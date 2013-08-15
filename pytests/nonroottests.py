@@ -55,6 +55,8 @@ class NonRootTests(unittest.TestCase):
                 shell.log_command_output(o, e)
                 o, e = shell.execute_non_sudo_command("rm -rf etc/ opt/ couchbase-server-enterprise_x86_64_2.2.0-772-rel.*")
                 shell.log_command_output(o, e)
+                command = "rm -rf backup/"
+                shell.log_command_output(o, e)
             else:
                 #Handling Windows?
                 pass
@@ -116,10 +118,9 @@ class NonRootTests(unittest.TestCase):
             ssh_client.close()
 
     """
-        Test loads a certain number of items on a standard bucket created
-        using couchbase-cli and later verifies if the number matches what's expected.
+        Method that initializes cluster, rebalances in nodes, and creates a standard bucket
     """
-    def test_create_bucket_test_load(self):
+    def init_rebalance_cluster_create_testbucket(self):
         shell = RemoteMachineShellConnection(self.master)
         if self._os == "centos" or self._os == "ubuntu":
             _1 = "cd /home/{0}/opt/couchbase &&".format(self.master.ssh_username)
@@ -155,6 +156,18 @@ class NonRootTests(unittest.TestCase):
             o, e = shell.execute_non_sudo_command(command_to_create_bucket)
             shell.log_command_output(o, e)
             time.sleep(30)
+        elif self._os == "windows":
+            # TODO: Windows support
+            pass
+
+    """
+        Test loads a certain number of items on a standard bucket created
+        using couchbase-cli and later verifies if the number matches what's expected.
+    """
+    def test_create_bucket_test_load(self):
+        shell = RemoteMachineShellConnection(self.master)
+        self.init_rebalance_cluster_create_testbucket()
+        if self._os == "centos" or self._os == "ubuntu":
             self.log.info("Load {0} through cbworkloadgen ..".format(self.num_items))
             _1 = "cd /home/{0}/opt/couchbase &&".format(self.master.ssh_username)
             _2 = " ./bin/cbworkloadgen -n localhost:8091"
@@ -176,10 +189,95 @@ class NonRootTests(unittest.TestCase):
             _3 = " --bucket=testbucket"
             _4 = " -u {0} -p {1}".format(self.master.rest_username, self.master.rest_password)
             command_to_delete_bucket = _1 + _2 + _3 + _4
-            o, e = shell.execute_non_sudo_command(command_to_load)
+            o, e = shell.execute_non_sudo_command(command_to_delete_bucket)
             shell.log_command_output(o, e)
             time.sleep(10)
         elif self._os == "windows":
-            # Windows support
+            # TODO: Windows support
+            self.log.info("Yet to add support for windows!")
             pass
 
+    """
+        Test that loads a certain number of items, backs up, deletes bucket,
+        recreates bucket, restores, and verifies if count matched.
+    """
+    def test_bucket_backup_restore(self):
+        shell = RemoteMachineShellConnection(self.master)
+        self.init_rebalance_cluster_create_testbucket()
+        if self._os == "centos" or self._os == "ubuntu":
+            self.log.info("Load {0} through cbworkloadgen ..".format(self.num_items))
+            _1 = "cd /home/{0}/opt/couchbase &&".format(self.master.ssh_username)
+            _2 = " ./bin/cbworkloadgen -n localhost:8091"
+            _3 = " -r .8 -i {0} -s 256 -b testbucket -t 1".format(self.num_items)
+            _4 = " -u {0} -p {1}".format(self.master.rest_username, self.master.rest_password)
+            command_to_load = _1 + _2 + _3 + _4
+            o, e = shell.execute_non_sudo_command(command_to_load)
+            shell.log_command_output(o, e)
+            time.sleep(20)
+            rest = RestConnection(self.master)
+            ini_item_count = rest.fetch_bucket_stats(bucket="testbucket")["op"]["samples"]["curr_items"][-1]
+            self.log.info("Backing up bucket 'testbucket' ..")
+            _1 = "cd /home/{0}/opt/couchbase &&".format(self.master.ssh_username)
+            _2 = " ./bin/cbbackup http://localhost:8091"
+            _3 = " /home/{0}/backup".format(self.master.ssh_username)
+            _4 = " -u {0} -p {1}".format(self.master.rest_username, self.master.rest_password)
+            command_to_backup = _1 + _2 + _3 + _4
+            o, e = shell.execute_non_sudo_command(command_to_backup)
+            shell.log_command_output(o, e)
+            time.sleep(10)
+            self.log.info("Deleting bucket ..")
+            _1 = "cd /home/{0}/opt/couchbase &&".format(self.master.ssh_username)
+            _2 = " ./bin/couchbase-cli bucket-delete -c localhost:8091"
+            _3 = " --bucket=testbucket"
+            _4 = " -u {0} -p {1}".format(self.master.rest_username, self.master.rest_password)
+            command_to_delete_bucket = _1 + _2 + _3 + _4
+            o, e = shell.execute_non_sudo_command(command_to_delete_bucket)
+            shell.log_command_output(o, e)
+            time.sleep(20)
+            if len(self.servers) < 2:
+                rep_count = 0
+            else:
+                rep_count = 1
+            self.log.info("Recreating bucket ..")
+            _1 = "cd /home/{0}/opt/couchbase &&".format(self.master.ssh_username)
+            _2 = " ./bin/couchbase-cli bucket-create -c localhost:8091"
+            _3 = " --bucket=testbucket --bucket-type=couchbase --bucket-port=11211"
+            _4 = " --bucket-ramsize=500 --bucket-replica={0} --wait".format(rep_count)
+            _5 = " -u {0} -p {1}".format(self.master.rest_username, self.master.rest_password)
+            command_to_create_bucket = _1 + _2 + _3 + _4 + _5
+            o, e = shell.execute_non_sudo_command(command_to_create_bucket)
+            shell.log_command_output(o, e)
+            time.sleep(20)
+            self.log.info("Restoring bucket 'testbucket' ..")
+            _1 = "cd /home/{0}/opt/couchbase &&".format(self.master.ssh_username)
+            _2 = " ./bin/cbrestore /home/{0}/backup http://localhost:8091".format(self.master.ssh_username)
+            _3 = " -b testbucket -B testbucket"
+            _4 = " -u {0} -p {1}".format(self.master.rest_username, self.master.rest_password)
+            command_to_restore = _1 + _2 + _3 + _4
+            o, e = shell.execute_non_sudo_command(command_to_restore)
+            shell.log_command_output(o, e)
+            time.sleep(10)
+            rest = RestConnection(self.master)
+            fin_item_count = rest.fetch_bucket_stats(bucket="testbucket")["op"]["samples"]["curr_items"][-1]
+            self.log.info("Removing backed-up folder ..")
+            command_to_remove_folder = "rm -rf /home/{0}/backup".format(self.master.ssh_username)
+            o, e = shell.execute_non_sudo_command(command_to_remove_folder)
+            shell.log_command_output(o, e)
+            if (fin_item_count == ini_item_count):
+                self.log.info("Item count before and after deleting with backup/restore matched, {0}={1}".format(
+                    fin_item_count, ini_item_count))
+            else:
+                self.fail("Item count didnt match - backup/restore, {0}!={1}".format(fin_item_count, ini_item_count))
+            self.log.info("Deleting testbucket ..");
+            _1 = "cd /home/{0}/opt/couchbase &&".format(self.master.ssh_username)
+            _2 = " ./bin/couchbase-cli bucket-delete -c localhost:8091"
+            _3 = " --bucket=testbucket"
+            _4 = " -u {0} -p {1}".format(self.master.rest_username, self.master.rest_password)
+            command_to_delete_bucket = _1 + _2 + _3 + _4
+            o, e = shell.execute_non_sudo_command(command_to_delete_bucket)
+            shell.log_command_output(o, e)
+            time.sleep(10)
+        elif self._os == "windows":
+            # TODO: Windows support
+            self.log.info("Yet to add support for windows!")
+            pass
