@@ -158,7 +158,7 @@ class NonRootTests(unittest.TestCase):
             self.log.info("Load {0} through cbworkloadgen ..".format(self.num_items))
             _1 = "cd /home/{0}/opt/couchbase &&".format(self.master.ssh_username)
             _2 = " ./bin/cbworkloadgen -n localhost:8091"
-            _3 = " -r .8 -i {0} -s 256 -b test_bucket -t 1".format(self.num_items)
+            _3 = " -r .8 -i {0} -s 256 -b testbucket -t 1".format(self.num_items)
             _4 = " -u {0} -p {1}".format(self.master.rest_username, self.master.rest_password)
             command_to_load = _1 + _2 + _3 + _4
             o, e = shell.execute_non_sudo_command(command_to_load)
@@ -170,6 +170,15 @@ class NonRootTests(unittest.TestCase):
                 self.log.info("Item count matched, {0}={1}".format(item_count, self.num_items))
             else:
                 self.fail("Item count: Not what's expected, {0}!={1}".format(item_count, self.num_items))
+            self.log.info("Deleting testbucket ..");
+            _1 = "cd /home/{0}/opt/couchbase &&".format(self.master.ssh_username)
+            _2 = " ./bin/couchbase-cli bucket-delete -c localhost:8091"
+            _3 = " --bucket=testbucket"
+            _4 = " -u {0} -p {1}".format(self.master.rest_username, self.master.rest_password)
+            command_to_delete_bucket = _1 + _2 + _3 + _4
+            o, e = shell.execute_non_sudo_command(command_to_load)
+            shell.log_command_output(o, e)
+            time.sleep(10)
         elif self._os == "windows":
             # Windows support
             pass
