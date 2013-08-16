@@ -4,6 +4,7 @@ from optparse import OptionParser
 sys.path.append(".")
 import testcfg as cfg
 from seriesly import Seriesly
+import store_report
 import requests
 import datetime
 import json
@@ -67,7 +68,7 @@ def plot_use_cbmonitor(snapshot_name, cluster_name, start_time, end_time):
     os.system('rm -f *.pdf')
     os.system('wget \"http://%s:8000/media/%s.pdf\"' % (cfg.SERIESLY_IP, urllib.quote(snapshot_name, ' ')))
 
-def store_report(run_id, i):
+def prepare_folder_report(run_id, i):
     path = "%s/phase%d" % (run_id, i)
     if not os.path.exists(path):
         os.makedirs(path)
@@ -220,9 +221,7 @@ def plot_all_phases(cluster_name, buckets):
 
     num_phases = len(phases_info.keys())
 
-    run_id = phases_info[1]['desc']
-    run_id = run_id.replace(" ", "_")
-    run_id = run_id.replace(",", "_")
+    run_id = store_report.get_run_info('name')
 
     if not os.path.exists("%s" % run_id):
         os.makedirs("%s" % run_id)
@@ -248,7 +247,7 @@ def plot_all_phases(cluster_name, buckets):
 
         plot_use_cbmonitor(snapshot_name, cluster_name, start_time_snapshot, end_time_snapshot)
 
-        store_report(run_id, i)
+        prepare_folder_report(run_id, i)
 
         store_90th_avg_value(buckets, start_time, end_time, run_id, i)
 
