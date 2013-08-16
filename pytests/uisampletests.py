@@ -249,7 +249,7 @@ class ROuserTests(BaseUITestCase):
     def test_delete_read_only_user(self):
         username = self.input.param('username', 'myrouser')
         password = self.input.param('password', 'myropass')
-
+        time.sleep(2)
         NavigationHelper(self).navigate('Settings')
         SettingsHelper(self).navigate('Account Management')
         SettingsHelper(self).create_user(username, password)
@@ -266,7 +266,7 @@ class ROuserTests(BaseUITestCase):
         password = self.input.param('password', 'myropass')
         verify_password = self.input.param('verify_password', None)
         error = self.input.param('error', '')
-
+        time.sleep(2)
         NavigationHelper(self).navigate('Settings')
         SettingsHelper(self).navigate('Account Management')
         try:
