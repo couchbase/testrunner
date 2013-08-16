@@ -67,10 +67,10 @@ class MemorySanity(BaseTestCase):
             for bucket in self.buckets:
                 mem_usage[bucket.name] = rest.fetch_bucket_stats(bucket.name)["op"]["samples"]["mem_used"][-1]
                 self.log.info("Memory used after attempt {0} = {1}, Difference from initial snapshot: {2}"\
-                              .format(i+1, mem_usage[bucket.name], (mem_usage[bucket.name] - initial_memory_usage[bucket.name])))
+                              .format(i + 1, mem_usage[bucket.name], (mem_usage[bucket.name] - initial_memory_usage[bucket.name])))
             time.sleep(10)
         if (self.repetitions > 0):
-            self.log.info("After {0} repetetive deletion-creation-load of the buckets, the memory consumption difference is .."\
+            self.log.info("After {0} repetitive deletion-creation-load of the buckets, the memory consumption difference is .."\
                           .format(self.repetitions));
             for bucket in self.buckets:
                 self.log.info("{0} :: Initial: {1} :: Now: {2} :: Difference: {3}"\
@@ -104,9 +104,9 @@ class MemorySanity(BaseTestCase):
             self._load_all_buckets(self.master, gen, 'create', 0)
             self.num_items += delta_items
             self.log.info("Resident ratio is %s" % mc.stats()["vb_active_perc_mem_resident"])
-        memory_mb = int(mc.stats("memory")["total_allocated_bytes"])/(1024 * 1024)
+        memory_mb = int(mc.stats("memory")["total_allocated_bytes"]) / (1024 * 1024)
         self.log.info("total_allocated_bytes is %s" % memory_mb)
-        self.assertTrue(memory_mb <= self.quota, "total_allocated_bytes %s should be within %s" %(
+        self.assertTrue(memory_mb <= self.quota, "total_allocated_bytes %s should be within %s" % (
                                                   memory_mb, self.quota))
 
 
@@ -149,7 +149,7 @@ class MemorySanity(BaseTestCase):
             self.log.info("Bucket: {0}".format(bucket.name))
             self.log.info("Appending to have items whose initial size was "
                             + "{0} to equal or cross a size of {1}".format(self.value_size, self.desired_item_size))
-            self.log.info("Item-appending of {0} items starting ..".format(len(selected_keys)+1))
+            self.log.info("Item-appending of {0} items starting ..".format(len(selected_keys) + 1))
 
             index = 3
             while self.value_size < self.desired_item_size:
@@ -167,7 +167,7 @@ class MemorySanity(BaseTestCase):
                 self.value_size += str_len
                 index += 1
 
-            self.log.info("The appending of {0} items ended".format(len(selected_keys)+1))
+            self.log.info("The appending of {0} items ended".format(len(selected_keys) + 1))
 
             msg = "Bucket:{0}".format(bucket.name)
             self.log.info("VERIFICATION <" + msg + ">: Phase 0 - Check the gap between "
@@ -181,8 +181,8 @@ class MemorySanity(BaseTestCase):
                 self.log.info("In {0} bucket {1}, total_fragmentation_bytes + the total_allocated_bytes = {2}"
                               .format(server.ip, bucket.name, (int(total_fragmentation_bytes_stats[server]) + int(total_allocated_bytes_stats[server]))))
                 self.log.info("In {0} bucket {1}, mem_used = {2}".format(server.ip, bucket.name, mem_used_stats[server]))
-                self.log.info("In {0} bucket {1}, the difference between acutal memory used by memcached and mem_used is {2} times"
-                              .format(server.ip, bucket.name, float(int(total_fragmentation_bytes_stats[server]) + int(total_allocated_bytes_stats[server]))/float(mem_used_stats[server])))
+                self.log.info("In {0} bucket {1}, the difference between actual memory used by memcached and mem_used is {2} times"
+                              .format(server.ip, bucket.name, float(int(total_fragmentation_bytes_stats[server]) + int(total_allocated_bytes_stats[server])) / float(mem_used_stats[server])))
 
             self.log.info("VERIFICATION <" + msg + ">: Phase1 - Check if any of the "
                     + "selected keys have value less than the desired value size")
@@ -194,7 +194,7 @@ class MemorySanity(BaseTestCase):
 
             if self.kv_verify:
                 self.log.info("VERIFICATION <" + msg + ">: Phase2 - Check if the content "
-                        + "after the appends match whats expected")
+                        + "after the appends match what's expected")
                 for k in verify_dict:
                     if awareness.memcached(key).get(k)[2] != verify_dict[k]:
                         self.fail("Content at key {0}: not what's expected.".format(k))
