@@ -30,19 +30,6 @@ class SwapRebalanceBase(unittest.TestCase):
                 server.ip = ip
             self.cluster_run = True
         self.case_number = self.input.param("case_number", 0)
-
-        # Clear the state from Previous invalid run
-        if rest._rebalance_progress_status() == 'running':
-                self.log.warning("rebalancing is still running, previous test should be verified")
-                stopped = rest.stop_rebalance()
-                self.assertTrue(stopped, msg="unable to stop rebalance")
-        self.load_started = False
-        self.loaders = []
-        self.log.info("==============  SwapRebalanceBase setup was started for test #{0} {1}=============="\
-                      .format(self.case_number, self._testMethodName))
-        SwapRebalanceBase.reset(self)
-        self.cluster_helper = Cluster()
-        # Initialize test params
         self.replica = self.input.param("replica", 1)
         self.keys_count = self.input.param("keys-count", 1000)
         self.load_ratio = self.input.param("load-ratio", 1)
@@ -53,21 +40,35 @@ class SwapRebalanceBase(unittest.TestCase):
         self.num_initial_servers = self.input.param("num-initial-servers", 3)
         self.fail_orchestrator = self.swap_orchestrator = self.input.param("swap-orchestrator", False)
         self.do_access = self.input.param("do-access", True)
-
-        # Make sure the test is setup correctly
-        min_servers = int(self.num_initial_servers) + int(self.num_swap)
-        msg = "minimum {0} nodes required for running swap rebalance"
-        self.assertTrue(len(self.servers) >= min_servers,
-            msg=msg.format(min_servers))
-
-        self.log.info('picking server : {0} as the master'.format(serverInfo))
-        node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
-        info = rest.get_nodes_self()
-        rest.init_cluster(username=serverInfo.rest_username, password=serverInfo.rest_password)
-        rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
-        self.log.info("==============  SwapRebalanceBase setup was finished for test #{0} {1} =============="
+        self.load_started = False
+        self.loaders = []
+        try:
+            # Clear the state from Previous invalid run
+            if rest._rebalance_progress_status() == 'running':
+                self.log.warning("rebalancing is still running, previous test should be verified")
+                stopped = rest.stop_rebalance()
+                self.assertTrue(stopped, msg="unable to stop rebalance")
+            self.log.info("==============  SwapRebalanceBase setup was started for test #{0} {1}=============="\
                       .format(self.case_number, self._testMethodName))
-        SwapRebalanceBase._log_start(self)
+            SwapRebalanceBase.reset(self)
+            self.cluster_helper = Cluster()
+
+            # Make sure the test is setup correctly
+            min_servers = int(self.num_initial_servers) + int(self.num_swap)
+            msg = "minimum {0} nodes required for running swap rebalance"
+            self.assertTrue(len(self.servers) >= min_servers, msg=msg.format(min_servers))
+
+            self.log.info('picking server : {0} as the master'.format(serverInfo))
+            node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
+            info = rest.get_nodes_self()
+            rest.init_cluster(username=serverInfo.rest_username, password=serverInfo.rest_password)
+            rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
+            self.log.info("==============  SwapRebalanceBase setup was finished for test #{0} {1} =============="
+                      .format(self.case_number, self._testMethodName))
+            SwapRebalanceBase._log_start(self)
+        except Exception, e:
+            self.cluster_helper.shutdown()
+            self.fail(e)
 
     @staticmethod
     def common_tearDown(self):
