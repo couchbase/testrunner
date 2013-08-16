@@ -739,7 +739,7 @@ class VBucketAwareMemcached(object):
                         if node.ip == masterIp and node.memcached == masterPort:
                             server.port = node.port
                     server.ip = masterIp
-                    self.log.info("Recevied forward map, reset vbucket map, new direct_client")
+                    self.log.info("Received forward map, reset vbucket map, new direct_client")
                     self.memcacheds[vBucket.master] = MemcachedClientHelper.direct_client(server, self.bucket)
                 # if no one is using that memcached connection anymore just close the connection
                 used_nodes = set([self.vBucketMap[vb_name] for vb_name in self.vBucketMap])
@@ -792,7 +792,7 @@ class VBucketAwareMemcached(object):
                                 MemcachedClientHelper.direct_client(server, bucket)
                         break
             except Exception as ex:
-                msg = "unable to establish connection to {0}.cleanup open connections"
+                msg = "unable to establish connection to {0}. cleanup open connections"
                 self.log.warn(msg.format(serverIp))
                 self.done()
                 raise ex
