@@ -20,25 +20,31 @@ class FailoverBaseTest(BaseTestCase):
     @staticmethod
     def setUp(self):
         self._cleanup_nodes = []
-        super(FailoverBaseTest, self).setUp()
+        self._failed_nodes = []
         self.bidirectional = self.input.param("bidirectional", False)
         self._value_size = self.input.param("value_size", 256)
-        self._failed_nodes = []
         self.dgm_run = self.input.param("dgm_run", True)
-        self.gen_create = BlobGenerator('loadOne', 'loadOne_', self._value_size, end=self.num_items)
+        credentials = self.input.membase_settings
         self.add_back_flag = False
         self.during_ops = self.input.param("during_ops", None)
+
+        super(FailoverBaseTest, self).setUp()
+
         self.log.info("==============  FailoverBaseTest setup was started for test #{0} {1}=============="\
                       .format(self.case_number, self._testMethodName))
-        rest = RestConnection(self.master)
-        credentials = self.input.membase_settings
-        ClusterOperationHelper.add_all_nodes_or_assert(self.master, self.servers, credentials, self)
-        nodes = rest.node_statuses()
-        rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
-        msg = "rebalance failed after adding these nodes {0}".format(nodes)
-        self.assertTrue(rest.monitorRebalance(), msg=msg)
+        try:
+            rest = RestConnection(self.master)
+            ClusterOperationHelper.add_all_nodes_or_assert(self.master, self.servers, credentials, self)
+            nodes = rest.node_statuses()
+            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
+            msg = "rebalance failed after adding these nodes {0}".format(nodes)
+            self.assertTrue(rest.monitorRebalance(), msg=msg)
+        except Exception, e:
+            self.cluster.shutdown()
+            self.fail(e)
         self.log.info("==============  FailoverBaseTest setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
+        self.gen_create = BlobGenerator('loadOne', 'loadOne_', self._value_size, end=self.num_items)
 
     @staticmethod
     def tearDown(self):
@@ -196,7 +202,7 @@ class FailoverTests(FailoverBaseTest):
                          self.change_password(new_password=old_pass)
                      elif self.during_ops == "change_port":
                          self.change_port(new_port='8091',
-                                          current_port=self.input.param("new_port", "9090")) 
+                                          current_port=self.input.param("new_port", "9090"))
 
 
     def stop_server(self, node):
