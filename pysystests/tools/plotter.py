@@ -229,11 +229,11 @@ def plot_all_phases(cluster_name, buckets):
         shutil.rmtree("%s" % run_id)
         os.makedirs("%s" % run_id)
 
-    for i in range(num_phases)[1:]:
+    for i in phases_info.keys():
         start_time = phases_info[i][[name for name in phases_info[i].keys() if (name != 'name' and name != 'desc')][0]]
         start_time = int(start_time[:10])
         end_time = 0
-        if i == num_phases - 1:
+        if i == phases_info.keys()[-1]:
             end_time = str(time.time())
             end_time = int(end_time[:10])
         else:
