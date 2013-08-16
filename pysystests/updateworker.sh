@@ -8,7 +8,7 @@ cd couchbase-python-client
 sudo python setup.py install
 cd ~/
 rm -rf testrunner
-git clone http://github.com/membase/testrunner.git
+git clone http://github.com/couchbase/testrunner.git
 cd testrunner/pysystests
 cp /tmp/testcfg.py oldtestcfg.py
 newparams=`cat testcfg.py  | egrep '^[A-Z].*=' | awk '{print $1}'`
