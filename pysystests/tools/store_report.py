@@ -36,11 +36,17 @@ def get_run_info(desc):
     phases_info.keys().sort()
 
     run_info = ''
+    #will take the first name/desc value; but we assume that their values are the same for all phases
     if desc == 'name':
-        run_info = phases_info[1]['name']
+        for phase in phases_info:
+            if 'name' in phases_info[phase]:
+                run_info = phases_info[phase]['name']
+                break
     if desc == 'build':
-        run_info = phases_info[1]['desc']
-
+        for phase in phases_info:
+            if 'desc' in phases_info[phase]:
+                run_info = phases_info[phase]['desc']
+                break
     run_info = run_info.replace(" ", "_")
     run_info = run_info.replace(",", "_")
 
