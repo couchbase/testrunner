@@ -1063,7 +1063,6 @@ class WarmUpMemcachedTest(unittest.TestCase):
         uptime = int(self.onenodemc.stats()["uptime"])
         RebalanceHelper.wait_for_stats(self.master, "default", 'ep_queue_size', 0)
         RebalanceHelper.wait_for_stats(self.master, "default", 'ep_flusher_todo', 0)
-        self.log.info(curr_items)
         self.log.info("sleeping for 10 seconds")
         time.sleep(10)
         rest = RestConnection(self.master)
@@ -1092,19 +1091,21 @@ class WarmUpMemcachedTest(unittest.TestCase):
         self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
         stats = self.onenodemc.stats()
         present_count = int(stats["curr_items"])
-        self.log.info("ep curr_items : {0}, inserted_items {1}".format(present_count, curr_items))
+        ep_warmup_thread = stats["ep_warmup_thread"]
+        self.log.info("ep curr_items : {0}, inserted_items {1} directly after kill_memcached ".format(present_count, curr_items))
+        self.log.info("ep_warmup_thread directly after kill_memcached: {0}".format(ep_warmup_thread))
         start = time.time()
-        while present_count < curr_items:
+        while present_count < curr_items or ep_warmup_thread != "complete":
             if (time.time() - start) <= timeout_in_seconds:
                 stats = self.onenodemc.stats()
                 present_count = int(stats["curr_items"])
+                ep_warmup_thread = stats["ep_warmup_thread"]
                 self.log.warn("curr_items : {0}".format(present_count))
+                self.log.warn("ep_warmup_thread : {0}".format(ep_warmup_thread))
                 time.sleep(1)
             else:
-
                 self.fail("Timed out waiting for warmup")
 
-        self.log.info("ep curr_items : {0}, inserted_items {1}".format(present_count, curr_items))
         stats = self.onenodemc.stats()
         if "ep_warmup_time" not in stats:
             self.log.error("'ep_warmup_time' was not found in stats:{0}".format(stats))
