@@ -14,6 +14,20 @@ class CreateMembaseBucketsTests(unittest.TestCase):
     input = TestInput
     log = None
 
+    #as part of the setup let's delete all the existing buckets
+    def setUp(self):
+        self.log = logger.Logger.get_logger()
+        self.input = TestInputSingleton.input
+        self.assertTrue(self.input, msg="input parameters missing...")
+        self.servers = self.input.servers
+        BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
+        self._log_start()
+
+    def tearDown(self):
+        BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
+        self._log_finish()
+
+
     def _log_start(self):
         try:
             msg = "{0} : {1} started ".format(datetime.datetime.now(), self._testMethodName)
@@ -29,21 +43,6 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         except:
             pass
 
-
-    #as part of the setup let's delete all the existing buckets
-    def setUp(self):
-        self.log = logger.Logger.get_logger()
-        self.input = TestInputSingleton.input
-        self.assertTrue(self.input, msg="input parameters missing...")
-        self.servers = self.input.servers
-        BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
-        self._log_start()
-
-
-    def tearDown(self):
-        BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
-        self._log_finish()
-
     # read each server's version number and compare it to self.version
     def test_default_moxi(self):
         name = 'default'
@@ -53,7 +52,6 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             rest.create_bucket(bucket=name, ramQuotaMB=200, proxyPort=proxyPort)
             msg = 'create_bucket succeeded but bucket {0} does not exist'.format(name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)
-
 
     def test_default_case_sensitive_dedicated(self):
         name = 'Default'
