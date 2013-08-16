@@ -71,6 +71,9 @@ class RebalanceProgressTests(RebalanceBaseTest):
     def test_progress_rebalance_swap(self):
         if self.nodes_in != self.nodes_out:
             self.fail("nodes_in != nodes_out. Not a swap rebalance")
+        if len(self.servers) < (self.nodes_init + self.nodes_in):
+            self.log.error("Not enough VMs!")
+            return
         servers_in = self.servers[self.nodes_init : self.nodes_init + self.nodes_in]
         servers_init = self.servers[:self.nodes_init]
         servers_unchanged = self.servers[:(self.nodes_init - self.nodes_out)]
