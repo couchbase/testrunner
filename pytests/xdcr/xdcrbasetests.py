@@ -294,6 +294,9 @@ class XDCRBaseTest(unittest.TestCase):
         self.disable_src_comp = self._input.param("disable_src_comp", True)
         self.disable_dest_comp = self._input.param("disable_dest_comp", True)
 
+        # Set this by default to 1 for all tests
+        self.set_xdcr_param('xdcrFailureRestartInterval', 1)
+
         self._optimistic_xdcr_threshold = self._input.param("optimistic_xdcr_threshold", 256)
         if self.src_master.ip != self.dest_master.ip:  #Only if it's not a cluster_run
             if self._optimistic_xdcr_threshold != 256:
@@ -929,16 +932,12 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
     def set_xdcr_param(self, param, value):
         self.log.info("Setting {0} to {1} ..".format(param, value))
-        RestConnection(self.src_master[0]).set_internalSetting(param, value)
+        RestConnection(self.src_master).set_internalSetting(param, value)
 
         if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
-            RestConnection(self.dest_master[0]).set_internalSetting(param, value)
+            RestConnection(self.dest_master).set_internalSetting(param, value)
 
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
-        if src_master.ip != dest_master.ip:
-            if self._failover is not None or self._warmup is not None:
-                self.set_xdcr_param('xdcrFailureRestartInterval', 1)
-        self.sleep(self._timeout / 2)
         self._link_clusters(src_cluster_name, src_master, dest_cluster_name, dest_master)
         self._replicate_clusters(src_master, dest_cluster_name)
         if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
