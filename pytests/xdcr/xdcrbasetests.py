@@ -40,7 +40,7 @@ class XDCRConstants:
     INPUT_PARAM_POLL_INTERVAL = "poll_interval"  # in seconds
     INPUT_PARAM_POLL_TIMEOUT = "poll_timeout"  # in seconds
 
-    #CLUSTER_TOPOLOGY_TYPE_LINE = "line"
+    # CLUSTER_TOPOLOGY_TYPE_LINE = "line"
     CLUSTER_TOPOLOGY_TYPE_CHAIN = "chain"
     CLUSTER_TOPOLOGY_TYPE_STAR = "star"
     CLUSTER_TOPOLOGY_TYPE_RING = "ring"
@@ -75,7 +75,7 @@ class XDCRBaseTest(unittest.TestCase):
             self._input = TestInputSingleton.input
             self._init_parameters()
             self.cluster = Cluster()
-            #REPLICATION RATE STATS
+            # REPLICATION RATE STATS
             self._local_replication_rate = {}
             self._xdc_replication_ops = {}
             self._xdc_replication_rate = {}
@@ -90,7 +90,7 @@ class XDCRBaseTest(unittest.TestCase):
             self.setup_extended()
             self.log.info("==============  XDCRbasetests setup was finished for test #{0} {1} =============="\
                 .format(self._case_number, self._testMethodName))
-            ## THREADS FOR STATS KEEPING
+            # # THREADS FOR STATS KEEPING
             if str(self.__class__).find('upgradeXDCR') == -1:
                 self._stats_thread1 = Thread(target=self._replication_stat_keeper, args=["replication_data_replicated", self.src_master])
                 self._stats_thread2 = Thread(target=self._replication_stat_keeper, args=["xdc_ops", self.dest_master])
@@ -180,7 +180,7 @@ class XDCRBaseTest(unittest.TestCase):
                         self._xdc_replication_ops[node1][the_bucket.name].sort()
                         _mid = len(self._xdc_replication_ops[node1][the_bucket.name]) / 2
                         if len(self._xdc_replication_ops[node1][the_bucket.name]) % 2 == 0:
-                            _median_value_ = (float)(self._xdc_replication_ops[node1][the_bucket.name][_mid] +
+                            _median_value_ = (float)(self._xdc_replication_ops[node1][the_bucket.name][_mid] + 
                                                      self._xdc_replication_ops[node1][the_bucket.name][_mid - 1]) / 2
                         else:
                             _median_value_ = self._xdc_replication_ops[node1][the_bucket.name][_mid]
@@ -205,14 +205,14 @@ class XDCRBaseTest(unittest.TestCase):
         self.log.info("Initializing input parameters started...")
         self._clusters_dic = self._input.clusters  # clusters is declared as dic in TestInput which is unordered.
         self._clusters_keys_olst = range(
-            len(self._clusters_dic))  #clusters are populated in the dic in testrunner such that ordinal is the key.
-        #orderedDic cannot be used in order to maintain the compability with python 2.6
+            len(self._clusters_dic))  # clusters are populated in the dic in testrunner such that ordinal is the key.
+        # orderedDic cannot be used in order to maintain the compability with python 2.6
         self._cluster_counter_temp_int = 0
         self._cluster_names_dic = self._get_cluster_names()
         self._servers = self._input.servers
         self._disabled_consistent_view = self._input.param("disabled_consistent_view", True)
         self._floating_servers_set = self._get_floating_servers()  # These are the servers defined in .ini file but not linked to any cluster.
-        self._cluster_counter_temp_int = 0  #TODO: fix the testrunner code to pass cluster name in params.
+        self._cluster_counter_temp_int = 0  # TODO: fix the testrunner code to pass cluster name in params.
         self.buckets = []
 
         self._default_bucket = self._input.param("default_bucket", True)
@@ -298,7 +298,7 @@ class XDCRBaseTest(unittest.TestCase):
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
 
         self._optimistic_xdcr_threshold = self._input.param("optimistic_xdcr_threshold", 256)
-        if self.src_master.ip != self.dest_master.ip:  #Only if it's not a cluster_run
+        if self.src_master.ip != self.dest_master.ip:  # Only if it's not a cluster_run
             if self._optimistic_xdcr_threshold != 256:
                 self.set_xdcr_param('xdcrOptimisticReplicationThreshold', self._optimistic_xdcr_threshold)
 
@@ -543,7 +543,7 @@ class XDCRBaseTest(unittest.TestCase):
 
         if master_id.find('es') != 0:
 
-            #verify if node_ids were changed for cluster_run
+            # verify if node_ids were changed for cluster_run
             for bucket in self.buckets:
                 if ("127.0.0.1" in bucket.master_id and "127.0.0.1" not in master_id) or \
                    ("localhost" in bucket.master_id and "localhost" not in master_id):
@@ -565,7 +565,7 @@ class XDCRBaseTest(unittest.TestCase):
         valid_keys_second, deleted_keys_second = kv_store_second[kvs_num].key_set()
 
         for key in valid_keys_second:
-            #replace the values for each key in first kvs if the keys are presented in second one
+            # replace the values for each key in first kvs if the keys are presented in second one
             if key in valid_keys_first:
                 partition1 = kv_store_first[kvs_num].acquire_partition(key)
                 partition2 = kv_store_second[kvs_num].acquire_partition(key)
@@ -575,7 +575,7 @@ class XDCRBaseTest(unittest.TestCase):
                            "flag"    : key_add["flag"]}
                 kv_store_first[1].release_partition(key)
                 kv_store_second[1].release_partition(key)
-            #add keys/values in first kvs if the keys are presented only in second one
+            # add keys/values in first kvs if the keys are presented only in second one
             else:
                 partition1, num_part = kv_store_first[kvs_num].acquire_random_partition()
                 partition2 = kv_store_second[kvs_num].acquire_partition(key)
@@ -585,7 +585,7 @@ class XDCRBaseTest(unittest.TestCase):
                            "flag"    : key_add["flag"]}
                 kv_store_first[kvs_num].release_partition(num_part)
                 kv_store_second[kvs_num].release_partition(key)
-            #add condition when key was deleted in first, but added in second
+            # add condition when key was deleted in first, but added in second
 
         for key in deleted_keys_second:
             # the same keys were deleted in both kvs
@@ -642,7 +642,7 @@ class XDCRBaseTest(unittest.TestCase):
         if self._failover is not None or self._rebalance is not None:
             timeout *= 2
 
-        #for verification src and dest clusters need more time
+        # for verification src and dest clusters need more time
         if verify_src:
             timeout *= 3 / 2
 
@@ -728,7 +728,7 @@ class XDCRBaseTest(unittest.TestCase):
     def _wait_for_replication_to_catchup(self, timeout=1200):
         rest1 = RestConnection(self.src_master)
         rest2 = RestConnection(self.dest_master)
-        #20 minutes by default
+        # 20 minutes by default
         end_time = time.time() + timeout
 
         for bucket in self.buckets:
@@ -738,6 +738,9 @@ class XDCRBaseTest(unittest.TestCase):
                 self.sleep(60, "Waiting for replication to catch up ..")
                 _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
                 _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+            if _count1 != _count2:
+                self.fail("not all items replicated in {0} sec for {1} bucket. on source cluster:{2}, on dest:{3}".\
+                          format(timeout, bucket.name, _count1, _count2))
             self.log.info("Replication caught up for bucket: {0}".format(bucket.name))
 
     def wait_node_restarted(self, server, wait_time=120, wait_if_warmup=False, check_service=False):
@@ -843,7 +846,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 #            #TODO should be added 'stop replication' when API to stop will be implemented
 #        for (rest_conn, cluster_ref, rep_database, rep_id) in self._cluster_state_arr:
 #            rest_conn.stop_replication(rep_database, rep_id)
-            #rest_conn.remove_remote_cluster(cluster_ref)
+            # rest_conn.remove_remote_cluster(cluster_ref)
 
     def init_parameters_extended(self):
         self._cluster_state_arr = []
@@ -1025,7 +1028,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
     def _async_update_delete_data(self):
         self.log.info("The tasks:-")
         tasks = []
-        #Setting up doc-ops at source nodes and doc-ops-dest at destination nodes
+        # Setting up doc-ops at source nodes and doc-ops-dest at destination nodes
         if self._doc_ops is not None:
             # allows multiple of them but one by one on either of the clusters
             if "update" in self._doc_ops:
@@ -1045,7 +1048,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
     def _verify_revIds(self, src_server, dest_server, ops_perf, kv_store=1):
         error_count = 0;
         tasks = []
-        #buckets = self._get_cluster_buckets(src_server)
+        # buckets = self._get_cluster_buckets(src_server)
         rest = RestConnection(src_server)
         buckets = rest.get_buckets()
         for bucket in buckets:
