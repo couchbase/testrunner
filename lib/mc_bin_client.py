@@ -273,7 +273,7 @@ class MemcachedClient(object):
         except MemcachedError, e:
             if e.status != memcacheConstants.ERR_AUTH_CONTINUE:
                 raise
-            challenge = e.msg
+            challenge = e.msg.split(' ')[0]
 
         dig = hmac.HMAC(password, challenge).hexdigest()
         return self._doCmd(memcacheConstants.CMD_SASL_STEP, 'CRAM-MD5',

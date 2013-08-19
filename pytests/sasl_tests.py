@@ -1,0 +1,138 @@
+from basetestcase import BaseTestCase
+from couchbase.cluster import Cluster
+from mc_bin_client import MemcachedClient, MemcachedError
+from membase.api.rest_client import RestConnection
+
+AUTH_SUCCESS = "Authenticated"
+AUTH_FAILURE = "Auth failure"
+
+class SaslTest(BaseTestCase):
+
+    def setUp(self):
+        super(SaslTest, self).setUp()
+
+    def tearDown(self):
+        super(SaslTest, self).tearDown()
+
+    def create_pwd_buckets(self, server, buckets):
+        tasks = []
+        for name in buckets:
+            tasks.append(self.cluster.async_create_sasl_bucket(server,
+                                                               name,
+                                                               buckets[name],
+                                                               100, 0))
+        for task in tasks:
+            task.result(self.wait_timeout * 10)
+
+    def do_auth(self, bucket, password):
+        self.log.info("Authenticate with {0} to {1}:{2}".format(self.auth_mech,
+                                                                bucket,
+                                                                password))
+        ret = None
+        nodes = RestConnection(self.master).get_nodes()
+        for n in nodes:
+            if n.ip == self.master.ip and n.port == self.master.port:
+                node = n
+        client = MemcachedClient(self.master.ip, node.memcached)
+        try:
+            if self.auth_mech == "CRAM-MD5":
+                ret = client.sasl_auth_cram_md5(bucket, password)[2]
+            elif self.auth_mech == "PLAIN":
+                ret = client.sasl_auth_plain(bucket, password)[2]
+            else:
+                self.fail("Invalid auth mechanism {0}".format(self.auth_mech))
+        except MemcachedError, e:
+            ret = e.msg.split(' for vbucket')[0]
+        client.close()
+        return ret
+
+    """Make sure that list mechanisms works and the response is in order"""
+    def test_list_mechs(self):
+        client = MemcachedClient(self.master.ip, 12000)
+        mechs = list(client.sasl_mechanisms())
+        assert "CRAM-MD5" in mechs
+        assert "PLAIN" in mechs
+        assert len(list(mechs)) == 2
+
+    """Tests basic sasl authentication on buckets that exist"""
+    def test_basic_valid(self):
+        buckets = { "bucket1" : "password1",
+                    "bucket2" : "password2" }
+        self.create_pwd_buckets(self.master, buckets)
+
+        for bucket in buckets:
+            assert self.do_auth(bucket, buckets[bucket]) == AUTH_SUCCESS
+
+    """Tests basic sasl authentication on non-existent buckets"""
+    def test_basic_invalid(self):
+        buckets = { "bucket1" : "password1",
+                    "bucket2" : "password2" }
+        for bucket in buckets:
+            assert self.do_auth(bucket, buckets[bucket]) == AUTH_FAILURE
+
+    """Tests basic sasl authentication on incomplete passwords
+
+    This test makes sure that all password characters are tested and that if the
+    user provides a partial password then authenication will fail"""
+    def test_auth_incomplete_password(self):
+        buckets = { "bucket1" : "password1" }
+        self.create_pwd_buckets(self.master, buckets)
+
+        for bucket in buckets:
+            assert self.do_auth(bucket, "") == AUTH_FAILURE
+            assert self.do_auth(bucket, "pass") == AUTH_FAILURE
+            assert self.do_auth(bucket, "password") == AUTH_FAILURE
+            assert self.do_auth(bucket, "password12") == AUTH_FAILURE
+            assert self.do_auth(bucket, "password1") == AUTH_SUCCESS
+
+    """Tests basic sasl authentication on incomplete bucket names
+
+    This test makes sure that all bucket characters are tested and that if the
+    user provides a partial bucket name then authenication will fail"""
+    def test_auth_incomplete_bucket(self):
+        buckets = { "bucket1" : "password1" }
+        self.create_pwd_buckets(self.master, buckets)
+
+        assert self.do_auth("", "password1") == AUTH_FAILURE
+        assert self.do_auth("buck", "password1") == AUTH_FAILURE
+        assert self.do_auth("bucket", "password1") == AUTH_FAILURE
+        assert self.do_auth("bucket12", "password1") == AUTH_FAILURE
+        assert self.do_auth("bucket1", "password1") == AUTH_SUCCESS
+
+    """Test bucket names and passwords with null characters
+
+    Null characters are used to seperate fields in some authentication
+    mechanisms and this test chaeck some of those cases."""
+    def test_auth_null_character_tests(self):
+        buckets = { "bucket1" : "password1" }
+        self.create_pwd_buckets(self.master, buckets)
+
+        assert self.do_auth("\0bucket1", "password1") == AUTH_FAILURE
+        assert self.do_auth("\0\0\0bucket1", "password1") == AUTH_FAILURE
+        assert self.do_auth("bucket1", "\0password1") == AUTH_FAILURE
+        assert self.do_auth("bucket1", "\0\0\0password1") == AUTH_FAILURE
+        assert self.do_auth("bucket1\0", "\0password1") == AUTH_FAILURE
+        assert self.do_auth("bucket1", "\0password1") == AUTH_FAILURE
+        assert self.do_auth("bucket1", "password1") == AUTH_SUCCESS
+
+    """Test bucket names and passwords with spaces
+
+    Space characters are used to seperate fields in some authentication
+    mechanisms and this test chaeck some of those cases."""
+    def test_auth_space_character_tests(self):
+        pass
+
+    """Test bucket names and passwords with special characters"""
+    def test_auth_special_character_tests(self):
+        pass
+
+    """UTF-8 Sasl test cases
+
+    Space characters are used to seperate fields in some authentication
+    mechanisms and this test chaeck some of those cases."""
+    def test_auth_utf8(self):
+        pass
+
+    """Test large usernames and passwords"""
+    def test_auth_too_big(self):
+        pass
