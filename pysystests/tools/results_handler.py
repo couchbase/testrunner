@@ -134,8 +134,8 @@ def main():
             for f in files:
                 os.system("wget %s/%s/%s -O %s/%s" % (CBFS_HOST, url_folder, f, url_folder, f))
 
-    compare_stats.compare_by_folders(storage_folder, "system-test-results/%s/%s/%s/%s" % (release_to_compare, platform, test_name, version_to_compare))
-    generate_index_file(storage_folder, options.json_test_file)
+        compare_stats.compare_by_folders(storage_folder, "system-test-results/%s/%s/%s/%s" % (release_to_compare, platform, test_name, version_to_compare))
+        generate_index_file(storage_folder, options.json_test_file)
     store_report.store_report_cbfs(release_number, platform)
 
 
