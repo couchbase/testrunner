@@ -163,7 +163,7 @@ class MemorySanity(BaseTestCase):
 
                     if self.kv_verify:
                         verify_dict[key] = verify_dict[key] + random_string
-
+                self.log.info("for {0} items size was increased to {1}".format(len(selected_keys) + 1, self.value_size))
                 self.value_size += str_len
                 index += 1
 
@@ -196,7 +196,7 @@ class MemorySanity(BaseTestCase):
                 self.log.info("VERIFICATION <" + msg + ">: Phase2 - Check if the content "
                         + "after the appends match what's expected")
                 for k in verify_dict:
-                    if awareness.memcached(key).get(k)[2] != verify_dict[k]:
+                    if awareness.memcached(k).get(k)[2] != verify_dict[k]:
                         self.fail("Content at key {0}: not what's expected.".format(k))
                 self.log.info("VERIFICATION <" + msg + ">: Successful")
 
