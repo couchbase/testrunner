@@ -19,9 +19,9 @@ class FailoverBaseTest(BaseTestCase):
 
     @staticmethod
     def setUp(self):
-        super(FailoverBaseTest, self).setUp()
         self._cleanup_nodes = []
         self._failed_nodes = []
+        super(FailoverBaseTest, self).setUp()
         self.bidirectional = self.input.param("bidirectional", False)
         self._value_size = self.input.param("value_size", 256)
         self.dgm_run = self.input.param("dgm_run", True)
