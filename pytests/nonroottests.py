@@ -66,13 +66,9 @@ class NonRootTests(unittest.TestCase):
         Method that sets up couchbase-server on the server list, without root privileges.
     """
     def non_root_install(self):
-        ssh_client = paramiko.SSHClient()
-        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             info = shell.extract_remote_info()
-            ssh_client.connect(hostname=server.ip,key_filename=server.ssh_key)
-            sftp_client = ssh_client.open_sftp()
             if self._os == "centos":
                 command0 = "rm -rf opt/ etc/ && rm -rf couchbase-server-enterprise_x86_64_2.2.0-772-rel.rpm"
                 command1 = "wget http://builds.hq.northscale.net/latestbuilds/couchbase-server-enterprise_x86_64_2.2.0-772-rel.rpm"
@@ -115,7 +111,6 @@ class NonRootTests(unittest.TestCase):
             else:
                 self.fail("Enter valid os name, options: centos, ubuntu, windows; entered name: {0} - invalid.".format(self._os))
 
-            ssh_client.close()
 
     """
         Method that initializes cluster, rebalances in nodes, and creates a standard bucket
