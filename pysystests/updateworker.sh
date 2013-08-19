@@ -3,7 +3,7 @@ cp testcfg.py /tmp
 sudo rm -rf /usr/local/lib/python2.6/dist-packages/couchbase*
 cd /tmp
 sudo rm -rf couchbase-python*
-git clone https://github.com/tahmmee/couchbase-python-client.git
+git clone https://github.com/couchbase/couchbase-python-client.git
 cd couchbase-python-client
 sudo python setup.py install
 cd ~/
