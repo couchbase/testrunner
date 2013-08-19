@@ -19,6 +19,7 @@ class FailoverBaseTest(BaseTestCase):
 
     @staticmethod
     def setUp(self):
+        super(FailoverBaseTest, self).setUp()
         self._cleanup_nodes = []
         self._failed_nodes = []
         self.bidirectional = self.input.param("bidirectional", False)
@@ -27,8 +28,6 @@ class FailoverBaseTest(BaseTestCase):
         credentials = self.input.membase_settings
         self.add_back_flag = False
         self.during_ops = self.input.param("during_ops", None)
-
-        super(FailoverBaseTest, self).setUp()
 
         self.log.info("==============  FailoverBaseTest setup was started for test #{0} {1}=============="\
                       .format(self.case_number, self._testMethodName))
@@ -51,7 +50,7 @@ class FailoverBaseTest(BaseTestCase):
         if hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures) > 0 \
                     and 'stop-on-failure' in TestInputSingleton.input.test_params and \
                     str(TestInputSingleton.input.test_params['stop-on-failure']).lower() == 'true':
-                    #supported starting with python2.7
+                    # supported starting with python2.7
                     log.warn("CLEANUP WAS SKIPPED")
                     self.cluster.shutdown()
                     self._log_finish(self)
@@ -117,11 +116,11 @@ class FailoverTests(FailoverBaseTest):
         RebalanceHelper.wait_for_replication(self.servers, self.cluster)
         chosen = RebalanceHelper.pick_nodes(self.master, howmany=self.num_replicas)
         for node in chosen:
-            #let's do op
+            # let's do op
             if failover_reason == 'stop_server':
                 self.stop_server(node)
                 log.info("10 seconds delay to wait for membase-server to shutdown")
-                #wait for 5 minutes until node is down
+                # wait for 5 minutes until node is down
                 self.assertTrue(RestHelper(rest).wait_for_node_status(node, "unhealthy", 300),
                                     msg="node status is not unhealthy even after waiting for 5 minutes")
             elif failover_reason == "firewall":
@@ -131,7 +130,7 @@ class FailoverTests(FailoverBaseTest):
                 if status:
                     log.info("node {0}:{1} is 'unhealthy' as expected".format(node.ip, node.port))
                 else:
-                    #verify iptables on the node if something wrong
+                    # verify iptables on the node if something wrong
                     for server in self.servers:
                         if server.ip == node.ip:
                             shell = RemoteMachineShellConnection(server)
@@ -152,7 +151,7 @@ class FailoverTests(FailoverBaseTest):
             failed_over = rest.fail_over(node.id)
             if not failed_over:
                 self.log.info("unable to failover the node the first time. try again in  60 seconds..")
-                #try again in 75 seconds
+                # try again in 75 seconds
                 time.sleep(75)
                 failed_over = rest.fail_over(node.id)
             self.assertTrue(failed_over, "unable to failover node after {0}".format(failover_reason))
