@@ -725,13 +725,16 @@ class XDCRBaseTest(unittest.TestCase):
                     self.log.info("ERROR: ep_warmup_thread's status not complete")
                 mc.close
 
-    def _wait_for_replication_to_catchup(self):
+    def _wait_for_replication_to_catchup(self, timeout=1200):
         rest1 = RestConnection(self.src_master)
         rest2 = RestConnection(self.dest_master)
+        #20 minutes by default
+        end_time = time.time() + timeout
+
         for bucket in self.buckets:
             _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
             _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
-            while _count1 != _count2:
+            while _count1 != _count2 and (time.time() - end_time) < 0:
                 self.sleep(60, "Waiting for replication to catch up ..")
                 _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
                 _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
@@ -914,7 +917,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 continue
             dest_cluster_name = self._cluster_names_dic[key]
             self.dest_master = nodes[0]
-            self._join_clusters(self._cluster_names_dic[key-1], self._clusters_dic[key-1][0],
+            self._join_clusters(self._cluster_names_dic[key - 1], self._clusters_dic[key - 1][0],
                                 dest_cluster_name, self.dest_master)
         self._join_clusters(dest_cluster_name, self.dest_master, src_cluster_name, self.src_master)
         self.sleep(30)
