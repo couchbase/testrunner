@@ -224,6 +224,12 @@ class AutoFailoverTests(unittest.TestCase):
     def test_30s_timeout_pause(self):
         timeout = self.timeout / 2
         server_fail = self._servers[1]
+        shell = RemoteMachineShellConnection(server_fail)
+        type = shell.extract_remote_info().distribution_type
+        shell.disconnect()
+        if type.lower() == 'windows':
+            self.log.info("test will be skipped because the signals SIGSTOP and SIGCONT do not exist for Windows")
+            return
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
             self.fail('failed to change autofailover_settings! See MB-7282')
@@ -234,6 +240,12 @@ class AutoFailoverTests(unittest.TestCase):
     def test_60s_timeout_pause(self):
         timeout = self.timeout
         server_fail = self._servers[1]
+        shell = RemoteMachineShellConnection(server_fail)
+        type = shell.extract_remote_info().distribution_type
+        shell.disconnect()
+        if type.lower() == 'windows':
+            self.log.info("test will be skipped because the signals SIGSTOP and SIGCONT do not exist for Windows")
+            return
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
             self.fail('failed to change autofailover_settings! See MB-7282')
@@ -274,10 +286,12 @@ class AutoFailoverTests(unittest.TestCase):
         shell.disconnect()
         log.info("stopped couchbase server on {0}".format(server))
 
+    #the signals SIGSTOP and SIGCONT do not exist for Windows
     def _pause_couchbase(self, server):
         self._pause_beam(server)
         self._pause_memcached(server)
 
+    #the signals SIGSTOP and SIGCONT do not exist for Windows
     def _pause_memcached(self, server):
         log = logger.Logger.get_logger()
         shell = RemoteMachineShellConnection(server)
@@ -285,6 +299,7 @@ class AutoFailoverTests(unittest.TestCase):
         shell.disconnect()
         log.info("stopped couchbase server on {0}".format(server))
 
+    #the signals SIGSTOP and SIGCONT do not exist for Windows
     def _pause_beam(self, server):
         log = logger.Logger.get_logger()
         shell = RemoteMachineShellConnection(server)
