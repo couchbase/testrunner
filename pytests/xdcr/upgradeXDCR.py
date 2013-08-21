@@ -136,6 +136,8 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         upgrade_nodes = self.input.param('upgrade_nodes', "src").split(";")
         self.cluster.shutdown()
         XDCRReplicationBaseTest.setUp(self)
+        self.set_xdcr_param('xdcrFailureRestartInterval', 1)
+        self.sleep(60)
         bucket = self._get_bucket('default', self.src_master)
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
         bucket = self._get_bucket('bucket0', self.src_master)
@@ -149,6 +151,8 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         if "dest" in upgrade_nodes :
             nodes_to_upgrade += self.dest_nodes
 
+        self.sleep(60)
+        self._wait_for_replication_to_catchup()
         for upgrade_version in self.upgrade_versions:
             for server in nodes_to_upgrade:
                 remote = RemoteMachineShellConnection(server)
@@ -165,6 +169,8 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
                 self.fail("Upgrade failed!")
             self.sleep(self.expire_time)
 
+        self.set_xdcr_param('xdcrFailureRestartInterval', 1)
+        self.sleep(60)
         bucket = self._get_bucket('bucket0', self.src_master)
         gen_create3 = BlobGenerator('loadThree', 'loadThree', self._value_size, end=self._num_items)
         self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
@@ -172,6 +178,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         bucket = self._get_bucket('default', self.src_master)
         self._load_bucket(bucket, self.src_master, gen_create2, 'create', exp=0)
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
+        self.sleep(60)
         self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
 
     def online_cluster_upgrade(self):
