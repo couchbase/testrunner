@@ -244,8 +244,14 @@ class BuildQuery(object):
 
     def _product_name(self, build_id):
         list = build_id.split('_')
-        return list[0]
-
+        if "centos6" in build_id:
+            # return couchbase-server-ent/com_centos6
+            return "_".join(list[:2])
+        elif "ubuntu_1204" in build_id:
+            # return couchbase-server-ent/com_ubuntu_1204
+            return "_".join(list[:3])
+        else:
+            return list[0]
         #the first one is the product
 
     def _product_arch_type(self, build_id):

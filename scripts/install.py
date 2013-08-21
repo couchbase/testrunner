@@ -46,9 +46,12 @@ Available keys:
 
 
 Examples:
- install.py -i /tmp/ubuntu.ini -p product=cb,version=2.0.0r-71
+ install.py -i /tmp/ubuntu.ini -p product=cb,version=2.2.0-792
  install.py -i /tmp/ubuntu.ini -p product=mb,version=1.7.1r-38,parallel=true,toy=keith
  install.py -i /tmp/ubuntu.ini -p product=mongo,version=2.0.2
+
+ # to run with build with require openssl version 1.0.0
+ install.py -i /tmp/ubuntu.ini -p product=cb,version=2.2.0-792,openssl=1
 """
     sys.exit(err)
 
@@ -101,6 +104,7 @@ class Installer(object):
         _errors = []
         version = ''
         server = ''
+        openssl = ''
         names = []
 
         # replace "v" with version
@@ -140,6 +144,9 @@ class Installer(object):
             else:
                 toy = ""
 
+        if ok:
+            if "openssl" in params:
+                openssl = params["openssl"]
 
         if ok:
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
@@ -160,6 +167,10 @@ class Installer(object):
             else:
                 ok = False
                 _errors.append(errors["INVALID-PARAMS"])
+            if "1" in openssl:
+                names = ['couchbase-server-enterprise_centos6', 'couchbase-server-community_centos6', \
+                         'couchbase-server-enterprise_ubuntu_1204', 'couchbase-server-community_ubuntu_1204']
+
         remote_client = RemoteMachineShellConnection(server)
         info = remote_client.extract_remote_info()
         remote_client.disconnect()
@@ -272,6 +283,10 @@ class MembaseServerInstaller(Installer):
         else:
             swappiness = 10
 
+        if "openssl" in params:
+            openssl = params["openssl"]
+        else: openssl = ""
+
         if type == "windows":
             build = self.build_url(params)
             remote_client.download_binary_in_win(build.url, params["version"])
@@ -282,7 +297,8 @@ class MembaseServerInstaller(Installer):
                 log.error('unable to download binaries : {0}'.format(build.url))
                 return False
             path = server.data_path or '/tmp'
-            success &= remote_client.install_server(build, path=path, vbuckets=vbuckets, swappiness=swappiness)
+            success &= remote_client.install_server(build, path=path, vbuckets=vbuckets, \
+                                                    swappiness=swappiness,openssl=openssl)
             ready = RestHelper(RestConnection(params["server"])).is_ns_server_running(60)
             if not ready:
                 log.error("membase-server did not start...")
@@ -397,6 +413,10 @@ class CouchbaseServerInstaller(Installer):
         else:
             swappiness = 10
 
+        if "openssl" in params:
+            openssl = params["openssl"]
+        else: openssl = ""
+
         if "vbuckets" in params:
             vbuckets = int(params["vbuckets"][0])
         else:
@@ -412,7 +432,8 @@ class CouchbaseServerInstaller(Installer):
             # TODO: need separate methods in remote_util for couchbase and membase install
             path = server.data_path or '/tmp'
             try:
-                success = remote_client.install_server(build, path=path, vbuckets=vbuckets, swappiness=swappiness)
+                success = remote_client.install_server(build, path=path, vbuckets=vbuckets, \
+                                                       swappiness=swappiness,openssl=openssl)
                 log.info('wait 5 seconds for membase server to start')
                 time.sleep(5)
                 if "rest_vbuckets" in params:
