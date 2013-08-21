@@ -2,6 +2,7 @@ from basetestcase import BaseTestCase
 from couchbase.cluster import Cluster
 from mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.rest_client import RestConnection
+from remote.remote_util import RemoteMachineShellConnection
 
 AUTH_SUCCESS = "Authenticated"
 AUTH_FAILURE = "Auth failure"
@@ -136,3 +137,34 @@ class SaslTest(BaseTestCase):
     """Test large usernames and passwords"""
     def test_auth_too_big(self):
         pass
+
+    def test_password(self):
+        buckets_num = self.input.param("buckets_to_check", 1)
+        valid_password = self.input.param("valid_pass", "password")
+        if isinstance(valid_password, int):
+            valid_password = str(valid_password)
+        valid_password = valid_password.replace('[space]',' ')
+        invalid_pass = self.input.param("invalid_pass", [])
+        if invalid_pass:
+            invalid_pass = invalid_pass.split(";")
+        self._create_sasl_buckets(self.master, buckets_num, bucket_size=100, password=valid_password)
+        if self.input.param("include_restart", False):
+            self.restart_server(self.servers[:self.nodes_init])
+        for bucket in self.buckets:
+            for password in invalid_pass:
+                password = password.replace('[space]',' ').replace('[tab]', u'\t').encode('ascii')
+                self.assertEqual(self.do_auth(bucket.name, password), AUTH_FAILURE,
+                             "Bucket %s, valid pass %s, shouldn't authentificate with %s" %(
+                                        bucket, bucket.saslPassword, password))
+            self.assertEqual(self.do_auth(bucket.name, bucket.saslPassword), AUTH_SUCCESS,
+                             "Bucket %s, valid pass %s, authentification should success" %(
+                                        bucket, bucket.saslPassword))
+
+    def restart_server(self, servers):
+        for server in servers:
+            shell = RemoteMachineShellConnection(server)
+            shell.stop_couchbase()
+            self.sleep(3, "Pause between start and stop")
+            shell.start_couchbase()
+            shell.disconnect()
+        self.sleep(10, "Pause for starting servers")
