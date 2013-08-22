@@ -49,7 +49,11 @@ class SaslTest(BaseTestCase):
 
     """Make sure that list mechanisms works and the response is in order"""
     def test_list_mechs(self):
-        client = MemcachedClient(self.master.ip, 12000)
+        nodes = RestConnection(self.master).get_nodes()
+        for n in nodes:
+            if n.ip == self.master.ip and n.port == self.master.port:
+                node = n
+        client = MemcachedClient(self.master.ip, node.memcached)
         mechs = list(client.sasl_mechanisms())
         assert "CRAM-MD5" in mechs
         assert "PLAIN" in mechs
