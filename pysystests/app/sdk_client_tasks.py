@@ -47,6 +47,7 @@ from couchbase import Couchbase
 class PersistedCB(Task):
     _conn = None
     _bucket = None
+    _password = ""
     _hosts = None
     _stale_count = 0
 
@@ -60,7 +61,8 @@ class PersistedCB(Task):
                 port = addr[1]
 
             logger.error("connecting sdk: %s" % host)
-            self._conn = Couchbase.connect(bucket = self._bucket, host=host, port=port)
+            self._conn = Couchbase.connect(bucket = self._bucket, password = self._password,
+                                           host=host, port=port)
             self._stale_count = 0
         self._stale_count = self._stale_count + 1
         return self._conn
@@ -79,8 +81,9 @@ class PersistedCB(Task):
 
         self._hosts = hosts
 
-    def set_bucket(self, bucket):
+    def set_bucket(self, bucket, password=""):
         self._bucket = bucket
+        self._password = password
 
     def close(self):
         del self._conn
@@ -90,7 +93,7 @@ class PersistedCB(Task):
 def mset(keys, template, bucket = "default", isupdate = False, password = "", hosts = None):
 
     mset.set_hosts(hosts)
-    mset.set_bucket(bucket)
+    mset.set_bucket(bucket, password)
     cb = mset.couchbaseClient
 
     # decode magic strings in template before sending to sdk
@@ -110,7 +113,7 @@ def mset(keys, template, bucket = "default", isupdate = False, password = "", ho
 @celery.task(base = PersistedCB)
 def mget(keys, bucket = "default", password = "", hosts = None):
     mset.set_hosts(hosts)
-    mset.set_bucket(bucket)
+    mset.set_bucket(bucket, password)
     cb = mset.couchbaseClient
 
     try:
@@ -124,7 +127,7 @@ def mget(keys, bucket = "default", password = "", hosts = None):
 @celery.task(base = PersistedCB)
 def mdelete(keys, bucket = "default", password = "", hosts = None):
     mdelete.set_hosts(hosts)
-    mdelete.set_bucket(bucket)
+    mdelete.set_bucket(bucket, password)
     cb = mdelete.couchbaseClient
     try:
         cb.delete_multi(keys)
