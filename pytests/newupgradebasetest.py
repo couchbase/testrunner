@@ -228,9 +228,10 @@ class NewUpgradeBaseTest(BaseTestCase):
     def verification(self, servers, check_items=True):
         if self.use_hostnames:
             for server in servers:
-                new_hostname = RestConnection(server).get_nodes_self().hostname
+                node_info = RestConnection(server).get_nodes_self()
+                new_hostname = node_info.hostname
                 self.assertEqual("%s:%s" % (server.hostname, server.port), new_hostname,
-                                 "Hostname is incorrect for server %s." % server.ip)
+                                 "Hostname is incorrect for server %s. Settings are %s" % (server.ip, node_info))
         if self.master.ip != self.rest.ip or \
            self.master.ip == self.rest.ip and str(self.master.port) != str(self.rest.port):
             if self.port:
