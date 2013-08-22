@@ -128,10 +128,10 @@ class NonRootTests(unittest.TestCase):
             time.sleep(10)
             for i in range(1, len(self.servers)):
                 _1 = "cd /home/{0}/opt/couchbase &&".format(self.master.ssh_username)
-                _2 = " ./bin/couchbase-cli server-add -c {1}:8091".format(self.master.ip)
-                _3 = " --server-add={2}:8091".format(self.servers[i].ip)
-                _4 = " --server-add-username={3}".format(self.servers[i].rest_username)
-                _5 = " --server-add-password={4}".format(self.servers[i].rest_password)
+                _2 = " ./bin/couchbase-cli rebalance -c {0}:8091".format(self.master.ip)
+                _3 = " --server-add={0}:8091".format(self.servers[i].ip)
+                _4 = " --server-add-username={0}".format(self.servers[i].rest_username)
+                _5 = " --server-add-password={0}".format(self.servers[i].rest_password)
                 _6 = " -u {0} -p {1}".format(self.servers[i].rest_username, self.servers[i].rest_password)
                 command_to_rebalance = _1 + _2 + _3 + _4 + _5 + _6
                 o, e = shell.execute_non_sudo_command(command_to_rebalance)
