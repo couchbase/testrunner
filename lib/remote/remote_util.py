@@ -845,6 +845,8 @@ class RemoteMachineShellConnection:
                 output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export {0}_NUM_VBUCKETS={1}/' /opt/{2}/etc/{2}_init.d".
                                                     format(server_type.upper(), vbuckets, server_type))
                 success &= self.log_command_output(output, error, track_words)
+            # skip output: [WARNING] couchbase-server is already started
+            track_words = ("error", "fail")
             if startserver:
                 output, error = self.execute_command('/etc/init.d/{0}-server start'.format(server_type))
 
