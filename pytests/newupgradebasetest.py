@@ -147,8 +147,10 @@ class NewUpgradeBaseTest(BaseTestCase):
                 for server in servers:
                     client = MemcachedClientHelper.direct_client(server, bucket)
                     drain_rate += int(client.stats()["ep_queue_size"])
+                self.sleep(3, "Pause to load all items")
                 self.assertEqual(self.num_items * (self.num_replicas + 1), drain_rate,
-                                 "Persistence is stopped, drain rate is incorrect")
+                                 "Persistence is stopped, drain rate is incorrect %s. Expected %s" % (
+                                    drain_rate, self.num_items * (self.num_replicas + 1)))
         self.change_settings()
 
     def _get_build(self, server, version, remote, is_amazon=False):
