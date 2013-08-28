@@ -258,7 +258,7 @@ class BuildQuery(object):
 
     def _product_arch_type(self, build_id):
         list = build_id.split('_')
-        if '64' in build_id.split('_'):
+        if '64' in build_id.split('_') or build_id.find('x86_64') != -1:
             return 'x86_64'
         elif 'x86' in build_id.split('_'):
             return 'x86'
