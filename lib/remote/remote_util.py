@@ -357,7 +357,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command_raw('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename))
             self.log_command_output(output, error)
             if skip_md5_check:
-                output, error = self.execute_command_raw('cd /tmp;wget -q -O {0} {1}'.format(filename, url))
+                output, error = self.execute_command_raw('cd /tmp;wget -q -O {0} {1};cd /tmp'.format(filename, url))
                 self.log_command_output(output, error)
             else:
                 log.info('get md5 sum for local and remote')
