@@ -320,7 +320,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command('/sbin/iptables -t nat -F')
             self.log_command_output(output, error)
 
-    def download_binary(self, url, deliverable_type, filename, latest_url=None):
+    def download_binary(self, url, deliverable_type, filename, latest_url=None, skip_md5_check=True):
         if getattr(self, "info", None) is None:
             self.info = self.extract_remote_info()
         self.disable_firewall()
@@ -356,15 +356,19 @@ class RemoteMachineShellConnection:
         # fix this :
             output, error = self.execute_command_raw('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename))
             self.log_command_output(output, error)
-            log.info('get md5 sum for local and remote')
-            output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q -O {1}.md5 {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
-            self.log_command_output(output, error)
-            if str(error).find('No such file or directory') != -1 and latest_url != '':
-                url = latest_url
+            if skip_md5_check:
+                output, error = self.execute_command_raw('cd /tmp;wget -q -O {0} {1}'.format(filename, url))
+                self.log_command_output(output, error)
+            else:
+                log.info('get md5 sum for local and remote')
                 output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q -O {1}.md5 {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
-            log.info('comparing md5 sum and downloading if needed')
-            output, error = self.execute_command_raw('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url))
-            self.log_command_output(output, error)
+                self.log_command_output(output, error)
+                if str(error).find('No such file or directory') != -1 and latest_url != '':
+                    url = latest_url
+                    output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q -O {1}.md5 {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
+                log.info('comparing md5 sum and downloading if needed')
+                output, error = self.execute_command_raw('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url))
+                self.log_command_output(output, error)
             # check if the file exists there now ?
             return self.file_exists('/tmp', filename)
             # for linux environment we can just
