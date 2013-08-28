@@ -68,8 +68,6 @@ class BuildQuery(object):
             if build.product_version.find(version) != -1 and product == build.product\
                and build.architecture_type == arch and type == build.deliverable_type\
                and build.toy == toy:
-                if openssl in ['','0'] and build.url.find('openssl') != -1:
-                    continue
                 return build
         return None
 
