@@ -184,8 +184,15 @@ class Installer(object):
                                                                      build_version=version,
                                                                      product='membase-server-enterprise')
                 else:
-                    build = BuildQuery().find_build(builds, name, info.deliverable_type,
-                                                    info.architecture_type, version, toy=toy)
+                    if "2.2.0-817" in version:
+                        version = "64"
+                        build = BuildQuery().find_build(builds, name, info.deliverable_type,
+                                                        info.architecture_type, version, toy=toy)
+                        build.product_version = "2.2.0-817-rel"
+                        build.url = "http://builds.hq.northscale.net/latestbuilds/couchbase-server-enterprise_2.2.0-817-rel_x86_64.rpm"
+                    else:
+                        build = BuildQuery().find_build(builds, name, info.deliverable_type,
+                                                        info.architecture_type, version, toy=toy)
 
                 if build:
                     if 'amazon' in params:
