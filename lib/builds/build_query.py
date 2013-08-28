@@ -63,11 +63,13 @@ class BuildQuery(object):
         #parse build page and create build object
         pass
 
-    def find_build(self,builds,product,type,arch,version,toy=''):
+    def find_build(self,builds,product,type,arch,version,toy='', openssl=''):
         for build in builds:
             if build.product_version.find(version) != -1 and product == build.product\
                and build.architecture_type == arch and type == build.deliverable_type\
                and build.toy == toy:
+                if openssl in ['','0'] and build.url.find('openssl') != -1:
+                    continue
                 return build
         return None
 
@@ -299,10 +301,17 @@ class BuildQuery(object):
         list = build_id.split('_')
         version_item = ''
         for item in list:
-            if item.endswith('.setup.exe') or item.endswith('rpm') or\
-               item.endswith('deb') or item.endswith('tar.gz') or item.endswith('zip'):
+            if re.match(r'[0-2].[0-9].[0-9]-[0-9]+-rel', item):
                 version_item = item
-                break
+                if list[-1].endswith('xml'):
+                    break
+                return version_item
+        if version_item == '':
+            for item in list:
+                if item.endswith('.setup.exe') or item.endswith('rpm') or\
+                   item.endswith('deb') or item.endswith('tar.gz') or item.endswith('zip'):
+                    version_item = item
+                    break
         if version_item != '':
             if version_item.endswith('.setup.exe'):
                 return version_item[:version_item.index('.setup.exe')]
