@@ -17,6 +17,7 @@ class NonRootTests(unittest.TestCase):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self._os = self.input.param("os","null");     #Allow centos, ubuntu, windows
+        self.build = self.input.param("build", "couchbase-server-enterprise_2.2.0-817-rel_x86_64.rpm")
         self.num_items = self.input.param("items", 100000)
         self.servers = self.input.servers
         self.master = self.servers[0]
@@ -38,7 +39,8 @@ class NonRootTests(unittest.TestCase):
                 command = "cd /home/{0}/opt/couchbase && ./bin/couchbase-server -k".format(server.ssh_username)
                 o, e = shell.execute_non_sudo_command(command)
                 shell.log_command_output(o, e)
-                o, e = shell.execute_non_sudo_command("rm -rf etc/ opt/ couchbase-server-enterprise_x86_64_2.2.0-772-rel.*")
+                command = "rm -rf etc/ opt/ usr/ {0}.*".format(self.build[:-4])
+                o, e = shell.execute_non_sudo_command(command)
                 shell.log_command_output(o, e)
             else:
                 #Handling Windows?
@@ -53,7 +55,8 @@ class NonRootTests(unittest.TestCase):
                 command = "cd /home/{0}/opt/couchbase && ./bin/couchbase-server -k".format(server.ssh_username)
                 o, e = shell.execute_non_sudo_command(command)
                 shell.log_command_output(o, e)
-                o, e = shell.execute_non_sudo_command("rm -rf etc/ opt/ couchbase-server-enterprise_x86_64_2.2.0-772-rel.*")
+                command = "rm -rf etc/ opt/ usr/ {0}.*".format(self.build[:-4])
+                o, e = shell.execute_non_sudo_command(command)
                 shell.log_command_output(o, e)
                 command = "rm -rf backup/"
                 shell.log_command_output(o, e)
@@ -70,9 +73,9 @@ class NonRootTests(unittest.TestCase):
             shell = RemoteMachineShellConnection(server)
             info = shell.extract_remote_info()
             if self._os == "centos":
-                command0 = "rm -rf opt/ etc/ && rm -rf couchbase-server-enterprise_x86_64_2.2.0-772-rel.rpm"
-                command1 = "wget http://builds.hq.northscale.net/latestbuilds/couchbase-server-enterprise_x86_64_2.2.0-772-rel.rpm"
-                command2 = "rpm2cpio couchbase-server-enterprise_x86_64_2.2.0-772-rel.rpm | cpio --extract --make-directories --no-absolute-filenames"
+                command0 = "rm -rf opt/ etc/ && rm -rf {0}".format(self.build)
+                command1 = "wget http://builds.hq.northscale.net/latestbuilds/{0}".format(self.build)
+                command2 = "rpm2cpio {0} | cpio --extract --make-directories --no-absolute-filenames".format(self.build)
                 command3 = "cd /home/{0}/opt/couchbase && ./bin/install/reloc.sh `pwd`".format(server.ssh_username)
                 command4 = "cd /home/{0}/opt/couchbase && ./bin/couchbase-server -- -noinput -detached".format(server.ssh_username)
                 command5 = "cd /home/{0}/opt/couchbase && ./bin/couchbase-server -k".format(server.ssh_username)
@@ -88,9 +91,9 @@ class NonRootTests(unittest.TestCase):
                 o, e = shell.execute_non_sudo_command(command4)
                 shell.log_command_output(o, e)
             elif self._os == "ubuntu":
-                command0 = "rm -rf opt/ etc/ && rm -rf couchbase-server-enterprise_x86_64_2.2.0-772-rel.deb"
-                command1 = "wget http://builds.hq.northscale.net/latestbuilds/couchbase-server-enterprise_x86_64_2.2.0-772-rel.deb"
-                command2 = "dpkg-deb -x couchbase-server-enterprise_x86_64_2.2.0-772-rel.deb /home/{0}".format(server.ssh_username)
+                command0 = "rm -rf opt/ etc/ && rm -rf {0}".format(self.build)
+                command1 = "wget http://builds.hq.northscale.net/latestbuilds/{0}".format(self.build)
+                command2 = "dpkg-deb -x {0} /home/{1}".format(self.build, server.ssh_username)
                 command3 = "cd /home/{0}/opt/couchbase && ./bin/install/reloc.sh `pwd`".format(server.ssh_username)
                 command4 = "cd /home/{0}/opt/couchbase && ./bin/couchbase-server -- -noinput -detached".format(server.ssh_username)
                 command5 = "cd /home/{0}/opt/couchbase && ./bin/couchbase-server -k".format(server.ssh_username)
@@ -105,7 +108,6 @@ class NonRootTests(unittest.TestCase):
                 self.log.info("Starting couchbase server <non-root, non-sudo> ..")
                 o, e = shell.execute_non_sudo_command(command4)
                 shell.log_command_output(o, e)
-                self.fail("TODO: Add instructions for ubuntu")
             elif self._os == "windows":
                 self.fail("TODO: Add instructions for windows")
             else:
