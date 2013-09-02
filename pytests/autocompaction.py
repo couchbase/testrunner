@@ -108,13 +108,12 @@ class AutoCompactionTests(BaseTestCase):
             if self.during_ops:
                 if self.during_ops == "change_port":
                     self.change_port(new_port=self.input.param("new_port", "9090"))
-                    rest = RestConnection(self.servers[0])
                     self.master.port = self.input.param("new_port", "9090")
                 elif self.during_ops == "change_password":
                     old_pass = self.master.rest_password
                     self.change_password(new_password=self.input.param("new_password", "new_pass"))
-                    rest = RestConnection(self.servers[0])
                     self.master.rest_password = self.input.param("new_password", "new_pass")
+                rest = RestConnection(self.master)
             insert_thread = Thread(target=self.load,
                                    name="insert",
                                    args=(self.master, self.autocompaction_value,
