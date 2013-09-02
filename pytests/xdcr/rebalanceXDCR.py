@@ -483,6 +483,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
                 tasks = []
+                self._verify_stats_all_buckets()
                 for view in views:
                     tasks.append(
                         self.cluster.async_query_view(self.src_master, prefix + ddoc_name, view.name, query,
