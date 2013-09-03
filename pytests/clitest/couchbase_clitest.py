@@ -642,7 +642,7 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output, ['Database data will be purged from disk ...', 'ERROR: unable to bucket-flush; please check your username (-u) and password (-p); (400) Bad Request', "{u'_': u'Flush is disabled for the bucket'}"])
             cli_command = "bucket-edit"
-            options = "--bucket={0} --enable-flush=0 --bucket-ramsize=500".format(bucket)
+            options = "--bucket={0} --enable-flush=1 --bucket-ramsize=500".format(bucket)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output, ['SUCCESS: bucket-edit'])
 
