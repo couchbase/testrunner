@@ -158,15 +158,6 @@ class BuildQuery(object):
             latestbuilds, latestchanges =\
                 self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds', timeout=timeout)
 
-        try:
-            sustaining_builds, sustaining_changes =\
-                self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds/sustaining')
-        except:
-            sustaining_builds, sustaining_changes =\
-                self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds/sustaining')
-
-        latestbuilds.extend(sustaining_builds)
-        latestchanges.extend(sustaining_changes)
         return latestbuilds, latestchanges
 
 
