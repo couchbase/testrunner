@@ -233,6 +233,8 @@ class XDCRBaseTest(unittest.TestCase):
         self._dgm_run_bool = self._input.param("dgm_run", False)
         self._mem_quota_int = 0  # will be set in subsequent methods
 
+        self.rep_type = self._input.param("replication_type", "capi")
+
         self._poll_interval = self._input.param(XDCRConstants.INPUT_PARAM_POLL_INTERVAL, 5)
         self._poll_timeout = self._input.param(XDCRConstants.INPUT_PARAM_POLL_TIMEOUT, 120)
 
@@ -960,7 +962,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         rest_conn_src = RestConnection(src_master)
         for bucket in self.buckets:
             (rep_database, rep_id) = rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
-                bucket.name, dest_cluster_name)
+                bucket.name, dest_cluster_name, self.rep_type)
             self._start_replication_time[bucket.name] = datetime.now()
             self.sleep(5)
         if self.buckets:
