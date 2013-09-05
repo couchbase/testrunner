@@ -27,6 +27,9 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.repl_buckets_from_dest = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if bucket_repl.find("<2") != -1 ]
         self._override_clusters_structure()
         self.queue = Queue.Queue()
+        self.rep_type = self.input.param("rep_type", "capi")
+        self.upgrade_versions = self.input.param('upgrade_version', '2.2.0-821-rel')
+        self.upgrade_versions = self.upgrade_versions.split(";")
 
     def tearDown(self):
         try:
@@ -99,7 +102,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         rest_conn_src = RestConnection(src_master)
         for bucket in buckets:
             (rep_database, rep_id) = rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
-                bucket, dest_cluster_name)
+                bucket, dest_cluster_name, self.rep_type)
             self._start_replication_time[bucket] = datetime.now()
             self.sleep(5)
         if self._get_cluster_buckets(src_master):
