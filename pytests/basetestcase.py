@@ -63,7 +63,7 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
             # avoid any cluster operations in setup for new upgrade & upgradeXDCR tests
             if str(self.__class__).find('newupgradetests') != -1 or \
-                    str(self.__class__).find('upgradeXDCR') != -1:
+                    str(self.__class__).find('upgradeXDCR') != -1 or self._testMethodName in ['suite_tearDown', 'suite_setUp']:
                 self.log.info("any cluster operation in setup will be skipped")
                 self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
@@ -113,6 +113,8 @@ class BaseTestCase(unittest.TestCase):
 
     def tearDown(self):
             try:
+                if self._testMethodName in ['suite_tearDown', 'suite_setUp']:
+                    return
                 test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
                     or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
                 if test_failed and TestInputSingleton.input.param("stop-on-failure", False)\

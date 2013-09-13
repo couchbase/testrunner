@@ -247,6 +247,8 @@ def watcher():
 if __name__ == "__main__":
     watcher()
 
+    BEFORE_SUITE = "suite_setUp"
+    AFTER_SUITE = "suite_tearDown"
     names, test_params, arg_i, arg_p, options = parse_args(sys.argv)
     # get params from command line
     TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
@@ -316,7 +318,15 @@ if __name__ == "__main__":
         TestInputSingleton.input.test_params.update(test_params)
         TestInputSingleton.input.test_params["case_number"] = case_number
         print "Test Input params:"
-        pprint(TestInputSingleton.input.test_params)
+        print(TestInputSingleton.input.test_params)
+        if case_number == 1:
+            before_suite_name = "%s.%s" % (name[:name.rfind('.')], BEFORE_SUITE)
+            try:
+                print "Run before suite setup for %s" % name
+                suite = unittest.TestLoader().loadTestsFromName(before_suite_name)
+                result = unittest.TextTestRunner(verbosity=2).run(suite)
+            except AttributeError as ex:
+                pass
         try:
             suite = unittest.TestLoader().loadTestsFromName(name)
         except AttributeError, e:
@@ -374,6 +384,13 @@ if __name__ == "__main__":
             print "test fails, all of the following tests will be skipped!!!"
             break
 
+    after_suite_name = "%s.%s" % (name[:name.rfind('.')], AFTER_SUITE)
+    try:
+        print "Run after suite setup for %s" % name
+        suite = unittest.TestLoader().loadTestsFromName(after_suite_name)
+        result = unittest.TextTestRunner(verbosity=2).run(suite)
+    except AttributeError as ex:
+        pass
     if "makefile" in TestInputSingleton.input.test_params:
         # print out fail for those tests which failed and do sys.exit() error code
         fail_count = 0

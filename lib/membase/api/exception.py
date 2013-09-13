@@ -154,3 +154,15 @@ class BucketFlushFailed(MembaseHttpException):
     def __init__(self, ip='', bucket_name=''):
         self._message = 'unable to flush bucket {0} on the host @ {1}'.\
             format(bucket_name, ip)
+
+class CBQError(Exception):
+    """Error raised when a query fails."""
+
+    def __init__(self, msg='', ip=''):
+        self._message = 'host {0}: ERROR:{1}'.format(ip, msg)
+
+    def __repr__(self):
+        return self._message
+
+    def __str__(self):
+        return "CBQError: %s" % self._message
