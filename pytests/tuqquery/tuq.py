@@ -53,17 +53,7 @@ class QueryTests(BaseTestCase):
                           'SELECT *.name FROM {0}' : 'Parse Error - syntax error',
                           'SELECT *.* FROM {0} ... ERROR' : 'Parse Error - syntax error',
                           'SELECT UNIQUE email from {0}' : ''}
-        for bucket in self.buckets:
-            for query, error in queries_errors.iteritems():
-                try:
-                    actual_result = self.run_cbq_query(query.format(bucket.name))
-                except CBQError as ex:
-                    self.log.error(ex)
-                    self.assertTrue(str(ex).find(error) != -1,
-                                    "Error is incorrect.Actual %s.\n Expected: %s.\n" %(
-                                                                str(ex).split(':')[-1], error))
-                else:
-                    self.fail("There was no errors. Error expected: %s" % error)
+        self.negative_common_body(queries_errors)
 
     def test_consistent_simple_check(self):
         queries = ['SELECT name, join_day, join_mo FROM %s \
@@ -78,6 +68,59 @@ class QueryTests(BaseTestCase):
             self.assertEquals(actual_result1['resultset'], actual_result2['resultset'],
                               "Results are inconsistent.Difference: %s" %(
                                     actual_result1['resultset'] - actual_result2['resultset']))
+
+    def test_simple_alias(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT COUNT(name) AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
+            actual_result = self.run_cbq_query()
+            expected_result = [ { "COUNT_EMPLOYEE": self.num_items  } ]
+            self.assertEquals(actual_result['resultset'], expected_result,
+                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
+                                        actual_result['resultset'], expected_result))
+
+    def test_simple_negative_alias(self):
+        queries_errors = {'SELECT name._last_name as *' : 'Parse Error - syntax error',
+                          'SELECT name._last_name as DATABASE ?' : 'Parse Error - syntax error',
+                          'SELECT nodes AS NULL FROM {0}' : 'Parse Error - syntax error',
+                          'SELECT email as name, name FROM {0}' :
+                                'alias name is defined more than once',
+                          'SELECT tasks_points AS points, points.task1 FROM {0}' :
+                                'Alias points cannot be referenced',
+                          'SELECT tasks_points.task1 AS points_new FROM {0} AS test \
+                           WHERE points_new >0' : "Alias points_new cannot be referenced"}
+        self.negative_common_body(queries_errors)
+
+    def test_alias_from_clause(self):
+        queries = ['SELECT tasks_points.task1 AS points FROM %s AS test' %(bucket.name),
+                   'SELECT tasks_points.task1 AS points FROM %s AS test WHERE test.join_day >0' %(
+                                                                            bucket.name),
+                   'SELECT tasks_points.task1 AS points FROM %s AS test ' % (bucket.name) +
+                   'WHERE FLOOR(test.test_rate) >0']
+        for bucket in self.buckets:
+            for query in queries:
+                full_list = self._generate_full_docs_list(self.gens_load)
+                expected_list = [{"points" : doc["tasks_points"]["task1"]} for doc in full_list]
+                expected_result = sorted(expected_list, key=lambda doc: (doc['name'], doc['email']))
+                actual_result = self.run_cbq_query(query)
+                self.assertEquals(actual_result['resultset'], expected_result,
+                                  "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
+                                            actual_result['resultset'], expected_result))
+
+
+    def negative_common_body(self, queries_errors={}):
+        if not queries_errors:
+            self.fail("No queries to run!")
+        for bucket in self.buckets:
+            for query, error in queries_errors.iteritems():
+                try:
+                    actual_result = self.run_cbq_query(query.format(bucket.name))
+                except CBQError as ex:
+                    self.log.error(ex)
+                    self.assertTrue(str(ex).find(error) != -1,
+                                    "Error is incorrect.Actual %s.\n Expected: %s.\n" %(
+                                                                str(ex).split(':')[-1], error))
+                else:
+                    self.fail("There was no errors. Error expected: %s" % error)
 
     def run_cbq_query(self, query=None, min_output_size=10):
         if query is None:
@@ -122,12 +165,13 @@ class QueryTests(BaseTestCase):
 
     def generate_docs(self, docs_per_day, start=0):
         generators = []
-        types = ["Engineer", "Sales", "Support"]
+        types = ['Engineer', 'Sales', 'Support']
         join_yr = [2010, 2011]
         join_mo = xrange(1, 12 + 1)
         join_day = xrange(1, 28 + 1)
         template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
-        template += ' "email":"{4}", "job_title":"{5}"}}'
+        template += ' "email":"{4}", "job_title":"{5}", "test_rate" : {8},'
+        template += ' "tasks_points" : {{"task1" : {6}, "task2" : {7}}}}}'
         for info in types:
             for year in join_yr:
                 for month in join_mo:
@@ -138,7 +182,8 @@ class QueryTests(BaseTestCase):
                         generators.append(DocumentGenerator("query-test" + prefix,
                                                template,
                                                name, [year], [month], [day],
-                                               email, info,
+                                               email, [info], range(1,10), range(1,10),
+                                               [float("%s.%s" % (month, month))],
                                                start=start, end=docs_per_day))
         return generators
 
