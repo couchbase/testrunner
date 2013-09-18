@@ -1423,6 +1423,7 @@ class RemoteMachineShellConnection:
             info.disk = self.get_disk_info(mac=is_mac)
             info.ram = self.get_ram_info(mac=is_mac)
             info.hostname = self.get_hostname()
+            info.domain = self.get_domain()
             return info
 
     def get_extended_windows_info(self):
@@ -1442,6 +1443,10 @@ class RemoteMachineShellConnection:
         o, r = self.execute_command_raw('hostname')
         if o:
             return o
+
+    def get_domain(self):
+        ret = self.execute_command_raw('hostname -d')
+        return ret
 
     def get_cpu_info(self, win_info=None, mac=False):
         if win_info:
