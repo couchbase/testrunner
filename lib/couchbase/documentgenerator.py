@@ -74,6 +74,7 @@ class DocumentGenerator(KVGenerator):
             value = arg[seed % len(arg)]
             doc_args.append(value)
             seed /= len(arg)
+
         json_doc = json.loads(self.template.format(*doc_args).replace('\'', '"'))
         json_doc['_id'] = self.name + '-' + str(self.itr)
         self.itr += 1
