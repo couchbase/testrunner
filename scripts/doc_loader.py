@@ -1,0 +1,172 @@
+#!/usr/bin/env python
+import getopt
+import sys
+
+sys.path.extend(('.', 'lib'))
+from lib.remote.remote_util import RemoteMachineShellConnection
+from couchbase.documentgenerator import DocumentGenerator
+from couchbase.cluster import Cluster
+from membase.api.rest_client import Bucket
+import TestInput
+import logger
+import logging.config
+import os
+import uuid
+import copy
+
+
+def usage(error=None):
+    print """\
+Syntax: doc_loader.py [options]
+will create documents like:
+{
+  "tasks_points": {
+    "task1": 1,
+    "task2": 1
+  },
+  "name": "employee-4",
+  "mutated": 0,
+  "skills": [
+    "skill2010",
+    "skill2011"
+  ],
+  "join_day": 4,
+  "join_mo": 1,
+  "test_rate": 1.1,
+  "join_yr": 2010,
+  "_id": "query-test1b32d75-0",
+  "email": "4-mail@couchbase.com",
+  "job_title": "Engineer",
+  "VMs": [
+    {
+      "RAM": 1,
+      "os": "ubuntu",
+      "name": "vm_1",
+      "memory": 1
+    },
+    {
+      "RAM": 1,
+      "os": "windows",
+      "name": "vm_2",
+      "memory": 1
+    }
+  ]
+}
+
+Options
+ -i <file>        Path to .ini file containing cluster information.
+ -p <key=val,...> Comma-separated key=value info.
+
+Available keys:
+ bucket_name= bucket to load (default by default)
+ bucket_port=dedicated bucket port if any
+ bucket_sasl_pass=sasl password of bucket
+ docs_per_day=documents to load per <one day>. 49 by default
+ years=number of years. 2 by default
+
+Example:
+ doc_loader.py -i cluster.ini -p bucket_name=default,docs_per_day=1
+ doc_loader.py -i cluster.ini -p docs_per_day=1,bucket_name=sasl,bucket_sasl_pass=pass
+"""
+    sys.exit(error)
+
+
+class DocLoader():
+    def __init__(self, servers, cluster):
+        self.servers = servers
+        self.master = self.servers[0]
+        self.cluster = cluster
+        self.log = logger.Logger.get_logger()
+
+    def generate_docs(self, docs_per_day, years):
+        generators = []
+        types = ["Engineer", "Sales", "Support"]
+        join_yr = [2010, 2011]
+        join_mo = xrange(1, 12 + 1)
+        join_day = xrange(1, 28 + 1)
+        template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
+        template += ' "email":"{4}", "job_title":"{5}", "test_rate":{8}, "skills":{9},'
+        template += '"VMs": {10},'
+        template += ' "tasks_points" : {{"task1" : {6}, "task2" : {7}}}}}'
+        for info in types:
+            for year in join_yr:
+                for month in join_mo:
+                    for day in join_day:
+                        prefix = str(uuid.uuid4())[:7]
+                        name = ["employee-%s" % (str(day))]
+                        email = ["%s-mail@couchbase.com" % (str(day))]
+                        vms = [{"RAM": month, "os": "ubuntu",
+                                "name": "vm_%s" % month, "memory": month},
+                               {"RAM": month, "os": "windows",
+                                "name": "vm_%s"% (month + 1), "memory": month}]
+                        generators.append(DocumentGenerator("query-test" + prefix,
+                                               template,
+                                               name, [year], [month], [day],
+                                               email, [info], range(1,10), range(1,10),
+                                               [float("%s.%s" % (month, month))],
+                                               [["skill%s" % y for y in join_yr]], [vms],
+                                               start=0, end=docs_per_day))
+        self.log.info("Docs are generated.")
+        return generators
+
+    def load(self, generators_load, bucket, exp=0, flag=0,
+             kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
+             timeout_secs=30, op_type='create'):
+        gens_load = []
+        for generator_load in generators_load:
+            gens_load.append(copy.deepcopy(generator_load))
+        tasks = []
+        items = 0
+        for gen_load in gens_load:
+                items += (gen_load.end - gen_load.start)
+
+        self.log.info("%s %s to %s documents..." % (op_type, items, bucket.name))
+        tasks.append(self.cluster.async_load_gen_docs(self.master, bucket.name,
+                                             gens_load,
+                                             bucket.kvs[kv_store], op_type, exp, flag,
+                                             only_store_hash, batch_size, pause_secs,
+                                             timeout_secs))
+        for task in tasks:
+            task.result()
+        self.log.info("LOAD IS FINISHED")
+
+def initialize_bucket(name, port=None, saslPassword=None):
+    if saslPassword:
+       return Bucket(name=name, authType="sasl", saslPassword=saslPassword)
+    elif port:
+       return Bucket(name=name, authType=None, saslPassword=None, port=port)
+    else:
+       return Bucket(name=name, authType="sasl", saslPassword=None)
+
+def main():
+    try:
+        (opts, args) = getopt.getopt(sys.argv[1:], 'hi:p', [])
+        for o, a in opts:
+            if o == "-h":
+                usage()
+
+        input = TestInput.TestInputParser.get_test_input(sys.argv)
+        if not input.servers:
+            usage("ERROR: no servers specified. Please use the -i parameter.")
+    except IndexError:
+        usage()
+    except getopt.GetoptError, error:
+        usage("ERROR: " + str(error))
+
+    docs_per_day = input.param("doc_per_day", 49)
+    years = input.param("years", 2)
+    bucket_name = input.param("bucket_name", "default")
+    bucket_port = input.param("bucket_port", None)
+    bucket_sasl_pass = input.param("bucket_sasl_pass", None)
+
+    cluster = Cluster()
+    try:
+        bucket = initialize_bucket(bucket_name, bucket_port, bucket_sasl_pass)
+        loader = DocLoader(input.servers, cluster)
+        generators_load = loader.generate_docs(docs_per_day, years)
+        loader.load(generators_load, bucket)
+    finally:
+        cluster.shutdown()
+
+if __name__ == "__main__":
+    main()
