@@ -106,7 +106,8 @@ class ESReplicationBaseTest(object):
                                 (cb_num_items, es_num_items))
 
             # query for all es keys
-            es_valid = es_rest.all_docs(keys_only=True,indices=[bucket.name], size = cb_num_items)
+            #es_valid = es_rest.all_docs(keys_only=True,indices=[bucket.name], size = cb_num_items)
+            es_valid = es_rest.all_docs(bucket.name)
 
             if len(es_valid) != cb_num_items:
                 self._log.info("WARNING: Couchbase has %s docs, ElasticSearch all_docs returned %s docs " %\
@@ -114,7 +115,8 @@ class ESReplicationBaseTest(object):
             for _id in cb_valid[:verification_count]:  # match at most 10k keys
                 if _id not in es_valid:
                     # document missing from all_docs query do manual term search
-                    if es_rest.term_exists(_id, indices=[bucket.name]) == False:
+                    #if es_rest.term_exists(_id, indices=[bucket.name]) == False:
+                    if es_rest.get_couch_doc(_id, bucket.name) is None:
                         self.xd_ref.fail("Document %s Missing from ES Index (%s)" % (_id, bucket.name))
 
             self._log.info("Verified couchbase bucket (%s) replicated (%s) docs to elasticSearch with matching keys" %\
@@ -134,7 +136,8 @@ class ESReplicationBaseTest(object):
             all_cb_docs = cb_rest.all_docs(bucket.name)
             cb_id_rev_list = self.get_cb_id_rev_list(all_cb_docs)
 
-            es_valid = es_rest.all_docs(indices=[bucket.name], size = len(cb_id_rev_list))
+            #es_valid = es_rest.all_docs(indices=[bucket.name], size = len(cb_id_rev_list))
+            es_valid = es_rest.all_docs(bucket.name)
             es_id_rev_list = self.get_es_id_rev_list(es_valid)
 
             # verify each (id, rev) pair returned from couchbase exists in elastic search
@@ -147,7 +150,8 @@ class ESReplicationBaseTest(object):
                 except ValueError:
 
                     # attempt manual lookup by search term
-                    es_doc = es_rest.search_term(cb_id_rev_pair[0], indices = [bucket.name])
+                    #es_doc = es_rest.search_term(cb_id_rev_pair[0], indices = [bucket.name])
+                    es_doc = es_rest.get_couch_doc(cb_id_rev_pair[0], bucket.name)
                     if es_doc is None:
                         self.xd_ref.fail("Error during verification:  %s does not exist in ES index %s" % (cb_id_rev_pair, bucket.name))
 
@@ -164,7 +168,8 @@ class ESReplicationBaseTest(object):
         return [(row['id'],row['value']['rev']) for row in docs['rows']]
 
     def get_es_id_rev_list(self, docs):
-        return [(row['doc']['_id'],row['meta']['rev']) for row in docs]
+        #return [(row['doc']['_id'],row['meta']['rev']) for row in docs]
+        return [(row['id'],row['value']['rev']) for row in docs['rows']]
 
 
     def _verify_es_values(self, src_server, dest_server, kv_store = 1, verification_count = 10000):
