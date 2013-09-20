@@ -178,7 +178,8 @@ class ESReplicationBaseTest(object):
         buckets = self.xd_ref._get_cluster_buckets(src_server)
         for bucket in buckets:
             mc = VBucketAwareMemcached(cb_rest, bucket)
-            es_valid = es_rest.all_docs(indices=[bucket.name], size=verification_count)
+            #es_valid = es_rest.all_docs(indices=[bucket.name], size=verification_count)
+            es_valid = es_rest.all_docs(bucket.name)
 
             # compare values of es documents to documents in couchbase
             for row in es_valid[:verification_count]:
