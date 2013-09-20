@@ -288,6 +288,57 @@ class QueryTests(BaseTestCase):
 
 ##############################################################################################
 #
+#   DISTINCT
+##############################################################################################
+
+    def test_distinct(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT DISTINCT job_title FROM %s'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+
+            full_list = self._generate_full_docs_list(self.gens_load)
+            tmp_titles = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : title}
+                             for title in tmp_titles]
+
+            self.assertEquals(actual_result['resultset'], expected_result,
+                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
+                                        actual_result['resultset'], expected_result))
+    def test_distinct_nested(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT DISTINCT tasks_points.task1 FROM %s'  % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            tmp = set([doc['tasks_points']['task1'] for doc in full_list])
+            expected_result = [{"task1" : point} for point in tmp]
+            self.assertEquals(actual_result['resultset'], expected_result,
+                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
+                                        actual_result['resultset'], expected_result))
+
+            self.query = 'SELECT DISTINCT skills[0] as skill FROM %s'  % (bucket.name, bucket.name)
+            actual_result = self.run_cbq_query()
+            tmp = set([doc['skills'][0] for doc in full_list])
+            expected_result = [{"skill" : point} for point in tmp]
+            self.assertEquals(actual_result['resultset'], expected_result,
+                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
+                                        actual_result['resultset'], expected_result))
+
+            self.query = 'SELECT DISTINCT tasks_points.* FROM %s'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            tmp = set([doc['tasks_points']['task1'] for doc in full_list])
+            expected_result = [{"task1" : point} for point in tmp]
+            self.assertEquals(actual_result['resultset'], expected_result,
+                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
+                                        actual_result['resultset'], expected_result))
+
+    def test_distinct_negative(self):
+        queries_errors = {'SELECT name FROM {0} ORDER BY DISTINCT name' : 'Parse Error - syntax error',
+                          'SELECT name FROM {0} GROUP BY DISTINCT name' : 'Parse Error - syntax error',
+                          'SELECT ANY tasks_points FROM {0}' : 'Parse Error - syntax error'}
+        self.negative_common_body(queries_errors)
+
+##############################################################################################
+#
 #   COMMON FUNCTIONS
 ##############################################################################################
 
