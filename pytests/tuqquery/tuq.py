@@ -15,6 +15,7 @@ class QueryTests(BaseTestCase):
         self.shell = RemoteMachineShellConnection(self.master)
         self.version = self.input.param("cbq_version", "dev_preview1")
         self.use_rest = self.input.param("use_rest", False)
+        self.max_verify = self.input.param("max_verify", None)
         if self._testMethodName in ['suite_tearDown', 'suite_setUp']:
             return
         try:
@@ -49,9 +50,7 @@ class QueryTests(BaseTestCase):
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_list = [{"name" : doc["name"], "email" : doc["email"]} for doc in full_list]
             expected_list_sorted = sorted(expected_list, key=lambda doc: (doc['name'], doc['email']))
-            self.assertEquals(actual_result['resultset'], expected_list_sorted,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_list_sorted))
+            self._verify_results(actual_result['resultset'], expected_list_sorted)
 
     def test_simple_negative_check(self):
         queries_errors = {'SELECT name FROM {0} WHERE COUNT({0}.name)>3' :
@@ -117,22 +116,31 @@ class QueryTests(BaseTestCase):
         self.negative_common_body(queries_errors)
 
     def test_alias_from_clause(self):
-        queries = ['SELECT tasks_points.task1 AS points FROM %s AS test' ,
-                   'SELECT tasks_points.task1 AS points FROM %s AS test WHERE test.join_day >0',
+        queries = ['SELECT tasks_points.task1 AS points FROM %s AS test ORDER BY points' ,
+                   'SELECT tasks_points.task1 AS points FROM %s AS test WHERE test.join_day >0'
+                   ' ORDER BY points',
                    'SELECT tasks_points.task1 AS points FROM %s AS test '
-                   'WHERE FLOOR(test.test_rate) >0',
+                   'WHERE FLOOR(test.test_rate) >0 ORDER BY points',
                    'SELECT tasks_points.task1 AS points FROM %s AS test '
-                   'GROUP BY test.tasks_points.task1']
+                   'GROUP BY test.tasks_points.task1 ORDER BY points']
         for bucket in self.buckets:
             for query in queries:
                 full_list = self._generate_full_docs_list(self.gens_load)
                 expected_result = [{"points" : doc["tasks_points"]["task1"]} for doc in full_list]
-                if query.find("GROUP") != -1:
-                    expected_result = sorted(expected_result, key=lambda doc: doc['points'])
+                expected_result = sorted(expected_result, key=lambda doc: doc['points'])
                 actual_result = self.run_cbq_query(query % (bucket.name))
-                self.assertEquals(actual_result['resultset'], expected_result,
-                                  "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                            actual_result['resultset'], expected_result))
+                self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_alias_from_clause_group(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT tasks_points.task1 AS points FROM %s AS test ' +\
+                         'GROUP BY test.tasks_points.task1 ORDER BY points' % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = set([{"points" : doc["tasks_points"]["task1"]} for doc in full_list])
+            expected_result = sorted(expected_result, key=lambda doc: doc['points'])
+            expected_result = [{"points" : doc["points"]} for doc in expected_result]
+            actual_result = self.run_cbq_query()
+            self._verify_results(actual_result['resultset'], expected_result)
 
     def test_alias_order_desc(self):
         for bucket in self.buckets:
@@ -144,9 +152,7 @@ class QueryTests(BaseTestCase):
             expected_list = [{"name" : doc["name"]} for doc in full_list]
             expected_result = sorted(expected_list, key=lambda doc: doc['name'],
                                      reverse=True)
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+            self._verify_results(actual_result['resultset'], expected_result)
 
     def test_alias_order_asc(self):
         for bucket in self.buckets:
@@ -158,9 +164,7 @@ class QueryTests(BaseTestCase):
             expected_list = [{"name" : doc["name"]} for doc in full_list]
             expected_result = sorted(expected_list, key=lambda doc: doc['name'],
                                      reverse=True)
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+            self._verify_results(actual_result['resultset'], expected_result)
 
 ##############################################################################################
 #
@@ -179,9 +183,7 @@ class QueryTests(BaseTestCase):
                              for doc in full_list]
             expected_result = sorted(expected_list, key=lambda doc: (doc['job_title'],
                                                                      doc["name"]))
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+            self._verify_results(actual_result['resultset'], expected_result)
             self.query = 'SELECT name, job_title FROM %s'  % (bucket.name) +\
             ' ORDER BY tasks_points.task1, job_title, name'
             actual_result = self.run_cbq_query()
@@ -190,16 +192,12 @@ class QueryTests(BaseTestCase):
                                                                      doc["name"]))
             expected_result = [{"name" : doc["name"], "job_title" : doc["job_title"]}
                                for doc in result_sorted]
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+            self._verify_results(actual_result['resultset'], expected_result)
             self.query = 'SELECT name, job_title, tasks_points.task1 AS CONTACT' +\
             ' FROM %s ORDER BY $2' % (bucket.name)
             actual_result = self.run_cbq_query()
             expected_result = sorted(expected_list, key=lambda doc: (doc['job_title']))
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+            self._verify_results(actual_result['resultset'], expected_result)
 
     def test_order_by_alias(self):
         for bucket in self.buckets:
@@ -214,9 +212,7 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_list, key=lambda doc: (doc['job_title'],
                                                                      doc["tasks_points"]),
                                      reverse=True)
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+            self._verify_results(actual_result['resultset'], expected_result)
 
     def test_order_by_alias_arrays(self):
         for bucket in self.buckets:
@@ -233,9 +229,7 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_list, key=lambda doc: (doc['tasks_points'],
                                                                      doc["skills"][0]),
                                      reverse=True)
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+            self._verify_results(actual_result['resultset'], expected_result)
 
     def test_order_by_aggr_fn(self):
         for bucket in self.buckets:
@@ -253,9 +247,7 @@ class QueryTests(BaseTestCase):
 
             expected_result = sorted(expected_list, key=lambda doc: (doc['min_value']))
             expected_result = [{"TITLE" : doc["job_title"]} for doc in expected_result]
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+            self._verify_results(actual_result['resultset'], expected_result)
 
     def test_order_by_precedence(self):
         for bucket in self.buckets:
@@ -269,9 +261,7 @@ class QueryTests(BaseTestCase):
                              for doc in full_list]
             expected_result = sorted(expected_list, key=lambda doc: (doc['job_title'],
                                                                      doc["join_yr"]))
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+            self._verify_results(actual_result['resultset'], expected_result)
 
             self.query = 'SELECT job_title, join_yr, FROM %s'  % (bucket.name) +\
             ' ORDER BY join_yr, job_title'
@@ -282,9 +272,7 @@ class QueryTests(BaseTestCase):
                              for doc in full_list]
             expected_result = sorted(expected_list, key=lambda doc: (doc['join_yr'],
                                                                      doc["job_title"]))
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+            self._verify_results(actual_result['resultset'], expected_result)
 
 ##############################################################################################
 #
@@ -293,43 +281,41 @@ class QueryTests(BaseTestCase):
 
     def test_distinct(self):
         for bucket in self.buckets:
-            self.query = 'SELECT DISTINCT job_title FROM %s'  % (bucket.name)
+            self.query = 'SELECT DISTINCT job_title FROM %s ORDER BY job_title'  % (bucket.name)
             actual_result = self.run_cbq_query()
 
             full_list = self._generate_full_docs_list(self.gens_load)
             tmp_titles = set([doc['job_title'] for doc in full_list])
             expected_result = [{"job_title" : title}
                              for title in tmp_titles]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result['resultset'], expected_result)
 
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
     def test_distinct_nested(self):
         for bucket in self.buckets:
-            self.query = 'SELECT DISTINCT tasks_points.task1 FROM %s'  % (bucket.name)
+            self.query = 'SELECT DISTINCT tasks_points.task1 FROM %s '  % (bucket.name) +\
+                         'ORDER BY tasks_points.task1'
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
             tmp = set([doc['tasks_points']['task1'] for doc in full_list])
             expected_result = [{"task1" : point} for point in tmp]
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+            expected_result = sorted(expected_result, key=lambda doc: (doc['task1']))
+            self._verify_results(actual_result['resultset'], expected_result)
 
-            self.query = 'SELECT DISTINCT skills[0] as skill FROM %s'  % (bucket.name, bucket.name)
+            self.query = 'SELECT DISTINCT skills[0] as skill' +\
+                         ' FROM %s ORDER BY skill'  % (bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
             tmp = set([doc['skills'][0] for doc in full_list])
             expected_result = [{"skill" : point} for point in tmp]
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+            expected_result = sorted(expected_result, key=lambda doc: (doc['skill']))
+            self._verify_results(actual_result['resultset'], expected_result)
 
-            self.query = 'SELECT DISTINCT tasks_points.* FROM %s'  % (bucket.name)
+            self.query = 'SELECT DISTINCT tasks_points.* ' +\
+                         'FROM %s'  % (bucket.name)
             actual_result = self.run_cbq_query()
             tmp = set([doc['tasks_points']['task1'] for doc in full_list])
             expected_result = [{"task1" : point} for point in tmp]
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+            self._verify_results(actual_result['resultset'], expected_result)
 
     def test_distinct_negative(self):
         queries_errors = {'SELECT name FROM {0} ORDER BY DISTINCT name' : 'Parse Error - syntax error',
@@ -491,3 +477,14 @@ class QueryTests(BaseTestCase):
                 all_docs_list.append(json.loads(val))
         return all_docs_list
 
+    def _verify_results(self, actual_result, expected_result):
+        self.assertEquals(len(actual_result), len(expected_result),
+                          "Results are incorrect.Actual num %s. Expected num: %s.\n" % (
+                                            len(actual_result), len(expected_result)))
+        if self.max_verify is not None:
+            actual_result = actual_result[:self.max_verify]
+            expected_result = expected_result[:self.max_verify]
+
+        self.assertEquals(actual_result, expected_result,
+                          "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
+                                            actual_result, expected_result))
