@@ -105,8 +105,14 @@ class collectinfoTests(CliBaseTest):
                     if output_line.find(x) >= 0:
                         find_log = True
                 if not find_log:
-                   missing_logs = True
-                   self.log.error("The log zip file miss %s" % (x))
+                    # missing syslog.tar.gz in mac as in ticket MB-9110
+                    # need to remove 3 lines below if it is fixed in 2.2.1
+                    # in mac os
+                    if x == "syslog.tar.gz" and info.distribution_type.lower() == "mac":
+                       missing_logs = False
+                   else:
+                       missing_logs = True
+                       self.log.error("The log zip file miss %s" % (x))
 
             missing_buckets = False
             if not self.node_down:
