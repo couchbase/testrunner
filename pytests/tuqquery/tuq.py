@@ -74,6 +74,14 @@ class QueryTests(BaseTestCase):
                               "Results are inconsistent.Difference: %s" %(
                                     actual_result1['resultset'] - actual_result2['resultset']))
 
+    def test_simple_nulls(self):
+        queries = ['FROM %s SELECT name WHERE id=null',
+           'SELECT id FROM %s WHERE id=NULL or id="null"']
+        for bucket in self.buckets:
+            for query in queries:
+                actual_result = self.run_cbq_query(query % (bucket.name))
+                self._verify_results(actual_result['resultset'], [])
+
 ##############################################################################################
 #
 #   ALIAS CHECKS
@@ -166,6 +174,15 @@ class QueryTests(BaseTestCase):
                                      reverse=True)
             self._verify_results(actual_result['resultset'], expected_result)
 
+    def test_alias_aggr_fn(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT COUNT(TEST.name) from %s AS TEST' %(bucket.name)
+            actual_result = self.run_cbq_query()
+
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"$1" : len(full_list)}]
+            self._verify_results(actual_result['resultset'], expected_result)
+
 ##############################################################################################
 #
 #   ORDER BY CHECKS
@@ -174,7 +191,7 @@ class QueryTests(BaseTestCase):
     def test_order_by_check(self):
         for bucket in self.buckets:
             self.query = 'SELECT name, job_title, tasks_points.task1 FROM %s'  % (bucket.name) +\
-            ' ORDER BY job_title, name'
+            ' ORDER BY job_title, name, tasks_points.task1'
             actual_result = self.run_cbq_query()
 
             full_list = self._generate_full_docs_list(self.gens_load)
@@ -182,7 +199,8 @@ class QueryTests(BaseTestCase):
                               "task1" : doc["tasks_points"]["task1"]}
                              for doc in full_list]
             expected_result = sorted(expected_list, key=lambda doc: (doc['job_title'],
-                                                                     doc["name"]))
+                                                                     doc["name"],
+                                                                     doc["task1"]))
             self._verify_results(actual_result['resultset'], expected_result)
             self.query = 'SELECT name, job_title FROM %s'  % (bucket.name) +\
             ' ORDER BY tasks_points.task1, job_title, name'
@@ -194,9 +212,14 @@ class QueryTests(BaseTestCase):
                                for doc in result_sorted]
             self._verify_results(actual_result['resultset'], expected_result)
             self.query = 'SELECT name, job_title, tasks_points.task1 AS CONTACT' +\
-            ' FROM %s ORDER BY $2' % (bucket.name)
+            ' FROM %s ORDER BY $2, $1, $3' % (bucket.name)
             actual_result = self.run_cbq_query()
-            expected_result = sorted(expected_list, key=lambda doc: (doc['job_title']))
+            expected_list = [{"name" : doc["name"], "job_title" : doc["job_title"],
+                              "CONTACT" : doc["tasks_points"]["task1"]}
+                             for doc in full_list]
+            expected_result = sorted(expected_list, key=lambda doc: (doc['job_title'],
+                                                                     doc["name"],
+                                                                     doc["CONTACT"]))
             self._verify_results(actual_result['resultset'], expected_result)
 
     def test_order_by_alias(self):
@@ -321,6 +344,51 @@ class QueryTests(BaseTestCase):
         queries_errors = {'SELECT name FROM {0} ORDER BY DISTINCT name' : 'Parse Error - syntax error',
                           'SELECT name FROM {0} GROUP BY DISTINCT name' : 'Parse Error - syntax error',
                           'SELECT ANY tasks_points FROM {0}' : 'Parse Error - syntax error'}
+        self.negative_common_body(queries_errors)
+
+##############################################################################################
+#
+#   DISTINCT
+##############################################################################################
+
+    def test_like(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM %s WHERE job_title LIKE 'S%' ORDER BY name"  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name']} for doc in full_list
+                               if doc["job_title"].startswith('S')]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+            self.query = "SELECT name FROM %s WHERE job_title LIKE '%u%' ORDER BY name"  %(
+                                                                            bucket.name)
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name']} for doc in full_list
+                               if doc["job_title"].find('u') != -1]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+            self.query = "SELECT name FROM %s WHERE job_title NOT LIKE 'S%' ORDER BY name"  %(
+                                                                            bucket.name)
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name']} for doc in full_list
+                               if not doc["job_title"].startswith('S')]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+            self.query = "SELECT name FROM %s WHERE join_yr NOT LIKE '_010' ORDER BY name"  %(
+                                                                            bucket.name)
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name']} for doc in full_list
+                               if not str(doc["join_yr"]).endswith('010') and\
+                               len(str(doc["join_yr"])) == 4]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_like_negative(self):
+        queries_errors = {"SELECT tasks_points FROM {0} WHERE tasks_points.* LIKE '_1%'" :
+                           'Parse Error - syntax error'}
         self.negative_common_body(queries_errors)
 
 ##############################################################################################
@@ -485,6 +553,6 @@ class QueryTests(BaseTestCase):
             actual_result = actual_result[:self.max_verify]
             expected_result = expected_result[:self.max_verify]
 
-        self.assertEquals(actual_result, expected_result,
+        self.assertTrue(actual_result == expected_result,
                           "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
                                             actual_result, expected_result))
