@@ -110,7 +110,7 @@ class collectinfoTests(CliBaseTest):
                     # in mac os
                     if x == "syslog.tar.gz" and info.distribution_type.lower() == "mac":
                        missing_logs = False
-                   else:
+                    else:
                        missing_logs = True
                        self.log.error("The log zip file miss %s" % (x))
 
