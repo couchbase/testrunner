@@ -393,15 +393,31 @@ class QueryTests(BaseTestCase):
         return url
 
     def _start_command_line_query(self, server):
-        cbq_url = self.build_url(self.version)
-        #TODO for windows
-        #TODO git
-        cmd = "cd /tmp; mkdir tuq;cd tuq; wget {0} -O tuq.tar.gz;".format(cbq_url)
-        cmd += "tar -xvf tuq.tar.gz;rm -rf tuq.tar.gz"
-        self.shell.execute_command(cmd)
-        cmd = "cd /tmp/tuq;./cbq-engine -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
-                                                            server.ip, server.port)
-        self.shell.execute_command(cmd)
+        if self.version == "git_repo":
+            if self.shell.file_exists('$GOPATH/src/github.com/couchbaselabs/tuqtng',
+                                   'tuqtng'):
+                cmd = "cd $GOPATH/src/github.com/couchbaselabs/tuqtng; git pull origin"
+                self.shell.execute_command(cmd)
+                cmd = "rm -rf $GOPATH/src/github.com/couchbaselabs/tuqtng/tugtng "
+                "$GOPATH/src/github.com/couchbaselabs/tuqtng/tuq_client/tuq_client"
+                self.shell.execute_command(cmd)
+            else:
+                cmd= 'go get github.com/couchbaselabs/tuqtng;'
+                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go get -d -v ./...'
+                self.shell.execute_command(cmd)
+            cmd = "cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go build"
+            self.shell.execute_command(cmd)
+            cmd = "cd $GOPATH/src/github.com/couchbaselabs/tuqtng/tuq_client; go build"
+            self.shell.execute_command(cmd)
+        else:
+            cbq_url = self.build_url(self.version)
+            #TODO for windows
+            cmd = "cd /tmp; mkdir tuq;cd tuq; wget {0} -O tuq.tar.gz;".format(cbq_url)
+            cmd += "tar -xvf tuq.tar.gz;rm -rf tuq.tar.gz"
+            self.shell.execute_command(cmd)
+            cmd = "cd /tmp/tuq;./cbq-engine -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
+                                                                server.ip, server.port)
+            self.shell.execute_command(cmd)
 
     def _parse_query_output(self, output):
         if output.find("cbq>") == 0:
