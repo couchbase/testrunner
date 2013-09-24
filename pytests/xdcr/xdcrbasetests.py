@@ -275,7 +275,7 @@ class XDCRBaseTest(unittest.TestCase):
             start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
         self.gen_update = BlobGenerator('loadOne', 'loadOne-', self._value_size, start=0,
             end=int(self._num_items * (float)(self._percent_update) / 100))
-
+        self.gen_append = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self._num_items)
 
         self.ord_keys = self._clusters_keys_olst
         self.ord_keys_len = len(self.ord_keys)

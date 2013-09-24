@@ -1,3 +1,4 @@
+import copy
 from xdcrbasetests import XDCRReplicationBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
@@ -458,3 +459,17 @@ class unidirectional(XDCRReplicationBaseTest):
         self._disable_firewall(self.dest_master)
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.verify_results()
+
+    """Testing Unidirectional append ( Loading only at source) Verifying whether XDCR replication is successful on
+    subsequent destination clusters. """
+
+    def test_append(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.sleep(self._timeout)
+        self.verify_results()
+        for i in xrange(20 * 1024 - 1):
+            gen = copy.deepcopy(self.gen_append)
+            self._load_all_buckets(self.src_master, gen, "append", 0)
+            self.sleep(self._timeout)
+            self.verify_results()

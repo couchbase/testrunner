@@ -553,6 +553,42 @@ class GenericLoadingTask(Thread, Task):
             self.state = FINISHED
             self.set_exception(error)
 
+    def _unlocked_append(self, partition, key, value):
+        try:
+            o, c, old_value = self.client.get(key)
+            if value is None:
+                return
+            value_json = json.loads(value)
+            old_value_json = json.loads(old_value)
+            old_value_json.update(value_json)
+            old_value = json.dumps(old_value_json)
+            value = json.dumps(value_json)
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+                #there is no such item, we do not know what value to set
+                return
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
+                return
+        except ValueError:
+            o, c, old_value = self.client.get(key)
+            index = random.choice(range(len(value)))
+            value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+            old_value += value
+        except BaseException as error:
+            self.state = FINISHED
+            self.set_exception(error)
+
+        try:
+            self.client.append(key, value)
+            if self.only_store_hash:
+                 value = str(crc32.crc32_hash(value))
+            partition.set(key, old_value)
+        except BaseException as error:
+            self.state = FINISHED
+            self.set_exception(error)
+
 
 class LoadDocumentsTask(GenericLoadingTask):
     def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=True):
@@ -579,6 +615,8 @@ class LoadDocumentsTask(GenericLoadingTask):
             self._unlocked_update(partition, key)
         elif self.op_type == 'delete':
             self._unlocked_delete(partition, key)
+        elif self.op_type == 'append':
+            self._unlocked_append(partition, key, value)
         else:
             self.state = FINISHED
             self.set_exception(Exception("Bad operation type: %s" % self.op_type))
