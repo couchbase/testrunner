@@ -2,6 +2,8 @@ import logger
 import json
 import uuid
 import copy
+import math
+import re
 
 from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
@@ -183,6 +185,15 @@ class QueryTests(BaseTestCase):
             expected_result = [{"$1" : len(full_list)}]
             self._verify_results(actual_result['resultset'], expected_result)
 
+    def test_alias_over(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT count(skill) FROM %s AS emp OVER skill IN emp.skills' %(
+                                                                            bucket.name)
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"$1" : len(full_list)}]
+            self._verify_results(actual_result['resultset'], expected_result)
+
 ##############################################################################################
 #
 #   ORDER BY CHECKS
@@ -212,7 +223,7 @@ class QueryTests(BaseTestCase):
                                for doc in result_sorted]
             self._verify_results(actual_result['resultset'], expected_result)
             self.query = 'SELECT name, job_title, tasks_points.task1 AS CONTACT' +\
-            ' FROM %s ORDER BY $2, $1, $3' % (bucket.name)
+            ' FROM %s ORDER BY 2, 1, 3' % (bucket.name)
             actual_result = self.run_cbq_query()
             expected_list = [{"name" : doc["name"], "job_title" : doc["job_title"],
                               "CONTACT" : doc["tasks_points"]["task1"]}
@@ -297,6 +308,22 @@ class QueryTests(BaseTestCase):
                                                                      doc["job_title"]))
             self._verify_results(actual_result['resultset'], expected_result)
 
+    def test_order_by_over(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT name, VMs FROM %s '  % (bucket.name) +\
+            'AS employees WHERE ANY vm.RAM > 5 AND vm.os = "ubuntu" '
+            'OVER vm IN default.VMs END ORDER BY name'
+            actual_result = self.run_cbq_query()
+
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_list = [{"name" : doc["name"], "VMs" : doc["VMs"]}
+                              for doc in full_list
+                              if len([vm["RAM"] > 5 and vm["os"] == 'ubuntu'
+                                for vm in doc["VMs"]]) > 0]
+
+            expected_result = sorted(expected_list, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
 ##############################################################################################
 #
 #   DISTINCT
@@ -346,9 +373,42 @@ class QueryTests(BaseTestCase):
                           'SELECT ANY tasks_points FROM {0}' : 'Parse Error - syntax error'}
         self.negative_common_body(queries_errors)
 
+    def test_any(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY skill = 'skill2010' OVER skill IN default.skills end) " +\
+                         "AND (ANY vm.RAM = 5 OVER vm IN default.VMs end) " +\
+                         "AND  NOT (job_title = 'Sales') ORDER BY name"
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
+                               for doc in full_list
+                               if len([skill for skill in doc["skills"]
+                                       if skill == 'skill2010']) > 0 and\
+                                  len([vm for vm in doc["VMs"]
+                                       if vm["RAM"] == 5]) > 0 and\
+                                  doc["job_title"] != 'Sales']
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_all(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
+                         "(ALL CEIL(vm.memory) > 5 OVER vm IN default.VMs END)" +\
+                         " ORDER BY name"
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name']}
+                               for doc in full_list
+                               if len([vm for vm in doc["VMs"]
+                                       if math.ceil(vm['memory']) < 5]) ==\
+                                  len(doc["VMs"])]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
 ##############################################################################################
 #
-#   DISTINCT
+#   LIKE
 ##############################################################################################
 
     def test_like(self):
@@ -390,6 +450,68 @@ class QueryTests(BaseTestCase):
         queries_errors = {"SELECT tasks_points FROM {0} WHERE tasks_points.* LIKE '_1%'" :
                            'Parse Error - syntax error'}
         self.negative_common_body(queries_errors)
+
+    def test_like_any(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, email FROM %s WHERE (ANY vm.os " % (bucket.name)
+            "LIKE '%bun%' OVER vm IN default.VMs END) AND (ANY skill = 'skill2010' "
+            "OVER skill IN default.skills END) ORDER BY name"
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
+                               for doc in full_list
+                               if len([vm for vm in doc["VMs"]
+                                       if vm["os"].find('bun') != 0]) > 0 and\
+                                  len([skill for skill in doc["skills"]
+                                       if skill == 'skill2010']) > 0]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_like_all(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, email FROM %s WHERE (ALL vm.os" % (bucket.name) +\
+                         " NOT LIKE '%cent%' OVER vm IN default.VMs END) AND (ANY skill =" +\
+                         " 'skill2010' OVER skill IN default.skills END) ORDER BY name" 
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
+                               for doc in full_list
+                               if len([vm for vm in doc["VMs"]
+                                     if vm["os"].find('cent') == 0]) == len(doc["VMs"]) and\
+                                  len([skill for skill in doc["skills"]
+                                       if skill == 'skill2010']) > 0]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_like_aliases(self):
+        for bucket in self.buckets:
+            self.query = "select name AS NAME from %s " % (bucket.name) +\
+            "AS EMPLOYEE where EMPLOYEE.name LIKE '_mpl%' ORDER BY name"
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"NAME" : doc['name']} for doc in full_list
+                               if doc["name"].find('mpl') != 0]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_like_wildcards(self):
+        for bucket in self.buckets:
+            self.query = "SELECT email FROM %s WHERE email " % (bucket.name) +\
+                         "LIKE '%\@%\.%' ORDER BY email"
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"email" : doc['email']} for doc in full_list
+                               if re.match(r'.*@.*\..*', doc['email'])]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['email']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+            self.query = "SELECT email FROM %s WHERE email" % (bucket.name) +\
+                         " NOT LIKE '%\@%\.' ORDER BY email"
+            actual_result = self.run_cbq_query()
+            expected_result = [{"email" : doc['email']} for doc in full_list
+                               if re.match(r'.*@.*\..*', doc['email']) is None]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
 
 ##############################################################################################
 #
@@ -492,6 +614,7 @@ class QueryTests(BaseTestCase):
         join_day = xrange(1, 28 + 1)
         template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
         template += ' "email":"{4}", "job_title":"{5}", "test_rate":{8}, "skills":{9},'
+        template += '"VMs": {10},'
         template += ' "tasks_points" : {{"task1" : {6}, "task2" : {7}}}}}'
         for info in types:
             for year in join_yr:
@@ -500,12 +623,17 @@ class QueryTests(BaseTestCase):
                         prefix = str(uuid.uuid4())[:7]
                         name = ["employee-%s" % (str(day))]
                         email = ["%s-mail@couchbase.com" % (str(day))]
+                        vms = [{"RAM": month, "os": "ubuntu",
+                                "name": "vm_%s" % month, "memory": month},
+                               {"RAM": month, "os": "windows",
+                                "name": "vm_%s"% (month + 1), "memory": month}]
                         generators.append(DocumentGenerator("query-test" + prefix,
                                                template,
                                                name, [year], [month], [day],
                                                email, [info], range(1,10), range(1,10),
                                                [float("%s.%s" % (month, month))],
                                                [["skill%s" % y for y in join_yr]],
+                                               [vms],
                                                start=start, end=docs_per_day))
         return generators
 
