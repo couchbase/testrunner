@@ -55,8 +55,20 @@ class cbstatsTests(CliBaseTest):
         mc_conn = MemcachedClientHelper.direct_client(self.master, bucket.name, self.timeout)
         for line in output:
             stats = line.rsplit(":", 1)
-            self.log.info("CbStats###### for %s:::%s==%s" % (stats[0], mc_conn.stats(command)[stats[0].strip()], stats[1].strip()))
-            if stats[1].strip() == mc_conn.stats(command)[stats[0].strip()]:
+            collect_stats = ""
+            if "hash" in command:
+                output, error = self.shell.execute_cbstats(bucket,command)
+                d = []
+                if len(output) > 0:
+                    d = dict(s.strip().split(':') for s in output)
+                    collect_stats = d[stats[0].strip()].strip()
+                else:
+                    raise Exception("Command does not throw out error message but cbstats gives no output. \
+                                      Please check the output manually")
+            else:
+                collect_stats = mc_conn.stats(command)[stats[0].strip()]
+            self.log.info("CbStats###### for %s:::%s==%s" % (stats[0].strip(), collect_stats, stats[1].strip()))
+            if stats[1].strip() == collect_stats:
                 continue
             else:
                 if stats[0].find('tcmalloc') != -1 or stats[0].find('bytes') != -1 or\
