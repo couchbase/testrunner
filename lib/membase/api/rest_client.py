@@ -1194,6 +1194,15 @@ class RestConnection(object):
                         log.info("Node {0} not part of cluster {1}".format(node.ip, node.clusterMembership))
         return nodes
 
+    # this method returns the number of node in cluster
+    def get_cluster_len(self):
+        nodes = self.get_nodes()
+        node_ip = []
+        for node in nodes:
+            node_ip.append(node.ip)
+        log.info("Number of node(s) in cluster is {0} node(s)".format(len(node_ip)))
+        return len(node_ip)
+
     def get_bucket_stats(self, bucket='default'):
         stats = {}
         status, json_parsed = self.get_bucket_stats_json(bucket)
