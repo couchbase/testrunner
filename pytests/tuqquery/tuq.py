@@ -515,6 +515,108 @@ class QueryTests(BaseTestCase):
 
 ##############################################################################################
 #
+#   GROUP BY
+##############################################################################################
+
+    def test_group_by(self):
+        for bucket in self.buckets:
+            self.query = "SELECT tasks_points.task1 AS task from %s " % (bucket.name) +\
+                         "WHERE join_mo>7 GROUP BY tasks_points.task1 " +\
+                         "ORDER BY tasks_points.task1"
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"task" : doc['tasks_points']["task1"]}
+                               for doc in full_list
+                               if doc["join_mo"] > 7]
+            expected_result = set(expected_result)
+            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+            self.query = "SELECT tasks_points.task1 AS task from %s " % (bucket.name) +\
+                         "WHERE join_mo>7 GROUP BY 1 " +\
+                         "ORDER BY tasks_points.task1"
+            actual_result = self.run_cbq_query()
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_group_by_having(self):
+        for bucket in self.buckets:
+            self.query = "from %s WHERE join_mo>7 GROUP BY tasks_points.task1 " % (bucket.name) +\
+                         "HAVING COUNT(tasks_points.task1) > 0 SELECT tasks_points.task1 " +\
+                         "AS task ORDER BY tasks_points.task1"
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"task" : doc['tasks_points']["task1"]}
+                               for doc in full_list
+                               if doc["join_mo"] > 7]
+            expected_result = [doc for doc in expected_result
+                               if expected_result.count(doc) > 0]
+            expected_result = set(expected_result)
+            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_group_by_aggr_fn(self):
+        for bucket in self.buckets:
+            self.query = "SELECT tasks_points.task1 AS task from %s " % (bucket.name) +\
+                         "WHERE join_mo>7 GROUP BY tasks_points.task1 " +\
+                         "HAVING COUNT(tasks_points.task1) > 0 AND "  +\
+                         "(MIN(join_day)=1 OR MAX(join_yr=2011)) " +\
+                         "ORDER BY tasks_points.task1"
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            tmp_groups = set([doc['tasks_points']["task1"] for doc in full_list])
+            expected_result = [{"task" : group} for group in tmp_groups
+                               if [doc['tasks_points']["task1"]
+                                   for doc in full_list].count(group) >0 and\
+                               (min([doc["join_day"] for doc in full_list
+                                     if doc['tasks_points']["task1"] == group]) == 1 or\
+                                max([doc["join_yr"] for doc in full_list
+                                     if doc['tasks_points']["task1"] == group]) == 2011)]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_group_by_over(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, AVG(test_rate) as avg_rate FROM %s " % (bucket.name) +\
+                         "WHERE (ANY skill = 'skill2010' OVER skill IN default.skills end) " +\
+                         "AND (ANY vm.RAM = 5 OVER vm IN default.VMs end) "  +\
+                         "GROUP BY job_title ORDER BY job_title"
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            tmp_groups = set([doc["job_title"] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "avg_rate" : math.fsum([doc["test_rate"] for doc in full_list
+                                             if doc["job_title"] == group]) /
+                                             len([doc["test_rate"] for doc in full_list
+                                             if doc["job_title"] == group])}
+                               for group in tmp_groups
+                               if len([doc for doc in full_list
+                                       if doc["job_title"] == group and\
+                                       'skill2010' in doc["skills"]]) >0 and\
+                                  len([doc for doc in full_list
+                                       if doc["job_title"] == group and\
+                                       [vm for vm in doc["VMs"] if vm["RAM"] == 5]]) >0]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_group_by_negative(self):
+        queries_errors = {"SELECT tasks_points from {0} WHERE tasks_points.task2>3"
+                          " GROUP BY tasks_points.*" :
+                           "Parse Error - syntax error",
+                           "SELECT tasks_points from {0} AS TEST "
+                           "WHERE tasks_points.task2>3 GROUP BY TEST.tasks_points.task1":
+                           "The expression TEST is not satisfied by these dependencies",
+                           "SELECT tasks_points.task1 AS task from {0} WHERE join_mo>7"
+                           " GROUP BY task" : "Alias task cannot be referenced",
+                           "SELECT tasks_points.task1 AS task from {0} WHERE join_mo>7"
+                           " GROUP BY tasks_points.task1 HAVING COUNT(task) > 0" :
+                           "Alias task cannot be referenced",
+                           "from {0} WHERE join_mo>7 GROUP BY tasks_points.task1 "
+                           "SELECT tasks_points.task1 AS task HAVING COUNT(tasks_points.task1) > 0" :
+                           "Parse Error - syntax error"}
+        self.negative_common_body(queries_errors)
+
+##############################################################################################
+#
 #   COMMON FUNCTIONS
 ##############################################################################################
 
