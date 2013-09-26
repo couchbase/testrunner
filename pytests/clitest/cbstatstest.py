@@ -1,7 +1,8 @@
 import json
+import time
 from clitest.cli_base import CliBaseTest
 from memcached.helper.data_helper import  MemcachedClientHelper
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, Bucket
 
 
 class cbstatsTests(CliBaseTest):
@@ -10,6 +11,10 @@ class cbstatsTests(CliBaseTest):
         self.command = self.input.param("command", "")
         self.vbucketId = self.input.param("vbid", -1)
         self.timeout = 6000
+        self.num_items = self.input.param("items", 1000)
+        self.command_options = self.input.param("command_options", '')
+        self.set_get_ratio = self.input.param("set_get_ratio", 0.9)
+        self.item_size = self.input.param("item_size", 128)
 
 
     def tearDown(self):
@@ -18,16 +23,29 @@ class cbstatsTests(CliBaseTest):
 
     def cbstats_test(self):
         """We use cbstas to check the various stats of server"""
+        cluster_len = RestConnection(self.master).get_cluster_len()
         if self.command == "kvstore":
             self.verify_cluster_stats()
         if self.command != "key":
-            for bucket in self.buckets:
-                output, error = self.shell.execute_cbstats(bucket, self.command)
-                self.verify_results(output, error)
-                if self.command in ["allocator", "kvtimings", "timings"]:
-                    self.log.warn("We will not verify exact values for this stat")
-                else:
-                    self._verify_direct_client_stats(bucket, self.command, output)
+            if "tapagg" in self.command and cluster_len == 1:
+                self.log.info("This command only works with cluster with 2 nodes or more")
+                raise Exception("This command does not work with one node cluster")
+            else:
+                # tapagg needs replica items to print out results
+                if "tapagg" in self.command:
+                    for bucket in self.buckets:
+                        self.shell.execute_cbworkloadgen(self.couchbase_usrname, \
+                                        self.couchbase_password, self.num_items, \
+                                        self.set_get_ratio, bucket.name, \
+                                        self.item_size, self.command_options)
+                        time.sleep(5)
+                for bucket in self.buckets:
+                    output, error = self.shell.execute_cbstats(bucket, self.command)
+                    self.verify_results(output, error)
+                    if self.command in ["allocator", "kvtimings", "timings"]:
+                        self.log.warn("We will not verify exact values for this stat")
+                    else:
+                        self._verify_direct_client_stats(bucket, self.command, output)
         else:
             mc_conn = MemcachedClientHelper.direct_client(self.master, self.buckets[0].name, self.timeout)
             bucket_info = RestConnection(self.master).get_bucket(self.buckets[0])
@@ -56,11 +74,12 @@ class cbstatsTests(CliBaseTest):
         for line in output:
             stats = line.rsplit(":", 1)
             collect_stats = ""
-            if "hash" in command:
+            commands = ["hash", "tapagg"]
+            if command in commands:
                 output, error = self.shell.execute_cbstats(bucket,command)
                 d = []
                 if len(output) > 0:
-                    d = dict(s.strip().split(':') for s in output)
+                    d = dict(s.strip().rsplit(':', 1) for s in output)
                     collect_stats = d[stats[0].strip()].strip()
                 else:
                     raise Exception("Command does not throw out error message but cbstats gives no output. \
