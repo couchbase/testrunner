@@ -617,6 +617,208 @@ class QueryTests(BaseTestCase):
 
 ##############################################################################################
 #
+#   SCALAR FN
+##############################################################################################
+
+    def test_ceil(self):
+        for bucket in self.buckets:
+            self.query = "select name, ceil(test_rate) as rate from %s"  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['name'], doc['rate']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name'], "rate" : math.ceil(doc['test_rate'])}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
+                                                                       doc['rate']))
+            self._verify_results(actual_result, expected_result)
+
+            self.query = "select name from %s where ceil(test_rate) > 5"  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['name']))
+            expected_result = [{"name" : doc['name']} for doc in full_list
+                               if math.ceil(doc['test_rate']) > 5]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+            self.query = "select name from %s where ceil(job_title) > 5"  %(bucket.name)
+            actual_result = self.run_cbq_query()
+            self._verify_results(actual_result['resultset'], [])
+
+    def test_floor(self):
+        for bucket in self.buckets:
+            self.query = "select name, floor(test_rate) as rate from %s"  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['name'], doc['rate']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name'], "rate" : math.floor(doc['test_rate'])}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
+                                                                       doc['rate']))
+            self._verify_results(actual_result, expected_result)
+
+            self.query = "select name from %s where floor(test_rate) > 5"  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['name']))
+            expected_result = [{"name" : doc['name']} for doc in full_list
+                               if math.floor(doc['test_rate']) > 5]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+            self.query = "select name from %s where floor(job_title) > 5"  %(bucket.name)
+            actual_result = self.run_cbq_query()
+            self._verify_results(actual_result['resultset'], [])
+
+    def test_greatest(self):
+        for bucket in self.buckets:
+            self.query = "select name, GREATEST(skills[0], skills[1]) as SKILL from %s"  % (
+                                                                                bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['name'], doc['SKILL']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name'], "SKILL" :
+                                (doc['skills'][0], doc['skills'][1])[doc['skills'][0]<doc['skills'][1]]}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
+                                                                       doc['SKILL']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_least(self):
+        for bucket in self.buckets:
+            self.query = "select name, LEAST(skills[0], skills[1]) as SKILL from %s"  % (
+                                                                            bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['name'], doc['SKILL']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name'], "SKILL" :
+                                (doc['skills'][0], doc['skills'][1])[doc['skills'][0]>doc['skills'][1]]}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
+                                                                       doc['SKILL']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_meta(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT distinct name FROM %s WHERE META().type = "json"'  % (
+                                                                            bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['name']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = set([{"name" : doc['name']} for doc in full_list])
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result, expected_result)
+
+            self.query = "SELECT distinct name FROM %s WHERE META().id IS NOT NULL"  % (
+                                                                                   bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_length(self):
+        for bucket in self.buckets:
+            self.query = 'Select name, email from %s where LENGTH(job_title) = 5'  % (
+                                                                            bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['name']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name'], "email" : doc['email']}
+                               for doc in full_list
+                               if len(doc['job_title']) == 5]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_upper(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT DISTINCT UPPER(job_title) as JOB from %s'  % (
+                                                                        bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['JOB']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = set([{"JOB" : doc['job_title'].upper()}
+                               for doc in full_list])
+            expected_result = sorted(expected_result, key=lambda doc: (doc['JOB']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_lower(self):
+        for bucket in self.buckets:
+            self.query = "SELECT distinct email from %s" % (bucket.name) +\
+                         " WHERE LOWER(job_title) < 't'"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['email']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = set([{"email" : doc['email'].upper()}
+                               for doc in full_list
+                               if doc['job_title'].lower() < 't'])
+            expected_result = sorted(expected_result, key=lambda doc: (doc['email']))
+            self._verify_results(actual_result, expected_result)
+
+            self.query = "SELECT distinct email from %s" % (bucket.name) +\
+                         " WHERE LOWER(job_title) < 't'"
+            actual_result = self.run_cbq_query()
+            self._verify_results(actual_result['resultset'], [])
+
+    def test_round(self):
+        for bucket in self.buckets:
+            self.query = "select name, round(test_rate) as rate from %s" % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['name'], doc['rate']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name": doc["name"], "rate" : round(doc['test_rate'])}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
+                                                                       doc['rate']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_substr(self):
+        for bucket in self.buckets:
+            self.query = "select name, SUBSTR(email, 7) as DOMAIN from %s" % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['name'], doc['DOMAIN']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name": doc["name"], "DOMAIN" : doc['email'][7:]}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
+                                                                       doc['DOMAIN']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_trunc(self):
+        for bucket in self.buckets:
+            self.query = "select name, TRUNC(test_rate, 0) as rate from %s" % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['name'], doc['rate']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name": doc["name"], "rate" : math.trunc(doc['test_rate'])}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
+                                                                       doc['rate']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_first(self):
+        for bucket in self.buckets:
+            self.query = "select name, FIRST vm.os over vm in VMs end as OS from %s" % (
+                                                                           bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['name'], doc['OS']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name": doc["name"], "OS" : doc['VMs'][0]["os"]}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
+                                                                       doc['OS']))
+            self._verify_results(actual_result, expected_result)
+
+##############################################################################################
+#
 #   COMMON FUNCTIONS
 ##############################################################################################
 
