@@ -822,6 +822,158 @@ class QueryTests(BaseTestCase):
 
 ##############################################################################################
 #
+#   AGGR FN
+##############################################################################################
+
+    def test_sum(self):
+        for bucket in self.buckets:
+            self.query = "SELECT join_mo, SUM(tasks_points.task1) as points_sum" +\
+                        " FROM %s WHERE join_mo < 5 GROUP BY join_mo " % (bucket.name) +\
+                        "ORDER BY join_mo"
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            tmp_groups = set([doc['join_mo'] for doc in full_list
+                              if doc['join_mo'] < 5])
+            expected_result = [{"join_mo" : group,
+                                "points_sum" : math.fsum([doc['tasks_points']['task1']
+                                                          for doc in full_list
+                                                          if doc['join_mo'] == group])}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+            self.query = "SELECT join_mo, SUM(test_rate) as rate FROM %s " % (bucket.name) +\
+                         "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
+                         "HAVING SUM(employees.test_rate) > 0 and " +\
+                         "SUM(test_rate) < 100000"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['join_mo']))
+            tmp_groups = set([doc['join_mo'] for doc in full_list])
+            expected_result = [{"join_mo" : group,
+                                "rate" : math.fsum([doc['test_rate']
+                                                          for doc in full_list
+                                                          if doc['join_mo'] == group and\
+                                                             doc['job_title'] == 'Sales'])}
+                               for group in tmp_groups
+                               if math.fsum([doc['test_rate']
+                                            for doc in full_list
+                                            if doc['join_mo'] == group and\
+                                            doc['job_title'] == 'Sales'] > 0) and\
+                                  math.fsum([doc['test_rate']
+                                            for doc in full_list
+                                            if doc['join_mo'] == group and\
+                                            doc['job_title'] == 'Sales'] < 100000)]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_avg(self):
+        for bucket in self.buckets:
+            self.query = "SELECT join_mo, AVG(tasks_points.task1) as points_avg" +\
+                        " FROM %s WHERE join_mo < 5 GROUP BY join_mo " % (bucket.name) +\
+                        "ORDER BY join_mo"
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            tmp_groups = set([doc['join_mo'] for doc in full_list
+                              if doc['join_mo'] < 5])
+            expected_result = [{"join_mo" : group,
+                                "points_avg" : math.fsum([doc['tasks_points']['task1']
+                                                          for doc in full_list
+                                                          if doc['join_mo'] == group]) /
+                                                len([doc['tasks_points']['task1']
+                                                          for doc in full_list
+                                                          if doc['join_mo'] == group])}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+            self.query = "SELECT join_mo, AVG(test_rate) as rate FROM %s " % (bucket.name) +\
+                         "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
+                         "HAVING AVG(employees.test_rate) > 0 and " +\
+                         "SUM(test_rate) < 100000"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['join_mo']))
+            tmp_groups = set([doc['join_mo'] for doc in full_list])
+            expected_result = [{"join_mo" : group,
+                                "rate" : math.fsum([doc['test_rate']
+                                                          for doc in full_list
+                                                          if doc['join_mo'] == group and\
+                                                             doc['job_title'] == 'Sales'])/
+                                               len([doc['test_rate']
+                                                          for doc in full_list
+                                                          if doc['join_mo'] == group and\
+                                                             doc['job_title'] == 'Sales'])}
+                               for group in tmp_groups
+                               if (math.fsum([doc['test_rate']
+                                            for doc in full_list
+                                            if doc['join_mo'] == group and\
+                                            doc['job_title'] == 'Sales']/
+                                    len([doc['test_rate']
+                                         for doc in full_list
+                                         if doc['join_mo'] == group and\
+                                         doc['job_title'] == 'Sales'])) > 0) and\
+                                  math.fsum([doc['test_rate']
+                                            for doc in full_list
+                                            if doc['join_mo'] == group and\
+                                            doc['job_title'] == 'Sales'] < 100000)]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_min(self):
+        for bucket in self.buckets:
+            self.query = "SELECT join_mo, MIN(test_rate) as rate FROM %s " % (bucket.name) +\
+                         "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
+                         "HAVING MIN(employees.test_rate) > 0 and " +\
+                         "SUM(test_rate) < 100000"
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['join_mo']))
+            tmp_groups = set([doc['join_mo'] for doc in full_list])
+            expected_result = [{"join_mo" : group,
+                                "rate" : min([doc['test_rate']
+                                              for doc in full_list
+                                              if doc['join_mo'] == group and\
+                                              doc['job_title'] == 'Sales'])}
+                               for group in tmp_groups
+                               if min([doc['test_rate']
+                                       for doc in full_list
+                                       if doc['join_mo'] == group and\
+                                       doc['job_title'] == 'Sales'] > 0) and\
+                                  math.fsum([doc['test_rate']
+                                            for doc in full_list
+                                            if doc['join_mo'] == group and\
+                                            doc['job_title'] == 'Sales'] < 100000)]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_max(self):
+        for bucket in self.buckets:
+            self.query = "SELECT join_mo, MAX(test_rate) as rate FROM %s " % (bucket.name) +\
+                         "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
+                         "HAVING MAX(employees.test_rate) > 0 and " +\
+                         "SUM(test_rate) < 100000"
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['join_mo']))
+            tmp_groups = set([doc['join_mo'] for doc in full_list])
+            expected_result = [{"join_mo" : group,
+                                "rate" : max([doc['test_rate']
+                                              for doc in full_list
+                                              if doc['join_mo'] == group and\
+                                              doc['job_title'] == 'Sales'])}
+                               for group in tmp_groups
+                               if max([doc['test_rate']
+                                       for doc in full_list
+                                       if doc['join_mo'] == group and\
+                                       doc['job_title'] == 'Sales'] > 0) and\
+                                  math.fsum([doc['test_rate']
+                                            for doc in full_list
+                                            if doc['join_mo'] == group and\
+                                            doc['job_title'] == 'Sales'] < 100000)]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
+            self._verify_results(actual_result, expected_result)
+
+##############################################################################################
+#
 #   COMMON FUNCTIONS
 ##############################################################################################
 
