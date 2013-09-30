@@ -63,12 +63,11 @@ class QueryTests(BaseTestCase):
         self.negative_common_body(queries_errors)
 
     def test_consistent_simple_check(self):
-        'SELECT name, join_day, join_mo FROM default WHERE join_day<10 AND (join_mo BETWEEN 1 AND 6) OR name IS NOT NULL ORDER BY join_day, join_mo'
         queries = ['SELECT name, join_day, join_mo FROM %s '
-                    'WHERE join_day<10 AND join_mo IN (1, 6) '
+                    'WHERE join_day<10 AND join_mo = 6 '
                     'OR name NOT NULL ORDER BY join_day, join_mo',
                    'SELECT name, join_day, join_mo FROM %s '
-                    'WHERE join_mo IN (1, 6) OR name NOT NULL AND '
+                    'WHERE join_mo = 6 OR name NOT NULL AND '
                     'join_day<10 ORDER BY join_day, join_mo']
         for bucket in self.buckets:
             actual_result1 = self.run_cbq_query(queries[0] % bucket.name)
