@@ -236,6 +236,27 @@ class SettingsTests(BaseUITestCase):
         time.sleep(self.input.param("auto_failover_timeout", 40))
         time.sleep(10)
 
+    def test_add_sample(self):
+        sample = self.input.param('sample', 'beer-sample')
+        num_expected = self.input.param('num_items', 7303)
+        self.helper.login()
+        NavigationHelper(self).navigate('Settings')
+        SettingsHelper(self).navigate('Sample Buckets')
+        sample_bucket = SettingsHelper(self).select_sample_bucket(sample)
+        NavigationHelper(self).navigate('Data Buckets')
+        self.assertTrue(BucketHelper(self).is_bucket_present(sample_bucket),
+                        "Bucket %s is not present" % sample_bucket)
+        end_time = time.time() + 120
+        while time.time() < end_time:
+            self.sleep(10)
+            num_actual = BucketHelper(self).get_items_number(sample_bucket)
+            if num_actual == str(num_expected):
+                break
+        self.assertTrue(num_actual == str(num_expected),
+                        "Items number expected %s, actual %s" % (
+                                                    num_expected, num_actual))
+        self.log.info("Bucket items number is %s as expected" % num_actual)
+
 class ROuserTests(BaseUITestCase):
     def setUp(self):
         super(ROuserTests, self).setUp()
@@ -610,6 +631,13 @@ class SettingsTestControls():
         self.delete_btn  = self.helper.find_control('confirm_delete_ro','confirm_btn', parent_locator='dlg')
         return self
 
+    def samples_buckets(self, bucket=''):
+        self.sample_cb = self.helper.find_control('sample_buckets', 'sample_cb', text=bucket)
+        self.installed_sample = self.helper.find_control('sample_buckets', 'installed_sample', text=bucket)
+        self.save_btn = self.helper.find_control('sample_buckets','save_btn')
+        self.error_msg = self.helper.find_controls('sample_buckets','error')
+        return self
+
 '''
 Helpers
 '''
@@ -790,6 +818,9 @@ class BucketHelper():
             return self.controls.bucket_stat_from_view_block(stat).get_text()
         else:
             raise Exception("Block is not implemented yet!!!")
+
+    def get_items_number(self, bucket):
+        return self.controls.bucket_info(bucket.name).items_count.get_text()
 
 class NodeInitializeHelper():
     def __init__(self, tc):
@@ -1124,6 +1155,28 @@ class SettingsHelper():
                          self.controls.auto_failover_info().save_btn.get_attribute('disabled') == 'true'),
                         "Save btn is not selected in %d sec" % (self.wait._timeout))
         self.tc.log.info("Save btn is selected")
+
+    def select_sample_bucket(self, sample):
+        self.tc.log.info("Selecting sample %s ..." % sample)
+        self.controls.samples_buckets(sample).sample_cb.click()
+        self.wait.until(lambda fn:
+                        self.is_sample_bucket_installed(sample).is_displayed() or
+                        self.get_error_samples(),
+                        "No reaction for sample bucket in %d sec" % (self.wait._timeout))
+        if self.get_error_samples():
+            raise Exception("Error during adding sample %s" % self.get_error_samples())
+        self.tc.log.info("Selected sample %s" % sample)
+        return Bucket(name=sample)
+
+    def get_error_samples(self):
+        msgs = []
+        for control in self.controls.samples_buckets().error_msg:
+            if control.is_displayed() and control.get_text() != '':
+                msgs.append(control.get_text())
+        return msgs
+
+    def is_sample_bucket_installed(self, sample):
+        return self.controls.samples_buckets(sample).installed_sample.is_displayed()
 
     def is_user_created(self):
         return self.controls.user_create_info().delete_btn.is_displayed()
