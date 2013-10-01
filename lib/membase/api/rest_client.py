@@ -1713,6 +1713,13 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
+    def query_tool(self, query):
+        params = urllib.urlencode({'q' : query})
+        log.info('query params : {0}'.format(params))
+        api =  "http://%s:8093/query?%s" % (self.ip, params)
+        status, content, header = self._http_request(api, 'GET', timeout=650)
+        return json.loads(content)
+
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
         self.implementationVersion = implementationVersion

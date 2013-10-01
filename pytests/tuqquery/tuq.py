@@ -7,13 +7,14 @@ from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
 from couchbase.documentgenerator import DocumentGenerator
 from membase.api.exception import CBQError
+from membase.api.rest_client import RestConnection
 
 class QueryTests(BaseTestCase):
     def setUp(self):
         super(QueryTests, self).setUp()
         self.shell = RemoteMachineShellConnection(self.master)
         self.version = self.input.param("cbq_version", "dev_preview1")
-
+        self.use_rest = self.input.param("use_rest", False)
         if self._testMethodName in ['suite_tearDown', 'suite_setUp']:
             return
         try:
@@ -308,19 +309,22 @@ class QueryTests(BaseTestCase):
     def run_cbq_query(self, query=None, min_output_size=10):
         if query is None:
             query = self.query
-        if self.version == "git_repo":
-            output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/"
-                                                        "tuq_client/tuq_client "
-                                                        "-engine=http://localhost:8093/",
-                                                   subcommands=[query,],
-                                                   min_output_size=20,
-                                                   end_msg='tuq_client>')
+        if self.use_rest:
+            result = RestConnection(self.master).query_tool(query)
         else:
-            output = self.shell.execute_commands_inside("/tmp/tuq/cbq -engine=http://localhost:8093/",
+            if self.version == "git_repo":
+                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/"
+                                                            "tuq_client/tuq_client "
+                                                            "-engine=http://localhost:8093/",
                                                        subcommands=[query,],
                                                        min_output_size=20,
-                                                       end_msg='cbq>')
-        result = self._parse_query_output(output)
+                                                       end_msg='tuq_client>')
+            else:
+                output = self.shell.execute_commands_inside("/tmp/tuq/cbq -engine=http://localhost:8093/",
+                                                           subcommands=[query,],
+                                                           min_output_size=20,
+                                                           end_msg='cbq>')
+            result = self._parse_query_output(output)
         if 'error' in result:
             raise CBQError(result["error"], self.master.ip)
         self.log.info("TOTAL ELAPSED TIME: %s" % [param["message"]
