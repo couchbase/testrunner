@@ -13,24 +13,27 @@ from membase.api.rest_client import RestConnection
 
 class QueryTests(BaseTestCase):
     def setUp(self):
+        if not self._testMethodName == 'suite_setUp':
+            self.skip_buckets_handle = True
         super(QueryTests, self).setUp()
         self.shell = RemoteMachineShellConnection(self.master)
         self.version = self.input.param("cbq_version", "dev_preview1")
         self.use_rest = self.input.param("use_rest", False)
         self.max_verify = self.input.param("max_verify", None)
-        if self._testMethodName in ['suite_tearDown', 'suite_setUp']:
-            return
+        docs_per_day = self.input.param("doc-per-day", 49)
+        self.gens_load = self.generate_docs(docs_per_day)
+
+    def suite_setUp(self):
         try:
-            docs_per_day = self.input.param("doc-per-day", 49)
-            self.gens_load = self.generate_docs(docs_per_day)
             self.load(self.gens_load)
+            self._start_command_line_query(self.master)
+            self.skip_buckets_handle = True
         except:
             self.tearDown()
 
-    def suite_setUp(self):
-        self._start_command_line_query(self.master)
-
     def tearDown(self):
+        if self._testMethodName == 'suite_tearDown':
+            self.skip_buckets_handle = False
         super(QueryTests, self).tearDown()
 
     def suite_tearDown(self):
@@ -1100,15 +1103,11 @@ class QueryTests(BaseTestCase):
         if self.version == "git_repo":
             if self.shell.file_exists('$GOPATH/src/github.com/couchbaselabs/tuqtng',
                                    'tuqtng'):
-                cmd = "cd $GOPATH/src/github.com/couchbaselabs/tuqtng; git pull origin"
+                cmd = "rm -rf $GOPATH/src/github.com"
                 self.shell.execute_command(cmd)
-                cmd = "rm -rf $GOPATH/src/github.com/couchbaselabs/tuqtng/tugtng "
-                "$GOPATH/src/github.com/couchbaselabs/tuqtng/tuq_client/tuq_client"
-                self.shell.execute_command(cmd)
-            else:
-                cmd= 'go get github.com/couchbaselabs/tuqtng;'
+            cmd= 'go get github.com/couchbaselabs/tuqtng;' +\
                 'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go get -d -v ./...'
-                self.shell.execute_command(cmd)
+            self.shell.execute_command(cmd)
             cmd = "cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go build"
             self.shell.execute_command(cmd)
             cmd = "cd $GOPATH/src/github.com/couchbaselabs/tuqtng/tuq_client; go build"
@@ -1189,7 +1188,7 @@ class QueryTests(BaseTestCase):
         for task in tasks:
             task.result()
         self.num_items = items
-        self._verify_stats_all_buckets(self.servers[:self.nodes_init])
+        self.verify_cluster_stats(self.servers[:self.nodes_init])
         self.log.info("LOAD IS FINISHED")
 
     def _generate_full_docs_list(self, gens_load):
