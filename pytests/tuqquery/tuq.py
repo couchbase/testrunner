@@ -973,6 +973,76 @@ class QueryTests(BaseTestCase):
 
 ##############################################################################################
 #
+#   EXPRESSIONS
+##############################################################################################
+
+    def test_case(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, CASE WHEN join_mo < 3 OR join_mo > 11 THEN 'winter'" +\
+                         " WHEN join_mo < 6 AND join_mo > 2 THEN 'spring' " +\
+                         "WHEN join_mo < 8 AND join_mo > 5 THEN 'summer' " +\
+                         "ELSE 'autumn' END AS period FROM %s" % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['name'],
+                                                                       doc['period']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name'],
+                                "period" : ((('autumn','summer')[doc['join_mo'] in [6,7,8]],
+                                             'spring')[doc['join_mo'] in [3,4,5]],'winter')
+                                             [doc['join_mo'] in [12,1,2]]}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
+                                                                       doc['period']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_case_arithm(self):
+        self.query = "SELECT CASE WHEN 1+1=3 THEN 7+7 WHEN 2+2=5 THEN 8+8 ELSE 2 END"
+        actual_result = self.run_cbq_query()
+        expected_result = [{"$1" : 2}]
+        self._verify_results(actual_result, expected_result)
+
+    def test_arithm(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, SUM(test_rate) % COUNT(distinct join_yr)" +\
+            " as avg_per_year from {0} group by job_title".format(bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['job_title']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "avg_per_year" : math.fsum([doc['test_rate']
+                                                             for doc in full_list
+                                                             if doc['job_title'] == group])/\
+                                                  len(set([doc['join_yr'] for doc in full_list
+                                                           if doc['job_title'] == group]))}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+            self.query = "SELECT job_title, (SUM(tasks_points.task1) +" +\
+            " SUM(tasks_points.task2)) % COUNT(distinct join_yr) as avg_per_year" +\
+            " from {0} group by job_title".format(bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['job_title']))
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "avg_per_year" : (math.fsum([doc['tasks_points']['task1']
+                                                             for doc in full_list
+                                                             if doc['job_title'] == group])+\
+                                                  math.fsum([doc['tasks_points']['task2']
+                                                             for doc in full_list
+                                                             if doc['job_title'] == group]))/\
+                                                  len(set([doc['join_yr'] for doc in full_list
+                                                           if doc['job_title'] == group]))}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+##############################################################################################
+#
 #   COMMON FUNCTIONS
 ##############################################################################################
 
