@@ -1,5 +1,4 @@
 from membase.api.rest_client import RestConnection
-from membase.api.esrest_client import EsRestConnection
 from memcached.helper.data_helper import VBucketAwareMemcached
 from mc_bin_client import MemcachedError
 import logger
@@ -75,7 +74,7 @@ class ESReplicationBaseTest(object):
 
     def verify_es_num_docs(self, src_server, dest_server, kv_store = 1, retry = 10, verification_count = 10000):
         cb_rest = RestConnection(src_server)
-        es_rest = EsRestConnection(dest_server)
+        es_rest = RestConnection(dest_server)
         buckets = self.xd_ref._get_cluster_buckets(src_server)
         wait = 20
         for bucket in buckets:
@@ -124,7 +123,7 @@ class ESReplicationBaseTest(object):
 
     def _verify_es_revIds(self, src_server, dest_server, kv_store = 1, verification_count = 10000):
         cb_rest = RestConnection(src_server)
-        es_rest = EsRestConnection(dest_server)
+        es_rest = RestConnection(dest_server)
         buckets = self.xd_ref._get_cluster_buckets(src_server)
         for bucket in buckets:
 

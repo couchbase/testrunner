@@ -7,6 +7,10 @@ import time
 
 log = logger.Logger.get_logger()
 
+# EsRestConnection: subclasses RestConnection for use against elastic-search nodes.
+#   Instance created by membase.api.rest_client.RestConnection
+#   when elastic-search endpoint is detected so it is not necessary to
+#   directly import this module into tests
 class EsRestConnection(RestConnection):
     def __init__(self, serverInfo, proto = "http"):
         #serverInfo can be a json object
