@@ -17,9 +17,10 @@ class QueryTests(BaseTestCase):
             self.skip_buckets_handle = True
         super(QueryTests, self).setUp()
         self.shell = RemoteMachineShellConnection(self.master)
-        self.version = self.input.param("cbq_version", "dev_preview1")
-        self.use_rest = self.input.param("use_rest", False)
+        self.version = self.input.param("cbq_version", "git_repo")
+        self.use_rest = self.input.param("use_rest", True)
         self.max_verify = self.input.param("max_verify", None)
+        self.buckets = RestConnection(self.master).get_buckets()
         docs_per_day = self.input.param("doc-per-day", 49)
         self.gens_load = self.generate_docs(docs_per_day)
 
@@ -96,7 +97,8 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = 'SELECT COUNT(name) AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
             actual_result = self.run_cbq_query()
-            expected_result = [ { "COUNT_EMPLOYEE": self.num_items  } ]
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [ { "COUNT_EMPLOYEE": len(full_list)  } ]
             self.assertEquals(actual_result['resultset'], expected_result,
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
                                         actual_result['resultset'], expected_result))
@@ -1101,16 +1103,14 @@ class QueryTests(BaseTestCase):
 
     def _start_command_line_query(self, server):
         if self.version == "git_repo":
-            if self.shell.file_exists('$GOPATH/src/github.com/couchbaselabs/tuqtng',
-                                   'tuqtng'):
-                cmd = "rm -rf $GOPATH/src/github.com"
-                self.shell.execute_command(cmd)
+            cmd = "rm -rf $GOPATH/src/github.com"
+            self.shell.execute_command(cmd)
             cmd= 'go get github.com/couchbaselabs/tuqtng;' +\
-                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go get -d -v ./...'
+                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go get -d -v ./...; cd .'
             self.shell.execute_command(cmd)
-            cmd = "cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go build"
+            cmd = "cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go build; cd ."
             self.shell.execute_command(cmd)
-            cmd = "cd $GOPATH/src/github.com/couchbaselabs/tuqtng/tuq_client; go build"
+            cmd = "cd $GOPATH/src/github.com/couchbaselabs/tuqtng/tuq_client; go build; cd ."
             self.shell.execute_command(cmd)
         else:
             cbq_url = self.build_url(self.version)
