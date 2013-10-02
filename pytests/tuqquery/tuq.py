@@ -103,6 +103,13 @@ class QueryTests(BaseTestCase):
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
                                         actual_result['resultset'], expected_result))
 
+            self.query = 'SELECT COUNT(*) + 1 AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
+            actual_result = self.run_cbq_query()
+            expected_result = [ { "COUNT_EMPLOYEE": len(full_list) + 1 } ]
+            self.assertEquals(actual_result['resultset'], expected_result,
+                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
+                                        actual_result['resultset'], expected_result))
+
     def test_simple_negative_alias(self):
         queries_errors = {'SELECT name._last_name as *' : 'Parse Error - syntax error',
                           'SELECT name._last_name as DATABASE ?' : 'Parse Error - syntax error',
@@ -272,6 +279,27 @@ class QueryTests(BaseTestCase):
                                                                      doc["tasks_points"]))
             self._verify_results(actual_result['resultset'], expected_result)
 
+    def test_order_by_alias_aggr_fn(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT join_yr, join_mo, count(*) AS emp_per_month from default'% (
+                                                                            bucket.name) +\
+            ' WHERE join_mo>7 GROUP BY join_yr, join_mo ORDER BY emp_per_month, join_mo, join_yr'  
+            actual_result = self.run_cbq_query()
+
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"join_yr" : doc["join_yr"],
+                              "join_mo" : doc["join_mo"],
+                              "emp_per_month" : len([x for x in full_list if
+                                                     x['join_yr'] == doc["join_yr"] and\
+                                                     x["join_mo"] == doc["join_mo"] and\
+                                                     x["join_mo"] > 7])}
+                             for doc in full_list]
+            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
+            expected_result = sorted(expected_result, key=lambda doc: (doc["emp_per_month"],
+                                                                     doc['join_mo'],
+                                                                     doc["join_yr"]))
+            self._verify_results(actual_result['resultset'], expected_result)
+
     def test_order_by_aggr_fn(self):
         for bucket in self.buckets:
             self.query = 'SELECT job_title AS TITLE FROM %s GROUP'  % (bucket.name) +\
@@ -403,10 +431,57 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['resultset'], expected_result)
 
+    def test_any_no_in_clause(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY skills = 'skill2010' OVER default.skills end) " +\
+                         "AND (ANY VMs.RAM = 5 OVER default.VMs end) " +\
+                         "AND  NOT (job_title = 'Sales') ORDER BY name"
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
+                               for doc in full_list
+                               if len([skill for skill in doc["skills"]
+                                       if skill == 'skill2010']) > 0 and\
+                                  len([vm for vm in doc["VMs"]
+                                       if vm["RAM"] == 5]) > 0 and\
+                                  doc["job_title"] != 'Sales']
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_any_external(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT name FROM %s WHERE '  % (bucket.name) +\
+                         'ANY job_title = x OVER x IN ["Support", "Management"] END' +\
+                         'ORDER BY name'
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name']}
+                               for doc in full_list
+                               if doc["job_title"] in ["Support", "Management"]]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
     def test_all(self):
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
                          "(ALL CEIL(vm.memory) > 5 OVER vm IN default.VMs END)" +\
+                         " ORDER BY name"
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name']}
+                               for doc in full_list
+                               if len([vm for vm in doc["VMs"]
+                                       if math.ceil(vm['memory']) > 5]) ==\
+                                  len(doc["VMs"])]
+
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_all_no_in_clause(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
+                         "(ALL CEIL(VMs.memory) > 5 OVER default.VMs END)" +\
                          " ORDER BY name"
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
@@ -1006,6 +1081,28 @@ class QueryTests(BaseTestCase):
         actual_result = self.run_cbq_query()
         expected_result = [{"$1" : 2}]
         self._verify_results(actual_result, expected_result)
+
+    def test_logic_expr(self):
+        for bucket in self.buckets:
+            self.query = "SELECT tasks_points.task1 as task FROM default WHERE " % (bucket.name)+\
+            "tasks_points.task1 > 1 AND tasks_points.task1 < 4"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['task']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"task" : doc['tasks_points']['task1']}
+                               for doc in full_list
+                               if doc['tasks_points']['task1'] > 1 and\
+                                  doc['tasks_points']['task1'] < 4]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_comparition_expr(self):
+        for bucket in self.buckets:
+            self.query = "SELECT tasks_points.task1 as task FROM default WHERE " % (bucket.name)+\
+            "tasks_points.task1 > tasks_points.task1"
+            actual_result = self.run_cbq_query()
+            self._verify_results(actual_result['resultset'], [])
 
     def test_arithm(self):
         for bucket in self.buckets:
