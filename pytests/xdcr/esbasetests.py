@@ -50,24 +50,27 @@ class ESReplicationBaseTest(object):
     def verify_es_stats(self, src_nodes, dest_nodes, verify_src = False, verification_count = 10000):
         xd_ref = self.xd_ref
 
+        src_master = self.xd_ref.src_master
+        dest_master = self.xd_ref.dest_master
+
         # prepare for verification
         xd_ref._wait_for_stats_all_buckets(src_nodes)
 
-        xd_ref._expiry_pager(src_nodes[0])
+        xd_ref._expiry_pager(src_master)
         if verify_src:
             xd_ref._verify_stats_all_buckets(src_nodes)
 
         self._log.info("Verifing couchbase to elasticsearch replication")
-        self.verify_es_num_docs(src_nodes[0], dest_nodes[0], verification_count = verification_count)
+        self.verify_es_num_docs(src_master, dest_master, verification_count = verification_count)
 
         if xd_ref._doc_ops is not None:
             # initial data has been modified
             # check revids
-            self._verify_es_revIds(src_nodes[0], dest_nodes[0], verification_count = verification_count)
+            self._verify_es_revIds(src_master, dest_master, verification_count = verification_count)
 
             if "create" in xd_ref._doc_ops:
                 # initial data values have has been modified
-                self._verify_es_values(src_nodes[0], dest_nodes[0],
+                self._verify_es_values(src_master, dest_master,
                                        verification_count = verification_count)
 
 
