@@ -90,6 +90,28 @@ class QueryTests(BaseTestCase):
 
 ##############################################################################################
 #
+#   LIMIT OFFSET CHECKS
+##############################################################################################
+
+    def test_limit_offset(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT DISTINCT name FROM %s ORDER BY name LIMIT 10' % (bucket.name)
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [ {"name" : doc["name"]} for doc in full_list ]
+            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
+            expected_result = sorted(expected_result, key=lambda doc: doc['name'])
+            self.assertEquals(actual_result['resultset'], expected_result[:10],
+                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
+                                        actual_result['resultset'], expected_result))
+            self.query = 'SELECT DISTINCT name FROM %s ORDER BY name LIMIT 10 OFFSET 10' % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEquals(actual_result['resultset'], expected_result[10:20],
+                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
+                                        actual_result['resultset'], expected_result))
+
+##############################################################################################
+#
 #   ALIAS CHECKS
 ##############################################################################################
 
@@ -1049,6 +1071,26 @@ class QueryTests(BaseTestCase):
                                             if doc['join_mo'] == group and\
                                             doc['job_title'] == 'Sales'] < 100000)]
             expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_agg(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, array_agg(DISTINCT name) as names" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = [{key : (value, value.sort())[isinstance(value, list)]}
+                             for key, value in actual_result['resultSet']]
+            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "names" : set([x["name"] for x in full_list
+                                               if x["job_title"] == group])}
+                               for group in tmp_groups]
+            expected_result = [{key : (value, value.sort())[isinstance(value, list)]}
+                             for key, value in expected_result]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
