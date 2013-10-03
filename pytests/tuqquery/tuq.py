@@ -517,6 +517,18 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['resultset'], expected_result)
 
+    def test_array(self):
+        for bucket in self.buckets:
+            self.query = "SELECT ARRAY vm.memory OVER vm IN VMs END AS vm_memories" +\
+            " FROM %s WHERE VMs IS NOT NULL "  % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['vm_memories']))
+            expected_result = [{"vm_memories" : [vm["memory"] for vm in doc['VMs']]}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['vm_memories']))
+            self._verify_results(actual_result, expected_result)
+
 ##############################################################################################
 #
 #   LIKE
