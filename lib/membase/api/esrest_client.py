@@ -4,6 +4,7 @@ from TestInput import TestInputSingleton
 import pyes
 import logger
 import time
+import requests
 
 log = logger.Logger.get_logger()
 
@@ -188,6 +189,25 @@ class EsRestConnection(RestConnection):
             docs.append(row)
 
         return docs
+
+    # check if a key exists by checking all known nodes
+    # See - CBES-17
+    # for use when it seems nodes are out of sync
+    def search_all_nodes(self, key, indices=["default"]):
+
+        doc = None
+
+        for index in indices:
+           for _node in self.get_nodes():
+               ip, port = (_node.ip, _node.ht_port)
+               r = requests.get('http://%s:%s/%s/couchbaseDocument/%s?preference=_only_node:%s' %\
+                   (ip, port, index, key, _node.key))
+               if r.status_code == 200 :
+                   if r.json()['_id'] == key:
+                       doc = r.json()
+                       break
+
+        return doc
 
     def fetch_bucket_stats(self, bucket='default', zoom='minute'):
 

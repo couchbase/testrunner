@@ -115,9 +115,12 @@ class ESReplicationBaseTest(object):
                 self._log.info("WARNING: Couchbase has %s docs, ElasticSearch all_docs returned %s docs " %\
                                      (cb_num_items, len(es_valid)))
             for _id in cb_valid[:verification_count]:  # match at most 10k keys
-                if _id not in es_valid:
+                id_found = _id in es_valid
+
+                if id_found == False:
                     # document missing from all_docs query do manual term search
-                    if es_rest.term_exists(_id, indices=[bucket.name]) == False:
+                    doc = es_rest.search_all_nodes(_id, indices = [bucket.name])
+                    if doc is None:
                         self.xd_ref.fail("Document %s Missing from ES Index (%s)" % (_id, bucket.name))
 
             self._log.info("Verified couchbase bucket (%s) replicated (%s) docs to elasticSearch with matching keys" %\
@@ -150,14 +153,15 @@ class ESReplicationBaseTest(object):
                 except ValueError:
 
                     # attempt manual lookup by search term
-                    es_doc = es_rest.search_term(cb_id_rev_pair[0], indices = [bucket.name])
+                    es_doc = es_rest.search_all_nodes(cb_id_rev_pair[0], indices = [bucket.name])
+
                     if es_doc is None:
                         self.xd_ref.fail("Error during verification:  %s does not exist in ES index %s" % (cb_id_rev_pair, bucket.name))
 
                     # compare
-                    es_id_rev_pair = (es_doc['meta']['id'], es_doc['meta']['id'])
+                    es_id_rev_pair = (es_doc['_source']['meta']['id'], es_doc['_source']['meta']['rev'])
                     if cb_id_rev_pair != es_id_rev_pair:
-                        self.xd_ref.fail("ES document %s has invalid revid (%s). Couchbase revid (%s). bucket (%s)" %\
+                        self.xd_ref.fail("ES document %s Missmatch Couchbase doc (%s). bucket (%s)" %\
                                         (es_id_rev_pair, cb_id_rev_pair, bucket.name))
 
             self._log.info("Verified doc rev-ids in couchbase bucket (%s) match meta rev-ids elastic search" %\
