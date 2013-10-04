@@ -699,7 +699,7 @@ class QueryTests(BaseTestCase):
                                if 'skill2010' in doc["skills"] and\
                                   len([vm for vm in doc["VMs"] if vm["RAM"] == 5]) >0]
             expected_result = [{"job_title" : group,
-                                "test_rate" : math.fsum([doc["test_rate"]
+                                "avg_rate" : math.fsum([doc["test_rate"]
                                                          for doc in expected_result
                                              if doc["job_title"] == group]) /
                                              len([doc["test_rate"] for doc in expected_result
