@@ -1855,7 +1855,7 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
-    def execute_cbhealthchecker(self, username, password, command_options=None):
+    def execute_cbhealthchecker(self, username, password, command_options=None, path_to_store=''):
         command_options_string = ""
         if command_options is not None:
             command_options_string = ' '.join(command_options)
@@ -1869,7 +1869,17 @@ class RemoteMachineShellConnection:
         if type == 'windows':
             cbhealthchecker_command = "%scbhealthchecker" % (testconstants.WIN_COUCHBASE_BIN_PATH)
 
+        if path_to_store:
+            self.execute_command('rm -rf %s; mkdir %s;cd %s' % (path_to_store,
+                                                path_to_store, path_to_store))
+
         command = "%s -u %s -p %s -c %s:%s %s" % (cbhealthchecker_command,
+                                                username, password, self.ip,
+                                                self.port, command_options_string)
+
+        if path_to_store:
+            command = "cd %s; %s -u %s -p %s -c %s:%s %s" % (path_to_store,
+                                                cbhealthchecker_command,
                                                 username, password, self.ip,
                                                 self.port, command_options_string)
 

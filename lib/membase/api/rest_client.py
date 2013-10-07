@@ -1868,6 +1868,9 @@ class RestParser(object):
         node.clusterCompatibility = parsed['clusterCompatibility']
         node.clusterMembership = parsed['clusterMembership']
         node.version = parsed['version']
+        node.curr_items = 0
+        if 'interestingStats' in parsed and 'curr_items' in parsed['interestingStats']:
+            node.curr_items = parsed['interestingStats']['curr_items']
         node.port = parsed["hostname"][parsed["hostname"].find(":") + 1:]
         node.os = parsed['os']
 
