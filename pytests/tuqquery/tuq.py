@@ -111,6 +111,34 @@ class QueryTests(BaseTestCase):
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
                                         actual_result['resultset'], expected_result))
 
+    def test_limit_offset_zero(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT DISTINCT name FROM %s ORDER BY name LIMIT 0' % (bucket.name)
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [ {"name" : doc["name"]} for doc in full_list ]
+            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
+            expected_result = sorted(expected_result, key=lambda doc: doc['name'])
+            self.assertEquals(actual_result['resultset'], [],
+                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
+                                        actual_result['resultset'], expected_result))
+            self.query = 'SELECT DISTINCT name FROM %s ORDER BY name LIMIT 10 OFFSET 0' % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEquals(actual_result['resultset'], expected_result[:10],
+                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
+                                        actual_result['resultset'], expected_result))
+
+    def test_limit_offset_negative_check(self):
+        queries_errors = {'SELECT DISTINCT name FROM {0} LIMIT -1' :
+                          'Parse Error - syntax error',
+                          'SELECT DISTINCT name FROM {0} LIMIT 1.1' :
+                          'Parse Error - syntax error',
+                          'SELECT DISTINCT name FROM {0} OFFSET -1' :
+                          'Parse Error - syntax error',
+                          'SELECT DISTINCT name FROM {0} OFFSET 1.1' :
+                          'Parse Error - syntax error'}
+        self.negative_common_body(queries_errors)
+
 ##############################################################################################
 #
 #   ALIAS CHECKS
