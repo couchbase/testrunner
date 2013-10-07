@@ -286,7 +286,8 @@ class MembaseServerInstaller(Installer):
 
         if "openssl" in params:
             openssl = params["openssl"]
-        else: openssl = ""
+        else:
+            openssl = ""
 
         if type == "windows":
             build = self.build_url(params)
@@ -415,7 +416,8 @@ class CouchbaseServerInstaller(Installer):
 
         if "openssl" in params:
             openssl = params["openssl"]
-        else: openssl = ""
+        else:
+            openssl = ""
 
         if "vbuckets" in params:
             vbuckets = int(params["vbuckets"][0])

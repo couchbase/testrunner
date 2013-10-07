@@ -11,6 +11,7 @@ import testconstants
 from testconstants import WIN_REGISTER_ID
 from testconstants import MEMBASE_VERSIONS
 from testconstants import COUCHBASE_VERSIONS
+from testconstants import MISSING_UBUNTU_LIB
 
 from membase.api.rest_client import RestConnection, RestHelper
 
@@ -835,6 +836,7 @@ class RemoteMachineShellConnection:
                     output, error = self.execute_command('{0}rpm -i /tmp/{1}'.format(environment, build.name))
             elif self.info.deliverable_type == 'deb':
                 self.check_openssl_version(self.info.deliverable_type, openssl)
+                self.install_missing_lib()
                 if force:
                     output, error = self.execute_command('{0}dpkg --force-all -i /tmp/{1}'.format(environment, build.name))
                 else:
@@ -2028,6 +2030,17 @@ class RemoteMachineShellConnection:
                                 self.log_command_output(o, r)
                 elif openssl == "":
                     log.info("no need to install pkgconfig on couchbase binary using openssl 0.9.8")
+
+    def install_missing_lib(self):
+        if self.info.deliverable_type == "deb":
+            for lib_name in MISSING_UBUNTU_LIB:
+                if lib_name != "":
+                    log.info("prepare install library {0}".format(lib_name))
+                    o, r = self.execute_command("apt-get install -y {0}".format(lib_name))
+                    self.log_command_output(o, r)
+                    o, r = self.execute_command("dpkg --get-selections | grep {0}".format(lib_name))
+                    self.log_command_output(o, r)
+                    log.info("lib {0} should appear around this line".format(lib_name))
 
 
 class RemoteUtilHelper(object):
