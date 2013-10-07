@@ -128,3 +128,21 @@ class QueriesOpsTests(QueryTests):
             expected_result = sorted(expected_result, key=lambda doc: doc['points'])
             actual_result = self.run_cbq_query()
             self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_failover_with_server_crash(self):
+        servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
+        self.test_group_by_aggr_fn()
+        self.cluster.failover(self.servers[:self.nodes_init], servr_out)
+        for i in xrange(3):
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                               [], servr_out)
+            self.sleep(5, "Wait some time for rebalance process and then kill memcached")
+            self.shell.terminate_process(process_name='memcached')
+            self.test_group_by_aggr_fn()
+            try:
+                rebalance.result()
+            except:
+                pass
+        rebalance = self.cluster.rebalance(self.servers[:self.nodes_init],
+                               [], servr_out)
+        self.test_group_by_aggr_fn()
