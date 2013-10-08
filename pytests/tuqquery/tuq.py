@@ -302,7 +302,7 @@ class QueryTests(BaseTestCase):
 
     def test_order_by_alias_aggr_fn(self):
         for bucket in self.buckets:
-            self.query = 'SELECT join_yr, join_mo, count(*) AS emp_per_month from default'% (
+            self.query = 'SELECT join_yr, join_mo, count(*) AS emp_per_month from %s'% (
                                                                             bucket.name) +\
             ' WHERE join_mo>7 GROUP BY join_yr, join_mo ORDER BY emp_per_month, join_mo, join_yr'  
             actual_result = self.run_cbq_query()
