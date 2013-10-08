@@ -112,3 +112,19 @@ class QueriesOpsTests(QueryTests):
             self.test_group_by_aggr_fn()
         finally:
             remote.start_server()
+
+    def test_cancel_query_mb_9223(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT tasks_points.task1 AS points FROM %s AS test ' %(bucket.name) +\
+                         'GROUP BY test.tasks_points.task1 ORDER BY points'
+            self.log.info("run query to cancel")
+            try:
+                RestConnection(self.master).query_tool(self.query, timeout=5)
+            except:
+                self.log.info("query is cancelled")
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"points" : doc["tasks_points"]["task1"]} for doc in full_list]
+            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
+            expected_result = sorted(expected_result, key=lambda doc: doc['points'])
+            actual_result = self.run_cbq_query()
+            self._verify_results(actual_result['resultset'], expected_result)
