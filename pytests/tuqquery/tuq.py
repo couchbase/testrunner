@@ -63,7 +63,8 @@ class QueryTests(BaseTestCase):
                           'Aggregate function not allowed here',
                           'SELECT *.name FROM {0}' : 'Parse Error - syntax error',
                           'SELECT *.* FROM {0} ... ERROR' : 'Parse Error - syntax error',
-                          'SELECT UNIQUE tasks_points from {0}' : ''}
+                          'SELECT UNIQUE tasks_points from {0}' : '',
+                          'FROM %s SELECT name WHERE id=null' : 'Parse Error - syntax error',}
         self.negative_common_body(queries_errors)
 
     def test_consistent_simple_check(self):
@@ -81,8 +82,7 @@ class QueryTests(BaseTestCase):
                                     actual_result1['resultset'] - actual_result2['resultset']))
 
     def test_simple_nulls(self):
-        queries = ['FROM %s SELECT name WHERE id=null',
-           'SELECT id FROM %s WHERE id=NULL or id="null"']
+        queries = ['SELECT id FROM %s WHERE id=NULL or id="null"']
         for bucket in self.buckets:
             for query in queries:
                 actual_result = self.run_cbq_query(query % (bucket.name))
