@@ -141,9 +141,9 @@ class ViewMergingTests(BaseTestCase):
                 self.merged_query(self.red_view_stats_name, params=params, ddoc='test2')
                 self.assertTrue(False, "Expected exception when querying _stats view")
             except QueryViewException as ex:
-                expectedStr = 'Error occured querying view ' + self.red_view_stats_name + \
-                    ': {"error":"error","reason":"Builtin _stats function requires map' + \
-                    ' values to be numbers"}'
+                expectedStr = (
+                    'Error occured querying view ' + self.red_view_stats_name +
+                    ': {"error":"error","reason":"reducer failure"}')
                 self.assertEquals(str(ex).strip("\n"), expectedStr)
         else:
             self.assertTrue(nodes > 1)
