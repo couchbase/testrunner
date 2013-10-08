@@ -94,3 +94,21 @@ class QueriesOpsTests(QueryTests):
         self.test_group_by_aggr_fn()
         rebalance.result()
         self.test_group_by_aggr_fn()
+
+    def test_autofailover(self):
+        autofailover_timeout = 30
+        status = self.rest.update_autofailover_settings(True, autofailover_timeout)
+        self.assertTrue(status, 'failed to change autofailover_settings!')
+        servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
+        self.test_group_by_aggr_fn()
+        remote = RemoteMachineShellConnection(self.servers[self.nodes_init -1])
+        try:
+            remote.stop_server()
+            self.sleep(autofailover_timeout + 10, "Wait for autofailover")
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                   [], servr_out)
+            self.test_group_by_aggr_fn()
+            rebalance.result()
+            self.test_group_by_aggr_fn()
+        finally:
+            remote.start_server()
