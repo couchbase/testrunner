@@ -107,6 +107,7 @@ class ObserveTests(BaseTestCase):
             key_val[key] = "multiset"
         return key_val
 
+    @staticmethod
     def _run_observe(self):
         tasks = []
         query_set = "true"
@@ -195,15 +196,15 @@ class ObserveTests(BaseTestCase):
         if rebalance == "in":
             self.servs_in = [self.servers[len(self.servers) - 1]]
             rebalance = self.cluster.async_rebalance(self.servers[:1], self.servs_in , [])
-            self._run_observe()
+            self._run_observe(self)
             rebalance.result()
         elif rebalance == "out":
             self.servs_out = [self.servers[self.nodes_init - 1]]
             rebalance = self.cluster.async_rebalance(self.servers[:1], [] , self.servs_out)
-            self._run_observe()
+            self._run_observe(self)
             rebalance.result()
         else:
-            self._run_observe()
+            self._run_observe(self)
 
 
     def test_observe_with_replication(self):
@@ -237,4 +238,4 @@ class ObserveTests(BaseTestCase):
             self._restart_memcache(bucket.name)
             # for bucket in self.buckets:
             ClusterOperationHelper._wait_warmup_completed(self, self.servers[:self.nodes_init], bucket.name)
-            self._run_observe()
+            self._run_observe(self)
