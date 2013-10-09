@@ -10,6 +10,7 @@ from basetestcase import BaseTestCase
 from couchbase.documentgenerator import DocumentGenerator
 from membase.api.exception import CBQError
 from membase.api.rest_client import RestConnection
+from memcached.helper.data_helper import MemcachedClientHelper
 
 class QueryTests(BaseTestCase):
     def setUp(self):
@@ -22,11 +23,12 @@ class QueryTests(BaseTestCase):
         self.max_verify = self.input.param("max_verify", None)
         self.buckets = RestConnection(self.master).get_buckets()
         docs_per_day = self.input.param("doc-per-day", 49)
+        self.item_flag = self.input.param("item_flag", 0)
         self.gens_load = self.generate_docs(docs_per_day)
 
     def suite_setUp(self):
         try:
-            self.load(self.gens_load)
+            self.load(self.gens_load, flag=self.item_flag)
             self._start_command_line_query(self.master)
             self.skip_buckets_handle = True
         except:
@@ -822,6 +824,29 @@ class QueryTests(BaseTestCase):
                                                                                    bucket.name)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['name']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_meta_flags(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT DISTINCT META().flags as flags FROM %s'  % (
+                                                                bucket.name)
+            actual_result = self.run_cbq_query()
+            expected_result = [{"flags" : self.item_flag}]
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_meta_cas(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT META().cas as cas FROM %s'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['cas']))
+            keys, _ = bucket.kvs[1].key_set()
+            client = MemcachedClientHelper.direct_client(self.master, bucket.name)
+            expected_result = []
+            for key in keys:
+                _, cas, _ = client.get(key)
+                expected_result.append({"cas" : cas})
+            expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))
             self._verify_results(actual_result, expected_result)
 
     def test_length(self):
