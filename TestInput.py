@@ -25,6 +25,7 @@ class TestInput(object):
         self.clusters = {}
         self.membase_settings = None
         self.test_params = {}
+        self.tuq_client = None
         #servers , each server can have u,p,port,directory
 
     def param(self, name, default_value):
@@ -169,6 +170,7 @@ class TestInputParser():
         cluster_ips = []
         clusters = {}
         moxis = []
+        input.tuq_client = None
         moxi_ips = []
         client_ips = []
         input.dashboard = []
@@ -191,6 +193,9 @@ class TestInputParser():
                 input.dashboard = TestInputParser.get_server_ips(config, section)
             elif section == 'uiconf':
                 input.ui_conf = TestInputParser.get_ui_tests_config(config, section)
+            elif section == 'tuq_client':
+                tuq_ip = TestInputParser.get_server_ips(config, section)
+                input.tuq_client = TestInputParser.get_server(tuq_ip[0], config)
             elif result is not None:
                 cluster_list = TestInputParser.get_server_ips(config, section)
                 cluster_ips.extend(cluster_list)

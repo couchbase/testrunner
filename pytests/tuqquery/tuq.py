@@ -17,7 +17,10 @@ class QueryTests(BaseTestCase):
         if not self._testMethodName == 'suite_setUp':
             self.skip_buckets_handle = True
         super(QueryTests, self).setUp()
-        self.shell = RemoteMachineShellConnection(self.master)
+        if self.input.tuq_client is not None:
+            self.shell = RemoteMachineShellConnection(self.input.tuq_client)
+        else:
+            self.shell = RemoteMachineShellConnection(self.master)
         self.version = self.input.param("cbq_version", "git_repo")
         self.use_rest = self.input.param("use_rest", True)
         self.max_verify = self.input.param("max_verify", None)
@@ -1269,27 +1272,29 @@ class QueryTests(BaseTestCase):
                 else:
                     self.fail("There was no errors. Error expected: %s" % error)
 
-    def run_cbq_query(self, query=None, min_output_size=10):
+    def run_cbq_query(self, query=None, min_output_size=10, server=None):
         if query is None:
             query = self.query
+        if server is None:
+           server = self.master
         if self.use_rest:
-            result = RestConnection(self.master).query_tool(query)
+            result = RestConnection(server).query_tool(query)
         else:
             if self.version == "git_repo":
-                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/"
-                                                            "tuq_client/tuq_client "
-                                                            "-engine=http://localhost:8093/",
+                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/" +\
+                                                            "tuq_client/tuq_client " +\
+                                                            "-engine=http://%s:8093/" % server.ip,
                                                        subcommands=[query,],
                                                        min_output_size=20,
                                                        end_msg='tuq_client>')
             else:
-                output = self.shell.execute_commands_inside("/tmp/tuq/cbq -engine=http://localhost:8093/",
+                output = self.shell.execute_commands_inside("/tmp/tuq/cbq -engine=http://%s:8093/" % server.ip,
                                                            subcommands=[query,],
                                                            min_output_size=20,
                                                            end_msg='cbq>')
             result = self._parse_query_output(output)
         if 'error' in result:
-            raise CBQError(result["error"], self.master.ip)
+            raise CBQError(result["error"], server.ip)
         self.log.info("TOTAL ELAPSED TIME: %s" % [param["message"]
                         for param in result["info"] if param["key"] == "total_elapsed_time"])
         return result
