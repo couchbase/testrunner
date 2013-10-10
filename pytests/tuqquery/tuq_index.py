@@ -20,10 +20,13 @@ class QueriesViewsTests(QueryTests):
 
     def test_simple_create_delete_index(self):
         for bucket in self.buckets:
-            self.query = "CREATE INDEX my_index ON %s(name) " % (bucket.name)
+            view_name = "my_index"
+            self.query = "CREATE INDEX %s ON %s(name) " % (
+                                    view_name, bucket.name)
             actual_result = self.run_cbq_query()
             self._verify_results(actual_result['resultset'], [])
-            self.query = "DROP INDEX %s.my_index" % (bucket.name)
+            self._verify_view_is_present(view_name)
+            self.query = "DROP INDEX %s.%s" % (bucket.name, view_name)
             actual_result = self.run_cbq_query()
             self._verify_results(actual_result['resultset'], [])
 
@@ -32,14 +35,16 @@ class QueriesViewsTests(QueryTests):
             self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
             actual_result = self.run_cbq_query()
             self._verify_results(actual_result['resultset'], [])
+            self._verify_view_is_present("#primary")
 
     def test_create_delete_index_with_query(self):
         for bucket in self.buckets:
-            self.query = "CREATE INDEX my_index ON %s(name) " % (bucket.name)
+            view_name = "my_index"
+            self.query = "CREATE INDEX %s ON %s(name) " % (view_name, bucket.name)
             actual_result = self.run_cbq_query()
             self._verify_results(actual_result['resultset'], [])
             self.test_case()
-            self.query = "DROP INDEX %s.my_index" % (bucket.name)
+            self.query = "DROP INDEX %s.%s" % (bucket.name,view_name)
             actual_result = self.run_cbq_query()
             self._verify_results(actual_result['resultset'], [])
             self.test_case()
@@ -96,3 +101,6 @@ class QueriesViewsTests(QueryTests):
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                 self.run_cbq_query()
+    def _verify_view_is_present(self, view_name):
+        ddoc, _ = RestConnection(self.master).get_ddoc("default", "ddl_%s" % view_name)
+        self.assertTrue(view_name in ddoc["views"], "View %s wasn't created" % view_name)
