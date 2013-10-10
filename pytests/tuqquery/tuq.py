@@ -304,7 +304,7 @@ class QueryTests(BaseTestCase):
     def test_order_by_alias(self):
         for bucket in self.buckets:
             self.query = 'SELECT job_title, tasks_points AS points FROM %s'  % (bucket.name) +\
-            ' AS test ORDER BY job_title, points DESC'
+            ' AS test ORDER BY job_title DESC, points DESC'
             actual_result = self.run_cbq_query()
 
             full_list = self._generate_full_docs_list(self.gens_load)
