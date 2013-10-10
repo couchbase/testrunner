@@ -479,6 +479,8 @@ class GenericLoadingTask(Thread, Task):
         except ValueError:
             index = random.choice(range(len(value)))
             value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+        except TypeError:
+            value = json.dumps(value)
 
         try:
             self.client.set(key, self.exp, self.flag, value)

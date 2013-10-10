@@ -1434,7 +1434,11 @@ class QueryTests(BaseTestCase):
             doc_gen = copy.deepcopy(gen_load)
             while doc_gen.has_next():
                 _, val = doc_gen.next()
-                all_docs_list.append(json.loads(val))
+                try:
+                    val = json.loads(val)
+                except TypeError:
+                    pass
+                all_docs_list.append(val)
         return all_docs_list
 
     def _verify_results(self, actual_result, expected_result):

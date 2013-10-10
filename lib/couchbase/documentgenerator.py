@@ -118,3 +118,24 @@ class BatchedDocumentGenerator(object):
             key_val[key] = val
             count += 1
         return key_val
+
+class JSONNonDocGenerator(KVGenerator):
+    """
+    Values can be arrays, integers, strings
+    """
+    def __init__(self, name, values, start=0, end=10000):
+        KVGenerator.__init__(self, name, start, end)
+        self.values = values
+        self.itr = self.start
+
+    def next(self):
+        if self.itr >= self.end:
+            raise StopIteration
+
+        key = self.name + str(self.itr)
+        index = self.itr
+        while index > len(self.values):
+            index = index - len(self.values)
+        value = self.values[index-1]
+        self.itr += 1
+        return key, value
