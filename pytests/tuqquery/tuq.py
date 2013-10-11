@@ -1254,6 +1254,22 @@ class QueryTests(BaseTestCase):
 
 ##############################################################################################
 #
+#   EXPLAIN
+##############################################################################################
+
+    def test_explain(self):
+        for bucket in self.buckets:
+            self.query = "EXPLAIN SELECT * FROM %s" % (bucket.name)
+            res = self.run_cbq_query()
+            self.assertTrue(res["resultset"]["input"]["type"] == "fetch",
+                            "Type should be fetch, but is: %s" % res["resultset"])
+            self.assertTrue(res["resultset"]["input"]["input"]["type"] == "scan",
+                            "Type should be scan, but is: %s" % res["resultset"])
+            self.assertTrue(res["resultset"]["input"]["input"]["index"] == "#alldocs",
+                            "Type should be #alldocs, but is: %s" % res["resultset"])
+
+##############################################################################################
+#
 #   COMMON FUNCTIONS
 ##############################################################################################
 
