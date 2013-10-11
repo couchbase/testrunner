@@ -3,6 +3,7 @@ import math
 from tuqquery.tuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
+from membase.helper.cluster_helper import ClusterOperationHelper
 
 class QueriesOpsTests(QueryTests):
     def setUp(self):
@@ -146,3 +147,21 @@ class QueriesOpsTests(QueryTests):
         rebalance = self.cluster.rebalance(self.servers[:self.nodes_init],
                                [], servr_out)
         self.test_group_by_aggr_fn()
+
+    def test_warmup(self):
+        if self.input.tuq_client is None:
+            self.fail("For this test external tuq server is requiered. " +\
+                      "Please specify one in conf")
+        self.test_alias_order_desc()
+        for server in self.servers[:self.nodes_init]:
+            remote = RemoteMachineShellConnection(server)
+            remote.stop_server()
+            remote.start_server()
+            remote.disconnect()
+        #run query, result may not be as expected, but tuq shouldn't fail
+        try:
+            self.test_alias_order_desc()
+        except:
+            pass
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+        self.test_alias_order_desc()
