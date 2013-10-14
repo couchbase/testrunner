@@ -45,15 +45,12 @@ from couchbase import Couchbase
 
 
 class PersistedCB(Task):
-    _conn = None
-    _bucket = None
-    _password = ""
+    clientMap = {}
     _hosts = None
     _stale_count = 0
 
-    @property
-    def couchbaseClient(self):
-        if self._conn is None or self._stale_count >= 100:
+    def couchbaseClient(self, bucket = "default", password = ""):
+        if bucket not in self.clientMap or self._stale_count >= 100:
             addr = self._hosts[random.randint(0,len(self._hosts) - 1)].split(':')
             host = addr[0]
             port = 8091
@@ -61,11 +58,11 @@ class PersistedCB(Task):
                 port = addr[1]
 
             logger.error("connecting sdk: %s" % host)
-            self._conn = Couchbase.connect(bucket = self._bucket, password = self._password,
-                                           host=host, port=port)
+            self._conn = Couchbase.connect(bucket=bucket, password=password, host=host, port=port)
+            self.clientMap[bucket] = self._conn
             self._stale_count = 0
         self._stale_count = self._stale_count + 1
-        return self._conn
+        return self.clientMap[bucket]
 
     def set_hosts(self, hosts):
         if self._hosts is not None:
@@ -81,20 +78,14 @@ class PersistedCB(Task):
 
         self._hosts = hosts
 
-    def set_bucket(self, bucket, password=""):
-        self._bucket = bucket
-        self._password = password
-
     def close(self):
         del self._conn
         self._conn = None
 
 @celery.task(base = PersistedCB)
 def mset(keys, template, bucket = "default", isupdate = False, password = "", hosts = None):
-
     mset.set_hosts(hosts)
-    mset.set_bucket(bucket, password)
-    cb = mset.couchbaseClient
+    cb = mset.couchbaseClient(bucket, password)
 
     # decode magic strings in template before sending to sdk
     # python pass-by-reference updates attribute in function
@@ -113,8 +104,7 @@ def mset(keys, template, bucket = "default", isupdate = False, password = "", ho
 @celery.task(base = PersistedCB)
 def mget(keys, bucket = "default", password = "", hosts = None):
     mset.set_hosts(hosts)
-    mset.set_bucket(bucket, password)
-    cb = mset.couchbaseClient
+    cb = mset.couchbaseClient(bucket, password)
 
     try:
         cb.get_multi(keys)
@@ -127,8 +117,7 @@ def mget(keys, bucket = "default", password = "", hosts = None):
 @celery.task(base = PersistedCB)
 def mdelete(keys, bucket = "default", password = "", hosts = None):
     mdelete.set_hosts(hosts)
-    mdelete.set_bucket(bucket, password)
-    cb = mdelete.couchbaseClient
+    cb = mdelete.couchbaseClient(bucket, password)
     try:
         cb.delete_multi(keys)
     except Exception:
