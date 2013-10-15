@@ -506,7 +506,7 @@ class QueryTests(BaseTestCase):
     def test_any_external(self):
         for bucket in self.buckets:
             self.query = 'SELECT name FROM %s WHERE '  % (bucket.name) +\
-                         'ANY job_title = x OVER x IN ["Support", "Management"] END' +\
+                         'ANY job_title = x OVER x IN ["Support", "Management"] END ' +\
                          'ORDER BY name'
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
