@@ -1432,6 +1432,8 @@ class QueryTests(BaseTestCase):
             actual_result = actual_result[:self.max_verify]
             expected_result = expected_result[:self.max_verify]
 
+        msg = "Results are incorrect.\n Actual first and last 100:  %s.\n ... \n %s" +\
+        "Expected first and last 100: %s.\n  ... \n %s"
         self.assertTrue(actual_result == expected_result,
-                          "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                            actual_result, expected_result))
+                          msg % (actual_result[:100],actual_result[-100:],
+                                 expected_result[:100],expected_result[-100:]))
