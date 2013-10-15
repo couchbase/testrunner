@@ -4,6 +4,7 @@ from tuqquery.tuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
+from backuptests import BackupHelper
 
 class QueriesOpsTests(QueryTests):
     def setUp(self):
@@ -151,7 +152,7 @@ class QueriesOpsTests(QueryTests):
         self.test_group_by_aggr_fn()
 
     def test_warmup(self):
-        num_srv_warm_up = self.input.get("srv_warm_up", self.nodes_init)
+        num_srv_warm_up = self.input.param("srv_warm_up", self.nodes_init)
         if self.input.tuq_client is None:
             self.fail("For this test external tuq server is requiered. " +\
                       "Please specify one in conf")
@@ -168,3 +169,14 @@ class QueriesOpsTests(QueryTests):
             pass
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
         self.test_alias_order_desc()
+
+    def test_with_backup(self):
+        tmp_folder = "/tmp/backup"
+        try:
+            self.shell.create_directory(tmp_folder)
+            node = RestConnection(self.master).get_nodes_self()
+            self.is_membase = False
+            BackupHelper(self.master, self).backup('default', node, tmp_folder)
+            self.test_alias_order_desc()
+        finally:
+            self.shell.delete_files(tmp_folder)
