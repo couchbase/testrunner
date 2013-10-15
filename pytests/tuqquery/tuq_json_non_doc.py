@@ -23,9 +23,37 @@ class JSONNonDocTests(QueryTests):
 
     def test_simple_query(self):
         for bucket in self.buckets:
-            self.query = "select * from %s" % bucket.name
+            self.query = "select value() from %s" % bucket.name
             actual_result = self.run_cbq_query()
+            actual_result = [doc["$1"] for doc in actual_result['resultset']]
             expected_result = self._generate_full_docs_list(self.gens_load)
+            self._verify_results(sorted(actual_result), sorted(expected_result))
+
+    def test_int_where(self):
+        for bucket in self.buckets:
+            self.query = "select value() from %s where value() > 300" % bucket.name
+            actual_result = self.run_cbq_query()
+            actual_result = [doc["$1"] for doc in actual_result['resultset']]
+            expected_result = self._generate_full_docs_list(self.gens_load)
+            expected_result = [doc for doc in expected_result if doc > 300 ]
+            self._verify_results(sorted(actual_result), sorted(expected_result))
+
+    def test_string_where(self):
+        for bucket in self.buckets:
+            self.query = "select value() from %s where value() == 'Engineer'" % bucket.name
+            actual_result = self.run_cbq_query()
+            actual_result = [doc["$1"] for doc in actual_result['resultset']]
+            expected_result = self._generate_full_docs_list(self.gens_load)
+            expected_result = [doc for doc in expected_result if doc == 'Engineer' ]
+            self._verify_results(sorted(actual_result), sorted(expected_result))
+
+    def test_array_where(self):
+        for bucket in self.buckets:
+            self.query = "SELECT value() FROM %s WHERE ANY num > 20 OVER num IN value() end" % bucket.name
+            actual_result = self.run_cbq_query()
+            actual_result = [doc["$1"] for doc in actual_result['resultset']]
+            expected_result = self._generate_full_docs_list(self.gens_load)
+            expected_result = [doc for doc in expected_result if doc[0] > 20 or doc[1] > 20 ]
             self._verify_results(sorted(actual_result), sorted(expected_result))
 
     def generate_docs(self, values_type, name="tuq", start=0, end=0):
