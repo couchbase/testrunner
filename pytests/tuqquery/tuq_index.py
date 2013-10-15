@@ -54,11 +54,11 @@ class QueriesViewsTests(QueryTests):
                     raise ex
             self.query = "EXPLAIN SELECT * FROM %s" % (bucket.name)
             res = self.run_cbq_query()
-            self.assertTrue(res["resultset"]["input"]["type"] == "fetch",
+            self.assertTrue(res["resultset"][0]["input"]["type"] == "fetch",
                             "Type should be fetch, but is: %s" % res["resultset"])
-            self.assertTrue(res["resultset"]["input"]["input"]["type"] == "scan",
+            self.assertTrue(res["resultset"][0]["input"]["input"]["type"] == "scan",
                             "Type should be scan, but is: %s" % res["resultset"])
-            self.assertTrue(res["resultset"]["input"]["input"]["index"] == "#primary",
+            self.assertTrue(res["resultset"][0]["input"]["input"]["index"] == "#primary",
                             "Type should be #alldocs, but is: %s" % res["resultset"])
 
     def test_explain_index_attr(self):
@@ -69,11 +69,11 @@ class QueriesViewsTests(QueryTests):
                 self.run_cbq_query()
                 self.query = "EXPLAIN SELECT * FROM %s WHERE name = 'abc'" % (bucket.name)
                 res = self.run_cbq_query()
-                self.assertTrue(res["resultset"]["input"]["type"] == "filter",
+                self.assertTrue(res["resultset"][0]["input"]["type"] == "filter",
                                 "Type should be fetch, but is: %s" % res["resultset"])
-                self.assertTrue(res["resultset"]["input"]["input"]["input"]["type"] == "scan",
+                self.assertTrue(res["resultset"][0]["input"]["input"]["input"]["type"] == "scan",
                                 "Type should be scan, but is: %s" % res["resultset"])
-                self.assertTrue(res["resultset"]["input"]["input"]["input"]["index"] == index_name,
+                self.assertTrue(res["resultset"][0]["input"]["input"]["input"]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name,res["resultset"]))
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
@@ -87,11 +87,11 @@ class QueriesViewsTests(QueryTests):
                 self.run_cbq_query()
                 self.query = "EXPLAIN SELECT * FROM %s WHERE email = 'abc'" % (bucket.name)
                 res = self.run_cbq_query()
-                self.assertTrue(res["resultset"]["input"]["type"] == "filter",
+                self.assertTrue(res["resultset"][0]["input"]["type"] == "filter",
                                 "Type should be fetch, but is: %s" % res["resultset"])
-                self.assertTrue(res["resultset"]["input"]["input"]["input"]["type"] == "scan",
+                self.assertTrue(res["resultset"][0]["input"]["input"]["input"]["type"] == "scan",
                                 "Type should be scan, but is: %s" % res["resultset"])
-                self.assertTrue(res["resultset"]["input"]["input"]["input"]["index"] != index_name,
+                self.assertTrue(res["resultset"][0]["input"]["input"]["input"]["index"] != index_name,
                                 "Index should be %s, but is: %s" % (index_name,res["resultset"]))
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)

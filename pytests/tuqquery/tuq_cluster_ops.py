@@ -14,6 +14,8 @@ class QueriesOpsTests(QueryTests):
 
     def tearDown(self):
         super(QueriesOpsTests, self).tearDown()
+        ClusterOperationHelper.cleanup_cluster(self.servers)
+        self.sleep(10)
 
     def suite_tearDown(self):
         super(QueriesOpsTests, self).suite_tearDown()
@@ -98,7 +100,7 @@ class QueriesOpsTests(QueryTests):
 
     def test_autofailover(self):
         autofailover_timeout = 30
-        status = self.rest.update_autofailover_settings(True, autofailover_timeout)
+        status = RestConnection(self.master).update_autofailover_settings(True, autofailover_timeout)
         self.assertTrue(status, 'failed to change autofailover_settings!')
         servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
         self.test_group_by_aggr_fn()

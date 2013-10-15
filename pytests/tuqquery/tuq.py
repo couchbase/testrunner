@@ -26,7 +26,7 @@ class QueryTests(BaseTestCase):
         self.max_verify = self.input.param("max_verify", None)
         self.buckets = RestConnection(self.master).get_buckets()
         docs_per_day = self.input.param("doc-per-day", 49)
-        self.item_flag = self.input.param("item_flag", 0)
+        self.item_flag = self.input.param("item_flag", 4042322160)
         self.gens_load = self.generate_docs(docs_per_day)
 
     def suite_setUp(self):
@@ -1026,11 +1026,11 @@ class QueryTests(BaseTestCase):
                                if math.fsum([doc['test_rate']
                                             for doc in full_list
                                             if doc['join_mo'] == group and\
-                                            doc['job_title'] == 'Sales'] > 0) and\
+                                            doc['job_title'] == 'Sales'] ) > 0 and\
                                   math.fsum([doc['test_rate']
                                             for doc in full_list
                                             if doc['join_mo'] == group and\
-                                            doc['job_title'] == 'Sales'] < 100000)]
+                                            doc['job_title'] == 'Sales'] ) < 100000]
             expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
             self._verify_results(actual_result, expected_result)
 
@@ -1078,11 +1078,11 @@ class QueryTests(BaseTestCase):
                                     len([doc['test_rate']
                                          for doc in full_list
                                          if doc['join_mo'] == group and\
-                                         doc['job_title'] == 'Sales'])) > 0) and\
+                                         doc['job_title'] == 'Sales']))> 0)  and\
                                   math.fsum([doc['test_rate']
                                             for doc in full_list
                                             if doc['join_mo'] == group and\
-                                            doc['job_title'] == 'Sales'] < 100000)]
+                                            doc['job_title'] == 'Sales'])  < 100000]
             expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
             self._verify_results(actual_result, expected_result)
 
@@ -1105,11 +1105,11 @@ class QueryTests(BaseTestCase):
                                if min([doc['test_rate']
                                        for doc in full_list
                                        if doc['join_mo'] == group and\
-                                       doc['job_title'] == 'Sales'] > 0) and\
+                                       doc['job_title'] == 'Sales']) > 0 and\
                                   math.fsum([doc['test_rate']
                                             for doc in full_list
                                             if doc['join_mo'] == group and\
-                                            doc['job_title'] == 'Sales'] < 100000)]
+                                            doc['job_title'] == 'Sales']) < 100000]
             expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
             self._verify_results(actual_result, expected_result)
 
@@ -1132,11 +1132,11 @@ class QueryTests(BaseTestCase):
                                if max([doc['test_rate']
                                        for doc in full_list
                                        if doc['join_mo'] == group and\
-                                       doc['job_title'] == 'Sales'] > 0) and\
+                                       doc['job_title'] == 'Sales'] ) > 0 and\
                                   math.fsum([doc['test_rate']
                                             for doc in full_list
                                             if doc['join_mo'] == group and\
-                                            doc['job_title'] == 'Sales'] < 100000)]
+                                            doc['job_title'] == 'Sales'] ) < 100000]
             expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
             self._verify_results(actual_result, expected_result)
 
@@ -1147,7 +1147,7 @@ class QueryTests(BaseTestCase):
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
             actual_result = [{key : (value, value.sort())[isinstance(value, list)]}
-                             for key, value in actual_result['resultSet']]
+                             for key, value in actual_result['resultset']]
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
 
             tmp_groups = set([doc['job_title'] for doc in full_list])
@@ -1193,7 +1193,7 @@ class QueryTests(BaseTestCase):
 
     def test_logic_expr(self):
         for bucket in self.buckets:
-            self.query = "SELECT tasks_points.task1 as task FROM default WHERE " % (bucket.name)+\
+            self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
             "tasks_points.task1 > 1 AND tasks_points.task1 < 4"
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['resultset'], key=lambda doc: (
@@ -1208,7 +1208,7 @@ class QueryTests(BaseTestCase):
 
     def test_comparition_expr(self):
         for bucket in self.buckets:
-            self.query = "SELECT tasks_points.task1 as task FROM default WHERE " % (bucket.name)+\
+            self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
             "tasks_points.task1 > tasks_points.task1"
             actual_result = self.run_cbq_query()
             self._verify_results(actual_result['resultset'], [])
@@ -1261,11 +1261,11 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "EXPLAIN SELECT * FROM %s" % (bucket.name)
             res = self.run_cbq_query()
-            self.assertTrue(res["resultset"]["input"]["type"] == "fetch",
+            self.assertTrue(res["resultset"][0]["input"]["type"] == "fetch",
                             "Type should be fetch, but is: %s" % res["resultset"])
-            self.assertTrue(res["resultset"]["input"]["input"]["type"] == "scan",
+            self.assertTrue(res["resultset"][0]["input"]["input"]["type"] == "scan",
                             "Type should be scan, but is: %s" % res["resultset"])
-            self.assertTrue(res["resultset"]["input"]["input"]["index"] == "#alldocs",
+            self.assertTrue(res["resultset"][0]["input"]["input"]["index"] == "#alldocs",
                             "Type should be #alldocs, but is: %s" % res["resultset"])
 
 ##############################################################################################

@@ -104,7 +104,8 @@ class QueriesViewsTests(QueryTests):
         self.log.info("Length is equal")
         self.assertEqual([row["key"] for row in formated_tool_res],
                          [row["key"] for row in formated_view_res],
-                         "Query results sorting are not equal. ")
+                         "Query results sorting are not equal./n Actual %s, Expected %s" %(
+                                                formated_tool_res[:100],formated_view_res[:100]))
         self.log.info("Sorting is equal")
         if check_values:
             formated_tool_res = sorted(formated_tool_res, key=lambda doc: (doc['key'],
