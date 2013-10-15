@@ -7,6 +7,7 @@ class XDCRTests(QueryTests, XDCRReplicationBaseTest):
     def setUp(self):
         super(XDCRTests, self).setUp()
         self.method_name = self.input.param("test_to_run", "test_simple_check")
+        self.with_reb = self.input.param("with_reb", None)
         self.bucket_topology = self.input.param("bucket_topology", "default:1><2").split(";")
         self.src_init = self.input.param('src_init', 1)
         self.dest_init = self.input.param('dest_init', 1)
@@ -45,9 +46,23 @@ class XDCRTests(QueryTests, XDCRReplicationBaseTest):
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
         fn = getattr(self, self.method_name)
         fn()
-        self.sleep(self.wait_timeout, "Wait some time and try again")
+        if self.with_reb == 'src':
+            srv_in = self.servers[self.src_init + self.dest_init :
+                                  self.src_init + self.dest_init + self.nodes_in]
+            task = self.cluster.async_rebalance(self.servers[:self.src_init],
+                               srv_in, [])
+        elif self.with_reb == 'dest':
+            srv_in = self.servers[self.src_init + self.dest_init :
+                                  self.src_init + self.dest_init + self.nodes_in]
+            task = self.cluster.async_rebalance(self.servers[self.src_init:
+                                                             self.src_init + self.dest_init],
+                               srv_in, [])
+        else:
+            self.sleep(self.wait_timeout, "Wait some time and try again")
         fn = getattr(self, self.method_name)
         fn()
+        if self.with_reb:
+            task.result()
 
     def _override_clusters_structure(self):
         UpgradeTests._override_clusters_structure(self)
