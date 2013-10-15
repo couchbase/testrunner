@@ -91,7 +91,8 @@ class XDCRBaseTest(unittest.TestCase):
             self.log.info("==============  XDCRbasetests setup was finished for test #{0} {1} =============="\
                 .format(self._case_number, self._testMethodName))
             # # THREADS FOR STATS KEEPING
-            if str(self.__class__).find('upgradeXDCR') == -1:
+            if str(self.__class__).find('upgradeXDCR') == -1  and \
+               str(self.__class__).find('tuq_xdcr') == -1:
                 self._stats_thread1 = Thread(target=self._replication_stat_keeper, args=["replication_data_replicated", self.src_master])
                 self._stats_thread2 = Thread(target=self._replication_stat_keeper, args=["xdc_ops", self.dest_master])
                 self._stats_thread3 = Thread(target=self._replication_stat_keeper, args=["data_replicated", self.src_master])
@@ -125,6 +126,9 @@ class XDCRBaseTest(unittest.TestCase):
             self.log.info("==============  XDCRbasetests stats for test #{0} {1} =============="\
                     .format(self._case_number, self._testMethodName))
             self._end_replication_flag = 1
+            if str(self.__class__).find('tuq_xdcr') != -1:
+                self._do_cleanup()
+                return
             if str(self.__class__).find('upgradeXDCR') == -1:
                 self._stats_thread1.join()
                 self._stats_thread2.join()

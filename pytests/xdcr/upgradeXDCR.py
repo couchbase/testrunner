@@ -37,10 +37,12 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         finally:
             self.cluster.shutdown()
 
+    @staticmethod
     def _override_clusters_structure(self):
         TestInputSingleton.input.clusters[0] = self.servers[:self.src_init]
         TestInputSingleton.input.clusters[1] = self.servers[self.src_init: self.src_init + self.dest_init ]
 
+    @staticmethod
     def _create_buckets(self, nodes):
         master_node = nodes[0]
         if self.src_master.ip in [node.ip for node in nodes]:
@@ -61,7 +63,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                 num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
 
-
+    @staticmethod
     def _setup_topology_chain(self):
         ord_keys = self._clusters_keys_olst
         ord_keys_len = len(ord_keys)
@@ -75,6 +77,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
             self._join_clusters(src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
             dest_key_index += 1
 
+    @staticmethod
     def _set_toplogy_star(self):
         src_master_identified = False
         for key in self._clusters_keys_olst:
@@ -89,6 +92,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
             self._join_clusters(src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
             self.sleep(30)
 
+    @staticmethod
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
         if len(self.repl_buckets_from_src):
             self._link_clusters(src_cluster_name, src_master, dest_cluster_name, dest_master)
@@ -98,6 +102,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self._replicate_clusters(src_master, dest_cluster_name, self.repl_buckets_from_src)
         self._replicate_clusters(dest_master, src_cluster_name, self.repl_buckets_from_dest)
 
+    @staticmethod
     def _replicate_clusters(self, src_master, dest_cluster_name, buckets):
         rest_conn_src = RestConnection(src_master)
         for bucket in buckets:
@@ -108,6 +113,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         if self._get_cluster_buckets(src_master):
             self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_database, rep_id))
 
+    @staticmethod
     def _get_bucket(self, bucket_name, server):
             server_id = RestConnection(server).get_nodes_self().id
             for bucket in self.buckets:
