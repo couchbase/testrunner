@@ -10,6 +10,7 @@ class ConcurrentTests(QueryTests):
         self.thread_stopped = Event()
         self.num_threads = self.input.param("num_threads", 4)
         self.test_to_run = self.input.param("test_to_run", "test_simple_check")
+        self.ops = self.input.param("ops", None)
 
     def suite_setUp(self):
         super(ConcurrentTests, self).suite_setUp()
@@ -21,6 +22,15 @@ class ConcurrentTests(QueryTests):
         super(ConcurrentTests, self).suite_tearDown()
 
     def test_concurrent_queries(self):
+        task_ops = None
+        if self.ops == 'rebalance':
+            task_ops = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                self.servers[self.nodes_init:self.nodes_init + self.nodes_in], [])
+        elif self.ops == 'failover':
+            servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
+            self.cluster.failover(self.servers[:self.nodes_init], servr_out)
+            task_ops = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                               [], servr_out)
         query_threads = []
         for n in xrange(self.num_threads):
             t = StoppableThread(target=self.query_thread,
@@ -45,6 +55,8 @@ class ConcurrentTests(QueryTests):
                 self.thread_stopped.clear()
         if self.thread_crashed.is_set():
             self.fail("Test failed, see logs above!")
+        if task_ops:
+            task_ops.result()
 
     def query_thread(self, method_name):
         try:
