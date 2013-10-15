@@ -151,11 +151,12 @@ class QueriesOpsTests(QueryTests):
         self.test_group_by_aggr_fn()
 
     def test_warmup(self):
+        num_srv_warm_up = self.input.get("srv_warm_up", self.nodes_init)
         if self.input.tuq_client is None:
             self.fail("For this test external tuq server is requiered. " +\
                       "Please specify one in conf")
         self.test_alias_order_desc()
-        for server in self.servers[:self.nodes_init]:
+        for server in self.servers[self.nodes_init - num_srv_warm_up:self.nodes_init]:
             remote = RemoteMachineShellConnection(server)
             remote.stop_server()
             remote.start_server()
