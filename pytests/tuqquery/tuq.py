@@ -73,17 +73,18 @@ class QueryTests(BaseTestCase):
 
     def test_consistent_simple_check(self):
         queries = ['SELECT name, join_day, join_mo FROM %s '
-                    'WHERE join_day<10 AND join_mo = 6 '
-                    'OR name NOT NULL ORDER BY join_day, join_mo',
+                    'WHERE name IS NOT NULL AND join_day<10 '
+                    'OR join_mo = 6 ORDER BY join_day, join_mo',
                    'SELECT name, join_day, join_mo FROM %s '
-                    'WHERE join_mo = 6 OR name NOT NULL AND '
+                    'WHERE join_mo = 6 OR name IS NOT NULL AND '
                     'join_day<10 ORDER BY join_day, join_mo']
         for bucket in self.buckets:
             actual_result1 = self.run_cbq_query(queries[0] % bucket.name)
             actual_result2 = self.run_cbq_query(queries[1] % bucket.name)
-            self.assertEquals(actual_result1['resultset'], actual_result2['resultset'],
-                              "Results are inconsistent.Difference: %s" %(
-                                    actual_result1['resultset'] - actual_result2['resultset']))
+            self.assertTrue(actual_result1['resultset'] == actual_result2['resultset'],
+                              "Results are inconsistent.Difference: %s %s %s %s" %(
+                                    len(actual_result1['resultset']), len(actual_result2['resultset']),
+                                    actual_result1['resultset'][100], actual_result2['resultset'][100]))
 
     def test_simple_nulls(self):
         queries = ['SELECT id FROM %s WHERE id=NULL or id="null"']
@@ -184,7 +185,7 @@ class QueryTests(BaseTestCase):
                                 'The expression TEST is not satisfied by these dependencies',
                           'SELECT test.tasks_points as points FROM {0} AS TEST ' +
                            'GROUP BY tasks_points AS GROUP_POINT' :
-                                'Alias points cannot be referenced',
+                                'parse_error',
                           'SELECT COUNT(tasks_points) as COUNT_NEW_POINT, COUNT(name) ' +
                            'as COUNT_EMP  FROM {0} AS TEST GROUP BY name ' +
                            'HAVING COUNT_NEW_POINT >0' :
@@ -345,9 +346,9 @@ class QueryTests(BaseTestCase):
                               "join_mo" : doc["join_mo"],
                               "emp_per_month" : len([x for x in full_list if
                                                      x['join_yr'] == doc["join_yr"] and\
-                                                     x["join_mo"] == doc["join_mo"] and\
-                                                     x["join_mo"] > 7])}
-                             for doc in full_list]
+                                                     x["join_mo"] == doc["join_mo"]])}
+                             for doc in full_list
+                             if doc["join_mo"] > 7]
             expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             expected_result = sorted(expected_result, key=lambda doc: (doc["emp_per_month"],
                                                                      doc['join_mo'],
@@ -879,11 +880,12 @@ class QueryTests(BaseTestCase):
 
     def test_meta_cas(self):
         for bucket in self.buckets:
-            self.query = 'SELECT META().cas as cas FROM %s'  % (bucket.name)
+            self.query = 'SELECT META().cas as cas, META().id as id FROM %s'  % (bucket.name)
             actual_result = self.run_cbq_query()
+            keys = [doc['id'] for doc in actual_result]
+            actual_result = [{"cas": doc['cas'] for doc in actual_result}]
             actual_result = sorted(actual_result['resultset'],
                                    key=lambda doc: (doc['cas']))
-            keys, _ = bucket.kvs[1].key_set()
             client = MemcachedClientHelper.direct_client(self.master, bucket.name)
             expected_result = []
             for key in keys:
@@ -1169,7 +1171,7 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "SELECT name, CASE WHEN join_mo < 3 OR join_mo > 11 THEN 'winter'" +\
                          " WHEN join_mo < 6 AND join_mo > 2 THEN 'spring' " +\
-                         "WHEN join_mo < 8 AND join_mo > 5 THEN 'summer' " +\
+                         "WHEN join_mo < 9 AND join_mo > 5 THEN 'summer' " +\
                          "ELSE 'autumn' END AS period FROM %s" % (bucket.name)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['resultset'], key=lambda doc: (
@@ -1189,7 +1191,7 @@ class QueryTests(BaseTestCase):
         self.query = "SELECT CASE WHEN 1+1=3 THEN 7+7 WHEN 2+2=5 THEN 8+8 ELSE 2 END"
         actual_result = self.run_cbq_query()
         expected_result = [{"$1" : 2}]
-        self._verify_results(actual_result, expected_result)
+        self._verify_results(actual_result['resultset'], expected_result)
 
     def test_logic_expr(self):
         for bucket in self.buckets:
@@ -1218,17 +1220,22 @@ class QueryTests(BaseTestCase):
             self.query = "SELECT job_title, SUM(test_rate) % COUNT(distinct join_yr)" +\
             " as avg_per_year from {0} group by job_title".format(bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
-                                                                       doc['job_title']))
+            actual_result = [{"job_title": doc["job_title"],
+                              "avg_per_year" : round(doc["avg_per_year"],2)}
+                              for doc in actual_result['resultset']]
+            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
             full_list = self._generate_full_docs_list(self.gens_load)
             tmp_groups = set([doc['job_title'] for doc in full_list])
             expected_result = [{"job_title" : group,
                                 "avg_per_year" : math.fsum([doc['test_rate']
                                                              for doc in full_list
-                                                             if doc['job_title'] == group])/\
+                                                             if doc['job_title'] == group]) %\
                                                   len(set([doc['join_yr'] for doc in full_list
                                                            if doc['job_title'] == group]))}
                                for group in tmp_groups]
+            expected_result = [{"job_title": doc["job_title"],
+                              "avg_per_year" : round(doc["avg_per_year"],2)}
+                              for doc in expected_result]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
@@ -1236,7 +1243,10 @@ class QueryTests(BaseTestCase):
             " SUM(tasks_points.task2)) % COUNT(distinct join_yr) as avg_per_year" +\
             " from {0} group by job_title".format(bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+            actual_result = [{"job_title": doc["job_title"],
+                              "avg_per_year" : round(doc["avg_per_year"],2)}
+                              for doc in actual_result['resultset']]
+            actual_result = sorted(actual_result, key=lambda doc: (
                                                                        doc['job_title']))
             tmp_groups = set([doc['job_title'] for doc in full_list])
             expected_result = [{"job_title" : group,
@@ -1245,10 +1255,13 @@ class QueryTests(BaseTestCase):
                                                              if doc['job_title'] == group])+\
                                                   math.fsum([doc['tasks_points']['task2']
                                                              for doc in full_list
-                                                             if doc['job_title'] == group]))/\
+                                                             if doc['job_title'] == group]))%\
                                                   len(set([doc['join_yr'] for doc in full_list
                                                            if doc['job_title'] == group]))}
                                for group in tmp_groups]
+            expected_result = [{"job_title": doc["job_title"],
+                              "avg_per_year" : round(doc["avg_per_year"],2)}
+                              for doc in expected_result]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
