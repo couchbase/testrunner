@@ -471,6 +471,6 @@ class unidirectional(XDCRReplicationBaseTest):
         self.verify_results()
         for i in xrange(20 * 1024 - 1):
             gen = copy.deepcopy(self.gen_append)
-            self._load_all_buckets(self.src_master, gen, "append", 0)
+            self._load_all_buckets(self.src_master, gen, "append", 0, batch_size=1)
             self.sleep(self._timeout)
             self.verify_results()

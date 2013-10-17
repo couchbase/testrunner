@@ -858,6 +858,33 @@ class VBucketAwareMemcached(object):
                 else:
                     raise error
 
+    def append(self, key, value):
+        vb_error = 0
+        while True:
+            try:
+                return self._send_op(self.memcached(key).append, key, value)
+            except MemcachedError as error:
+                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
+                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
+                    vb_error += 1
+                else:
+                    raise error
+            except (EOFError, socket.error), error:
+                if "Got empty data (remote died?)" in error.message or \
+                   "Timeout waiting for socket" in error.message or \
+                   "Broken pipe" in error.message or "Connection reset by peer" in error.message \
+                    and vb_error < 5:
+                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
+                    vb_error += 1
+                else:
+                    raise error
+            except BaseException as error:
+                if vb_error < 5:
+                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
+                    vb_error += 1
+                else:
+                    raise error
+
     def observe(self, key):
         vb_error = 0
         while True:
