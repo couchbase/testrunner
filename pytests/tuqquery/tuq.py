@@ -34,7 +34,7 @@ class QueryTests(BaseTestCase):
 
     def suite_setUp(self):
         try:
-#            self.load(self.gens_load, flag=self.item_flag)
+            self.load(self.gens_load, flag=self.item_flag)
             self._build_tuq(self.master)
             self.skip_buckets_handle = True
         except:
