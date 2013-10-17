@@ -437,9 +437,10 @@ class unidirectional(XDCRReplicationBaseTest):
                 shell = RemoteMachineShellConnection(self.dest_nodes[i])
             except BaseException, e:
                 self.log.warn("node {0} is unreachable".format(self.dest_nodes[i].ip))
-                self.sleep(60)
+                self.sleep(60, "still can't connect to node")
                 num += 1
-            break
+            else:
+                break
         if num == 10:
             self.fail("Can't establish SSH session after 10 minutes")
         shell.disable_firewall()
