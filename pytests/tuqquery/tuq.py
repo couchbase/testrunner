@@ -5,6 +5,7 @@ import copy
 import math
 import re
 
+import testconstants
 from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
 from couchbase.documentgenerator import DocumentGenerator
@@ -17,11 +18,13 @@ class QueryTests(BaseTestCase):
         if not self._testMethodName == 'suite_setUp':
             self.skip_buckets_handle = True
         super(QueryTests, self).setUp()
-        if self.input.tuq_client is not None:
-            self.shell = RemoteMachineShellConnection(self.input.tuq_client)
+        self.version = self.input.param("cbq_version", "git_repo")
+        if self.input.tuq_client and "client" in self.input.tuq_client:
+            self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
         else:
             self.shell = RemoteMachineShellConnection(self.master)
-        self.version = self.input.param("cbq_version", "git_repo")
+        if not self._testMethodName == 'suite_setUp':
+            self._start_command_line_query(self.master)
         self.use_rest = self.input.param("use_rest", True)
         self.max_verify = self.input.param("max_verify", None)
         self.buckets = RestConnection(self.master).get_buckets()
@@ -31,8 +34,8 @@ class QueryTests(BaseTestCase):
 
     def suite_setUp(self):
         try:
-            self.load(self.gens_load, flag=self.item_flag)
-            self._start_command_line_query(self.master)
+#            self.load(self.gens_load, flag=self.item_flag)
+            self._build_tuq(self.master)
             self.skip_buckets_handle = True
         except:
             self.tearDown()
@@ -883,13 +886,13 @@ class QueryTests(BaseTestCase):
             self.query = 'SELECT META().cas as cas, META().id as id FROM %s'  % (bucket.name)
             actual_result = self.run_cbq_query()
             keys = [doc['id'] for doc in actual_result['resultset']]
-            actual_result = [{"cas": doc['cas']} for doc in actual_result]
-            actual_result = sorted(actual_result['resultset'],
+            actual_result = [{"cas": doc['cas']} for doc in actual_result['resultset']]
+            actual_result = sorted(actual_result,
                                    key=lambda doc: (doc['cas']))
             client = MemcachedClientHelper.direct_client(self.master, bucket.name)
             expected_result = []
             for key in keys:
-                _, cas, _ = client.get(key)
+                _, cas, _ = client.get(key.encode('utf-8'))
                 expected_result.append({"cas" : cas})
             expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))
             self._verify_results(actual_result, expected_result)
@@ -1306,6 +1309,8 @@ class QueryTests(BaseTestCase):
             query = self.query
         if server is None:
            server = self.master
+           if self.input.tuq_client and "client" in self.input.tuq_client:
+               server = self.tuq_client
         if self.use_rest:
             result = RestConnection(server).query_tool(query)
         else:
@@ -1338,16 +1343,34 @@ class QueryTests(BaseTestCase):
         #TODO for windows
         return url
 
-    def _start_command_line_query(self, server):
+    def _build_tuq(self, server):
         if self.version == "git_repo":
-            cmd = "rm -rf $GOPATH/src/github.com"
+            os = self.shell.extract_remote_info().type.lower()
+            if os != 'windows':
+                goroot = testconstants.LINUX_GOROOT
+                gopath = testconstants.LINUX_GOPATH
+            else:
+                goroot = testconstants.WINDOWS_GOROOT
+                gopath = testconstants.WINDOWS_GOPATH
+            if self.input.tuq_client and "gopath" in self.input.tuq_client:
+                gopath = self.input.tuq_client["gopath"]
+            if self.input.tuq_client and "goroot" in self.input.tuq_client:
+                goroot = self.input.tuq_client["goroot"]
+            cmd = "rm -rf {0}/src/github.com".format(gopath)
             self.shell.execute_command(cmd)
-            cmd= 'go get github.com/couchbaselabs/tuqtng;' +\
-                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go get -d -v ./...; cd .'
+            cmd= 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) +\
+                ' export PATH=$PATH:$GOROOT/bin && ' +\
+                'go get github.com/couchbaselabs/tuqtng;' +\
+                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; ' +\
+                'go get -d -v ./...; cd .'
             self.shell.execute_command(cmd)
-            cmd = "cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go build; cd ."
+            cmd = 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) +\
+                ' export PATH=$PATH:$GOROOT/bin && ' +\
+                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go build; cd .'
             self.shell.execute_command(cmd)
-            cmd = "cd $GOPATH/src/github.com/couchbaselabs/tuqtng/tuq_client; go build; cd ."
+            cmd = 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) +\
+                ' export PATH=$PATH:$GOROOT/bin && ' +\
+                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng/tuq_client; go build; cd .'
             self.shell.execute_command(cmd)
         else:
             cbq_url = self.build_url(self.version)
@@ -1355,6 +1378,27 @@ class QueryTests(BaseTestCase):
             cmd = "cd /tmp; mkdir tuq;cd tuq; wget {0} -O tuq.tar.gz;".format(cbq_url)
             cmd += "tar -xvf tuq.tar.gz;rm -rf tuq.tar.gz"
             self.shell.execute_command(cmd)
+
+    def _start_command_line_query(self, server):
+        if self.version == "git_repo":
+            os = self.shell.extract_remote_info().type.lower()
+            if os != 'windows':
+                gopath = testconstants.LINUX_GOPATH
+            else:
+                gopath = testconstants.WINDOWS_GOPATH
+            if self.input.tuq_client and "gopath" in self.input.tuq_client:
+                gopath = self.input.tuq_client["gopath"]
+            if os == 'windows':
+                cmd = "cd %s/src/github.com/couchbaselabs/tuqtng/; " % (gopath) +\
+                "tuqtng.exe -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
+                                                                server.ip, server.port)
+            else:
+                cmd = "cd %s/src/github.com/couchbaselabs/tuqtng/; " % (gopath) +\
+                "./tuqtng -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
+                                                                server.ip, server.port)
+            self.shell.execute_command(cmd)
+        else:
+            #TODO for windows
             cmd = "cd /tmp/tuq;./cbq-engine -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
                                                                 server.ip, server.port)
             self.shell.execute_command(cmd)

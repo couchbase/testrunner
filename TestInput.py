@@ -25,7 +25,7 @@ class TestInput(object):
         self.clusters = {}
         self.membase_settings = None
         self.test_params = {}
-        self.tuq_client = None
+        self.tuq_client = {}
         #servers , each server can have u,p,port,directory
 
     def param(self, name, default_value):
@@ -170,7 +170,7 @@ class TestInputParser():
         cluster_ips = []
         clusters = {}
         moxis = []
-        input.tuq_client = None
+        input.tuq_client = {}
         moxi_ips = []
         client_ips = []
         input.dashboard = []
@@ -194,8 +194,7 @@ class TestInputParser():
             elif section == 'uiconf':
                 input.ui_conf = TestInputParser.get_ui_tests_config(config, section)
             elif section == 'tuq_client':
-                tuq_ip = TestInputParser.get_server_ips(config, section)
-                input.tuq_client = TestInputParser.get_server(tuq_ip[0], config)
+                input.tuq_client = TestInputParser.get_tuq_config(config, section)
             elif result is not None:
                 cluster_list = TestInputParser.get_server_ips(config, section)
                 cluster_ips.extend(cluster_list)
@@ -207,6 +206,10 @@ class TestInputParser():
         for cluster_ip in cluster_ips:
             servers.append(TestInputParser.get_server(cluster_ip, config))
         servers = TestInputParser.get_server_options(servers, input.membase_settings, global_properties)
+        if 'client' in input.tuq_client and input.tuq_client['client']:
+            input.tuq_client['client'] = TestInputParser.get_server_options([input.tuq_client['client'],],
+                                                                            input.membase_settings,
+                                                                            global_properties)[0]
         for key, value in clusters.items():
             end += value
             input.clusters[key] = servers[start:end]
@@ -277,6 +280,20 @@ class TestInputParser():
             else:
                 conf[option] = config.get(section, option)
         conf['server'] = server
+        return conf
+
+    @staticmethod
+    def get_tuq_config(config, section):
+        conf = {}
+        server = TestInputServer()
+        options = config.options(section)
+        for option in options:
+            if option == 'ip':
+                ip = config.get(section, option)
+                conf['client'] = TestInputParser.get_server(ip, config)
+            else:
+                conf[option] = config.get(section, option)
+            conf[option] = config.get(section, option)
         return conf
 
     @staticmethod

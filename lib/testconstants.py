@@ -30,3 +30,7 @@ MAC_CB_PATH = "/Applications/Couchbase\ Server.app/Contents/Resources/couchbase-
 LINUX_COUCHBASE_LOGS_PATH = '/opt/couchbase/var/lib/couchbase/logs'
 WIN_COUCHBASE_LOGS_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/logs/'
 MISSING_UBUNTU_LIB = ["libcurl3"]
+LINUX_GOPATH = '/root/tuq/gocode/'
+WINDOWS_GOPATH = '/cygdrive/c/tuq/gocode'
+LINUX_GOROOT = '/root/tuq/go/'
+WINDOWS_GOROOT = '/cygdrive/c/tuq/go'
