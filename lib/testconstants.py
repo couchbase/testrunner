@@ -4,7 +4,8 @@ MEMBASE_DATA_PATH = "/opt/membase/var/lib/membase/data/"
 MEMBASE_VERSIONS = ["1.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1", "1.7.2"]
 COUCHBASE_DATA_PATH = "/opt/couchbase/var/lib/couchbase/data/"
 # remember update WIN_REGISTER_ID also when update COUCHBASE_VERSION
-COUCHBASE_VERSIONS = ["1.8.0r", "1.8.0", "1.8.1", "2.0.0", "2.0.1", "2.0.2", "2.1.0", "2.1.1", "2.2.0", "2.2.1"]
+COUCHBASE_VERSIONS = ["1.8.0r", "1.8.0", "1.8.1", "2.0.0", "2.0.1", "2.0.2", "2.1.0", "2.1.1", "2.2.0",
+                      "2.2.1", "2.5.0"]
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
 WIN_CB_PATH = "/cygdrive/c/Program Files/Couchbase/Server/"
@@ -16,7 +17,9 @@ WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F", "170":"AF3F80E
                    "181":"A68267DB-875D-43FA-B8AB-423039843F02", "200":"9E3DC4AA-46D9-4B30-9643-2A97169F02A7", \
                    "201":"4D3F9646-294F-4167-8240-768C5CE2157A", "202":"7EDC64EF-43AD-48BA-ADB3-3863627881B8",
                    "210":"7EDC64EF-43AD-48BA-ADB3-3863627881B8", "211":"7EDC64EF-43AD-48BA-ADB3-3863627881B8",
-                   "220":"CC4CF619-03B8-462A-8CCE-7CA1C22B337B", "221":"3A60B9BB-977B-0424-2955-75346C04C586"}
+                   "220":"CC4CF619-03B8-462A-8CCE-7CA1C22B337B", "221":"3A60B9BB-977B-0424-2955-75346C04C586",
+		   "250":"3A60B9BB-977B-0424-2955-75346C04C586"}
+# "250":"3E851A0C-B415-91C4-ADEF-6CA7ABA269C1"  will replace this ID when merged
 VERSION_FILE = "VERSION.txt"
 MIN_COMPACTION_THRESHOLD = 2
 MAX_COMPACTION_THRESHOLD = 100
