@@ -1145,7 +1145,7 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
             self._verify_results(actual_result, expected_result)
 
-    def test_array_agg(self):
+    def test_array_agg_distinct(self):
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_agg(DISTINCT name) as names" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
@@ -1159,6 +1159,26 @@ class QueryTests(BaseTestCase):
             expected_result = [{"job_title" : group,
                                 "names" : set([x["name"] for x in full_list
                                                if x["job_title"] == group])}
+                               for group in tmp_groups]
+            expected_result = [{key : (value, value.sort())[isinstance(value, list)]}
+                             for key, value in expected_result]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_agg(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, array_agg(name) as names" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = [{key : (value, value.sort())[isinstance(value, list)]}
+                             for key, value in actual_result['resultset']]
+            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "names" : [x["name"] for x in full_list
+                                               if x["job_title"] == group]}
                                for group in tmp_groups]
             expected_result = [{key : (value, value.sort())[isinstance(value, list)]}
                              for key, value in expected_result]
