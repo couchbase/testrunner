@@ -63,6 +63,7 @@ Available keys:
  bucket_sasl_pass=sasl password of bucket
  docs_per_day=documents to load per <one day>. 49 by default
  years=number of years. 2 by default
+ flags=flags of items
 
 Example:
  doc_loader.py -i cluster.ini -p bucket_name=default,docs_per_day=1
@@ -158,13 +159,14 @@ def main():
     bucket_name = input.param("bucket_name", "default")
     bucket_port = input.param("bucket_port", None)
     bucket_sasl_pass = input.param("bucket_sasl_pass", None)
+    flag = input.param("flags", 0)
 
     cluster = Cluster()
     try:
         bucket = initialize_bucket(bucket_name, bucket_port, bucket_sasl_pass)
         loader = DocLoader(input.servers, cluster)
         generators_load = loader.generate_docs(docs_per_day, years)
-        loader.load(generators_load, bucket)
+        loader.load(generators_load, bucket, flag=flag)
     finally:
         cluster.shutdown()
 
