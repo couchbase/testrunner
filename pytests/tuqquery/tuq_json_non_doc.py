@@ -4,13 +4,16 @@ from couchbase.documentgenerator import JSONNonDocGenerator
 
 class JSONNonDocTests(QueryTests):
     def setUp(self):
-        super(JSONNonDocTests, self).setUp()
-        self.value_type = self.input.param("value_type", "int")
-        self.gens_load = self.generate_docs(self.value_type)
-        for bucket in self.buckets:
-            self.cluster.bucket_flush(self.master, bucket=bucket,
-                                  timeout=self.wait_timeout * 5)
-        self.load(self.gens_load)
+        try:
+            super(JSONNonDocTests, self).setUp()
+            self.value_type = self.input.param("value_type", "int")
+            self.gens_load = self.generate_docs(self.value_type)
+            for bucket in self.buckets:
+                self.cluster.bucket_flush(self.master, bucket=bucket,
+                                      timeout=self.wait_timeout * 5)
+            self.load(self.gens_load)
+        except:
+            self.cluster.shutdown()
 
     def suite_setUp(self):
         super(JSONNonDocTests, self).suite_setUp()
