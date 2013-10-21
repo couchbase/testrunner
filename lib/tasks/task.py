@@ -1565,10 +1565,16 @@ class MonitorViewQueryResultsTask(Task):
                 str(ex).find("doesn't exist") != -1 or \
                 str(ex).find('missing') != -1 or \
                 str(ex).find("Undefined set view") != -1:
-                raise ex
+                self.log.error(
+                       "view_results not ready yet ddoc=%s , try again in 10 seconds..." %
+                       self.design_doc_name)
+                task_manager.schedule(self, 10)
             elif str(ex).find('timeout') != -1:
                 self.connection_timeout = self.connection_timeout * 2
-                raise ex
+                self.log.error("view_results not ready yet ddoc=%s ," +\
+                               " try again in 10 seconds... and double timeout" %
+                       self.design_doc_name)
+                task_manager.schedule(self, 10)
             else:
                 self.state = FINISHED
                 res = {"passed" : False,
