@@ -107,7 +107,7 @@ help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
                                   '--enable-auto-failover=[0|1]': 'allow auto failover'},
  'setting-compacttion OPTIONS': {'--compaction-db-percentage=PERCENTAGE': ' at which point database compaction is triggered',
                                  '--compaction-db-size=SIZE[MB]': ' at which point database compaction is triggered',
-                                 '--compaction-period-from=HH:MM': 'allow compaction time period from',
+                                 '--compaction-period-from=HH:MM': ' allow compaction time period from',
                                  '--compaction-period-to=HH:MM': ' allow compaction time period to',
                                  '--compaction-view-percentage=PERCENTAGE': ' at which point view compaction is triggered',
                                  '--compaction-view-size=SIZE[MB]': ' at which point view compaction is triggered',
@@ -148,8 +148,8 @@ help_short = {'COMMANDs include': {'bucket-compact': 'compact database and index
                       'bucket-list': 'list all buckets in a cluster',
                       'cluster-edit': 'modify cluster settings',
                       'cluster-init': 'set the username,password and port of the cluster',
-                      'failover': '',
-                      'help': 'show longer usage/',
+                      'failover': 'failover one or more servers',
+                      'help': 'show longer usage/help and examples',
                       'node-init': 'set node specific parameters',
                       'rebalance': 'start a cluster rebalancing',
                       'rebalance-status': 'show status of current cluster rebalancing',
@@ -636,7 +636,7 @@ class CouchbaseCliTest(CliBaseTest):
         cli_command = "bucket-flush"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
         self.assertEqual(output, ['Running this command will totally PURGE database data from disk.Do you really want to do it? (Yes/No)TIMED OUT: command: bucket-flush: localhost:8091, most likely bucket is not flushed'])
-        if enable_flush:
+        if not enable_flush:
             cli_command = "bucket-flush --force"
             options = "--bucket={0}".format(bucket)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
