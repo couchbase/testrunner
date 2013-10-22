@@ -1390,7 +1390,7 @@ class QueryTests(BaseTestCase):
                 gopath = self.input.tuq_client["gopath"]
             if os == 'windows':
                 cmd = "cd %s/src/github.com/couchbaselabs/tuqtng/; " % (gopath) +\
-                "tuqtng.exe -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
+                "./tuqtng.exe -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
                                                                 server.ip, server.port)
             else:
                 cmd = "cd %s/src/github.com/couchbaselabs/tuqtng/; " % (gopath) +\
