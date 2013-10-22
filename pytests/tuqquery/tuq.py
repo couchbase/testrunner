@@ -1394,7 +1394,7 @@ class QueryTests(BaseTestCase):
                                                                 server.ip, server.port)
             else:
                 cmd = "cd %s/src/github.com/couchbaselabs/tuqtng/; " % (gopath) +\
-                "./tuqtng -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
+                "./tuqtng -couchbase http://%s:%s/ >/dev/null 2>&1" %(
                                                                 server.ip, server.port)
             self.shell.execute_command(cmd)
         else:
