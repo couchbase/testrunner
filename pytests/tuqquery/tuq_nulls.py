@@ -140,6 +140,151 @@ class NULLTests(QueryTests):
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
             self._verify_results(actual_result['resultset'], expected_result)
 
+    def test_ifnan(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name, IFNAN(story_point[2],story_point[1]) as point" +\
+                        " FROM %s ORDER BY feature_name"  % bucket.name
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = []
+            for doc in full_list:
+                if len(doc['story_point']) < 3:
+                    expected_result.append({'feature_name' : doc['feature_name']})
+                else:
+                    expected_result.append({'feature_name' : doc['feature_name'],
+                                            'point' : doc['story_point'][2]})
+            expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_ifnull(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name, IFNAN(story_point[2],story_point[1]) as point" +\
+                        " FROM %s ORDER BY feature_name"  % bucket.name
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = []
+            for doc in full_list:
+                if len(doc['story_point']) < 3:
+                    expected_result.append({'feature_name' : doc['feature_name']})
+                elif doc['story_point'][2] is None:
+                    expected_result.append({'feature_name' : doc['feature_name'],
+                                            'point' : doc['story_point'][1]})
+                else:
+                    expected_result.append({'feature_name' : doc['feature_name'],
+                                            'point' : doc['story_point'][2]})
+            expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_firstnum(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name, FIRSTNUM(story_point[2],story_point[1]) as point" +\
+                        " FROM %s ORDER BY feature_name"  % bucket.name
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = []
+            for doc in full_list:
+                if len(doc['story_point']) < 3:
+                    expected_result.append({'feature_name' : doc['feature_name'],
+                                            'point' : None})
+                elif doc['story_point'][2] is None:
+                    expected_result.append({'feature_name' : doc['feature_name'],
+                                            'point' : doc['story_point'][1]})
+                else:
+                    expected_result.append({'feature_name' : doc['feature_name'],
+                                            'point' : doc['story_point'][2]})
+            expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_nanif(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name, NANIF(story_points[0],story_point[0])" +\
+                        " FROM %s ORDER BY feature_name"  % bucket.name
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{'feature_name' : doc['feature_name']}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_ifposinf(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name, IFPOSINF(story_point[2],story_point[1]) as point" +\
+                        " FROM %s ORDER BY feature_name"  % bucket.name
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = []
+            for doc in full_list:
+                if len(doc['story_point']) < 3:
+                    expected_result.append({'feature_name' : doc['feature_name']})
+                else:
+                    expected_result.append({'feature_name' : doc['feature_name'],
+                                            'point' : doc['story_point'][2]})
+            expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+            self.query = "SELECT feature_name, IFNEGINF(story_point[2],story_point[1]) as point" +\
+                        " FROM %s ORDER BY feature_name"  % bucket.name
+            actual_result = self.run_cbq_query()
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_ifinf(self):
+        queries = ["SELECT feature_name, IFINF(story_point[2],story_point[1]) as point" +\
+                   " FROM %s ORDER BY feature_name",
+                   "SELECT feature_name, IFNANORINF(story_point[2],story_point[1]) as point" +\
+                   " FROM %s ORDER BY feature_name",
+                   "SELECT feature_name, POSINFIF(story_point[2],story_point[1]) as point" +\
+                   " FROM %s ORDER BY feature_name",
+                   "SELECT feature_name, NEGINFIF(story_point[2],story_point[1]) as point" +\
+                   " FROM %s ORDER BY feature_name",]
+        full_list = self._generate_full_docs_list(self.gens_load)
+        expected_result = []
+        for doc in full_list:
+            if len(doc['story_point']) < 3:
+                expected_result.append({'feature_name' : doc['feature_name']})
+            else:
+                expected_result.append({'feature_name' : doc['feature_name'],
+                                            'point' : doc['story_point'][2]})
+        expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+        for bucket in self.buckets:
+            for query in queries:
+                actual_result = self.run_cbq_query(query % bucket)
+                self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_ifmissing(self):
+        queries = ["SELECT feature_name, IFMISSINGORNULL(coverage_tests.P0," +\
+                        "coverage_tests.P4) as C FROM %s ORDER BY feature_name",
+                    "SELECT feature_name, IFMISSING(coverage_tests.P0," +\
+                        "coverage_tests.P4) as C FROM %s ORDER BY feature_name"]
+        full_list = self._generate_full_docs_list(self.gens_load)
+        expected_result = []
+        for doc in full_list:
+            if "P0" in doc['coverage_tests']:
+                expected_result.append({'feature_name' : doc['feature_name'],
+                                        'C' : doc['coverage_tests']['P0']})
+            else:
+                expected_result.append({'feature_name' : doc['feature_name'],
+                                        'C' : doc['coverage_tests']['P4']})
+        expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+        for bucket in self.buckets:
+            for query in queries:
+                actual_result = self.run_cbq_query(query % bucket)
+                self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_missingif(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name, MISSINGIF(coverage_tests.P0,0) as point" +\
+                        " FROM %s ORDER BY feature_name"  % bucket.name
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = []
+            for doc in full_list:
+                if (not 'P0' in doc['coverage_tests']) or doc['coverage_tests'] == 0:
+                    expected_result.append({'feature_name' : doc['feature_name']})
+                else:
+                    expected_result.append({'feature_name' : doc['feature_name'],
+                                            'point' : doc['coverage_tests']['P0']})
+            expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
     def generate_docs(self, name="tuq", start=0, end=0):
         if not end:
             end = self.num_items

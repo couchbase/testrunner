@@ -48,6 +48,7 @@ class QueryTests(BaseTestCase):
     def suite_tearDown(self):
         if hasattr(self, 'shell'):
             self.shell.execute_command("killall /tmp/tuq/cbq-engine")
+            self.shell.execute_command("killall tuqtng")
             self.shell.execute_command("rm -rf /tmp/tuq")
             self.shell.disconnect()
 
