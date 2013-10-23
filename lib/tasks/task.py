@@ -471,14 +471,15 @@ class GenericLoadingTask(Thread, Task):
     def next(self):
         raise NotImplementedError
 
-    def _unlocked_create(self, partition, key, value):
+    def _unlocked_create(self, partition, key, value, is_base64_value=False):
         try:
             value_json = json.loads(value)
             value_json['mutated'] = 0
             value = json.dumps(value_json)
         except ValueError:
             index = random.choice(range(len(value)))
-            value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+            if not is_base64_value:
+                value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
         except TypeError:
             value = json.dumps(value)
 
@@ -608,7 +609,8 @@ class LoadDocumentsTask(GenericLoadingTask):
         key, value = self.generator.next()
         partition = self.kv_store.acquire_partition(key)
         if self.op_type == 'create':
-            self._unlocked_create(partition, key, value)
+            is_base64_value = (self.generator.__class__.__name__ == 'Base64Generator')
+            self._unlocked_create(partition, key, value, is_base64_value=is_base64_value)
         elif self.op_type == 'read':
             self._unlocked_read(partition, key)
         elif self.op_type == 'read_replica':
