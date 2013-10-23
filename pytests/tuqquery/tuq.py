@@ -475,8 +475,10 @@ class QueryTests(BaseTestCase):
     def test_any(self):
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                         "(ANY skill = 'skill2010' OVER skill IN default.skills end) " +\
-                         "AND (ANY vm.RAM = 5 OVER vm IN default.VMs end) " +\
+                         "(ANY skill = 'skill2010' OVER skill IN %s.skills end) " % (
+                                                                      bucket.name) +\
+                         "AND (ANY vm.RAM = 5 OVER vm IN %s.VMs end) " % (
+                                                                bucket.name) +\
                          "AND  NOT (job_title = 'Sales') ORDER BY name"
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
@@ -493,8 +495,10 @@ class QueryTests(BaseTestCase):
     def test_any_no_in_clause(self):
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                         "(ANY skills = 'skill2010' OVER default.skills end) " +\
-                         "AND (ANY VMs.RAM = 5 OVER default.VMs end) " +\
+                         "(ANY skills = 'skill2010' OVER %s.skills end) " % (
+                                                                bucket.name) +\
+                         "AND (ANY VMs.RAM = 5 OVER %s.VMs end) " % (
+                                                            bucket.name) +\
                          "AND  NOT (job_title = 'Sales') ORDER BY name"
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
@@ -524,7 +528,8 @@ class QueryTests(BaseTestCase):
     def test_all(self):
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
-                         "(ALL CEIL(vm.memory) > 5 OVER vm IN default.VMs END)" +\
+                         "(ALL CEIL(vm.memory) > 5 OVER vm IN %s.VMs END)" % (
+                                                            bucket.name) +\
                          " ORDER BY name"
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
@@ -540,7 +545,8 @@ class QueryTests(BaseTestCase):
     def test_all_no_in_clause(self):
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
-                         "(ALL CEIL(VMs.memory) > 5 OVER default.VMs END)" +\
+                         "(ALL CEIL(VMs.memory) > 5 OVER %s.VMs END)" % (
+                                                        bucket.name) +\
                          " ORDER BY name"
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
@@ -613,8 +619,9 @@ class QueryTests(BaseTestCase):
     def test_like_any(self):
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE (ANY vm.os " % (bucket.name) +\
-            "LIKE '%bun%' OVER vm IN default.VMs END) AND (ANY skill = 'skill2010' " +\
-            "OVER skill IN default.skills END) ORDER BY name"
+            "LIKE '%bun%' OVER vm IN %s.VMs END) AND (ANY skill = 'skill2010' " % (
+                                                                      bucket.name) +\
+            "OVER skill IN %s.skills END) ORDER BY name"% (bucket.name)
             actual_result = self.run_cbq_query()
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name'], "email" : doc["email"]}
@@ -629,8 +636,10 @@ class QueryTests(BaseTestCase):
     def test_like_all(self):
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE (ALL vm.os" % (bucket.name) +\
-                         " NOT LIKE '%cent%' OVER vm IN default.VMs END) AND (ANY skill =" +\
-                         " 'skill2010' OVER skill IN default.skills END) ORDER BY name" 
+                         " NOT LIKE '%cent%' OVER vm IN %s.VMs END) AND (ANY skill =" % (
+                                                                      bucket.name) +\
+                         " 'skill2010' OVER skill IN %s.skills END) ORDER BY name" % (
+                                                                      bucket.name)
             actual_result = self.run_cbq_query()
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name'], "email" : doc["email"]}
@@ -736,8 +745,10 @@ class QueryTests(BaseTestCase):
     def test_group_by_over(self):
         for bucket in self.buckets:
             self.query = "SELECT job_title, AVG(test_rate) as avg_rate FROM %s " % (bucket.name) +\
-                         "WHERE (ANY skill = 'skill2010' OVER skill IN default.skills end) " +\
-                         "AND (ANY vm.RAM = 5 OVER vm IN default.VMs end) "  +\
+                         "WHERE (ANY skill = 'skill2010' OVER skill IN %s.skills end) " % (
+                                                                      bucket.name) +\
+                         "AND (ANY vm.RAM = 5 OVER vm IN %s.VMs end) "  % (
+                                                                      bucket.name) +\
                          "GROUP BY job_title ORDER BY job_title"
             actual_result = self.run_cbq_query()
             full_list = self._generate_full_docs_list(self.gens_load)
