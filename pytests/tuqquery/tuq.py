@@ -6,6 +6,8 @@ import math
 import re
 
 import testconstants
+from datetime import date
+import datetime
 from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
 from couchbase.documentgenerator import DocumentGenerator
@@ -1315,6 +1317,56 @@ class QueryTests(BaseTestCase):
                             "Type should be scan, but is: %s" % res["resultset"])
             self.assertTrue(res["resultset"][0]["input"]["input"]["index"] == "#alldocs",
                             "Type should be #alldocs, but is: %s" % res["resultset"])
+
+##############################################################################################
+#
+#   DATETIME
+##############################################################################################
+
+    def test_now(self):
+        self.query = "select now_str() as now"
+        now = datetime.datetime.now()
+        today = date.today()
+        res = self.run_cbq_query()
+        expected = "%s-%s-%sT%s:" % (today.year, today.month, today.day, now.hour)
+        self.assertTrue(res["resultset"]["now"].startswith(expected),
+                        "Result expected: %s. Actual %s" % (expected, res["resultset"]))
+
+    def test_hours(self):
+        self.query = 'select date_part("hour", now_str()) as hour, ' +\
+        'date_part("minute", now_str()) as minute, date_part("second",' +\
+        ' now_str()) as sec, date_part("milliseconds", now_str()) as msec'
+        now = datetime.datetime.now()
+        res = self.run_cbq_query()
+        self.assertTrue(res["resultset"]["hour"] == now.hour,
+                        "Result expected: %s. Actual %s" % (now.hour, res["resultset"]))
+        self.assertTrue("minute" in res["resultset"], "No minute field")
+        self.assertTrue("second" in res["resultset"], "No minute field")
+        self.assertTrue("msec" in res["resultset"], "No minute field")
+
+    def test_where(self):
+        for bucket in self.buckets:
+            self.query = 'select name, join_yr, join_mo, join_day from %s' % (bucket.name) +\
+            ' where date_part("month", now_str()) < join_mo AND date_part("year", now_str())' +\
+            ' > join_yr AND date_part("day", now_str()) < join_day'
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result["resultset"], key=lambda doc: (doc['name'],
+                                                                                doc['join_yr'],
+                                                                                doc['join_mo'],
+                                                                                doc['join_day']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            today = date.today()
+            expected_result = [{"name" : doc['name'], "join_yr" : doc['join_yr'],
+                                "join_mo" : doc['join_mo'], "join_day" : doc['join_day']}
+                               for doc in full_list
+                               if doc['join_yr'] > today.year and\
+                               doc['join_mo'] < today.month and\
+                               doc['join_day'] < today.day]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
+                                                                        doc['join_yr'],
+                                                                        doc['join_mo'],
+                                                                        doc['join_day']))
+            self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
 #
