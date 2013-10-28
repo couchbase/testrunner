@@ -241,6 +241,10 @@ class BuildQuery(object):
         elif "ubuntu_1204" in build_id:
             # return couchbase-server-ent/com_ubuntu_1204
             return "_".join(list[:3])
+        # this should be done w/ more generic rule for toy-split
+        elif "cent54" in build_id:
+            list = build_id.split("-toy")
+            return list[0]
         else:
             return list[0]
         #the first one is the product
@@ -255,7 +259,7 @@ class BuildQuery(object):
 
 
     def _product_toy(self, build_id):
-        r = re.search("[^_]+_toy-([\w-]*)-x86", build_id)
+        r = re.search("[^_]+-toy-([\w-]*)-x86", build_id)
         if r:
             return r.group(1)
         return ''

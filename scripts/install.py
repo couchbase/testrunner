@@ -49,6 +49,7 @@ Examples:
  install.py -i /tmp/ubuntu.ini -p product=cb,version=2.2.0-792
  install.py -i /tmp/ubuntu.ini -p product=mb,version=1.7.1r-38,parallel=true,toy=keith
  install.py -i /tmp/ubuntu.ini -p product=mongo,version=2.0.2
+ install.py -i /tmp/ubuntu.ini -p product=cb,version=0.0.0-704-toy,toy=couchstore,parallel=true,vbuckets=1024
 
  # to run with build with require openssl version 1.0.0
  install.py -i /tmp/ubuntu.ini -p product=cb,version=2.2.0-792,openssl=1
@@ -170,6 +171,8 @@ class Installer(object):
             if "1" in openssl:
                 names = ['couchbase-server-enterprise_centos6', 'couchbase-server-community_centos6', \
                          'couchbase-server-enterprise_ubuntu_1204', 'couchbase-server-community_ubuntu_1204']
+            if "toy" in params:
+                names = ['couchbase-server-community_cent54-master']
 
         remote_client = RemoteMachineShellConnection(server)
         info = remote_client.extract_remote_info()
@@ -205,7 +208,6 @@ class Installer(object):
                             build.url = build.url.replace("enterprise", "community")
                             build.name = build.name.replace("enterprise", "community")
                     return build
-
             _errors.append(errors["BUILD-NOT-FOUND"])
         msg = "unable to find a build for product {0} version {1} for package_type {2}"
         raise Exception(msg.format(names, version, info.deliverable_type))
