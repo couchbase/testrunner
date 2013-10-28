@@ -20,6 +20,7 @@ from pprint import pprint
 class NewUpgradeBaseTest(BaseTestCase):
     def setUp(self):
         super(NewUpgradeBaseTest, self).setUp()
+        self.released_versions = ["1.8.1r", "1.8.1", "2.0.0-1976-rel", "2.0.1"]
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '1.8.1')
@@ -158,11 +159,10 @@ class NewUpgradeBaseTest(BaseTestCase):
             info = remote.extract_remote_info()
         builds, changes = BuildQuery().get_all_builds(timeout=self.wait_timeout * 5)
         self.log.info("finding build %s for machine %s" % (version, server))
-        result = re.search('r', version)
 
         if re.match(r'[1-9].[0-9].[0-9]-[0-9]+$', version):
             version = version + "-rel"
-        if result is None:
+        if version in self.released_versions:
             appropriate_build = BuildQuery().\
                 find_membase_release_build('%s-enterprise' % (self.product), info.deliverable_type,
                                            info.architecture_type, version.strip(), is_amazon=is_amazon)

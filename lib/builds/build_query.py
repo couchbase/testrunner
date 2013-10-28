@@ -116,7 +116,11 @@ class BuildQuery(object):
             build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{4}.setup.{3}'.format(build_version, product, os_architecture, deliverable_type, build_details)
             build.url_latest_build = 'http://builds.hq.northscale.net/latestbuilds/{0}_{1}_{3}.setup.{2}'.format(product, os_architecture, deliverable_type, build_details)
         else:
-            build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{4}.{3}'.format(build_version, product, os_architecture, deliverable_type, build_details)
+            if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
+                build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{4}.{3}'.format(build_version[:build_version.find('-')],
+                                                                                                  product, os_architecture, deliverable_type, build_details)
+            else:
+                build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{4}.{3}'.format(build_version, product, os_architecture, deliverable_type, build_details)
             build.url_latest_build = 'http://builds.hq.northscale.net/latestbuilds/{0}_{1}_{3}.{2}'.format(product, os_architecture, deliverable_type, build_details)
         # This points to the Internal s3 account to look for release builds
         if is_amazon:

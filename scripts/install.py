@@ -183,12 +183,18 @@ class Installer(object):
                 timeout = int(params["timeout"])
             builds, changes = BuildQuery().get_all_builds(timeout=timeout)
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
+            cb_releases_version = ["2.0.0-1976-rel", "2.0.1"]
             for name in names:
                 if version in releases_version:
-                     build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
+                    build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
                                                                      os_architecture=info.architecture_type,
                                                                      build_version=version,
                                                                      product='membase-server-enterprise')
+                elif version in cb_releases_version:
+                    build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
+                                                                     os_architecture=info.architecture_type,
+                                                                     build_version=version,
+                                                                     product=name)
                 else:
                     build = BuildQuery().find_build(builds, name, info.deliverable_type,
                                                         info.architecture_type, version, toy=toy,

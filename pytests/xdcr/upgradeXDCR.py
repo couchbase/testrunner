@@ -25,7 +25,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.buckets_on_dest = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if re.search('\S+:\S*2', bucket_repl)]
         self.repl_buckets_from_src = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if bucket_repl.find("1>") != -1 ]
         self.repl_buckets_from_dest = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if bucket_repl.find("<2") != -1 ]
-        self._override_clusters_structure()
+        self._override_clusters_structure(self)
         self.queue = Queue.Queue()
         self.rep_type = self.input.param("rep_type", "capi")
         self.upgrade_versions = self.input.param('upgrade_version', '2.2.0-821-rel')
@@ -74,7 +74,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
             dest_key = ord_keys[dest_key_index]
             src_cluster_name = self._cluster_names_dic[src_key]
             dest_cluster_name = self._cluster_names_dic[dest_key]
-            self._join_clusters(src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
+            self._join_clusters(self, src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
             dest_key_index += 1
 
     @staticmethod
@@ -89,7 +89,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
                 continue
             dest_cluster_name = self._cluster_names_dic[key]
             self.dest_master = nodes[0]
-            self._join_clusters(src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
+            self._join_clusters(self, src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
             self.sleep(30)
 
     @staticmethod
@@ -99,8 +99,8 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         if len(self.repl_buckets_from_dest):
             self._link_clusters(dest_cluster_name, dest_master, src_cluster_name, src_master)
 
-        self._replicate_clusters(src_master, dest_cluster_name, self.repl_buckets_from_src)
-        self._replicate_clusters(dest_master, src_cluster_name, self.repl_buckets_from_dest)
+        self._replicate_clusters(self, src_master, dest_cluster_name, self.repl_buckets_from_src)
+        self._replicate_clusters(self, dest_master, src_cluster_name, self.repl_buckets_from_dest)
 
     @staticmethod
     def _replicate_clusters(self, src_master, dest_cluster_name, buckets):
@@ -147,11 +147,11 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         XDCRReplicationBaseTest.setUp(self)
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
         self.sleep(60)
-        bucket = self._get_bucket('default', self.src_master)
+        bucket = self._get_bucket(self,'default', self.src_master)
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
-        bucket = self._get_bucket('bucket0', self.src_master)
+        bucket = self._get_bucket(self, 'bucket0', self.src_master)
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
-        bucket = self._get_bucket('bucket0', self.dest_master)
+        bucket = self._get_bucket(self, 'bucket0', self.dest_master)
         gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self._num_items)
         self._load_bucket(bucket, self.dest_master, gen_create2, 'create', exp=0)
         nodes_to_upgrade = []
@@ -180,11 +180,11 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
 
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
         self.sleep(60)
-        bucket = self._get_bucket('bucket0', self.src_master)
+        bucket = self._get_bucket(self, 'bucket0', self.src_master)
         gen_create3 = BlobGenerator('loadThree', 'loadThree', self._value_size, end=self._num_items)
         self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
         self.do_merge_bucket(self.src_master, self.dest_master, True, bucket)
-        bucket = self._get_bucket('default', self.src_master)
+        bucket = self._get_bucket(self, 'default', self.src_master)
         self._load_bucket(bucket, self.src_master, gen_create2, 'create', exp=0)
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
         self.sleep(60)
@@ -196,9 +196,9 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self._install(self.servers[self.src_init + self.dest_init:])
         self.cluster.shutdown()
         XDCRReplicationBaseTest.setUp(self)
-        bucket_default = self._get_bucket('default', self.src_master)
-        bucket_sasl = self._get_bucket('bucket0', self.src_master)
-        bucket_standard = self._get_bucket('standard_bucket0', self.dest_master)
+        bucket_default = self._get_bucket(self, 'default', self.src_master)
+        bucket_sasl = self._get_bucket(self, 'bucket0', self.src_master)
+        bucket_standard = self._get_bucket(self, 'standard_bucket0', self.dest_master)
 
         self._load_bucket(bucket_default, self.src_master, self.gen_create, 'create', exp=0)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_create, 'create', exp=0)
@@ -222,7 +222,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self._load_bucket(bucket_standard, self.dest_master, self.gen_delete, 'delete', exp=0)
         self._load_bucket(bucket_standard, self.dest_master, self.gen_update, 'create', exp=self._expires)
         self.do_merge_bucket(self.src_master, self.dest_master, True, bucket_sasl)
-        bucket_sasl = self._get_bucket('bucket0', self.dest_master)
+        bucket_sasl = self._get_bucket(self, 'bucket0', self.dest_master)
         gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size,
             start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
         gen_update2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, start=0,

@@ -444,7 +444,10 @@ class XDCRBaseTest(unittest.TestCase):
     def _setup_cluster(self, nodes, disabled_consistent_view=None):
         self._init_nodes(nodes, disabled_consistent_view)
         self.cluster.async_rebalance(nodes, nodes[1:], []).result()
-        self._create_buckets(nodes)
+        if str(self.__class__).find('upgradeXDCR') != -1:
+            self._create_buckets(self, nodes)
+        else:
+            self._create_buckets(nodes)
 
     def _init_nodes(self, nodes, disabled_consistent_view=None):
         _tasks = []
@@ -869,9 +872,15 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
     def _setup_topology(self):
         if self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_CHAIN:
-            self._setup_topology_chain()
+            if str(self.__class__).find('upgradeXDCR') != -1:
+                self._setup_topology_chain(self)
+            else:
+                self._setup_topology_chain()
         elif self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_STAR:
-            self._set_topology_star()
+            if str(self.__class__).find('upgradeXDCR') != -1:
+                self._set_topology_star(self)
+            else:
+                self._set_topology_star()
         elif self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_RING:
             self._set_topology_ring()
         else:
