@@ -13,6 +13,7 @@ from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
+from couchbase.document import DesignDocument, View
 
 class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
     def setUp(self):
@@ -30,6 +31,13 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.rep_type = self.input.param("rep_type", "capi")
         self.upgrade_versions = self.input.param('upgrade_version', '2.2.0-821-rel')
         self.upgrade_versions = self.upgrade_versions.split(";")
+        self.ddocs_num_src = self.input.param("ddocs-num-src", 0)
+        self.view_num_src = self.input.param("view-per-ddoc-src", 2)
+        self.ddocs_num_dest = self.input.param("ddocs-num-dest", 0)
+        self.view_num_dest = self.input.param("view-per-ddoc-dest", 2)
+        self.post_upgrade_ops = self.input.param("post-upgrade-actions", None)
+        self.ddocs_src = []
+        self.ddocs_dest = []
 
     def tearDown(self):
         try:
@@ -148,6 +156,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
         self.sleep(60)
         bucket = self._get_bucket(self,'default', self.src_master)
+        self._operations()
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
         bucket = self._get_bucket(self, 'bucket0', self.src_master)
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
@@ -188,7 +197,9 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self._load_bucket(bucket, self.src_master, gen_create2, 'create', exp=0)
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
         self.sleep(60)
+        self._post_upgrade_ops()
         self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
+        self._verify(self.gen_create.end + gen_create2.end + gen_create3.end)
 
     def online_cluster_upgrade(self):
         self._install(self.servers[:self.src_init + self.dest_init ])
@@ -234,3 +245,81 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket_default)
         self.do_merge_bucket(self.dest_master, self.src_master, False, bucket_standard)
         self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
+
+    def _operations(self):
+        if self.ddoc_num_src:
+            ddocs = self._create_views(self.ddoc_num_src, self.buckets_on_src,
+                                       self.views_num_src, self.src_master)
+            self.ddocs_src.extend(ddocs)
+        if self.ddoc_num_dest:
+            ddocs = self._create_views(self.ddoc_num_dest, self.buckets_on_dest,
+                                       self.views_num_dest, self.dest_master)
+            self.ddocs_dest.extend(ddocs)
+
+    def _verify(self, expected_rows):
+        if self.ddocs_src:
+            self._verify_ddocs(expected_rows, self.buckets_on_src, self.ddocs_src, self.src_master)
+
+        if self.ddocs_dest:
+            self._verify_ddocs(expected_rows, self.buckets_on_dest, self.ddocs_dest, self.dest_master)
+
+    def _create_views(self, ddocs_num, buckets, views_num, server):
+        ddocs = []
+        if ddocs_num:
+            self.default_view = View(self.default_view_name, None, None)
+            for bucket in buckets:
+                for i in xrange(ddocs_num):
+                    views = self.make_default_views(self.default_view_name, views_num,
+                                                    self.is_dev_ddoc, different_map=True)
+                    ddoc = DesignDocument(self.default_view_name + str(i), views)
+                    tasks = self.async_create_views(self, server, ddoc.name, views, bucket=bucket)
+                    for task in tasks:
+                        task.result()
+                    ddocs.append(ddoc)
+        return ddocs
+
+    def _verify_ddocs(self, expected_rows, buckets, ddocs, server):
+        query = {"connectionTimeout" : 60000}
+        if self.max_verify:
+            expected_rows = self.max_verify
+            query["limit"] = expected_rows
+        for bucket in buckets:
+            for ddoc in ddocs:
+                prefix = ("", "dev_")[ddoc.views[0].dev_view]
+                self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name, query, bucket=bucket,
+                                           wait_time=self.wait_timeout * 5, expected_rows=expected_rows,
+                                           retry_time=10, server=server)
+
+    def _post_upgrade_ops(self):
+        if self.post_upgrade_ops:
+            for op_cluster in self.post_upgrade_ops.split(';'):
+                cluster, op = op_cluster.split('-')
+                if op == 'rebalancein':
+                    free_servs = [ser for ser in self.servers
+                                  if not (ser in self.src_nodes or ser in self.dest_nodes)]
+                    if cluster == 'src':
+                        self.cluster.rebalance(self.src_nodes, free_servs[:self.nodes_in], [])
+                        self.src_nodes.extend(free_servs[:self.nodes_in])
+                    elif cluster == 'dest':
+                        self.cluster.rebalance(self.dest_nodes, free_servs[:self.nodes_in], [])
+                        self.dest_nodes.extend(free_servs[:self.nodes_in])
+                elif op == 'rebalanceout':
+                    if cluster == 'src':
+                        self.cluster.rebalance(self.src_nodes, self.src_nodes[self.nodes_out:], [])
+                        for node in self.src_nodes[self.nodes_out:]:
+                            self.src_nodes.remove(node)
+                    elif cluster == 'dest':
+                        self.cluster.rebalance(self.dest_nodes, self.dest_nodes[self.nodes_out:], [])
+                        for node in self.dest_nodes[self.nodes_out:]:
+                            self.dest_nodes.remove(node)
+                if op == 'create_index':
+                    ddoc_num = 1
+                    views_num = 2
+                    if cluster == 'src':
+                        ddocs = self._create_views(ddoc_num, self.buckets_on_src,
+                                       views_num, self.src_master)
+                        self.ddocs_src.extend(ddocs)
+                    elif cluster == 'dest':
+                        ddocs = self._create_views(ddoc_num, self.buckets_on_dest,
+                                       views_num, self.dest_master)
+                        self.ddocs_dest.extend(ddocs)
