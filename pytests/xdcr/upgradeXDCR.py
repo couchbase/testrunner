@@ -171,21 +171,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
 
         self.sleep(60)
         self._wait_for_replication_to_catchup()
-        for upgrade_version in self.upgrade_versions:
-            for server in nodes_to_upgrade:
-                remote = RemoteMachineShellConnection(server)
-                remote.stop_server()
-                remote.disconnect()
-            upgrade_threads = self._async_update(upgrade_version, nodes_to_upgrade)
-            #wait upgrade statuses
-            for upgrade_thread in upgrade_threads:
-                upgrade_thread.join()
-            success_upgrade = True
-            while not self.queue.empty():
-                success_upgrade &= self.queue.get()
-            if not success_upgrade:
-                self.fail("Upgrade failed!")
-            self.sleep(self.expire_time)
+        self._offline_upgrade(nodes_to_upgrade)
 
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
         self.sleep(60)
@@ -245,6 +231,53 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket_default)
         self.do_merge_bucket(self.dest_master, self.src_master, False, bucket_standard)
         self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
+
+    def incremental_offline_upgrade(self):
+        upgrade_seq = self.input.param("upgrade_seq", "src>dest")
+
+        self._install(self.servers[:self.src_init + self.dest_init ])
+        self.cluster.shutdown()
+        XDCRReplicationBaseTest.setUp(self)
+        self.set_xdcr_param('xdcrFailureRestartInterval', 1)
+        self.sleep(60)
+        bucket = self._get_bucket('default', self.src_master)
+        self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
+        bucket = self._get_bucket('bucket0', self.src_master)
+        self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
+        bucket = self._get_bucket('bucket0', self.dest_master)
+        gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self._num_items)
+        self._load_bucket(bucket, self.dest_master, gen_create2, 'create', exp=0)
+        self.sleep(self._timeout)
+        self._wait_for_replication_to_catchup()
+        src_serv = self.servers[:self.src_init]
+        dest_serv = self.servers[self.src_init:self.dest_init]
+        nodes_to_upgrade = []
+        if upgrade_seq == "src>dest":
+            nodes_to_upgrade = src_serv
+            nodes_to_upgrade.extend(dest_serv)
+        elif upgrade_seq == "src<dest":
+            nodes_to_upgrade = dest_serv
+            nodes_to_upgrade.extend(src_serv)
+        elif upgrade_seq == "src><dest":
+            min_cluster = min(len(src_serv), len(dest_serv))
+            for i in xrange(min_cluster):
+                nodes_to_upgrade.append(src_serv[i])
+                nodes_to_upgrade.append(dest_serv[i])
+
+        for node in nodes_to_upgrade:
+            self._offline_upgrade([node])
+            self.set_xdcr_param('xdcrFailureRestartInterval', 1)
+            self.sleep(60)
+            bucket = self._get_bucket('bucket0', self.src_master)
+            gen_create3 = BlobGenerator('loadThree', 'loadThree', self._value_size, end=self._num_items)
+            self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
+            self.do_merge_bucket(self.src_master, self.dest_master, True, bucket)
+            bucket = self._get_bucket('default', self.src_master)
+            self._load_bucket(bucket, self.src_master, gen_create2, 'create', exp=0)
+            self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
+            self.sleep(60)
+            self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
+            self.sleep(self.wait_timeout * 5, "Let clusters work for some time")
 
     def _operations(self):
         if self.ddoc_num_src:
@@ -323,3 +356,20 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
                         ddocs = self._create_views(ddoc_num, self.buckets_on_dest,
                                        views_num, self.dest_master)
                         self.ddocs_dest.extend(ddocs)
+
+    def _offline_upgrade(self, servers):
+        for upgrade_version in self.upgrade_versions:
+            for server in servers:
+                    remote = RemoteMachineShellConnection(server)
+                    remote.stop_server()
+                    remote.disconnect()
+            upgrade_threads = self._async_update(upgrade_version, [])
+            #wait upgrade statuses
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
+            success_upgrade = True
+            while not self.queue.empty():
+                success_upgrade &= self.queue.get()
+            if not success_upgrade:
+                self.fail("Upgrade failed!")
+            self.sleep(self.expire_time)
