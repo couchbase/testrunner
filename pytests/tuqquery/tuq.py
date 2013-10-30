@@ -37,7 +37,8 @@ class QueryTests(BaseTestCase):
     def suite_setUp(self):
         try:
             self.load(self.gens_load, flag=self.item_flag)
-            self._build_tuq(self.master)
+            if self.input.param("skip_build_tuq", False):
+                self._build_tuq(self.master)
             self.skip_buckets_handle = True
         except:
             self.tearDown()
@@ -316,10 +317,10 @@ class QueryTests(BaseTestCase):
 
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_list = [{"job_title" : doc["job_title"],
-                              "tasks_points" : doc["tasks_points"]}
+                              "points" : doc["tasks_points"]}
                              for doc in full_list]
             expected_result = sorted(expected_list, key=lambda doc: (doc['job_title'],
-                                                                     doc["tasks_points"]),
+                                                                     doc["points"]),
                                      reverse=True)
             self._verify_results(actual_result['resultset'], expected_result)
 
@@ -621,8 +622,8 @@ class QueryTests(BaseTestCase):
     def test_like_any(self):
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE (ANY vm.os " % (bucket.name) +\
-            "LIKE '%bun%' OVER vm IN %s.VMs END) AND (ANY skill = 'skill2010' " % (
-                                                                      bucket.name) +\
+            "LIKE '%bun%' OVER vm IN " +\
+            "%s.VMs END) AND (ANY skill = 'skill2010' " % (bucket.name) +\
             "OVER skill IN %s.skills END) ORDER BY name"% (bucket.name)
             actual_result = self.run_cbq_query()
             full_list = self._generate_full_docs_list(self.gens_load)
@@ -638,8 +639,8 @@ class QueryTests(BaseTestCase):
     def test_like_all(self):
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE (ALL vm.os" % (bucket.name) +\
-                         " NOT LIKE '%cent%' OVER vm IN %s.VMs END) AND (ANY skill =" % (
-                                                                      bucket.name) +\
+                         " NOT LIKE '%cent%' OVER vm IN " +\
+                         "%s.VMs END) AND (ANY skill =" % (bucket.name) +\
                          " 'skill2010' OVER skill IN %s.skills END) ORDER BY name" % (
                                                                       bucket.name)
             actual_result = self.run_cbq_query()
