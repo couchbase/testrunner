@@ -1034,13 +1034,14 @@ class QueryTests(BaseTestCase):
                          "HAVING SUM(employees.test_rate) > 0 and " +\
                          "SUM(test_rate) < 100000"
             actual_result = self.run_cbq_query()
+            actual_result = [{"join_mo" : doc["join_mo"], "rate" : int(doc["rate"])} for doc in actual_result]
             actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['join_mo']))
             tmp_groups = set([doc['join_mo'] for doc in full_list])
             expected_result = [{"join_mo" : group,
-                                "rate" : math.fsum([doc['test_rate']
+                                "rate" : int(math.fsum([doc['test_rate']
                                                           for doc in full_list
                                                           if doc['join_mo'] == group and\
-                                                             doc['job_title'] == 'Sales'])}
+                                                             doc['job_title'] == 'Sales']))}
                                for group in tmp_groups
                                if math.fsum([doc['test_rate']
                                             for doc in full_list
@@ -1093,11 +1094,11 @@ class QueryTests(BaseTestCase):
                                if (math.fsum([doc['test_rate']
                                             for doc in full_list
                                             if doc['join_mo'] == group and\
-                                            doc['job_title'] == 'Sales']/
+                                            doc['job_title'] == 'Sales'])/
                                     len([doc['test_rate']
                                          for doc in full_list
                                          if doc['join_mo'] == group and\
-                                         doc['job_title'] == 'Sales']))> 0)  and\
+                                         doc['job_title'] == 'Sales'])> 0)  and\
                                   math.fsum([doc['test_rate']
                                             for doc in full_list
                                             if doc['join_mo'] == group and\
