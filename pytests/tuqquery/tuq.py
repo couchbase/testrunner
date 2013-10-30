@@ -900,7 +900,7 @@ class QueryTests(BaseTestCase):
             self.query = 'SELECT META().cas as cas, META().id as id FROM %s'  % (bucket.name)
             actual_result = self.run_cbq_query()
             keys = [doc['id'] for doc in actual_result['resultset']]
-            actual_result = [{"cas": doc['cas']} for doc in actual_result['resultset']]
+            actual_result = [{"cas": int(doc['cas'])} for doc in actual_result['resultset']]
             actual_result = sorted(actual_result,
                                    key=lambda doc: (doc['cas']))
             client = MemcachedClientHelper.direct_client(self.master, bucket.name)
