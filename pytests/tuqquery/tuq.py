@@ -1165,18 +1165,26 @@ class QueryTests(BaseTestCase):
             self.query = "SELECT job_title, array_agg(DISTINCT name) as names" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
             full_list = self._generate_full_docs_list(self.gens_load)
-            actual_result = self.run_cbq_query()
-            actual_result = [{key : (value, value.sort())[isinstance(value, list)]}
-                             for key, value in actual_result['resultset']]
+            actual_list = self.run_cbq_query()
+            actual_result = []
+            for key, value in actual_list['resultset']:
+                if isinstance(value, list):
+                    actual_result.append({key : value.sort()})
+                else:
+                    actual_result.append({key : value})
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
 
             tmp_groups = set([doc['job_title'] for doc in full_list])
-            expected_result = [{"job_title" : group,
+            expected_list = [{"job_title" : group,
                                 "names" : set([x["name"] for x in full_list
                                                if x["job_title"] == group])}
                                for group in tmp_groups]
-            expected_result = [{key : (value, value.sort())[isinstance(value, list)]}
-                             for key, value in expected_result]
+            expected_result = []
+            for key, value in expected_list:
+                if isinstance(value, list):
+                    expected_result.append({key : value.sort()})
+                else:
+                    expected_result.append({key : value})
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
@@ -1185,18 +1193,26 @@ class QueryTests(BaseTestCase):
             self.query = "SELECT job_title, array_agg(name) as names" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
             full_list = self._generate_full_docs_list(self.gens_load)
-            actual_result = self.run_cbq_query()
-            actual_result = [{key : (value, value.sort())[isinstance(value, list)]}
-                             for key, value in actual_result['resultset']]
+            actual_list = self.run_cbq_query()
+            actual_result = []
+            for key, value in actual_list['resultset']:
+                if isinstance(value, list):
+                    actual_result.append({key : value.sort()})
+                else:
+                    actual_result.append({key : value})
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
 
             tmp_groups = set([doc['job_title'] for doc in full_list])
-            expected_result = [{"job_title" : group,
+            expected_list = [{"job_title" : group,
                                 "names" : [x["name"] for x in full_list
                                                if x["job_title"] == group]}
                                for group in tmp_groups]
-            expected_result = [{key : (value, value.sort())[isinstance(value, list)]}
-                             for key, value in expected_result]
+            expected_result = []
+            for key, value in expected_list:
+                if isinstance(value, list):
+                    expected_result.append({key : value.sort()})
+                else:
+                    expected_result.append({key : value})
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
