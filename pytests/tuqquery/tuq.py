@@ -37,7 +37,7 @@ class QueryTests(BaseTestCase):
     def suite_setUp(self):
         try:
             self.load(self.gens_load, flag=self.item_flag)
-            if self.input.param("skip_build_tuq", False):
+            if not self.input.param("skip_build_tuq", False):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
         except:
