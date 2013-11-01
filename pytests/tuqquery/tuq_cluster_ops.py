@@ -9,6 +9,8 @@ from backuptests import BackupHelper
 class QueriesOpsTests(QueryTests):
     def setUp(self):
         super(QueriesOpsTests, self).setUp()
+        if self.nodes_init > 1 and not self._testMethodName == 'suite_setUp':
+            self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
 
     def suite_setUp(self):
         super(QueriesOpsTests, self).suite_setUp()
@@ -32,7 +34,7 @@ class QueriesOpsTests(QueryTests):
             self.test_order_by_over()
 
     def test_incr_rebalance_out(self):
-        self.assertTrue(len(self.servers[:self.nodes_init]) > self.nodes_out + 1,
+        self.assertTrue(len(self.servers[:self.nodes_init]) > self.nodes_out,
                         "Servers are not enough")
         self.test_order_by_over()
         for i in xrange(1, self.nodes_out + 1):
