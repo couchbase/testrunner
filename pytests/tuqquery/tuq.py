@@ -49,10 +49,11 @@ class QueryTests(BaseTestCase):
         super(QueryTests, self).tearDown()
 
     def suite_tearDown(self):
-        if hasattr(self, 'shell'):
-            self.shell.execute_command("killall /tmp/tuq/cbq-engine")
-            self.shell.execute_command("killall tuqtng")
-            self.shell.disconnect()
+        if not self.input.param("skip_build_tuq", False):
+            if hasattr(self, 'shell'):
+                self.shell.execute_command("killall /tmp/tuq/cbq-engine")
+                self.shell.execute_command("killall tuqtng")
+                self.shell.disconnect()
 
 
 ##############################################################################################
@@ -1499,8 +1500,12 @@ class QueryTests(BaseTestCase):
                                                                 server.ip, server.port)
             self.shell.execute_command(cmd)
         else:
-            #TODO for windows
-            cmd = "cd /tmp/tuq;./cbq-engine -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
+            os = self.shell.extract_remote_info().type.lower()
+            if os != 'windows':
+                cmd = "cd /tmp/tuq;./cbq-engine -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
+                                                                server.ip, server.port)
+            else:
+                cmd = "cd /cygdrive/c/tuq;./cbq-engine.exe -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
                                                                 server.ip, server.port)
             self.shell.execute_command(cmd)
 
