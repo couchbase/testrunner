@@ -1721,6 +1721,74 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'GET', timeout=timeout)
         return json.loads(content)
 
+    # return all rack/zone info
+    def get_all_zones_info(self, timeout=120):
+        zones = {}
+        api = self.baseUrl + 'pools/default/serverGroups'
+        status, content, header = self._http_request(api, timeout=timeout)
+        if status:
+            zones = json.loads(content)
+        else:
+            raise Exception("Failed to get all zones info")
+        return zones
+
+    # return group name and unique uuid
+    def get_zone_names(self):
+        zone_names = {}
+        zone_info = self.get_all_zones_info()
+        if len(zone_info["groups"]) >= 1:
+            for i in range(0, len(zone_info["groups"])):
+                zone_names[zone_info["groups"][i]["name"]] = zone_info["groups"][i]["uri"][28:]
+        return zone_names
+
+    def add_zone(self, zone_name):
+        api = self.baseUrl + 'pools/default/serverGroups'
+        request_name = "name={0}".format(zone_name)
+        status, content, header = self._http_request(api, "POST", \
+                                        params=request_name)
+        if status:
+            log.info("zone {0} is added".format(zone_name))
+        else:
+            raise Exception("Failed to add zone with name: %s " % zone_name)
+
+    def delete_zone(self, zone_name):
+        api = self.baseUrl + 'pools/default/serverGroups/'
+        # check if zone exist
+        found = False
+        zones = self.get_zone_names()
+        for zone in zones:
+            if zone_name == zone:
+                api += zones[zone_name]
+                found = True
+                break
+        if not found:
+            raise Exception("There is not zone with name: %s in cluster" % zone_name)
+        status, content, header = self._http_request(api, "DELETE")
+        if status:
+            log.info("zone {0} is deleted".format(zone_name))
+        else:
+            raise Exception("Failed to delete zone with name: %s " % zone_name)
+
+    def rename_zone(self, old_name, new_name):
+        api = self.baseUrl + 'pools/default/serverGroups/'
+        # check if zone exist
+        found = False
+        zones = self.get_zone_names()
+        for zone in zones:
+            if old_name == zone:
+                api += zones[old_name]
+                request_name = "name={0}".format(new_name)
+                found = True
+                break
+        if not found:
+            raise Exception("There is not zone with name: %s in cluster" % old_name)
+        status, content, header = self._http_request(api, "PUT", params= request_name)
+        if status:
+            log.info("zone {0} is renamed to {1}".format(old_name, new_name))
+        else:
+            raise Exception("Failed to rename zone with name: %s " % old_name)
+
+
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
         self.implementationVersion = implementationVersion
