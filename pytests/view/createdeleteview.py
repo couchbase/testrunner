@@ -304,10 +304,13 @@ class CreateDeleteViewTests(BaseTestCase):
                  View("view1", 'function (doc)',
                       red_func=None, dev_view=False)]
         for view in views:
-            with self.assertRaises(DesignDocCreationException):
+            try:
                 self.cluster.create_view(
                     self.master, self.default_design_doc_name, view,
                     'default', self.wait_timeout * 2)
+            except DesignDocCreationException:
+                pass
+            else:
                 self.fail("server allowed creation of invalid view")
 
     def test_create_view_with_duplicate_name(self):
