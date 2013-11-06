@@ -835,11 +835,21 @@ class RestConnection(object):
     #can't add the node to itself ( TODO )
     #server already added
     #returns otpNode
-    def add_node(self, user='', password='', remoteIp='', port='8091'):
+    def add_node(self, user='', password='', remoteIp='', port='8091', zone_name=''):
         otpNode = None
         log.info('adding remote node @{0}:{1} to this cluster @{2}:{3}'\
-        .format(remoteIp, port, self.ip, self.port))
-        api = self.baseUrl + 'controller/addNode'
+                          .format(remoteIp, port, self.ip, self.port))
+        if zone_name == '':
+            api = self.baseUrl + 'controller/addNode'
+        else:
+            api = self.baseUrl + 'pools/default/serverGroups'
+            if self.is_zone_exist(zone_name):
+                zones = self.get_zone_names()
+                api = "/".join((api, zones[zone_name], "addNode"))
+                log.info("node {0} will be added to zone {1}".format(remoteIp, zone_name))
+            else:
+                raise Exception("There is not zone with name: %s in cluster" % zone_name)
+
         params = urllib.urlencode({'hostname': "{0}:{1}".format(remoteIp, port),
                                    'user': user,
                                    'password': password})
@@ -1729,15 +1739,17 @@ class RestConnection(object):
         if status:
             zones = json.loads(content)
         else:
-            raise Exception("Failed to get all zones info")
+            raise Exception("Failed to get all zones info.\n \
+                  Zone only supports from couchbase server version 2.5 and up.")
         return zones
 
     # return group name and unique uuid
     def get_zone_names(self):
         zone_names = {}
         zone_info = self.get_all_zones_info()
-        if len(zone_info["groups"]) >= 1:
+        if zone_info and len(zone_info["groups"]) >= 1:
             for i in range(0, len(zone_info["groups"])):
+                # pools/default/serverGroups/ = 27 chars
                 zone_names[zone_info["groups"][i]["name"]] = zone_info["groups"][i]["uri"][28:]
         return zone_names
 
@@ -1782,11 +1794,48 @@ class RestConnection(object):
                 break
         if not found:
             raise Exception("There is not zone with name: %s in cluster" % old_name)
-        status, content, header = self._http_request(api, "PUT", params= request_name)
+        status, content, header = self._http_request(api, "PUT", params = request_name)
         if status:
             log.info("zone {0} is renamed to {1}".format(old_name, new_name))
         else:
             raise Exception("Failed to rename zone with name: %s " % old_name)
+
+    # get all nodes info in one zone/rack/group
+    def get_nodes_in_zone(self, zone_name):
+        nodes = {}
+        tmp = {}
+        zone_info = self.get_all_zones_info()
+        if zone_name != "":
+            found = False
+            if len(zone_info["groups"]) >= 1:
+                for i in range(0, len(zone_info["groups"])):
+                    if zone_info["groups"][i]["name"] == zone_name:
+                        tmp = zone_info["groups"][i]["nodes"]
+                        if not tmp:
+                            log.info("zone {0} is existed but no node in it".format(zone_name))
+                        # remove port
+                        for node in tmp:
+                            node["hostname"] = node["hostname"].split(":")
+                            node["hostname"] = node["hostname"][0]
+                            nodes[node["hostname"]] = node
+                        found = True
+                        break
+            if not found:
+                raise Exception("There is not zone with name: %s in cluster" % zone_name)
+        return nodes
+
+    def is_zone_exist(self, zone_name):
+        found = False
+        zones = self.get_zone_names()
+        if zones:
+            for zone in zones:
+                if zone_name == zone:
+                    found = True
+                    return True
+                    break
+        if not found:
+            log.error("There is not zone with name: {0} in cluster.".format(zone_name))
+            return False
 
 
 class MembaseServerVersion:
