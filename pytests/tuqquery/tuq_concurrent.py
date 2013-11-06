@@ -27,6 +27,7 @@ class ConcurrentTests(QueryTests):
             task_ops = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                 self.servers[self.nodes_init:self.nodes_init + self.nodes_in], [])
         elif self.ops == 'failover':
+            self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
             servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
             self.cluster.failover(self.servers[:self.nodes_init], servr_out)
             task_ops = self.cluster.async_rebalance(self.servers[:self.nodes_init],
