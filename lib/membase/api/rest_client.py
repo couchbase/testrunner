@@ -1727,7 +1727,7 @@ class RestConnection(object):
     def query_tool(self, query, timeout=650):
         params = urllib.urlencode({'q' : query})
         log.info('query params : {0}'.format(params))
-        api =  "http://%s:8093/query?%s" % (self.ip, params)
+        api = "http://%s:8093/query?%s" % (self.ip, params)
         status, content, header = self._http_request(api, 'GET', timeout=timeout)
         return json.loads(content)
 
@@ -1794,7 +1794,7 @@ class RestConnection(object):
                 break
         if not found:
             raise Exception("There is not zone with name: %s in cluster" % old_name)
-        status, content, header = self._http_request(api, "PUT", params = request_name)
+        status, content, header = self._http_request(api, "PUT", params=request_name)
         if status:
             log.info("zone {0} is renamed to {1}".format(old_name, new_name))
         else:
@@ -1836,6 +1836,16 @@ class RestConnection(object):
         if not found:
             log.error("There is not zone with name: {0} in cluster.".format(zone_name))
             return False
+
+    def get_bucket_CCCP(self, bucket):
+        log.info("Getting CCCP config ")
+        api = '%spools/default/b/%s' % (self.baseUrl, bucket)
+        if isinstance(bucket, Bucket):
+            api = '%spools/default/b/%s' % (self.baseUrl, bucket.name)
+        status, content, header = self._http_request(api)
+        if status:
+            return json.loads(content)
+        return None
 
 
 class MembaseServerVersion:

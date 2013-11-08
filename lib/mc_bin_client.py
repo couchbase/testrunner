@@ -540,6 +540,14 @@ class MemcachedClient(object):
         else:
             self.vbucketId = vbucket
 
+    def get_config(self):
+        """Get the config within the memcached server."""
+        return self._doCmd(memcacheConstants.CMD_GET_CLUSTER_CONFIG, '', '')
+
+    def set_config(self, blob_conf):
+        """Set the config within the memcached server."""
+        return self._doCmd(memcacheConstants.CMD_SET_CLUSTER_CONFIG, blob_conf, '')
+
 def error_to_str(errno):
     if errno == 0x01:
         return "Not found"

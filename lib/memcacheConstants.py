@@ -131,6 +131,10 @@ TAP_FLAG_TYPES = {TAP_FLAG_BACKFILL: ">Q",
 TAP_FLAG_ACK = 0x01
 TAP_FLAG_NO_VALUE = 0x02 # The value for the key is not included in the packet
 
+#CCCP
+CMD_SET_CLUSTER_CONFIG = 0xb4
+CMD_GET_CLUSTER_CONFIG = 0xb5
+
 # Flags, expiration
 SET_PKT_FMT = ">II"
 
