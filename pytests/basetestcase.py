@@ -122,6 +122,16 @@ class BaseTestCase(unittest.TestCase):
                         or self.input.param("skip_cleanup", False):
                     self.log.warn("CLEANUP WAS SKIPPED")
                 else:
+                    if test_failed and TestInputSingleton.input.param('get_trace', None):
+                        for server in self.servers:
+                            try:
+                                shell = RemoteMachineShellConnection(server)
+                                output, _ = shell.execute_command("ps -aef|grep %s" %
+                                        TestInputSingleton.input.param('get_trace', None))
+                                output = shell.execute_command("pstack %s" % output[0].split()[1].strip())
+                                print output[0]
+                            except:
+                                pass
                     if test_failed and self.input.param('BUGS', False):
                         self.log.warn("Test failed. Possible reason is: {0}".format(self.input.param('BUGS', False)))
 
