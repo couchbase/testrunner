@@ -22,7 +22,7 @@ class MembaseBuild(object):
         self.deliverable_type = ''
         self.architecture_type = ''
         self.toy = ''
-        self.change = None # a MembaseChange
+        self.change = None  # a MembaseChange
         self.url_latest_build = ''
 
     def __repr__(self):
@@ -63,7 +63,7 @@ class BuildQuery(object):
         #parse build page and create build object
         pass
 
-    def find_build(self,builds,product,type,arch,version,toy='', openssl=''):
+    def find_build(self, builds, product, type, arch, version, toy='', openssl=''):
         for build in builds:
             if build.product_version.find(version) != -1 and product == build.product\
                and build.architecture_type == arch and type == build.deliverable_type\
@@ -76,7 +76,7 @@ class BuildQuery(object):
             build = BuildQuery().find_build(builds, product, deliverable_type,
                                             os_architecture, build_version)
             if build:
-                build.url = build.url.replace("http://builds.hq.northscale.net",\
+                build.url = build.url.replace("http://builds.hq.northscale.net", \
                                                   "http://packages.northscale.com.s3.amazonaws.com")
                 build.url = build.url.replace("enterprise", "community")
                 build.name = build.name.replace("enterprise", "community")
@@ -156,10 +156,10 @@ class BuildQuery(object):
 
     def get_all_builds(self, timeout=None):
         try:
-            latestbuilds, latestchanges =\
+            latestbuilds, latestchanges = \
                 self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds', timeout=timeout)
         except:
-            latestbuilds, latestchanges =\
+            latestbuilds, latestchanges = \
                 self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds', timeout=timeout)
 
         return latestbuilds, latestchanges
@@ -182,7 +182,7 @@ class BuildQuery(object):
             except:
                 time.sleep(1)
         if not page:
-            raise Exception('unable to connect to builds.hq')
+            raise Exception('unable to connect to %s/index.html' % build_page)
         query = BuildQuery()
         for incident in soup('li'):
             contents = incident.contents
