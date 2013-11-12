@@ -24,9 +24,9 @@ class HealthcheckerTests(CliBaseTest):
     def healthchecker_test(self):
 
         gen_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
-        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items/2-1))
-        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items/2, end=(self.num_items*3/4-1))
-        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items*3/4, end=self.num_items)
+        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items / 2 - 1))
+        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items / 2, end=(self.num_items * 3 / 4 - 1))
+        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items * 3 / 4, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", 0)
 
         if(self.doc_ops is not None):
@@ -60,8 +60,9 @@ class HealthcheckerTests(CliBaseTest):
             if command_output.find(bucket.name) == -1:
                 raise Exception("cbhealthchecker does not generate report for %s" % bucket.name)
 
-        if self.os == "linux" or self.os == "mac":
+        if self.os in ["linux", "mac"]:
             command = "cd %s;du -s %s/*" % (self.path_to_store, self.report_folder_name)
+            self.shell.use_sudo = False
             output, error = self.shell.execute_command(command.format(command))
             self.shell.log_command_output(output, error)
             empty_reports = False
@@ -152,7 +153,7 @@ class HealthcheckerTests(CliBaseTest):
                                                   "Node %s expected status is %s, actual is %s" % (
                                                         node.ip, node.status,
                                                         row.findAll('td')[2].string))
-                            embeded_rows = rows[i+1].findAll('table')[0].findAll('tr')
+                            embeded_rows = rows[i + 1].findAll('table')[0].findAll('tr')
                             for emb_row in embeded_rows:
                                 if len(emb_row.findAll('td')) and \
                                    emb_row.findAll('td')[1].string == 'Data path on disk':

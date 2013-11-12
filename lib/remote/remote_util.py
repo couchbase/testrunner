@@ -791,7 +791,7 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
 
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
-                       swappiness=10, force=False,openssl=''):
+                       swappiness=10, force=False, openssl=''):
         server_type = None
         success = True
         track_words = ("warning", "error", "fail")
@@ -1260,7 +1260,7 @@ class RemoteMachineShellConnection:
         if self.info.type.lower() == 'windows':
             self.use_sudo = False
 
-        if self.use_sudo :
+        if self.use_sudo:
             command = "sudo " + command
 
         return self.execute_command_raw(command, debug=debug, use_channel=use_channel)
