@@ -82,7 +82,9 @@ class BaseTestCase(unittest.TestCase):
                                             self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port)
 
             try:
-                if str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1:
+                if (str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1) or \
+                    (str(self.__class__).find('memorysanitytests.MemorySanity') != -1) or \
+                    str(self.__class__).find('negativetests.NegativeTests') != -1:
                     # rebalance all nodes into the cluster before each test
                     self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
                 elif self.nodes_init > 1:
@@ -90,11 +92,6 @@ class BaseTestCase(unittest.TestCase):
                 elif str(self.__class__).find('ViewQueryTests') != -1 and \
                         not self.input.param("skip_rebalance", False):
                     self.cluster.rebalance(self.servers, self.servers[1:], [])
-                elif str(self.__class__).find('memorysanitytests.MemorySanity') != -1:
-                    self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
-                elif str(self.__class__).find('negativetests.NegativeTests') != -1:
-                    self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
-
             except BaseException, e:
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
