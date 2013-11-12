@@ -1,10 +1,11 @@
-from view.view_base import ViewBaseTest
-from couchbase.documentgenerator import BlobGenerator
-from couchbase.document import DesignDocument, View
 import time
 from tasks.future import TimeoutError
 
-class CompactionViewTests(ViewBaseTest):
+from couchbase.documentgenerator import DocumentGenerator
+from couchbase.documentgenerator import BlobGenerator
+from couchbase.document import DesignDocument, View
+
+class CompactionViewTests(BaseTestCase):
 
     def setUp(self):
         super(CompactionViewTests, self).setUp()

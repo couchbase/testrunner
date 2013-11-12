@@ -1,14 +1,16 @@
 import json
 import time
-from view_base import ViewBaseTest
+
+from basetestcase import BaseTestCase
 from couchbase.document import DesignDocument, View
+from couchbase.documentgenerator import DocumentGenerator
 from membase.api.rest_client import RestConnection
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.api.exception import ReadDocumentException
 from membase.api.exception import DesignDocCreationException
-from couchbase.documentgenerator import DocumentGenerator
 
-class CreateDeleteViewTests(ViewBaseTest):
+
+class CreateDeleteViewTests(BaseTestCase):
 
     def setUp(self):
         super(CreateDeleteViewTests, self).setUp()

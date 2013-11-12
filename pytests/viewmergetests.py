@@ -6,7 +6,6 @@ import logger
 import json
 from collections import defaultdict
 
-from view.view_base import ViewBaseTest
 from TestInput import TestInputSingleton
 from couchbase.document import View
 from membase.api.rest_client import RestConnection, Bucket
@@ -63,7 +62,7 @@ class ViewMergingTests(BaseTestCase):
         self.assertEquals(len(results.get(u'rows', None)), 0)
 
     def test_nonexisting_views(self):
-        view_names = ['mapview2','mapview3', 'mapview4', 'mapview5']
+        view_names = ['mapview2', 'mapview3', 'mapview4', 'mapview5']
         for view_name in view_names:
             with self.assertRaises(QueryViewException):
                 results = self.merged_query(view_name)
@@ -101,12 +100,12 @@ class ViewMergingTests(BaseTestCase):
             self.assertEquals(row['doc']['json']['integer'], num)
             self.assertEquals(row['doc']['json']['string'], str(num))
             self.assertEquals(row['doc']['meta']['id'], str(num))
-            num +=1
+            num += 1
 
     def test_queries_reduce(self):
         all_query_params = ['skip', 'limit', 'startkey', 'endkey', 'startkey_docid',
                         'endkey_docid', 'inclusive_end', 'descending', 'reduce',
-                        'group','group_level']
+                        'group', 'group_level']
         current_params = {}
         for key in self.input.test_params:
             if key in all_query_params:
@@ -190,7 +189,7 @@ class ViewMergingTests(BaseTestCase):
             keys = keys[:(int(params['limit']))]
         if 'key' in params:
             if int(params['key']) <= self.num_docs:
-                keys = [int(params['key']),]
+                keys = [int(params['key']), ]
             else:
                 keys = []
         if 'keys' in params:
@@ -265,7 +264,7 @@ class ViewMergingTests(BaseTestCase):
             expected = self.calculate_matching_keys(params)
             self.assertEquals(results.get(u'rows', [])[0][u'value'], len(expected),
                               "Value for reduce is incorrect. Expected %s, actual %s"
-                              % (len(expected),results.get(u'rows', [])[0][u'value']))
+                              % (len(expected), results.get(u'rows', [])[0][u'value']))
 
     def create_ddocs(self, is_dev_view):
         mapview = View(self.map_view_name, '''function(doc) {
@@ -294,7 +293,7 @@ class ViewMergingTests(BaseTestCase):
         for vbucket in self.bucket.vbuckets:
             if vbucket.master not in clients:
                 ip, port = vbucket.master.split(':')
-                clients[vbucket.master] =  MemcachedClient(ip, int(port))
+                clients[vbucket.master] = MemcachedClient(ip, int(port))
         return clients
 
     def populate_alternated(self, num_vbuckets, docs):
@@ -368,7 +367,7 @@ class ViewMergingTests(BaseTestCase):
        bucket = self.default_bucket_name
        if not 'stale' in params:
            params['stale'] = 'false'
-       ddoc = ("","dev_")[self.is_dev_view] + ddoc
+       ddoc = ("", "dev_")[self.is_dev_view] + ddoc
        return self.rest.query_view(ddoc, view_name, bucket, params)
 
     def verify_keys_are_sorted(self, results, desc=False):
@@ -377,7 +376,7 @@ class ViewMergingTests(BaseTestCase):
         self.log.info('rows are sorted by key')
 
     @staticmethod
-    def _verify_list_is_sorted(keys, key = lambda x: x, desc=False):
+    def _verify_list_is_sorted(keys, key=lambda x: x, desc=False):
         if desc:
             return all([key(keys[i]) >= key(keys[i + 1]) for i in xrange(len(keys) - 1)])
         else:
