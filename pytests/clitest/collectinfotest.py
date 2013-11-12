@@ -13,20 +13,19 @@ LOG_FILE_NAME_LIST = ["couchbase.log", "diag.log", "ddocs.log", "ini.log", "sysl
                       "ns_server.stats.log", "ns_server.xdcr_errors.log",
                       "ns_server.xdcr.log"]
 
-class collectinfoTests(CliBaseTest):
+class CollectinfoTests(CliBaseTest):
 
     def setUp(self):
-        super(collectinfoTests, self).setUp()
+        super(CollectinfoTests, self).setUp()
         self.log_filename = self.input.param("filename", "info")
         self.doc_ops = self.input.param("doc_ops", None)
         self.expire_time = self.input.param("expire_time", 5)
-        self.value_size = self.input.param("value_size", 256)
         self.node_down = self.input.param("node_down", False)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
 
     def tearDown(self):
-        super(collectinfoTests, self).tearDown()
+        super(CollectinfoTests, self).tearDown()
 
     def collectinfo_test(self):
         """We use cbcollect_info to automatically collect the logs for server node
@@ -38,9 +37,9 @@ class collectinfoTests(CliBaseTest):
         stats for all the buckets we have created"""
 
         gen_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
-        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items/2-1))
-        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items/2, end=(self.num_items*3/4-1))
-        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items*3/4, end=self.num_items)
+        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items / 2 - 1))
+        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items / 2, end=(self.num_items * 3 / 4 - 1))
+        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items * 3 / 4, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", 0)
 
         if(self.doc_ops is not None):
@@ -54,7 +53,7 @@ class collectinfoTests(CliBaseTest):
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         self.shell.delete_files("%s.zip" % (self.log_filename))
-        self.shell.delete_files("cbcollect_info*") #This is the folder generated after unzip the log package
+        self.shell.delete_files("cbcollect_info*")  #This is the folder generated after unzip the log package
 
         if self.node_down:
             if self.os == 'linux':
