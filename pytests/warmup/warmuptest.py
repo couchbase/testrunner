@@ -8,13 +8,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase.documentgenerator import BlobGenerator
 from couchbase.stats_tools import StatsCommon
 from remote.remote_util import RemoteMachineShellConnection
-import string
-import random
 import testconstants
-
-def key_generator(size=6, chars=string.ascii_uppercase + string.digits):
-    return ''.join(random.choice(chars) for x in range(size))
-
 
 class WarmUpTests(BaseTestCase):
     def setUp(self):
@@ -184,9 +178,11 @@ class WarmUpTests(BaseTestCase):
                     if int(active_resident) > self.active_resident_threshold:
                         self.log.info("resident ratio is %s greater than %s for %s in bucket %s. Continue loading to the cluster" %
                                       (active_resident, self.active_resident_threshold, server.ip, bucket.name))
-                        random_key = key_generator()
+                        random_key = self.key_generator()
                         generate_load = BlobGenerator(random_key, '%s-' % random_key, self.value_size, end=self.num_items)
-                        self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                        tasks = self._async_load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                        for task in tasks:
+                            task.result()
                         self.load_gen_list.append(generate_load)
                     else:
                         threshold_reached = True

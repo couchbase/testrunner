@@ -3,10 +3,14 @@ import unittest
 import copy
 import datetime
 import time
+import string
+import random
 
+from couchbase.documentgenerator import BlobGenerator
 from couchbase.cluster import Cluster
 from couchbase.document import View
 from couchbase.documentgenerator import DocumentGenerator
+from couchbase.stats_tools import StatsCommon
 from TestInput import TestInputSingleton
 from membase.api.rest_client import RestConnection, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -47,6 +51,7 @@ class BaseTestCase(unittest.TestCase):
             self.num_items = self.input.param("items", 1000)
             self.value_size = self.input.param("value_size", 512)
             self.dgm_run = self.input.param("dgm_run", False)
+            self.active_resident_threshold = int(self.input.param("active_resident_threshold", 0))
             # max items number to verify in ValidateDataTask, None - verify all
             self.max_verify = self.input.param("max_verify", None)
             # we don't change consistent_view on server by default
@@ -218,7 +223,8 @@ class BaseTestCase(unittest.TestCase):
         self._create_memcached_buckets(self.master, self.memcached_buckets)
 
     def _get_bucket_size(self, mem_quota, num_buckets, ratio=2.0 / 3.0):
-        return int(ratio / float(num_buckets) * float(mem_quota))
+        #min size is 100MB now
+        return max(100, int(ratio / float(num_buckets) * float(mem_quota)))
 
     def _create_sasl_buckets(self, server, num_buckets, server_id=None, bucket_size=None, password='password'):
         if not num_buckets:
@@ -370,6 +376,28 @@ class BaseTestCase(unittest.TestCase):
         tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
         for task in tasks:
             task.result()
+        if self.active_resident_threshold:
+            stats_all_buckets = {}
+            for bucket in self.buckets:
+                stats_all_buckets[bucket.name] = StatsCommon()
+
+            for bucket in self.buckets:
+                threshold_reached = False
+                while not threshold_reached :
+                    active_resident = stats_all_buckets[bucket.name].get_stats([self.master], bucket, '', 'vb_active_perc_mem_resident')[server]
+                    if int(active_resident) > self.active_resident_threshold:
+                        self.log.info("resident ratio is %s greater than %s for %s in bucket %s. Continue loading to the cluster" %
+                                      (active_resident, self.active_resident_threshold, self.master.ip, bucket.name))
+                        random_key = self.key_generator()
+                        generate_load = BlobGenerator(random_key, '%s-' % random_key, self.value_size, end=20000)
+                        self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                    else:
+                        threshold_reached = True
+                        self.log.info("DGM state achieved for %s in bucket %s!" % (self.master.ip, bucket.name))
+                        break
+
+    def key_generator(self, size=6, chars=string.ascii_uppercase + string.digits):
+        return ''.join(random.choice(chars) for x in range(size))
 
     """Waits for queues to drain on all servers and buckets in a cluster.
 
