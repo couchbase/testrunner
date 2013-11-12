@@ -75,8 +75,8 @@ class RestHelper(object):
             log.info('rebalance reached >{0}% in {1} seconds '.format(progress, duration))
             return progress
 
+    #get the nodes and verify that all the nodes.status are healthy
     def is_cluster_rebalanced(self):
-        #get the nodes and verify that all the nodes.status are healthy
         return self.rest.rebalance_statuses()
 
     #this method will rebalance the cluster by passing the remote_node as
@@ -96,8 +96,6 @@ class RestHelper(object):
             vBuckets = self.rest.get_vbuckets(bucket)
             if vBuckets:
                 return True
-            if isinstance(vBuckets, tuple):
-               return True  # es vbucket format
             else:
                 time.sleep(0.5)
         msg = 'vbucket map is not ready for bucket {0} after waiting {1} seconds'
@@ -702,7 +700,7 @@ class RestConnection(object):
         params = urllib.urlencode({'port': port,
                                    'username': username,
                                    'password': password})
-        log.info('settings/web params on {0}:{1} :{2}'.format(self.ip, self.port, params))
+        log.info('settings/web params on {0}:{1}:{2}'.format(self.ip, self.port, params))
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
@@ -712,7 +710,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'GET')
         if status:
             settings = json.loads(content)
-        log.info('settings/web params on {0}:{1} :{2}'.format(self.ip, self.port, settings))
+        log.info('settings/web params on {0}:{1}:{2}'.format(self.ip, self.port, settings))
         return settings
 
     def init_cluster_memoryQuota(self, username='Administrator',
@@ -792,7 +790,7 @@ class RestConnection(object):
                                    'toCluster': toCluster,
                                    'type': rep_type})
         status, content, header = self._http_request(api, 'POST', params)
-        #respone : {"database":"http://127.0.0.1:9500/_replicator",
+        #response : {"database":"http://127.0.0.1:9500/_replicator",
         # "id": "replication_id"}
         if status:
             json_parsed = json.loads(content)
@@ -891,7 +889,7 @@ class RestConnection(object):
                 raise ServerAlreadyJoinedException(nodeIp=self.ip,
                                                    remoteIp=otpNode)
             else:
-                # todo : raise an exception here
+                # TODO : raise an exception here
                 log.error('eject_node error {0}'.format(content))
         return True
 
@@ -1049,7 +1047,7 @@ class RestConnection(object):
 
 
     #if status is none , is there an errorMessage
-    #convoluted logic which figures out if the rebalance failed or suceeded
+    #convoluted logic which figures out if the rebalance failed or succeeded
     def rebalance_statuses(self):
         rebalanced = None
         api = self.baseUrl + 'pools/rebalanceStatuses?waitChange=1'
