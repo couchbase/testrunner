@@ -5,10 +5,10 @@ import time
 import logger
 from lib.builds import BeautifulSoup
 
-class healthcheckerTests(CliBaseTest):
+class HealthcheckerTests(CliBaseTest):
 
     def setUp(self):
-        super(healthcheckerTests, self).setUp()
+        super(HealthcheckerTests, self).setUp()
         self.report_folder_name = self.input.param("foler_name", "reports")
         self.doc_ops = self.input.param("doc_ops", None)
         self.expire_time = self.input.param("expire_time", 5)
@@ -19,7 +19,7 @@ class healthcheckerTests(CliBaseTest):
                                               "/tmp/cbhealthreport")
 
     def tearDown(self):
-        super(healthcheckerTests, self).tearDown()
+        super(HealthcheckerTests, self).tearDown()
 
     def healthchecker_test(self):
 
