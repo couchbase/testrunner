@@ -95,7 +95,7 @@ class BucketOperationHelper():
                     assert_on_test.fail(msg=msg)
 
     @staticmethod
-    def create_bucket(serverInfo, name='default', replica=1, port=11210, test_case=None, bucket_ram= -1, password=None):
+    def create_bucket(serverInfo, name='default', replica=1, port=11210, test_case=None, bucket_ram=-1, password=None):
         log = logger.Logger.get_logger()
         rest = RestConnection(serverInfo)
         if bucket_ram < 0:
@@ -279,6 +279,9 @@ class BucketOperationHelper():
                     try:
                         (a, b, c) = client.get_vbucket_state(i)
                     except mc_bin_client.MemcachedError as e:
+                        if "Not my vbucket" in log_msg:
+                            # reduce output
+                            log_msg = log_msg[:log_msg.find("vBucketMap") + 12] + "..."
                         log.error("%s: %s" % (log_msg, e))
                         continue
                     if c.find("\x01") > 0 or c.find("\x02") > 0:
