@@ -231,7 +231,7 @@ class RestConnection(object):
                 else:
                     self.capiBaseUrl = http_res["couchApiBase"]
                     return
-            raise Exception("couchApiBase doesn't exist in nodes/self: %s " % http_res)
+            raise ServerUnavailableException("couchApiBase doesn't exist in nodes/self: %s " % http_res)
 
     def __init__(self, serverInfo):
         #serverInfo can be a json object
@@ -271,12 +271,12 @@ class RestConnection(object):
                     if self.is_cluster_mixed():
                         self.capiBaseUrl = self.baseUrl + "/couchBase"
                         return
-                    time.sleep(0.1)
+                    time.sleep(0.2)
                     http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
                 else:
                     self.capiBaseUrl = http_res["couchApiBase"]
                     return
-            raise Exception("couchApiBase doesn't exist in nodes/self: %s " % http_res)
+            raise ServerUnavailableException("couchApiBase doesn't exist in nodes/self: %s " % http_res)
 
     def sasl_streaming_rq(self, bucket, timeout=120):
         api = self.baseUrl + 'pools/default/bucketsStreaming/{0}'.format(bucket)
