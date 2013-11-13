@@ -52,6 +52,7 @@ class Future(object):
             try:
                 callback(self)
             except Exception:
+                print "exception calling callback for %s" % self
                 LOGGER.exception('exception calling callback for %r', self)
 
     def __repr__(self):
