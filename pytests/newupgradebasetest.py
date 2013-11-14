@@ -101,6 +101,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         params['vbuckets'] = [self.initial_vbuckets]
         if self.initial_build_type is not None:
             params['type'] = self.initial_build_type
+        self.log.info("will install {0} on {1}".format(self.initial_version, [s.ip for s in servers]))
         InstallerJob().parallel_install(servers, params)
         if self.product in ["couchbase", "couchbase-server", "cb"]:
             success = True
@@ -114,8 +115,6 @@ class NewUpgradeBaseTest(BaseTestCase):
             for server in self.servers[:self.nodes_init]:
                 hostname = RemoteUtilHelper.use_hostname_for_server_settings(server)
                 server.hostname = hostname
-
-
 
     def operations(self, servers):
         self.quota = self._initialize_nodes(self.cluster, servers, self.disabled_consistent_view,
@@ -180,7 +179,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             remote = RemoteMachineShellConnection(server)
             appropriate_build = self._get_build(server, upgrade_version, remote, info=info)
             self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(upgrade_version))
-            self.assertTrue(remote.download_build(appropriate_build),"Build wasn't downloaded!")
+            self.assertTrue(remote.download_build(appropriate_build), "Build wasn't downloaded!")
             o, e = remote.membase_upgrade(appropriate_build, save_upgrade_config=False)
             self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
             remote.disconnect()
@@ -227,7 +226,6 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.master = server
         self.rest = RestConnection(self.master)
         self.rest_helper = RestHelper(self.rest)
-
 
     def verification(self, servers, check_items=True):
         if self.use_hostnames:
