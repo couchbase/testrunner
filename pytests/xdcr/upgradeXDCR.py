@@ -364,7 +364,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
                     remote = RemoteMachineShellConnection(server)
                     remote.stop_server()
                     remote.disconnect()
-            upgrade_threads = self._async_update(upgrade_version, [])
+            upgrade_threads = self._async_update(upgrade_version, servers)
             #wait upgrade statuses
             for upgrade_thread in upgrade_threads:
                 upgrade_thread.join()
