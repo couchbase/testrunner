@@ -23,8 +23,9 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
     def test_upgrade(self):
         self._install([self.master])
         self.operations([self.master])
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
         for upgrade_version in self.upgrade_versions:
+            self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade to {0} version".\
+                       format(upgrade_version))
             upgrade_threads = self._async_update(upgrade_version, [self.master])
             #wait upgrade statuses
             for upgrade_thread in upgrade_threads:
@@ -53,19 +54,20 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
         if op == "higher_version":
             tmp = self.initial_version
             self.initial_version = self.upgrade_versions[0]
-            self.upgrade_versions = [tmp,]
+            self.upgrade_versions = [tmp, ]
         info = None
         if op == "wrong_arch":
             remote = RemoteMachineShellConnection(self.master)
             info = remote.extract_remote_info()
-            info.architecture_type = ('x86_64','x86')[info.architecture_type == 'x86']
+            info.architecture_type = ('x86_64', 'x86')[info.architecture_type == 'x86']
         self._install([self.master])
         self.operations([self.master])
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
         try:
             if op == "close_port":
                 RemoteUtilHelper.enable_firewall(self.master)
             for upgrade_version in self.upgrade_versions:
+                self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade to {0} version".\
+                       format(upgrade_version))
                 self._upgrade(upgrade_version, self.master, info=info)
         except Exception, ex:
             self.log.info("Exception %s appeared as expected" % ex)
@@ -100,8 +102,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     getattr(self, opn)()
         num_stoped_nodes = self.input.param('num_stoped_nodes', self.nodes_init)
         upgrade_nodes = self.servers[self.nodes_init - num_stoped_nodes :self.nodes_init]
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
         for upgrade_version in self.upgrade_versions:
+            self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade to {0} version".\
+                       format(upgrade_version))
             for server in upgrade_nodes:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
@@ -152,8 +155,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 getattr(self, opn)()
         num_stoped_nodes = self.input.param('num_stoped_nodes', self.nodes_init)
         stoped_nodes = self.servers[self.nodes_init - num_stoped_nodes :self.nodes_init]
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
         for upgrade_version in self.upgrade_versions:
+            self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade to {0} version".\
+                       format(upgrade_version))
             for server in stoped_nodes:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
@@ -185,12 +189,12 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.operations(self.servers[:self.nodes_init])
         if self.ddocs_num:
             self.create_ddocs_and_views()
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
         if self.during_ops:
             for opn in self.during_ops:
                 getattr(self, opn)()
         for upgrade_version in self.upgrade_versions:
-
+            self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade to {0} version".\
+                       format(upgrade_version))
             for server in stoped_nodes:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
@@ -238,8 +242,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.operations(self.servers[:self.nodes_init])
             if self.ddocs_num and not self.input.param('extra_verification', False):
                 self.create_ddocs_and_views()
-            self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
             for upgrade_version in self.upgrade_versions:
+                self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade to {0} version".\
+                       format(upgrade_version))
                 for server in self.servers[:self.nodes_init]:
                     remote = RemoteMachineShellConnection(server)
                     remote.stop_server()
@@ -300,8 +305,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         num_nodes_reinstall = self.input.param('num_nodes_reinstall', 1)
         stoped_nodes = self.servers[self.nodes_init - (self.nodes_init - num_nodes_reinstall):self.nodes_init]
         nodes_reinstall = self.servers[:num_nodes_reinstall]
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
         for upgrade_version in self.upgrade_versions:
+            self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade to {0} version".\
+                       format(upgrade_version))
             for server in stoped_nodes:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
@@ -332,8 +338,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.operations(self.servers[:self.nodes_init])
         if self.ddocs_num:
             self.create_ddocs_and_views()
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
         self.initial_version = self.upgrade_versions[0]
+        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
+                       format(self.initial_version))
         self.product = 'couchbase-server'
         servs_in = self.servers[self.nodes_init:self.nodes_in + self.nodes_init]
         servs_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
@@ -357,8 +364,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             seqno_comparator = '=='
         if self.ddocs_num:
             self.create_ddocs_and_views()
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
         self.initial_version = self.upgrade_versions[0]
+        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
+                       format(self.initial_version))
         self.product = 'couchbase-server'
         self._install(self.servers[self.nodes_init:self.num_servers])
         self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
@@ -382,10 +390,11 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.operations(self.servers)
         if self.ddocs_num:
             self.create_ddocs_and_views()
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
         for server in self.servers[1:]:
             self.cluster.rebalance(self.servers, [], [server])
             self.initial_version = self.upgrade_versions[0]
+            self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
+                       format(self.initial_version))
             self.product = 'couchbase-server'
             self._install([server])
             self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
@@ -405,8 +414,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.operations(self.servers[:half_node])
         if self.ddocs_num:
             self.create_ddocs_and_views()
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
         self.initial_version = self.upgrade_versions[0]
+        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
+                       format(self.initial_version))
         self.product = 'couchbase-server'
         self._install(self.servers[half_node:])
         self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
@@ -442,11 +452,11 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.operations(self.servers)
         if self.ddocs_num:
             self.create_ddocs_and_views()
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
-        self.log.info("Install new version to nodes_init:num_servers nodes")
         upgrade_servers = self.servers[self.nodes_init:self.num_servers]
         self.cluster.rebalance(self.servers, [], upgrade_servers)
         self.initial_version = self.upgrade_versions[0]
+        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
+                       format(self.initial_version))
         self._install(upgrade_servers)
         self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
         self.log.info("Rebalance in new version nodes and rebalance out some nodes")
@@ -480,9 +490,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def online_upgrade_swap_rebalance(self):
         self._install(self.servers[:self.nodes_init])
         self.operations(self.servers[:self.nodes_init])
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade")
         self.initial_version = self.upgrade_versions[0]
         self.product = 'couchbase-server'
+        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
+                       format(self.initial_version))
         self._install(self.servers[self.nodes_init:self.num_servers])
         self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
         self.swap_num_servers = self.input.param('swap_num_servers', 1)
