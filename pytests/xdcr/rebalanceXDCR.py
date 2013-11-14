@@ -22,7 +22,7 @@ class Rebalance(XDCRReplicationBaseTest):
 #        super(Rebalance, self).tearDown()
         try:
             self.log.info("==============  XDCRbasetests stats for test #{0} {1} =============="\
-                        .format(self._case_number, self._testMethodName))
+                        .format(self.case_number, self._testMethodName))
             self._end_replication_flag = 1
             if hasattr(self, '_stats_thread1'): self._stats_thread1.join()
             if hasattr(self, '_stats_thread2'): self._stats_thread2.join()
@@ -40,14 +40,14 @@ class Rebalance(XDCRReplicationBaseTest):
                 self._print_stats(self.dest_master)
             self.log.info("============== = = = = = = = = END = = = = = = = = = = ==============")
             self.log.info("==============  rebalanceXDCR cleanup was started for test #{0} {1} =============="\
-                    .format(self._case_number, self._testMethodName))
+                    .format(self.case_number, self._testMethodName))
             for nodes in [self.src_nodes, self.dest_nodes]:
                 for node in nodes:
                     BucketOperationHelper.delete_all_buckets_or_assert([node], self)
                     ClusterOperationHelper.cleanup_cluster([node], self)
                     ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self)
             self.log.info("==============  rebalanceXDCR cleanup was finished for test #{0} {1} =============="\
-                    .format(self._case_number, self._testMethodName))
+                    .format(self.case_number, self._testMethodName))
         finally:
             self.cluster.shutdown()
             self._log_finish(self)

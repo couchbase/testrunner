@@ -82,14 +82,14 @@ class XDCRBaseTest(unittest.TestCase):
             self._start_replication_time = {}
 
             self.log.info("==============  XDCRbasetests setup was started for test #{0} {1}=============="\
-                .format(self._case_number, self._testMethodName))
+                .format(self.case_number, self._testMethodName))
             if not self._input.param("skip_cleanup", False) and str(self.__class__).find('upgradeXDCR') == -1:
                 self._cleanup_previous_setup()
 
             self._init_clusters(self._disabled_consistent_view)
             self.setup_extended()
             self.log.info("==============  XDCRbasetests setup was finished for test #{0} {1} =============="\
-                .format(self._case_number, self._testMethodName))
+                .format(self.case_number, self._testMethodName))
             # # THREADS FOR STATS KEEPING
             if str(self.__class__).find('upgradeXDCR') == -1  and \
                str(self.__class__).find('tuq_xdcr') == -1:
@@ -124,7 +124,7 @@ class XDCRBaseTest(unittest.TestCase):
             test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
                     or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
             self.log.info("==============  XDCRbasetests stats for test #{0} {1} =============="\
-                    .format(self._case_number, self._testMethodName))
+                    .format(self.case_number, self._testMethodName))
             self._end_replication_flag = 1
             if str(self.__class__).find('tuq_xdcr') != -1:
                 self._do_cleanup()
@@ -150,11 +150,11 @@ class XDCRBaseTest(unittest.TestCase):
                 self._print_stats(self.dest_master)
             self.log.info("============== = = = = = = = = END = = = = = = = = = = ==============")
             self.log.info("==============  XDCRbasetests cleanup was started for test #{0} {1} =============="\
-                .format(self._case_number, self._testMethodName))
+                .format(self.case_number, self._testMethodName))
             self.teardown_extended()
             self._do_cleanup()
             self.log.info("==============  XDCRbasetests cleanup was finished for test #{0} {1} =============="\
-                .format(self._case_number, self._testMethodName))
+                .format(self.case_number, self._testMethodName))
         finally:
             self.cluster.shutdown()
             self._log_finish(self)
@@ -184,7 +184,7 @@ class XDCRBaseTest(unittest.TestCase):
                         self._xdc_replication_ops[node1][the_bucket.name].sort()
                         _mid = len(self._xdc_replication_ops[node1][the_bucket.name]) / 2
                         if len(self._xdc_replication_ops[node1][the_bucket.name]) % 2 == 0:
-                            _median_value_ = (float)(self._xdc_replication_ops[node1][the_bucket.name][_mid] + 
+                            _median_value_ = (float)(self._xdc_replication_ops[node1][the_bucket.name][_mid] +
                                                      self._xdc_replication_ops[node1][the_bucket.name][_mid - 1]) / 2
                         else:
                             _median_value_ = self._xdc_replication_ops[node1][the_bucket.name][_mid]
@@ -252,7 +252,7 @@ class XDCRBaseTest(unittest.TestCase):
         if self._doc_ops_dest is not None:
             self._doc_ops_dest = self._doc_ops_dest.split("-")
 
-        self._case_number = self._input.param("case_number", 0)
+        self.case_number = self._input.param("case_number", 0)
         self._expires = self._input.param("expires", 0)
         self._timeout = self._input.param("timeout", 60)
         self._percent_update = self._input.param("upd", 30)

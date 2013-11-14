@@ -88,11 +88,11 @@ class NegativeTests2(XDCRReplicationBaseTest):
     def setUp(self):
         super(NegativeTests2, self).setUp()
         self.log.info("==============  Negatives2 setUp was started for test #{0} {1}=============="\
-                .format(self._case_number, self._testMethodName))
+                .format(self.case_number, self._testMethodName))
 
     def tearDown(self):
         self.log.info("==============  Negatives2 tearDown was started for test #{0} {1}=============="\
-                .format(self._case_number, self._testMethodName))
+                .format(self.case_number, self._testMethodName))
         super(NegativeTests2, self).tearDown()
 
     """

@@ -31,7 +31,6 @@ class XDCRTests(QueryTests, XDCRReplicationBaseTest):
         if not self._testMethodName in ['suite_tearDown',
                                         'suite_setUp']:
             try:
-                self._case_number = self.case_number
                 XDCRReplicationBaseTest.tearDown(self)
                 return
             finally:
