@@ -181,7 +181,7 @@ class Installer(object):
             timeout = None
             if "timeout" in params:
                 timeout = int(params["timeout"])
-            builds, changes = BuildQuery().get_all_builds(timeout=timeout)
+            builds, changes = BuildQuery().get_all_builds(timeout=300)
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
             cb_releases_version = ["2.0.0-1976-rel", "2.0.1"]
             for name in names:
@@ -311,7 +311,7 @@ class MembaseServerInstaller(Installer):
                 return False
             path = server.data_path or '/tmp'
             success &= remote_client.install_server(build, path=path, vbuckets=vbuckets, \
-                                                    swappiness=swappiness,openssl=openssl)
+                                                    swappiness=swappiness, openssl=openssl)
             ready = RestHelper(RestConnection(params["server"])).is_ns_server_running(60)
             if not ready:
                 log.error("membase-server did not start...")
@@ -436,7 +436,7 @@ class CouchbaseServerInstaller(Installer):
             vbuckets = None
         if type == "windows":
             remote_client.download_binary_in_win(build.url, params["version"])
-            success = remote_client.install_server_win(build, params["version"].replace("-rel",""))
+            success = remote_client.install_server_win(build, params["version"].replace("-rel", ""))
         else:
             downloaded = remote_client.download_build(build)
             if not downloaded:
@@ -446,7 +446,7 @@ class CouchbaseServerInstaller(Installer):
             path = server.data_path or '/tmp'
             try:
                 success = remote_client.install_server(build, path=path, vbuckets=vbuckets, \
-                                                       swappiness=swappiness,openssl=openssl)
+                                                       swappiness=swappiness, openssl=openssl)
                 log.info('wait 5 seconds for membase server to start')
                 time.sleep(5)
                 if "rest_vbuckets" in params:
