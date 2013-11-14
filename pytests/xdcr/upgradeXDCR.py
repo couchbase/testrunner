@@ -32,9 +32,9 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.upgrade_versions = self.input.param('upgrade_version', '2.2.0-821-rel')
         self.upgrade_versions = self.upgrade_versions.split(";")
         self.ddocs_num_src = self.input.param("ddocs-num-src", 0)
-        self.view_num_src = self.input.param("view-per-ddoc-src", 2)
+        self.views_num_src = self.input.param("view-per-ddoc-src", 2)
         self.ddocs_num_dest = self.input.param("ddocs-num-dest", 0)
-        self.view_num_dest = self.input.param("view-per-ddoc-dest", 2)
+        self.views_num_dest = self.input.param("view-per-ddoc-dest", 2)
         self.post_upgrade_ops = self.input.param("post-upgrade-actions", None)
         self.ddocs_src = []
         self.ddocs_dest = []
@@ -155,7 +155,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         XDCRReplicationBaseTest.setUp(self)
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
         self.sleep(60)
-        bucket = self._get_bucket(self,'default', self.src_master)
+        bucket = self._get_bucket(self, 'default', self.src_master)
         self._operations()
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
         bucket = self._get_bucket(self, 'bucket0', self.src_master)
@@ -280,12 +280,13 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
             self.sleep(self.wait_timeout * 5, "Let clusters work for some time")
 
     def _operations(self):
-        if self.ddoc_num_src:
-            ddocs = self._create_views(self.ddoc_num_src, self.buckets_on_src,
+        # TODO: there are not tests with views
+        if self.ddocs_num_src:
+            ddocs = self._create_views(self.ddocs_num_src, self.buckets_on_src,
                                        self.views_num_src, self.src_master)
             self.ddocs_src.extend(ddocs)
-        if self.ddoc_num_dest:
-            ddocs = self._create_views(self.ddoc_num_dest, self.buckets_on_dest,
+        if self.ddocs_num_dest:
+            ddocs = self._create_views(self.ddocs_num_dest, self.buckets_on_dest,
                                        self.views_num_dest, self.dest_master)
             self.ddocs_dest.extend(ddocs)
 
