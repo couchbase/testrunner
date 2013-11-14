@@ -158,7 +158,8 @@ class BuildQuery(object):
         try:
             latestbuilds, latestchanges = \
                 self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds', timeout=timeout)
-        except:
+        except Exception as e:
+            print e.message
             latestbuilds, latestchanges = \
                 self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds', timeout=timeout)
 

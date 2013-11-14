@@ -2108,8 +2108,7 @@ class RemoteUtilHelper(object):
         version = RestConnection(server).get_nodes_self().version
         hostname = info.hostname[0]
         time.sleep(5)
-        if version.startswith("1.8.0") or version.startswith("1.8.1") or\
-           version.startswith("2.0.0") or version.startswith("2.0.1"):
+        if version.startswith("1.8.") or version.startswith("2.0."):
             shell.stop_couchbase()
             if info.type.lower() == "windows":
                 o = shell.execute_batch_command('ipconfig')
