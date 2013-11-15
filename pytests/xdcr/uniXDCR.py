@@ -214,30 +214,30 @@ class unidirectional(XDCRReplicationBaseTest):
         if self._failover is not None:
             if "source" in self._failover:
                 self.log.info(" Failing over Source Master Node {0}:{1}".format(self.src_master.ip, self.src_master.port))
+                prev_master_id = RestConnection(self.src_master).get_nodes_self().id
                 self.cluster.failover(self.src_nodes, [self.src_master])
                 self.log.info(" Rebalance out Source Master Node {0}".format(self.src_master.ip))
                 self.cluster.rebalance(self.src_nodes, [], [self.src_master])
-                prev_master = self.src_master
                 self.src_nodes.remove(self.src_master)
                 self.src_master = self.src_nodes[0]
                 rest = RestConnection(self.src_master)
                 master_id = rest.get_nodes_self().id
                 for bucket in self.buckets:
-                    if bucket.master_id == RestConnection(prev_master).get_nodes_self().id:
+                    if bucket.master_id == prev_master_id:
                         bucket.master_id = master_id
 
             if "destination" in self._failover:
                 self.log.info(" Failing over Destination Master Node {0}".format(self.dest_master.ip))
+                prev_master_id = RestConnection(self.dest_master).get_nodes_self().id
                 self.cluster.failover(self.dest_nodes, [self.dest_master])
                 self.log.info(" Rebalance out Destination Master Node {0}".format(self.dest_master.ip))
                 self.cluster.rebalance(self.dest_nodes, [], [self.dest_master])
-                prev_master = self.dest_master
                 self.dest_nodes.remove(self.dest_master)
                 self.dest_master = self.dest_nodes[0]
                 rest = RestConnection(self.dest_master)
                 master_id = rest.get_nodes_self().id
                 for bucket in self.buckets:
-                    if bucket.master_id == RestConnection(prev_master).get_nodes_self().id:
+                    if bucket.master_id == prev_master_id:
                         bucket.master_id = master_id
 
         self.sleep(self._timeout / 6)
