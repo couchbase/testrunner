@@ -458,22 +458,15 @@ class XDCRBaseTest(unittest.TestCase):
             if mem_quota_node < self._mem_quota_int or self._mem_quota_int == 0:
                 self._mem_quota_int = mem_quota_node
 
-    def _existing_bucket_list(self, buckets):
-        bucket_names = []
-        for bucket in buckets:
-            bucket_names.append(bucket.name)
-        return bucket_names
-
     def _create_sasl_buckets(self, server, num_buckets, server_id, bucket_size):
         bucket_tasks = []
         for i in range(num_buckets):
             name = "sasl_bucket_" + str(i + 1)
             bucket_tasks.append(self.cluster.async_create_sasl_bucket(server, name, 'password',
                                                                               bucket_size, self._num_replicas))
-            if name not in self._existing_bucket_list(self.buckets):
-                self.buckets.append(Bucket(name=name, authType="sasl", saslPassword="password",
-                                        num_replicas=self._num_replicas, bucket_size=bucket_size,
-                                        master_id=server_id))
+            self.buckets.append(Bucket(name=name, authType="sasl", saslPassword="password",
+                                   num_replicas=self._num_replicas, bucket_size=bucket_size,
+                                   master_id=server_id))
 
         for task in bucket_tasks:
             task.result(self._timeout * 10)
@@ -486,10 +479,9 @@ class XDCRBaseTest(unittest.TestCase):
                                                                                   11214 + i,
                                                                                   bucket_size,
                                                                                   self._num_replicas))
-            if name not in self._existing_bucket_list(self.buckets):
-                self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
-                                        num_replicas=self._num_replicas, bucket_size=bucket_size,
-                                        port=11214 + i, master_id=server_id))
+            self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
+                                    num_replicas=self._num_replicas, bucket_size=bucket_size,
+                                    port=11214 + i, master_id=server_id))
 
         for task in bucket_tasks:
             task.result(self._timeout * 10)
@@ -503,15 +495,13 @@ class XDCRBaseTest(unittest.TestCase):
         rest = RestConnection(master_node)
         master_id = rest.get_nodes_self().id
 
-        if self._sasl_buckets > 0:
-            self._create_sasl_buckets(master_node, self._sasl_buckets, master_id, bucket_size)
-        if self._standard_buckets > 0:
-            self._create_standard_buckets(master_node, self._standard_buckets, master_id, bucket_size)
+        self._create_sasl_buckets(master_node, self._sasl_buckets, master_id, bucket_size)
+        self._create_standard_buckets(master_node, self._standard_buckets, master_id, bucket_size)
         if self._default_bucket:
             self.cluster.create_default_bucket(master_node, bucket_size, self._num_replicas)
-            if "default" not in self._existing_bucket_list(self.buckets):
-                self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
-                                    num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
+            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+                                       num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
+
 
     def _get_bucket_size(self, mem_quota, num_buckets, ratio=2.0 / 3.0):
         return int(ratio / float(num_buckets) * float(mem_quota))
@@ -561,7 +551,6 @@ class XDCRBaseTest(unittest.TestCase):
                     replace("localhost", new_ip)
 
         return [bucket for bucket in self.buckets if bucket.master_id == master_id]
-
 
     """merge 2 different kv strores from different clsusters/buckets
        assume that all elements in the second kvs are more relevant.
@@ -973,13 +962,12 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
     def _replicate_clusters(self, src_master, dest_cluster_name):
         rest_conn_src = RestConnection(src_master)
-        for bucket in self.buckets:
+        for bucket in self._get_cluster_buckets(src_master):
             (rep_database, rep_id) = rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
                 bucket.name, dest_cluster_name, self.rep_type)
             self._start_replication_time[bucket.name] = datetime.now()
-            self.sleep(5)
-        if self.buckets:
             self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_database, rep_id))
+            self.sleep(5)
 
     def _load_gen_data(self, cname, node):
         for op_type in self._seed_data_ops_lst:
