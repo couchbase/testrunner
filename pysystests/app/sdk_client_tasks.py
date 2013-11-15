@@ -97,14 +97,14 @@ def mset(keys, template, bucket = "default", isupdate = False, password = "", ho
     try:
         cb.set_multi(msg)
     except Exception:
-        mget._conn = None
+        mset._conn = None
 
     return keys, rawTemplate
 
 @celery.task(base = PersistedCB)
 def mget(keys, bucket = "default", password = "", hosts = None):
-    mset.set_hosts(hosts)
-    cb = mset.couchbaseClient(bucket, password)
+    mget.set_hosts(hosts)
+    cb = mget.couchbaseClient(bucket, password)
 
     try:
         cb.get_multi(keys)
