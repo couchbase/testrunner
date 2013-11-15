@@ -1822,6 +1822,66 @@ class RestConnection(object):
                 raise Exception("There is not zone with name: %s in cluster" % zone_name)
         return nodes
 
+    def get_zone_uri(self):
+        zone_uri = {}
+        zone_info = self.get_all_zones_info()
+        if zone_info and len(zone_info["groups"]) >= 1:
+            for i in range(0, len(zone_info["groups"])):
+                zone_uri[zone_info["groups"][i]["name"]] = zone_info["groups"][i]["uri"]
+        return zone_uri
+
+    def shuffle_nodes_in_zones(self, moved_nodes, source_zone, target_zone):
+        # moved_nodes should be a IP list like
+        # ["192.168.171.144", "192.168.171.145"]
+        request = ""
+        for i in range(0, len(moved_nodes)):
+            moved_nodes[i] = "ns_1@" + moved_nodes[i]
+
+        all_zones = self.get_all_zones_info()
+        api = self.baseUrl + all_zones["uri"][1:]
+
+        moved_node_json = []
+        for i in range(0, len(all_zones["groups"])):
+            for node in all_zones["groups"][i]["nodes"]:
+                if all_zones["groups"][i]["name"] == source_zone:
+                    for n in moved_nodes:
+                        if n == node["otpNode"]:
+                            moved_node_json.append({"otpNode": node["otpNode"]})
+
+        zone_json = {}
+        group_json = []
+        for i in range(0, len(all_zones["groups"])):
+            node_j = []
+            zone_json["uri"] = all_zones["groups"][i]["uri"]
+            zone_json["name"] = all_zones["groups"][i]["name"]
+            zone_json["nodes"] = node_j
+
+            if not all_zones["groups"][i]["nodes"]:
+                if all_zones["groups"][i]["name"] == target_zone:
+                    for i in range(0,len(moved_node_json)):
+                        zone_json["nodes"].append(moved_node_json[i])
+                else:
+                    zone_json["nodes"] = []
+            else:
+                for node in all_zones["groups"][i]["nodes"]:
+                    if all_zones["groups"][i]["name"] == source_zone and \
+                                           node["otpNode"] in moved_nodes:
+                        pass
+                    else:
+                        node_j.append({"otpNode": node["otpNode"]})
+                if all_zones["groups"][i]["name"] == target_zone:
+                    for k in range(0, len(moved_node_json)):
+                        node_j.append(moved_node_json[k])
+                    zone_json["nodes"] = node_j
+            group_json.append({"name": zone_json["name"], "uri": zone_json["uri"], "nodes": zone_json["nodes"]})
+        request = '{{"groups": {0} }}'.format(json.dumps(group_json))
+        status, content, header = self._http_request(api, "PUT", params = request)
+        # sample request format
+        # request = ' {"groups":[{"uri":"/pools/default/serverGroups/0","nodes": [] },\
+        #                       {"uri":"/pools/default/serverGroups/c8275b7a88e6745c02815dde4a505e70","nodes": [] },\
+        #                        {"uri":"/pools/default/serverGroups/1acd9810a027068bd14a1ddd43db414f","nodes": \
+        #                               [{"otpNode":"ns_1@192.168.171.144"},{"otpNode":"ns_1@192.168.171.145"}]} ]} '
+
     def is_zone_exist(self, zone_name):
         found = False
         zones = self.get_zone_names()
