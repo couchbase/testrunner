@@ -1,9 +1,9 @@
 import copy
+from random import randrange
+
 from xdcrbasetests import XDCRReplicationBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
-from membase.helper.cluster_helper import ClusterOperationHelper
-from random import randrange
 
 
 #Assumption that at least 2 nodes on every cluster
