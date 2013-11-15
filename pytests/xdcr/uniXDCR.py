@@ -1,4 +1,5 @@
 import copy
+import time
 from random import randrange
 
 from xdcrbasetests import XDCRReplicationBaseTest
