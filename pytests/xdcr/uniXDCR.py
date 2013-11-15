@@ -193,9 +193,13 @@ class unidirectional(XDCRReplicationBaseTest):
                     self.log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                                     len(self.dest_nodes)))
 
-        self.sleep(self._timeout / 6)
+        now = time.time()
         self._async_modify_data()
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        #The failover/rebalance things at destination may take some time to finish.
+        #During the process, each vb replicator source XDCR will probe every 30 seconds,
+        #once the failover/rebalance is over and new vb map is generated, source XDCR will resume replication.
+        self.sleep(max(0, 30 + now - time.time()))
         self.verify_results()
 
     """Testing Unidirectional load( Loading only at source). Failover node at Source/Destination while
