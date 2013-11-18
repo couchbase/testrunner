@@ -183,7 +183,7 @@ class Installer(object):
                 timeout = int(params["timeout"])
             builds, changes = BuildQuery().get_all_builds(timeout=300)
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
-            cb_releases_version = ["2.0.0-1976-rel", "2.0.1"]
+            cb_releases_version = ["2.0.0", "2.0.1"]
             for name in names:
                 if version in releases_version:
                     build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
