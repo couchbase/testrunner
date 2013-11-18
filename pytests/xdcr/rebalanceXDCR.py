@@ -238,8 +238,8 @@ class Rebalance(XDCRReplicationBaseTest):
                     remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
                     tasks.extend(self._async_rebalance(self.dest_nodes, [add_node], [remove_node]))
                     self.log.info(
-                        " Starting rebalance-out node{0} at Destination cluster {1}".format(self.dest_master.ip,
-                            add_node.ip, remove_node.ip))
+                        " Starting swap-rebalance at Destination cluster {0} add node {1} and remove node {2}".format(
+                            self.dest_master.ip, add_node.ip, remove_node.ip))
                     self.dest_nodes.remove(remove_node)
                     self.dest_nodes.append(add_node)
 
@@ -295,8 +295,8 @@ class Rebalance(XDCRReplicationBaseTest):
                     dest_buckets = self._get_cluster_buckets(self.dest_master)
                     tasks.extend(self._async_rebalance(self.dest_nodes, [add_node], [self.dest_master]))
                     self.log.info(
-                        " Starting rebalance-out node{0} at Destination cluster {1}".format(self.dest_master.ip,
-                            add_node.ip, self.dest_master.ip))
+                        " Starting swap-rebalance at Destination cluster {0} add node {1} and remove node {2}".format(
+                            self.dest_master.ip, add_node.ip, self.dest_master.ip))
                     self.dest_nodes.remove(self.dest_nodes[0])
                     self.dest_nodes.append(add_node)
                     self.dest_master = add_node
@@ -366,7 +366,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
                     tasks += self._async_rebalance(self.dest_nodes, [add_node], [remove_node])
                     self.log.info(
-                        " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
+                        " Starting swap-rebalance at Destination cluster {0} add node {1} and remove node {2}".format(
                             self.dest_master.ip, add_node.ip, remove_node.ip))
                     self.dest_nodes.remove(remove_node)
 
@@ -462,7 +462,7 @@ class Rebalance(XDCRReplicationBaseTest):
                         remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
                         tasks += self._async_rebalance(self.dest_nodes, [add_node], [remove_node])
                         self.log.info(
-                            " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
+                            " Starting swap-rebalance at Destination cluster {0} add node {1} and remove node {2}".format(
                                 self.dest_master.ip, add_node.ip, remove_node.ip))
                         self.dest_nodes.remove(remove_node)
 
@@ -484,7 +484,9 @@ class Rebalance(XDCRReplicationBaseTest):
 
                 tasks = []
                 src_nodes = self.get_servers_in_cluster(self.src_master)
+                dest_nodes = self.get_servers_in_cluster(self.dest_master)
                 self._verify_stats_all_buckets(src_nodes)
+                self._verify_stats_all_buckets(dest_nodes)
                 for view in views:
                     tasks.append(
                         self.cluster.async_query_view(self.src_master, prefix + ddoc_name, view.name, query,
