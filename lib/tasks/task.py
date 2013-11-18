@@ -1573,7 +1573,7 @@ class MonitorViewQueryResultsTask(Task):
                 task_manager.schedule(self, 10)
             elif str(ex).find('timeout') != -1:
                 self.connection_timeout = self.connection_timeout * 2
-                self.log.error("view_results not ready yet ddoc=%s ," +\
+                self.log.error("view_results not ready yet ddoc=%s ," + \
                                " try again in 10 seconds... and double timeout" %
                        self.design_doc_name)
                 task_manager.schedule(self, 10)
@@ -2534,8 +2534,12 @@ class ViewQueryVerificationTask(Task):
             self.set_result(rc_status)
         except Exception, ex:
             self.state = FINISHED
-            self.log.info("FIRST 100 RESULTS for view %s : %s" % (self.view_name,
-                                                        self.expected_rows[100]))
+            try:
+                max_example_result = max(100, len(self.results['rows'] - 1))
+                self.log.info("FIRST %s RESULTS for view %s : %s" % (max_example_result , self.view_name,
+                                                                     self.results['rows'][max_example_result]))
+            except Exception, inner_ex:
+                 self.log.error(inner_ex)
             self.set_result({"passed" : False,
                              "errors" : "ERROR: %s" % ex})
 
