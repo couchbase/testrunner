@@ -631,6 +631,23 @@ class XDCRBaseTest(unittest.TestCase):
                         src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
                     dest_bucket.kvs[1] = src_bucket.kvs[1]
 
+    # CBQE-1695 Wait for replication_changes_left (outbound mutations) to be 0.
+    def __wait_for_mutation_to_replicate(self, master_node, timeout=180):
+        buckets = self._get_cluster_buckets(master_node)
+        curr_time = time.time()
+        end_time = curr_time + timeout
+        rest = RestConnection(master_node)
+        while curr_time < end_time:
+            found = 0
+            for bucket in buckets:
+                if int(rest.get_xdc_queue_size(bucket.name)) == 0:
+                    found = found + 1
+            if found == len(buckets):
+                return True
+            time.sleep(10)
+            end_time = end_time - 10
+        self.fail("Timeout occurs while waiting for mutations to be replicated")
+
         """Verify the stats at the destination cluster
         1. Data Validity check - using kvstore-node key-value check
         2. Item count check on source versus destination
@@ -652,9 +669,11 @@ class XDCRBaseTest(unittest.TestCase):
             self.log.info("and Verify xdcr replication stats at Source Cluster : {0}".format(self.src_master.ip))
             timeout = max(120, end_time - time.time())
             self._wait_for_stats_all_buckets(src_nodes, timeout=timeout)
+            self.__wait_for_mutation_to_replicate(src_nodes[0])
         timeout = max(120, end_time - time.time())
         self.log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_master.ip))
         self._wait_for_stats_all_buckets(dest_nodes, timeout=timeout)
+        self.__wait_for_mutation_to_replicate(dest_nodes[0])
         if verify_src:
             timeout = max(120, end_time - time.time())
             self._verify_stats_all_buckets(src_nodes, timeout=timeout)
