@@ -2096,8 +2096,8 @@ class ViewCompactionTask(Task):
                 self.state = FINISHED
             else:
                 #Sometimes the compacting is not started immediately
-                for i in xrange(10):
-                    time.sleep(5)
+                for i in xrange(17):
+                    time.sleep(3)
                     if self._is_compacting():
                         task_manager.schedule(self, 2)
                         return
