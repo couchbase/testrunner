@@ -1,6 +1,7 @@
 ps aux | grep [c]elery | awk '{print $2}' | xargs kill  9
 cp testcfg.py /tmp
 sudo rm -rf /usr/local/lib/python2.6/dist-packages/couchbase*
+sudo rm -rf /usr/local/lib/python2.7/dist-packages/couchbase*
 cd /tmp
 sudo rm -rf couchbase-python*
 git clone https://github.com/couchbase/couchbase-python-client.git

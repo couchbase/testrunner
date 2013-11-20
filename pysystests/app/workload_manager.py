@@ -20,10 +20,10 @@ from celery.exceptions import TimeoutError
 from celery.signals import task_postrun
 from celery.utils.log import get_task_logger
 
-
 logger = get_task_logger(__name__)
 
 
+EXCHANGE = cfg.CB_CLUSTER_TAG+"consumers"
 if cfg.SERIESLY_IP != '':
     from seriesly import Seriesly
 
@@ -34,6 +34,7 @@ When a message is received it is caached and sent to sysTestRunner for processin
 """
 @celery.task(base = PersistedMQ, ignore_result = True)
 def workloadConsumer(workloadQueue = "workload_default", templateQueue = "workload_template_default"):
+
 
     rabbitHelper = workloadConsumer.rabbitHelper
 
@@ -127,7 +128,79 @@ def sysTestRunner(workload):
         setupCacheMissQueues(workload)
 
 
+    run(workload)
+
+def run(workload):
+
     workload.active = True
+    rabbitHelper = RabbitHelper()
+    sdk_queue_key = "sdk_consumer.*"
+
+    # read doc template
+    template = Template.from_cache(str(workload.template))
+    if template is None:
+        logger.error("no doc template imported")
+        return
+
+    consumer_template = copy.deepcopy(template)
+    bucket = str(workload.bucket)
+    password = str(workload.password)
+
+    active_hosts = None
+    clusterStatus = CacheHelper.clusterstatus(cfg.CB_CLUSTER_TAG+"_status")
+    if clusterStatus is not None:
+        active_hosts = clusterStatus.get_all_hosts()
+
+
+    if workload.cc_queues is not None:
+        # override template attribute with workload
+        consumer_template.cc_queues = workload.cc_queues
+
+    if len(workload.indexed_keys) > 0:
+        template.indexed_keys = workload.indexed_keys
+
+
+    ops_sec = workload.ops_per_sec
+
+    # modify ops by number of consumers
+    num_consumers = rabbitHelper.numExchangeQueues(cfg.CB_CLUSTER_TAG, EXCHANGE)
+
+    if num_consumers == 0:
+        logger.error("No sdkclients running")
+        return
+
+    ops_sec = int(ops_sec)/num_consumers
+    create_count = int(ops_sec *  workload.create_perc/100)
+    update_count = int(ops_sec *  workload.update_perc/100)
+    get_count = int(ops_sec *  workload.get_perc/100)
+    del_count = int(ops_sec *  workload.del_perc/100)
+    exp_count = int(ops_sec *  workload.exp_perc/100)
+    consume_queue =  workload.consume_queue
+
+    ttl = workload.ttl
+    miss_queue = workload.miss_queue
+    miss_perc = workload.miss_perc
+
+    # broadcast to sdk_consumers
+    msg = {'bucket' : bucket,
+           'id' : workload.id,
+           'password' : password,
+           'template' : consumer_template.__dict__,
+           'ops_sec' : ops_sec,
+           'create_count' : create_count,
+           'update_count' : update_count,
+           'get_count' : get_count,
+           'del_count' : del_count,
+           'exp_count' : exp_count,
+           'consume_queue' : consume_queue,
+           'ttl' : ttl,
+           'miss_perc' : miss_perc,
+           'active' : True,
+           'active_hosts' : active_hosts}
+
+    rabbitHelper.putMsg('', json.dumps(msg), EXCHANGE)
+    logger.error("start task sent to %s consumers" % num_consumers)
+
 
 
 @celery.task(base = PersistedMQ, ignore_result = True)
@@ -297,29 +370,30 @@ def task_prerun_handler(workload, prevWorkload):
 """
 @celery.task(base = PersistedMQ, ignore_result = True)
 def taskScheduler():
+    pass
 
-    workloads = CacheHelper.workloads()
+   #workloads = CacheHelper.workloads()
 
-    rabbitHelper = taskScheduler.rabbitHelper
-    tasks = []
+   #rabbitHelper = taskScheduler.rabbitHelper
+   #tasks = []
 
-    for workload in workloads:
-        if workload.active:
+   #for workload in workloads:
+   #    if workload.active:
 
-            task_queue = workload.task_queue
-            num_ready_tasks = rabbitHelper.qsize(task_queue)
-            # dequeue subtasks
-            if num_ready_tasks > 0:
-                tasks = rabbitHelper.getJsonMsg(task_queue)
-                if tasks is not None and len(tasks) > 0:
+   #        task_queue = workload.task_queue
+   #        num_ready_tasks = rabbitHelper.qsize(task_queue)
+   #        # dequeue subtasks
+   #        if num_ready_tasks > 0:
+   #            tasks = rabbitHelper.getJsonMsg(task_queue)
+   #            if tasks is not None and len(tasks) > 0:
 
-                    # apply async
-                    result = TaskSet(tasks = tasks).apply_async()
+   #                # apply async
+   #                result = TaskSet(tasks = tasks).apply_async()
 
 
-            # check if more subtasks need to be queued
-            if num_ready_tasks < 10:
-                queue_op_cycles.delay(workload)
+   #        # check if more subtasks need to be queued
+   #        if num_ready_tasks < 10:
+   #            queue_op_cycles.delay(workload)
 
 
 """ scans active workloads for postcondition flags and
@@ -372,6 +446,7 @@ def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
     if create_count > 0:
         set_template = copy.deepcopy(template)
         set_template.ttl = 0 # override template level ttl
+        #rabbitHelper.putMsg('gvset', str(create_count))
         create_tasks = generate_set_tasks(set_template, create_count, bucket, password = password, hosts = active_hosts)
 
     if update_count > 0:
@@ -403,7 +478,9 @@ def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
 
     pending_tasks = create_tasks + update_tasks + get_tasks + del_tasks
     pending_tasks = json.dumps(pending_tasks)
-    rabbitHelper.putMsg(task_queue, pending_tasks)
+    #rabbitHelper.putMsg(task_queue, pending_tasks)
+
+    rabbitHelper.putMsg('gvset', pending_tasks)
 
 def _random_string(length):
     return (("%%0%dX" % (length * 2)) % random.getrandbits(length * 8)).encode("ascii")
@@ -908,7 +985,12 @@ class Workload(object):
 
         # check if workload is being deactivated
         if name == "active" and self.active == False and self.initialized:
-            self.requeueNonDeletedKeys()
+            msg = {'active' : False,
+                   'id' : self.id}
+            RabbitHelper().putMsg('', json.dumps(msg), EXCHANGE)
+            logger.error("kill task %s" % self.id)
+
+            #self.requeueNonDeletedKeys()
 
     def requeueNonDeletedKeys(self):
         rabbitHelper = RabbitHelper()

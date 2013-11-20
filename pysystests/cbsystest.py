@@ -3,6 +3,7 @@ import json
 from rabbit_helper import RabbitHelper
 import uuid
 import time
+import copy
 
 parser = argparse.ArgumentParser(description='CB System Test Tool')
 subparser = parser.add_subparsers(dest="subparsers")
@@ -55,6 +56,9 @@ def add_workload_parser(parent):
     parser.add_argument("--ttl",      default=15, help="document expires time to use when expirations set")
     parser.add_argument("--delete",  help="percentage of deletes 0-100", default=0, type=int)
     parser.add_argument("--template",help="predefined template to use", default="default")
+    parser.add_argument("--standalone",help="run without broker",action='store_true')
+    parser.add_argument("--hosts",  default=["127.0.0.1"],  nargs='+', help="couchbase hosts for use with standalone")
+    parser.add_argument("--padding",  default="", help="you can put a custom string here when using standalone loader")
     add_modifier_args(parser)
 
     parser.set_defaults(handler=run_workload)
@@ -184,10 +188,58 @@ def run_workload(args):
                  "template"  : args.template}
     cluster = args.cluster
 
-    rabbitHelper = RabbitHelper(args.broker, cluster)
-    workload['rcq'] = getResponseQueue(rabbitHelper)
-    rabbitHelper.putMsg("workload_"+cluster, json.dumps(workload))
-    receiveResponse(rabbitHelper, workload['rcq'])
+    if args.standalone:
+        from consumer import start_client_processes
+        task = argsToTask(args)
+        start_client_processes(task)
+    else:
+        rabbitHelper = RabbitHelper(args.broker, cluster)
+        workload['rcq'] = getResponseQueue(rabbitHelper)
+        rabbitHelper.putMsg("workload_"+cluster, json.dumps(workload))
+        receiveResponse(rabbitHelper, workload['rcq'])
+
+def argsToTask(args):
+
+    bucket = args.bucket
+    password = args.password
+    active_hosts = args.hosts
+    ops_sec = args.ops
+    num_consumers = 1
+
+    ops_sec = int(ops_sec)/num_consumers
+    create_count = int(ops_sec *  args.create/100)
+    update_count = int(ops_sec *  args.update/100)
+    get_count = int(ops_sec *  args.get/100)
+    del_count = int(ops_sec *  args.delete/100)
+    exp_count = int(ops_sec *  args.expire/100)
+
+    ttl = args.ttl
+    miss_perc = args.miss
+
+    # broadcast to sdk_consumers
+    msg = {'bucket' : bucket,
+           'id' : bucket,
+           'password' : password,
+           'ops_sec' : ops_sec,
+           'create_count' : create_count,
+           'update_count' : update_count,
+           'get_count' : get_count,
+           'del_count' : del_count,
+           'exp_count' : exp_count,
+           'cc_queues' : None,
+           'consume_queue' : None,
+           'ttl' : ttl,
+           'miss_perc' : miss_perc,
+           'active' : True,
+           'active_hosts' : active_hosts}
+
+    # set doc-template to this message
+    msg_copy = copy.deepcopy(msg)
+    msg_copy['template'] = {}
+    msg_copy['template']['cc_queues'] = None
+    msg_copy['template']['kv'] = msg
+
+    return msg_copy
 
 
 def import_template(args):

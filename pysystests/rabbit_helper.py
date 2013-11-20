@@ -1,4 +1,5 @@
 from librabbitmq import Connection, Message
+from pyrabbit.api import Client
 import json
 import pickle
 from celery import Task
@@ -26,14 +27,33 @@ class RabbitHelper(object):
             mq_server = cfg.RABBITMQ_IP
 
         self.connection = Connection(host= mq_server, userid="guest", password="guest", virtual_host = virtual_host)
+        self.manager = Client(mq_server+":55672", "guest", "guest")
 
 
-    def declare(self, queue, durable = True):
+    def declare(self, queue = None, durable = True):
+        res = None
         channel = self.connection.channel()
-        if not isinstance(queue,str): queue = str(queue)
-        res = channel.queue_declare(queue = queue, durable = durable, auto_delete = True)
+        if queue:
+            if not isinstance(queue,str): queue = str(queue)
+            res = channel.queue_declare(queue = queue, durable = durable, auto_delete = True)
+        else:
+            # tmp queue
+            res = channel.queue_declare(exclusive = True)
+
         channel.close()
         return res
+
+
+    def exchange_declare(self, exchange, type_='direct'):
+        channel = self.connection.channel()
+        channel.exchange_declare(exchange = exchange,
+                                type=type_)
+        channel.close()
+
+    def bind(self, exchange, queue):
+        channel = self.connection.channel()
+        channel.queue_bind(exchange = exchange, queue = queue)
+        channel.close()
 
     def delete(self, queue):
         channel = self.connection.channel()
@@ -47,11 +67,8 @@ class RabbitHelper(object):
         channel.queue_purge(queue=queue)
         channel.close()
 
-    def consume(self, callback, queue, no_ack = True):
-        channel = self.connection.channel()
-        channel.basic_consume(callback, queue = queue, no_ack = no_ack)
-        channel.start_consuming()
-        channel.close()
+    def channel(self):
+        return  self.connection.channel(), self.connection
 
 
     def qsize(self, queue):
@@ -65,10 +82,31 @@ class RabbitHelper(object):
 
         return size
 
-    def putMsg(self, queue, body):
+    def broadcastMsg(self, routing_key, body):
         channel = self.connection.channel()
-        if not isinstance(queue, str): queue = str(queue)
-        rc = channel.basic_publish(exchange = '', routing_key=queue,  body = body)
+        rc = channel.basic_publish(exchange = '', routing_key = routing_key,  body = body)
+        channel.close()
+
+    def getExchange(self, vhost, exchange):
+        return self.manager.get_exchange(vhost, exchange)
+
+    def numExchangeQueues(self, vhost, exchange):
+
+        try:
+          ex = self.getExchange(vhost, exchange)
+          return len(ex['outgoing'])
+        except Exception:
+          return 1 # todo: sometimes the broker doesn't return expected response
+
+
+    def putMsg(self, routing_key, body, exchange = ''):
+
+        channel = self.connection.channel()
+        if not isinstance(routing_key, str): routing_key= str(routing_key)
+
+        rc = channel.basic_publish(exchange = exchange,
+                                   routing_key = routing_key,
+                                   body = body)
         channel.close()
 
 

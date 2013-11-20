@@ -12,7 +12,7 @@ os.system("rm -rf celerybeat-schedule.db")
 
 
 # kill old background processes
-kill_procs=["sdkserver"]
+kill_procs=["consumer"]
 for proc in kill_procs:
     os.system("ps aux | grep %s | awk '{print $2}' | xargs kill" % proc)
 
@@ -48,5 +48,10 @@ for q_ in queues:
 # clean up cache
 CacheHelper.cacheClean()
 
-# start sdk server
-os.system("python sdkserver.py  &")
+# start local consumer
+exchange = cfg.CB_CLUSTER_TAG+"consumers"
+RabbitHelper().exchange_declare(exchange, "fanout")
+os.system("python consumer.py  &")
+os.system("ulimit -n 10240")
+
+

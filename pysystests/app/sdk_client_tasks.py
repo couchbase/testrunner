@@ -16,6 +16,7 @@ import copy
 import time
 import zlib
 import imp
+import datetime
 
 sys.path=["../lib"] + sys.path
 from mc_bin_client import MemcachedClient, MemcachedError
@@ -42,15 +43,18 @@ except ValueError:
 
 imp.reload(couchbase)
 from couchbase import Couchbase
-
+from couchbase.experimental import enable as enable_experimental
+enable_experimental()
+from gcouchbase.connection import GConnection
 
 class PersistedCB(Task):
     clientMap = {}
     _hosts = None
-    _stale_count = 0
+    #_stale_count = 0
 
     def couchbaseClient(self, bucket = "default", password = ""):
-        if bucket not in self.clientMap or self._stale_count >= 100:
+        #if bucket not in self.clientMap or self._stale_count >= 100:
+        if bucket not in self.clientMap:
             addr = self._hosts[random.randint(0,len(self._hosts) - 1)].split(':')
             host = addr[0]
             port = 8091
@@ -61,7 +65,7 @@ class PersistedCB(Task):
             self._conn = Couchbase.connect(bucket=bucket, password=password, host=host, port=port)
             self.clientMap[bucket] = self._conn
             self._stale_count = 0
-        self._stale_count = self._stale_count + 1
+        #self._stale_count = self._stale_count + 1
         return self.clientMap[bucket]
 
     def set_hosts(self, hosts):
@@ -82,6 +86,7 @@ class PersistedCB(Task):
         del self._conn
         self._conn = None
 
+
 @celery.task(base = PersistedCB)
 def mset(keys, template, bucket = "default", isupdate = False, password = "", hosts = None):
     mset.set_hosts(hosts)
@@ -94,12 +99,18 @@ def mset(keys, template, bucket = "default", isupdate = False, password = "", ho
     msg = {}
     for key in keys:
        msg[key] = rawTemplate
+
     try:
-        cb.set_multi(msg)
+        n = datetime.datetime.now()
+        #dispatch
+        #eventlet.spawn_n(cb.set_multi, msg)
+        p = datetime.datetime.now()
+        #logger.error((p-n).microseconds)
     except Exception:
         mset._conn = None
-
+ 
     return keys, rawTemplate
+
 
 @celery.task(base = PersistedCB)
 def mget(keys, bucket = "default", password = "", hosts = None):
