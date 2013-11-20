@@ -13,6 +13,7 @@ from threading import Thread
 from remote.remote_util import RemoteMachineShellConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from membase.api.exception import RebalanceFailedException
+from basetestcase import BaseTestCase
 
 class SwapRebalanceBase(unittest.TestCase):
 
@@ -63,6 +64,8 @@ class SwapRebalanceBase(unittest.TestCase):
             info = rest.get_nodes_self()
             rest.init_cluster(username=serverInfo.rest_username, password=serverInfo.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
+            if self.num_buckets > 10:
+                BaseTestCase.change_max_buckets(self)
             self.log.info("==============  SwapRebalanceBase setup was finished for test #{0} {1} =============="
                       .format(self.case_number, self._testMethodName))
             SwapRebalanceBase._log_start(self)

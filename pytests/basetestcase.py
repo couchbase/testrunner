@@ -39,6 +39,7 @@ class BaseTestCase(unittest.TestCase):
                 self.default_bucket_name = "default"
             self.standard_buckets = self.input.param("standard_buckets", 0)
             self.sasl_buckets = self.input.param("sasl_buckets", 0)
+            self.num_buckets = self.input.param("num_buckets", 0)
             self.memcached_buckets = self.input.param("memcached_buckets", 0)
             self.total_buckets = self.sasl_buckets + self.default_bucket + self.standard_buckets + self.memcached_buckets
             self.num_servers = self.input.param("servers", len(self.servers))
@@ -168,6 +169,19 @@ class BaseTestCase(unittest.TestCase):
                 # stop all existing task manager threads
                 self.cluster.shutdown()
                 self._log_finish(self)
+
+    @staticmethod
+    def change_max_buckets(self):
+        command = "curl -X POST -u {0}:{1} -d maxBucketCount={2} http://{3}:{4}/internalSettings".format\
+            (self.servers[0].rest_username,
+            self.servers[0].rest_password,
+            self.num_buckets,
+            self.servers[0].ip,
+            self.servers[0].port)
+        shell = RemoteMachineShellConnection(self.servers[0])
+        output, error = shell.execute_command_raw(command)
+        shell.log_command_output(output, error)
+        shell.disconnect()
 
     @staticmethod
     def _log_start(self):
