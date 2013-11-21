@@ -65,7 +65,7 @@ class SwapRebalanceBase(unittest.TestCase):
             rest.init_cluster(username=serverInfo.rest_username, password=serverInfo.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
             if self.num_buckets > 10:
-                BaseTestCase.change_max_buckets(self)
+                BaseTestCase.change_max_buckets(self, self.num_buckets)
             self.log.info("==============  SwapRebalanceBase setup was finished for test #{0} {1} =============="
                       .format(self.case_number, self._testMethodName))
             SwapRebalanceBase._log_start(self)

@@ -104,6 +104,10 @@ class BaseTestCase(unittest.TestCase):
                 self.fail(e)
             if self.dgm_run:
                 self.quota = 256
+            if self.total_buckets > 10:
+                self.log.info("================== changing max buckets from 10 to {0} =================".format\
+                                                            (self.total_buckets))
+                self.change_max_buckets(self, self.total_buckets)
             if self.total_buckets > 0:
                 self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
             if str(self.__class__).find('newupgradetests') == -1:
@@ -171,11 +175,11 @@ class BaseTestCase(unittest.TestCase):
                 self._log_finish(self)
 
     @staticmethod
-    def change_max_buckets(self):
+    def change_max_buckets(self, total_buckets):
         command = "curl -X POST -u {0}:{1} -d maxBucketCount={2} http://{3}:{4}/internalSettings".format\
             (self.servers[0].rest_username,
             self.servers[0].rest_password,
-            self.num_buckets,
+            total_buckets,
             self.servers[0].ip,
             self.servers[0].port)
         shell = RemoteMachineShellConnection(self.servers[0])
