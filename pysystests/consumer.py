@@ -119,10 +119,8 @@ class SDKClient(threading.Thread):
             ops_total = ops_total + self.ops_sec
             cycle = cycle + 1
 
-            if (cycle % 100) == 0:
+            if (cycle % 120) == 0: # mins
                 logging.info("[Thread %s] total ops: %s" % (self.name, ops_total))
-
-            if self.memq.qsize() > 100:
                 self.flushq()
 
         # push everything to rabbitmq
