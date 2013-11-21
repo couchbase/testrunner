@@ -1,4 +1,4 @@
-"""pushes stats from serieslydb to CBFS_HOST 
+"""pushes stats from serieslydb to CBFS_HOST
 
 This module works by collecting stats from the seriesly database specified in testcfg.py
 and furthermore uses the pandas (python data-anysis) module to store the stats into a dataframe
@@ -9,6 +9,7 @@ usage: push_stats.py [-h] --spec <dir>/<test.js>
                           --version VERSION
                           --build BUILD
                           [--name NAME]
+                          [--cluster default]
 
 Where spec name is a required argument specifying the file used to generate stats.
 
@@ -27,7 +28,7 @@ from seriesly import Seriesly, exceptions
 import requests
 
 # cbfs
-CBFS_HOST = 'http://cbfs.hq.couchbase.com:8484'
+CBFS_HOST = 'http://10.5.0.128:8484'
 
 # archives array for keeping track of files to push (archive) into cbfs
 archives = []
@@ -38,8 +39,9 @@ parser.add_argument("--spec", help="path to json file used in test", metavar="<d
 parser.add_argument("--version",  help="couchbase version.. ie (2.2.0)", required = True)
 parser.add_argument("--build",  help="build number", required = True)
 parser.add_argument("--name", default=None, help="use to override name in test spec")
+parser.add_argument("--cluster", default="default", help="should match whatever you set for CB_CLUSTER_TAG")
 
-## connect to seriesly 
+## connect to seriesly
 conn = Seriesly(cfg.SERIESLY_IP, 3133)
 
 
@@ -168,9 +170,7 @@ def storePhase(ns_dataframe, version, test, build, bucket):
     else:
       phase_dataframe = ns_dataframe[ (ns_dataframe.index < event_idx[i+1]) &\
         (ns_dataframe.index > event_idx[i])]
-
-    phase_no = i
-    dataframeToCsv(phase_dataframe, path, test, phase_no)
+    dataframeToCsv(phase_dataframe, path, test, i)
 
 def dataframeToCsv(dataframe, path, test, phase_no):
     ph_csv  = "%s/%s_phase%s.csv" % (path, test, phase_no)
@@ -186,7 +186,7 @@ def dataframeToCsv(dataframe, path, test, phase_no):
 def generateStats(version, test, build, buckets):
 
   for bucket in buckets:
-    ns_dataframe = createDataframe('ns_serverdefault%s' % bucket)
+    ns_dataframe = createDataframe('ns_server%s' % bucket)
 
     if ns_dataframe:
       storePhase(ns_dataframe, version, test, build, bucket)
@@ -244,18 +244,19 @@ def setName(name, spec):
   name = name.replace(' ','_')
   return name
 
-def getBuckets():
-  dbs = [db_name for db_name in conn.list_dbs() if db_name.find('ns_serverdefault')==0 ]
+def getBuckets(cluster = 'default'):
+  dbs = [db_name for db_name in conn.list_dbs() if db_name.find('ns_server'+cluster)==0 ]
 
   # filter out dbs with host ip/name attached
   buckets = []
   for db in dbs:
     if(len([bucket for bucket in dbs if bucket.find(db) == 0]) != 1):
-      db = db[len('ns_serverdefault'):]
+      db = db[len('ns_server'):]
       buckets.append(db)
 
   if(len(buckets) == 0):
     print "no bucket data in seriesly db"
+    print "did you use %s as your CB_CLUSTER_TAG? if try again with the --cluster arg" % default
     sys.exit(-1)
 
   return buckets
@@ -289,7 +290,8 @@ def main():
   test = setName(args.name, spec)
   build = args.build
   version = args.version
-  buckets = getBuckets()
+  cluster = args.cluster
+  buckets = getBuckets(cluster)
 
   prepareEnv(version, test, build, buckets)
   generateStats(version, test, build, buckets)
