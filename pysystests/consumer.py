@@ -463,7 +463,7 @@ def kill_nprocs(id_, kill_num = None):
         kill_num = len(procs)
 
     for i in range(kill_num):
-        p.terminate()
+        procs[i].terminate()
 
 def start_client_processes(task):
 
