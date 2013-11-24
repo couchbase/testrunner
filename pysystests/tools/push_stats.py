@@ -72,6 +72,10 @@ def getDBData(db):
 """
 def stripData(data):
   ev, _ = getSortedEventData()
+
+  if ev is None:
+    return data
+
   start_time = ev[0]
   copy = {}
 
@@ -84,7 +88,18 @@ def stripData(data):
   return copy
 
 def getSortedEventData():
-  return sortDBData(conn['event'].get_all())
+  keys = data = None
+
+  if 'event' in conn.list_dbs():
+    data = conn['event'].get_all()
+    if(len(data) > 0):
+      keys, data = sortDBData(data)
+    else:
+      print "warning: eventdb exists but is empty"
+  else:
+    print "warning: eventdb not found in seriesly db"
+
+  return keys, data
 
 
 def get_query_params(start_time):
@@ -161,16 +176,21 @@ def storePhase(ns_dataframe, version, test, build, bucket):
   columns = ns_dataframe.columns
   event_idx, _ = getSortedEventData()
 
-  # plot each phase
-  for i in xrange(len(event_idx)):
-    if i == 0:
-      phase_dataframe = ns_dataframe[ns_dataframe.index < event_idx[i+1]]
-    elif i == len(event_idx) - 1:
-      phase_dataframe = ns_dataframe[ns_dataframe.index > event_idx[i]]
-    else:
-      phase_dataframe = ns_dataframe[ (ns_dataframe.index < event_idx[i+1]) &\
-        (ns_dataframe.index > event_idx[i])]
-    dataframeToCsv(phase_dataframe, path, test, i)
+  if event_idx is None:
+    print "storing all data in single phase"
+    dataframeToCsv(ns_dataframe, path, test, 0)
+
+  else:
+    # plot each phase
+    for i in xrange(len(event_idx)):
+      if i == 0:
+        phase_dataframe = ns_dataframe[ns_dataframe.index < event_idx[i+1]]
+      elif i == len(event_idx) - 1:
+        phase_dataframe = ns_dataframe[ns_dataframe.index > event_idx[i]]
+      else:
+        phase_dataframe = ns_dataframe[ (ns_dataframe.index < event_idx[i+1]) &\
+          (ns_dataframe.index > event_idx[i])]
+      dataframeToCsv(phase_dataframe, path, test, i)
 
 def dataframeToCsv(dataframe, path, test, phase_no):
     ph_csv  = "%s/%s_phase%s.csv" % (path, test, phase_no)
@@ -245,8 +265,12 @@ def setName(name, spec):
   return name
 
 def getBuckets(cluster = 'default'):
-  dbs = [db_name for db_name in conn.list_dbs() if db_name.find('ns_server'+cluster)==0 ]
 
+  if len(conn.list_dbs()) == 0:
+    print "seriesly database is empty, check SERIESLY_IP in your testcfg.py"
+    sys.exit(-1)
+
+  dbs = [db_name for db_name in conn.list_dbs() if db_name.find('ns_server'+cluster)==0 ]
   # filter out dbs with host ip/name attached
   buckets = []
   for db in dbs:
@@ -256,7 +280,7 @@ def getBuckets(cluster = 'default'):
 
   if(len(buckets) == 0):
     print "no bucket data in seriesly db"
-    print "did you use %s as your CB_CLUSTER_TAG? if try again with the --cluster arg" % default
+    print "did you try with '--cluster %s' ?" % cfg.CB_CLUSTER_TAG
     sys.exit(-1)
 
   return buckets
