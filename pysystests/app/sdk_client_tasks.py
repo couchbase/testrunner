@@ -195,13 +195,12 @@ def mc_op_latency(op, key, val, ip, port = 8091, bucket = "default", password = 
         start = time.time()
         rc = func(*args)  # exec
         end = time.time()
-
         latency = end - start
 
     except MemcachedError as ex:
         msg = "error connecting to host %s:%s for gathering latency"\
                %  (ip, port)
-        logger.info(msg)
+        logger.error(ex)
 
     return latency
 
@@ -211,21 +210,21 @@ def getDirectMC(key, ip, port = 8091, bucket = "default", password = ""):
 
     # get initial mc client
     client = MemcachedClient(ip, int(port))
-    vbId = (((zlib.crc32(key)) >> 16) & 0x7fff) & (client.vbucket_count - 1)
 
     # get vbucket map
     rest = create_rest(ip, port)
     vbuckets = rest.get_vbuckets(bucket)
+    vbId = (((zlib.crc32(key)) >> 16) & 0x7fff) & (len(vbuckets) - 1)
 
     # find vbucket responsible to this key and mapping host
     if vbuckets is not None:
 
         vbucket = [vbucket for vbucket in vbuckets if vbucket.id == vbId]
-
         if len(vbucket) == 1:
             mc_ip, mc_port = vbucket[0].master.split(":")
             real_mc_client = MemcachedClient(mc_ip, int(mc_port))
             real_mc_client.sasl_auth_plain(bucket, password)
+            real_mc_client.vbucket_count = len(vbuckets)
 
     return real_mc_client
 

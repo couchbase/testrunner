@@ -636,7 +636,7 @@ def report_kv_latency(bucket = "default"):
             if consume_queue is not None:
                 keys = rabbitHelper.getJsonMsg(str(consume_queue), requeue = True)
                 if len(keys) > 0:
-                    get_key = str(keys[0])
+                    get_key = str(keys['start'])
 
             # collect op latency
             set_latency = client.mc_op_latency('set', key, value, ip, port, bucket, password)
