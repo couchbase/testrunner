@@ -90,9 +90,19 @@ class SDKClient(threading.Thread):
         port = 8091
         if len(addr) > 1:
             port = addr[1]
-        self.cb = GConnection(bucket=self.bucket, password = self.password, host = host, port = port)
 
         self.e = e
+        self.cb = None
+        self.isterminal = False
+
+        try:
+            self.cb = GConnection(bucket=self.bucket, password = self.password, host = host, port = port)
+        except Exception as ex:
+            logging.error("[Thread %s] cannot reach %s:%s/%s" %
+                          (self.name, host, port, self.bucket))
+            logging.error(ex)
+            self.isterminal = True
+
 
     def run(self):
 
@@ -106,7 +116,9 @@ class SDKClient(threading.Thread):
             # do an op cycle
             threads = self.do_cycle()
             gevent.joinall(threads)
-
+            if self.isterminal == True:
+                # some error occured during workload
+                exit(-1)
 
             # wait till next cycle
             end = datetime.datetime.now()
@@ -198,9 +210,9 @@ class SDKClient(threading.Thread):
 
             if ((j+1) % self.batch_size) == 0:
                 batch = keys[cursor:j+1]
+                self._mset(msg, ttl)
                 self.memq.put_nowait({'start' : batch[0],
                                       'end'  : batch[-1]})
-                self._mset(msg, ttl)
                 cursor = j + 1
                 msg = {}
 
@@ -218,6 +230,9 @@ class SDKClient(threading.Thread):
             logging.warn("temp failure during mset - cluster may be unstable")
         except TimeoutError:
             logging.warn("cluster timed trying to handle mset")
+        except Exception as ex:
+            logging.error(ex)
+            self.isterminal = True
 
     def mset_update(self, template, count):
 
@@ -236,6 +251,9 @@ class SDKClient(threading.Thread):
                     logging.warn("cluster timed out trying to handle mset - cluster may be unstable")
                 except TemporaryFailError:
                     logging.warn("temp failure during mset - cluster may be unstable")
+                except Exception as ex:
+                    logging.error(ex)
+                    self.isterminal = True
 
 
     def mget(self, count):
@@ -255,6 +273,9 @@ class SDKClient(threading.Thread):
                     logging.warn("get key not found!  %s: " % nf.key)
                 except TimeoutError:
                     logging.warn("cluster timed out trying to handle mget - cluster may be unstable")
+                except Exception as ex:
+                    logging.error(ex)
+                    self.isterminal = True
 
 
     def mdelete(self, count):
@@ -278,6 +299,9 @@ class SDKClient(threading.Thread):
                 logging.warn("get key not found!  %s: " % nf.key)
             except TimeoutError:
                 logging.warn("cluster timed out trying to handle mdelete - cluster may be unstable")
+            except Exception as ex:
+                logging.error(ex)
+                self.isterminal = True
 
         return keys_deleted
 
@@ -446,7 +470,29 @@ class SDKProcess(Process):
         for client  in self.clients:
             client.start()
 
-        self.clients[0].join()
+        # monitor running threads and restart if any die
+        while True:
+
+            i = -1
+            # if we find a dead client - restart it
+            for client in self.clients:
+                if client.is_alive() == False:
+
+                    i = i + 1
+                    logging.info("[Thread %s] died" % (client.name))
+
+                    if client.e.is_set() == False:
+
+                        new_client = SDKClient(client.name, self.task, client.e)
+                        new_client.start()
+                        self.clients.append(new_client)
+                        logging.info("[Thread %s] restarting..." % (new_client.name))
+                        break
+
+            if i > -1:
+                del self.clients[i]
+
+            time.sleep(5)
 
 
     def terminate(self):
