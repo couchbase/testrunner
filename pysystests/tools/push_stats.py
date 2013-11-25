@@ -175,7 +175,6 @@ def storePhase(ns_dataframe, version, test, build, bucket):
   phase_dataframe = None
   columns = ns_dataframe.columns
   event_idx, _ = getSortedEventData()
-
   if event_idx is None:
     print "storing all data in single phase"
     dataframeToCsv(ns_dataframe, path, test, 0)
@@ -203,13 +202,13 @@ def dataframeToCsv(dataframe, path, test, phase_no):
     archives.append(ph_csv_gz)
 
 
-def generateStats(version, test, build, buckets):
+def generateStats(version, test, build, dbs):
 
-  for bucket in buckets:
-    ns_dataframe = createDataframe('ns_server%s' % bucket)
+  for db in dbs:
+    ns_dataframe = createDataframe('%s' % db.name)
 
     if ns_dataframe:
-      storePhase(ns_dataframe, version, test, build, bucket)
+      storePhase(ns_dataframe, version, test, build, db.bucket)
 
 
 def pushStats():
@@ -234,10 +233,10 @@ def mkdir(path):
       shutil.rmtree(path)
       os.makedirs(path)
 
-def prepareEnv(version, test, build, buckets):
+def prepareEnv(version, test, build, dbs):
 
-  for bucket in buckets:
-    path = "system-test-results/%s/%s/%s/%s" % (version, test, build, bucket)
+  for db in dbs:
+    path = "system-test-results/%s/%s/%s/%s" % (version, test, build, db.bucket)
     mkdir(path)
 
 
@@ -264,34 +263,45 @@ def setName(name, spec):
   name = name.replace(' ','_')
   return name
 
-def getBuckets(cluster = 'default'):
+def getDBs(cluster = 'default'):
+
+  dbs = []
 
   if len(conn.list_dbs()) == 0:
     print "seriesly database is empty, check SERIESLY_IP in your testcfg.py"
     sys.exit(-1)
 
-  dbs = [db_name for db_name in conn.list_dbs() if db_name.find('ns_server'+cluster)==0 ]
-  # filter out dbs with host ip/name attached
-  buckets = []
-  for db in dbs:
-    if(len([bucket for bucket in dbs if bucket.find(db) == 0]) != 1):
-      db = db[len('ns_server'):]
-      buckets.append(db)
+  bucket_dbs = [db_name for db_name in conn.list_dbs() if db_name.find('ns_server'+cluster)==0 ]
 
-  if(len(buckets) == 0):
+
+  for db in bucket_dbs:
+    # filter out dbs with host ip/name attached
+    if(len([bucket for bucket in bucket_dbs if bucket.find(db) == 0]) != 1):
+      db = DB('ns_server', db)
+      dbs.append(db)
+
+  atop_dbs = [db_name for db_name in conn.list_dbs() if db_name.find('atop'+cluster)==0]
+  for db in atop_dbs:
+    dbs.append(DB('atop'+cluster,db))
+
+  latency_dbs = [db_name for db_name in conn.list_dbs() if db_name.find('latency') > 0]
+  for db in latency_dbs:
+    dbs.append(DB('',db))
+
+  if(len(dbs) == 0):
     print "no bucket data in seriesly db"
     print "did you try with '--cluster %s' ?" % cfg.CB_CLUSTER_TAG
     sys.exit(-1)
 
-  return buckets
+  return dbs
 
-def createInfoFile(version, test, build, buckets, specPath):
+def createInfoFile(version, test, build, dbs, specPath):
 
   path = "system-test-results/%s/%s/%s" % (version, test, build)
   fname = '%s/_info.js' % path
   specName = specPath.split('/')[-1]
 
-  info = {'buckets' : buckets,
+  info = {'buckets' : [db.bucket for db in dbs],
           'spec' : specName,
           'files' : archives}
 
@@ -305,6 +315,12 @@ def createInfoFile(version, test, build, buckets, specPath):
   shutil.copy(specPath, path)
   archives.append("%s/%s" % (path, specName))
 
+class DB(object):
+  def __init__(self, prefix, name):
+    self.prefix = prefix
+    self.name = name
+    self.bucket= name[len(prefix):]
+
 def main():
 
 
@@ -315,11 +331,11 @@ def main():
   build = args.build
   version = args.version
   cluster = args.cluster
-  buckets = getBuckets(cluster)
+  dbs = getDBs(cluster)
 
-  prepareEnv(version, test, build, buckets)
-  generateStats(version, test, build, buckets)
-  createInfoFile(version, test, build, buckets, specPath)
+  prepareEnv(version, test, build, dbs)
+  generateStats(version, test, build, dbs)
+  createInfoFile(version, test, build, dbs, specPath)
   pushStats()
 
 if __name__ == "__main__":
