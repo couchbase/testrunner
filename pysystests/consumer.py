@@ -42,11 +42,6 @@ PROCSPERTASK = 4
 MAXPROCESSES = 16
 PROCSSES = {}
 
-# broker init
-#conn = Connection(host= cfg.RABBITMQ_IP, userid="guest", password="guest", virtual_host = cfg.CB_CLUSTER_TAG)
-#channel = conn.channel()
-
-
 
 class SDKClient(threading.Thread):
 
@@ -70,9 +65,9 @@ class SDKClient(threading.Thread):
         self.active_hosts = task['active_hosts']
         self.batch_size = 5000
         self.memq = queue.Queue()
-        self.hotset = []
         self.ccq = None
-        self.hotkeys = []
+        self.hotkey_batches = []
+
         if task['template']['cc_queues']:
             self.ccq = str(task['template']['cc_queues'][0])  #only supporting 1 now
             RabbitHelper().declare(self.ccq)
@@ -103,6 +98,8 @@ class SDKClient(threading.Thread):
             logging.error(ex)
             self.isterminal = True
 
+        logging.info("[Thread %s] started" % (self.name))
+        logging.info(task)
 
     def run(self):
 
@@ -131,7 +128,7 @@ class SDKClient(threading.Thread):
             ops_total = ops_total + self.ops_sec
             cycle = cycle + 1
 
-            if (cycle % 120) == 0: # mins
+            if (cycle % 120) == 0: # 2 mins
                 logging.info("[Thread %s] total ops: %s" % (self.name, ops_total))
                 self.flushq()
 
@@ -141,12 +138,17 @@ class SDKClient(threading.Thread):
 
     def flushq(self):
 
+        mq = RabbitHelper()
+
         if self.ccq is not None:
 
+            logging.info("[Thread %s] flushing %s items to %s" %
+                         (self.name, self.memq.qsize(), self.ccq))
+
             # declare queue
-            mq = RabbitHelper()
             mq.declare(self.ccq)
 
+            # empty the in memory queue
             while self.memq.empty() == False:
                 try:
                     msg = self.memq.get_nowait()
@@ -155,12 +157,18 @@ class SDKClient(threading.Thread):
                 except queue.Empty:
                     pass
 
-                # hot keys
-                if len(self.hotkeys) > 0:
-                    key_map = {'start' : self.hotkeys[0],
-                               'end' : self.hotkeys[-1]}
-                    msg = json.dumps(key_map)
-                    mq.putMsg(self.ccq, msg)
+        # hot keys
+        if len(self.hotkey_batches) > 0:
+
+            # try to put onto remote queue
+            queue = self.consume_queue or self.ccq
+
+            if queue is not None:
+                key_map = {'start' : self.hotkey_batches[0][0],
+                           'end' : self.hotkey_batches[-1][-1]}
+                msg = json.dumps(key_map)
+                mq.putMsg(queue, msg)
+                self.hotkey_batches = []
 
 
     def do_cycle(self):
@@ -271,6 +279,7 @@ class SDKClient(threading.Thread):
                     self.cb.get_multi(batch)
                 except NotFoundError as nf:
                     logging.warn("get key not found!  %s: " % nf.key)
+                    pass
                 except TimeoutError:
                     logging.warn("cluster timed out trying to handle mget - cluster may be unstable")
                 except Exception as ex:
@@ -312,49 +321,30 @@ class SDKClient(threading.Thread):
         keys_retrieved = 0
         batches = []
         miss_keys = []
-        requeue = len(self.hotkeys) > 0
 
-        keys = self.getKeysFromQueue(requeue = requeue, force_stale = True)
+        num_to_miss = int( ((self.miss_perc/float(100)) * count))
+        miss_batches = self.getKeys(num_to_miss)
 
-        if requeue == False:
-            # hotkeys were taken off queue and cannot be reused
-            self.hotkeys = keys
-
-
-        if len(keys) > 0:
-            # miss% of count keys
-            num_to_miss = int( ((self.miss_perc/float(100)) * len(keys)) / float(self.op_factor))
-            miss_keys = keys[:num_to_miss]
-            batches.append(miss_keys)
-            keys_retrieved = len(miss_keys)
+        if len(self.hotkey_batches) == 0:
+            # hotkeys are taken off queue and cannot be reused
+            # until workload is flushed
+            need = count - num_to_miss
+            self.hotkey_batches = self.getKeys(need, requeue = False)
 
 
-        # use old hotkeys for rest of set
-        while keys_retrieved < count:
-
-            keys = self.hotkeys
-
-            # in case we got too many keys slice the batch
-            need = count - keys_retrieved
-            if(len(keys) > need):
-                keys = keys[:need]
-
-            keys_retrieved = keys_retrieved + len(keys)
-
-            # add to batch
-            batches.append(keys)
-
+        batches = miss_batches + self.hotkey_batches
         return batches
 
     def getKeys(self, count, requeue = True):
 
         keys_retrieved = 0
         batches = []
+        force_stale = (self.consume_queue is not None) or (self.miss_perc > 0)
 
         while keys_retrieved < count:
 
             # get keys
-            keys = self.getKeysFromQueue(requeue)
+            keys = self.getKeysFromQueue(requeue, force_stale = force_stale)
 
             if len(keys) == 0:
                 break
@@ -407,7 +397,7 @@ class SDKClient(threading.Thread):
 
     def fillq(self):
 
-        if self.ccq == None:
+        if (self.consume_queue == None) and (self.ccq == None):
             return
 
         # put about 20 items into the queue
@@ -415,6 +405,9 @@ class SDKClient(threading.Thread):
             key_map = self.getKeyMapFromRemoteQueue()
             if key_map:
                 self.memq.put_nowait(key_map)
+
+        logging.info("[Thread %s] filled %s items from  %s" %
+                     (self.name, self.memq.qsize(), self.consume_queue or self.ccq))
 
     def getKeyMapFromLocalQueue(self, requeue = True):
 
@@ -426,19 +419,28 @@ class SDKClient(threading.Thread):
                 self.memq.put_nowait(key_map)
         except queue.Empty:
             #no more items
-            if self.ccq is not None:
-                self.fillq()
+            self.fillq()
 
         return key_map
 
     def getKeyMapFromRemoteQueue(self, requeue = True):
+
         key_map = None
         mq = RabbitHelper()
-        if mq.qsize(self.ccq) > 0:
+
+        # try to fetch from consume queue and
+        # fall back to ccqueue
+        queue = self.consume_queue
+
+        if queue is None  or mq.qsize(queue) == 0:
+            queue = self.ccq
+
+        if mq.qsize(queue) > 0:
             try:
-                key_map = mq.getJsonMsg(self.ccq, requeue = requeue )
+                key_map = mq.getJsonMsg(queue, requeue = requeue )
             except Exception:
                 pass
+
         return key_map
 
 
@@ -479,15 +481,16 @@ class SDKProcess(Process):
                 if client.is_alive() == False:
 
                     i = i + 1
-                    logging.info("[Thread %s] died" % (client.name))
 
                     if client.e.is_set() == False:
-
+                        logging.info("[Thread %s] died" % (client.name))
                         new_client = SDKClient(client.name, self.task, client.e)
                         new_client.start()
                         self.clients.append(new_client)
                         logging.info("[Thread %s] restarting..." % (new_client.name))
                         break
+                    else:
+                        logging.info("[Thread %s] stopped by parent" % (client.name))
 
             if i > -1:
                 del self.clients[i]

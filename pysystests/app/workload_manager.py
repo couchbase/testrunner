@@ -124,8 +124,9 @@ def sysTestRunner(workload):
     # print out workload params
     logger.error(workload.params)
 
-    if workload.miss_perc > 0:
-        setupCacheMissQueues(workload)
+   #DEPRECIATED
+   #if workload.miss_perc > 0:
+   #     setupCacheMissQueues(workload)
 
 
     run(workload)
