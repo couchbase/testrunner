@@ -37,7 +37,7 @@ parser.add_argument("--cluster", default = cfg.CB_CLUSTER_TAG, help="the CB_CLUS
 
 # some global state
 CB_CLUSTER_TAG = cfg.CB_CLUSTER_TAG
-CLIENTSPERPROCESS = 2
+CLIENTSPERPROCESS = 8 
 PROCSPERTASK = 4
 MAXPROCESSES = 16
 PROCSSES = {}
