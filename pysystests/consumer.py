@@ -8,7 +8,7 @@ import argparse
 
 # couchbase
 from couchbase.experimental import enable as enable_experimental
-from couchbase.exceptions import NotFoundError, TemporaryFailError, TimeoutError
+from couchbase.exceptions import NotFoundError, TemporaryFailError, TimeoutError, NetworkError
 enable_experimental()
 from gcouchbase.connection import GConnection
 import testcfg as cfg
@@ -37,7 +37,7 @@ parser.add_argument("--cluster", default = cfg.CB_CLUSTER_TAG, help="the CB_CLUS
 
 # some global state
 CB_CLUSTER_TAG = cfg.CB_CLUSTER_TAG
-CLIENTSPERPROCESS = 8 
+CLIENTSPERPROCESS = 2
 PROCSPERTASK = 4
 MAXPROCESSES = 16
 PROCSSES = {}
@@ -115,6 +115,7 @@ class SDKClient(threading.Thread):
             gevent.joinall(threads)
             if self.isterminal == True:
                 # some error occured during workload
+                self.flushq(True)
                 exit(-1)
 
             # wait till next cycle
@@ -133,10 +134,10 @@ class SDKClient(threading.Thread):
                 self.flushq()
 
         # push everything to rabbitmq
-        self.flushq()
+        self.flushq(True)
 
 
-    def flushq(self):
+    def flushq(self, flush_hotkeys = False):
 
         mq = RabbitHelper()
 
@@ -158,7 +159,7 @@ class SDKClient(threading.Thread):
                     pass
 
         # hot keys
-        if len(self.hotkey_batches) > 0:
+        if flush_hotkeys and (len(self.hotkey_batches) > 0):
 
             # try to put onto remote queue
             queue = self.consume_queue or self.ccq
@@ -238,6 +239,9 @@ class SDKClient(threading.Thread):
             logging.warn("temp failure during mset - cluster may be unstable")
         except TimeoutError:
             logging.warn("cluster timed trying to handle mset")
+        except NetworkError as nx:
+            logging.error("network error")
+            logging.error(nx)
         except Exception as ex:
             logging.error(ex)
             self.isterminal = True
@@ -257,6 +261,9 @@ class SDKClient(threading.Thread):
                     logging.error("update key not found!  %s: " % nf.key)
                 except TimeoutError:
                     logging.warn("cluster timed out trying to handle mset - cluster may be unstable")
+                except NetworkError as nx:
+                    logging.error("network error")
+                    logging.error(nx)
                 except TemporaryFailError:
                     logging.warn("temp failure during mset - cluster may be unstable")
                 except Exception as ex:
@@ -282,6 +289,9 @@ class SDKClient(threading.Thread):
                     pass
                 except TimeoutError:
                     logging.warn("cluster timed out trying to handle mget - cluster may be unstable")
+                except NetworkError as nx:
+                    logging.error("network error")
+                    logging.error(nx)
                 except Exception as ex:
                     logging.error(ex)
                     self.isterminal = True
@@ -308,6 +318,9 @@ class SDKClient(threading.Thread):
                 logging.warn("get key not found!  %s: " % nf.key)
             except TimeoutError:
                 logging.warn("cluster timed out trying to handle mdelete - cluster may be unstable")
+            except NetworkError as nx:
+                logging.error("network error")
+                logging.error(nx)
             except Exception as ex:
                 logging.error(ex)
                 self.isterminal = True
@@ -501,6 +514,8 @@ class SDKProcess(Process):
     def terminate(self):
         for e in self.client_events:
             e.set()
+
+        super(SDKProcess, self).terminate()
 
 def _random_string(length):
     return (("%%0%dX" % (length * 2)) % random.getrandbits(length * 8)).encode("ascii")
