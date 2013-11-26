@@ -37,7 +37,7 @@ parser.add_argument("--cluster", default = cfg.CB_CLUSTER_TAG, help="the CB_CLUS
 
 # some global state
 CB_CLUSTER_TAG = cfg.CB_CLUSTER_TAG
-CLIENTSPERPROCESS = 2
+CLIENTSPERPROCESS = 4
 PROCSPERTASK = 4
 MAXPROCESSES = 16
 PROCSSES = {}
@@ -59,20 +59,22 @@ class SDKClient(threading.Thread):
         self.get_count = task['get_count']/self.op_factor
         self.del_count = task['del_count']/self.op_factor
         self.exp_count = task['exp_count']/self.op_factor
-        self.consume_queue = task['consume_queue']
         self.ttl = task['ttl']
         self.miss_perc = task['miss_perc']
         self.active_hosts = task['active_hosts']
         self.batch_size = 5000
         self.memq = queue.Queue()
+        self.consume_queue = task['consume_queue']
         self.ccq = None
         self.hotkey_batches = []
+
+        if self.consume_queue is not None:
+            RabbitHelper().declare(self.consume_queue)
 
         if task['template']['cc_queues']:
             self.ccq = str(task['template']['cc_queues'][0])  #only supporting 1 now
             RabbitHelper().declare(self.ccq)
 
-        self.batch_size = 1000
         if self.batch_size > self.create_count:
             self.batch_size = self.create_count
 
@@ -89,6 +91,7 @@ class SDKClient(threading.Thread):
         self.e = e
         self.cb = None
         self.isterminal = False
+        self.done = False
 
         try:
             self.cb = GConnection(bucket=self.bucket, password = self.password, host = host, port = port)
@@ -98,21 +101,21 @@ class SDKClient(threading.Thread):
             logging.error(ex)
             self.isterminal = True
 
-        logging.info("[Thread %s] started" % (self.name))
-        logging.info(task)
+        logging.info("[Thread %s] started for workload: %s" % (self.name, task['id']))
 
     def run(self):
 
         cycle = ops_total = 0
+        self.e.set()
 
-        while self.e.is_set() == False:
+        while self.e.is_set() == True:
 
             start = datetime.datetime.now()
 
 
             # do an op cycle
-            threads = self.do_cycle()
-            gevent.joinall(threads)
+            self.do_cycle()
+
             if self.isterminal == True:
                 # some error occured during workload
                 self.flushq(True)
@@ -133,8 +136,8 @@ class SDKClient(threading.Thread):
                 logging.info("[Thread %s] total ops: %s" % (self.name, ops_total))
                 self.flushq()
 
-        # push everything to rabbitmq
-        self.flushq(True)
+        self.flushq()
+        logging.info("[Thread %s] done!" % (self.name))
 
 
     def flushq(self, flush_hotkeys = False):
@@ -174,8 +177,6 @@ class SDKClient(threading.Thread):
 
     def do_cycle(self):
 
-        threads = []
-
         if self.create_count > 0:
 
             count = self.create_count
@@ -188,23 +189,17 @@ class SDKClient(threading.Thread):
                 self.mset(self.template['kv'], docs_to_expire, ttl = self.ttl)
                 count = count - docs_to_expire
 
-            t = gevent.spawn(self.mset, self.template['kv'], count)
-            threads.append(t)
+            self.mset(self.template['kv'], count)
 
         if self.update_count > 0:
-            t = gevent.spawn(self.mset_update, self.template['kv'], self.update_count)
-            threads.append(t)
+            self.mset_update(self.template['kv'], self.update_count)
 
         if self.get_count > 0:
-            t = gevent.spawn(self.mget, self.get_count)
-            threads.append(t)
+            self.mget(self.get_count)
 
         if self.del_count > 0:
-            t = gevent.spawn(self.mdelete, self.del_count)
-            threads.append(t)
+            self.mdelete(self.del_count)
 
-
-        return threads
 
     def mset(self, template, count, ttl = 0):
         msg = {}
@@ -222,13 +217,13 @@ class SDKClient(threading.Thread):
                 self._mset(msg, ttl)
                 self.memq.put_nowait({'start' : batch[0],
                                       'end'  : batch[-1]})
-                cursor = j + 1
                 msg = {}
-
-        if (cursor < j) and (len(msg) > 0):
-            self._mset(msg, ttl)
-            self.memq.put_nowait({'start' : keys[cursor],
-                                  'end'  : keys[-1]})
+                cursor = j
+            elif j == (count -1):
+                batch = keys[cursor:]
+                self._mset(msg, ttl)
+                self.memq.put_nowait({'start' : batch[0],
+                                      'end'  : batch[-1]})
 
 
     def _mset(self, msg, ttl = 0):
@@ -336,7 +331,7 @@ class SDKClient(threading.Thread):
         miss_keys = []
 
         num_to_miss = int( ((self.miss_perc/float(100)) * count))
-        miss_batches = self.getKeys(num_to_miss)
+        miss_batches = self.getKeys(num_to_miss, force_stale = True)
 
         if len(self.hotkey_batches) == 0:
             # hotkeys are taken off queue and cannot be reused
@@ -348,11 +343,10 @@ class SDKClient(threading.Thread):
         batches = miss_batches + self.hotkey_batches
         return batches
 
-    def getKeys(self, count, requeue = True):
+    def getKeys(self, count, requeue = True, force_stale = False):
 
         keys_retrieved = 0
         batches = []
-        force_stale = (self.consume_queue is not None) or (self.miss_perc > 0)
 
         while keys_retrieved < count:
 
@@ -481,6 +475,8 @@ class SDKProcess(Process):
 
     def run(self):
 
+        logging.info("[Process %s] started workload: %s" % (self.id, self.task['id']))
+
         # start process clients
         for client  in self.clients:
             client.start()
@@ -495,15 +491,16 @@ class SDKProcess(Process):
 
                     i = i + 1
 
-                    if client.e.is_set() == False:
+                    if client.e.is_set() == True:
                         logging.info("[Thread %s] died" % (client.name))
                         new_client = SDKClient(client.name, self.task, client.e)
                         new_client.start()
                         self.clients.append(new_client)
                         logging.info("[Thread %s] restarting..." % (new_client.name))
-                        break
                     else:
                         logging.info("[Thread %s] stopped by parent" % (client.name))
+
+                    break
 
             if i > -1:
                 del self.clients[i]
@@ -513,21 +510,27 @@ class SDKProcess(Process):
 
     def terminate(self):
         for e in self.client_events:
-            e.set()
+            e.clear()
 
         super(SDKProcess, self).terminate()
+        logging.info("[Process %s] terminated workload: %s" % (self.id, self.task['id']))
+
 
 def _random_string(length):
     return (("%%0%dX" % (length * 2)) % random.getrandbits(length * 8)).encode("ascii")
 
 def kill_nprocs(id_, kill_num = None):
 
-    procs = PROCSSES[id_]
-    if kill_num == None:
-        kill_num = len(procs)
+    if id_ in PROCSSES:
+        procs = PROCSSES[id_]
+        del PROCSSES[id_]
 
-    for i in range(kill_num):
-        procs[i].terminate()
+        if kill_num == None:
+            kill_num = len(procs)
+
+        for i in range(kill_num):
+            procs[i].terminate()
+
 
 def start_client_processes(task):
 
