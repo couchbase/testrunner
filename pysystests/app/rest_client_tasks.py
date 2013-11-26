@@ -336,6 +336,16 @@ def perform_admin_tasks(adminMsg, cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
             logger.error(toBeEjectedNodes)
             rest.rebalance(otpNodes=allNodes, ejectedNodes=toBeEjectedNodes)
 
+    # do a soft rest on ejectedNodes that were failed over
+    logger.error(toBeEjectedNodes)
+    restartNodes = ""
+    for node in toBeEjectedNodes:
+        if node in (failoverNodes + autoFailoverNodes):
+            if '@' in node:  # ns_X@hostname  formated
+                node = node.split('@')[1]
+            restartNodes = "%s %s" % (node, restartNodes)
+    if len(restartNodes):
+        restart(restartNodes)
 
 def monitorRebalance():
     rest = create_rest()
