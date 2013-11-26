@@ -194,7 +194,8 @@ class CacheHelper():
         objCacheKeys = [CacheHelper.WORKLOADCACHEKEY,
                         CacheHelper.BUCKETSTATUSCACHEKEY,
                         CacheHelper.QUERYCACHEKEY,
-                        CacheHelper.ACTIVETASKCACHEKEY]
+                        CacheHelper.ACTIVETASKCACHEKEY,
+                        CacheHelper.CLUSTERSTATUSKEY]
 
         for cacheKey in objCacheKeys:
             ObjCacher().clear(cacheKey)
