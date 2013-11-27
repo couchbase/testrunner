@@ -3,6 +3,7 @@ from memcached.helper.data_helper import MemcachedClientHelper
 from membase.api.rest_client import RestConnection
 from basetestcase import BaseTestCase
 from couchbase.document import View
+from couchbase.documentgenerator import BlobGenerator
 
 
 class CCCP(BaseTestCase):
@@ -53,6 +54,23 @@ class CCCP(BaseTestCase):
         for task in tasks:
             task.result()
 
+    def test_not_my_vbucket_config(self):
+        self.gen_load = BlobGenerator('cccp', 'cccp-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, self.gen_load, "create", 0)
+        self.cluster.rebalance(self.servers[:self.nodes_init],
+                               self.servers[self.nodes_init:self.nodes_init + 1], [])
+        self.nodes_init = self.nodes_init + 1
+        for bucket in self.buckets:
+            while self.gen_load.has_next():
+                key, _ = self.gen_load.next()
+                try:
+                    self.clients[bucket.name].get(key)
+                except Exception, ex:
+                    self.log.info("Config in exception is correct. Bucket %s, key %s" % (bucket.name, key))
+                    config = str(ex)[str(ex).find("Not my vbucket':") + 16 : str(ex).find("for vbucket")]
+                    config = json.loads(config)
+                    self.verify_config(config, bucket)
+
     def verify_config(self, config_json, bucket):
         expected_params = ["nodeLocator", "rev", "uuid", "bucketCapabilitiesVer",
                            "bucketCapabilities"]
@@ -83,13 +101,17 @@ class CCCP(BaseTestCase):
             return tasks
         if self.ops == 'rebalance_in':
             tasks.append(self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                self.servers[self.nodes_init:self.nodes_in], []))
+                                                self.servers[self.nodes_init:self.nodes_init + self.nodes_in], []))
+            self.nodes_init += self.nodes_in
         elif self.ops == 'rebalance_out':
             tasks.append(self.cluster.async_rebalance(self.servers[:self.nodes_init],
                     [], self.servers[(self.nodes_init - self.nodes_out):self.nodes_init]))
+            self.nodes_init -= self.nodes_out
         elif self.ops == 'failover':
             tasks.append(self.cluster.failover(self.servers[:self.nodes_init],
-                    [], self.servers[(self.nodes_init - self.nodes_out):self.nodes_init]))
+                    self.servers[(self.nodes_init - self.nodes_out):self.nodes_init]))
+            self.sleep(10)
+            self.nodes_init -= self.nodes_out
         if self.ops == 'create_views':
             views_num = 10
             views = self.make_default_views(self.view_name, views_num, different_map=True)
