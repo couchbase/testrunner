@@ -101,29 +101,30 @@ class HostnameTests(BaseTestCase):
 
 
     @staticmethod
-    def convert_to_hostname(self, servers_with_hostnames):
+    def convert_to_hostname(self, servers_with_hostnames, username='Administrator', password='password'):
         try:
             hostname = []
             for server in servers_with_hostnames:
                 shell = RemoteMachineShellConnection(server)
                 info = shell.extract_remote_info()
                 domain = ''.join(info.domain[0])
+                if not domain:
+                    output = shell.execute_command_raw('nslookup %s' % info.hostname[0])
+                    print output
+                    self.fail("Domain is not defined, couchbase cannot be configured correctly. NOT A BUG. CONFIGURATION ISSUE")
                 hostname.append(info.hostname[0] + "." + domain)
                 master_rest = RestConnection(server)
-                var = master_rest.get_nodes_self().hostname
-                flag = True if server.ip in var else False
-                self.log.info("get_node_self function returned : {0}".format(var))
-                if flag:
+                current_hostname = master_rest.get_nodes_self().hostname
+                self.log.info("get_node_self function returned : {0}".format(current_hostname))
+                if server.ip in current_hostname:
                     self.log.info("Node {0} is referred via IP. Need to be referred with hostname. Changing the name of the node!!".format(server.ip))
                     version = RestConnection(server).get_nodes_self().version
                     if version.startswith("1.8.1") or version.startswith("2.0.0") or version.startswith("2.0.1"):
                         RemoteUtilHelper.use_hostname_for_server_settings(server)
-                        obj = RestConnection(server)
-                        obj.init_cluster()
+                        master_rest.init_cluster()
                     else:
-                        obj = RestConnection(server)
-                        obj.init_cluster()
-                        var = master_rest.rename_node(username='Administrator', password='password', port='', hostname=hostname[-1])
+                        master_rest.init_cluster()
+                        master_rest.rename_node(username=username, password=password, port='', hostname=hostname[-1])
                 else:
                     self.log.info("Node {0} already referred via hostname. No need to convert the name".format(server.ip))
         finally:
