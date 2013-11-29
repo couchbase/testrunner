@@ -171,7 +171,7 @@ class BaseTestCase(unittest.TestCase):
                 self.case_number += 1000
             finally:
                 # stop all existing task manager threads
-                self.cluster.shutdown()
+                self.cluster.shutdown(force=True)
                 self._log_finish(self)
 
     @staticmethod
