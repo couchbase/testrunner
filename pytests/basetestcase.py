@@ -671,12 +671,9 @@ class BaseTestCase(unittest.TestCase):
                 ClusterOperationHelper.wait_for_ns_servers_or_assert(
                                             [server], self, wait_time=wait_time - num * 10, wait_if_warmup=wait_if_warmup)
                 break
-            except Exception, e:
-                if e.message.find('couchApiBase doesn') != -1 or e.message.find('unable to reach') != -1:
-                    num += 1
-                    self.sleep(10)
-                else:
-                    raise e
+            except ServerUnavailableException:
+                num += 1
+                self.sleep(10)
 
     def wait_service_started(self, server, wait_time=120):
         shell = RemoteMachineShellConnection(server)
