@@ -339,12 +339,12 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
                         self.dest_nodes.extend(free_servs[:self.nodes_in])
                 elif op == 'rebalanceout':
                     if cluster == 'src':
-                        self.cluster.rebalance(self.src_nodes, self.src_nodes[self.nodes_out:], [])
-                        for node in self.src_nodes[self.nodes_out:]:
+                        self.cluster.rebalance(self.src_nodes, [], self.src_nodes[:self.nodes_out])
+                        for node in self.src_nodes[:self.nodes_out]:
                             self.src_nodes.remove(node)
                     elif cluster == 'dest':
-                        self.cluster.rebalance(self.dest_nodes, self.dest_nodes[self.nodes_out:], [])
-                        for node in self.dest_nodes[self.nodes_out:]:
+                        self.cluster.rebalance(self.dest_nodes, [], self.dest_nodes[:self.nodes_out])
+                        for node in self.dest_nodes[:self.nodes_out]:
                             self.dest_nodes.remove(node)
                 if op == 'create_index':
                     ddoc_num = 1
