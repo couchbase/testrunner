@@ -160,14 +160,14 @@ class RestHelper(object):
                     continue
                 while is_pid_blocked:
                     log.info('Index for ddoc %s is blocked, server %s' % (ddoc_name, server.ip))
-                    rest._wait_for_task_pid(old_pid, end_time, ddoc_name)
+                    self._wait_for_task_pid(old_pid, end_time, ddoc_name)
                     old_pid, is_pid_blocked = rest._get_indexer_task_pid(ddoc_name)
                     if time.time() > end_time:
                         log.error("INDEX IS STILL BLOKED node %s ddoc % pid %" % (server, ddoc_name, old_pid))
                         break
                 if old_pid:
                     log.info('Index for ddoc %s is running, server %s' % (ddoc_name, server.ip))
-                    rest._wait_for_task_pid(old_pid, end_time, ddoc_name)
+                    self._wait_for_task_pid(old_pid, end_time, ddoc_name)
             except Exception, ex:
                 log.error('unable to check index on server %s because of %s' % (server.ip, str(ex)))
 
