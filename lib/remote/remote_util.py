@@ -73,11 +73,26 @@ class RemoteMachineHelper(object):
         return True
 
     def is_process_running(self, process_name):
-        processes = self.remote_shell.get_running_processes()
-        for process in processes:
-            if process.name == process_name:
-                return process
-        return None
+        if getattr(self.remote_shell, "info", None) is None:
+            self.remote_shell.info = self.remote_shell.extract_remote_info()
+
+        if self.remote_shell.info.type.lower() == 'windows':
+             output, error = self.remote_shell.execute_command('tasklist| grep {0}'.format(process_name), debug=False)
+             if error or output == [""]:
+                 return None
+             words = output[0].split(" ")
+             words = filter(lambda x: x != "", words)
+             process = RemoteMachineProcess()
+             process.pid = words[1]
+             process.name = words[0]
+             print "process is running: ", words
+             return process
+        else:
+            processes = self.remote_shell.get_running_processes()
+            for process in processes:
+                if process.name == process_name:
+                    return process
+            return None
 
 
 class RemoteMachineShellConnection:
@@ -262,6 +277,9 @@ class RemoteMachineShellConnection:
             self.info = self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
+                if not (RemoteMachineHelper(self).is_process_running('memcached') or \
+                        RemoteMachineHelper(self).is_process_running('erl')):
+                    return False
                 return True
         elif self.info.distribution_type.lower() == 'mac':
             output, error = self.execute_command('ls %s%s' % (testconstants.MAC_CB_PATH, testconstants.VERSION_FILE))

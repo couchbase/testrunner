@@ -588,6 +588,14 @@ class InstallerJob(object):
         for installer, _params in installers:
             try:
                 installer.uninstall(_params)
+                if "product" in params and params["product"] in ["couchbase", "couchbase-server", "cb"]:
+                    success = True
+                    for server in servers:
+                        success &= not RemoteMachineShellConnection(server).is_couchbase_installed()
+                    if not success:
+                        print "thread {0} finished. Server:{1}.Couchbase is still" +\
+                              " installed after uninstall".format(t.name, server)
+                        return success
                 print "uninstall succeeded"
             except Exception as ex:
                 print "unable to complete the uninstallation: ", ex
@@ -629,6 +637,14 @@ class InstallerJob(object):
         for t in uninstall_threads:
             t.join()
             print "thread {0} finished".format(t.name)
+        if "product" in params and params["product"] in ["couchbase", "couchbase-server", "cb"]:
+            success = True
+            for server in servers:
+                success &= not RemoteMachineShellConnection(server).is_couchbase_installed()
+            if not success:
+                print "Server:{0}.Couchbase is still" +\
+                      " installed after uninstall".format(server)
+                return success
         for t in install_threads:
             t.start()
         for t in install_threads:
