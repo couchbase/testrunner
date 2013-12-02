@@ -169,7 +169,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         if "dest" in upgrade_nodes :
             nodes_to_upgrade += self.dest_nodes
 
-        self.sleep(60)
+        self.sleep(120)
         self._wait_for_replication_to_catchup()
         self._offline_upgrade(nodes_to_upgrade)
 
@@ -182,7 +182,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         bucket = self._get_bucket(self, 'default', self.src_master)
         self._load_bucket(bucket, self.src_master, gen_create2, 'create', exp=0)
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
-        self.sleep(60)
+        self.sleep(120)
         self._post_upgrade_ops()
         self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
         self._verify(self.gen_create.end + gen_create2.end + gen_create3.end)
