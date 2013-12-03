@@ -1110,7 +1110,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             raise ValueError(
                 "Verification process not completed after waiting for {0} seconds.".format(self._poll_timeout))
 
-    def _verify_all_buckets(self, server, kv_store=1, timeout=None, max_verify=None, only_store_hash=True, batch_size=1000):
+    def _verify_all_buckets(self, server, kv_store=1, timeout=1800, max_verify=None, only_store_hash=True, batch_size=1000):
         def verify():
             try:
                 tasks = []
