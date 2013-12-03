@@ -331,12 +331,18 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
                 if op == 'rebalancein':
                     free_servs = [ser for ser in self.servers
                                   if not (ser in self.src_nodes or ser in self.dest_nodes)]
+                    servers_to_add = free_servs[:self.nodes_in]
+                    if servers_to_add:
+                        temp = self.initial_version
+                        self.initial_version = self.upgrade_versions[0]
+                        self._install(servers_to_add)
+                        self.initial_version = temp
                     if cluster == 'src':
-                        self.cluster.rebalance(self.src_nodes, free_servs[:self.nodes_in], [])
-                        self.src_nodes.extend(free_servs[:self.nodes_in])
+                        self.cluster.rebalance(self.src_nodes, servers_to_add, [])
+                        self.src_nodes.extend(servers_to_add)
                     elif cluster == 'dest':
-                        self.cluster.rebalance(self.dest_nodes, free_servs[:self.nodes_in], [])
-                        self.dest_nodes.extend(free_servs[:self.nodes_in])
+                        self.cluster.rebalance(self.dest_nodes, servers_to_add, [])
+                        self.dest_nodes.extend(servers_to_add)
                 elif op == 'rebalanceout':
                     if cluster == 'src':
                         self.cluster.rebalance(self.src_nodes, [], self.src_nodes[:self.nodes_out])
