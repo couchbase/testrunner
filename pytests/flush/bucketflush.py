@@ -66,18 +66,20 @@ class BucketFlushTests(BaseTestCase):
 
     """Test case to check client behavior with bucket flush while loading/updating/deleting data"""
     def bucketflush_with_data_ops(self):
-
-        with self.assertRaises(MemcachedError) as exp:
+        try:
             tasks = self._async_load_all_buckets(self.master, self.gen_create, self.data_op, 0)
-
             for bucket in self.buckets:
                 self.cluster.bucket_flush(self.master, bucket)
-
             for task in tasks:
                 task.result()
-        memcached_exception = exp.exception
-        self.assertEqual(memcached_exception.status, 134, msg="Unexpected Exception - {0}".format(memcached_exception))
-        self.log.info("Expected Exception Caught - {0}".format(memcached_exception))
+        except MemcachedError as exp:
+            self.assertEqual(exp.status, 134, msg="Unexpected Exception - {0}".format(exp))
+            self.log.info("Expected Exception Caught - {0}".format(exp))
+        except Exception as exp:
+            self.log.info("Unxpected Exception Caught - {0}".format(exp))
+            self.fail("Unexpected exception caught- {0}".format(exp))
+        else:
+            self.fail("All buckets may not have been flushed")
 
     """Test case to check client behavior with bucket flush while loading/updating/deleting data via Moxi client(ascii,non-ascii)"""
     def bucketflush_with_data_ops_moxi(self):
@@ -97,8 +99,7 @@ class BucketFlushTests(BaseTestCase):
                 client = MemcachedClientHelper.proxy_client(server, bucket.name, force_ascii=use_ascii)
             except Exception as ex:
                 self.log.error("unable to create memcached client due to {0}..".format(ex))
-
-        with self.assertRaises(MemcachedError) as exp:
+        try:
             for itr in xrange(items):
                 key = 'bucketflush' + str(itr)
                 value = 'bucketflush-' + str(itr)
@@ -106,8 +107,11 @@ class BucketFlushTests(BaseTestCase):
                     client.set(key, 0, 0, value)
                 elif data_op == "delete":
                     client.delete(key)
-
-        memcached_exception = exp.exception
-        self.assertEqual(memcached_exception.status, 134, msg="Unexpected Exception - {0}".format(memcached_exception))
-        self.log.info("Expected Exception Caught - {0}".format(memcached_exception))
-
+        except MemcachedError as exp:
+               self.assertEqual(exp.status, 134, msg="Unexpected Exception - {0}".format(exp))
+               self.log.info("Expected Exception Caught - {0}".format(exp))
+        except Exception as exp:
+               self.log.info("Unxpected Exception Caught - {0}".format(exp))
+               self.fail("Unexpected exception caught- {0}".format(exp))
+        else:
+               self.fail("All buckets may not have been flushed")
