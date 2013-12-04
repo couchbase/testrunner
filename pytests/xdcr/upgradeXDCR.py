@@ -306,9 +306,10 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
                     views = self.make_default_views(self.default_view_name, views_num,
                                                     self.is_dev_ddoc, different_map=True)
                     ddoc = DesignDocument(self.default_view_name + str(i), views)
-                    tasks = self.async_create_views(server, ddoc.name, views, bucket=bucket)
+                    bucket_server = self._get_bucket(self, bucket, server)
+                    tasks = self.async_create_views(server, ddoc.name, views, bucket=bucket_server)
                     for task in tasks:
-                        task.result()
+                        task.result(timeout=60)
                     ddocs.append(ddoc)
         return ddocs
 
