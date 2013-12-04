@@ -105,6 +105,20 @@ class QueriesViewsTests(QueryTests):
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                 self.run_cbq_query()
 
+    def test_explain_index_aggr_gn(self):
+        for bucket in self.buckets:
+            index_name = "my_index"
+            try:
+                self.query = "CREATE INDEX %s ON %s(name) " % (index_name, bucket.name)
+                self.run_cbq_query()
+                self.query = "EXPLAIN SELECT COUNT(name) FROM %s" % (bucket.name)
+                res = self.run_cbq_query()
+                self.assertTrue(res["resultset"][0]["input"]["input"]["input"]["index"] == index_name,
+                                "Index should be %s, but is: %s" % (index_name,res["resultset"]))
+            finally:
+                self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                self.run_cbq_query()
+
     def _verify_view_is_present(self, view_name, bucket):
         ddoc, _ = RestConnection(self.master).get_ddoc(bucket.name, "ddl_%s" % view_name)
         self.assertTrue(view_name in ddoc["views"], "View %s wasn't created" % view_name)
