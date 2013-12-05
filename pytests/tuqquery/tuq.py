@@ -1035,8 +1035,8 @@ class QueryTests(BaseTestCase):
                          "HAVING SUM(employees.test_rate) > 0 and " +\
                          "SUM(test_rate) < 100000"
             actual_result = self.run_cbq_query()
-            actual_result = [{"join_mo" : doc["join_mo"], "rate" : int(doc["rate"])} for doc in actual_result]
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['join_mo']))
+            actual_result = [{"join_mo" : doc["join_mo"], "rate" : int(doc["rate"])} for doc in actual_result['resultset']]
+            actual_result = sorted(actual_result, key=lambda doc: (doc['join_mo']))
             tmp_groups = set([doc['join_mo'] for doc in full_list])
             expected_result = [{"join_mo" : group,
                                 "rate" : int(math.fsum([doc['test_rate']
@@ -1080,7 +1080,11 @@ class QueryTests(BaseTestCase):
                          "HAVING AVG(employees.test_rate) > 0 and " +\
                          "SUM(test_rate) < 100000"
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['join_mo']))
+
+            actual_result = [{'join_mo' : doc['join_mo'],
+                              'rate' : round(doc['rate'], 2)}
+                             for doc in actual_result['resultset']]
+            actual_result = sorted(actual_result, key=lambda doc: (doc['join_mo']))
             tmp_groups = set([doc['join_mo'] for doc in full_list])
             expected_result = [{"join_mo" : group,
                                 "rate" : math.fsum([doc['test_rate']
@@ -1104,6 +1108,9 @@ class QueryTests(BaseTestCase):
                                             for doc in full_list
                                             if doc['join_mo'] == group and\
                                             doc['job_title'] == 'Sales'])  < 100000]
+            expected_result = [{'join_mo' : doc['join_mo'],
+                              'rate' : round(doc['rate'], 2)}
+                             for doc in expected_result]
             expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
             self._verify_results(actual_result, expected_result)
 
@@ -1168,11 +1175,14 @@ class QueryTests(BaseTestCase):
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_list = self.run_cbq_query()
             actual_result = []
-            for key, value in actual_list['resultset']:
-                if isinstance(value, list):
-                    actual_result.append({key : value.sort()})
-                else:
-                    actual_result.append({key : value})
+            for item in actual_list['resultset']:
+                for key, value in item.iteritems():
+                    curr_item = {}
+                    if isinstance(value, list):
+                        curr_item[key] = sorted(value)
+                    else:
+                        curr_item[key] = value
+                actual_result.append(curr_item)
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
 
             tmp_groups = set([doc['job_title'] for doc in full_list])
@@ -1181,11 +1191,14 @@ class QueryTests(BaseTestCase):
                                                if x["job_title"] == group])}
                                for group in tmp_groups]
             expected_result = []
-            for key, value in expected_list:
-                if isinstance(value, list):
-                    expected_result.append({key : value.sort()})
-                else:
-                    expected_result.append({key : value})
+            for item in expected_list:
+                for key, value in item.iteritems():
+                    curr_item = {}
+                    if isinstance(value, list):
+                        curr_item[key] = sorted(value)
+                    else:
+                        curr_item[key] = value
+                expected_result.append(curr_item)
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
@@ -1196,11 +1209,14 @@ class QueryTests(BaseTestCase):
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_list = self.run_cbq_query()
             actual_result = []
-            for key, value in actual_list['resultset']:
-                if isinstance(value, list):
-                    actual_result.append({key : value.sort()})
-                else:
-                    actual_result.append({key : value})
+            for item in actual_list['resultset']:
+                for key, value in item.iteritems():
+                    curr_item = {}
+                    if isinstance(value, list):
+                        curr_item[key] = sorted(value)
+                    else:
+                        curr_item[key] = value
+                actual_result.append(curr_item)
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
 
             tmp_groups = set([doc['job_title'] for doc in full_list])
@@ -1209,11 +1225,14 @@ class QueryTests(BaseTestCase):
                                                if x["job_title"] == group]}
                                for group in tmp_groups]
             expected_result = []
-            for key, value in expected_list:
-                if isinstance(value, list):
-                    expected_result.append({key : value.sort()})
-                else:
-                    expected_result.append({key : value})
+            for item in expected_list:
+                for key, value in item.iteritems():
+                    curr_item = {}
+                    if isinstance(value, list):
+                        curr_item[key] = sorted(value)
+                    else:
+                        curr_item[key] = value
+                expected_result.append(curr_item)
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
