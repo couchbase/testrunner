@@ -1611,8 +1611,10 @@ class QueryTests(BaseTestCase):
         return all_docs_list
 
     def _verify_results(self, actual_result, expected_result):
-        self.assertEquals(len(actual_result), len(expected_result),
-                          "Results are incorrect.Actual num %s. Expected num: %s.\n" % (
+        if len(actual_result) != len(expected_result):
+            missing, extra = self.check_missing_and_extra(actual_result, expected_result)
+            self.log.error("Missing items: %s.\n Extra items: %s" % (missing, extra))
+            self.fail("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
                                             len(actual_result), len(expected_result)))
         if self.max_verify is not None:
             actual_result = actual_result[:self.max_verify]
@@ -1623,3 +1625,14 @@ class QueryTests(BaseTestCase):
         self.assertTrue(actual_result == expected_result,
                           msg % (actual_result[:100],actual_result[-100:],
                                  expected_result[:100],expected_result[-100:]))
+
+    def check_missing_and_extra(self, actual, expected):
+        missing = []
+        extra = []
+        for item in actual:
+            if not (item in expected):
+                 extra.append(item)
+        for item in expected:
+            if not (item in actual):
+                missing.append(item)
+        return missing, extra
