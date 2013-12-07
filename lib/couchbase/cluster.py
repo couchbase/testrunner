@@ -137,9 +137,9 @@ class Cluster(object):
         return _task
 
     def async_verify_data(self, server, bucket, kv_store, max_verify=None,
-                          only_store_hash=True, batch_size=1, replica_to_read=None):
+                          only_store_hash=True, batch_size=1, replica_to_read=None, timeout_sec=5):
         if batch_size > 1:
-            _task = BatchedValidateDataTask(server, bucket, kv_store, max_verify, only_store_hash, batch_size)
+            _task = BatchedValidateDataTask(server, bucket, kv_store, max_verify, only_store_hash, batch_size, timeout_sec)
         else:
             _task = ValidateDataTask(server, bucket, kv_store, max_verify, only_store_hash, replica_to_read)
         self.task_manager.schedule(_task)

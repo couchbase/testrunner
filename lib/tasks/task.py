@@ -960,13 +960,14 @@ class ValidateDataTask(GenericLoadingTask):
 
 
 class BatchedValidateDataTask(GenericLoadingTask):
-    def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=True, batch_size=100):
+    def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=True, batch_size=100, timeout_sec=5):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
         self.valid_keys, self.deleted_keys = kv_store.key_set()
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
         self.itr = 0
         self.max_verify = self.num_valid_keys + self.num_deleted_keys
+        self.timeout_sec = timeout_sec
         self.only_store_hash = only_store_hash
         if max_verify is not None:
             self.max_verify = min(max_verify, self.max_verify)
@@ -998,7 +999,7 @@ class BatchedValidateDataTask(GenericLoadingTask):
     def _check_valid_keys(self, keys):
         partition_keys_dic = self.kv_store.acquire_partitions(keys)
         try:
-            key_vals = self.client.getMulti(keys, parallel=True)
+            key_vals = self.client.getMulti(keys, parallel=True, timeout_sec=self.timeout_sec)
         except ValueError, error:
             self.state = FINISHED
             self.set_exception(error)

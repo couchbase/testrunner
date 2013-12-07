@@ -653,8 +653,7 @@ class XDCRBaseTest(unittest.TestCase):
         2. Item count check on source versus destination
         3. For deleted and updated items, check the CAS/SeqNo/Expiry/Flags for same key on source/destination
         * Make sure to call expiry_pager function to flush out temp items(deleted/expired items)"""
-    def verify_xdcr_stats(self, src_nodes, dest_nodes, verify_src=False):
-        timeout = 500
+    def verify_xdcr_stats(self, src_nodes, dest_nodes, verify_src=False, timeout=500):
         if self._failover is not None or self._rebalance is not None:
             timeout *= 2
 
@@ -1110,13 +1109,13 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             raise ValueError(
                 "Verification process not completed after waiting for {0} seconds.".format(self._poll_timeout))
 
-    def _verify_all_buckets(self, server, kv_store=1, timeout=1800, max_verify=None, only_store_hash=True, batch_size=1000):
+    def _verify_all_buckets(self, server, kv_store=1, timeout=None, max_verify=None, only_store_hash=True, batch_size=1000):
         def verify():
             try:
                 tasks = []
                 buckets = self._get_cluster_buckets(server)
                 for bucket in buckets:
-                    tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size))
+                    tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size, timeout_sec=60))
                 for task in tasks:
                     task.result(timeout)
                 return True
