@@ -16,15 +16,15 @@ class QueriesOpsTests(QueryTests):
         super(QueriesOpsTests, self).suite_setUp()
 
     def tearDown(self):
-        super(QueriesOpsTests, self).tearDown()
-        #stop rebalance if any
         rest = RestConnection(self.master)
         if rest._rebalance_progress_status() == 'running':
             self.log.warning("rebalancing is still running, test should be verified")
             stopped = rest.stop_rebalance()
             self.assertTrue(stopped, msg="unable to stop rebalance")
+        super(QueriesOpsTests, self).tearDown()
         ClusterOperationHelper.cleanup_cluster(self.servers)
         self.sleep(10)
+
 
     def suite_tearDown(self):
         super(QueriesOpsTests, self).suite_tearDown()
