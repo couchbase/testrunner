@@ -25,7 +25,7 @@ class QueriesViewsTests(QueryTests):
                                     view_name, bucket.name)
             actual_result = self.run_cbq_query()
             self._verify_results(actual_result['resultset'], [])
-            self._verify_view_is_present(view_name)
+            self._verify_view_is_present(view_name, bucket)
             self.assertTrue(self._is_index_in_list(bucket, view_name), "Index is not in list")
             self.query = "DROP INDEX %s.%s" % (bucket.name, view_name)
             actual_result = self.run_cbq_query()
@@ -37,7 +37,7 @@ class QueriesViewsTests(QueryTests):
             self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
             actual_result = self.run_cbq_query()
             self._verify_results(actual_result['resultset'], [])
-            self._verify_view_is_present("#primary")
+            self._verify_view_is_present("#primary", bucket)
             self.assertTrue(self._is_index_in_list(bucket, "#primary"), "Index is not in list")
 
     def test_create_delete_index_with_query(self):
@@ -105,8 +105,8 @@ class QueriesViewsTests(QueryTests):
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                 self.run_cbq_query()
 
-    def _verify_view_is_present(self, view_name):
-        ddoc, _ = RestConnection(self.master).get_ddoc("default", "ddl_%s" % view_name)
+    def _verify_view_is_present(self, view_name, bucket):
+        ddoc, _ = RestConnection(self.master).get_ddoc(bucket.name, "ddl_%s" % view_name)
         self.assertTrue(view_name in ddoc["views"], "View %s wasn't created" % view_name)
 
     def _is_index_in_list(self, bucket, index_name):
