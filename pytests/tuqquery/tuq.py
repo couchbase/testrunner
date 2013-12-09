@@ -1613,7 +1613,7 @@ class QueryTests(BaseTestCase):
     def _verify_results(self, actual_result, expected_result):
         if len(actual_result) != len(expected_result):
             missing, extra = self.check_missing_and_extra(actual_result, expected_result)
-            self.log.error("Missing items: %s.\n Extra items: %s" % (missing, extra))
+            self.log.error("Missing items: %s.\n Extra items: %s" % (missing[:100], extra[:100]))
             self.fail("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
                                             len(actual_result), len(expected_result)))
         if self.max_verify is not None:
