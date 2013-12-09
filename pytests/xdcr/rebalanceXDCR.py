@@ -286,7 +286,7 @@ class Rebalance(XDCRReplicationBaseTest):
                         " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
                             self.src_master.ip, add_node.ip, self.src_master.ip))
                     self.src_nodes.remove(self.src_nodes[0])
-                    self.src_nodes.append(add_node)
+                    self.src_nodes.insert(0, add_node)
                     self.src_master = add_node
 
                 if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
@@ -298,7 +298,7 @@ class Rebalance(XDCRReplicationBaseTest):
                         " Starting swap-rebalance at Destination cluster {0} add node {1} and remove node {2}".format(
                             self.dest_master.ip, add_node.ip, self.dest_master.ip))
                     self.dest_nodes.remove(self.dest_nodes[0])
-                    self.dest_nodes.append(add_node)
+                    self.dest_nodes.insert(0, add_node)
                     self.dest_master = add_node
 
                 self.sleep(self._timeout / 2)
@@ -457,6 +457,7 @@ class Rebalance(XDCRReplicationBaseTest):
                             " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
                                 self.src_master.ip, add_node.ip, remove_node.ip))
                         self.src_nodes.remove(remove_node)
+                        self.src_nodes.append(add_node)
 
                     if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
                         remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
@@ -465,6 +466,7 @@ class Rebalance(XDCRReplicationBaseTest):
                             " Starting swap-rebalance at Destination cluster {0} add node {1} and remove node {2}".format(
                                 self.dest_master.ip, add_node.ip, remove_node.ip))
                         self.dest_nodes.remove(remove_node)
+                        self.dest_nodes.append(add_node)
 
                 self.sleep(5)
 
@@ -474,8 +476,9 @@ class Rebalance(XDCRReplicationBaseTest):
                         self.cluster.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
                     for task in tasks:
                         if task.state != "FINISHED":
-                            continue;
-                    break;
+                            break
+                    else:
+                        break
 
                 if self._replication_direction_str in "unidirection":
                     self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
