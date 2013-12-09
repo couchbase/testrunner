@@ -64,6 +64,18 @@ class BaseTestCase(unittest.TestCase):
             self.maxParallelReplicaIndexers = self.input.param("maxParallelReplicaIndexers", None)
             self.quota_percent = self.input.param("quota_percent", None)
             self.port = None
+            self.log_info=self.input.param("log_info", None)
+            self.log_location=self.input.param("log_location", None)
+            self.stat_info=self.input.param("stat_info", None)
+
+            if self.input.param("log_info", None):
+                self.change_log_info()
+            if self.input.param("log_location", None):
+                self.change_log_location()
+
+            if self.input.param("stat_info", None):
+                self.change_stat_info()
+
             if self.input.param("port", None):
                 self.port = str(self.input.param("port", None))
             self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
@@ -754,3 +766,30 @@ class BaseTestCase(unittest.TestCase):
                 if server.ip == node.ip and int(server.port) == int(node.port):
                     server.port = new_port
                     break
+
+    def change_log_info(self):
+        for server in self.servers:
+            remote_client = RemoteMachineShellConnection(server)
+            remote_client.stop_couchbase()
+            remote_client.change_log_level(self.log_info)
+            remote_client.start_couchbase()
+            remote_client.disconnect()
+        self.log.info("========= CHANGED LOG LEVELS ===========")
+
+    def change_log_location(self):
+        for server in self.servers:
+            remote_client = RemoteMachineShellConnection(server)
+            remote_client.stop_couchbase()
+            remote_client.configure_log_location(self.log_location)
+            remote_client.start_couchbase()
+            remote_client.disconnect()
+        self.log.info("========= CHANGED LOG LOCATION ===========")
+
+    def change_stat_info(self):
+        for server in self.servers:
+            remote_client = RemoteMachineShellConnection(server)
+            remote_client.stop_couchbase()
+            remote_client.change_stat_periodicity(self.stat_info)
+            remote_client.start_couchbase()
+            remote_client.disconnect()
+        self.log.info("========= CHANGED STAT PERIODICITY ===========")

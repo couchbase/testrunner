@@ -272,6 +272,66 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command("cmd /c schtasks /end /tn upgrademe")
         self.log_command_output(output, error)
 
+    def change_log_level(self, new_log_level):
+        log.info("CHANGE LOG LEVEL TO %s".format(new_log_level))
+        # ADD NON_ROOT user config_details
+        output, error = self.execute_command("sed -i '/loglevel_default, /c \\{loglevel_default, %s\}'. %s"
+                                            % (new_log_level, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/loglevel_ns_server, /c \\{loglevel_ns_server, %s\}'. %s"
+                                            % (new_log_level, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/loglevel_stats, /c \\{loglevel_stats, %s\}'. %s"
+                                             % (new_log_level, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/loglevel_rebalance, /c \\{loglevel_rebalance, %s\}'. %s"
+                                            % (new_log_level, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/loglevel_cluster, /c \\{loglevel_cluster, %s\}'. %s"
+                                            % (new_log_level, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/loglevel_views, /c \\{loglevel_views, %s\}'. %s"
+                                            % (new_log_level, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/loglevel_error_logger, /c \\{loglevel_error_logger, %s\}'. %s"
+                                            % (new_log_level, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/loglevel_mapreduce_errors, /c \\{loglevel_mapreduce_errors, %s\}'. %s"
+                                            % (new_log_level, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/loglevel_user, /c \\{loglevel_user, %s\}'. %s"
+                                            % (new_log_level, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/loglevel_xdcr, /c \\{loglevel_xdcr, %s\}'. %s"
+                                            % (new_log_level, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/loglevel_menelaus, /c \\{loglevel_menelaus, %s\}'. %s"
+                                            % (new_log_level, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+
+    def configure_log_location(self, new_log_location):
+        mv_logs= testconstants.LINUX_LOG_PATH+'/'+new_log_location
+        print " MV LOGS %s" % mv_logs
+        error_log_tag="error_logger_mf_dir"
+        # ADD NON_ROOT user config_details
+        log.info("CHANGE LOG LOCATION TO %s".format(mv_logs))
+        output, error = self.execute_command("rm -rf %s" % mv_logs)
+        self.log_command_output(output, error)
+        output, error = self.execute_command("mkdir %s" % mv_logs)
+        self.log_command_output(output, error)
+        output, error = self.execute_command("chown -R couchbase %s" % mv_logs)
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/%s, /c \\{%s, \"%s\"\}.' %s"
+                                        % (error_log_tag, error_log_tag, mv_logs, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+
+    def change_stat_periodicity(self, ticks ):
+        # ADD NON_ROOT user config_details
+        log.info("CHANGE STAT PERIODICITY TO every %s seconds" % ticks)
+        output, error = self.execute_command("sed -i '$ a\{grab_stats_every_n_ticks, %s}.'  %s"
+        % (ticks, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+
     def is_couchbase_installed(self):
         if getattr(self, "info", None) is None:
             self.info = self.extract_remote_info()

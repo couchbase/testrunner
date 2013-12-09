@@ -36,3 +36,6 @@ LINUX_GOPATH = '/root/tuq/gocode'
 WINDOWS_GOPATH = '/cygdrive/c/tuq/gocode'
 LINUX_GOROOT = '/root/tuq/go'
 WINDOWS_GOROOT = '/cygdrive/c/Go'
+LINUX_STATIC_CONFIG = '/opt/couchbase/etc/couchbase/static_config'
+LINUX_LOG_PATH = '/opt'
+
