@@ -64,8 +64,14 @@ class ViewMergingTests(BaseTestCase):
     def test_nonexisting_views(self):
         view_names = ['mapview2', 'mapview3', 'mapview4', 'mapview5']
         for view_name in view_names:
-            with self.assertRaises(QueryViewException):
-                results = self.merged_query(view_name)
+            try:
+                self.merged_query(view_name)
+            except QueryViewException:
+                self.log.info("QueryViewException is raised as expected")
+            except Exception:
+                self.assertFail("QueryViewException is expected, but not raised")
+            else:
+                self.assertFail("QueryViewException is expected, but not raised")
 
     def test_non_empty_view(self):
         num_vbuckets = len(self.rest.get_vbuckets(self.bucket))
