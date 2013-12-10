@@ -490,15 +490,15 @@ class bidirectional(XDCRReplicationBaseTest):
         self._async_update_delete_data()
         self.sleep(self._timeout)
 
-        i = len(self.dest_nodes) - 1
-        shell = RemoteMachineShellConnection(self.dest_nodes[i])
+        reboot_node_dest = self.dest_nodes[len(self.dest_nodes) - 1]
+        shell = RemoteMachineShellConnection(reboot_node_dest)
         if shell.extract_remote_info().type.lower() == 'windows':
             o, r = shell.execute_command("shutdown -r -f -t 0")
         elif shell.extract_remote_info().type.lower() == 'linux':
             o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
-        i = len(self.src_nodes) - 1
-        shell = RemoteMachineShellConnection(self.src_nodes[i])
+        reboot_node_src = self.src_nodes[len(self.src_nodes) - 1]
+        shell = RemoteMachineShellConnection(reboot_node_src)
         if shell.extract_remote_info().type.lower() == 'windows':
             o, r = shell.execute_command("shutdown -r -f -t 0")
         elif shell.extract_remote_info().type.lower() == 'linux':
@@ -506,5 +506,6 @@ class bidirectional(XDCRReplicationBaseTest):
         shell.log_command_output(o, r)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert([self.dest_nodes[i]], self, wait_if_warmup=True)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([reboot_node_dest], self, wait_if_warmup=True)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([reboot_node_src], self, wait_if_warmup=True)
         self.verify_results(verify_src=True)
