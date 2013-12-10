@@ -67,14 +67,16 @@ class BaseTestCase(unittest.TestCase):
             self.log_info=self.input.param("log_info", None)
             self.log_location=self.input.param("log_location", None)
             self.stat_info=self.input.param("stat_info", None)
+            self.port_info=self.input.param("port_info", None)
 
             if self.input.param("log_info", None):
                 self.change_log_info()
             if self.input.param("log_location", None):
                 self.change_log_location()
-
             if self.input.param("stat_info", None):
                 self.change_stat_info()
+            if self.input.param("port_info", None):
+                self.change_port_info()
 
             if self.input.param("port", None):
                 self.port = str(self.input.param("port", None))
@@ -793,3 +795,14 @@ class BaseTestCase(unittest.TestCase):
             remote_client.start_couchbase()
             remote_client.disconnect()
         self.log.info("========= CHANGED STAT PERIODICITY ===========")
+
+    def change_port_info(self):
+        for server in self.servers:
+            remote_client = RemoteMachineShellConnection(server)
+            remote_client.stop_couchbase()
+            remote_client.change_port_static(self.port_info)
+            server.port = self.port_info
+            self.log.info("New REST port %s" % server.port)
+            remote_client.start_couchbase()
+            remote_client.disconnect()
+        self.log.info("========= CHANGED ALL PORTS ===========")

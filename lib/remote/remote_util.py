@@ -332,6 +332,38 @@ class RemoteMachineShellConnection:
         % (ticks, testconstants.LINUX_STATIC_CONFIG))
         self.log_command_output(output, error)
 
+    def change_port_static(self, new_port ):
+        # ADD NON_ROOT user config_details
+        log.info("=========CHANGE PORTS for REST: %s, MCCOUCH: %s,MEMCACHED: %s, MOXI: %s, CAPI: %s==============="
+                %(new_port, new_port+1, new_port+2, new_port+3, new_port+4))
+        output, error = self.execute_command("sed -i '/{rest_port/d' %s" % testconstants.LINUX_STATIC_CONFIG)
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '$ a\{rest_port, %s}.' %s"
+                                             % (new_port, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/{mccouch_port/d' %s" % testconstants.LINUX_STATIC_CONFIG)
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '$ a\{mccouch_port, %s}.' %s"
+                                             % (new_port+1, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/{memcached_port/d' %s" % testconstants.LINUX_STATIC_CONFIG)
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '$ a\{memcached_port, %s}.' %s"
+                                             % (new_port+2, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/{moxi_port/d' %s" % testconstants.LINUX_STATIC_CONFIG)
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '$ a\{moxi_port, %s}.' %s"
+                                             % (new_port+3, testconstants.LINUX_STATIC_CONFIG))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("sed -i '/port = /c\port = %s' %s"
+                                             % (new_port+4, testconstants.LINUX_CAPI_INI))
+        self.log_command_output(output, error)
+        output, error = self.execute_command("rm %s" % testconstants.LINUX_CONFIG_FILE)
+        self.log_command_output(output, error)
+        output, error = self.execute_command("cat %s" % testconstants.LINUX_STATIC_CONFIG)
+        self.log_command_output(output, error)
+
     def is_couchbase_installed(self):
         if getattr(self, "info", None) is None:
             self.info = self.extract_remote_info()
