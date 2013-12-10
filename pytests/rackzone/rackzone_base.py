@@ -1,6 +1,8 @@
 from basetestcase import BaseTestCase
 from couchbase.document import View
 from couchbase.documentgenerator import BlobGenerator
+from membase.api.rest_client import RestConnection, Bucket
+
 
 class RackzoneBaseTest(BaseTestCase):
 
@@ -26,4 +28,10 @@ class RackzoneBaseTest(BaseTestCase):
             self._load_doc_data_all_buckets()
 
     def tearDown(self):
+        serverInfo = self.servers[0]
+        rest = RestConnection(serverInfo)
+        zones = rest.get_zone_names()
+        for zone in zones:
+            if zone != "Group 1":
+                rest.delete_zone(zone)
         super(RackzoneBaseTest, self).tearDown()
