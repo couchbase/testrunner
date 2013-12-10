@@ -33,6 +33,8 @@ class QueryTests(BaseTestCase):
         docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.gens_load = self.generate_docs(docs_per_day)
+        if self.input.param("gomaxprocs", None):
+            self.configure_gomaxprocs()
 
     def suite_setUp(self):
         try:
@@ -1636,3 +1638,10 @@ class QueryTests(BaseTestCase):
             if not (item in actual):
                 missing.append(item)
         return missing, extra
+
+    def configure_gomaxprocs(self):
+        max_proc = self.input.param("gomaxprocs", None)
+        cmd = "export GOMAXPROCS=%s" % max_proc
+        for server in self.servers:
+            shell_connection = RemoteMachineShellConnection(self.master)
+            shell_connection.execute_command(cmd)
