@@ -65,25 +65,24 @@ class Rebalance(XDCRReplicationBaseTest):
                 self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
             self.sleep(self._timeout / 2)
+            verify_src = False
             for num_rebalance in range(self._num_rebalance):
-                add_node = self._floating_servers_set[num_rebalance - 1]
                 tasks = []
                 if "source" in self._rebalance:
+                    add_node = self._floating_servers_set.pop()
                     tasks.extend(self._async_rebalance(self.src_nodes, [add_node], []))
                     self.log.info(
                         " Starting rebalance-in node {0} at Source cluster {1}".format(add_node.ip, self.src_master.ip))
 
                     self.src_nodes.extend([add_node])
-                    self._floating_servers_set.remove(add_node)
+                    verify_src = True
 
                 if "destination" in self._rebalance:
-                    if "source" in self._rebalance:
-                        add_node = self._floating_servers_set[num_rebalance - 1]
+                    add_node = self._floating_servers_set.pop()
                     tasks.extend(self._async_rebalance(self.dest_nodes, [add_node], []))
                     self.log.info(" Starting rebalance-in node{0} at Destination cluster {1}".format(add_node.ip,
                         self.dest_master.ip))
                     self.dest_nodes.extend([add_node])
-                    self._floating_servers_set.remove(add_node)
 
                 self.sleep(self._timeout / 2)
                 for task in tasks:
@@ -97,10 +96,10 @@ class Rebalance(XDCRReplicationBaseTest):
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                self.verify_results(False)
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                self.verify_results(True)
+                verify_src = True
+            self.verify_results(verify_src=verify_src)
         finally:
             pass
 
@@ -118,6 +117,7 @@ class Rebalance(XDCRReplicationBaseTest):
                 self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
             self.sleep(self._timeout / 2)
+            verify_src = False
             for num_rebalance in range(self._num_rebalance):
                 tasks = []
                 if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
@@ -126,6 +126,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     self.log.info(" Starting rebalance-out node {0} at Source cluster {1}".format(remove_node.ip,
                         self.src_master.ip))
                     self.src_nodes.remove(remove_node)
+                    verify_src = True
                 if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
                     remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
                     tasks.extend(self._async_rebalance(self.dest_nodes, [], [remove_node]))
@@ -145,10 +146,10 @@ class Rebalance(XDCRReplicationBaseTest):
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                self.verify_results(False)
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                self.verify_results(True)
+                verify_src = True
+            self.verify_results(verify_src=verify_src)
         finally:
             pass
 
@@ -165,6 +166,7 @@ class Rebalance(XDCRReplicationBaseTest):
             src_buckets = dest_buckets = []
             self.sleep(self._timeout / 2)
             tasks = []
+            verify_src = False
             if "source" in self._rebalance:
                 src_buckets = self._get_cluster_buckets(self.src_master)
                 tasks.extend(self._async_rebalance(self.src_nodes, [], [self.src_master]))
@@ -172,6 +174,11 @@ class Rebalance(XDCRReplicationBaseTest):
                     self.src_master.ip))
                 self.src_nodes.remove(self.src_nodes[0])
                 self.src_master = self.src_nodes[0]
+                master_id = RestConnection(self.src_master).get_nodes_self().id
+                for bucket in src_buckets:
+                    bucket.master_id = master_id
+                verify_src = True
+
             if "destination" in self._rebalance:
                 dest_buckets = self._get_cluster_buckets(self.dest_master)
                 tasks.extend(self._async_rebalance(self.dest_nodes, [], [self.dest_master]))
@@ -180,17 +187,13 @@ class Rebalance(XDCRReplicationBaseTest):
                         self.dest_master.ip))
                 self.dest_nodes.remove(self.dest_nodes[0])
                 self.dest_master = self.dest_nodes[0]
+                master_id = RestConnection(self.dest_master).get_nodes_self().id
+                for bucket in dest_buckets:
+                    bucket.master_id = master_id
 
             self.sleep(self._timeout / 2)
             for task in tasks:
                 task.result()
-
-            master_id = RestConnection(self.src_master).get_nodes_self().id
-            for bucket in src_buckets:
-                bucket.master_id = master_id
-            master_id = RestConnection(self.dest_master).get_nodes_self().id
-            for bucket in dest_buckets:
-                bucket.master_id = master_id
 
             if self._replication_direction_str in "unidirection":
                 self._async_modify_data()
@@ -200,10 +203,10 @@ class Rebalance(XDCRReplicationBaseTest):
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                self.verify_results(False)
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                self.verify_results(True)
+                verify_src = True
+            self.verify_results(verify_src=verify_src)
         finally:
             pass
 
@@ -220,10 +223,11 @@ class Rebalance(XDCRReplicationBaseTest):
                 self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
             self.sleep(self._timeout / 2)
+            verify_src = False
             for num_rebalance in range(self._num_rebalance):
                 tasks = []
-                add_node = self._floating_servers_set[num_rebalance - 1]
                 if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
+                    add_node = self._floating_servers_set.pop()
                     remove_node = self.src_nodes[len(self.src_nodes) - 1]
                     tasks.extend(self._async_rebalance(self.src_nodes, [add_node], [remove_node]))
                     self.log.info(
@@ -231,10 +235,10 @@ class Rebalance(XDCRReplicationBaseTest):
                             self.src_master.ip, add_node.ip, remove_node.ip))
                     self.src_nodes.remove(remove_node)
                     self.src_nodes.append(add_node)
+                    verify_src = True
                 self.sleep(self._timeout / 2)
                 if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
-                    if "source" in self._rebalance:
-                        add_node = self._floating_servers_set[num_rebalance]
+                    add_node = self._floating_servers_set.pop()
                     remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
                     tasks.extend(self._async_rebalance(self.dest_nodes, [add_node], [remove_node]))
                     self.log.info(
@@ -255,10 +259,10 @@ class Rebalance(XDCRReplicationBaseTest):
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                self.verify_results(False)
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                self.verify_results(True)
+                verify_src = True
+            self.verify_results(verify_src=verify_src)
         finally:
             pass
 
@@ -275,42 +279,42 @@ class Rebalance(XDCRReplicationBaseTest):
                 self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
             self.sleep(self._timeout / 2)
+            verify_src = False
             for num_rebalance in range(self._num_rebalance):
                 tasks = []
                 src_buckets = dest_buckets = []
-                add_node = self._floating_servers_set[num_rebalance - 1]
                 if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
+                    add_node = self._floating_servers_set.pop()
                     src_buckets = self._get_cluster_buckets(self.src_master)
                     tasks.extend(self._async_rebalance(self.src_nodes, [add_node], [self.src_master]))
                     self.log.info(
                         " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
                             self.src_master.ip, add_node.ip, self.src_master.ip))
-                    self.src_nodes.remove(self.src_nodes[0])
-                    self.src_nodes.insert(0, add_node)
-                    self.src_master = add_node
+                    self.src_nodes.remove(self.src_master)
+                    self.src_nodes.append(add_node)
+                    self.src_master = self.src_nodes[0]
+                    master_id = RestConnection(self.src_master).get_nodes_self().id
+                    for bucket in src_buckets:
+                        bucket.master_id = master_id
+                    verify_src = True
 
                 if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
-                    if "source" in self._rebalance:
-                        add_node = self._floating_servers_set[num_rebalance]
+                    add_node = self._floating_servers_set.pop()
                     dest_buckets = self._get_cluster_buckets(self.dest_master)
                     tasks.extend(self._async_rebalance(self.dest_nodes, [add_node], [self.dest_master]))
                     self.log.info(
                         " Starting swap-rebalance at Destination cluster {0} add node {1} and remove node {2}".format(
                             self.dest_master.ip, add_node.ip, self.dest_master.ip))
-                    self.dest_nodes.remove(self.dest_nodes[0])
-                    self.dest_nodes.insert(0, add_node)
-                    self.dest_master = add_node
+                    self.dest_nodes.remove(self.dest_master)
+                    self.dest_nodes.append(add_node)
+                    self.dest_master = self.dest_nodes[0]
+                    master_id = RestConnection(self.dest_master).get_nodes_self().id
+                    for bucket in dest_buckets:
+                        bucket.master_id = master_id
 
                 self.sleep(self._timeout / 2)
                 for task in tasks:
                     task.result()
-
-                master_id = RestConnection(self.src_master).get_nodes_self().id
-                for bucket in src_buckets:
-                    bucket.master_id = master_id
-                master_id = RestConnection(self.dest_master).get_nodes_self().id
-                for bucket in dest_buckets:
-                    bucket.master_id = master_id
 
                 if self._replication_direction_str in "unidirection":
                     self._async_modify_data()
@@ -320,10 +324,10 @@ class Rebalance(XDCRReplicationBaseTest):
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                self.verify_results(False)
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                self.verify_results(True)
+                verify_src = True
+            self.verify_results(verify_src=verify_src)
         finally:
             pass
 
@@ -348,21 +352,24 @@ class Rebalance(XDCRReplicationBaseTest):
 
             query = {"full_set": "true", "stale": "false"}
 
+            verify_src = False
             for num_rebalance in range(self._num_rebalance):
                 tasks = []
                 tasks = self.async_create_views(self.src_master, ddoc_name, views, self.default_bucket_name)
                 tasks += self.async_create_views(self.dest_master, ddoc_name, views, self.default_bucket_name)
                 self.sleep(self._timeout / 2)
 
-                add_node = self._floating_servers_set[self._num_rebalance - 1]
                 if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
+                    add_node = self._floating_servers_set.pop()
                     remove_node = self.src_nodes[len(self.src_nodes) - 1]
                     tasks += self._async_rebalance(self.src_nodes, [add_node], [remove_node])
                     self.log.info(
                         " Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}".format(
                             self.src_master.ip, add_node.ip, remove_node.ip))
                     self.src_nodes.remove(remove_node)
+                    verify_src = True
                 if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
+                    add_node = self._floating_servers_set.pop()
                     remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
                     tasks += self._async_rebalance(self.dest_nodes, [add_node], [remove_node])
                     self.log.info(
@@ -393,10 +400,10 @@ class Rebalance(XDCRReplicationBaseTest):
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                self.verify_results(False)
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                self.verify_results(True)
+                verify_src = True
+            self.verify_results(verify_src=verify_src)
         finally:
             pass
 
@@ -420,9 +427,9 @@ class Rebalance(XDCRReplicationBaseTest):
 
             query = {"full_set": "true", "stale": "false"}
 
+            verify_src = False
             for num_rebalance in range(self._num_rebalance):
                 tasks = []
-                add_node = self._floating_servers_set[self._num_rebalance - 1]
                 tasks = self.async_create_views(self.src_master, ddoc_name, views, self.default_bucket_name)
                 tasks += self.async_create_views(self.dest_master, ddoc_name, views, self.default_bucket_name)
                 for task in tasks:
@@ -451,6 +458,7 @@ class Rebalance(XDCRReplicationBaseTest):
 
                 if self._rebalance is not None:
                     if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
+                        add_node = self._floating_servers_set.pop()
                         remove_node = self.src_nodes[len(self.src_nodes) - 1]
                         tasks += self._async_rebalance(self.src_nodes, [add_node], [remove_node])
                         self.log.info(
@@ -458,8 +466,10 @@ class Rebalance(XDCRReplicationBaseTest):
                                 self.src_master.ip, add_node.ip, remove_node.ip))
                         self.src_nodes.remove(remove_node)
                         self.src_nodes.append(add_node)
+                        verify_src = False
 
                     if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
+                        add_node = self._floating_servers_set.pop()
                         remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
                         tasks += self._async_rebalance(self.dest_nodes, [add_node], [remove_node])
                         self.log.info(
@@ -503,9 +513,9 @@ class Rebalance(XDCRReplicationBaseTest):
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-                self.verify_results(False)
             elif self._replication_direction_str in "bidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                self.verify_results(True)
+                verify_src = True
+            self.verify_results(verify_src=verify_src)
         finally:
             pass

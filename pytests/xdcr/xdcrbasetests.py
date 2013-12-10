@@ -413,10 +413,18 @@ class XDCRBaseTest(unittest.TestCase):
     def teardown_extended(self):
         pass
 
+    def __stop_rebalance(self, nodes):
+        rest = RestConnection(nodes[0])
+        if rest._rebalance_progress_status() == 'running':
+            self.log.warning("rebalancing is still running, test should be verified")
+            stopped = rest.stop_rebalance()
+            self.assertTrue(stopped, msg="unable to stop rebalance")
+
     def _do_cleanup(self):
         for key in self._clusters_keys_olst:
             nodes = self._clusters_dic[key]
             self.log.info("cleanup cluster{0}: {1}".format(key + 1, nodes))
+            self.__stop_rebalance(nodes)
             for node in nodes:
                 BucketOperationHelper.delete_all_buckets_or_assert([node], self)
                 if self._input.param("forceEject", False) and node not in [self.src_nodes[0], self.dest_nodes[0] ]:
@@ -551,7 +559,10 @@ class XDCRBaseTest(unittest.TestCase):
                     bucket.master_id = bucket.master_id.replace("127.0.0.1", new_ip).\
                     replace("localhost", new_ip)
 
-        return [bucket for bucket in self.buckets if bucket.master_id == master_id]
+        buckets = filter(lambda bucket: bucket.master_id == master_id, self.buckets)
+        if not buckets:
+            self.log.warn("No bucket(s) found on the server %s" % master_server)
+        return buckets
 
     """merge 2 different kv strores from different clsusters/buckets
        assume that all elements in the second kvs are more relevant.
@@ -643,10 +654,11 @@ class XDCRBaseTest(unittest.TestCase):
                 if int(rest.get_xdc_queue_size(bucket.name)) == 0:
                     found = found + 1
             if found == len(buckets):
-                return True
+                break
             time.sleep(10)
             end_time = end_time - 10
-        self.fail("Timeout occurs while waiting for mutations to be replicated")
+        else:
+            self.fail("Timeout occurs while waiting for mutations to be replicated")
 
         """Verify the stats at the destination cluster
         1. Data Validity check - using kvstore-node key-value check
@@ -668,11 +680,11 @@ class XDCRBaseTest(unittest.TestCase):
             self.log.info("and Verify xdcr replication stats at Source Cluster : {0}".format(self.src_master.ip))
             timeout = max(120, end_time - time.time())
             self._wait_for_stats_all_buckets(src_nodes, timeout=timeout)
-            self.__wait_for_mutation_to_replicate(src_nodes[0])
+            self.__wait_for_mutation_to_replicate(self.src_master)
         timeout = max(120, end_time - time.time())
         self.log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_master.ip))
         self._wait_for_stats_all_buckets(dest_nodes, timeout=timeout)
-        self.__wait_for_mutation_to_replicate(dest_nodes[0])
+        self.__wait_for_mutation_to_replicate(self.dest_master)
         if verify_src:
             timeout = max(120, end_time - time.time())
             self._verify_stats_all_buckets(src_nodes, timeout=timeout)
