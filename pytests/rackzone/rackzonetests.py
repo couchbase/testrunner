@@ -127,7 +127,7 @@ class RackzoneTests(RackzoneBaseTest):
         except Exception,e :
             print e
 
-    def testrza(self):
+    def test_replica_distribution_in_zone(self):
         serverInfo = self.servers[0]
         rest = RestConnection(serverInfo)
         zones = []
