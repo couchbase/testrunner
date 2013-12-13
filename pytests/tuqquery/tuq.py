@@ -1204,6 +1204,35 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
+    def test_array_length(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, array_length(array_agg(DISTINCT name)) as num_names" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "num_names" : len(set([x["name"] for x in full_list
+                                               if x["job_title"] == group]))}
+                               for group in tmp_groups]
+
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+            self.query = "SELECT job_title, array_length(array_agg(DISTINCT test_rate)) as rates" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['job_title']))
+            expected_result = [{"job_title" : group,
+                                "rates" : len(set([x["test_rate"] for x in full_list
+                                               if x["job_title"] == group]))}
+                               for group in tmp_groups]
+
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
     def test_array_agg(self):
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_agg(name) as names" +\
