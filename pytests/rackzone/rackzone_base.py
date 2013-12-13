@@ -1,7 +1,9 @@
+import testconstants
 from basetestcase import BaseTestCase
 from couchbase.document import View
 from couchbase.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, Bucket
+
 
 
 class RackzoneBaseTest(BaseTestCase):
@@ -9,6 +11,7 @@ class RackzoneBaseTest(BaseTestCase):
     def setUp(self):
         super(RackzoneBaseTest, self).setUp()
         self.value_size = self.input.param("value_size", 128)
+        self.num_buckets = self.input.param("num_buckets", 0)
         self.doc_ops = self.input.param("doc_ops", None)
         self.output_time = self.input.param("output_time", False)
         if self.doc_ops is not None:
@@ -28,6 +31,7 @@ class RackzoneBaseTest(BaseTestCase):
             self._load_doc_data_all_buckets()
 
     def tearDown(self):
+        super(RackzoneBaseTest, self).tearDown()
         serverInfo = self.servers[0]
         rest = RestConnection(serverInfo)
         zones = rest.get_zone_names()
