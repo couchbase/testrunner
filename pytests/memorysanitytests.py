@@ -190,7 +190,7 @@ class MemorySanity(BaseTestCase):
                 value = awareness.memcached(key).get(key)[2]
                 if len(value) < self.desired_item_size:
                     self.fail("Failed to append enough to make value size surpass the "
-                                + "size, for key {0}".format(key))
+                                + "size {0}, key {1} has size {2}".format(self.desired_item_size, key, len(value)))
 
             if self.kv_verify:
                 self.log.info("VERIFICATION <" + msg + ">: Phase2 - Check if the content "
