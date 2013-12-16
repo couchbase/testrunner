@@ -31,7 +31,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
     where we are adding back and removing at least half of the nodes."""
     def incremental_rebalance_in_out_with_max_buckets_number(self):
         self.bucket_size = self.input.param("bucket_size", 100)
-        bucket_num = max(10, self.quota / self.bucket_size)
+        bucket_num = min(10, self.quota / self.bucket_size)
         self.log.info('total %s buckets will be created with size %s MB' % (bucket_num, self.bucket_size))
         self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
         self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
