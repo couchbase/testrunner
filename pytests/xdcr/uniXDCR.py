@@ -5,7 +5,6 @@ from random import randrange
 from xdcrbasetests import XDCRReplicationBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
-from clitest.collectinfotest import collectinfoTests
 
 
 #Assumption that at least 2 nodes on every cluster
@@ -489,4 +488,5 @@ class unidirectional(XDCRReplicationBaseTest):
         self.log_filename = self._input.param("file_name", "collectInfo")
         self.shell = RemoteMachineShellConnection(self.src_master)
         self.shell.execute_cbcollect_info("%s.zip" % (self.log_filename))
+        from clitest.collectinfotest import collectinfoTests
         collectinfoTests.verify_results(self, self.log_filename)
