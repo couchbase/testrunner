@@ -62,7 +62,11 @@ class MemcachetestRunner():
         return self.launch_memcachetest()
 
     def launch_memcachetest(self):
-        command = "{0}/memcachetest/memcachetest -h {1}:{2} -i {3} {4}".format(self.path, self.memcached_ip, self.memcached_port, self.num_items, self.extra_params)
+        exists = self.shell.file_exists('/usr/local/bin/', 'memcachetest')
+        if not exists:
+            command = "{0}/memcachetest/memcachetest -h {1}:{2} -i {3} {4}".format(self.path, self.memcached_ip, self.memcached_port, self.num_items, self.extra_params)
+        else:
+            command = "/usr/local/bin/memcachetest -h {0}:{1} -i {2} {3}".format(self.memcached_ip, self.memcached_port, self.num_items, self.extra_params)
         output, error = self.shell.execute_command_raw(command)
         status = self.shell.log_command_output(output, error, track_words="downstream timeout")
 
