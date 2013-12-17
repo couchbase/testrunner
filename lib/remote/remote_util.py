@@ -369,7 +369,7 @@ class RemoteMachineShellConnection:
             self.info = self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
-                if not (RemoteMachineHelper(self).is_process_running('memcached') or \
+                if not (RemoteMachineHelper(self).is_process_running('memcached') and \
                         RemoteMachineHelper(self).is_process_running('erl')):
                     return False
                 return True
