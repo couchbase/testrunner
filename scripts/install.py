@@ -293,7 +293,7 @@ class MembaseServerInstaller(Installer):
         if "swappiness" in params:
             swappiness = int(params["swappiness"])
         else:
-            swappiness = 10
+            swappiness = 0
 
         if "openssl" in params:
             openssl = params["openssl"]
@@ -423,7 +423,7 @@ class CouchbaseServerInstaller(Installer):
         if "swappiness" in params:
             swappiness = int(params["swappiness"])
         else:
-            swappiness = 10
+            swappiness = 0
 
         if "openssl" in params:
             openssl = params["openssl"]
