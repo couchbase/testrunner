@@ -490,3 +490,19 @@ class unidirectional(XDCRReplicationBaseTest):
         self.shell.execute_cbcollect_info("%s.zip" % (self.log_filename))
         from clitest.collectinfotest import collectinfoTests
         collectinfoTests.verify_results(self, self.log_filename)
+
+    """ Verify the fix for MB-9548"""
+    def test_verify_replications_stream_delete(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.sleep(60)
+        self.verify_results()
+        src_buckets = self._get_cluster_buckets(self.src_master)
+        rest_conn = RestConnection(self.src_master)
+        replications = rest_conn.get_replications()
+        self.assertTrue(replications, "Number of replication streams should not be 0")
+        for bucket in src_buckets:
+            self.cluster.bucket_delete(self.src_master, bucket.name)
+
+        replications = rest_conn.get_replications()
+        self.assertTrue(not replications, "No replication streams should exists after deleting the buckets")
