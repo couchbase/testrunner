@@ -78,7 +78,7 @@ class RemoteMachineHelper(object):
 
         if self.remote_shell.info.type.lower() == 'windows':
              output, error = self.remote_shell.execute_command('tasklist| grep {0}'.format(process_name), debug=False)
-             if error or output == [""]:
+             if error or output == [""] or output == []:
                  return None
              words = output[0].split(" ")
              words = filter(lambda x: x != "", words)
@@ -369,10 +369,12 @@ class RemoteMachineShellConnection:
             self.info = self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
-                if not (RemoteMachineHelper(self).is_process_running('memcached') and \
-                        RemoteMachineHelper(self).is_process_running('erl')):
-                    return False
-                return True
+                max_iteration = 4
+                for i in xrange(max_iteration):
+                    if RemoteMachineHelper(self).is_process_running('memcached') and \
+                            RemoteMachineHelper(self).is_process_running('erl'):
+                        return True
+                return False
         elif self.info.distribution_type.lower() == 'mac':
             output, error = self.execute_command('ls %s%s' % (testconstants.MAC_CB_PATH, testconstants.VERSION_FILE))
             self.log_command_output(output, error)
