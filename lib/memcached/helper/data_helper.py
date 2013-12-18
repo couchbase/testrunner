@@ -16,7 +16,7 @@ import threading
 from mc_bin_client import MemcachedClient, MemcachedError
 from mc_ascii_client import MemcachedAsciiClient
 from memcached.helper.old_kvstore import ClientKeyValueStore
-from membase.api.rest_client import RestConnection, RestHelper, Bucket
+from membase.api.rest_client import RestConnection, RestHelper, Bucket, vBucket
 from memcacheConstants import ERR_NOT_FOUND, ERR_NOT_MY_VBUCKET, ERR_ETMPFAIL, ERR_EINVAL
 import json
 import sys
@@ -720,11 +720,12 @@ class VBucketAwareMemcached(object):
         self.vBucketMap = v
         self.vBucketMapReplica = r
 
-    def reset_vbuckets(self, rest, vbucketids_set):
-        forward_map = rest.get_bucket(self.bucket, num_attempt=2).forward_map
+    def reset_vbuckets(self, rest, vbucketids_set, forward_map=None):
         if not forward_map:
-            self.reset(rest)
-            forward_map = rest.get_vbuckets(self.bucket)
+            forward_map = rest.get_bucket(self.bucket, num_attempt=2).forward_map
+            if not forward_map:
+                self.reset(rest)
+                forward_map = rest.get_vbuckets(self.bucket)
         nodes = rest.get_nodes()
         for vBucket in forward_map:
             if vBucket.id in vbucketids_set:
@@ -838,7 +839,8 @@ class VBucketAwareMemcached(object):
                 return self._send_op(self.memcached(key).set, key, exp, flags, value)
             except MemcachedError as error:
                 if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
+                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]),
+                                        forward_map=self._parse_not_my_vbucket_error(error))
                     vb_error += 1
                 else:
                     raise error
@@ -865,7 +867,8 @@ class VBucketAwareMemcached(object):
                 return self._send_op(self.memcached(key).append, key, value)
             except MemcachedError as error:
                 if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
+                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]),
+                                        forward_map=self._parse_not_my_vbucket_error(error))
                     vb_error += 1
                 else:
                     raise error
@@ -892,7 +895,8 @@ class VBucketAwareMemcached(object):
                 return self._send_op(self.memcached(key).observe, key)
             except MemcachedError as error:
                 if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
+                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]),
+                                        forward_map=self._parse_not_my_vbucket_error(error))
                     vb_error += 1
                 else:
                     raise error
@@ -920,7 +924,8 @@ class VBucketAwareMemcached(object):
                 return self._send_op(self.memcached(key).get, key)
             except MemcachedError as error:
                 if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
+                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]),
+                                        forward_map=self._parse_not_my_vbucket_error(error))
                     vb_error += 1
                 else:
                     raise error
@@ -948,7 +953,8 @@ class VBucketAwareMemcached(object):
                 return self._send_op(self.memcached(key, replica_index=replica_index).getr, key)
             except MemcachedError as error:
                 if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
+                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]),
+                                        forward_map=self._parse_not_my_vbucket_error(error))
                     vb_error += 1
                 else:
                     raise error
@@ -1191,6 +1197,25 @@ class VBucketAwareMemcached(object):
 
     def done(self):
         [self.memcacheds[ip].close() for ip in self.memcacheds]
+
+    def _parse_not_my_vbucket_error(self, error):
+        error_msg = error.msg
+        vbuckets = []
+        error_json = json.loads(error_msg[error_msg.find('{'):error_msg.rfind('}') + 1])
+        vBucketMap = error_json['vBucketServerMap']['vBucketMap']
+        serverList = error_json['vBucketServerMap']['serverList']
+        counter = 0
+        for vbucket in vBucketMap:
+            vbucketInfo = vBucket()
+            vbucketInfo.master = serverList[vbucket[0]]
+            if vbucket:
+                for i in range(1, len(vbucket)):
+                    if vbucket[i] != -1:
+                        vbucketInfo.replica.append(serverList[vbucket[i]])
+            vbucketInfo.id = counter
+            counter += 1
+            vbuckets.append(vbucketInfo)
+        return vbuckets
 
 class KVStoreAwareSmartClient(VBucketAwareMemcached):
     def __init__(self, rest, bucket, kv_store=None, info=None, store_enabled=True):
