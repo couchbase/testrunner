@@ -505,7 +505,7 @@ class bidirectional(XDCRReplicationBaseTest):
             o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
 
-        self.sleep(self._timeout)
+        self.sleep(360)
         ClusterOperationHelper.wait_for_ns_servers_or_assert([reboot_node_dest], self, wait_if_warmup=True)
         ClusterOperationHelper.wait_for_ns_servers_or_assert([reboot_node_src], self, wait_if_warmup=True)
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
