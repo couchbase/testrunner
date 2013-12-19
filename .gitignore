@@ -5,6 +5,7 @@
 *.idea
 *.log
 *.log.*
+build/
 dist/
 logs/
 ns_server_data*
