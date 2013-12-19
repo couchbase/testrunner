@@ -26,6 +26,9 @@ class BaseTestCase(unittest.TestCase):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.servers = self.input.servers
+        if str(self.__class__).find('moxitests') != -1:
+            self.moxi_server = self.servers[-1]
+            self.servers = self.servers[:-1]
         self.buckets = []
         self.master = self.servers[0]
         self.cluster = Cluster()
@@ -384,14 +387,18 @@ class BaseTestCase(unittest.TestCase):
     Returns:
         A list of all of the tasks created.
     """
-    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
+    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0,
+                                only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30,
+                                proxy_client=None):
         tasks = []
         for bucket in self.buckets:
             gen = copy.deepcopy(kv_gen)
             if bucket.type != 'memcached':
                 tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
                                                           bucket.kvs[kv_store],
-                                                          op_type, exp, flag, only_store_hash, batch_size, pause_secs, timeout_secs))
+                                                          op_type, exp, flag, only_store_hash,
+                                                          batch_size, pause_secs, timeout_secs,
+                                                          proxy_client))
             else:
                 self._load_memcached_bucket(server, gen, bucket.name)
         return tasks
@@ -405,8 +412,12 @@ class BaseTestCase(unittest.TestCase):
         exp - The expiration for the items if updated or created (int)
         kv_store - The index of the bucket's kv_store to use. (int)
     """
-    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
-        tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
+    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0,
+                          only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30,
+                          proxy_client=None):
+        tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag,
+                                             only_store_hash, batch_size, pause_secs, timeout_secs,
+                                             proxy_client)
         for task in tasks:
             task.result()
         if self.active_resident_threshold:

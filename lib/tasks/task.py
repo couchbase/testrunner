@@ -594,13 +594,18 @@ class GenericLoadingTask(Thread, Task):
 
 
 class LoadDocumentsTask(GenericLoadingTask):
-    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=True):
+    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0,
+                 only_store_hash=True, proxy_client=None):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
         self.generator = generator
         self.op_type = op_type
         self.exp = exp
         self.flag = flag
         self.only_store_hash = only_store_hash
+        if proxy_client:
+            self.log.info("Changing client to proxy %s:%s..." % (proxy_client.host,
+                                                              proxy_client.port))
+            self.client = proxy_client
 
     def has_next(self):
         return self.generator.has_next()

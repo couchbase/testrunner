@@ -386,6 +386,18 @@ class RemoteMachineShellConnection:
                 return True
         return False
 
+    def is_moxi_installed(self):
+        if getattr(self, "info", None) is None:
+            self.info = self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            self.log.error('Not implemented')
+        elif self.info.distribution_type.lower() == 'mac':
+            self.log.error('Not implemented')
+        elif self.info.type.lower() == "linux":
+            if self.file_exists(testconstants.LINUX_MOXI_PATH, 'moxi'):
+                return True
+        return False
+
     # /opt/moxi/bin/moxi -Z port_listen=11211 -u root -t 4 -O /var/log/moxi/moxi.log
     def start_moxi(self, ip, bucket, port, user=None, threads=4, log_file="/var/log/moxi.log"):
         if self.is_couchbase_installed():
@@ -1039,6 +1051,25 @@ class RemoteMachineShellConnection:
             return success
 
 
+    def install_moxi(self, build):
+        success = True
+        track_words = ("warning", "error", "fail")
+        if getattr(self, "info", None) is None:
+            self.info = self.extract_remote_info()
+        log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
+        if self.info.type.lower() == 'windows':
+            self.log.error('Not implemented')
+        elif self.info.deliverable_type in ["rpm", "deb"]:
+            output, error = self.execute_command('rpm -i /tmp/{0}'.format(build.name))
+            if error and ' '.join(error).find("ERROR") != -1:
+                success = False
+        elif self.info.deliverable_type == 'deb':
+            output, error = self.execute_command('dpkg -i /tmp/{0}'.format(build.name))
+            if error and ' '.join(error).find("ERROR") != -1:
+                success = False
+        success &= self.log_command_output(output, '', track_words)
+        return success
+
     def wait_till_file_deleted(self, remotepath, filename, timeout_in_seconds=180):
         end_time = time.time() + float(timeout_in_seconds)
         deleted = False
@@ -1319,6 +1350,25 @@ class RemoteMachineShellConnection:
             self.terminate_processes(self.info, terminate_process_list)
             if not save_upgrade_config:
                 self.remove_folders(linux_folders)
+
+    def moxi_uninstall(self):
+        terminate_process_list = ["moxi"]
+        if getattr(self, "info", None) is None:
+            self.info = self.extract_remote_info()
+        log.info(self.info.distribution_type)
+        type = self.info.distribution_type.lower()
+        if type == 'windows':
+            self.log.error("Not implemented")
+        elif type == "ubuntu":
+            uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("moxi-server", "moxi-server")
+            output, error = self.execute_command(uninstall_cmd)
+            self.log_command_output(output, error)
+        elif type in ["centos", "red hat"]:
+            uninstall_cmd = 'rpm -e {0}'.format("moxi-server")
+            log.info('running rpm -e to remove couchbase-server')
+            output, error = self.execute_command(uninstall_cmd)
+            self.log_command_output(output, error)
+        self.terminate_processes(self.info, terminate_process_list)
 
     def log_command_output(self, output, error, track_words=()):
         # success means that there are no track_words in the output

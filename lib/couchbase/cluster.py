@@ -118,14 +118,15 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=5):
+    def async_load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, flag=0, only_store_hash=True,
+                            batch_size=1, pause_secs=1, timeout_secs=5, proxy_client=None):
         if batch_size > 1:
             _task = BatchedLoadDocumentsTask(server, bucket, generator, kv_store, op_type, exp, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
         else:
             if isinstance(generator, list):
                 _task = LoadDocumentsGeneratorsTask(server, bucket, generator, kv_store, op_type, exp, flag, only_store_hash)
             else:
-                _task = LoadDocumentsTask(server, bucket, generator, kv_store, op_type, exp, flag, only_store_hash)
+                _task = LoadDocumentsTask(server, bucket, generator, kv_store, op_type, exp, flag, only_store_hash, proxy_client)
         self.task_manager.schedule(_task)
         return _task
 
@@ -273,8 +274,10 @@ class Cluster(object):
         _task = self.async_rebalance(servers, to_add, to_remove, use_hostnames)
         return _task.result(timeout)
 
-    def load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, timeout=None, flag=0, only_store_hash=True, batch_size=1):
-        _task = self.async_load_gen_docs(server, bucket, generator, kv_store, op_type, exp, flag, only_store_hash=only_store_hash, batch_size=batch_size)
+    def load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, timeout=None,
+                      flag=0, only_store_hash=True, batch_size=1, proxy_client=None):
+        _task = self.async_load_gen_docs(server, bucket, generator, kv_store, op_type, exp, flag,
+                                         only_store_hash=only_store_hash, batch_size=batch_size, proxy_client=proxy_client)
         return _task.result(timeout)
 
     def workload(self, server, bucket, kv_store, num_ops, create, read, update, delete, exp, timeout=None):

@@ -301,7 +301,7 @@ class MemcachedClientHelper(object):
         return client
 
     @staticmethod
-    def proxy_client(server, bucket, timeout=30, force_ascii=False):
+    def proxy_client(server, bucket, timeout=30, force_ascii=False, standalone_moxi_port=None):
         # for this bucket on this node what is the proxy ?
         rest = RestConnection(server)
         log = logger.Logger.get_logger()
@@ -317,23 +317,42 @@ class MemcachedClientHelper(object):
         for node in nodes:
             RestHelper(rest).vbucket_map_ready(bucket, 60)
             vBuckets = rest.get_vbuckets(bucket)
+            port_moxi = standalone_moxi_port or node.moxi
             if ascii:
                 log = logger.Logger.get_logger()
-                log.info("creating ascii client {0}:{1} {2}".format(server.ip, node.moxi, bucket))
-                client = MemcachedAsciiClient(server.ip, node.moxi, timeout=timeout)
+                log.info("creating ascii client {0}:{1} {2}".format(server.ip, port_moxi, bucket))
+                client = MemcachedAsciiClient(server.ip, port_moxi, timeout=timeout)
             else:
                 log = logger.Logger.get_logger()
                 if isinstance(server, dict):
-                    log.info("creating proxy client {0}:{1} {2}".format(server["ip"], node.moxi, bucket))
-                    client = MemcachedClient(server["ip"], node.moxi, timeout=timeout)
+                    log.info("creating proxy client {0}:{1} {2}".format(server["ip"], port_moxi, bucket))
+                    client = MemcachedClient(server["ip"], port_moxi, timeout=timeout)
                 else:
-                    log.info("creating proxy client {0}:{1} {2}".format(server.ip, node.moxi, bucket))
-                    client = MemcachedClient(server.ip, node.moxi, timeout=timeout)
+                    log.info("creating proxy client {0}:{1} {2}".format(server.ip, port_moxi, bucket))
+                    client = MemcachedClient(server.ip, port_moxi, timeout=timeout)
                 client.vbucket_count = len(vBuckets)
                 if bucket_info.authType == "sasl":
                     client.sasl_auth_plain(bucket_info.name.encode('ascii'),
                                            bucket_info.saslPassword.encode('ascii'))
             return client
+        if isinstance(server, dict):
+            raise Exception("unable to find {0} in get_nodes()".format(server["ip"]))
+        else:
+            raise Exception("unable to find {0} in get_nodes()".format(server.ip))
+
+    @staticmethod
+    def standalone_moxi_client(server, bucket, timeout=30, moxi_port=None):
+        log = logger.Logger.get_logger()
+        if isinstance(server, dict):
+            log.info("creating proxy client {0}:{1} {2}".format(server["ip"], moxi_port, bucket.name))
+            client = MemcachedClient(server["ip"], moxi_port, timeout=timeout)
+        else:
+            log.info("creating proxy client {0}:{1} {2}".format(server.ip, moxi_port, bucket.name))
+            client = MemcachedClient(server.ip, moxi_port, timeout=timeout)
+        if bucket.name != 'default' and bucket.authType == "sasl":
+            client.sasl_auth_plain(bucket.name.encode('ascii'),
+                                   bucket.saslPassword.encode('ascii'))
+        return client
         if isinstance(server, dict):
             raise Exception("unable to find {0} in get_nodes()".format(server["ip"]))
         else:
