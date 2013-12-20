@@ -1,6 +1,6 @@
 import time
 from tasks.future import TimeoutError
-
+from basetestcase import BaseTestCase
 from couchbase.documentgenerator import DocumentGenerator
 from couchbase.documentgenerator import BlobGenerator
 from couchbase.document import DesignDocument, View

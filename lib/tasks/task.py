@@ -2072,11 +2072,12 @@ class ViewCompactionTask(Task):
     def check(self, task_manager):
 
         try:
+            _compaction_running = self._is_compacting()
             new_compaction_revision, fragmentation = self._get_compaction_details()
             self.log.info("stats compaction: ({0},{1})".
                           format(new_compaction_revision, fragmentation))
 
-            if new_compaction_revision == self.compaction_revision and self._is_compacting():
+            if new_compaction_revision == self.compaction_revision and _compaction_running :
                 # compaction ran successfully but compaction was not changed
                 # perhaps we are still compacting
                 self.log.info("design doc {0} is compacting".format(self.design_doc_name))
