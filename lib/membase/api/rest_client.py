@@ -1112,6 +1112,22 @@ class RestConnection(object):
         _stats = json.loads(content)
         return _stats['vBucketServerMap']['vBucketMap']
 
+    def get_vbucket_map_and_server_list(self, bucket="default"):
+        """ Return server list, replica and vbuckets map
+        that matches to server list """
+        vbucket_map = self.fetch_vbucket_map(bucket)
+        api = self.baseUrl + 'pools/default/buckets/' + bucket
+        status, content, header = self._http_request(api)
+        _stats = json.loads(content)
+        num_replica = _stats['vBucketServerMap']['numReplicas']
+        vbucket_map = _stats['vBucketServerMap']['vBucketMap']
+        servers = _stats['vBucketServerMap']['serverList']
+        server_list = []
+        for node in servers:
+            node = node.split(":")
+            server_list.append(node[0])
+        return vbucket_map,server_list,num_replica
+
     def get_pools_info(self):
         parsed = {}
         api = self.baseUrl + 'pools'
