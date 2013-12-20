@@ -489,6 +489,20 @@ class ViewQueryTests(BaseTestCase):
         data_set.add_negative_query(query_params, error)
         self._query_test_init(data_set)
 
+    def test_big_dataset_negative_queries(self):
+        '''
+        Test uses big data set:
+            -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
+        Steps to repro:
+            1. Start load data
+            2. Simultaneously start querying(queries should raise an error)
+        '''
+        error = self.input.param('error', 'too large')
+        self.value_size = 34603008
+        data_set = BigDataSet(self.master, self.cluster, self.num_docs)
+        data_set.add_stale_queries(error)
+        self._query_test_init(data_set)
+
     def test_employee_dataset_invalid_startkey_docid_endkey_docid_queries(self):
         '''
         Test uses employee data set:
@@ -2863,6 +2877,42 @@ class FlagsDataSet:
                 tc.assertTrue(row['value'] == self.item_flag,
                                   "Flag should be %s, but actual is %s" % \
                                    (self.item_flag, row['value']))
+
+class BigDataSet:
+    def __init__(self, server, cluster, num_docs, bucket="default"):
+        self.server = server
+        self.cluster = cluster
+        self.bucket = bucket
+        self.views = self.create_views()
+        self.name = "big_data_set"
+        self.num_docs = num_docs
+        self.kv_store = None
+
+    def create_views(self):
+        view_fn = 'function (doc, meta) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}'
+        view_fn2 = 'function (doc, meta) {var val_test = "test";  while (val_test.length < 700000000) { val_test = val_test.concat(val_test);  }emit(doc.age, val_test);}'
+        reduce_fn = "function(key, values, rereduce) {var val_test = 'test';  while (val_test.length < 70000) { val_test = val_test.concat(val_test);  } return val_test;}"
+        return [QueryView(self.server, self.cluster, fn_str=view_fn),
+                QueryView(self.server, self.cluster, fn_str=view_fn2),
+                QueryView(self.server, self.cluster, fn_str=view_fn, reduce_fn=reduce_fn)]
+
+    def generate_docs(self, view, start=0, end=None):
+        if end is None:
+            end = self.num_docs
+        age = range(start, end)
+        name = ['a' * self.value_size,]
+        template = '{{ "age": {0}, "name": "{1}" }}'
+
+        gen_load = DocumentGenerator(view.prefix, template, age, name, start=start,
+                                     end=end)
+        return [gen_load]
+
+    def add_stale_queries(self, error, views=None):
+        if views is None:
+            views = self.views
+
+        for view in views:
+            view.queries += [QueryHelper({"stale" : "false"}, error=error)]
 
 class QueryHelper:
     def __init__(self, params,
