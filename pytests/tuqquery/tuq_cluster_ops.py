@@ -21,7 +21,10 @@ class QueriesOpsTests(QueryTests):
             self.log.warning("rebalancing is still running, test should be verified")
             stopped = rest.stop_rebalance()
             self.assertTrue(stopped, msg="unable to stop rebalance")
-        super(QueriesOpsTests, self).tearDown()
+        try:
+            super(QueriesOpsTests, self).tearDown()
+        except:
+            pass
         ClusterOperationHelper.cleanup_cluster(self.servers)
         self.sleep(10)
 

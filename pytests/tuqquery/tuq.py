@@ -500,9 +500,9 @@ class QueryTests(BaseTestCase):
     def test_any_no_in_clause(self):
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
-                         "(ANY skill IN %s.skills SATISFIES skills = 'skill2010' end)" % (
+                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' end)" % (
                                                                 bucket.name) +\
-                         "AND (ANY vm IN %s.VMs SATISFIES VMs.RAM = 5 end) " % (
+                         "AND (ANY vm IN %s.VMs SATISFIES vm.RAM = 5 end) " % (
                                                             bucket.name) +\
                          "AND  NOT (job_title = 'Sales') ORDER BY name"
             full_list = self._generate_full_docs_list(self.gens_load)
