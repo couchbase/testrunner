@@ -35,21 +35,21 @@ class QueriesOpsTests(QueryTests):
         for i in xrange(1, self.nodes_in + 1):
             rebalance = self.cluster.async_rebalance(self.servers[:i],
                                                      self.servers[i:i+1], [])
-            self.test_order_by_over()
+            self.test_order_by_satisfy()
             rebalance.result()
-            self.test_order_by_over()
+            self.test_order_by_satisfy()
 
     def test_incr_rebalance_out(self):
         self.assertTrue(len(self.servers[:self.nodes_init]) > self.nodes_out,
                         "Servers are not enough")
-        self.test_order_by_over()
+        self.test_order_by_satisfy()
         for i in xrange(1, self.nodes_out + 1):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i-1)],
                                     [],
                                     self.servers[self.nodes_init - i:self.nodes_init - (i-1)])
-            self.test_order_by_over()
+            self.test_order_by_satisfy()
             rebalance.result()
-            self.test_order_by_over()
+            self.test_order_by_satisfy()
 
     def test_swap_rebalance(self):
         self.assertTrue(len(self.servers) >= self.nodes_init + self.nodes_in,
@@ -58,27 +58,27 @@ class QueriesOpsTests(QueryTests):
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                self.servers[self.nodes_init:self.nodes_init + self.nodes_in],
                                self.servers[self.nodes_init - self.nodes_out:self.nodes_init])
-        self.test_order_by_over()
+        self.test_order_by_satisfy()
         rebalance.result()
-        self.test_order_by_over()
+        self.test_order_by_satisfy()
 
     def test_rebalance_with_server_crash(self):
         servr_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
         servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
-        self.test_group_by_over()
+        self.test_group_by_satisfy()
         for i in xrange(3):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                      servr_in, servr_out)
             self.sleep(5, "Wait some time for rebalance process and then kill memcached")
             remote = RemoteMachineShellConnection(self.servers[self.nodes_init -1])
             remote.terminate_process(process_name='memcached')
-            self.test_group_by_over()
+            self.test_group_by_satisfy()
             try:
                 rebalance.result()
             except:
                 pass
         self.cluster.rebalance(self.servers[:self.nodes_init], servr_in, servr_out)
-        self.test_group_by_over()
+        self.test_group_by_satisfy()
 
     def test_failover(self):
         servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
