@@ -559,6 +559,40 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['vm_memories']))
             self._verify_results(actual_result, expected_result)
 
+    def test_slicing(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, array_agg(name)[:5] as names" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            for item in actual_result['resultset']:
+                self.log.info("Result: %s" % actual_result['resultset'])
+                self.assertTrue(len(item['names']) <= 5, "Slicing doesn't work")
+
+            self.query = "SELECT job_title, array_agg(name)[5:] as names" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_list = [{"job_title" : group,
+                                "names" : [x["name"] for x in full_list
+                                               if x["job_title"] == group]}
+                               for group in tmp_groups]
+            for item in actual_result['resultset']:
+                for tmp_item in expected_list:
+                    if item['job_title'] == tmp_item['job_title']:
+                        expected_item = tmp_item
+                self.log.info("Result: %s" % actual_result['resultset'])
+                self.assertTrue(len(item['names']) == len(expected_item['names']),
+                                "Slicing doesn't work")
+
+            self.query = "SELECT job_title, array_agg(name)[5:10] as names" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            actual_result = self.run_cbq_query()
+            for item in actual_result['resultset']:
+                self.log.info("Result: %s" % actual_result['resultset'])
+                self.assertTrue(len(item['names']) <= 5, "Slicing doesn't work")
+
 ##############################################################################################
 #
 #   LIKE
