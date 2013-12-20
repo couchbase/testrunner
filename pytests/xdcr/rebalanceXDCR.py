@@ -320,7 +320,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     self._async_modify_data()
                 elif self._replication_direction_str in "bidirection":
                     self._async_update_delete_data()
-                self.sleep(self._timeout / 2)
+                self.sleep(self._timeout * 2)
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
