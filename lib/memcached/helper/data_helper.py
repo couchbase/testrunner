@@ -1223,6 +1223,10 @@ class VBucketAwareMemcached(object):
         error_json = json.loads(error_msg[error_msg.find('{'):error_msg.rfind('}') + 1])
         vBucketMap = error_json['vBucketServerMap']['vBucketMap']
         serverList = error_json['vBucketServerMap']['serverList']
+        if not self.rest:
+            self.rest = RestConnection(self.info)
+        serverList = map(lambda server: server.replace("$HOST", str(self.rest.ip))
+                  if server.find("$HOST") != -1 else server, serverList)
         counter = 0
         for vbucket in vBucketMap:
             vbucketInfo = vBucket()
