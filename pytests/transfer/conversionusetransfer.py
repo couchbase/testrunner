@@ -72,6 +72,7 @@ class ConversionUseTransfer(TransferBaseTest):
 
 
         self._install([self.server_origin], version=self.latest_version)
+        self._install([self.server_recovery], version=self.latest_version)
 
         kvs_before = {}
         bucket_names = []
@@ -103,8 +104,8 @@ class ConversionUseTransfer(TransferBaseTest):
         for bucket in self.buckets:
             shell_server_recovery.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
         shell_server_recovery.disconnect()
-        time.sleep(30)
+        time.sleep(self.wait_timeout)
 
         self._wait_for_stats_all_buckets([self.server_recovery])
-        self._verify_all_buckets(self.server_recovery, 1, self.wait_timeout * 50, self.max_verify, True, 1)
         self._verify_stats_all_buckets([self.server_recovery])
+        self._verify_all_buckets(self.server_recovery, 1, self.wait_timeout * 50, self.max_verify, True, 1)
