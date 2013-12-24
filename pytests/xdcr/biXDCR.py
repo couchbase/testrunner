@@ -272,13 +272,13 @@ class bidirectional(XDCRReplicationBaseTest):
                     self.log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                                     len(self.dest_nodes)))
 
-        self.sleep(self._timeout / 2)
+        self.sleep(self._timeout)
 
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
-        self.sleep(self._timeout)
+        self.sleep(self._timeout * 2)
 
         self.verify_results(verify_src=True)
 
