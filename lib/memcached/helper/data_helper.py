@@ -1221,7 +1221,7 @@ class VBucketAwareMemcached(object):
         error_msg = error.msg
         vbuckets = []
         error_json = json.loads(error_msg[error_msg.find('{'):error_msg.rfind('}') + 1])
-        vBucketMap = error_json['vBucketServerMap']['vBucketMap']
+        vBucketMap = error_json['vBucketServerMap']['vBucketMapForward']
         serverList = error_json['vBucketServerMap']['serverList']
         if not self.rest:
             self.rest = RestConnection(self.info)

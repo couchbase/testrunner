@@ -510,6 +510,7 @@ class GenericLoadingTask(Thread, Task):
             self.set_exception(error)
 
     def _unlocked_update(self, partition, key):
+        value = None
         try:
             o, c, value = self.client.get(key)
             if value is None:
@@ -527,6 +528,8 @@ class GenericLoadingTask(Thread, Task):
                 self.set_exception(error)
                 return
         except ValueError:
+            if value is None:
+                return
             index = random.choice(range(len(value)))
             value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
         except BaseException as error:
