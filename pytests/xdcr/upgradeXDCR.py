@@ -184,6 +184,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
         self.sleep(60)
         self._post_upgrade_ops()
+        self.sleep(60)
         self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
         self._verify(self.gen_create.end + gen_create2.end + gen_create3.end)
 
@@ -211,6 +212,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self._load_bucket(bucket_default, self.src_master, self.gen_update, 'create', exp=self._expires)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_delete, 'delete', exp=0)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_update, 'create', exp=self._expires)
+        self.sleep(120)
 
         self._online_upgrade(self.dest_nodes, self.servers[self.src_init + self.dest_init:])
         self._install(self.dest_nodes)
@@ -230,10 +232,22 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.do_merge_bucket(self.dest_master, self.src_master, False, bucket_sasl)
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket_default)
         self.do_merge_bucket(self.dest_master, self.src_master, False, bucket_standard)
-        self.sleep(60)
+        self.sleep(120)
         self._post_upgrade_ops()
+        self.sleep(120)
         self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
-        self._verify(self.gen_create.end + gen_create2.end)
+        self.max_verify = None
+        if self.ddocs_src:
+            for bucket_name in self.buckets_on_src:
+                bucket = self._get_bucket(self, bucket_name, self.src_master)
+                expected_rows = items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_src, self.src_master)
+
+        if self.ddocs_dest:
+            for bucket_name in self.buckets_on_dest:
+                bucket = self._get_bucket(self, bucket_name, self.dest_master)
+                expected_rows = items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_dest, self.dest_master)
 
     def incremental_offline_upgrade(self):
         upgrade_seq = self.input.param("upgrade_seq", "src>dest")
