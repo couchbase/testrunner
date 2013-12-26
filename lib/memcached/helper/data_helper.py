@@ -1220,8 +1220,15 @@ class VBucketAwareMemcached(object):
     def _parse_not_my_vbucket_error(self, error):
         error_msg = error.msg
         vbuckets = []
-        error_json = json.loads(error_msg[error_msg.find('{'):error_msg.rfind('}') + 1])
-        vBucketMap = error_json['vBucketServerMap']['vBucketMapForward']
+        try:
+            error_json = json.loads(error_msg[error_msg.find('{'):error_msg.rfind('}') + 1])
+        except:
+            self.log.error("Error while getting CCCP from not_my_vbucket...\n %s" % error_msg)
+            return None
+        if 'vBucketMapForward' in error_json['vBucketServerMap']:
+            vBucketMap = error_json['vBucketServerMap']['vBucketMapForward']
+        else:
+            vBucketMap = error_json['vBucketServerMap']['vBucketMap']
         serverList = error_json['vBucketServerMap']['serverList']
         if not self.rest:
             self.rest = RestConnection(self.info)
