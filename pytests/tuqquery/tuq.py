@@ -272,6 +272,12 @@ class QueryTests(BaseTestCase):
             expected_result = [{"$1" : len(full_list) * len(full_list[0]["skills"])}]
             self._verify_results(actual_result['resultset'], expected_result)
 
+            self.query = 'SELECT count(skill) FROM %s AS emp UNNEST emp.skills skill' %(
+                                                                            bucket.name)
+            actual_result = self.run_cbq_query()
+            expected_result = [{"$1" : len(full_list) * len(full_list[0]["skills"])}]
+            self._verify_results(actual_result['resultset'], expected_result)
+
 ##############################################################################################
 #
 #   ORDER BY CHECKS
