@@ -1307,6 +1307,23 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
+    def test_poly_length(self):
+        for bucket in self.buckets:
+            full_list = self._generate_full_docs_list(self.gens_load)
+            query_fields = ['tasks_points', 'VMs', 'skills']
+            for query_field in query_fields:
+                self.query = "Select length(%s) as custom_num from %s order by custom_num" % (query_field, bucket.name)
+                actual_result = self.run_cbq_query()
+                expected_result = [{"custom_num" : None} for doc in full_list]
+                self._verify_results(actual_result['resultset'], expected_result)
+
+                self.query = "Select poly_length(%s) as custom_num from %s order by custom_num" % (query_field, bucket.name)
+                actual_result = self.run_cbq_query()
+                expected_result = [{"custom_num" : len(doc[query_field])}
+                                   for doc in full_list]
+                expected_result = sorted(expected_result, key=lambda doc: (doc['custom_num']))
+                self._verify_results(actual_result['resultset'], expected_result)
+
     def test_array_agg(self):
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_agg(name) as names" +\
