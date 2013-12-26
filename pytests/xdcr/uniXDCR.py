@@ -24,7 +24,7 @@ class unidirectional(XDCRReplicationBaseTest):
         self._modify_src_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.sleep(self._timeout)
+        self.sleep(self._timeout / 2)
         self.verify_results()
 
     """Testing Unidirectional load( Loading only at source) Verifying whether XDCR replication is successful on
@@ -38,7 +38,7 @@ class unidirectional(XDCRReplicationBaseTest):
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
         self._wait_for_stats_all_buckets(self.src_nodes)
-        self.sleep(self._timeout)
+        self.sleep(self._timeout / 2)
         self.verify_results()
 
     """Testing Unidirectional load( Loading only at source). Failover node at Source/Destination while

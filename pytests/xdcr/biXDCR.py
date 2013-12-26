@@ -35,7 +35,7 @@ class bidirectional(XDCRReplicationBaseTest):
             if "delete" in self._doc_ops_dest:
                 self._load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0)
 
-        self.sleep(self._timeout)
+        self.sleep(self._timeout / 2)
         self._wait_for_stats_all_buckets(self.src_nodes)
         self._wait_for_stats_all_buckets(self.dest_nodes)
 
@@ -52,7 +52,7 @@ class bidirectional(XDCRReplicationBaseTest):
         if "create" in self._doc_ops_dest:
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-        self.sleep(self._timeout)
+        self.sleep(self._timeout / 2)
         self._async_update_delete_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
