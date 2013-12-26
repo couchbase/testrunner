@@ -1508,7 +1508,7 @@ class ViewQueryTests(BaseTestCase):
         for data_set in data_sets:
             data_set.add_startkey_endkey_queries()
             self.load(data_set, generators[iterator])
-            self._query_all_views(generators[iterator])
+            self._query_all_views(data_set.views, generators[iterator])
             iterator += 1
 
         query_bucket_threads = []
@@ -2799,7 +2799,7 @@ class ExpirationDataSet:
         self.expire = expire
         self.expire_millis = 0
 
-    def create_views(self, rest):
+    def create_views(self):
         view_fn = 'function (doc, meta) {if(doc.age !== undefined) { emit(doc.age, meta.expiration);}}'
         return [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=view_fn)]
 
