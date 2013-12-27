@@ -45,7 +45,7 @@ class AutoFailoverBaseTest(unittest.TestCase):
         ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase, \
                 wait_time=AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME * 10, wait_if_warmup=True)
         try:
-            rest = RestConnection(self._servers[0])
+            rest = RestConnection(servers[0])
             buckets = rest.get_buckets()
             for bucket in buckets:
                 MemcachedClientHelper.flush_bucket(servers[0], bucket.name)

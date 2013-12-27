@@ -278,7 +278,7 @@ class bidirectional(XDCRReplicationBaseTest):
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
-        self.sleep(self._timeout * 2)
+        self.sleep(self._timeout)
 
         self.verify_results(verify_src=True)
 
