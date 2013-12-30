@@ -49,6 +49,8 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
 
     def test_upgrade_negative(self):
         op = self.input.param("op", None)
+        error = self.input.param("error", '')
+        remote = RemoteMachineShellConnection(self.master)
         if op is None:
             self.fail("operation should be specified")
         if op == "higher_version":
@@ -57,7 +59,6 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
             self.upgrade_versions = [tmp, ]
         info = None
         if op == "wrong_arch":
-            remote = RemoteMachineShellConnection(self.master)
             info = remote.extract_remote_info()
             info.architecture_type = ('x86_64', 'x86')[info.architecture_type == 'x86']
         self._install([self.master])
@@ -68,7 +69,9 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
             for upgrade_version in self.upgrade_versions:
                 self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade to {0} version".\
                        format(upgrade_version))
-                self._upgrade(upgrade_version, self.master, info=info)
+                output, error = self._upgrade(upgrade_version, self.master, info=info)
+                if str(output).find(error) != -1 or str(error).find(error) != -1:
+                    raise Exception(error)
         except Exception, ex:
             self.log.info("Exception %s appeared as expected" % ex)
             self.log.info("Check that old version is working fine")
