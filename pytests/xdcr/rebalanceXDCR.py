@@ -445,7 +445,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     if "delete" in self._doc_ops:
                         tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
 
-                    self.sleep(5)
+                    self.sleep(10)
 
                 if self._doc_ops_dest is not None:
                     if "update" in self._doc_ops_dest:
@@ -454,7 +454,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     if "delete" in self._doc_ops_dest:
                         tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
 
-                    self.sleep(5)
+                    self.sleep(10)
 
                 if self._rebalance is not None:
                     if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
