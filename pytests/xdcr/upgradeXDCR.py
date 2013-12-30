@@ -1,6 +1,7 @@
 from threading import Thread
 import time
 import re
+import copy
 import Queue
 from datetime import datetime
 from membase.api.rest_client import RestConnection, Bucket
@@ -70,6 +71,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
             self.cluster.create_default_bucket(master_node, bucket_size, self._num_replicas)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                 num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
+        time.sleep(30)
 
     @staticmethod
     def _setup_topology_chain(self):
@@ -240,13 +242,13 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         if self.ddocs_src:
             for bucket_name in self.buckets_on_src:
                 bucket = self._get_bucket(self, bucket_name, self.src_master)
-                expected_rows = items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_src, self.src_master)
 
         if self.ddocs_dest:
             for bucket_name in self.buckets_on_dest:
                 bucket = self._get_bucket(self, bucket_name, self.dest_master)
-                expected_rows = items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_dest, self.dest_master)
 
     def incremental_offline_upgrade(self):
@@ -268,10 +270,10 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self._wait_for_replication_to_catchup()
         nodes_to_upgrade = []
         if upgrade_seq == "src>dest":
-            nodes_to_upgrade = self.src_nodes
+            nodes_to_upgrade = copy.copy(self.src_nodes)
             nodes_to_upgrade.extend(self.dest_nodes)
         elif upgrade_seq == "src<dest":
-            nodes_to_upgrade = self.dest_nodes
+            nodes_to_upgrade = copy.copy(self.dest_nodes)
             nodes_to_upgrade.extend(self.src_nodes)
         elif upgrade_seq == "src><dest":
             min_cluster = min(len(self.src_nodes), len(self.dest_nodes))
@@ -279,20 +281,25 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
                 nodes_to_upgrade.append(self.src_nodes[i])
                 nodes_to_upgrade.append(self.dest_nodes[i])
 
-        for node in nodes_to_upgrade:
+        for _seq, node in enumerate(nodes_to_upgrade):
             self._offline_upgrade([node])
             self.set_xdcr_param('xdcrFailureRestartInterval', 1)
             self.sleep(60)
             bucket = self._get_bucket(self, 'bucket0', self.src_master)
-            gen_create3 = BlobGenerator('loadThree', 'loadThree', self._value_size, end=self._num_items)
+            itemPrefix = "loadThree" + _seq * 'a'
+            gen_create3 = BlobGenerator(itemPrefix, itemPrefix, self._value_size, end=self._num_items)
             self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
-            self.do_merge_bucket(self.src_master, self.dest_master, True, bucket)
             bucket = self._get_bucket(self, 'default', self.src_master)
-            self._load_bucket(bucket, self.src_master, gen_create2, 'create', exp=0)
-            self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
+            itemPrefix = "loadFour" + _seq * 'a'
+            gen_create4 = BlobGenerator(itemPrefix, itemPrefix, self._value_size, end=self._num_items)
+            self._load_bucket(bucket, self.src_master, gen_create4, 'create', exp=0)
             self.sleep(60)
-            self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
-            self.sleep(self.wait_timeout * 5, "Let clusters work for some time")
+        bucket = self._get_bucket(self, 'bucket0', self.src_master)
+        self.do_merge_bucket(self.src_master, self.dest_master, True, bucket)
+        bucket = self._get_bucket(self, 'default', self.src_master)
+        self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
+        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
+        self.sleep(self.wait_timeout * 5, "Let clusters work for some time")
 
     def _operations(self):
         # TODO: there are not tests with views
