@@ -420,8 +420,6 @@ class Rebalance(XDCRReplicationBaseTest):
             dest_buckets = self._get_cluster_buckets(self.src_master)
             for bucket in src_buckets:
                 views = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
-            for bucket in src_buckets:
-                views_dest = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
             ddoc_name = "ddoc1"
             prefix = ("", "dev_")[self._is_dev_ddoc]
 
@@ -494,10 +492,11 @@ class Rebalance(XDCRReplicationBaseTest):
                     self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
                 elif self._replication_direction_str in "bidirection":
                     self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+                    verify_src = True
 
-                tasks = []
                 self._verify_stats_all_buckets(self.src_nodes)
                 self._verify_stats_all_buckets(self.dest_nodes)
+                tasks = []
                 for view in views:
                     tasks.append(
                         self.cluster.async_query_view(self.src_master, prefix + ddoc_name, view.name, query,
@@ -508,12 +507,6 @@ class Rebalance(XDCRReplicationBaseTest):
 
                 for task in tasks:
                     task.result(self._poll_timeout)
-
-            if self._replication_direction_str in "unidirection":
-                self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-            elif self._replication_direction_str in "bidirection":
-                self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-                verify_src = True
             self.verify_results(verify_src=verify_src)
         finally:
             pass
