@@ -63,7 +63,7 @@ class HealthcheckerTests(CliBaseTest):
         if self.os in ["linux", "mac"]:
             command = "cd %s;du -s %s/*" % (self.path_to_store, self.report_folder_name)
             self.shell.use_sudo = False
-            output, error = self.shell.execute_command(command.format(command))
+            output, error = self.shell.execute_command(command)
             self.shell.log_command_output(output, error)
             empty_reports = False
             if len(error) > 0:

@@ -730,7 +730,7 @@ class BackupHelper(object):
         command = "{0} {1} {2}".format(mbbackup_path,
                                        data_directory,
                                        backup_location)
-        output, error = self.test.shell.execute_command(command.format(command))
+        output, error = self.test.shell.execute_command(command)
         self.test.shell.log_command_output(output, error)
 
     def restore(self, backup_location, moxi_port=None, overwrite_flag=False, username=None, password=None):

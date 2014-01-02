@@ -398,7 +398,7 @@ class CheckpointTests(BaseTestCase):
         shell = RemoteMachineShellConnection(server)
         if os == "linux":
             command = "%stools/cbworkloadgen -n %s:8091 -i %s" % (testconstants.LINUX_COUCHBASE_BIN_PATH, server.ip, self.num_items)
-            output, error = shell.execute_command(command.format(command))
+            output, error = shell.execute_command(command)
             shell.log_command_output(output, error)
         shell.disconnect()
 

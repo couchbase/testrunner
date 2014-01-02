@@ -42,7 +42,7 @@ class docloaderTests(CliBaseTest):
             command = "unzip %ssamples/%s.zip" % (testconstants.LINUX_CB_PATH, self.load_filename)
             if self.os == 'mac':
                 command = "unzip %ssamples/%s.zip" % (testconstants.MAC_CB_PATH, self.load_filename)
-            output, error = self.shell.execute_command(command.format(command))
+            output, error = self.shell.execute_command(command)
             self.shell.log_command_output(output, error)
 
         self.verify_results(self.load_filename)
@@ -75,7 +75,7 @@ class docloaderTests(CliBaseTest):
     def get_number_of_files(self, file):
         if self.os != "windows":
             command = "find %s/ -name *.json | wc -l" % (file)
-            output, error = self.shell.execute_command(command.format(command))
+            output, error = self.shell.execute_command(command)
             self.shell.log_command_output(output, error)
             if 'unable to resolve host' in output[0]:
                 #handle situation when DNS server does not have any entry for host, when
@@ -85,7 +85,7 @@ class docloaderTests(CliBaseTest):
                 a = int(output[0])
 
             command = "find %s/design_docs/ -name *.json | wc -l" % (file)
-            output, error = self.shell.execute_command(command.format(command))
+            output, error = self.shell.execute_command(command)
             self.shell.log_command_output(output, error)
             if 'unable to resolve host' in output[0]:
                 b = int(output[1])
@@ -122,7 +122,7 @@ class docloaderTests(CliBaseTest):
         command = "find %s/design_docs/ -name *.json | cut -d \"/\" -f3" % (file)
         if self.os == 'mac':
             command = "find %s/design_docs/ -name *.json | cut -d \"/\" -f4" % (file)
-        output, error = self.shell.execute_command(command.format(command))
+        output, error = self.shell.execute_command(command)
         self.shell.log_command_output(output, error)
 
         for line in output:

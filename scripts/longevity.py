@@ -158,7 +158,7 @@ class BackupHelper(object):
         command = "{0} {1} {2}".format(mbbackup_path,
                                        data_directory,
                                        backup_location)
-        output, error = self.shell.execute_command(command.format(command))
+        output, error = self.shell.execute_command(command)
         self.shell.log_command_output(output, error)
 
 

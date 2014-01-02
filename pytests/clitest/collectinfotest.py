@@ -92,13 +92,13 @@ class CollectinfoTests(CliBaseTest):
 
             if os == "linux":
                 command = "unzip %s" % (zip_file)
-                output, error = self.shell.execute_command(command.format(command))
+                output, error = self.shell.execute_command(command)
                 self.shell.log_command_output(output, error)
                 if len(error) > 0:
                     raise Exception("unable to unzip the files. Check unzip command output for help")
 
                 command = "ls cbcollect_info*/"
-                output, error = self.shell.execute_command(command.format(command))
+                output, error = self.shell.execute_command(command)
                 self.shell.log_command_output(output, error)
                 if len(error) > 0:
                     raise Exception("unable to list the files. Check ls command output for help")
@@ -122,7 +122,7 @@ class CollectinfoTests(CliBaseTest):
                 if not self.node_down:
                     for bucket in self.buckets:
                         command = "grep %s cbcollect_info*/stats.log" % (bucket.name)
-                        output, error = self.shell.execute_command(command.format(command))
+                        output, error = self.shell.execute_command(command)
                         self.shell.log_command_output(output, error)
                         if len(error) > 0:
                             raise Exception("unable to grep key words. Check grep command output for help")
@@ -131,7 +131,7 @@ class CollectinfoTests(CliBaseTest):
                             self.log.error("%s stats are missed in stats.log" % (bucket.name))
 
                 command = "du -s cbcollect_info*/*"
-                output, error = self.shell.execute_command(command.format(command))
+                output, error = self.shell.execute_command(command)
                 self.shell.log_command_output(output, error)
                 empty_logs = False
                 if len(error) > 0:

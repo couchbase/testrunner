@@ -1840,7 +1840,7 @@ class RemoteMachineShellConnection:
             command = "cmd /c \"%s\" \"%s%s@%s:%s\" \"%s\" %s" % (backup_command, "http://", login_info,
                                                cluster_ip, cluster_port, backup_file_location, command_options_string)
 
-        output, error = self.execute_command(command.format(command))
+        output, error = self.execute_command(command)
         self.log_command_output(output, error)
 
     def restore_backupFile(self, login_info, backup_location, buckets):
@@ -1861,12 +1861,12 @@ class RemoteMachineShellConnection:
             if type == 'windows':
                 command = "cmd /c \"%s\" \"%s\" \"%s%s@%s:%s\" %s %s" % (restore_command, backup_file_location, "http://",
                                                       login_info, self.ip, self.port, "-b", bucket)
-            output, error = self.execute_command(command.format(command))
+            output, error = self.execute_command(command)
             self.log_command_output(output, error)
 
     def delete_files(self, file_location):
         command = "%s%s" % ("rm -rf ", file_location)
-        output, error = self.execute_command(command.format(command))
+        output, error = self.execute_command(command)
         self.log_command_output(output, error)
 
     def execute_cbtransfer(self, source, destination, command_options=''):
@@ -1882,7 +1882,7 @@ class RemoteMachineShellConnection:
         command = "%s %s %s %s" % (transfer_command, source, destination, command_options)
         if type == 'windows':
             command = "cmd /c \"%s\" \"%s\" \"%s\" %s" % (transfer_command, source, destination, command_options)
-        output, error = self.execute_command(command.format(command))
+        output, error = self.execute_command(command)
         self.log_command_output(output, error)
 
     def execute_cbdocloader(self, username, password, bucket, memory_quota, file):
@@ -1908,7 +1908,7 @@ class RemoteMachineShellConnection:
                                                                         username, password, self.ip,
                                                                         self.port, bucket, memory_quota,
                                                                         WIN_COUCHBASE_SAMPLES_PATH, file)
-        output, error = self.execute_command(command.format(command))
+        output, error = self.execute_command(command)
         self.log_command_output(output, error)
         return output, error
 
@@ -1923,7 +1923,7 @@ class RemoteMachineShellConnection:
             cbcollect_command = "%scbcollect_info" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
         command = "%s %s" % (cbcollect_command, file)
-        output, error = self.execute_command(command.format(command), use_channel=True)
+        output, error = self.execute_command(command, use_channel=True)
         self.log_command_output(output, error)
         return output, error
 
@@ -1947,7 +1947,7 @@ class RemoteMachineShellConnection:
             command = "%s %s:11210 -b %s -p \"%s\" %s %s %s" % (cbepctl_command, self.ip,
                                                                 bucket.name, bucket.saslPassword,
                                                                 param_type, param, value)
-        output, error = self.execute_command(command.format(command))
+        output, error = self.execute_command(command)
         self.log_command_output(output, error)
         return output, error
 
@@ -1969,7 +1969,7 @@ class RemoteMachineShellConnection:
         else:
             command = "%s %s:11210 %s %s %s " % (cbstat_command, self.ip, command,
                                                                 keyname, vbid)
-        output, error = self.execute_command(command.format(command))
+        output, error = self.execute_command(command)
         self.log_command_output(output, error)
         return output, error
 
@@ -2013,7 +2013,7 @@ class RemoteMachineShellConnection:
                                                                           ratio, num_items, bucket, item_size,
                                                                           command_options, username, password)
 
-        output, error = self.execute_command(command.format(command))
+        output, error = self.execute_command(command)
         self.log_command_output(output, error)
         return output, error
 
@@ -2045,7 +2045,7 @@ class RemoteMachineShellConnection:
                                                 username, password, self.ip,
                                                 self.port, command_options_string)
 
-        output, error = self.execute_command(command.format(command))
+        output, error = self.execute_command(command)
         self.log_command_output(output, error)
         return output, error
 

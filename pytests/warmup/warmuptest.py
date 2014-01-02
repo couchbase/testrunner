@@ -235,7 +235,7 @@ class WarmUpTests(BaseTestCase):
 
             for bucket in self.buckets:
                 command = "cd %s%s & remove *access*" % (path, bucket.name)
-                output, error = shell.execute_command(command.format(command))
+                output, error = shell.execute_command(command)
                 shell.log_command_output(output, error)
 
             shell.disconnect()
