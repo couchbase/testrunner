@@ -724,21 +724,44 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
-    def add_remote_cluster(self, remoteIp, remotePort, username, password, name):
+    def get_cluster_ceritificate(self):
+        api = self.baseUrl + 'pools/default/certificate'
+        status, content, _ = self._http_request(api, 'GET')
+        if status:
+            output = json.loads(content)
+            return output['certificate']
+        else:
+            log.error("/poos/default/certificate status:{0},content:{1}".format(status, content))
+            raise Exception("certificate API failed")
+
+    def regenerate_cluster_certificate(self):
+        api = self.baseUrl + 'controller/regenerateCertificate'
+        status, content, _ = self._http_request(api, 'POST')
+        if status:
+            output = json.loads(content)
+            return output['certificate']
+        else:
+            log.error("controller/regenerateCertificate status:{0},content:{1}".format(status, content))
+            raise Exception("regenerateCertificate API failed")
+
+    def add_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=''):
         #example : password:password username:Administrator hostname:127.0.0.1:9002 name:two
         msg = "adding remote cluster hostname:{0}:{1} with username:password {2}:{3} name:{4}"
         log.info(msg.format(remoteIp, remotePort, username, password, name))
         api = self.baseUrl + 'pools/default/remoteClusters'
-        params = urllib.urlencode({'hostname': "{0}:{1}".format(remoteIp, remotePort),
-                                   'username': username,
-                                   'password': password,
-                                   'name':name})
-        status, content, header = self._http_request(api, 'POST', params)
+        param_map = {'hostname': "{0}:{1}".format(remoteIp, remotePort),
+                        'username': username,
+                        'password': password,
+                        'name':name}
+        if demandEncryption:
+            param_map ['demandEncryption'] = demandEncryption
+            param_map['certificate'] = certificate
+        params = urllib.urlencode(param_map)
+        status, content, _ = self._http_request(api, 'POST', params)
         #sample response :
         # [{"name":"two","uri":"/pools/default/remoteClusters/two","validateURI":"/pools/default/remoteClusters/two?just_validate=1","hostname":"127.0.0.1:9002","username":"Administrator"}]
         if status:
-            json_parsed = json.loads(content)
-            remoteCluster = json_parsed
+            remoteCluster = json.loads(content)
         else:
             log.error("/remoteCluster failed : status:{0},content:{1}".format(status, content))
             raise Exception("remoteCluster API 'add cluster' failed")
@@ -777,19 +800,21 @@ class RestConnection(object):
 
 
     #replicationType:continuous toBucket:default toCluster:two fromBucket:default
-    def start_replication(self, replicationType, fromBucket, toCluster, rep_type="xmem", toBucket=None):
+    def start_replication(self, replicationType, fromBucket, toCluster, rep_type="xmem", toBucket=None, demand_encryption=0):
         toBucket = toBucket or fromBucket
 
         msg = "starting replication type:{0} from {1} to {2} in the remote cluster {3}"
-        create_replication_response = {}
         log.info(msg.format(replicationType, fromBucket, toBucket, toCluster))
         api = self.baseUrl + 'controller/createReplication'
-        params = urllib.urlencode({'replicationType': replicationType,
-                                   'toBucket': toBucket,
-                                   'fromBucket': fromBucket,
-                                   'toCluster': toCluster,
-                                   'type': rep_type})
-        status, content, header = self._http_request(api, 'POST', params)
+        param_map = {'replicationType': replicationType,
+                     'toBucket': toBucket,
+                     'fromBucket': fromBucket,
+                     'toCluster': toCluster,
+                     'type': rep_type}
+        if demand_encryption:
+            param_map['demand_encryption'] = 'on'
+        params = urllib.urlencode(param_map)
+        status, content, _ = self._http_request(api, 'POST', params)
         #response : {"database":"http://127.0.0.1:9500/_replicator",
         # "id": "replication_id"}
         if status:
@@ -1126,7 +1151,7 @@ class RestConnection(object):
         for node in servers:
             node = node.split(":")
             server_list.append(node[0])
-        return vbucket_map,server_list,num_replica
+        return vbucket_map, server_list, num_replica
 
     def get_pools_info(self):
         parsed = {}
@@ -1874,7 +1899,7 @@ class RestConnection(object):
 
             if not all_zones["groups"][i]["nodes"]:
                 if all_zones["groups"][i]["name"] == target_zone:
-                    for i in range(0,len(moved_node_json)):
+                    for i in range(0, len(moved_node_json)):
                         zone_json["nodes"].append(moved_node_json[i])
                 else:
                     zone_json["nodes"] = []
@@ -1891,7 +1916,7 @@ class RestConnection(object):
                     zone_json["nodes"] = node_j
             group_json.append({"name": zone_json["name"], "uri": zone_json["uri"], "nodes": zone_json["nodes"]})
         request = '{{"groups": {0} }}'.format(json.dumps(group_json))
-        status, content, header = self._http_request(api, "PUT", params = request)
+        status, content, header = self._http_request(api, "PUT", params=request)
         # sample request format
         # request = ' {"groups":[{"uri":"/pools/default/serverGroups/0","nodes": [] },\
         #                       {"uri":"/pools/default/serverGroups/c8275b7a88e6745c02815dde4a505e70","nodes": [] },\

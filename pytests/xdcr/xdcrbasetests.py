@@ -260,6 +260,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._percent_delete = self._input.param("del", 30)
         self._warmup = self._input.param("warm", None)
         self._failover = self._input.param("failover", None)
+        self._demand_encryption = self._input.param("demand_encryption", 0)
         self._rebalance = self._input.param("rebalance", None)
         if self._warmup is not None:
             self._warmup = self._warmup.split("-")
@@ -715,12 +716,12 @@ class XDCRBaseTest(unittest.TestCase):
             dest_nodes = self.get_servers_in_cluster(self.dest_master)
             self.verify_xdcr_stats(src_nodes, dest_nodes, verify_src)
         else:
-             # Checking replication at destination clusters when more then 2 clusters defined
-             for cluster_num in self.ord_keys[1:]:
-                 if dest_key_index == self.ord_keys_len:
-                     break
-                 self.dest_nodes = self._clusters_dic[cluster_num]
-                 self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, verify_src)
+            # Checking replication at destination clusters when more then 2 clusters defined
+            for cluster_num in self.ord_keys[1:]:
+                if dest_key_index == self.ord_keys_len:
+                    break
+                self.dest_nodes = self._clusters_dic[cluster_num]
+                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, verify_src)
 
     def get_servers_in_cluster(self, member):
         nodes = [node for node in RestConnection(member).get_nodes()]
@@ -986,15 +987,20 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
     def _link_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
         rest_conn_src = RestConnection(src_master)
+        certificate = ""
+        if self._demand_encryption:
+            rest_conn_dest = RestConnection(dest_master)
+            certificate = rest_conn_dest.get_cluster_ceritificate()
         rest_conn_src.add_remote_cluster(dest_master.ip, dest_master.port,
             dest_master.rest_username,
-            dest_master.rest_password, dest_cluster_name)
+            dest_master.rest_password, dest_cluster_name,
+            demandEncryption=self._demand_encryption, certificate=certificate)
 
     def _replicate_clusters(self, src_master, dest_cluster_name):
         rest_conn_src = RestConnection(src_master)
         for bucket in self._get_cluster_buckets(src_master):
             (rep_database, rep_id) = rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
-                bucket.name, dest_cluster_name, self.rep_type)
+                bucket.name, dest_cluster_name, self.rep_type, demand_encryption=self._demand_encryption)
             self._start_replication_time[bucket.name] = datetime.now()
             self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_database, rep_id))
             self.sleep(5)
