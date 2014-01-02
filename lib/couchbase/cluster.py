@@ -539,8 +539,8 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_view_query_verification(self, server, design_doc_name, view_name, query, expected_rows, num_verified_docs=20, bucket="default", query_timeout=20,
-                                      results=None):
+    def async_view_query_verification(self, design_doc_name, view_name, query, expected_rows, num_verified_docs=20, bucket="default", query_timeout=20,
+                                      results=None, server=None):
         """Asynchronously query a views in a design doc and does full verification of results
 
         Parameters:
@@ -557,7 +557,7 @@ class Cluster(object):
 
         Returns:
             ViewQueryVerificationTask - A task future that is a handle to the scheduled task."""
-        _task = ViewQueryVerificationTask(server, design_doc_name, view_name, query, expected_rows, num_verified_docs, bucket, query_timeout, results=results)
+        _task = ViewQueryVerificationTask(design_doc_name, view_name, query, expected_rows, server, num_verified_docs, bucket, query_timeout, results=results)
         self.task_manager.schedule(_task)
         return _task
 

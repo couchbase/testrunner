@@ -2141,9 +2141,10 @@ class QueryView:
                         msg = "%s:%s: ERROR: %s" % (self, query, result_query["errors"])
                         self.log.error(msg)
                     if result_query["results"]:
-                        task = self.cluster.async_view_query_verification(tc.servers[0],
-                                                   self.ddoc_name, self.name,
+                        task = tc.cluster.async_view_query_verification(
+                                                   self.ddoc_name, self.view.name,
                                                    query.params, expected_results,
+                                                   server=tc.servers[0],
                                                    num_verified_docs=len(expected_results),
                                                    bucket=self.bucket,
                                                    results=result_query["results"])
