@@ -1,6 +1,6 @@
 from clitest.cli_base import CliBaseTest
 from couchbase.documentgenerator import BlobGenerator
-from membase.api.rest_client import RestConnection, Bucket
+from membase.api.rest_client import RestConnection
 from couchbase.document import View
 
 LOG_FILE_NAME_LIST = ["couchbase.log", "diag.log", "ddocs.log", "ini.log", "syslog.tar.gz",

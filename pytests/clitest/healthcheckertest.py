@@ -1,8 +1,6 @@
 from clitest.cli_base import CliBaseTest
 from couchbase.documentgenerator import BlobGenerator
-from membase.api.rest_client import RestConnection, Bucket
-import time
-import logger
+from membase.api.rest_client import RestConnection
 from lib.builds import BeautifulSoup
 
 class HealthcheckerTests(CliBaseTest):

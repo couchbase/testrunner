@@ -1,6 +1,5 @@
 from clitest.cli_base import CliBaseTest
-from membase.api.rest_client import RestConnection, Bucket
-from couchbase.cluster import Cluster
+from membase.api.rest_client import RestConnection
 import testconstants
 import json
 

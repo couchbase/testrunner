@@ -1,5 +1,5 @@
 from clitest.cli_base import CliBaseTest
-from membase.api.rest_client import RestConnection, Bucket
+from membase.api.rest_client import RestConnection
 
 class epctlTests(CliBaseTest):
 
@@ -21,7 +21,7 @@ class epctlTests(CliBaseTest):
 
         for bucket in self.buckets:
             if self.persistence == "start":
-                output,error = self.shell.execute_cbepctl(bucket,"stop", self.param_type,
+                output, error = self.shell.execute_cbepctl(bucket, "stop", self.param_type,
                                                           self.param, self.param_value)
             output, error = self.shell.execute_cbepctl(bucket, self.persistence,
                                                        self.param_type, self.param,
@@ -29,7 +29,7 @@ class epctlTests(CliBaseTest):
             self.verify_results(output, error)
 
     def verify_results(self, output, error):
-        if len(error) >0 :
+        if len(error) > 0 :
             raise Exception("Command throw out error message. Please check the output of remote_util")
         if self.persistence != "":
             if output[0].find("Error") != -1:

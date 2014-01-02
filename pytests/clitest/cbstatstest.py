@@ -1,7 +1,7 @@
 import json
 from clitest.cli_base import CliBaseTest
 from memcached.helper.data_helper import  MemcachedClientHelper
-from membase.api.rest_client import RestConnection, Bucket
+from membase.api.rest_client import RestConnection
 
 
 class cbstatsTests(CliBaseTest):
