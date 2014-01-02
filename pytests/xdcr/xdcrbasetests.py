@@ -655,7 +655,7 @@ class XDCRBaseTest(unittest.TestCase):
                     found = found + 1
             if found == len(buckets):
                 break
-            time.sleep(10)
+            self.sleep(10)
             end_time = end_time - 10
         else:
             self.fail("Timeout occurs while waiting for mutations to be replicated")

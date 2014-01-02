@@ -1,9 +1,6 @@
 from clitest.cli_base import CliBaseTest
 from couchbase.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, Bucket
-import testconstants
-import time
-import logger
 from couchbase.document import View
 
 LOG_FILE_NAME_LIST = ["couchbase.log", "diag.log", "ddocs.log", "ini.log", "syslog.tar.gz",
@@ -52,7 +49,7 @@ class CollectinfoTests(CliBaseTest):
                 self._load_all_buckets(self.master, gen_delete, "delete", 0)
             if("expire" in self.doc_ops):
                 self._load_all_buckets(self.master, gen_expire, "update", self.expire_time)
-                time.sleep(self.expire_time + 1)
+                self.sleep(self.expire_time + 1)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         self.shell.delete_files("%s.zip" % (self.log_filename))
@@ -77,7 +74,7 @@ class CollectinfoTests(CliBaseTest):
             if self.os == 'linux':
                 output, error = self.shell.execute_command("/etc/init.d/couchbase-server restart")
                 self.shell.log_command_output(output, error)
-                time.sleep(self.wait_timeout)
+                self.sleep(self.wait_timeout)
 
 
     @staticmethod

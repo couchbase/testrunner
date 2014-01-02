@@ -36,7 +36,7 @@ class HealthcheckerTests(CliBaseTest):
                 self._load_all_buckets(self.master, gen_delete, "delete", 0)
             if("expire" in self.doc_ops):
                 self._load_all_buckets(self.master, gen_expire, "update", self.expire_time)
-                time.sleep(self.expire_time + 1)
+                self.sleep(self.expire_time + 1)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         self.shell.delete_files(self.report_folder_name)

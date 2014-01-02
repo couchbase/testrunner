@@ -1,5 +1,4 @@
 from threading import Thread
-import time
 import re
 import copy
 import Queue
@@ -18,7 +17,6 @@ from couchbase.document import DesignDocument, View
 
 class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
     def setUp(self):
-        datetime.now()
         super(UpgradeTests, self).setUp()
         self.bucket_topology = self.input.param("bucket_topology", "default:1><2").split(";")
         self.src_init = self.input.param('src_init', 2)
@@ -71,7 +69,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
             self.cluster.create_default_bucket(master_node, bucket_size, self._num_replicas)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                 num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
-        time.sleep(30)
+        self.sleep(30)
 
     @staticmethod
     def _setup_topology_chain(self):

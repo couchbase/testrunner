@@ -1,5 +1,4 @@
 import json
-import time
 from clitest.cli_base import CliBaseTest
 from memcached.helper.data_helper import  MemcachedClientHelper
 from membase.api.rest_client import RestConnection, Bucket
@@ -38,7 +37,7 @@ class cbstatsTests(CliBaseTest):
                                         self.couchbase_password, self.num_items, \
                                         self.set_get_ratio, bucket.name, \
                                         self.item_size, self.command_options)
-                        time.sleep(5)
+                        self.sleep(5)
                 for bucket in self.buckets:
                     output, error = self.shell.execute_cbstats(bucket, self.command)
                     self.verify_results(output, error)
@@ -51,7 +50,7 @@ class cbstatsTests(CliBaseTest):
             bucket_info = RestConnection(self.master).get_bucket(self.buckets[0])
             keys_map = {}
             for i in range(self.num_items):
-                vb_id = i - len(bucket_info.vbuckets) * int(i/len(bucket_info.vbuckets))
+                vb_id = i - len(bucket_info.vbuckets) * int(i / len(bucket_info.vbuckets))
                 mc_conn.set("test_docs-%s" % i, 0, 0, json.dumps('{ "test" : "test"}').encode("ascii", "ignore"), vb_id)
                 keys_map["test_docs-%s" % i] = vb_id
             for key, vb_id in keys_map.iteritems():
@@ -76,7 +75,7 @@ class cbstatsTests(CliBaseTest):
             collect_stats = ""
             commands = ["hash", "tapagg"]
             if command in commands:
-                output, error = self.shell.execute_cbstats(bucket,command)
+                output, error = self.shell.execute_cbstats(bucket, command)
                 d = []
                 if len(output) > 0:
                     d = dict(s.strip().rsplit(':', 1) for s in output)
