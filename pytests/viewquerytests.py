@@ -2115,8 +2115,13 @@ class QueryView:
                 if query.error:
                     expected_results = []
                 else:
+                    params_gen_results = query.params
+                    if query.non_json:
+                        params_gen_results = {}
+                        for key, value in query.params.iteritems():
+                            params_gen_results[key] = value.replace('"', '')
                     task = tc.cluster.async_generate_expected_view_results(doc_gens, self.view,
-                                                                            query.params,
+                                                                            params_gen_results,
                                                                             type_query=query.type_)
                     if 'stop' in dir(threading.currentThread()):
                         threading.currentThread().tasks.append(task)
@@ -2614,16 +2619,16 @@ class SimpleDataSet:
 
         for view in views:
             view.queries = list()
-            start_key = '"%s-%s"' % (views[0].prefix, str(self.num_docs / 2))
-            end_key = '"%s-%s%s"' % (views[0].prefix, str(self.num_docs - 1000), symbol)
+            start_key = '%s-%s' % (views[0].prefix, str(self.num_docs / 2))
+            end_key = '%s-%s%s' % (views[0].prefix, str(self.num_docs - 1000), symbol)
 
             view.queries += [QueryHelper({"startkey" : end_key,
                                            "endkey" : start_key,
-                                           "descending" : "true"}),
-                             QueryHelper({"endkey" : end_key}),
+                                           "descending" : "true"}, non_json=True),
+                             QueryHelper({"endkey" : end_key}, non_json=True),
                              QueryHelper({"endkey" : end_key,
-                                          "inclusiveend" : "false"}),
-                             QueryHelper({"startkey" : start_key})]
+                                          "inclusive_end" : "false"}, non_json=True),
+                             QueryHelper({"startkey" : start_key}, non_json=True)]
             if limit:
                 for q in view.queries:
                     q.params["limit"] = limit
@@ -2919,11 +2924,12 @@ class BigDataSet:
 class QueryHelper:
     def __init__(self, params,
                  type_="view",
-                 error=None):
+                 error=None, non_json=False):
 
         self.params = params
         self.type_ = type_   # "view" or "all_docs"
         self.error = error
+        self.non_json = non_json
 
     def __str__(self):
         return str(self.params)
