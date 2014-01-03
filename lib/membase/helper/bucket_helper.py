@@ -279,10 +279,12 @@ class BucketOperationHelper():
                     try:
                         (a, b, c) = client.get_vbucket_state(i)
                     except mc_bin_client.MemcachedError as e:
+                        ex_msg = str(e)
                         if "Not my vbucket" in log_msg:
                             # reduce output
                             log_msg = log_msg[:log_msg.find("vBucketMap") + 12] + "..."
-                        log.error("%s: %s" % (log_msg, e))
+                            ex_msg = str(e)[:str(e).find('Not my vbucket') + 14] + "..."
+                        log.error("%s: %s" % (log_msg, ex_msg))
                         continue
                     if c.find("\x01") > 0 or c.find("\x02") > 0:
                         ready_vbuckets[i] = True
