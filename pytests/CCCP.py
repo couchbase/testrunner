@@ -4,6 +4,7 @@ from membase.api.rest_client import RestConnection
 from basetestcase import BaseTestCase
 from couchbase.document import View
 from couchbase.documentgenerator import BlobGenerator
+from remote.remote_util import RemoteMachineShellConnection
 
 
 class CCCP(BaseTestCase):
@@ -116,5 +117,15 @@ class CCCP(BaseTestCase):
             views_num = 10
             views = self.make_default_views(self.view_name, views_num, different_map=True)
             tasks.extend(self.async_create_views(self.master, self.ddoc_name, views))
+        if self.ops == 'restart':
+            servers_to_choose = [serv for serv in self.servers if self.master.ip != serv.ip]
+            self.assertTrue(servers_to_choose, "There is only one node in cluster")
+            shell = RemoteMachineShellConnection(servers_to_choose[0])
+            try:
+                shell.stop_couchbase()
+                shell.start_couchbase()
+            finally:
+                shell.disconnect()
+            self.sleep(5, "Server %s is starting..." % servers_to_choose[0].ip)
         return tasks
         
