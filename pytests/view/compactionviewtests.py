@@ -14,6 +14,9 @@ class CompactionViewTests(BaseTestCase):
         self.ddocs_num = self.input.param("ddocs_num", 1)
         self.view_per_ddoc = self.input.param("view_per_ddoc", 2)
         self.use_dev_views = self.input.param("use_dev_views", False)
+        self.default_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
+        self.default_view_name = "default_view"
+        self.default_view = View(self.default_view_name, self.default_map_func, None)
         self.ddocs = []
         # disable auto compaction
         self.disable_compaction()
