@@ -267,7 +267,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
         self._async_modify_data()
 
-        self.sleep(15)
+        self.sleep(self._timeout / 4)
         for task in tasks:
             task.result()
 
