@@ -353,8 +353,10 @@ class RestConnection(object):
         api = self.baseUrl + 'pools/default/tasks'
         try:
             status, content, header = self._http_request(api, 'GET', headers=self._create_headers())
+            log.info("ns_server_tasks: %s %s %s" %(status, content, header))
             return json.loads(content)
         except ValueError:
+            log.info("ns_server_tasks: ValueError")
             return ""
 
     # DEPRECATED: use create_ddoc() instead.
@@ -827,6 +829,7 @@ class RestConnection(object):
     def get_replications(self):
         replications = []
         content = self.ns_server_tasks()
+        log.info("get_replications: content: %s" %content)
         for item in content:
             if item["type"] == "xdcr":
                 replications.append(item)

@@ -506,7 +506,7 @@ class XDCRBaseTest(unittest.TestCase):
         master_id = rest.get_nodes_self().id
         if len(set([server.ip for server in self._servers])) != 1: #if not cluster run use ip addresses instead of lh
             master_id = master_id.replace("127.0.0.1", master_node.ip).replace("localhost", master_node.ip)
-        
+
         self._create_sasl_buckets(master_node, self._sasl_buckets, master_id, bucket_size)
         self._create_standard_buckets(master_node, self._standard_buckets, master_id, bucket_size)
         if self._default_bucket:
