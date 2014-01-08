@@ -1297,7 +1297,7 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
             self.query = "SELECT job_title," +\
-                         " array_prepend(['skill5', 'skill8'], array_agg(skills)) as skills" +\
+                         " array_prepend(['skill5', 'skill8'], array_agg(skills)) as skills_new" +\
                          " FROM %s GROUP BY job_title" % (bucket.name)
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_list = self.run_cbq_query()
@@ -1306,7 +1306,7 @@ class QueryTests(BaseTestCase):
 
             tmp_groups = set([doc['job_title'] for doc in full_list])
             expected_result = [{"job_title" : group,
-                                "skills" : sorted([x["skills"] for x in full_list
+                                "skills_new" : sorted([x["skills"] for x in full_list
                                                   if x["job_title"] == group] + \
                                                   [['skill5', 'skill8']])}
                                for group in tmp_groups]
