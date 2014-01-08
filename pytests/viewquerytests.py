@@ -499,7 +499,7 @@ class ViewQueryTests(BaseTestCase):
         '''
         error = self.input.param('error', 'too large')
         self.value_size = 34603008
-        data_set = BigDataSet(self.master, self.cluster, self.num_docs)
+        data_set = BigDataSet(self.master, self.cluster, self.num_docs, self.value_size)
         data_set.add_stale_queries(error)
         self._query_test_init(data_set)
 
@@ -2879,7 +2879,7 @@ class FlagsDataSet:
                                    (self.item_flag, row['value']))
 
 class BigDataSet:
-    def __init__(self, server, cluster, num_docs, bucket="default"):
+    def __init__(self, server, cluster, num_docs, value_size, bucket="default"):
         self.server = server
         self.cluster = cluster
         self.bucket = bucket
@@ -2887,6 +2887,7 @@ class BigDataSet:
         self.name = "big_data_set"
         self.num_docs = num_docs
         self.kv_store = None
+        self.value_size = value_size
 
     def create_views(self):
         view_fn = 'function (doc, meta) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}'
