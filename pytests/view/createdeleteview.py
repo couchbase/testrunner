@@ -8,7 +8,8 @@ from membase.api.rest_client import RestConnection
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.api.exception import ReadDocumentException
 from membase.api.exception import DesignDocCreationException
-
+from membase.helper.cluster_helper import ClusterOperationHelper
+from remote.remote_util import RemoteMachineShellConnection
 
 class CreateDeleteViewTests(BaseTestCase):
 
@@ -16,6 +17,7 @@ class CreateDeleteViewTests(BaseTestCase):
         super(CreateDeleteViewTests, self).setUp()
         self.bucket_ddoc_map = {}
         self.ddoc_ops = self.input.param("ddoc_ops", None)
+        self.boot_op = self.input.param("boot_op", None)
         self.nodes_in = self.input.param("nodes_in", 1)
         self.nodes_out = self.input.param("nodes_out", 1)
         self.test_with_view = self.input.param("test_with_view", False)
@@ -862,3 +864,51 @@ class CreateDeleteViewTests(BaseTestCase):
 
         self.create_views(self.master, 'ddoc_big_int', view)
 
+    def _execute_boot_op(self, server):
+        try:
+            shell = RemoteMachineShellConnection(server)
+            if self.boot_op == "warmup":
+                shell.set_environment_variable(None, None)
+            elif self.boot_op == "reboot":
+                if shell.extract_remote_info().type.lower() == 'windows':
+                    o, r = shell.execute_command("shutdown -r -f -t 0")
+                elif shell.extract_remote_info().type.lower() == 'linux':
+                    o, r = shell.execute_command("reboot")
+                shell.log_command_output(o, r)
+            self.log.info("Node {0} is being stopped".format(server.ip))
+        finally:
+            shell.disconnect()
+
+    def _verify_data(self, server):
+        query = {"stale" : "false", "full_set" : "true"}
+        self.sleep(60, "Node {0} should be warming up".format(server.ip))
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([server], self, wait_if_warmup=True)
+        self._wait_for_stats_all_buckets(self.servers)
+        for bucket, ddoc_view_map in self.bucket_ddoc_map.items():
+            for ddoc_name, view_list in ddoc_view_map.items():
+                    for view in view_list:
+                        self.cluster.query_view(self.master, ddoc_name, view.name, query)
+        self._verify_ddoc_ops_all_buckets()
+        self._verify_ddoc_data_all_buckets()
+
+    """ Reboot node/Restart couchbase in cluster and while reboot is in progress, update map function/delete view/query view on another node."""
+    def test_view_ops_with_warmup(self):
+        self._load_doc_data_all_buckets()
+        for bucket in self.buckets:
+            self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc, "dev_test", "v1")
+        tasks = []
+        if self.ddoc_ops in ["update", "delete"]:
+            for bucket in self.buckets:
+                tasks = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2,
+                                                        self.num_views_per_ddoc / 2, "dev_test", "v1")
+        elif self.ddoc_ops == "query":
+            for bucket, self.ddoc_view_map in self.bucket_ddoc_map.items():
+                for ddoc_name, view_list in self.ddoc_view_map.items():
+                    for view in view_list:
+                        query = {"stale" : "false", "full_set" : "true"}
+                        tasks.append(self.cluster.async_query_view(self.master, ddoc_name, view.name, query))
+        server = self.servers[1]
+        self._execute_boot_op(server)
+        for task in tasks:
+            task.result(self.wait_timeout * 2)
+        self._verify_data(server)
