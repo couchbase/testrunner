@@ -82,7 +82,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
             dest_key = ord_keys[dest_key_index]
             src_cluster_name = self._cluster_names_dic[src_key]
             dest_cluster_name = self._cluster_names_dic[dest_key]
-            self._join_clusters(self, src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
+            UpgradeTests._join_clusters(self, src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
             dest_key_index += 1
 
     @staticmethod
@@ -97,7 +97,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
                 continue
             dest_cluster_name = self._cluster_names_dic[key]
             self.dest_master = nodes[0]
-            self._join_clusters(self, src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
+            UpgradeTests._join_clusters(self, src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
             self.sleep(30)
 
     @staticmethod

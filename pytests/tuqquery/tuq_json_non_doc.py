@@ -52,7 +52,7 @@ class JSONNonDocTests(QueryTests):
 
     def test_array_where(self):
         for bucket in self.buckets:
-            self.query = "SELECT value() FROM %s WHERE ANY num > 20 OVER num IN value() end" % bucket.name
+            self.query = "SELECT value() FROM %s WHERE ANY num IN value() SATISFIES num > 20 end" % bucket.name
             actual_result = self.run_cbq_query()
             actual_result = [doc["$1"] for doc in actual_result['resultset']]
             expected_result = self._generate_full_docs_list(self.gens_load)

@@ -57,7 +57,7 @@ class QueriesOpsTests(QueryTests):
     def test_swap_rebalance(self):
         self.assertTrue(len(self.servers) >= self.nodes_init + self.nodes_in,
                         "Servers are not enough")
-        self.test_order_by_over()
+        self.test_order_by_satisfy()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                self.servers[self.nodes_init:self.nodes_init + self.nodes_in],
                                self.servers[self.nodes_init - self.nodes_out:self.nodes_init])

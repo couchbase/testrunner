@@ -23,14 +23,16 @@ class QueriesViewsTests(QueryTests):
             view_name = "my_index"
             self.query = "CREATE INDEX %s ON %s(name) " % (
                                     view_name, bucket.name)
-            actual_result = self.run_cbq_query()
-            self._verify_results(actual_result['resultset'], [])
-            self._verify_view_is_present(view_name, bucket)
-            self.assertTrue(self._is_index_in_list(bucket, view_name), "Index is not in list")
-            self.query = "DROP INDEX %s.%s" % (bucket.name, view_name)
-            actual_result = self.run_cbq_query()
-            self._verify_results(actual_result['resultset'], [])
-            self.assertFalse(self._is_index_in_list(bucket, view_name), "Index is in list")
+            try:
+                actual_result = self.run_cbq_query()
+                self._verify_results(actual_result['resultset'], [])
+                self._verify_view_is_present(view_name, bucket)
+                self.assertTrue(self._is_index_in_list(bucket, view_name), "Index is not in list")
+            finally:
+                self.query = "DROP INDEX %s.%s" % (bucket.name, view_name)
+                actual_result = self.run_cbq_query()
+                self._verify_results(actual_result['resultset'], [])
+                self.assertFalse(self._is_index_in_list(bucket, view_name), "Index is in list")
 
     def test_primary_create_delete_index(self):
         for bucket in self.buckets:
@@ -44,12 +46,14 @@ class QueriesViewsTests(QueryTests):
         for bucket in self.buckets:
             view_name = "my_index"
             self.query = "CREATE INDEX %s ON %s(name) " % (view_name, bucket.name)
-            actual_result = self.run_cbq_query()
-            self._verify_results(actual_result['resultset'], [])
-            self.test_case()
-            self.query = "DROP INDEX %s.%s" % (bucket.name,view_name)
-            actual_result = self.run_cbq_query()
-            self._verify_results(actual_result['resultset'], [])
+            try:
+                actual_result = self.run_cbq_query()
+                self._verify_results(actual_result['resultset'], [])
+                self.test_case()
+            finally:
+                self.query = "DROP INDEX %s.%s" % (bucket.name,view_name)
+                actual_result = self.run_cbq_query()
+                self._verify_results(actual_result['resultset'], [])
             self.test_case()
 
     def test_explain(self):
