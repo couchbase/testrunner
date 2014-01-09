@@ -1729,7 +1729,7 @@ class QueryTests(BaseTestCase):
 
     def load(self, generators_load, exp=0, flag=0,
              kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
-             timeout_secs=30, op_type='create'):
+             timeout_secs=30, op_type='create', start_items=0):
         gens_load = {}
         for bucket in self.buckets:
             tmp_gen = []
@@ -1750,7 +1750,7 @@ class QueryTests(BaseTestCase):
                                              timeout_secs))
         for task in tasks:
             task.result()
-        self.num_items = items
+        self.num_items = items + start_items
         self.verify_cluster_stats(self.servers[:self.nodes_init])
         self.log.info("LOAD IS FINISHED")
 
