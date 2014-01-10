@@ -353,10 +353,8 @@ class RestConnection(object):
         api = self.baseUrl + 'pools/default/tasks'
         try:
             status, content, header = self._http_request(api, 'GET', headers=self._create_headers())
-            log.info("ns_server_tasks: %s %s %s" %(status, content, header))
             return json.loads(content)
         except ValueError:
-            log.info("ns_server_tasks: ValueError")
             return ""
 
     # DEPRECATED: use create_ddoc() instead.
@@ -730,8 +728,7 @@ class RestConnection(object):
         api = self.baseUrl + 'pools/default/certificate'
         status, content, _ = self._http_request(api, 'GET')
         if status:
-            output = json.loads(content)
-            return output['certificate']
+            return content
         else:
             log.error("/poos/default/certificate status:{0},content:{1}".format(status, content))
             raise Exception("certificate API failed")
@@ -740,8 +737,7 @@ class RestConnection(object):
         api = self.baseUrl + 'controller/regenerateCertificate'
         status, content, _ = self._http_request(api, 'POST')
         if status:
-            output = json.loads(content)
-            return output['certificate']
+            return content
         else:
             log.error("controller/regenerateCertificate status:{0},content:{1}".format(status, content))
             raise Exception("regenerateCertificate API failed")
@@ -829,7 +825,6 @@ class RestConnection(object):
     def get_replications(self):
         replications = []
         content = self.ns_server_tasks()
-        log.info("get_replications: content: %s" %content)
         for item in content:
             if item["type"] == "xdcr":
                 replications.append(item)
