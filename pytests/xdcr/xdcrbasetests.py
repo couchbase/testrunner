@@ -513,6 +513,8 @@ class XDCRBaseTest(unittest.TestCase):
             self.cluster.create_default_bucket(master_node, bucket_size, self._num_replicas)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
+        # Adding timeout until MB-9707/MB-9745/MB-9819 is fixed
+        self.sleep(30)
 
 
     def _get_bucket_size(self, mem_quota, num_buckets, ratio=2.0 / 3.0):
