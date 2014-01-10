@@ -382,67 +382,74 @@ class bidirectional(XDCRReplicationBaseTest):
 
 
     def replication_with_view_queries_and_ops(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
-        self.sleep(self._timeout)
-
-        src_buckets = self._get_cluster_buckets(self.src_master)
-        dest_buckets = self._get_cluster_buckets(self.src_master)
-        for bucket in src_buckets:
-            views = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
-        for bucket in src_buckets:
-            views_dest = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
-        ddoc_name = "ddoc1"
-        prefix = ("", "dev_")[self._is_dev_ddoc]
-
-        query = {"full_set" : "true", "stale" : "false"}
-
         tasks = []
-        tasks = self.async_create_views(self.src_master, ddoc_name, views, self.default_bucket_name)
-        tasks += self.async_create_views(self.dest_master, ddoc_name, views, self.default_bucket_name)
-        for task in tasks:
-            task.result(self._poll_timeout)
+        try:
+            self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+            self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
+            self.sleep(self._timeout)
 
-        #self._async_update_delete_data()
-        #self.cluster.query_view(self.src_master, prefix + ddoc_name, view.name, query)
-        #self.cluster.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
+            src_buckets = self._get_cluster_buckets(self.src_master)
+            dest_buckets = self._get_cluster_buckets(self.src_master)
+            for bucket in src_buckets:
+                views = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
+            for bucket in src_buckets:
+                views_dest = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
+            ddoc_name = "ddoc1"
+            prefix = ("", "dev_")[self._is_dev_ddoc]
 
-        tasks = []
-        #Setting up doc-ops at source nodes
-        if self._doc_ops is not None:
-            # allows multiple of them but one by one on either of the clusters
-            if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
-            if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-            self.sleep(5)
-        if self._doc_ops_dest is not None:
-            if "update" in self._doc_ops_dest:
-                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
-            if "delete" in self._doc_ops_dest:
-                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
-            self.sleep(5)
+            query = {"full_set" : "true", "stale" : "false"}
 
-        while True:
+            tasks = []
+            tasks = self.async_create_views(self.src_master, ddoc_name, views, self.default_bucket_name)
+            tasks += self.async_create_views(self.dest_master, ddoc_name, views, self.default_bucket_name)
+            for task in tasks:
+                task.result(self._poll_timeout)
+
+            #self._async_update_delete_data()
+            #self.cluster.query_view(self.src_master, prefix + ddoc_name, view.name, query)
+            #self.cluster.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
+
+            tasks = []
+            #Setting up doc-ops at source nodes
+            if self._doc_ops is not None:
+                # allows multiple of them but one by one on either of the clusters
+                if "update" in self._doc_ops:
+                    tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
+                if "delete" in self._doc_ops:
+                    tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
+                self.sleep(5)
+            if self._doc_ops_dest is not None:
+                if "update" in self._doc_ops_dest:
+                    tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
+                if "delete" in self._doc_ops_dest:
+                    tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
+                self.sleep(5)
+
+            while True:
+                for view in views:
+                    self.cluster.query_view(self.src_master, prefix + ddoc_name, view.name, query)
+                    self.cluster.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
+                if set([task.state for task in tasks]) != set(["FINISHED"]):
+                    continue
+                else:
+                    break
+
+            self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+
+            tasks = []
             for view in views:
-                self.cluster.query_view(self.src_master, prefix + ddoc_name, view.name, query)
-                self.cluster.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
-            if set([task.state for task in tasks]) != set(["FINISHED"]):
-                continue
-            else:
-                break
+                tasks.append(self.cluster.async_query_view(self.src_master, prefix + ddoc_name, view.name, query, src_buckets[0].kvs[1].__len__()))
+                tasks.append(self.cluster.async_query_view(self.dest_master, prefix + ddoc_name, view.name, query, dest_buckets[0].kvs[1].__len__()))
 
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+            for task in tasks:
+                task.result(self._poll_timeout)
 
-        tasks = []
-        for view in views:
-            tasks.append(self.cluster.async_query_view(self.src_master, prefix + ddoc_name, view.name, query, src_buckets[0].kvs[1].__len__()))
-            tasks.append(self.cluster.async_query_view(self.dest_master, prefix + ddoc_name, view.name, query, dest_buckets[0].kvs[1].__len__()))
-
-        for task in tasks:
-            task.result(self._poll_timeout)
-
-        self.verify_results(verify_src=True)
+            self.verify_results(verify_src=True)
+        finally:
+            # For timeout error, all tasks to be cancelled
+            # Before proceeding to next test
+            for task in tasks:
+                task.cancel()
 
 
     """Replication with disabled/enabled ddoc compaction on both clusters.

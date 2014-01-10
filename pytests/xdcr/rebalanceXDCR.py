@@ -408,6 +408,7 @@ class Rebalance(XDCRReplicationBaseTest):
             pass
 
     def swap_rebalance_replication_with_view_queries_and_ops(self):
+        tasks = []
         try:
             self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
 
@@ -509,4 +510,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     task.result(self._poll_timeout)
             self.verify_results(verify_src=verify_src)
         finally:
-            pass
+            # Some query tasks not finished after timeout and keep on running,
+            # it should be cancelled before proceeding to next test.
+            for task in tasks:
+                task.cancel()
