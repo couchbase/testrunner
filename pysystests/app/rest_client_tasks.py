@@ -494,7 +494,8 @@ def failover_by_killing_mc(ip):
     logger.error(cmd)
     result = node_ssh.execute_command(cmd, node)
     logger.error(result)
-    time.sleep(40)
+    # in windows, it needs more than 1 min
+    time.sleep(70)
 
 def add_back_nodes(rest, servers='', nodes=[]):
     addBackNodes = []
