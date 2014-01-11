@@ -773,3 +773,105 @@ class CouchbaseCliTest(CliBaseTest):
             remote_client.disconnect()
             self._teardown_xdcr()
 
+#tests for the group-manage option. group creation, renaming and deletion are tested . These tests require a cluster of four or more nodes.
+    def testCreateRenameDeleteGroup(self):
+        remote_client = RemoteMachineShellConnection(self.master)
+        cli_command = "group-manage"
+
+#create group
+        options = " --create --group-name=group2"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ["SUCCESS: group created group2"])
+#create existing group. operation should fail
+        options = " --create --group-name=group2"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output[0], "ERROR: unable to create group group2 (400) Bad Request")
+        self.assertEqual(output[1], "{u'name': u'already exists'}")
+#rename group test
+        options = " --rename=group3 --group-name=group2"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ["SUCCESS: group renamed group2"])
+#delete group test
+        options = " --delete --group-name=group3"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ["SUCCESS: group deleted group3"])
+#delete non-empty group test
+        options = " --delete --group-name=\"Group 1\""
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output[0], "ERROR: unable to delete group Group 1 (400) Bad Request")
+        self.assertEqual(output[1], "{u'_': u'group is not empty'}")
+#delete non-existing group
+        options = " --delete --group-name=groupn"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ["ERROR: invalid group name:groupn"])
+        remote_client.disconnect()
+
+#tests for the group-manage option. adding and moving servers between groups are tested. These tests require a cluster of four or more nodes.
+    def testAddMoveServerListGroup(self):
+        nodes_add = self.input.param("nodes_add", 1)
+        remote_client = RemoteMachineShellConnection(self.master)
+        cli_command = "group-manage"
+#create a group to use in this testcase
+        options = " --create --group-name=group2"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ["SUCCESS: group created group2"])
+#add multiple servers to group
+        for num in xrange(nodes_add):
+            options = "--add-servers=\"{0}:8091;{1}:8091\" --group-name=group2 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip, self.servers[num + 2].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="{0}:8091".format(self.servers[num].ip), user="Administrator", password="password")
+            self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'group2'".format(self.servers[num + 1].ip))
+            self.assertEqual(output[1], "SUCCESS: add server '{0}:8091' to group 'group2'".format(self.servers[num + 2].ip))
+#add single server to group
+        for num in xrange(nodes_add):
+            options = "--add-servers={0}:8091 --group-name=group2 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 3].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'group2'".format(self.servers[num + 3].ip)])
+#list servers in group
+        for num in xrange(nodes_add):
+            options = " --list --group-name=group2"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output[0], "group2")
+            self.assertEqual(output[1], " server: {0}:8091".format(self.servers[num + 1].ip))
+            self.assertEqual(output[2], " server: {0}:8091".format(self.servers[num + 2].ip))
+            self.assertEqual(output[3], " server: {0}:8091".format(self.servers[num + 3].ip))
+#test move multiple servers
+        for num in xrange(nodes_add):
+            options = "--from-group=group2 --to-group=\"Group 1\" --move-servers=\"{0}:8091;{1}:8091;{2}:8091\"".format(self.servers[num + 1].ip, self.servers[num + 2].ip, self.servers[num + 3].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["SUCCESS: move servers from group 'group2' to group 'Group 1'"])
+#clean up by deleting group
+        options = " --delete --group-name=group2"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ["SUCCESS: group deleted group2"])
+
+#tests for the server-add option with group manage rider.  These tests require a cluster of four or more nodes.
+
+    def testServerAddRebalancewithGroupManage(self):
+        nodes_add = self.input.param("nodes_add", 1)
+        remote_client = RemoteMachineShellConnection(self.master)
+
+
+#test server-add command with group manage option
+        cli_command = "server-add"
+        for num in xrange(nodes_add):
+            options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password --group-name=\"Group 1\"".format(self.servers[num + 1].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'Group 1'".format(self.servers[num + 1].ip)])
+
+
+#test rebalance command with add server and group manage option
+        cli_command = "rebalance"
+        for num in xrange(nodes_add):
+            options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password --group-name=\"Group 1\"".format(self.servers[num + 2].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'".format(self.servers[num + 2].ip))
+            self.assertTrue("INFO: rebalancing" in output[1])
+            self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+
+        for num in xrange(nodes_add):
+            options = "--server-remove={0}:8091 --server-add={1}:8091 --server-add-username=Administrator --server-add-password=password --group-name=\"Group 1\"".format(self.servers[num + 2].ip, self.servers[num + 3].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'".format(self.servers[num + 3].ip))
+            self.assertTrue("INFO: rebalancing" in output[1])
+            self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+
