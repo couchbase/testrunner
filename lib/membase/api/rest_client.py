@@ -798,7 +798,7 @@ class RestConnection(object):
 
 
     #replicationType:continuous toBucket:default toCluster:two fromBucket:default
-    def start_replication(self, replicationType, fromBucket, toCluster, rep_type="xmem", toBucket=None, demand_encryption=0):
+    def start_replication(self, replicationType, fromBucket, toCluster, rep_type="xmem", toBucket=None):
         toBucket = toBucket or fromBucket
 
         msg = "starting replication type:{0} from {1} to {2} in the remote cluster {3}"
@@ -809,8 +809,6 @@ class RestConnection(object):
                      'fromBucket': fromBucket,
                      'toCluster': toCluster,
                      'type': rep_type}
-        if demand_encryption:
-            param_map['demand_encryption'] = 'on'
         params = urllib.urlencode(param_map)
         status, content, _ = self._http_request(api, 'POST', params)
         #response : {"database":"http://127.0.0.1:9500/_replicator",

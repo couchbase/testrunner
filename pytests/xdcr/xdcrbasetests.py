@@ -1006,7 +1006,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         rest_conn_src = RestConnection(src_master)
         for bucket in self._get_cluster_buckets(src_master):
             (rep_database, rep_id) = rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
-                bucket.name, dest_cluster_name, self.rep_type, demand_encryption=self._demand_encryption)
+                bucket.name, dest_cluster_name, self.rep_type)
             self._start_replication_time[bucket.name] = datetime.now()
             self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_database, rep_id))
             self.sleep(5)
