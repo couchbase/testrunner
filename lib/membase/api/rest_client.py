@@ -742,17 +742,13 @@ class RestConnection(object):
             log.error("controller/regenerateCertificate status:{0},content:{1}".format(status, content))
             raise Exception("regenerateCertificate API failed")
 
-    def add_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=''):
-        #example : password:password username:Administrator hostname:127.0.0.1:9002 name:two
-        msg = "adding remote cluster hostname:{0}:{1} with username:password {2}:{3} name:{4}"
-        log.info(msg.format(remoteIp, remotePort, username, password, name))
-        api = self.baseUrl + 'pools/default/remoteClusters'
+    def __remote_clusters(self, api, op, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=''):
         param_map = {'hostname': "{0}:{1}".format(remoteIp, remotePort),
                         'username': username,
                         'password': password,
                         'name':name}
         if demandEncryption:
-            param_map ['demandEncryption'] = demandEncryption
+            param_map ['demandEncryption'] = 'on'
             param_map['certificate'] = certificate
         params = urllib.urlencode(param_map)
         status, content, _ = self._http_request(api, 'POST', params)
@@ -762,8 +758,20 @@ class RestConnection(object):
             remoteCluster = json.loads(content)
         else:
             log.error("/remoteCluster failed : status:{0},content:{1}".format(status, content))
-            raise Exception("remoteCluster API 'add cluster' failed")
+            raise Exception("remoteCluster API '{0} remote cluster' failed".format(op))
         return remoteCluster
+
+    def add_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=''):
+        #example : password:password username:Administrator hostname:127.0.0.1:9002 name:two
+        msg = "adding remote cluster hostname:{0}:{1} with username:password {2}:{3} name:{4}"
+        log.info(msg.format(remoteIp, remotePort, username, password, name))
+        api = self.baseUrl + 'pools/default/remoteClusters'
+        self.__remote_clusters(api, 'add', remoteIp, remotePort, username, password, name, demandEncryption, certificate)
+
+    def modify_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=''):
+        log.info("modifying remote cluster name:{0}".format(name))
+        api = self.baseUrl + 'pools/default/remoteClusters/' + urllib.quote(name)
+        self.__remote_clusters(api, 'modify', remoteIp, remotePort, username, password, name, demandEncryption, certificate)
 
     def get_remote_clusters(self):
         remote_clusters = []
