@@ -1002,6 +1002,17 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             dest_master.rest_password, dest_cluster_name,
             demandEncryption=self._demand_encryption, certificate=certificate)
 
+    def _modify_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master, require_encryption=None):
+        rest_conn_src = RestConnection(src_master)
+        certificate = ""
+        if require_encryption:
+            rest_conn_dest = RestConnection(dest_master)
+            certificate = rest_conn_dest.get_cluster_ceritificate()
+        rest_conn_src.modify_remote_cluster(dest_master.ip, dest_master.port,
+            dest_master.rest_username,
+            dest_master.rest_password, dest_cluster_name,
+            demandEncryption=require_encryption, certificate=certificate)
+
     def _replicate_clusters(self, src_master, dest_cluster_name):
         rest_conn_src = RestConnection(src_master)
         for bucket in self._get_cluster_buckets(src_master):
