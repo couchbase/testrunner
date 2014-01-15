@@ -692,13 +692,15 @@ class XDCRBaseTest(unittest.TestCase):
             timeout = max(120, end_time - time.time())
             self._verify_stats_all_buckets(src_nodes, timeout=timeout)
             timeout = max(120, end_time - time.time())
-            self.__wait_for_mutation_to_replicate(self.src_master)
+            # Mutation will be checked on opposite cluster.
+            self.__wait_for_mutation_to_replicate(self.dest_master)
             timeout = max(120, end_time - time.time())
             self._verify_all_buckets(self.src_master)
         timeout = max(120, end_time - time.time())
         self._verify_stats_all_buckets(dest_nodes, timeout=timeout)
         timeout = max(120, end_time - time.time())
-        self.__wait_for_mutation_to_replicate(self.dest_master)
+        # Mutation will be checked on opposite cluster.
+        self.__wait_for_mutation_to_replicate(self.src_master)
         timeout = max(120, end_time - time.time())
         self._verify_all_buckets(self.dest_master)
 
