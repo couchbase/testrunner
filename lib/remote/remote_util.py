@@ -168,7 +168,7 @@ class RemoteMachineShellConnection:
         log.info("Connected")
 
     def sleep(self, timeout=1, message=""):
-        self.log.info("{0}:sleep for {1} secs. {2} ...".format(self.ip, timeout, message))
+        log.info("{0}:sleep for {1} secs. {2} ...".format(self.ip, timeout, message))
         time.sleep(timeout)
 
     def get_running_processes(self):
