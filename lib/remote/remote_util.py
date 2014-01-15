@@ -66,7 +66,7 @@ class RemoteMachineHelper(object):
                 # we should have an option to wait for the process
                 # to start during the timeout
                 # process might have crashed
-                log.info("process {0} is not running or it might have crashed!".format(process_name))
+                log.info("{0}:process {1} is not running or it might have crashed!".format(self.remote_shell.ip, process_name))
                 return False
             time.sleep(1)
         #            log.info('process {0} is running'.format(process_name))
@@ -85,7 +85,7 @@ class RemoteMachineHelper(object):
              process = RemoteMachineProcess()
              process.pid = words[1]
              process.name = words[0]
-             print "process is running: ", words
+             log.info("{0}:process is running on: {1}".format(self.remote_shell.ip, words))
              return process
         else:
             processes = self.remote_shell.get_running_processes()
@@ -167,6 +167,10 @@ class RemoteMachineShellConnection:
                     exit(1)
         log.info("Connected")
 
+    def sleep(self, timeout=1, message=""):
+        self.log.info("{0}:sleep for {1} secs. {2} ...".format(self.ip, timeout, message))
+        time.sleep(timeout)
+
     def get_running_processes(self):
         # if its linux ,then parse each line
         # 26989 ?        00:00:51 pdflush
@@ -203,8 +207,7 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
             o, r = self.execute_command("net stop couchbaseserver")
             self.log_command_output(o, r)
-            log.info("Wait 10 seconds to stop service completely")
-            time.sleep(10)
+            self.sleep(10, "Wait to stop service completely")
         if self.info.type.lower() == "linux":
             o, r = self.execute_command("/etc/init.d/membase-server stop")
             self.log_command_output(o, r)
@@ -310,9 +313,9 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
 
     def configure_log_location(self, new_log_location):
-        mv_logs= testconstants.LINUX_LOG_PATH+'/'+new_log_location
+        mv_logs = testconstants.LINUX_LOG_PATH + '/' + new_log_location
         print " MV LOGS %s" % mv_logs
-        error_log_tag="error_logger_mf_dir"
+        error_log_tag = "error_logger_mf_dir"
         # ADD NON_ROOT user config_details
         log.info("CHANGE LOG LOCATION TO %s".format(mv_logs))
         output, error = self.execute_command("rm -rf %s" % mv_logs)
@@ -325,17 +328,17 @@ class RemoteMachineShellConnection:
                                         % (error_log_tag, error_log_tag, mv_logs, testconstants.LINUX_STATIC_CONFIG))
         self.log_command_output(output, error)
 
-    def change_stat_periodicity(self, ticks ):
+    def change_stat_periodicity(self, ticks):
         # ADD NON_ROOT user config_details
         log.info("CHANGE STAT PERIODICITY TO every %s seconds" % ticks)
         output, error = self.execute_command("sed -i '$ a\{grab_stats_every_n_ticks, %s}.'  %s"
         % (ticks, testconstants.LINUX_STATIC_CONFIG))
         self.log_command_output(output, error)
 
-    def change_port_static(self, new_port ):
+    def change_port_static(self, new_port):
         # ADD NON_ROOT user config_details
         log.info("=========CHANGE PORTS for REST: %s, MCCOUCH: %s,MEMCACHED: %s, MOXI: %s, CAPI: %s==============="
-                %(new_port, new_port+1, new_port+2, new_port+3, new_port+4))
+                % (new_port, new_port + 1, new_port + 2, new_port + 3, new_port + 4))
         output, error = self.execute_command("sed -i '/{rest_port/d' %s" % testconstants.LINUX_STATIC_CONFIG)
         self.log_command_output(output, error)
         output, error = self.execute_command("sed -i '$ a\{rest_port, %s}.' %s"
@@ -344,20 +347,20 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command("sed -i '/{mccouch_port/d' %s" % testconstants.LINUX_STATIC_CONFIG)
         self.log_command_output(output, error)
         output, error = self.execute_command("sed -i '$ a\{mccouch_port, %s}.' %s"
-                                             % (new_port+1, testconstants.LINUX_STATIC_CONFIG))
+                                             % (new_port + 1, testconstants.LINUX_STATIC_CONFIG))
         self.log_command_output(output, error)
         output, error = self.execute_command("sed -i '/{memcached_port/d' %s" % testconstants.LINUX_STATIC_CONFIG)
         self.log_command_output(output, error)
         output, error = self.execute_command("sed -i '$ a\{memcached_port, %s}.' %s"
-                                             % (new_port+2, testconstants.LINUX_STATIC_CONFIG))
+                                             % (new_port + 2, testconstants.LINUX_STATIC_CONFIG))
         self.log_command_output(output, error)
         output, error = self.execute_command("sed -i '/{moxi_port/d' %s" % testconstants.LINUX_STATIC_CONFIG)
         self.log_command_output(output, error)
         output, error = self.execute_command("sed -i '$ a\{moxi_port, %s}.' %s"
-                                             % (new_port+3, testconstants.LINUX_STATIC_CONFIG))
+                                             % (new_port + 3, testconstants.LINUX_STATIC_CONFIG))
         self.log_command_output(output, error)
         output, error = self.execute_command("sed -i '/port = /c\port = %s' %s"
-                                             % (new_port+4, testconstants.LINUX_CAPI_INI))
+                                             % (new_port + 4, testconstants.LINUX_CAPI_INI))
         self.log_command_output(output, error)
         output, error = self.execute_command("rm %s" % testconstants.LINUX_CONFIG_FILE)
         self.log_command_output(output, error)
@@ -875,15 +878,14 @@ class RemoteMachineShellConnection:
         self.stop_schedule_tasks()
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
         log.info("version to upgrade: {0}".format(output))
-        log.info('sleep for 5 seconds before running task schedule upgrademe')
-        time.sleep(5)
+        self.info('before running task schedule upgrademe')
         if '1.8.0' in str(output):
             # run installer in second time as workaround for upgrade 1.8.0 only:
             # Installer needs to update registry value in order to upgrade from the previous version.
             # Please run installer again to continue."""
             output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
             self.log_command_output(output, error)
-            time.sleep(200)
+            self.sleep(200, "because upgrade version is {0}".format(output))
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
             self.log_command_output(output, error)
             self.stop_schedule_tasks()
@@ -897,8 +899,7 @@ class RemoteMachineShellConnection:
         self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
         log.info("installed version:")
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
-        log.info('wait 60 seconds for server to start up completely')
-        time.sleep(60)
+        time.sleep(60, "wait for server to start up completely")
         ct = time.time()
         while time.time() - ct < 10800:
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V| findstr Status ")
@@ -910,7 +911,7 @@ class RemoteMachineShellConnection:
                 break
             else:
                 log.info("upgrademe task still running:{0}".format(output))
-                time.sleep(30)
+                self.sleep(30)
         output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
         self.log_command_output(output, error)
 
@@ -995,10 +996,10 @@ class RemoteMachineShellConnection:
         elif self.info.deliverable_type in ["zip"]:
             o, r = self.execute_command("ps aux | grep Archive | awk '{print $2}' | xargs kill -9")
             self.log_command_output(o, r)
-            time.sleep(60)
+            self.sleep(60)
             output, error = self.execute_command("cd ~/Downloads ; open couchbase-server*.zip")
             self.log_command_output(output, error)
-            time.sleep(60)
+            self.sleep(60)
             output, error = self.execute_command("mv ~/Downloads/couchbase-server*/Couchbase\ Server.app /Applications/")
             self.log_command_output(output, error)
             output, error = self.execute_command("open /Applications/Couchbase\ Server.app")
@@ -1042,8 +1043,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             success &= self.log_command_output(output, error, track_words)
             self.wait_till_file_added(remote_path, "VERSION.txt", timeout_in_seconds=600)
-            log.info('wait 30 seconds for server to start up completely')
-            time.sleep(30)
+            self.sleep(30, "wait for server to start up completely")
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
             self.log_command_output(output, error)
             output, error = self.execute_command("rm -f *-diag.zip")
@@ -1184,8 +1184,7 @@ class RemoteMachineShellConnection:
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
-                log.info('sleep 30 seconds before running the next job ...')
-                time.sleep(30)
+                self.sleep(30, "next step is to install")
                 output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
                 self.log_command_output(output, error)
                 # delete binary after uninstall
@@ -1256,8 +1255,7 @@ class RemoteMachineShellConnection:
             self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
             # modify bat file to run uninstall schedule task
             self.modify_bat_file('/cygdrive/c/automation', bat_file, product, rm_version, task)
-            log.info('sleep for 5 seconds before running task schedule uninstall')
-            time.sleep(5)
+            self.sleep(5, "before running task schedule uninstall")
             # run schedule task uninstall couchbase server
             output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
             self.log_command_output(output, error)
@@ -1265,8 +1263,7 @@ class RemoteMachineShellConnection:
             if not deleted:
                 log.error("Uninstall was failed at node {0}".format(self.ip))
                 sys.exit()
-            log.info('sleep 15 seconds before running the next job ...')
-            time.sleep(15)
+            self.sleep(15, "next step is to install")
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
             self.log_command_output(output, error)
             output, error = self.execute_command("rm /cygdrive/c/tmp/{0}".format(build_name))
@@ -1321,8 +1318,7 @@ class RemoteMachineShellConnection:
                 self.create_windows_capture_file(task, product, full_version)
                 self.modify_bat_file('/cygdrive/c/automation', bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
-                log.info('sleep for 5 seconds before running task schedule uninstall')
-                time.sleep(5)
+                self.sleep(5, "before running task schedule uninstall")
                 # run schedule task uninstall Couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
@@ -1330,8 +1326,7 @@ class RemoteMachineShellConnection:
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
-                log.info('sleep 30 seconds before running the next job ...')
-                time.sleep(30)
+                self.sleep(30, "nex step is to install")
                 output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
                 self.log_command_output(output, error)
             else:
@@ -1657,8 +1652,7 @@ class RemoteMachineShellConnection:
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("net stop couchbaseserver")
             self.log_command_output(o, r)
-            log.info("Wait 10 seconds to stop service completely")
-            time.sleep(10)
+            self.sleep(10, "Wait to stop service completely")
         if self.info.type.lower() == "linux":
             o, r = self.execute_command("/etc/init.d/couchbase-server stop", self.info, use_channel=True)
             self.log_command_output(o, r)
@@ -1780,7 +1774,7 @@ class RemoteMachineShellConnection:
             shell.send('export {0}={1}\n'.format(name, value))
             shell.send('/etc/init.d/couchbase-server restart\n')
         shell.close()
-        time.sleep(30)
+        self.sleep(30)
 
     def set_node_name(self, name):
         """Edit couchbase-server shell script in place and set custom node name.
@@ -2087,8 +2081,7 @@ class RemoteMachineShellConnection:
             if not r:
                 success = True
                 self.log_command_output(o, r)
-                log.info("sleep 30 seconds for windows to execute completely")
-                time.sleep(30)
+                self.sleep(30, "Wait for windows to execute completely")
             else:
                 log.error("Command didn't run successfully. Error: {0}".format(r))
         else:
