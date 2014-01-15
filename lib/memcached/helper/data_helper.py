@@ -40,11 +40,11 @@ class MemcachedClientHelper(object):
     @staticmethod
     def create_threads(servers=None,
                        name='default',
-                       ram_load_ratio= -1,
-                       number_of_items= -1,
+                       ram_load_ratio=-1,
+                       number_of_items=-1,
                        value_size_distribution=None,
                        number_of_threads=50,
-                       override_vBucketId= -1,
+                       override_vBucketId=-1,
                        write_only=False,
                        moxi=True,
                        async_write=False,
@@ -108,11 +108,11 @@ class MemcachedClientHelper(object):
     @staticmethod
     def create_threads_for_load_bucket(serverInfo=None,
                                        name='default',
-                                       ram_load_ratio= -1,
-                                       number_of_items= -1,
+                                       ram_load_ratio=-1,
+                                       number_of_items=-1,
                                        value_size_distribution=None,
                                        number_of_threads=50,
-                                       override_vBucketId= -1,
+                                       override_vBucketId=-1,
                                        write_only=False,
                                        moxi=True,
                                        delete_ratio=0,
@@ -170,11 +170,11 @@ class MemcachedClientHelper(object):
     @staticmethod
     def load_bucket_and_return_the_keys(servers=None,
                                         name='default',
-                                        ram_load_ratio= -1,
-                                        number_of_items= -1,
+                                        ram_load_ratio=-1,
+                                        number_of_items=-1,
                                         value_size_distribution=None,
                                         number_of_threads=50,
-                                        override_vBucketId= -1,
+                                        override_vBucketId=-1,
                                         write_only=False,
                                         moxi=True,
                                         delete_ratio=0,
@@ -222,11 +222,11 @@ class MemcachedClientHelper(object):
     @staticmethod
     def load_bucket(servers,
                     name='default',
-                    ram_load_ratio= -1,
-                    number_of_items= -1,
+                    ram_load_ratio=-1,
+                    number_of_items=-1,
                     value_size_distribution=None,
                     number_of_threads=50,
-                    override_vBucketId= -1,
+                    override_vBucketId=-1,
                     write_only=False,
                     moxi=True):
         inserted_keys_count = 0
@@ -469,7 +469,7 @@ class WorkerThread(threading.Thread):
                  name,
                  values_list,
                  ignore_how_many_errors=5000,
-                 override_vBucketId= -1,
+                 override_vBucketId=-1,
                  terminate_in_minutes=120,
                  write_only=False,
                  moxi=True,
@@ -1219,6 +1219,9 @@ class VBucketAwareMemcached(object):
 
     def _parse_not_my_vbucket_error(self, error):
         error_msg = error.msg
+        if error_msg == "Connection reset":
+            self.log.error("{0} while _send_op, server is alive?".format(error_msg))
+            return None
         vbuckets = []
         try:
             error_json = json.loads(error_msg[error_msg.find('{'):error_msg.rfind('}') + 1])
@@ -1254,7 +1257,7 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
         self.store_enabled = store_enabled
         self._rlock = threading.Lock()
 
-    def set(self, key, value, ttl= -1):
+    def set(self, key, value, ttl=-1):
         self._rlock.acquire()
         try:
             if ttl >= 0:
