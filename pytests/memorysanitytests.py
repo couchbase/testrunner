@@ -163,7 +163,7 @@ class MemorySanity(BaseTestCase):
 
                     if self.kv_verify:
                         verify_dict[key] = verify_dict[key] + random_string
-                self.log.info("for {0} items size was increased to {1}".format(len(selected_keys) + 1, self.value_size))
+                self.log.info("for {0} items size was increased to {1} KB".format(len(selected_keys) + 1, self.value_size))
                 self.value_size += str_len
                 index += 1
 
