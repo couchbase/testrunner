@@ -179,12 +179,12 @@ class BucketOperationHelper():
         msg = 'bucket "{0}" was not deleted even after waiting for two minutes'.format(bucket)
         if test_case:
             if not BucketOperationHelper.wait_for_bucket_deletion(bucket, rest, 200):
-                 try:
-                    print_dataStorage_content([serverInfo])
+                try:
+                    BucketOperationHelper.print_dataStorage_content([serverInfo])
                     log.info(StatsCommon.get_stats([serverInfo], bucket, "timings"))
-                 except:
+                except:
                     log.error("Unable to get timings for bucket")
-                 test_case.fail(msg)
+                test_case.fail(msg)
 
 
     @staticmethod
