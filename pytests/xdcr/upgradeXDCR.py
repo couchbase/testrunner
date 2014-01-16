@@ -35,6 +35,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.ddocs_num_dest = self.input.param("ddocs-num-dest", 0)
         self.views_num_dest = self.input.param("view-per-ddoc-dest", 2)
         self.post_upgrade_ops = self.input.param("post-upgrade-actions", None)
+        self._use_encryption_after_upgrade = self.input.param("use_encryption_after_upgrade", 0)
         self.ddocs_src = []
         self.ddocs_dest = []
 
@@ -172,6 +173,16 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.sleep(60)
         self._wait_for_replication_to_catchup()
         self._offline_upgrade(nodes_to_upgrade)
+
+        if self._use_encryption_after_upgrade and "src" in upgrade_nodes and "dest" in upgrade_nodes and self.upgrade_versions[0] >= "2.5.0":
+            if "src" in self._use_encryption_after_upgrade:
+                src_remote_clusters = RestConnection(self.src_master).get_remote_clusters()
+                for remote_cluster in src_remote_clusters:
+                    self._modify_clusters(None, self.src_master, remote_cluster['name'], self.dest_master, require_encryption=1)
+            if "dest" in self._use_encryption_after_upgrade:
+                dest_remote_clusters = RestConnection(self.dest_master).get_remote_clusters()
+                for remote_cluster in dest_remote_clusters:
+                    self._modify_clusters(None, self.dest_master, remote_cluster['name'], self.src_master, require_encryption=1)
 
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
         self.sleep(60)
