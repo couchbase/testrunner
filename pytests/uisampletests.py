@@ -91,7 +91,7 @@ class InitializeTest(BaseUITestCase):
             try:
                 rest = RestConnection(server)
                 rest.force_eject_node()
-                time.sleep(5)
+                time.sleep(10)
                 self.driver.refresh()
             except BaseException, e:
                 self.fail(e)
@@ -854,7 +854,7 @@ class BucketHelper():
             self.controls.bucket_pop_up().dedicated_port_radio.click()
             self.controls.bucket_pop_up().port.type(bucket.protocol_port)
         if bucket.num_replica:
-            if bucket.num_replica == 0:
+            if bucket.num_replica == '0':
                 self.controls.bucket_pop_up(parent).enable_replica_cb.check(setTrue=False)
             else:
                 self.controls.bucket_pop_up(parent).enable_replica_cb.check()
