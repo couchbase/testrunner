@@ -649,6 +649,7 @@ class XDCRBaseTest(unittest.TestCase):
 
     # CBQE-1695 Wait for replication_changes_left (outbound mutations) to be 0.
     def __wait_for_mutation_to_replicate(self, master_node, timeout=180):
+        self.log.info("Waiting for Outbound mutation to be zero on cluster node: %s" % master_node.ip)
         buckets = self._get_cluster_buckets(master_node)
         curr_time = time.time()
         end_time = curr_time + timeout
@@ -656,7 +657,9 @@ class XDCRBaseTest(unittest.TestCase):
         while curr_time < end_time:
             found = 0
             for bucket in buckets:
-                if int(rest.get_xdc_queue_size(bucket.name)) == 0:
+                mutations = int(rest.get_xdc_queue_size(bucket.name))
+                self.log.info("Current outbound mutations on cluster node: %s for bucket %s is %s" % (master_node.ip, bucket.name, mutations))
+                if  mutations == 0:
                     found = found + 1
             if found == len(buckets):
                 break

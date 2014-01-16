@@ -435,6 +435,8 @@ class bidirectional(XDCRReplicationBaseTest):
                     break
 
             self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+            self._verify_stats_all_buckets(self.src_nodes)
+            self._verify_stats_all_buckets(self.dest_nodes)
 
             tasks = []
             for view in views:
