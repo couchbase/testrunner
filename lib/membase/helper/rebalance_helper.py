@@ -395,6 +395,7 @@ class RebalanceHelper():
                 missing_percentage = 0
             else:
                 missing_percentage = delta * 1.0 / (sum * (replica_factor + 1))
+            log.info("Nodes stats are: {0}".format([node.ip for node in nodes]))
         else:
             missing_percentage = 1
         log.info("delta : {0} missing_percentage : {1} replica_factor : {2}".format(delta, \
