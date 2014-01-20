@@ -666,7 +666,11 @@ class XDCRBaseTest(unittest.TestCase):
             self.sleep(10)
             end_time = end_time - 10
         else:
-            self.fail("Timeout occurs while waiting for mutations to be replicated")
+            # MB-9707: Updating this code from fail to warning to avoid test to abort, as per this
+            # bug, this particular stat i.e. replication_changes_left is buggy.
+            self.log.error("Timeout occurs while waiting for mutations to be replicated")
+            return False
+        return True
 
         """Verify the stats at the destination cluster
         1. Data Validity check - using kvstore-node key-value check
@@ -691,19 +695,20 @@ class XDCRBaseTest(unittest.TestCase):
         timeout = max(120, end_time - time.time())
         self.log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_master.ip))
         self._wait_for_stats_all_buckets(dest_nodes, timeout=timeout)
+        mutations_replicated = True
         if verify_src:
             timeout = max(120, end_time - time.time())
             self._verify_stats_all_buckets(src_nodes, timeout=timeout)
             timeout = max(120, end_time - time.time())
             # Mutation will be checked on opposite cluster.
-            self.__wait_for_mutation_to_replicate(self.dest_master)
+            mutations_replicated &= self.__wait_for_mutation_to_replicate(self.dest_master)
             timeout = max(120, end_time - time.time())
             self._verify_all_buckets(self.src_master)
         timeout = max(120, end_time - time.time())
         self._verify_stats_all_buckets(dest_nodes, timeout=timeout)
         timeout = max(120, end_time - time.time())
         # Mutation will be checked on opposite cluster.
-        self.__wait_for_mutation_to_replicate(self.src_master)
+        mutations_replicated &= self.__wait_for_mutation_to_replicate(self.src_master)
         timeout = max(120, end_time - time.time())
         self._verify_all_buckets(self.dest_master)
 
@@ -717,6 +722,9 @@ class XDCRBaseTest(unittest.TestCase):
 
         if errors_caught > 0:
             self.fail("Mismatches on Meta Information on xdcr-replicated items!")
+
+        if not mutations_replicated:
+            self.fail("Test is failed as Outbound mutations has not become zero, check the test logs above.")
 
     def verify_results(self, verify_src=False):
         dest_key_index = 1
