@@ -178,7 +178,7 @@ class Installer(object):
                 names = ['couchbase-server-enterprise_centos6', 'couchbase-server-community_centos6', \
                          'couchbase-server-enterprise_ubuntu_1204', 'couchbase-server-community_ubuntu_1204']
             if "toy" in params:
-                names = ['couchbase-server-community_cent54-master']
+                names = ['couchbase-server-community']
 
         remote_client = RemoteMachineShellConnection(server)
         info = remote_client.extract_remote_info()
