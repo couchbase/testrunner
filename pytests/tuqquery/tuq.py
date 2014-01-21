@@ -1519,7 +1519,7 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result, expected_result)
 ##############################################################################################
 #
-#   EXPLAIN
+#   KEY
 ##############################################################################################
 
     def test_key(self):
@@ -1562,6 +1562,43 @@ class QueryTests(BaseTestCase):
             self.query = 'select name FROM %s KEY ["wrong_one","wrong_second"]' % (bucket.name)
             actual_result = self.run_cbq_query()
             self.assertFalse(actual_result['resultset'], "Having a wrong key query returned some result")
+
+    def test_key_first(self):
+        for bucket in self.buckets:
+            key_select, value_select = copy.deepcopy(self.gens_load[0]).next()
+            self.query = 'SELECT * FROM %s KEY FIRST emp._id FOR emp IN [%s] END' % (bucket.name, value_select)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['name']))
+            full_list = self._generate_full_docs_list(self.gens_load, keys=[key_select])
+            expected_result = [{"name" : doc['name']} for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_key_array(self):
+        for bucket in self.buckets:
+            gen_select = copy.deepcopy(self.gens_load[0])
+            key_select, value_select = gen_select.next()
+            self.query = 'SELECT * FROM %s KEYS ARRAY emp._id FOR emp IN [%s] END' % (bucket.name, value_select)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['name']))
+            full_list = self._generate_full_docs_list(self.gens_load, keys=[key_select])
+            expected_result = [{"name" : doc['name']} for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result, expected_result)
+
+            key2_select, value2_select = gen_select.next()
+            self.query = 'SELECT * FROM %s KEYS ARRAY emp._id FOR emp IN [%s,%s] END' % (bucket.name,
+                                                                                      value_select,
+                                                                                      value2_select)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['name']))
+            full_list = self._generate_full_docs_list(self.gens_load, keys=[key_select, key2_select])
+            expected_result = [{"name" : doc['name']} for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
 #
