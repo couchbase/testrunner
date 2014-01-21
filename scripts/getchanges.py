@@ -9,7 +9,7 @@ if __name__ == "__main__":
     args = sys.argv
     if len(args) == 2:
         version = args[1]
-        builds, changes = BuildQuery().get_all_builds()
+        builds, changes = BuildQuery().get_all_builds(version=version)
         build = BuildQuery().find_membase_build_with_version(builds, version)
         if build.change and build.change.url:
             try:

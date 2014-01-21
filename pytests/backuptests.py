@@ -498,7 +498,7 @@ class BackupRestoreTests(unittest.TestCase):
         if not final_version.startswith('2.0'):
             self.log.error("Upgrade test not set to run from 1.8.1 -> 2.0 ..")
             return
-        builds, changes = BuildQuery().get_all_builds()
+        builds, changes = BuildQuery().get_all_builds(version=final_version)
         product = 'couchbase-server-enterprise'
         #CASE where the worker isn't a 2.0+
         worker_flag = 0
@@ -631,7 +631,7 @@ class BackupRestoreTests(unittest.TestCase):
 
         self.servers = copy.copy(original_set)
         if initial_version == fin:
-            builds, changes = BuildQuery().get_all_builds()
+            builds, changes = BuildQuery().get_all_builds(version=initial_version)
             for server in self.servers:
                 remote = RemoteMachineShellConnection(server)
                 info = remote.extract_remote_info()

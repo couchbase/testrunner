@@ -125,7 +125,7 @@ class Installer(object):
         params = tmp
 
         ok = True
-        if not "version" in params:
+        if not "version" in params and len(params["version"]) < 5:
             _errors.append(errors["INVALID-PARAMS"])
             ok = False
         else:
@@ -184,12 +184,11 @@ class Installer(object):
         info = remote_client.extract_remote_info()
         remote_client.disconnect()
         if ok:
-            timeout = None
+            timeout = 300
             if "timeout" in params:
                 timeout = int(params["timeout"])
-            builds, changes = BuildQuery().get_all_builds(timeout=300)
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
-            cb_releases_version = ["2.0.0", "2.0.1"]
+            cb_releases_version = ["1.8.1", "2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0"]
             for name in names:
                 if version in releases_version:
                     build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
@@ -202,6 +201,7 @@ class Installer(object):
                                                                      build_version=version,
                                                                      product=name)
                 else:
+                    builds, changes = BuildQuery().get_all_builds(version=version, timeout=timeout)
                     build = BuildQuery().find_build(builds, name, info.deliverable_type,
                                                         info.architecture_type, version, toy=toy,
                                                         openssl=openssl)
@@ -640,7 +640,7 @@ class InstallerJob(object):
                     for server in servers:
                         success &= not RemoteMachineShellConnection(server).is_couchbase_installed()
                     if not success:
-                        print "thread {0} finished. Server:{1}.Couchbase is still" +\
+                        print "thread {0} finished. Server:{1}.Couchbase is still" + \
                               " installed after uninstall".format(t.name, server)
                         return success
                 print "uninstall succeeded"
@@ -689,7 +689,7 @@ class InstallerJob(object):
             for server in servers:
                 success &= not RemoteMachineShellConnection(server).is_couchbase_installed()
             if not success:
-                print "Server:{0}.Couchbase is still" +\
+                print "Server:{0}.Couchbase is still" + \
                       " installed after uninstall".format(server)
                 return success
         for t in install_threads:

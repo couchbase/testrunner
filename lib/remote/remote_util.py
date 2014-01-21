@@ -1214,7 +1214,7 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
 
     def couchbase_win_uninstall(self, product, version, os_name, query):
-        builds, changes = query.get_all_builds()
+        builds, changes = query.get_all_builds(version=version)
         version_file = 'VERSION.txt'
         bat_file = "uninstall.bat"
         task = "uninstall"

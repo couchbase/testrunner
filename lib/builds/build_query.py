@@ -154,30 +154,36 @@ class BuildQuery(object):
     def get_sustaining_latest_builds(self):
         return self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds/sustaining')
 
-    def get_all_builds(self, timeout=None):
+    def get_all_builds(self, version=None, timeout=None):
         try:
             latestbuilds, latestchanges = \
-                self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds', timeout=timeout)
+                self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds', version=version, timeout=timeout)
         except Exception as e:
             print e
             latestbuilds, latestchanges = \
-                self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds', timeout=timeout)
+                self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds', version=version, timeout=timeout)
 
         return latestbuilds, latestchanges
 
 
     #baseurl = 'http://builds.hq.northscale.net/latestbuilds/'
-    def _get_and_parse_builds(self, build_page, timeout=None):
+    def _get_and_parse_builds(self, build_page, version=None, timeout=None):
         builds = []
         changes = []
         page = None
         soup = None
+        index_url = '/index.html'
+        if version:
+            if version.find("-") != -1:
+                index_url = "/index_" + version[:version.find("-")] + ".html"
+            else:
+                index_url = "/index_" + version + ".html"
         #try this five times
         for i in range(0, 5):
             try:
                 if timeout:
                     socket.setdefaulttimeout(timeout)
-                page = urllib2.urlopen(build_page + '/index.html')
+                page = urllib2.urlopen(build_page + index_url)
                 soup = BeautifulSoup.BeautifulSoup(page)
                 break
             except:

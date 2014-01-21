@@ -156,7 +156,7 @@ class NewUpgradeBaseTest(BaseTestCase):
     def _get_build(self, server, version, remote, is_amazon=False, info=None):
         if info is None:
             info = remote.extract_remote_info()
-        builds, changes = BuildQuery().get_all_builds(timeout=self.wait_timeout * 5)
+        builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5)
         self.log.info("finding build %s for machine %s" % (version, server))
 
         if re.match(r'[1-9].[0-9].[0-9]-[0-9]+$', version):
