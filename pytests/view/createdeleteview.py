@@ -135,7 +135,7 @@ class CreateDeleteViewTests(BaseTestCase):
             #store the updated ddoc dict
             self.bucket_ddoc_map[bucket] = ddoc_view_map
         else:
-            self.log.fail("Invalid ddoc operation {0}. No execution done.".format(ddoc_op_type))
+            self.log.exception("Invalid ddoc operation {0}. No execution done.".format(ddoc_op_type))
 
     """Asynchronously execute create/update/delete operations on a bucket and
     create an internal dictionary of the objects created. For update/delete operation,
@@ -228,7 +228,7 @@ class CreateDeleteViewTests(BaseTestCase):
             self.bucket_ddoc_map[bucket] = ddoc_view_map
             return tasks
         else:
-            self.log.fail("Invalid ddoc operation {0}. No execution done.".format(ddoc_op_type))
+            self.log.exception("Invalid ddoc operation {0}. No execution done.".format(ddoc_op_type))
 
     """Verify number of Design Docs/Views on all buckets
     comparing with the internal dictionary of the create/update/delete ops

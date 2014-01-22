@@ -89,7 +89,7 @@ class DocumentKeysTests(BaseTestCase):
             try:
                 client = MemcachedClientHelper.proxy_client(self.master, bucket.name)
             except Exception as ex:
-                self.log.fail("unable to create memcached client due to {0}..".format(ex))
+                self.log.exception("unable to create memcached client due to {0}..".format(ex))
 
             try:
                 for itr in xrange(self.num_items):
@@ -101,7 +101,7 @@ class DocumentKeysTests(BaseTestCase):
                         client.delete(key)
                         expected_rows = 0
             except Exception as ex:
-                self.log.fail("Received exception {0} while performing data op - {1}".format(ex, data_op))
+                self.log.exception("Received exception {0} while performing data op - {1}".format(ex, data_op))
 
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
         self._verify_with_views(expected_rows)
