@@ -1484,6 +1484,10 @@ class ViewQueryTask(Task):
             self.log.info("(%d rows) expected, (%d rows) returned" % \
                           (self.expected_rows, len(content['rows'])))
 
+            raised_error = content.get(u'error', '') or ''.join([str(item) for item in content.get(u'errors', [])])
+            if raised_error:
+                raise QueryViewException(self.view_name, raised_error)
+
             if len(content['rows']) == self.expected_rows:
                 self.log.info("expected number of rows: '{0}' was found for view query".format(self.
                             expected_rows))
