@@ -1955,9 +1955,9 @@ class RemoteMachineShellConnection:
         if self.info.distribution_type.lower() == 'mac':
             cbstat_command = "%scbstats" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
-        if bucket.saslPassword == None:
-            bucket.saslPassword = ''
-        if command != "key":
+        if command != "key" and command != "raw":
+            if bucket.saslPassword == None:
+                bucket.saslPassword = ''
             command = "%s %s:11210 %s -b %s -p \"%s\" " % (cbstat_command, self.ip, command,
                                                                 bucket.name, bucket.saslPassword)
         else:
