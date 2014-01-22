@@ -397,7 +397,7 @@ class bidirectional(XDCRReplicationBaseTest):
             ddoc_name = "ddoc1"
             prefix = ("", "dev_")[self._is_dev_ddoc]
 
-            query = {"full_set" : "true", "stale" : "false"}
+            query = {"full_set" : "true", "stale" : "false", "connection_timeout" : 60000}
 
             tasks = []
             tasks = self.async_create_views(self.src_master, ddoc_name, views, self.default_bucket_name)
