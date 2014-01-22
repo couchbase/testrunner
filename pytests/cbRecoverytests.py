@@ -73,6 +73,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
     def cbr_routine(self, _healthy_, _compromised_):
         shell = RemoteMachineShellConnection(_healthy_)
         info = shell.extract_remote_info()
+        shell.disconnect()
         _ssh_client = paramiko.SSHClient()
         _ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         _ssh_client.connect(hostname=_healthy_.ip, username=_healthy_.ssh_username, password=_healthy_.ssh_password)
@@ -105,7 +106,6 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                     rest.remove_all_recoveries()
                     raise Exception("Unable to complete test, cbrecovery failed to complete in expected time")
                     break
-        shell.disconnect()
 
     def trigger_rebalance(self, rest):
         _nodes_ = rest.node_statuses()
@@ -122,7 +122,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                 result in data loss, so force failover
                 """
                 if _count_ > self._num_replicas:
-                    time.sleep(10)
+                    self.sleep(10)
                     for item in rest.node_statuses():
                         if node.ip == item.ip:
                             rest.fail_over(item.id)
@@ -131,8 +131,8 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                     continue
                 shell = RemoteMachineShellConnection(node)
                 shell.stop_couchbase()
-                self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 shell.disconnect()
+                self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 rest.reset_autofailover()
                 _count_ += 1
 
@@ -152,8 +152,8 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                     continue
                 shell = RemoteMachineShellConnection(node)
                 o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
-                self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 shell.disconnect()
+                self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 rest.reset_autofailover()
                 _count_ += 1
 
