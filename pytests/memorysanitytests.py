@@ -1,20 +1,14 @@
-import unittest
-import datetime
 from TestInput import TestInputSingleton
 import time
-import sys
-import uuid
 import logger
 import string
 import random
 import math
-from membase.api.rest_client import RestConnection, RestHelper
-from membase.helper.cluster_helper import ClusterOperationHelper
+from lib.remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
-from memcached.helper.data_helper import MemcachedClientHelper
 from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
 from basetestcase import BaseTestCase
-from mc_bin_client import MemcachedClient, MemcachedError
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from couchbase.stats_tools import StatsCommon
 
@@ -55,7 +49,7 @@ class MemorySanity(BaseTestCase):
             initial_memory_usage[bucket.name] = rest.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["mem_used"][-1]
             self.log.info("initial memory consumption of bucket '{0}' with load: {1}".format(bucket.name, initial_memory_usage[bucket.name]))
         mem_usage = {}
-        time.sleep(10)
+        self.sleep(10)
         #the repetitions
         for i in range(0, self.repetitions):
             BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
@@ -68,7 +62,7 @@ class MemorySanity(BaseTestCase):
                 mem_usage[bucket.name] = rest.fetch_bucket_stats(bucket.name)["op"]["samples"]["mem_used"][-1]
                 self.log.info("Memory used after attempt {0} = {1}, Difference from initial snapshot: {2}"\
                               .format(i + 1, mem_usage[bucket.name], (mem_usage[bucket.name] - initial_memory_usage[bucket.name])))
-            time.sleep(10)
+            self.sleep(10)
         if (self.repetitions > 0):
             self.log.info("After {0} repetitive deletion-creation-load of the buckets, the memory consumption difference is .."\
                           .format(self.repetitions));
@@ -124,9 +118,10 @@ class MemorySanity(BaseTestCase):
         self.fixed_append_size = self.input.param("fixed_append_size", True)
         self.append_ratio = self.input.param("append_ratio", 0.5)
         self._load_all_buckets(self.master, self.gen_create, "create", 0,
-                               batch_size=10000, pause_secs=5, timeout_secs=100)
+                               batch_size=1000, pause_secs=5, timeout_secs=100)
 
         for bucket in self.buckets:
+            self.value_size = self.input.param("value_size", 512)
             verify_dict = {}
             vkeys, dkeys = bucket.kvs[1].key_set()
 
@@ -160,15 +155,15 @@ class MemorySanity(BaseTestCase):
                 for key in selected_keys:
                     random_string = self.random_str_generator(str_len)
                     awareness.memcached(key).append(key, random_string)
-
                     if self.kv_verify:
                         verify_dict[key] = verify_dict[key] + random_string
-                self.log.info("for {0} items size was increased to {1} KB".format(len(selected_keys) + 1, self.value_size))
+                self.log.info("for {0} items size was increased to {1} Bytes".format(len(selected_keys) + 1, self.value_size))
                 self.value_size += str_len
                 index += 1
 
             self.log.info("The appending of {0} items ended".format(len(selected_keys) + 1))
 
+        for bucket in self.buckets:
             msg = "Bucket:{0}".format(bucket.name)
             self.log.info("VERIFICATION <" + msg + ">: Phase 0 - Check the gap between "
                       + "mem_used by the bucket and total_allocated_bytes")
@@ -183,6 +178,7 @@ class MemorySanity(BaseTestCase):
                 self.log.info("In {0} bucket {1}, mem_used = {2}".format(server.ip, bucket.name, mem_used_stats[server]))
                 self.log.info("In {0} bucket {1}, the difference between actual memory used by memcached and mem_used is {2} times"
                               .format(server.ip, bucket.name, float(int(total_fragmentation_bytes_stats[server]) + int(total_allocated_bytes_stats[server])) / float(mem_used_stats[server])))
+
 
             self.log.info("VERIFICATION <" + msg + ">: Phase1 - Check if any of the "
                     + "selected keys have value less than the desired value size")
@@ -200,3 +196,6 @@ class MemorySanity(BaseTestCase):
                         self.fail("Content at key {0}: not what's expected.".format(k))
                 self.log.info("VERIFICATION <" + msg + ">: Successful")
 
+        shell = RemoteMachineShellConnection(self.master)
+        shell.execute_cbstats("", "raw", keyname="allocator", vbid="")
+        shell.disconnect()
