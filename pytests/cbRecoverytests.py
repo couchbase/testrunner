@@ -258,13 +258,9 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     initial_node_count = len(self.src_nodes)
                     vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.src_nodes):
-                    self.log.info("Won't failover .. count exceeds available servers on source : SKIPPING TEST")
-                    self.tearDown()
-                    return
+                    raise Exception("Won't failover .. count exceeds available servers on source : SKIPPING TEST")
                 if len(self._floating_servers_set) <= self._add_count:
-                    self.log.info("Not enough spare nodes available, to match the failover count : SKIPPING TEST")
-                    self.tearDown()
-                    return
+                    raise Exception("Not enough spare nodes available, to match the failover count : SKIPPING TEST")
                 self.log.info("Failing over {0} nodes on source ..".format(self._failover_count))
                 self.failed_nodes = self.src_nodes[(len(self.src_nodes) - self._failover_count):len(self.src_nodes)]
                 self.cluster.failover(self.src_nodes, self.failed_nodes)
@@ -289,13 +285,9 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     initial_node_count = len(self.dest_nodes)
                     vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.dest_nodes):
-                    self.log.info("Won't failover .. count exceeds available servers on sink : SKIPPING TEST")
-                    self.tearDown()
-                    return
+                    raise Exception("Won't failover .. count exceeds available servers on sink : SKIPPING TEST")
                 if len(self._floating_servers_set) < self._add_count:
-                    self.log.info("Not enough spare nodes available, to match the failover count : SKIPPING TEST")
-                    self.tearDown()
-                    return
+                    raise Exception("Not enough spare nodes available, to match the failover count : SKIPPING TEST")
                 self.log.info("Failing over {0} nodes on destination ..".format(self._failover_count))
                 self.failed_nodes = self.dest_nodes[(len(self.dest_nodes) - self._failover_count):len(self.dest_nodes)]
                 self.cluster.failover(self.dest_nodes, self.failed_nodes)
@@ -355,13 +347,9 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     initial_node_count = len(self.src_nodes)
                     vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.src_nodes):
-                    self.log.info("Won't failover .. count exceeds available servers on source : SKIPPING TEST")
-                    self.tearDown()
-                    return
+                    raise Exception("Won't failover .. count exceeds available servers on source : SKIPPING TEST")
                 if len(self._floating_servers_set) < self._add_count:
-                    self.log.info("Not enough spare nodes available, to match the failover count : SKIPPING TEST")
-                    self.tearDown()
-                    return
+                    raise Exception("Not enough spare nodes available, to match the failover count : SKIPPING TEST")
 
                 self._autofail_enable(rest)
                 self.log.info("Triggering {0} over {1} nodes on source ..".format(self.failover_reason, self._failover_count))
@@ -390,13 +378,9 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     initial_node_count = len(self.dest_nodes)
                     vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.dest_nodes):
-                    self.log.info("Won't failover .. count exceeds available servers on source : SKIPPING TEST")
-                    self.tearDown()
-                    return
+                    raise Exception("Won't failover .. count exceeds available servers on source : SKIPPING TEST")
                 if len(self._floating_servers_set) < self._add_count:
-                    self.log.info("Not enough spare nodes available, to match the failover count : SKIPPING TEST")
-                    self.tearDown()
-                    return
+                    raise Exception("Not enough spare nodes available, to match the failover count : SKIPPING TEST")
 
                 self._autofail_enable(rest)
                 self.log.info("Triggering {0} over {1} nodes on destination ..".format(self.failover_reason, self._failover_count))
@@ -459,13 +443,9 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     initial_node_count = len(self.src_nodes)
                     vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.src_nodes):
-                    self.log.info("Won't failover .. count exceeds available servers on source : SKIPPING TEST")
-                    self.tearDown()
-                    return
+                    raise Exception("Won't failover .. count exceeds available servers on source : SKIPPING TEST")
                 if len(self._floating_servers_set) < self._add_count:
-                    self.log.info("Not enough spare nodes available, to match the failover count : SKIPPING TEST")
-                    self.tearDown()
-                    return
+                    raise Exception("Not enough spare nodes available, to match the failover count : SKIPPING TEST")
                 self.log.info("Failing over {0} nodes on source ..".format(self._failover_count))
                 self.failed_nodes = self.src_nodes[(len(self.src_nodes) - self._failover_count):len(self.src_nodes)]
                 self.cluster.failover(self.src_nodes, self.failed_nodes)
@@ -492,13 +472,10 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     initial_node_count = len(self.dest_nodes)
                     vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.dest_nodes):
-                    self.log.info("Won't failover .. count exceeds available servers on sink : SKIPPING TEST")
-                    self.tearDown()
-                    return
+                    raise Exception("Won't failover .. count exceeds available servers on sink : SKIPPING TEST")
                 if len(self._floating_servers_set) < self._add_count:
-                    self.log.info("Not enough spare nodes available, to match the failover count : SKIPPING TEST")
-                    self.tearDown()
-                    return
+                    raise Exception("Not enough spare nodes available, to match the failover count : SKIPPING TEST")
+
                 self.log.info("Failing over {0} nodes on destination ..".format(self._failover_count))
                 self.failed_nodes = self.dest_nodes[(len(self.dest_nodes) - self._failover_count):len(self.dest_nodes)]
                 self.cluster.failover(self.dest_nodes, self.failed_nodes)
