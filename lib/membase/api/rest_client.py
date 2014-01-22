@@ -134,7 +134,7 @@ class RestHelper(object):
 
     def _wait_for_task_pid(self, pid, end_time, ddoc_name):
         while (time.time() < end_time):
-            new_pid, _ = self.rest._get_indexer_task_pid(self, ddoc_name)
+            new_pid, _ = self.rest._get_indexer_task_pid(ddoc_name)
             if pid == new_pid:
                 time.sleep(5)
                 continue
