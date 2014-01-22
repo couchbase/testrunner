@@ -109,6 +109,20 @@ class JoinTests(QueryTests):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
+    def test_join_unnest_alias(self):
+        for bucket in self.buckets:
+            self.query = "SELECT task2 FROM %s emp1 JOIN %s" % (bucket.name, bucket.name) +\
+            " task KEYS emp1.tasks_ids UNNEST emp1.tasks_ids as task2"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc:(
+                                                               doc['task2']))
+            expected_result = self._generate_full_joined_docs_list()
+            expected_result = [{"task2" : task} for doc in expected_result
+                               for task in doc['tasks_ids']]
+            expected_result = sorted(expected_result, key=lambda doc:(
+                                                          doc['task2']))
+            self._verify_results(actual_result, expected_result)
+
     def generate_docs(self, docs_per_day, start=0):
         generators = []
         types = ['Engineer', 'Sales', 'Support']
