@@ -132,7 +132,7 @@ class JoinTests(QueryTests):
     def generate_docs_tasks(self):
         generators = []
         start, end = 0, (28 + 1)
-        template = '{{ "task_name":"{0}", "project":{1}}}'
+        template = '{{ "task_name":"{0}", "project": "{1}"}}'
         generators.append(DocumentGenerator("test_task", template,
                                             ["test_task_%s" % i for i in xrange(0,10)],
                                             ["CB"],
