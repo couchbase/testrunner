@@ -1595,7 +1595,7 @@ class MonitorViewQueryResultsTask(Task):
                 res = {"passed" : False,
                        "errors" : str(ex)}
                 if self.results and self.results.get(u'rows', []):
-                    res[results] = self.results
+                    res['results'] = self.results
                 self.set_result(res)
         except Exception, ex:
             if self.current_retry == self.retries:
