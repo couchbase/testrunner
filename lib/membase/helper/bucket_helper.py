@@ -281,8 +281,9 @@ class BucketOperationHelper():
                     except mc_bin_client.MemcachedError as e:
                         ex_msg = str(e)
                         if "Not my vbucket" in log_msg:
-                            # reduce output
                             log_msg = log_msg[:log_msg.find("vBucketMap") + 12] + "..."
+                        if "Not my vbucket" in ex_msg:
+                            #reduce output
                             ex_msg = str(e)[:str(e).find('Not my vbucket') + 14] + "..."
                         log.error("%s: %s" % (log_msg, ex_msg))
                         continue
