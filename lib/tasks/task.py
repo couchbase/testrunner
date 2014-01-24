@@ -130,7 +130,7 @@ class NodeInitializeTask(Task):
 
 class BucketCreateTask(Task):
     def __init__(self, server, bucket='default', replicas=1, size=0, port=11211,
-                 password=None, bucket_type='membase'):
+                 password=None, bucket_type='membase', enable_replica_index=1):
         Task.__init__(self, "bucket_create_task")
         self.server = server
         self.bucket = bucket
@@ -139,6 +139,7 @@ class BucketCreateTask(Task):
         self.size = size
         self.password = password
         self.bucket_type = bucket_type
+        self.enable_replica_index = enable_replica_index
 
     def execute(self, task_manager):
         try:
@@ -160,7 +161,8 @@ class BucketCreateTask(Task):
                                proxyPort=self.port,
                                authType=authType,
                                saslPassword=self.password,
-                               bucketType=self.bucket_type)
+                               bucketType=self.bucket_type,
+                               replica_index=self.enable_replica_index)
             self.state = CHECKING
             task_manager.schedule(self)
         except BucketCreationException as e:

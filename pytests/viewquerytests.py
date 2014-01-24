@@ -367,57 +367,66 @@ class ViewQueryTests(BaseTestCase):
 
     def test_employee_dataset_min_changes_check(self):
         '''
-        Test uses employee data set:
-            -documents are structured as {"name": name<string>,
-                                       "join_yr" : year<int>,
-                                       "join_mo" : month<int>,
-                                       "join_day" : day<int>,
-                                       "email": email<string>,
-                                       "job_title" : title<string>,
-                                       "type" : type<string>,
-                                       "desc" : desc<tring>}
+        Test uses simple data set:
+             -documents are structured as {name: some_name<string>, age: some_integer_age<int>}
         Steps to repro:
             1. Create views with updateMinChanges option
-            2. Loader threads starts
-            3. Check thread for each view in each node is started
-                check thread wait for update_seqs will be more than
-                    updateMinChanges optoin
-                then checks that index is started
+            2. Load data less that changes
+            3. Check index is not started
+            4. load data more that changes
+            5.Check index is triggered
         '''
         min_changes = self.input.param('min-changes', 1000)
+        min_changes_r = self.input.param('min-changes-replica', 2000)
         options = {"updateMinChanges" : min_changes,
-                   "replicaUpdateMinChanges" : min_changes}
-        data_set = EmployeeDataSet(self._rconn(), self.docs_per_day, limit=self.limit,
-                                   ddoc_options=options)
+                   "replicaUpdateMinChanges" : min_changes_r}
+        point_1 = min(min_changes, min_changes_r) - 100
+        point_2 = point_1 + (max(min_changes, min_changes_r) - min(min_changes, min_changes_r))/2
+        point_3 = max(min_changes, min_changes_r) + 200
+        index_types = (('main','replica'), ('replica', 'main'))[min_changes > min_changes_r]
+        data_set = SimpleDataSet(self.master, self.cluster, self.num_docs,
+                                 ddoc_options=options)
+        gen_load_1 = data_set.generate_docs(data_set.views[0], start=0,
+                                            end=point_1)
 
-        load_thread = StoppableThread(target=data_set.load,
-               name="load_thread",
-               args=(self, data_set.views[0]))
-        try:
-            load_thread.start()
+        self.load(data_set, gen_load_1)
+        self.assertFalse(data_set.is_index_triggered_or_ran(data_set.views[0], index_types[0]),
+                        "View %s, Index %s was triggered. Options %s" % (data_set.views[0],
+                                                                    index_types[0], options))
+        self.assertFalse(data_set.is_index_triggered_or_ran(data_set.views[0], index_types[1]),
+                        "View %s, Index %s was triggered. Options %s" % (data_set.views[0],
+                                                                    index_types[1], options))
+        self.log.info("Indexes are not triggered")
+        changes_done = point_1
+        changes_done = self._load_until_point(point_2, changes_done, data_set)
+        self.assertTrue(data_set.is_index_triggered_or_ran(data_set.views[0], index_types[0]),
+                        "View %s, Index %s wasn't triggered. Options %s" % (data_set.views[0],
+                                                                    index_types[0], options))
+        self.assertFalse(data_set.is_index_triggered_or_ran(data_set.views[0], index_types[1]),
+                        "View %s, Index %s was triggered. Options %s" % (data_set.views[0],
+                                                                index_types[1], options))
+        self.log.info("View %s, Index %s was triggered. Options %s" % (data_set.views[0],
+                                                                    index_types[0], options))
+        retry = 0
+        self._load_until_point(point_3, changes_done, data_set)
+        self.assertTrue(data_set.is_index_triggered_or_ran(data_set.views[0], index_types[1]),
+                        "View %s, Index %s wasn't triggered. Options %s" % (data_set.views[0],
+                                                                index_types[1], options))
+        self.log.info("View %s, Index %s was triggered. Options %s" % (data_set.views[0],
+                                                                       index_types[1], options))
 
-            check_threads = []
-            for server in self.servers:
-                for view in data_set.views:
-                    t = StoppableThread(target=data_set.wait_min_changes,
-                           name="wait-{0}".format(view.name),
-                           args=(self, server, view, min_changes))
-                    check_threads.append(t)
-                    t.start()
-
-            while True:
-                if not check_threads:
-                    return
-                self.thread_stopped.wait(60)
-                if self.thread_crashed.is_set():
-                    for t in check_threads:
-                        t.stop()
-                    return
-                else:
-                    check_threads = [d for d in check_threads if d.is_alive()]
-                    self.thread_stopped.clear()
-        finally:
-            load_thread.join()
+    def _load_until_point(self, point, changes_done, data_set):
+        max_retry = 20
+        retry = 0
+        while (data_set.get_partition_seq(data_set.views[0]) < point and retry < max_retry):
+            changes_done += (100 * len(self.servers))
+            gen_load = data_set.generate_docs(data_set.views[0],
+                                            start=changes_done,
+                                            end=changes_done +(100 * len(self.servers)))
+            changes_done += (100 * len(self.servers))
+            self.load(data_set, gen_load)
+            self.log.info("Partition sequence is: %s" % data_set.get_partition_seq(data_set.views[0]))
+        return changes_done
 
     def test_employee_dataset_alldocs_queries(self):
         '''
@@ -2525,24 +2534,9 @@ class EmployeeDataSet:
                                                start=start, end=end))
         return generators
 
-
-    def wait_min_changes(self, tc, server, view, min_change, timeout=600):
-        try:
-            #TODO
-            pass
-        except Exception as ex:
-            view.results.addError(tc, sys.exc_info())
-            tc.log.error("At least one of checking min changes threads is crashed: {0}".format(ex))
-            tc.thread_crashed.set()
-            raise ex
-        finally:
-            if not tc.thread_stopped.is_set():
-                tc.thread_stopped.set()
-
-
 class SimpleDataSet:
     def __init__(self, server, cluster, num_docs, reduce_fn=None, bucket='default',
-                 name_ddoc=None, json_case=False):
+                 name_ddoc=None, json_case=False, ddoc_options=None):
         self.num_docs = num_docs
         self.name = name_ddoc
         self.json_case = json_case
@@ -2551,6 +2545,7 @@ class SimpleDataSet:
         self.reduce_fn = reduce_fn
         self.bucket = bucket
         self.cluster = cluster
+        self.ddoc_options = ddoc_options
         self.views = self.create_views()
 
     def create_views(self):
@@ -2558,7 +2553,8 @@ class SimpleDataSet:
         if self.json_case:
             view_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc._id, doc.age);}}'
         return [QueryView(self.server, self.cluster, fn_str=view_fn,
-                          reduce_fn=self.reduce_fn, name=self.name)]
+                          reduce_fn=self.reduce_fn, name=self.name,
+                          ddoc_options=self.ddoc_options)]
 
     def generate_docs(self, view, start=0, end=None):
         if end is None:
@@ -2570,6 +2566,31 @@ class SimpleDataSet:
         gen_load = DocumentGenerator(view.prefix, template, age, name, start=start,
                                      end=end)
         return [gen_load]
+
+    def get_updates_num(self, view):
+        rest = RestConnection(self.server)
+        _, stat = rest.set_view_info(view.bucket, view.name)
+        return stat['stats']['full_updates']
+
+    def is_index_triggered_or_ran(self, view, index_type):
+        rest = RestConnection(self.server)
+        is_running = rest.is_index_triggered(view.name, index_type)
+        if index_type == 'main':
+            return is_running or self.get_updates_num(view) >= 1
+        else:
+            content = rest.query_view(view.name, view.name, view.bucket, {"stale" : "ok",
+                                                                "_type" : "replica"})
+            if not 'rows' in content:
+                raise Exception("Query doesn't contain 'rows': %s" % content)
+            return is_running or len(content['rows']) > 0
+
+    def get_partition_seq(self, view):
+        rest = RestConnection(self.server)
+        _, stat = rest.set_view_info(view.bucket, view.name)
+        partition_seq = 0
+        for value in stat['partition_seqs'].itervalues():
+                    partition_seq += value
+        return partition_seq
 
     def add_negative_query(self, query_params, error, views=None):
         views = views or self.views
@@ -2835,7 +2856,7 @@ class ExpirationDataSet:
                           "Actual results %s, expected %s" % (
                                     len(results.get(u'rows', 0)), self.num_docs))
             for row in results.get(u'rows', 0):
-                tc.assertTrue(row['value'] in xrange(self.expire_millis - 200, self.expire_millis + 200),
+                tc.assertTrue(row['value'] in xrange(self.expire_millis - 200, self.expire_millis + 600),
                                   "Expiration should be %s, but actual is %s" % \
                                    (self.expire_millis, row['value']))
             tc.log.info("Expiration emmited correctly")

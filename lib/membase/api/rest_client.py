@@ -385,24 +385,24 @@ class RestConnection(object):
             raise DesignDocCreationException(design_doc_name, content)
         return json.loads(content)
 
-    def is_index_triggered(self, ddoc_name):
-        run, block = self._get_indexer_task_pid(ddoc_name)
+    def is_index_triggered(self, ddoc_name, index_type='main'):
+        run, block = self._get_indexer_task_pid(ddoc_name, index_type=index_type)
         if run or block:
             return True
         else:
             return False
 
-    def _get_indexer_task_pid(self, ddoc_name):
+    def _get_indexer_task_pid(self, ddoc_name, index_type='main'):
         active_tasks = self.active_tasks()
         if u'error' in active_tasks:
             return None
         if active_tasks:
             for task in active_tasks:
-                if task['type'] == 'indexer' and task['indexer_type'] == 'main':
+                if task['type'] == 'indexer' and task['indexer_type'] == index_type:
                     for ddoc in task['design_documents']:
                         if ddoc == ('_design/%s' % ddoc_name):
                             return task['pid'], False
-                if task['type'] == 'blocked_indexer' and task['indexer_type'] == 'main':
+                if task['type'] == 'blocked_indexer' and task['indexer_type'] == index_type:
                     for ddoc in task['design_documents']:
                         if ddoc == ('_design/%s' % ddoc_name):
                             return task['pid'], True

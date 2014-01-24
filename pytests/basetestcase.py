@@ -54,6 +54,7 @@ class BaseTestCase(unittest.TestCase):
             self.nodes_out = self.input.param("nodes_out", 1)
 
             self.num_replicas = self.input.param("replicas", 1)
+            self.enable_replica_index = self.input.param("index_replicas", 1)
             self.num_items = self.input.param("items", 1000)
             self.value_size = self.input.param("value_size", 512)
             self.dgm_run = self.input.param("dgm_run", False)
@@ -251,7 +252,8 @@ class BaseTestCase(unittest.TestCase):
 
     def _bucket_creation(self):
         if self.default_bucket:
-            self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas)
+            self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas,
+                                               enable_replica_index=self.enable_replica_index)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self.num_replicas, bucket_size=self.bucket_size))
 
@@ -276,7 +278,8 @@ class BaseTestCase(unittest.TestCase):
             bucket_tasks.append(self.cluster.async_create_sasl_bucket(server, name,
                                                                       password,
                                                                       bucket_size,
-                                                                      self.num_replicas))
+                                                                      self.num_replicas,
+                                                                      enable_replica_index=self.enable_replica_index))
             self.buckets.append(Bucket(name=name, authType="sasl", saslPassword=password,
                                        num_replicas=self.num_replicas, bucket_size=bucket_size,
                                        master_id=server_id));
@@ -296,7 +299,8 @@ class BaseTestCase(unittest.TestCase):
             bucket_tasks.append(self.cluster.async_create_standard_bucket(server, name,
                                                                     STANDARD_BUCKET_PORT + i,
                                                                     bucket_size,
-                                                                    self.num_replicas))
+                                                                    self.num_replicas,
+                                                                    enable_replica_index=self.enable_replica_index))
             self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
                                        num_replicas=self.num_replicas,
                                        bucket_size=bucket_size,
