@@ -259,7 +259,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.src_nodes):
                     raise Exception("Won't failover .. count exceeds available servers on source : SKIPPING TEST")
-                if len(self._floating_servers_set) <= self._add_count:
+                if len(self._floating_servers_set) < self._add_count:
                     raise Exception("Not enough spare nodes available, to match the failover count : SKIPPING TEST")
                 self.log.info("Failing over {0} nodes on source ..".format(self._failover_count))
                 self.failed_nodes = self.src_nodes[(len(self.src_nodes) - self._failover_count):len(self.src_nodes)]
