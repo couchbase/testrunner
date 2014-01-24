@@ -215,7 +215,7 @@ class ViewQueryTests(BaseTestCase):
                stratkey. endkey, descending, inclusive_end, parameters with non-json char)
         '''
         symbols = [u"\xf1", u"\xe1", u"\xfc", u"\xbf", u"\xf1", u"\xe1", u"\xfc",
-                   u"\xbf", u"\uffff"]
+                   u"\xbf"]
         data_set = SimpleDataSet(self.master, self.cluster, self.num_docs,
                                  json_case=True)
         generator_load = data_set.generate_docs(data_set.views[0])
@@ -2124,7 +2124,7 @@ class QueryView:
                 if query.error:
                     expected_results = []
                 else:
-                    params_gen_results = query.params
+                    params_gen_results = copy.deepcopy(query.params)
                     if query.non_json:
                         params_gen_results = {}
                         for key, value in query.params.iteritems():
@@ -2154,7 +2154,7 @@ class QueryView:
                     if result_query["errors"]:
                         msg = "%s:%s: ERROR: %s" % (self, query, result_query["errors"])
                         self.log.error(msg)
-                    if result_query["results"]:
+                    if 'results' in result_query and result_query["results"]:
                         task = tc.cluster.async_view_query_verification(
                                                    self.ddoc_name, self.view.name,
                                                    query.params, expected_results,
@@ -2640,8 +2640,8 @@ class SimpleDataSet:
 
         for view in views:
             view.queries = list()
-            start_key = '%s-%s' % (views[0].prefix, str(self.num_docs / 2))
-            end_key = '%s-%s%s' % (views[0].prefix, str(self.num_docs - 1000), symbol)
+            start_key = '"%s-%s"' % (views[0].prefix, str(self.num_docs / 2))
+            end_key = '"%s-%s%s"' % (views[0].prefix, str(self.num_docs - 2), symbol)
 
             view.queries += [QueryHelper({"startkey" : end_key,
                                            "endkey" : start_key,
