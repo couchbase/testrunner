@@ -1,4 +1,5 @@
 NS_SERVER_TIMEOUT = 120
+STANDARD_BUCKET_PORT = 11217
 COUCHBASE_SINGLE_DEFAULT_INI_PATH = "/opt/couchbase/etc/couchdb/default.ini"
 MEMBASE_DATA_PATH = "/opt/membase/var/lib/membase/data/"
 MEMBASE_VERSIONS = ["1.5.4", "1.6.5.4-win64", "1.7.0", "1.7.1", "1.7.1.1", "1.7.2"]

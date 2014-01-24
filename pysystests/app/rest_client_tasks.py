@@ -21,6 +21,7 @@ import eventlet
 from eventlet.green import urllib2
 from celery.utils.log import get_task_logger
 from cache import ObjCacher, CacheHelper
+from testconstants import STANDARD_BUCKET_PORT
 logger = get_task_logger(__name__)
 
 if cfg.SERIESLY_IP != '':
@@ -202,7 +203,7 @@ def create_standard_buckets(rest, bucketMsg):
         rest.create_bucket(bucket = name,
                            ramQuotaMB = bucketMsgParsed['ramQuotaMB'],
                            replicaNumber = bucketMsgParsed['replicas'],
-                           proxyPort = 11214+i,
+                           proxyPort = STANDARD_BUCKET_PORT + i,
                            authType = "none",
                            saslPassword = None,
                            bucketType = bucketMsgParsed['type'],

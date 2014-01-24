@@ -16,6 +16,8 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from cache import ObjCacher, CacheHelper
 import testcfg as cfg
 from app.workload_manager import ClusterStatus
+from testconstants import STANDARD_BUCKET_PORT
+
 ObjCacher().clear(CacheHelper.CLUSTERSTATUSKEY)
 
 class initialize(unittest.TestCase):
@@ -202,7 +204,7 @@ class SETUP(initialize):
             rest.create_bucket(bucket=name,
                                ramQuotaMB=bucket_size,
                                replicaNumber=self._num_replicas,
-                               proxyPort=11214+i,
+                               proxyPort=STANDARD_BUCKET_PORT + i,
                                authType="none",
                                saslPassword=None)
             self._buckets.append(name)

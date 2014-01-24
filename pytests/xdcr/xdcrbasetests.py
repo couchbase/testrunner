@@ -22,6 +22,7 @@ from datetime import datetime
 from couchbase.documentgenerator import BlobGenerator
 from basetestcase import BaseTestCase
 from membase.api.exception import ServerUnavailableException
+from testconstants import STANDARD_BUCKET_PORT
 
 #===============================================================================
 # class: XDCRConstants
@@ -486,12 +487,12 @@ class XDCRBaseTest(unittest.TestCase):
         for i in range(num_buckets):
             name = "standard_bucket_" + str(i + 1)
             bucket_tasks.append(self.cluster.async_create_standard_bucket(server, name,
-                                                                                  11214 + i,
+                                                                                  STANDARD_BUCKET_PORT + i,
                                                                                   bucket_size,
                                                                                   self._num_replicas))
             self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
                                     num_replicas=self._num_replicas, bucket_size=bucket_size,
-                                    port=11214 + i, master_id=server_id))
+                                    port=STANDARD_BUCKET_PORT + i, master_id=server_id))
 
         for task in bucket_tasks:
             task.result(self._timeout * 10)

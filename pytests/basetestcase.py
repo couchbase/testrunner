@@ -19,6 +19,7 @@ from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.api.exception import ServerUnavailableException
+from testconstants import STANDARD_BUCKET_PORT
 
 
 class BaseTestCase(unittest.TestCase):
@@ -293,12 +294,13 @@ class BaseTestCase(unittest.TestCase):
         for i in range(num_buckets):
             name = 'standard_bucket' + str(i)
             bucket_tasks.append(self.cluster.async_create_standard_bucket(server, name,
-                                                                          11214 + i,
-                                                                          bucket_size,
-                                                                          self.num_replicas))
+                                                                    STANDARD_BUCKET_PORT + i,
+                                                                    bucket_size,
+                                                                    self.num_replicas))
             self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
                                        num_replicas=self.num_replicas,
-                                       bucket_size=bucket_size, port=11214 + i, master_id=server_id));
+                                       bucket_size=bucket_size,
+				       port=STANDARD_BUCKET_PORT + i, master_id=server_id));
         for task in bucket_tasks:
             task.result(self.wait_timeout * 10)
 
@@ -313,13 +315,13 @@ class BaseTestCase(unittest.TestCase):
         for i in range(num_buckets):
             name = 'memcached_bucket' + str(i)
             bucket_tasks.append(self.cluster.async_create_memcached_bucket(server, name,
-                                                                          11214 + \
+                                                                          STANDARD_BUCKET_PORT + \
                                                                           self.standard_buckets + i,
                                                                           bucket_size,
                                                                           self.num_replicas))
             self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
                                        num_replicas=self.num_replicas,
-                                       bucket_size=bucket_size, port=11214 + \
+                                       bucket_size=bucket_size, port=STANDARD_BUCKET_PORT + \
                                                         self.standard_buckets + i,
                                        master_id=server_id, type='memcached'));
         for task in bucket_tasks:
