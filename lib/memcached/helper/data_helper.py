@@ -1211,15 +1211,15 @@ class VBucketAwareMemcached(object):
                     backoff *= 2
                 else:
                     raise error
-            except (EOFError, IOError, socket.error):
-                raise MemcachedError(ERR_NOT_MY_VBUCKET, "Connection reset")
+            except (EOFError, IOError, socket.error), error:
+                raise MemcachedError(ERR_NOT_MY_VBUCKET, "Connection reset with error: {0}".format(error))
 
     def done(self):
         [self.memcacheds[ip].close() for ip in self.memcacheds]
 
     def _parse_not_my_vbucket_error(self, error):
         error_msg = error.msg
-        if error_msg == "Connection reset":
+        if "Connection reset with error:" in error_msg:
             self.log.error("{0} while _send_op, server is alive?".format(error_msg))
             return None
         vbuckets = []
