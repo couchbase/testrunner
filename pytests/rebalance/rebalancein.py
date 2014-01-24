@@ -343,6 +343,12 @@ class RebalanceInTests(RebalanceBaseTest):
         query = {}
         query["connectionTimeout"] = 60000;
         query["full_set"] = "true"
+
+        expected_rows = None
+        if self.max_verify:
+            expected_rows = self.max_verify
+            query["limit"] = expected_rows
+
         tasks = []
         tasks = self.async_create_views(self.master, ddoc_name, views, self.default_bucket_name)
         for task in tasks:
@@ -371,10 +377,6 @@ class RebalanceInTests(RebalanceBaseTest):
                 self.assertTrue(result)
             self.sleep(2)
 
-        expected_rows = None
-        if self.max_verify:
-            expected_rows = self.max_verify
-            query["limit"] = expected_rows
         query["stale"] = "false"
 
         self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=self.wait_timeout * 3, expected_rows=expected_rows)
