@@ -505,7 +505,7 @@ class XDCRBaseTest(unittest.TestCase):
         bucket_size = self._get_bucket_size(self._mem_quota_int, total_buckets)
         rest = RestConnection(master_node)
         master_id = rest.get_nodes_self().id
-        if len(set([server.ip for server in self._servers])) != 1: #if not cluster run use ip addresses instead of lh
+        if len(set([server.ip for server in self._servers])) != 1:  #if not cluster run use ip addresses instead of lh
             master_id = master_id.replace("127.0.0.1", master_node.ip).replace("localhost", master_node.ip)
 
         self._create_sasl_buckets(master_node, self._sasl_buckets, master_id, bucket_size)
@@ -563,7 +563,7 @@ class XDCRBaseTest(unittest.TestCase):
                     bucket.master_id = bucket.master_id.replace("127.0.0.1", new_ip).\
                     replace("localhost", new_ip)
 
-        if len(set([server.ip for server in self._servers])) != 1: #if not cluster run use ip addresses instead of lh
+        if len(set([server.ip for server in self._servers])) != 1:  #if not cluster run use ip addresses instead of lh
             master_id = master_id.replace("127.0.0.1", master_server.ip).replace("localhost", master_server.ip)
         buckets = filter(lambda bucket: bucket.master_id == master_id, self.buckets)
         if not buckets:
@@ -785,7 +785,7 @@ class XDCRBaseTest(unittest.TestCase):
             _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
             _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
             while _count1 != _count2 and (time.time() - end_time) < 0:
-                self.sleep(60, "Waiting for replication to catch up ..")
+                self.sleep(60, "Expected: {0} items, found: {1}. Waiting for replication to catch up ..".format(_count1, _count2))
                 _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
                 _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
             if _count1 != _count2:
