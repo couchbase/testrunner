@@ -220,6 +220,9 @@ class XDCRBaseTest(unittest.TestCase):
         self._floating_servers_set = self._get_floating_servers()  # These are the servers defined in .ini file but not linked to any cluster.
         self._cluster_counter_temp_int = 0  # TODO: fix the testrunner code to pass cluster name in params.
         self.buckets = []
+        # max items number to verify in ValidateDataTask, None - verify all
+        self.max_verify = self.input.param("max_verify", None)
+
 
         self._default_bucket = self._input.param("default_bucket", True)
         self._end_replication_flag = self._input.param("end_replication_flag", 0)
@@ -704,14 +707,14 @@ class XDCRBaseTest(unittest.TestCase):
             # Mutation will be checked on opposite cluster.
             mutations_replicated &= self.__wait_for_mutation_to_replicate(self.dest_master)
             timeout = max(120, end_time - time.time())
-            self._verify_all_buckets(self.src_master)
+            self._verify_all_buckets(self.src_master, max_verify=self.max_verify)
         timeout = max(120, end_time - time.time())
         self._verify_stats_all_buckets(dest_nodes, timeout=timeout)
         timeout = max(120, end_time - time.time())
         # Mutation will be checked on opposite cluster.
         mutations_replicated &= self.__wait_for_mutation_to_replicate(self.src_master)
         timeout = max(120, end_time - time.time())
-        self._verify_all_buckets(self.dest_master)
+        self._verify_all_buckets(self.dest_master, max_verify=self.max_verify)
 
         errors_caught = 0
         if self._doc_ops is not None or self._doc_ops_dest is not None:
@@ -732,7 +735,7 @@ class XDCRBaseTest(unittest.TestCase):
         if len(self.ord_keys) == 2:
             src_nodes = self.get_servers_in_cluster(self.src_master)
             dest_nodes = self.get_servers_in_cluster(self.dest_master)
-            self.verify_xdcr_stats(src_nodes, dest_nodes, verify_src)
+            self.verify_xdcr_stats(src_nodes, dest_nodes, verify_src, max_verify=self.max_verify)
         else:
             # Checking replication at destination clusters when more then 2 clusters defined
             for cluster_num in self.ord_keys[1:]:
