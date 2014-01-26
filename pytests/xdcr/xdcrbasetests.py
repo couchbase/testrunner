@@ -724,7 +724,7 @@ class XDCRBaseTest(unittest.TestCase):
                 errors_caught = self._verify_revIds(self.src_master, self.dest_master, "update")
 
             if "delete" in self._doc_ops or (self._doc_ops_dest is not None and "delete" in self._doc_ops_dest):
-                errors_caught = self._verify_revIds(self.src_master, self.dest_master, "delete")
+                errors_caught += self._verify_revIds(self.src_master, self.dest_master, "delete")
 
         if errors_caught > 0:
             self.fail("Mismatches on Meta Information on xdcr-replicated items!")
@@ -737,7 +737,7 @@ class XDCRBaseTest(unittest.TestCase):
         if len(self.ord_keys) == 2:
             src_nodes = self.get_servers_in_cluster(self.src_master)
             dest_nodes = self.get_servers_in_cluster(self.dest_master)
-            self.verify_xdcr_stats(src_nodes, dest_nodes, verify_src, max_verify=self.max_verify)
+            self.verify_xdcr_stats(src_nodes, dest_nodes, verify_src)
         else:
             # Checking replication at destination clusters when more then 2 clusters defined
             for cluster_num in self.ord_keys[1:]:
