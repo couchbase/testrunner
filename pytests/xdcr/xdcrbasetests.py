@@ -221,7 +221,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._cluster_counter_temp_int = 0  # TODO: fix the testrunner code to pass cluster name in params.
         self.buckets = []
         # max items number to verify in ValidateDataTask, None - verify all
-        self.max_verify = self.input.param("max_verify", None)
+        self.max_verify = self._input.param("max_verify", None)
 
 
         self._default_bucket = self._input.param("default_bucket", True)
@@ -682,6 +682,10 @@ class XDCRBaseTest(unittest.TestCase):
         3. For deleted and updated items, check the CAS/SeqNo/Expiry/Flags for same key on source/destination
         * Make sure to call expiry_pager function to flush out temp items(deleted/expired items)"""
     def verify_xdcr_stats(self, src_nodes, dest_nodes, verify_src=False, timeout=500):
+        self._expiry_pager(self.src_nodes[0])
+        self._expiry_pager(self.dest_nodes[0])
+        self.sleep(30)  #it's not clear why we need to have these timeout?
+
         if self._failover is not None or self._rebalance is not None:
             timeout *= 2
 
@@ -689,8 +693,6 @@ class XDCRBaseTest(unittest.TestCase):
         if verify_src:
             timeout *= 3 / 2
 
-        self._expiry_pager(self.src_nodes[0])
-        self._expiry_pager(self.dest_nodes[0])
         end_time = time.time() + timeout
         if verify_src:
             self.log.info("and Verify xdcr replication stats at Source Cluster : {0}".format(self.src_master.ip))
@@ -1137,7 +1139,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         for bucket in buckets:
             ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 10, bucket)
             self.log.info("wait for expiry pager to run on all these nodes")
-            self.sleep(30)
 
     def _wait_for_stats_all_buckets(self, servers, timeout=120):
         def verify():
