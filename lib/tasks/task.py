@@ -261,6 +261,7 @@ class RebalanceTask(Task):
             self.set_exception(e)
         self.retry_get_progress = 0
         self.use_hostnames = use_hostnames
+        self.previous_progress = 0
 
     def execute(self, task_manager):
         try:
@@ -322,6 +323,10 @@ class RebalanceTask(Task):
             # if ServerUnavailableException
             if progress == -100:
                 self.retry_get_progress += 1
+            if self.previous_progress != progress:
+                self.previous_progress = progress
+            else:
+                self.retry_get_progress += 1
         except RebalanceFailedException as ex:
             self.state = FINISHED
             self.set_exception(ex)
@@ -338,6 +343,7 @@ class RebalanceTask(Task):
             else:
                 self.state = FINISHED
                 self.set_result(False)
+                self.set_exception("seems like rebalance hangs. please check logs!")
         else:
             success_cleaned = []
             for removed in self.to_remove:
