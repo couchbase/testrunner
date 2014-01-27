@@ -50,7 +50,7 @@ class FailoverBaseTest(BaseTestCase):
                               .format(self.case_number, self._testMethodName))
                 RemoteUtilHelper.common_basic_setup(self.servers)
                 self.log.info("10 seconds delay to wait for membase-server to start")
-                time.sleep(10)
+                self.sleep(10)
                 for server in self._cleanup_nodes:
                     shell = RemoteMachineShellConnection(server)
                     o, r = shell.execute_command("iptables -F")
