@@ -3,7 +3,7 @@ from basetestcase import BaseTestCase
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase.documentgenerator import BlobGenerator
-from remote.remote_util import RemoteMachineShellConnection
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 
 class FailoverBaseTest(BaseTestCase):
 
