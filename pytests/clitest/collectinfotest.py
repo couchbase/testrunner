@@ -162,13 +162,16 @@ class CollectinfoTests(CliBaseTest):
         self.gen_load = BlobGenerator('couch', 'cb-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, self.gen_load, "create", 0)
         self.reduce_fn = "_count"
+        expected_num_items = self.num_items
         if self.generate_map_reduce_error:
             self.reduce_fn = "_sum"
+            expected_num_items = None
+
         view = View(self.view_name, self.default_map_func, self.reduce_fn, dev_view=False)
-        self.cluster.create_view(
-                    self.master, self.default_design_doc_name, view,
-                    'default', self.wait_timeout * 2)
+        self.cluster.create_view(self.master, self.default_design_doc_name, view,
+                                 'default', self.wait_timeout * 2)
         query = {"stale": "false", "connection_timeout": 60000}
-        self.cluster.query_view(self.master, self.default_design_doc_name, self.view_name, query, self.num_items, 'default')
+        self.cluster.query_view(self.master, self.default_design_doc_name, self.view_name, query,
+                                expected_num_items, 'default', timeout=self.wait_timeout)
         self.shell.execute_cbcollect_info("%s.zip" % (self.log_filename))
         self.verify_results(self, self.log_filename)
