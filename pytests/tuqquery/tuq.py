@@ -1800,6 +1800,7 @@ class QueryTests(BaseTestCase):
                 key, val = doc_gen.next()
                 try:
                     val = json.loads(val)
+                    val['mutated'] = 0
                 except TypeError:
                     pass
                 if keys:

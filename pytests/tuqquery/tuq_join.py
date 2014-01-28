@@ -136,6 +136,92 @@ class JoinTests(QueryTests):
                                                           doc['name'], doc['task']))
             self._verify_results(actual_result, expected_result)
 
+    def test_simple_nest_keys(self):
+        for bucket in self.buckets:
+            self.query = "SELECT * FROM %s emp %s NEST %s tasks " % (
+                                                bucket.name, self.type_join, bucket.name) +\
+                         "KEYS emp.tasks_ids"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc:
+                                   self._get_for_sort(doc))
+            self._delete_ids(actual_result)
+            full_list = self._generate_full_nested_docs_list(join_type=self.type_join)
+            expected_result = [{"emp" : doc['item'], "tasks" : doc['items_nested']}
+                               for doc in full_list if doc and 'items_nested' in doc]
+            expected_result.extend([{"emp" : doc['item']}
+                                    for doc in full_list if not 'items_nested' in doc])
+            expected_result = sorted(expected_result, key=lambda doc:
+                                   self._get_for_sort(doc))
+            self._delete_ids(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_simple_nest_key(self):
+        for bucket in self.buckets:
+            self.query = "SELECT * FROM %s emp %s NEST %s tasks " % (
+                                                bucket.name, self.type_join, bucket.name) +\
+                         "KEY emp.tasks_ids[0]"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc:
+                                                            self._get_for_sort(doc))
+            self._delete_ids(actual_result)
+            full_list = self._generate_full_nested_docs_list(particular_key=0,
+                                                             join_type=self.type_join)
+            expected_result = [{"emp" : doc['item'], "tasks" : doc['items_nested']}
+                               for doc in full_list if doc and 'items_nested' in doc]
+            expected_result.extend([{"emp" : doc['item']}
+                                    for doc in full_list if not 'items_nested' in doc])
+            expected_result = sorted(expected_result, key=lambda doc:
+                                                            self._get_for_sort(doc))
+            self._delete_ids(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_nest_keys_with_array(self):
+        for bucket in self.buckets:
+            self.query = "select emp.name, ARRAY item.project FOR item in items end projects " +\
+                         "FROM %s emp %s NEST %s items " % (
+                                                    bucket.name, self.type_join, bucket.name) +\
+                         "KEYS emp.tasks_ids"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'])
+            full_list = self._generate_full_nested_docs_list(join_type=self.type_join)
+            expected_result = [{"name" : doc['item']['name'],
+                                "projects" : [nested_doc['project'] for nested_doc in doc['items_nested']]}
+                               for doc in full_list if doc and 'items_nested' in doc]
+            expected_result.extend([{} for doc in full_list if not 'items_nested' in doc])
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_nest_keys_where(self):
+        for bucket in self.buckets:
+            self.query = "select emp.name, ARRAY item.project FOR item in items end projects " +\
+                         "FROM %s emp %s NEST %s items " % (
+                                                    bucket.name, self.type_join, bucket.name) +\
+                         "KEYS emp.tasks_ids where ANY item IN items SATISFIES item.project == 'CB' end"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['name'], doc['projects']))
+            full_list = self._generate_full_nested_docs_list(join_type=self.type_join)
+            expected_result = [{"name" : doc['item']['name'],
+                                "projects" : [nested_doc['project'] for nested_doc in doc['items_nested']]}
+                               for doc in full_list if doc and 'items_nested' in doc and\
+                               len([nested_doc for nested_doc in doc['items_nested']
+                                    if nested_doc['project'] == 'CB']) > 0]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name'], doc['projects']))
+            self._verify_results(actual_result, expected_result)
+
+    def _get_for_sort(self, doc):
+        if not 'emp' in doc:
+            return ''
+        if 'name' in doc['emp']:
+            return doc['emp']['name'], doc['emp']['join_yr'],\
+                   doc['emp']['join_mo'], doc['emp']['job_title']
+        else:
+            return doc['emp']['task_name']
+
+    def _delete_ids(self, result):
+        for item in result:
+            if 'emp' in item:
+                del item['emp']['_id']
+
     def generate_docs(self, docs_per_day, start=0):
         generators = []
         types = ['Engineer', 'Sales', 'Support']
@@ -193,7 +279,7 @@ class JoinTests(QueryTests):
         elif join_type.upper() == JOIN_LEFT:
             for item in all_docs_list:
                 keys = item["tasks_ids"]
-                if particular_key:
+                if particular_key is not None:
                     keys=[item["tasks_ids"][particular_key]]
                 tasks_items = self._generate_full_docs_list(self.gens_tasks, keys=keys)
                 for key in keys:
@@ -207,3 +293,34 @@ class JoinTests(QueryTests):
         else:
             raise Exception("Unknown type of join")
         return joined_list
+
+    def _generate_full_nested_docs_list(self, join_type=JOIN_INNER,
+                                        particular_key=None):
+        nested_list = []
+        all_docs_list = self._generate_full_docs_list(self.gens_load)
+        if join_type.upper() == JOIN_INNER:
+            for item in all_docs_list:
+                keys = item["tasks_ids"]
+                if particular_key is not None:
+                    keys=[item["tasks_ids"][particular_key]]
+                tasks_items = self._generate_full_docs_list(self.gens_tasks, keys=keys)
+                if tasks_items:
+                    nested_list.append({"items_nested" : tasks_items,
+                                        "item" : item})
+        elif join_type.upper() == JOIN_LEFT:
+            for item in all_docs_list:
+                keys = item["tasks_ids"]
+                if particular_key is not None:
+                    keys=[item["tasks_ids"][particular_key]]
+                tasks_items = self._generate_full_docs_list(self.gens_tasks, keys=keys)
+                if tasks_items:
+                    nested_list.append({"items_nested" : tasks_items,
+                                        "item" : item})
+            tasks_doc_list = self._generate_full_docs_list(self.gens_tasks)
+            for item in tasks_doc_list:
+                nested_list.append({"item" : item})
+        elif join_type.upper() == JOIN_RIGHT:
+            raise Exception("RIGHT JOIN doen't exists in corrunt implementation")
+        else:
+            raise Exception("Unknown type of join")
+        return nested_list
