@@ -257,7 +257,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
             self.sleep(20)
-            tasks.extend(self.cluster.async_rebalance(self.servers[:self.num_servers],
+            tasks.append(self.cluster.async_rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], []))
             try:
                 for task in tasks:
