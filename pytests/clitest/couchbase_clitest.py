@@ -148,7 +148,11 @@ help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
                         '--xdcr-cluster-name=CLUSTERNAME': 'cluster name',
                         '--xdcr-hostname=HOSTNAME': ' remote host name to connect to',
                         '--xdcr-password=PASSWORD': ' remote cluster admin password',
-                        '--xdcr-username=USERNAME': ' remote cluster admin username'}}
+                        '--xdcr-username=USERNAME': ' remote cluster admin username',
+                        '--xdcr-demand-encryption=[0|1]': 'allow data encrypted using ssl',
+                        '--xdcr-certificate=CERTIFICATE':  'pem-encoded certificate. Need be present if xdcr-demand-encryption is true'},
+'ssl-manage OPTIONS': {'--retrieve-cert=CERTIFICATE': 'retrieve cluster certificate AND save to a pem file',
+                       '--regenerate-cert=CERTIFICATE': 'regenerate cluster certificate AND save to a pem file'}}
 
 
 help_short = {'COMMANDs include': {'bucket-compact': 'compact database and index data',
@@ -175,6 +179,7 @@ help_short = {'COMMANDs include': {'bucket-compact': 'compact database and index
                       'setting-compaction': 'set auto compaction settings',
                       'setting-notification': 'set notification settings',
                       'setting-xdcr': 'set xdcr related settings',
+                      'ssl-manage': 'manage cluster certificate',
                       'user-manage': 'manage read only user',
                       'xdcr-replicate': 'xdcr operations',
                       'xdcr-setup': 'set up XDCR connection'},
@@ -275,13 +280,6 @@ class CouchbaseCliTest(CliBaseTest):
 
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
         self.assertTrue("SUCCESS: bucket-create" in output[0])
-
-    def _teardown_xdcr(self):
-        for server in self.servers:
-            rest = RestConnection(server)
-            rest.remove_all_remote_clusters()
-            rest.remove_all_replications()
-            rest.remove_all_recoveries()
 
     def testHelp(self):
         remote_client = RemoteMachineShellConnection(self.master)
@@ -715,64 +713,6 @@ class CouchbaseCliTest(CliBaseTest):
         cluster_status = rest.cluster_status()
         remote_client.disconnect()
 
-    def testXDCRSetup(self):
-        '''xdcr-setup OPTIONS:
-        --create                           create a new xdcr configuration
-        --edit                             modify existed xdcr configuration
-        --delete                           delete existed xdcr configuration
-        --xdcr-cluster-name=CLUSTERNAME    cluster name
-        --xdcr-hostname=HOSTNAME           remote host name to connect to
-        --xdcr-username=USERNAME           remote cluster admin username
-        --xdcr-password=PASSWORD           remtoe cluster admin password'''
-        remote_client = RemoteMachineShellConnection(self.master)
-        try:
-            #rest = RestConnection(self.master)
-            #xdcr_cluster_name & xdcr_hostname=the number of server in ini file to add to master as replication
-            xdcr_cluster_name = self.input.param("xdcr-cluster-name", None)
-            xdcr_hostname = self.input.param("xdcr-hostname", None)
-            xdcr_username = self.input.param("xdcr-username", None)
-            xdcr_password = self.input.param("xdcr-password", None)
-            output_error = ""
-            ip = None
-            if xdcr_cluster_name is not None:
-                ip = self.servers[xdcr_cluster_name].ip
-#            if ip is not None:
-#                output_error = 'SUCCESS: init {0}'.format(ip)
-            output_error = self.input.param("output_error", 'SUCCESS: init HOSTIP').replace(";", ",")
-            if ip is not None:
-                output_error = output_error.replace("HOSTIP", ip)
-            cli_command = "xdcr-setup"
-            options = "--create"
-            options += (" --xdcr-cluster-name={0}".format(ip), "")[xdcr_cluster_name is None]
-            if xdcr_hostname is not None:
-                options += " --xdcr-hostname={0}".format(self.servers[xdcr_hostname].ip)
-            options += (" --xdcr-username={0}".format(xdcr_username), "")[xdcr_username is None]
-            options += (" --xdcr-password={0}".format(xdcr_password), "")[xdcr_password is None]
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual([s.rstrip() for s in output], [s for s in output_error.split(',')])
-
-            if "SUCCESS: init" in output_error:
-                #MB-8570 add verification when will be fixed
-                options = options.replace("--create ", "--edit ")
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-
-            if "SUCCESS: init" in output_error and xdcr_cluster_name is None:
-                #MB-8573 couchbase-cli: quotes are not supported when try to remove remote xdcr cluster that has white spaces in the name
-                options = "--delete --xdcr-cluster-name={0}".format("remote%20cluster")
-            else:
-                options = "--delete --xdcr-cluster-name={0}".format(self.servers[xdcr_cluster_name].ip)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-
-            if "SUCCESS: init" in output_error:
-                self.assertEqual(output, ["SUCCESS: delete {0}".format(self.servers[xdcr_cluster_name].ip)])
-            else:
-                self.assertEqual(output, ["ERROR: unable to delete xdcr remote site localhost (404) Object Not Found", "unknown remote cluster"])
-
-
-        finally:
-            remote_client.disconnect()
-            self._teardown_xdcr()
-
 #tests for the group-manage option. group creation, renaming and deletion are tested . These tests require a cluster of four or more nodes.
     def testCreateRenameDeleteGroup(self):
         remote_client = RemoteMachineShellConnection(self.master)
@@ -875,3 +815,165 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertTrue("INFO: rebalancing" in output[1])
             self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
 
+class XdcrCLITest(CliBaseTest):
+    XDCR_SETUP_SUCCESS = {
+                          "create": "SUCCESS: init/edit CLUSTERNAME",
+                          "edit": "SUCCESS: init/edit CLUSTERNAME",
+                          "delete": "SUCCESS: delete CLUSTERNAME"
+    }
+    XDCR_REPLICATE_SUCCESS = {
+                          "create": "SUCCESS: start replication",
+                          "delete": "SUCCESS: delete replication",
+    }
+    SSL_MANAGE_SUCCESS = {'retrieve': "SUCCESS: retrieve certificate to \'PATH\'",
+                           'regenerate': "SUCCESS: regenerate certificate to \'PATH\'"
+                           }
+    def setUp(self):
+        TestInputSingleton.input.test_params["default_bucket"] = False
+        super(XdcrCLITest, self).setUp()
+        self.__user = "Administrator"
+        self.__password = "password"
+
+    def tearDown(self):
+        for server in self.servers:
+            rest = RestConnection(server)
+            rest.remove_all_remote_clusters()
+            rest.remove_all_replications()
+            rest.remove_all_recoveries()
+        super(XdcrCLITest, self).tearDown()
+
+    def __execute_cli(self, cli_command, options, cluster_host="localhost"):
+        return self.shell.execute_couchbase_cli(
+                                                cli_command=cli_command,
+                                                options=options,
+                                                cluster_host=cluster_host,
+                                                user=self.__user,
+                                                password=self.__password)
+
+    def __xdcr_setup_create(self):
+        # xdcr_hostname=the number of server in ini file to add to master as replication
+        xdcr_cluster_name = self.input.param("xdcr-cluster-name", None)
+        xdcr_hostname = self.input.param("xdcr-hostname", None)
+        xdcr_username = self.input.param("xdcr-username", None)
+        xdcr_password = self.input.param("xdcr-password", None)
+        demand_encyrption = self.input.param("demand-encryption", 0)
+        xdcr_cert = self.input.param("xdcr-certificate", None)
+        wrong_cert = self.input.param("wrong-certificate", None)
+
+        cli_command = "xdcr-setup"
+        options = "--create"
+        options += (" --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name), "")[xdcr_cluster_name is None]
+        if xdcr_hostname is not None:
+            options += " --xdcr-hostname={0}".format(self.servers[xdcr_hostname].ip)
+        options += (" --xdcr-username={0}".format(xdcr_username), "")[xdcr_username is None]
+        options += (" --xdcr-password={0}".format(xdcr_password), "")[xdcr_password is None]
+        options += (" --xdcr-demand-encryption={0}".format(demand_encyrption))
+
+        if demand_encyrption and xdcr_hostname is not None and xdcr_cert:
+            if wrong_cert:
+                cluster_host = "localhost"
+            else:
+                cluster_host = self.servers[xdcr_hostname].ip
+            output, _ = self.__execute_cli(cli_command="ssl-manage", options="--retrieve-cert={0}".format(xdcr_cert), cluster_host=cluster_host)
+            options += (" --xdcr-certificate={0}".format(xdcr_cert), "")[xdcr_cert is None]
+            self.assertNotEqual(output[0].find("SUCCESS"), -1, "ssl-manage CLI failed to retrieve certificate")
+
+        output, error = self.__execute_cli(cli_command=cli_command, options=options)
+        return output, error, xdcr_cluster_name, xdcr_hostname, cli_command, options
+
+    def testXDCRSetup(self):
+        error_expected_in_command = self.input.param("error-expected", None)
+        output, _, xdcr_cluster_name, xdcr_hostname, cli_command, options = self.__xdcr_setup_create()
+        if error_expected_in_command != "create":
+            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["create"].replace("CLUSTERNAME", (xdcr_cluster_name, "")[xdcr_cluster_name is None]), output[0])
+        else:
+            output_error = self.input.param("output_error", "[]")
+            if output_error.find("CLUSTERNAME") != -1:
+                output_error = output_error.replace("CLUSTERNAME", (xdcr_cluster_name, "")[xdcr_cluster_name is None])
+            if output_error.find("HOSTNAME") != -1:
+                output_error = output_error.replace("HOSTNAME", (self.servers[xdcr_hostname].ip, "")[xdcr_hostname is None])
+            self.assertEqual(output, eval(output_error))
+            return
+        #MB-8570 can't edit xdcr-setup through couchbase-cli
+        if xdcr_cluster_name:
+            options = options.replace("--create ", "--edit ")
+            output, _ = self.__execute_cli(cli_command=cli_command, options=options)
+            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["edit"].replace("CLUSTERNAME", (xdcr_cluster_name, "")[xdcr_cluster_name is None]), output[0])
+        if not xdcr_cluster_name:
+            #MB-8573 couchbase-cli: quotes are not supported when try to remove remote xdcr cluster that has white spaces in the name
+            options = "--delete --xdcr-cluster-name=\'{0}\'".format("remote cluster")
+        else:
+            options = "--delete --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name)
+        output, _ = self.__execute_cli(cli_command=cli_command, options=options)
+        if error_expected_in_command != "delete":
+            self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["delete"].replace("CLUSTERNAME", (xdcr_cluster_name, "remote cluster")[xdcr_cluster_name is None]), output[0])
+        else:
+            xdcr_cluster_name = "unknown"
+            options = "--delete --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name)
+            output, _ = self.__execute_cli(cli_command=cli_command, options=options)
+            output_error = self.input.param("output_error", "[]")
+            if output_error.find("CLUSTERNAME") != -1:
+                output_error = output_error.replace("CLUSTERNAME", (xdcr_cluster_name, "")[xdcr_cluster_name is None])
+            if output_error.find("HOSTNAME") != -1:
+                output_error = output_error.replace("HOSTNAME", (self.servers[xdcr_hostname].ip, "")[xdcr_hostname is None])
+            self.assertEqual(output, eval(output_error))
+            return
+
+    def testXdcrReplication(self):
+        '''xdcr-replicate OPTIONS:
+        --create                               create and start a new replication
+        --delete                               stop and cancel a replication
+        --list                                 list all xdcr replications
+        --xdcr-from-bucket=BUCKET              local bucket name to replicate from
+        --xdcr-cluster-name=CLUSTERNAME        remote cluster to replicate to
+        --xdcr-to-bucket=BUCKETNAME            remote bucket to replicate to'''
+        to_bucket = self.input.param("xdcr-to-bucket", None)
+        from_bucket = self.input.param("xdcr-from-bucket", None)
+        error_expected = self.input.param("error-expected", False)
+        _, _, xdcr_cluster_name, xdcr_hostname, _, _ = self.__xdcr_setup_create()
+        cli_command = "xdcr-replicate"
+        options = "--create"
+        options += (" --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name), "")[xdcr_cluster_name is None]
+        options += (" --xdcr-from-bucket=\'{0}\'".format(from_bucket), "")[from_bucket is None]
+        options += (" --xdcr-to-bucket=\'{0}\'".format(to_bucket), "")[to_bucket is None]
+        self.bucket_size = self._get_bucket_size(self.quota, 1)
+        if from_bucket:
+            self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas,
+                                               enable_replica_index=self.enable_replica_index)
+        if to_bucket:
+            self.cluster.create_default_bucket(self.servers[xdcr_hostname], self.bucket_size, self.num_replicas,
+                                               enable_replica_index=self.enable_replica_index)
+        output, _ = self.__execute_cli(cli_command, options)
+        if not error_expected:
+            self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["create"], output[0])
+        else:
+            return
+
+        options = "--list"
+        output, _ = self.__execute_cli(cli_command, options)
+        for value in output:
+            if value.startswith("stream id"):
+                replicator = value.split(":")[1].strip()
+                options = "--delete"
+                options += (" --xdcr-replicator={0}".format(replicator))
+                output, _ = self.__execute_cli(cli_command, options)
+                self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["delete"], output[0])
+
+    def testSSLManage(self):
+        '''ssl-manage OPTIONS:
+        --retrieve-cert=CERTIFICATE            retrieve cluster certificate AND save to a pem file
+        --regenerate-cert=CERTIFICATE          regenerate cluster certificate AND save to a pem file'''
+        xdcr_cert = self.input.param("xdcr-certificate", None)
+        xdcr_cert = "/tmp/" + xdcr_cert
+        cli_command = "ssl-manage"
+        options = "--retrieve-cert={0}".format(xdcr_cert)
+        output, error = self.__execute_cli(cli_command=cli_command, options=options)
+        self.assertFalse(error, "Error thrown during CLI execution %s" % error)
+        self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["retrieve"].replace("PATH", xdcr_cert), output[0])
+        self.shell.execute_command("rm {0}".format(xdcr_cert))
+
+        options = "--regenerate-cert={0}".format(xdcr_cert)
+        output, error = self.__execute_cli(cli_command=cli_command, options=options)
+        self.assertFalse(error, "Error thrown during CLI execution %s" % error)
+        self.assertEqual(XdcrCLITest.SSL_MANAGE_SUCCESS["regenerate"].replace("PATH", xdcr_cert), output[0])
+        self.shell.execute_command("rm {0}".format(xdcr_cert))

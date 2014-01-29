@@ -790,9 +790,9 @@ class RestConnection(object):
 
     def remove_remote_cluster(self, name):
         #example : name:two
-        msg = "removing remote cluster name:{0}".format(name.replace(' ', '%20'))
+        msg = "removing remote cluster name:{0}".format(urllib.quote(name))
         log.info(msg)
-        api = self.baseUrl + 'pools/default/remoteClusters/{0}'.format(name)
+        api = self.baseUrl + 'pools/default/remoteClusters/{0}'.format(urllib.quote(name))
         params = urllib.urlencode({})
         status, content, header = self._http_request(api, 'DELETE', params)
         #sample response :
