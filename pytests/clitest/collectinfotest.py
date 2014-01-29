@@ -171,7 +171,11 @@ class CollectinfoTests(CliBaseTest):
         self.cluster.create_view(self.master, self.default_design_doc_name, view,
                                  'default', self.wait_timeout * 2)
         query = {"stale": "false", "connection_timeout": 60000}
-        self.cluster.query_view(self.master, self.default_design_doc_name, self.view_name, query,
+        try:
+            self.cluster.query_view(self.master, self.default_design_doc_name, self.view_name, query,
                                 expected_num_items, 'default', timeout=self.wait_timeout)
+        except Exception, ex:
+            if not self.generate_map_reduce_error:
+                raise ex
         self.shell.execute_cbcollect_info("%s.zip" % (self.log_filename))
         self.verify_results(self, self.log_filename)
