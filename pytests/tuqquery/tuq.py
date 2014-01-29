@@ -199,7 +199,7 @@ class QueryTests(BaseTestCase):
                            'as COUNT_EMP  FROM {0} AS TEST GROUP BY name ' +
                            'HAVING COUNT_NEW_POINT >0' :
                                 'Alias COUNT_NEW_POINT cannot be referenced',
-                          'SELECT * FROM {0} emp UNNEST {0}.VMs' : 'Invalid Bucket in UNNEST clause default'}
+                          'SELECT * FROM {0} emp UNNEST {0}.VMs' : 'Invalid Bucket in UNNEST clause'}
         self.negative_common_body(queries_errors)
 
     def test_alias_from_clause(self):
