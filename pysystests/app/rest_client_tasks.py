@@ -287,14 +287,15 @@ def perform_admin_tasks(adminMsg, cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
     app.workload_manager.updateClusterStatus()
     clusterStatus = CacheHelper.clusterstatus(cluster_id)
     if clusterStatus is None:
-        logger.error("Unable to fetch clusterStatus from cache")
+        logger.error("Unable to fetch clusterStatus from cache: ")
         return
 
     rest = clusterStatus.node_rest()
 
     # Add nodes
     servers = adminMsg["rebalance_in"]
-    add_nodes(rest, servers, cluster_id)
+    zone_name = adminMsg["group"]
+    add_nodes(rest, servers, cluster_id, zone_name)
 
     # Get all nodes
     allNodes = []
@@ -399,7 +400,13 @@ def xdcr_start_replication(src_master, dest_cluster_name, bucketFilter = None):
                                                                          bucket.name, dest_cluster_name)
                 logger.error("rep_database: %s rep_id: %s" % (rep_database, rep_id))
 
-def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
+def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status", zone_name = ''):
+
+    # create zone if it does not exit
+    if zone_name != '':
+        if rest.is_zone_exist(zone_name) == False:
+           rest.add_zone(zone_name)
+
     if servers.find('.') != -1 or servers == '':
         servers = servers.split()
     else:
@@ -415,7 +422,7 @@ def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
     for server in servers:
         logger.error("Adding node %s" % server)
         ip, port = parse_server_arg(server)
-        rest.add_node(cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD, ip, port)
+        rest.add_node(cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD, ip, port, zone_name)
 
 def pick_nodesToRemove(servers='', involve_orchestrator=False, cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
     if servers.find('.') != -1 or servers == '':

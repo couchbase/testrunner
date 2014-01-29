@@ -538,6 +538,9 @@ def parseClusterReq(cluster):
         or clusterMsg['only_failover'] == True:
         rebalance_required = False
 
+    if 'group' in cluster:
+        clusterMsg['group'] = cluster['group']
+
     clusterMsg['rebalance_required'] = rebalance_required
     return clusterMsg
 
