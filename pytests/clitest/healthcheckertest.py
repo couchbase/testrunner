@@ -84,7 +84,8 @@ class HealthcheckerTests(CliBaseTest):
     def _check_params(self):
         list_f = self.shell.list_files('%s/%s' % (self.path_to_store, self.report_folder_name))
         for f in list_f:
-            if f["file"].find('chart') == -1:
+            if f["file"].find('chart') == -1 and f["file"].find('image') == -1 and\
+                f["file"].find('js') == -1 and f["file"].find('css') == -1:
                 path = '%s/%s/%s' % (self.path_to_store, self.report_folder_name, f["file"])
                 list_reports = ['%s/minute.html' % path, '%s/day.html' % path,
                                 '%s/week.html' % path, '%s/hour.html' % path]
@@ -170,7 +171,7 @@ class HealthcheckerTests(CliBaseTest):
                                 if len(emb_row.findAll('td')) and \
                                    emb_row.findAll('td')[1].string == 'Current number of active items':
                                     self.assertTrue(emb_row.findAll('td')[2].li.string.\
-                                                    find(str(node_info.curr_items)) != -1,
+                                                    find(str(node_info.curr_items/(self.num_replicas + 1))) != -1,
                                                     "Node %s expected index path is %s, actual is %s" % (
                                                         node.ip, str(node_info.curr_items),
                                                         emb_row.findAll('td')[2].li.string))

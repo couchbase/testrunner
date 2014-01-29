@@ -2039,7 +2039,7 @@ class RemoteMachineShellConnection:
                                                 username, password, self.ip,
                                                 self.port, command_options_string)
 
-        output, error = self.execute_command(command)
+        output, error = self.execute_command_raw(command)
         self.log_command_output(output, error)
         return output, error
 
