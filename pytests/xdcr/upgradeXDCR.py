@@ -197,7 +197,18 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self._post_upgrade_ops()
         self.sleep(60)
         self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
-        self._verify(self.gen_create.end + gen_create2.end + gen_create3.end)
+        self.max_verify = None
+        if self.ddocs_src:
+            for bucket_name in self.buckets_on_src:
+                bucket = self._get_bucket(self, bucket_name, self.src_master)
+                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_src, self.src_master)
+
+        if self.ddocs_dest:
+            for bucket_name in self.buckets_on_dest:
+                bucket = self._get_bucket(self, bucket_name, self.dest_master)
+                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_dest, self.dest_master)
 
     def online_cluster_upgrade(self):
         self._install(self.servers[:self.src_init + self.dest_init ])
