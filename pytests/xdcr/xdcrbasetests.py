@@ -682,9 +682,9 @@ class XDCRBaseTest(unittest.TestCase):
         3. For deleted and updated items, check the CAS/SeqNo/Expiry/Flags for same key on source/destination
         * Make sure to call expiry_pager function to flush out temp items(deleted/expired items)"""
     def verify_xdcr_stats(self, src_nodes, dest_nodes, verify_src=False, timeout=500):
-        self._expiry_pager(self.src_nodes[0])
-        self._expiry_pager(self.dest_nodes[0])
-        self.sleep(30)  #it's not clear why we need to have these timeout?
+        self._expiry_pager(self.src_nodes[0], val=10)
+        self._expiry_pager(self.dest_nodes[0], val=10)
+        self.sleep(10)
 
         if self._failover is not None or self._rebalance is not None:
             timeout *= 2
@@ -781,6 +781,9 @@ class XDCRBaseTest(unittest.TestCase):
                 mc.close
 
     def _wait_for_replication_to_catchup(self, timeout=1200):
+        self._expiry_pager(self.src_master)
+        self._expiry_pager(self.dest_master)
+
         rest1 = RestConnection(self.src_master)
         rest2 = RestConnection(self.dest_master)
         # 20 minutes by default
@@ -1134,10 +1137,10 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
         return error_count
 
-    def _expiry_pager(self, master):
+    def _expiry_pager(self, master, val=10):
         buckets = self._get_cluster_buckets(master)
         for bucket in buckets:
-            ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", 10, bucket)
+            ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", val, bucket)
             self.log.info("wait for expiry pager to run on all these nodes")
 
     def _wait_for_stats_all_buckets(self, servers, timeout=120):
