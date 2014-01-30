@@ -478,6 +478,46 @@ class QueryTests(BaseTestCase):
                                      (doc['task1'], doc['task2']))
             self._verify_results(actual_result, expected_result)
 
+    def test_all(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT ALL job_title FROM %s ORDER BY job_title'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"job_title" : doc['job_title']}
+                             for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_all_nested(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT ALL tasks_points.task1 FROM %s '  % (bucket.name) +\
+                         'ORDER BY tasks_points.task1'
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            expected_result = [{"task1" : doc['tasks_points']['task1']}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['task1']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+            self.query = 'SELECT ALL skills[0] as skill' +\
+                         ' FROM %s ORDER BY skills[0]'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            expected_result = [{"skill" : doc['skills'][0]}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['skill']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+            self.query = 'SELECT ALL tasks_points.* ' +\
+                         'FROM %s'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            expected_result = [doc['tasks_points'] for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc:
+                                     (doc['task1'], doc['task2']))
+            actual_result = sorted(actual_result['resultset'], key=lambda doc:
+                                     (doc['task1'], doc['task2']))
+            self._verify_results(actual_result, expected_result)
+
     def test_distinct_negative(self):
         queries_errors = {'SELECT name FROM {0} ORDER BY DISTINCT name' : 'Parse Error - syntax error',
                           'SELECT name FROM {0} GROUP BY DISTINCT name' : 'Parse Error - syntax error',
