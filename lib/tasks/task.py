@@ -1984,7 +1984,8 @@ class MonitorViewFragmentationTask(Task):
         new_frag_value = MonitorViewFragmentationTask.\
             calc_ddoc_fragmentation(rest, self.design_doc_name, bucket=self.bucket)
 
-        self.log.info("current amount of fragmentation = %d" % new_frag_value)
+        self.log.info("%s: current amount of fragmentation = %d" % (self.design_doc_name,
+                                                                    new_frag_value))
         if new_frag_value > self.fragmentation_value:
             self.state = FINISHED
             self.set_result(True)
@@ -2062,8 +2063,15 @@ class ViewCompactionTask(Task):
         try:
             self.compaction_revision, self.precompacted_fragmentation = \
                 self._get_compaction_details()
-            self.log.info("stats compaction before triggering it: ({0},{1})".
-                          format(self.compaction_revision, self.precompacted_fragmentation))
+            self.log.info("{0}: stats compaction before triggering it: ({1},{2})".
+                          format(self.design_doc_name,
+                                 self.compaction_revision, self.precompacted_fragmentation))
+            if self.precompacted_fragmentation == 0:
+                self.log.info("%s: There is nothing to compact, fragmentation is 0" %
+                              self.design_doc_name)
+                self.set_result(False)
+                self.state = FINISHED
+                return
             self.rest.ddoc_compaction(self.ddoc_id)
             self.state = CHECKING
             task_manager.schedule(self, 2)
@@ -2082,19 +2090,23 @@ class ViewCompactionTask(Task):
         try:
             _compaction_running = self._is_compacting()
             new_compaction_revision, fragmentation = self._get_compaction_details()
-            self.log.info("stats compaction: ({0},{1})".
-                          format(new_compaction_revision, fragmentation))
+            self.log.info("{0}: stats compaction:revision and fragmentation: ({1},{2})".
+                          format(self.design_doc_name,
+                                 new_compaction_revision, fragmentation))
 
             if new_compaction_revision == self.compaction_revision and _compaction_running :
                 # compaction ran successfully but compaction was not changed
                 # perhaps we are still compacting
                 self.log.info("design doc {0} is compacting".format(self.design_doc_name))
                 task_manager.schedule(self, 3)
-            elif new_compaction_revision > self.compaction_revision:
-                self.log.info("compactor was run, compaction revision was changed on {0}".format(new_compaction_revision))
+            elif new_compaction_revision > self.compaction_revision or\
+                 self.precompacted_fragmentation >  fragmentation:
+                self.log.info("{1}: compactor was run, compaction revision was changed on {0}".format(new_compaction_revision,
+                                                                                                      self.design_doc_name))
                 frag_val_diff = fragmentation - self.precompacted_fragmentation
-                self.log.info("fragmentation went from %d to %d" % \
-                              (self.precompacted_fragmentation, fragmentation))
+                self.log.info("%s: fragmentation went from %d to %d" % \
+                              (self.design_doc_name,
+                               self.precompacted_fragmentation, fragmentation))
 
                 if frag_val_diff > 0:
 
@@ -2118,8 +2130,9 @@ class ViewCompactionTask(Task):
                         return
                     else:
                         new_compaction_revision, fragmentation = self._get_compaction_details()
-                        self.log.info("stats compaction: ({0},{1})".
-                          format(new_compaction_revision, fragmentation))
+                        self.log.info("{2}: stats compaction: ({0},{1})".
+                          format(new_compaction_revision, fragmentation,
+                                 self.design_doc_name))
                         #case of rebalance when with concurrent updates it's possible that
                         #compaction value has not changed significantly
                         if new_compaction_revision > self.compaction_revision and self.with_rebalance:
