@@ -115,7 +115,7 @@ class XDCRBaseTest(unittest.TestCase):
                     self._stats_thread5.start()
                     self._stats_thread6.start()
                     self._log_start(self)
-        except  Exception as e:
+        except Exception as e:
             self.log.error(e.message)
             self.log.error("Error while setting up clusters: %s", sys.exc_info())
             self._cleanup_broken_setup()
@@ -783,6 +783,7 @@ class XDCRBaseTest(unittest.TestCase):
     def _wait_for_replication_to_catchup(self, timeout=1200):
         self._expiry_pager(self.src_master)
         self._expiry_pager(self.dest_master)
+        self.sleep(15)
 
         rest1 = RestConnection(self.src_master)
         rest2 = RestConnection(self.dest_master)
@@ -799,7 +800,7 @@ class XDCRBaseTest(unittest.TestCase):
             if _count1 != _count2:
                 self.fail("not all items replicated in {0} sec for {1} bucket. on source cluster:{2}, on dest:{3}".\
                           format(timeout, bucket.name, _count1, _count2))
-            self.log.info("Replication caught up for bucket: {0}".format(bucket.name))
+            self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
 
     def wait_node_restarted(self, server, wait_time=120, wait_if_warmup=False, check_service=False):
         now = time.time()
