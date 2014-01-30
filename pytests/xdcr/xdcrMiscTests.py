@@ -2,12 +2,12 @@ from couchbase.stats_tools import StatsCommon
 from xdcrbasetests import XDCRReplicationBaseTest
 from couchbase.documentgenerator import BlobGenerator
 
-class xdcrDataLoss(XDCRReplicationBaseTest):
+class XdcrMiscTests(XDCRReplicationBaseTest):
     def setUp(self):
-        super(xdcrDataLoss, self).setUp()
+        super(XdcrMiscTests, self).setUp()
 
     def tearDown(self):
-        super(xdcrDataLoss, self).tearDown()
+        super(XdcrMiscTests, self).tearDown()
 
     def setup_extended(self):
         pass
@@ -49,7 +49,7 @@ class xdcrDataLoss(XDCRReplicationBaseTest):
 
         # Wait for delete tasks to be finished
         for task in tasks:
-           task.result()
+            task.result()
 
         # Step-7 Wait for all the items to be replicated
         # Step-8 Compare the source and destination cluster items - item count, meta data, data content.
@@ -73,3 +73,32 @@ class xdcrDataLoss(XDCRReplicationBaseTest):
             elif self.rep_type == "capi":
                 src_stat_ep_num_ops_get_meta = StatsCommon.get_stats([self.src_master], bucket, '', 'ep_num_ops_get_meta')
                 self.assertTrue(src_stat_ep_num_ops_get_meta > 0, "Number of get [%s] operation occurs at bucket = %s, while expected greater than 0" % (src_stat_ep_num_ops_get_meta, bucket))
+
+
+    def test_diff_version_xdcr(self):
+        self.gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self._num_items)
+        self.gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size,
+            start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
+        self.gen_update2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, start=0,
+            end=int(self._num_items * (float)(self._percent_update) / 100))
+
+        # Step-2 Setting up replication clusters.
+        src_cluster_name, dest_cluster_name = "remote-dest-src", "remote-src-dest"
+        self.__setup_replication_clusters(self.src_master, self.dest_master, src_cluster_name, dest_cluster_name)
+
+        self.rep_type = "capi"
+        self._replicate_clusters(self.src_master, dest_cluster_name)
+
+        self.rep_type = "xmem"
+        self._replicate_clusters(self.dest_master, src_cluster_name)
+
+        # Step-3 Load 10k items ( sets=80, deletes=20) on source cluster.
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
+        self._async_update_delete_data()
+        # Step-4 XDCR Source -> Remote
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+
+        # Step-5 verify data
+        self.sleep(120)
+        self.verify_results(verify_src=True)
