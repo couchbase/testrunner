@@ -801,7 +801,7 @@ class CreateDeleteViewTests(BaseTestCase):
         for task in query_ops:
             result = task.result()
 
-        self.verify_cluster_stats()
+        self.verify_cluster_stats(servers=self.servers[:self.nodes_init])
         self._verify_ddoc_ops_all_buckets()
         if self.test_with_view:
             self._verify_ddoc_data_all_buckets()
