@@ -1606,6 +1606,85 @@ class QueryTests(BaseTestCase):
 
 ##############################################################################################
 #
+#   TYPE FNS
+##############################################################################################
+
+    def test_type(self):
+        types_list = [("name", "string"), ("tasks_points", "object"),
+                      ("some_wrong_key", "missing"),
+                      ("skills", "array"), ("VMs[0].RAM", "number"),
+                      ("true", "boolean"), ("test_rate", "number"),
+                      ("test.test[0]", "missing")]
+        for bucket in self.buckets:
+            for name_item, type_item in types_list:
+                self.query = 'SELECT TYPE(%s) as type_output FROM %s' % (
+                                                        name_item, bucket.name)
+                actual_result = self.run_cbq_query()
+                for doc in actual_result['resultset']:
+                    self.assertTrue(doc["type_output"] == type_item,
+                                    "Expected type for %s: %s. Actual: %s" %(
+                                                    name_item, type_item, doc["type_output"]))
+                self.log.info("Type for %s(%s) is checked." % (name_item, type_item))
+
+    def test_check_types(self):
+        types_list = [("name", "ISSTR", True), ("skills[0]", "ISSTR", True),
+                      ("test_rate", "ISSTR", False), ("VMs", "ISSTR", False),
+                      ("some_wrong_key", "ISSTR", None),
+                      ("false", "ISBOOL", True), ("join_day", "ISBOOL", False),
+                      ("VMs", "ISARRAY", True), ("VMs[0]", "ISARRAY", False),
+                      ("VMs", "ISARRAY", False), ("VMs[0]", "ISARRAY", True)]
+        for bucket in self.buckets:
+            for name_item, fn, expected_result in types_list:
+                self.query = 'SELECT %s(%s) as type_output FROM %s' % (
+                                                        fn, name_item, bucket.name)
+                actual_result = self.run_cbq_query()
+                for doc in actual_result['resultset']:
+                    self.assertTrue(doc["type_output"] == expected_result,
+                                    "Expected output for fn %s( %s) : %s. Actual: %s" %(
+                                                fn, name_item, expected_result, doc["type_output"]))
+                self.log.info("Fn %s(%s) is checked. (%s)" % (fn, name_item, expected_result))
+
+    def test_types_in_satisfy(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
+                         "(EVERY vm IN %s.VMs SATISFIES ISOBJ(vm) END) AND" % (
+                                                            bucket.name) +\
+                         " ISSTR(email) ORDER BY name"
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name']}
+                               for doc in full_list]
+
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_to_num(self):
+        self.query = 'SELECT tonum("12.12") - tonum("0.12") as num'
+        actual_result = self.run_cbq_query()
+        self.assertTrue(actual_result['resultset']['num'] == 12,
+                        "Expected: 12. Actual: %s" % (actual_result['resultset']))
+        self.log.info("TONUM is checked")
+
+    def test_to_str(self):
+        for bucket in self.buckets:
+            self.query = "SELECT TOSTR(join_mo) month FROM %s" % bucket.name
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['name']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"month" : str(doc['join_mo'])} for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_to_bool(self):
+        self.query = 'SELECT tonum("true") as boo'
+        actual_result = self.run_cbq_query()
+        self.assertTrue(actual_result['resultset']['boo'] == True,
+                        "Expected: true. Actual: %s" % (actual_result['resultset']))
+        self.log.info("TOBOOL is checked")
+
+#TODO toarray
+##############################################################################################
+#
 #   COMMON FUNCTIONS
 ##############################################################################################
 
