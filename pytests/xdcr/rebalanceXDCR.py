@@ -111,38 +111,54 @@ class Rebalance(XDCRReplicationBaseTest):
 
     def async_rebalance_out(self):
         try:
-            self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+            #MB-9497 to load data during rebalance-out/replication
+            load_tasks = []
+            async_data_load = self._input.param("async_load", False)
+            if async_data_load:
+                load_tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0))
+            else:
+                self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
 
             if self._replication_direction_str in "bidirection":
-                self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
+                if async_data_load:
+                    load_tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_create2, "create", 0))
+                else:
+                    self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-            self.sleep(self._timeout / 2)
+            if not async_data_load:
+                self.sleep(self._timeout / 2)
+
             verify_src = False
-            for num_rebalance in range(self._num_rebalance):
-                tasks = []
-                if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
-                    remove_node = self.src_nodes[len(self.src_nodes) - 1]
-                    tasks.extend(self._async_rebalance(self.src_nodes, [], [remove_node]))
-                    self.log.info(" Starting rebalance-out node {0} at Source cluster {1}".format(remove_node.ip,
-                        self.src_master.ip))
-                    self.src_nodes.remove(remove_node)
-                    verify_src = True
-                if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
-                    remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
-                    tasks.extend(self._async_rebalance(self.dest_nodes, [], [remove_node]))
-                    self.log.info(" Starting rebalance-out node{0} at Destination cluster {1}".format(remove_node.ip,
-                        self.dest_master.ip))
-                    self.dest_nodes.remove(remove_node)
+            tasks = []
+            if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
+                remove_nodes = self.src_nodes[len(self.src_nodes) - self._num_rebalance:]
+                tasks.extend(self._async_rebalance(self.src_nodes, [], remove_nodes))
+                remove_node_ips = [remove_node.ip for remove_node in remove_nodes]
+                self.log.info(" Starting rebalance-out nodes:{0} at Source cluster {1}".format(remove_node_ips,
+                    self.src_master.ip))
+                map(self.src_nodes.remove, remove_nodes)
+                verify_src = True
+            if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
+                remove_nodes = self.dest_nodes[len(self.dest_nodes) - self._num_rebalance:]
+                tasks.extend(self._async_rebalance(self.dest_nodes, [], remove_nodes))
+                remove_node_ips = [remove_node.ip for remove_node in remove_nodes]
+                self.log.info(" Starting rebalance-out nodes:{0} at Destination cluster {1}".format(remove_node_ips, self.dest_master.ip))
+                map(self.dest_nodes.remove, remove_nodes)
 
                 self.sleep(self._timeout / 2)
-                for task in tasks:
-                    task.result()
+            for task in tasks:
+                task.result()
 
-                if self._replication_direction_str in "unidirection":
-                    self._async_modify_data()
-                elif self._replication_direction_str in "bidirection":
-                    self._async_update_delete_data()
-                self.sleep(self._timeout / 2)
+            # Wait for load data to finish if asynchronous
+            if async_data_load:
+                for load_task in load_tasks:
+                    load_task.result()
+
+            if self._replication_direction_str in "unidirection":
+                self._async_modify_data()
+            elif self._replication_direction_str in "bidirection":
+                self._async_update_delete_data()
+            self.sleep(self._timeout / 2)
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
