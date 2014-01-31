@@ -1588,9 +1588,8 @@ class MonitorViewQueryResultsTask(Task):
                 task_manager.schedule(self, 10)
             elif str(ex).find('timeout') != -1:
                 self.connection_timeout = self.connection_timeout * 2
-                self.log.error("view_results not ready yet ddoc=%s ," + \
-                               " try again in 10 seconds... and double timeout" %
-                       self.design_doc_name)
+                self.log.error("view_results not ready yet ddoc=%s ,"  % self.design_doc_name + \
+                               " try again in 10 seconds... and double timeout")
                 task_manager.schedule(self, 10)
             else:
                 self.state = FINISHED
