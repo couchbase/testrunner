@@ -75,11 +75,11 @@ class bidirectional(XDCRReplicationBaseTest):
         if "update" in self._doc_ops and "update" in self._doc_ops_dest:
             self.sleep(30)
         if "update" in self._doc_ops_dest:
-            tasks += self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires)
+            tasks += self._async_load_all_buckets(self.dest_master, self.gen_update, "update", self._expires)
         if "delete" in self._doc_ops:
             tasks += self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
         if "delete" in self._doc_ops_dest:
-            tasks += self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0)
+            tasks += self._async_load_all_buckets(self.dest_master, self.gen_delete, "delete", 0)
 
         for task in tasks:
             task.result()
