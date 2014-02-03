@@ -1636,7 +1636,21 @@ class QueryTests(BaseTestCase):
                         "Expected: true. Actual: %s" % (actual_result['resultset']))
         self.log.info("TOBOOL is checked")
 
-#TODO toarray
+    def test_to_array(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, toarray(name) as names" +\
+            " FROM %s" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'], key=lambda doc: (doc['job_title'],
+                                                                   doc['names']))
+            expected_result = [{"job_title" : doc["job_title"],
+                              "names" : [doc["name"]]}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title'],
+                                                                       doc['names']))
+            self._verify_results(actual_result, expected_result)
+
 ##############################################################################################
 #
 #   COMMON FUNCTIONS
