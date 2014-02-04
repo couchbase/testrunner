@@ -1059,7 +1059,7 @@ class RemoteMachineShellConnection:
         log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
         if self.info.type.lower() == 'windows':
             self.log.error('Not implemented')
-        elif self.info.deliverable_type in ["rpm", "deb"]:
+        elif self.info.deliverable_type in ["rpm"]:
             output, error = self.execute_command('rpm -i /tmp/{0}'.format(build.name))
             if error and ' '.join(error).find("ERROR") != -1:
                 success = False

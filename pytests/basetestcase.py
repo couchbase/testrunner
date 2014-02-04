@@ -28,8 +28,9 @@ class BaseTestCase(unittest.TestCase):
         self.input = TestInputSingleton.input
         self.servers = self.input.servers
         if str(self.__class__).find('moxitests') != -1:
-            self.moxi_server = self.servers[-1]
-            self.servers = self.servers[:-1]
+            self.moxi_server = self.input.moxis[0]
+            self.servers = [server for server in self.servers
+                            if server.ip != self.moxi_server.ip]
         self.buckets = []
         self.master = self.servers[0]
         self.cluster = Cluster()
