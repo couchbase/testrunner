@@ -39,7 +39,6 @@ class QueriesViewsTests(QueryTests):
             self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
             actual_result = self.run_cbq_query()
             self._verify_results(actual_result['resultset'], [])
-            self._verify_view_is_present("#primary", bucket)
             self.assertTrue(self._is_index_in_list(bucket, "#primary"), "Index is not in list")
 
     def test_create_delete_index_with_query(self):
