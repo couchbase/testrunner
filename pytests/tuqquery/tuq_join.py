@@ -135,6 +135,52 @@ class JoinTests(QueryTests):
             expected_result = sorted(expected_result, key=lambda doc:(
                                                           doc['name'], doc['task']))
             self._verify_results(actual_result, expected_result)
+##############################################################################################
+#
+#   KEY
+##############################################################################################
+
+    def test_key(self):
+        for bucket in self.buckets:
+            key_select, _ = copy.deepcopy(self.gens_tasks[0]).next()
+            self.query = 'select task_name FROM %s KEY "%s"' % (bucket.name, key_select)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['task_name']))
+            full_list = self._generate_full_docs_list(self.gens_tasks, keys=[key_select])
+            expected_result = [{"task_name" : doc['task_name']} for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['task_name']))
+            self._verify_results(actual_result, expected_result)
+
+            self.query = 'select task_name FROM %s KEY "wrong_one"' % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertFalse(actual_result['resultset'], "Having a wrong key query returned some result")
+
+    def test_keys(self):
+        for bucket in self.buckets:
+            keys_select = []
+            generator = copy.deepcopy(self.gens_tasks[0])
+            for i in xrange(5):
+                key, _ = generator.next()
+                keys_select.append(key)
+            self.query = 'select task_name FROM %s KEYS %s' % (bucket.name, keys_select)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['task_name']))
+            full_list = self._generate_full_docs_list(self.gens_tasks, keys=keys_select)
+            expected_result = [{"task_name" : doc['task_name']} for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['task_name']))
+            self._verify_results(actual_result, expected_result)
+
+            keys_select.extend(["wrong"])
+            self.query = 'select task_name FROM %s KEYS %s' % (bucket.name, keys_select)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'])
+            self._verify_results(actual_result, expected_result)
+
+            self.query = 'select task_name FROM %s KEYS ["wrong_one","wrong_second"]' % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertFalse(actual_result['resultset'], "Having a wrong key query returned some result")
 
     def test_key_first(self):
         for bucket in self.buckets:
@@ -166,6 +212,12 @@ class JoinTests(QueryTests):
             expected_result = self._generate_full_docs_list(self.gens_tasks, keys=[key_select, key2_select])
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+
+##############################################################################################
+#
+#   NEST
+##############################################################################################
+
 
     def test_simple_nest_keys(self):
         for bucket in self.buckets:

@@ -1557,52 +1557,6 @@ class QueryTests(BaseTestCase):
                                                                         doc['join_mo'],
                                                                         doc['join_day']))
             self._verify_results(actual_result, expected_result)
-##############################################################################################
-#
-#   KEY
-##############################################################################################
-
-    def test_key(self):
-        for bucket in self.buckets:
-            key_select, _ = copy.deepcopy(self.gens_load[0]).next()
-            self.query = 'select name FROM %s KEY "%s"' % (bucket.name, key_select)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
-                                                                       doc['name']))
-            full_list = self._generate_full_docs_list(self.gens_load, keys=[key_select])
-            expected_result = [{"name" : doc['name']} for doc in full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = 'select name FROM %s KEY "wrong_one"' % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertFalse(actual_result['resultset'], "Having a wrong key query returned some result")
-
-    def test_keys(self):
-        for bucket in self.buckets:
-            keys_select = []
-            generator = copy.deepcopy(self.gens_load[0])
-            for i in xrange(5):
-                keys_select.append(generator.next())
-            self.query = 'select name FROM %s KEY "%s"' % (bucket.name, keys_select)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
-                                                                       doc['name']))
-            full_list = self._generate_full_docs_list(self.gens_load, keys=[keys_select])
-            expected_result = [{"name" : doc['name']} for doc in full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = 'select name FROM %s KEY "%s"' % (bucket.name, keys_select.extend(["wrong"]))
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
-                                                                       doc['name']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = 'select name FROM %s KEY ["wrong_one","wrong_second"]' % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertFalse(actual_result['resultset'], "Having a wrong key query returned some result")
-
 
 ##############################################################################################
 #
