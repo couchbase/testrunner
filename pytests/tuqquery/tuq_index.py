@@ -49,6 +49,11 @@ class QueriesViewsTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 self._verify_results(actual_result['resultset'], [])
                 self.test_case()
+            except Exception, ex:
+                content = self.cluster.query_view(self.master, "ddl_%s" % view_name, view_name, {"stale" : "ok"},
+                                                  bucket="default", retry_time=1)
+                self.log.info("Generated view has %s items" % len(content['rows']))
+                raise ex
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name,view_name)
                 actual_result = self.run_cbq_query()
