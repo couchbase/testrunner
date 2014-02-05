@@ -11,6 +11,8 @@ from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 
+log = logger.Logger.get_logger()
+
 class AutoFailoverBaseTest(unittest.TestCase):
     # start from 1..n
     # then from no failover x node and rebalance and
@@ -22,7 +24,6 @@ class AutoFailoverBaseTest(unittest.TestCase):
 
     @staticmethod
     def common_setup(input, testcase):
-        log = logger.Logger.get_logger()
         log.info("==============  common_setup was started for test #{0} {1}=============="\
                       .format(testcase.case_number, testcase._testMethodName))
         servers = input.servers
@@ -35,7 +36,6 @@ class AutoFailoverBaseTest(unittest.TestCase):
 
     @staticmethod
     def common_tearDown(servers, testcase):
-        log = logger.Logger.get_logger()
         log.info("==============  common_tearDown was started for test #{0} {1} =============="\
                           .format(testcase.case_number, testcase._testMethodName))
         RemoteUtilHelper.common_basic_setup(servers)
@@ -79,7 +79,6 @@ class AutoFailoverBaseTest(unittest.TestCase):
 
     @staticmethod
     def wait_for_no_failover_or_assert(master, autofailover_count, timeout, testcase):
-        log = logger.Logger.get_logger()
         time_start = time.time()
         time_max_end = time_start + timeout
         failover_count = 0
@@ -100,7 +99,6 @@ class AutoFailoverBaseTest(unittest.TestCase):
     def get_failover_count(master):
         rest = RestConnection(master)
         cluster_status = rest.cluster_status()
-        log = logger.Logger.get_logger()
 
         failover_count = 0
         # check for inactiveFailed
@@ -114,18 +112,18 @@ class AutoFailoverBaseTest(unittest.TestCase):
 
 class AutoFailoverTests(unittest.TestCase):
     def setUp(self):
-        self._input = TestInputSingleton.input
-        self.case_number = self._input.param("case_number", 0)
-        self._servers = self._input.servers
+        self.input = TestInputSingleton.input
+        self.case_number = self.input.param("case_number", 0)
+        self.servers = self.input.servers
         self.log = logger.Logger().get_logger()
-        self.master = self._servers[0]
+        self.master = self.servers[0]
         self.rest = RestConnection(self.master)
         self.timeout = 60
-        AutoFailoverBaseTest.common_setup(self._input, self)
+        AutoFailoverBaseTest.common_setup(self.input, self)
         self._cluster_setup()
 
     def tearDown(self):
-        AutoFailoverBaseTest.common_tearDown(self._servers, self)
+        AutoFailoverBaseTest.common_tearDown(self.servers, self)
 
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
@@ -159,7 +157,7 @@ class AutoFailoverTests(unittest.TestCase):
 
     def test_30s_timeout_firewall(self):
         timeout = self.timeout / 2
-        server_fail = self._servers[1]
+        server_fail = self.servers[1]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
             self.fail('failed to change autofailover_settings! See MB-7282')
@@ -169,7 +167,7 @@ class AutoFailoverTests(unittest.TestCase):
 
     def test_60s_timeout_firewall(self):
         timeout = self.timeout
-        server_fail = self._servers[1]
+        server_fail = self.servers[1]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
             self.fail('failed to change autofailover_settings! See MB-7282')
@@ -179,7 +177,7 @@ class AutoFailoverTests(unittest.TestCase):
 
     def test_30s_timeout_stop(self):
         timeout = self.timeout
-        server_fail = self._servers[1]
+        server_fail = self.servers[1]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
             self.fail('failed to change autofailover_settings! See MB-7282')
@@ -189,7 +187,7 @@ class AutoFailoverTests(unittest.TestCase):
 
     def test_60s_timeout_stop(self):
         timeout = self.timeout
-        server_fail = self._servers[1]
+        server_fail = self.servers[1]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
             self.fail('failed to change autofailover_settings! See MB-7282')
@@ -199,8 +197,8 @@ class AutoFailoverTests(unittest.TestCase):
 
     def test_reset_count(self):
         timeout = self.timeout / 2
-        server_fail1 = self._servers[1]
-        server_fail2 = self._servers[2]
+        server_fail1 = self.servers[1]
+        server_fail2 = self.servers[2]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
             self.fail('failed to change autofailover_settings! See MB-7282')
@@ -223,7 +221,7 @@ class AutoFailoverTests(unittest.TestCase):
 
     def test_30s_timeout_pause(self):
         timeout = self.timeout / 2
-        server_fail = self._servers[1]
+        server_fail = self.servers[1]
         shell = RemoteMachineShellConnection(server_fail)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
@@ -239,7 +237,7 @@ class AutoFailoverTests(unittest.TestCase):
 
     def test_60s_timeout_pause(self):
         timeout = self.timeout
-        server_fail = self._servers[1]
+        server_fail = self.servers[1]
         shell = RemoteMachineShellConnection(server_fail)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
@@ -265,8 +263,8 @@ class AutoFailoverTests(unittest.TestCase):
 
     def test_two_failed_nodes(self):
         timeout = self.timeout / 2
-        server_fail1 = self._servers[1]
-        server_fail2 = self._servers[2]
+        server_fail1 = self.servers[1]
+        server_fail2 = self.servers[2]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
             self.fail('failed to change autofailover_settings! See MB-7282')
@@ -280,7 +278,6 @@ class AutoFailoverTests(unittest.TestCase):
         AutoFailoverBaseTest.wait_for_no_failover_or_assert(self.master, 2, timeout + AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, self)
 
     def _stop_couchbase(self, server):
-        log = logger.Logger.get_logger()
         shell = RemoteMachineShellConnection(server)
         shell.stop_couchbase()
         shell.disconnect()
@@ -293,7 +290,6 @@ class AutoFailoverTests(unittest.TestCase):
 
     #the signals SIGSTOP and SIGCONT do not exist for Windows
     def _pause_memcached(self, server):
-        log = logger.Logger.get_logger()
         shell = RemoteMachineShellConnection(server)
         shell.pause_memcached()
         shell.disconnect()
@@ -301,14 +297,12 @@ class AutoFailoverTests(unittest.TestCase):
 
     #the signals SIGSTOP and SIGCONT do not exist for Windows
     def _pause_beam(self, server):
-        log = logger.Logger.get_logger()
         shell = RemoteMachineShellConnection(server)
         shell.pause_beam()
         shell.disconnect()
         log.info("stopped couchbase server on {0}".format(server))
 
     def load_data(self, master, bucket, keys_count):
-        log = logger.Logger.get_logger()
         inserted_keys_cnt = 0
         repeat_count = 0
         while inserted_keys_cnt < keys_count and repeat_count < 5:
@@ -331,22 +325,20 @@ class AutoFailoverTests(unittest.TestCase):
         return inserted_keys_cnt
 
     def _cluster_setup(self):
-        log = logger.Logger.get_logger()
-
-        replicas = self._input.param("replicas", 1)
-        keys_count = self._input.param("keys-count", 0)
-        num_buckets = self._input.param("num-buckets", 1)
+        replicas = self.input.param("replicas", 1)
+        keys_count = self.input.param("keys-count", 0)
+        num_buckets = self.input.param("num-buckets", 1)
 
         bucket_name = "default"
-        master = self._servers[0]
-        credentials = self._input.membase_settings
+        master = self.servers[0]
+        credentials = self.input.membase_settings
         rest = RestConnection(self.master)
         info = rest.get_nodes_self()
         rest.init_cluster(username=self.master.rest_username,
                           password=self.master.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
         rest.reset_autofailover()
-        ClusterOperationHelper.add_all_nodes_or_assert(self.master, self._servers, credentials, self)
+        ClusterOperationHelper.add_all_nodes_or_assert(self.master, self.servers, credentials, self)
         bucket_ram = info.memoryQuota * 2 / 3
 
         if num_buckets == 1:
