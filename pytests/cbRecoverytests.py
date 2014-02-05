@@ -89,7 +89,8 @@ class CBRbaseclass(XDCRReplicationBaseTest):
     def trigger_rebalance(self, rest):
         _nodes_ = rest.node_statuses()
         rest.rebalance(otpNodes=[node.id for node in _nodes_], ejectedNodes=[])
-        RestHelper(rest).rebalance_reached()
+        reached = RestHelper(rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed or did not completed")
 
     def auto_fail_over(self, master):
         _count_ = 1
@@ -183,7 +184,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
         self.failover_reason = self._input.param("failover_reason", "stop_server")  # or firewall_block
         self.flag_val = self._input.param("setflag", 0)
         self.failed_nodes = []
-        self._ifautofail = 0
+        self._ifautofail = False
         for server in self._servers:
             rest = RestConnection(server)
             rest.reset_autofailover()
@@ -193,7 +194,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
             shell.disconnect()
 
     def tearDown(self):
-        if self._ifautofail == 1:
+        if self._ifautofail:
             if "stop_server" in self.failover_reason:
                 for node in self.failed_nodes:
                     shell = RemoteMachineShellConnection(node)
@@ -210,7 +211,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
             self.sleep(20)
         super(cbrecovery, self).tearDown()
 
-    def cbrecover_multiple_failover_swapout_reb_routine(self):
+    def common_preSetup(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0, flag=self.flag_val)
         tasks = []
         if self._doc_ops is not None:
@@ -225,17 +226,35 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
         """
         Tracking vbucket movement just on the default bucket for now
         """
-        vbucket_map_before = []
-        initial_node_count = 0
-        vbucket_map_after = []
-        final_node_count = 0
+        self.vbucket_map_before = []
+        self.initial_node_count = 0
+        self.vbucket_map_after = []
+        self.final_node_count = 0
 
+    def common_tearDown_verification(self):
+        if self._failover is not None:
+            #TOVERIFY: Check if vbucket map unchanged if swap rebalance
+            if self._default_bucket:
+                if self._failover_count == self._add_count:
+                    _flag_ = self.vbucket_map_checker(self.vbucket_map_before, self.vbucket_map_after, self.initial_node_count, self.final_node_count)
+                    if _flag_:
+                        self.log.info("vbucket_map same as earlier")
+                    else:
+                        self.log.info("vbucket_map differs from earlier")
+
+        self.sleep(self._timeout / 2)
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.verify_results(verify_src=True)
+
+
+    def cbrecover_multiple_failover_swapout_reb_routine(self):
+        self.common_preSetup()
         if self._failover is not None:
             if "source" in self._failover:
                 rest = RestConnection(self.src_master)
                 if self._default_bucket:
-                    initial_node_count = len(self.src_nodes)
-                    vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
+                    self.initial_node_count = len(self.src_nodes)
+                    self.vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.src_nodes):
                     raise Exception("Won't failover .. count exceeds available servers on source : SKIPPING TEST")
                 if len(self._floating_servers_set) < self._add_count:
@@ -255,14 +274,14 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
 
                 self.trigger_rebalance(rest)
                 if self._default_bucket:
-                    vbucket_map_after = rest.fetch_vbucket_map()
-                    final_node_count = len(self.src_nodes)
+                    self.vbucket_map_after = rest.fetch_vbucket_map()
+                    self.final_node_count = len(self.src_nodes)
 
             elif "destination" in self._failover:
                 rest = RestConnection(self.dest_master)
                 if self._default_bucket:
-                    initial_node_count = len(self.dest_nodes)
-                    vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
+                    self.initial_node_count = len(self.dest_nodes)
+                    self.vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.dest_nodes):
                     raise Exception("Won't failover .. count exceeds available servers on sink : SKIPPING TEST")
                 if len(self._floating_servers_set) < self._add_count:
@@ -282,49 +301,21 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
 
                 self.trigger_rebalance(rest)
                 if self._default_bucket:
-                    vbucket_map_after = rest.fetch_vbucket_map()
-                    final_node_count = len(self.dest_nodes)
+                    self.vbucket_map_after = rest.fetch_vbucket_map()
+                    self.final_node_count = len(self.dest_nodes)
 
-            #TOVERIFY: Check if vbucket map unchanged if swap rebalance
-            if self._default_bucket:
-                if self._failover_count == self._add_count:
-                    _flag_ = self.vbucket_map_checker(vbucket_map_before, vbucket_map_after, initial_node_count, final_node_count)
-                    if _flag_:
-                        self.log.info("vbucket_map same as earlier")
-                    else:
-                        self.log.info("vbucket_map differs from earlier")
+        self.common_tearDown_verification()
 
-        self.sleep(self._timeout / 2)
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.verify_results(verify_src=True)
 
     def cbrecover_multiple_autofailover_swapout_reb_routine(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0, flag=self.flag_val)
-        tasks = []
-        if self._doc_ops is not None:
-            if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
-            if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-        for task in tasks:
-            task.result()
-
-        self._wait_for_replication_to_catchup()
-        """
-        Tracking vbucket movement just on the default bucket for now
-        """
-        vbucket_map_before = []
-        initial_node_count = 0
-        vbucket_map_after = []
-        final_node_count = 0
-
+        self.common_preSetup()
         if self._failover is not None:
-            self._ifautofail = 1
+            self._ifautofail = True
             if "source" in self._failover:
                 rest = RestConnection(self.src_master)
                 if self._default_bucket:
-                    initial_node_count = len(self.src_nodes)
-                    vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
+                    self.initial_node_count = len(self.src_nodes)
+                    self.vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.src_nodes):
                     raise Exception("Won't failover .. count exceeds available servers on source : SKIPPING TEST")
                 if len(self._floating_servers_set) < self._add_count:
@@ -346,16 +337,16 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
 
                 self.trigger_rebalance(rest)
                 if self._default_bucket:
-                    vbucket_map_after = rest.fetch_vbucket_map()
-                    initial_node_count = len(self.src_nodes)
+                    self.vbucket_map_after = rest.fetch_vbucket_map()
+                    self.initial_node_count = len(self.src_nodes)
 
                 self._autofail_disable(rest)
 
             elif "destination" in self._failover:
                 rest = RestConnection(self.dest_master)
                 if self._default_bucket:
-                    initial_node_count = len(self.dest_nodes)
-                    vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
+                    self.initial_node_count = len(self.dest_nodes)
+                    self.vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.dest_nodes):
                     raise Exception("Won't failover .. count exceeds available servers on source : SKIPPING TEST")
                 if len(self._floating_servers_set) < self._add_count:
@@ -377,50 +368,21 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
 
                 self.trigger_rebalance(rest)
                 if self._default_bucket:
-                    vbucket_map_after = rest.fetch_vbucket_map()
-                    final_node_count = len(self.dest_nodes)
+                    self.vbucket_map_after = rest.fetch_vbucket_map()
+                    self.final_node_count = len(self.dest_nodes)
 
                 self._autofail_disable(rest)
 
-            #TOVERIFY: Check if vbucket map unchanged if swap rebalance
-            if self._default_bucket:
-                if self._failover_count == self._add_count:
-                    _flag_ = self.vbucket_map_checker(vbucket_map_before, vbucket_map_after, initial_node_count, final_node_count)
-                    if _flag_:
-                        self.log.info("vbucket_map same as earlier")
-                    else:
-                        self.log.info("vbucket_map differs from earlier")
-
-        self.sleep(self._timeout / 2)
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.verify_results(verify_src=True)
+        self.common_tearDown_verification()
 
     def cbrecover_multiple_failover_addback_routine(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0, flag=self.flag_val)
-        tasks = []
-        if self._doc_ops is not None:
-            if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
-            if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-        for task in tasks:
-            task.result()
-
-        self._wait_for_replication_to_catchup()
-        """
-        Tracking vbucket movement just on the default bucket for now
-        """
-        vbucket_map_before = []
-        initial_node_count = 0
-        vbucket_map_after = []
-        final_node_count = 0
-
+        self.common_preSetup()
         if self._failover is not None:
             if "source" in self._failover:
                 rest = RestConnection(self.src_master)
                 if self._default_bucket:
-                    initial_node_count = len(self.src_nodes)
-                    vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
+                    self.initial_node_count = len(self.src_nodes)
+                    self.vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.src_nodes):
                     raise Exception("Won't failover .. count exceeds available servers on source : SKIPPING TEST")
                 if len(self._floating_servers_set) < self._add_count:
@@ -442,14 +404,14 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
 
                 self.trigger_rebalance(rest)
                 if self._default_bucket:
-                    vbucket_map_after = rest.fetch_vbucket_map()
-                    final_node_count = len(self.src_nodes)
+                    self.vbucket_map_after = rest.fetch_vbucket_map()
+                    self.final_node_count = len(self.src_nodes)
 
             elif "destination" in self._failover:
                 rest = RestConnection(self.dest_master)
                 if self._default_bucket:
-                    initial_node_count = len(self.dest_nodes)
-                    vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
+                    self.initial_node_count = len(self.dest_nodes)
+                    self.vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.dest_nodes):
                     raise Exception("Won't failover .. count exceeds available servers on sink : SKIPPING TEST")
                 if len(self._floating_servers_set) < self._add_count:
@@ -472,18 +434,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
 
                 self.trigger_rebalance(rest)
                 if self._default_bucket:
-                    vbucket_map_after = rest.fetch_vbucket_map()
-                    final_node_count = len(self.dest_nodes)
+                    self.vbucket_map_after = rest.fetch_vbucket_map()
+                    self.final_node_count = len(self.dest_nodes)
 
-            #TOVERIFY: Check if vbucket map unchanged if swap rebalance
-            if self._default_bucket:
-                if self._failover_count == self._add_count:
-                    _flag_ = self.vbucket_map_checker(vbucket_map_before, vbucket_map_after, initial_node_count, final_node_count)
-                    if _flag_:
-                        self.log.info("vbucket_map same as earlier")
-                    else:
-                        self.log.info("vbucket_map differs from earlier")
-
-        self.sleep(self._timeout / 2)
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.verify_results(verify_src=True)
+        self.common_tearDown_verification()
