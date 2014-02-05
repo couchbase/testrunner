@@ -1951,6 +1951,22 @@ class RestConnection(object):
         return None
 
 
+    def get_recovery_task(self):
+        content = self.ns_server_tasks()
+        for item in content:
+            if item["type"] == "recovery":
+                return item
+        return None
+
+
+    def get_recovery_progress(self, recoveryStatusURI):
+        api = '%s%s' % (self.baseUrl, recoveryStatusURI)
+        status, content, header = self._http_request(api)
+        if status:
+            return json.loads(content)
+        return None
+
+
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
         self.implementationVersion = implementationVersion
