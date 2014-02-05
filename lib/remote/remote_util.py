@@ -2288,19 +2288,19 @@ class RemoteUtilHelper(object):
                 hostname = suffix_dns_row[0].split(':')[1].strip()
                 cmd = "cat  /opt/couchbase/bin/couchbase-server"
                 old_start = shell.execute_command_raw(cmd)
-                new_start = '\n'.join(old_start[0]).replace("-run ns_bootstrap -- \\",
-                                      "-run ns_bootstrap -- \\\n        -name ns_1@%s \\" % hostname)
-                cmd = "echo '%s' > /opt/couchbase/bin/couchbase-server" % new_start
-                shell.execute_command_raw(cmd)
+                cmd = r"sed -i 's/\(.*\-run ns_bootstrap.*\)/\1\n\t-name ns_1@{0} \\/' \
+                        /opt/couchbase/bin/couchbase-server".format(hostname)
+                o, r = shell.execute_command(cmd)
+                shell.log_command_output(o, r)
                 time.sleep(2)
                 cmd = 'rm -rf /opt/couchbase/var/lib/couchbase/data/*'
-                shell.execute_command_raw(cmd)
+                shell.execute_command(cmd)
                 cmd = 'rm -rf /opt/couchbase/var/lib/couchbase/mnesia/*'
-                shell.execute_command_raw(cmd)
+                shell.execute_command(cmd)
                 cmd = 'rm -rf /opt/couchbase/var/lib/couchbase/config/config.dat'
-                shell.execute_command_raw(cmd)
+                shell.execute_command(cmd)
                 cmd = 'echo "%s" > /opt/couchbase/var/lib/couchbase/ip' % hostname
-                shell.execute_command_raw(cmd)
+                shell.execute_command(cmd)
         else:
             o = shell.execute_command_raw('nslookup %s' % hostname)
             suffix_dns_row = [row for row in o[0] if row.find("Name:") != -1]
