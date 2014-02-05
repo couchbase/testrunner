@@ -722,3 +722,46 @@ class Cluster(object):
         _task = MonitorDBFragmentationTask(server, fragmentation, bucket)
         self.task_manager.schedule(_task)
         return _task
+
+    def cbrecovery(self, src_server, dest_server, bucket_src='', bucket_dest='', username='', password='',
+                 username_dest='', password_dest='', verbose=False):
+        """Synchronously run and monitor cbrecovery
+
+        Parameters:
+            src_server - source cluster to restore data from(TestInputServers)
+            dest_server - destination cluster to restore data to(TestInputServers)
+            bucket_src - source bucket to recover from
+            bucket_dest - destination bucket to recover to
+            username - REST username for source cluster
+            password - REST password for source cluster
+            username_dest - REST username for destination cluster or server node
+            password_dest - REST password for destination cluster or server node
+            verbose - verbose logging; more -v's provide more verbosity
+
+        Returns:
+            boolean - Whether or not the cbrecovery completed successfully"""
+        _task = self.async_cbrecovery(server, src_server, dest_server, bucket_src, bucket_dest, username, password,
+                 username_dest, password_dest, verbose)
+        return _task.result(timeout)
+
+    def async_cbrecovery(self, src_server, dest_server, bucket_src='', bucket_dest='', username='', password='',
+                 username_dest='', password_dest='', verbose=False):
+        """Asyncronously run/monitor cbrecovery
+
+        Parameters:
+            src_server - source cluster to restore data from(TestInputServers)
+            dest_server - destination cluster to restore data to(TestInputServers)
+            bucket_src - source bucket to recover from
+            bucket_dest - destination bucket to recover to
+            username - REST username for source cluster
+            password - REST password for source cluster
+            username_dest - REST username for destination cluster or server node
+            password_dest - REST password for destination cluster or server node
+            verbose - verbose logging; more -v's provide more verbosity
+
+        Returns:
+            CBRecoveryTask - A task future that is a handle to the scheduled task"""
+        _task = CBRecoveryTask(src_server, dest_server, bucket_src, bucket_dest, username, password,
+                 username_dest, password_dest, verbose)
+        self.task_manager.schedule(_task)
+        return _task
