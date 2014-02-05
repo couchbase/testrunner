@@ -1,8 +1,9 @@
 from xdcr.xdcrbasetests import XDCRReplicationBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
+from membase.api.exception import CBRecoveryFailedException
 import time
-import paramiko
+
 
 class CBRbaseclass(XDCRReplicationBaseTest):
     def _autofail_enable(self, _rest_):
@@ -59,7 +60,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
         _flag = False
         rest1 = RestConnection(_healthy_)
         rest2 = RestConnection(_compromised_)
-        while time.time() - start < 180:
+        while time.time() - start < 60:
             _count1 = rest1.fetch_bucket_stats(bucket=bucket)["op"]["samples"]["curr_items"][-1]
             _count2 = rest2.fetch_bucket_stats(bucket=bucket)["op"]["samples"]["curr_items"][-1]
             if _count1 == _count2:
@@ -71,41 +72,19 @@ class CBRbaseclass(XDCRReplicationBaseTest):
         return _flag
 
     def cbr_routine(self, _healthy_, _compromised_):
-        shell = RemoteMachineShellConnection(_healthy_)
-        info = shell.extract_remote_info()
-        shell.disconnect()
-        _ssh_client = paramiko.SSHClient()
-        _ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        _ssh_client.connect(hostname=_healthy_.ip, username=_healthy_.ssh_username, password=_healthy_.ssh_password)
+        tasks = []
+        for bucket in self._get_cluster_buckets(_compromised_):
+            tasks.append(self.cluster.async_cbrecovery(_healthy_, _compromised_, bucket_src=bucket, bucket_dest=bucket, username=_healthy_.rest_username, password=_healthy_.rest_password,
+                 username_dest=_compromised_.rest_username, password_dest=_compromised_.rest_password, verbose=False))
+        for task in tasks:
+            task.result()
+
+        _check = True
+
         for bucket in self.buckets:
-            source_ = "http://{0}:{1}@{2}:{3}".format(_healthy_.rest_username, _healthy_.rest_password,
-                                                     _healthy_.ip, _healthy_.port)
-            sink_ = "http://{0}:{1}@{2}:{3}".format(_compromised_.rest_username, _compromised_.rest_password,
-                                                   _compromised_.ip, _compromised_.port)
-            bucket_ = "-b {0} -B {0}".format(bucket.name)
-
-            if info.type.lower() == "linux":
-                command = "/opt/couchbase/bin/cbrecovery"
-            elif info.type.lower() == "windows":
-                command = "C:/Program\ Files/Couchbase/Server/bin/cbrecovery.exe"
-
-            command += " " + source_ + " " + sink_ + " " + bucket_
-            self.log.info("Running command .. {0}".format(command))
-            _ssh_client.exec_command(command)
-            self.sleep(self._timeout)
-
-            _check = self.wait_for_catchup(_healthy_, _compromised_, bucket.name)
-            _attempts = 1
-            while not _check:
-                _attempts += 1
-                _ssh_client.exec_command(command)
-                _check = self.wait_for_catchup(_healthy_, _compromised_, bucket.name)
-                if _attempts > 4:
-                    self.log.error("Cbrecovery didn't complete in time, ending test ..")
-                    rest = RestConnection(_compromised_)
-                    rest.remove_all_recoveries()
-                    raise Exception("Unable to complete test, cbrecovery failed to complete in expected time")
-                    break
+            _check += self.wait_for_catchup(_healthy_, _compromised_, bucket.name)
+        if not _check:
+            raise CBRecoveryFailedException("not all items were recovered. see logs above")
 
     def trigger_rebalance(self, rest):
         _nodes_ = rest.node_statuses()
