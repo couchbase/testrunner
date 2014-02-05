@@ -67,7 +67,7 @@ class RestHelper(object):
                     previous_progress = progress
             #sleep for 2 seconds
             time.sleep(2)
-        if progress < 0:
+        if progress <= 0:
             log.error("rebalance progress code : {0}".format(progress))
             return False
         else:
