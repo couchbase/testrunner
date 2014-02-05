@@ -8,6 +8,7 @@ import json
 import re
 import math
 import crc32
+import paramiko
 from httplib import IncompleteRead
 from threading import Thread
 from memcacheConstants import ERR_NOT_FOUND
@@ -20,8 +21,9 @@ from mc_bin_client import MemcachedError
 from tasks.future import Future
 from couchbase.stats_tools import StatsCommon
 from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
-                                        GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, ServerUnavailableException, BucketFlushFailed
-
+                                    GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, \
+                                    ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException
+from remote.remote_util import RemoteMachineShellConnection
 from couchbase.documentgenerator import BatchedDocumentGenerator
 
 #TODO: Setup stacktracer
@@ -1588,7 +1590,7 @@ class MonitorViewQueryResultsTask(Task):
                 task_manager.schedule(self, 10)
             elif str(ex).find('timeout') != -1:
                 self.connection_timeout = self.connection_timeout * 2
-                self.log.error("view_results not ready yet ddoc=%s ,"  % self.design_doc_name + \
+                self.log.error("view_results not ready yet ddoc=%s ," % self.design_doc_name + \
                                " try again in 10 seconds... and double timeout")
                 task_manager.schedule(self, 10)
             else:
@@ -2100,7 +2102,7 @@ class ViewCompactionTask(Task):
                 self.log.info("design doc {0} is compacting".format(self.design_doc_name))
                 task_manager.schedule(self, 3)
             elif new_compaction_revision > self.compaction_revision or\
-                 self.precompacted_fragmentation >  fragmentation:
+                 self.precompacted_fragmentation > fragmentation:
                 self.log.info("{1}: compactor was run, compaction revision was changed on {0}".format(new_compaction_revision,
                                                                                                       self.design_doc_name))
                 frag_val_diff = fragmentation - self.precompacted_fragmentation
@@ -2774,3 +2776,106 @@ class MonitorDBFragmentationTask(Task):
             self.state = FINISHED
             self.set_result(False)
             self.set_exception(ex)
+
+
+class CBRecoveryTask(Task):
+    def __init__(self, src_server, dest_server, bucket_src='', bucket_dest='', username='', password='',
+                 username_dest='', password_dest='', verbose=False):
+        Task.__init__(self, "cbrecovery_task")
+        self.src_server = src_server
+        self.dest_server = dest_server
+        self.bucket_src = bucket_src
+        self.bucket_dest = bucket_dest
+        if isinstance(bucket_src, Bucket):
+            self.bucket_src = bucket_src.name
+        if isinstance(bucket_dest, Bucket):
+            self.bucket_dest = bucket_dest.name
+        self.username = username
+        self.password = password
+        self.username_dest = username_dest
+        self.password_dest = password_dest
+        self.verbose = verbose
+
+        try:
+            self.shell = RemoteMachineShellConnection(src_server)
+            self.info = self.shell.extract_remote_info()
+            self.shell.disconnect()
+            self.rest = RestConnection(dest_server)
+            self._ssh_client = paramiko.SSHClient()
+            self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            self._ssh_client.connect(hostname=src_server.ip, username=src_server.ssh_username, password=src_server.ssh_password)
+        except Exception, e:
+            self.log.error(e)
+            self.state = FINISHED
+            self.set_exception(e)
+        self.progress = {}
+        self.started = False
+        self.retries = 0
+
+    def execute(self, task_manager):
+        try:
+            if self.info.type.lower() == "linux":
+                command = "/opt/couchbase/bin/cbrecovery "
+            elif self.info.type.lower() == "windows":
+                command = "C:/Program\ Files/Couchbase/Server/bin/cbrecovery.exe "
+
+            src_url = "http://{0}:{1}".format(self.src_server.ip, self.src_server.port)
+            dest_url = "http://{0}:{1}".format(self.dest_server.ip, self.dest_server.port)
+            command += "{0} {1} ".format(src_url, dest_url)
+
+            if self.bucket_src:
+                command += "-b {0} ".format(self.bucket_src)
+            if self.bucket_dest:
+                command += "-B {0} ".format(self.bucket_dest)
+            if self.username:
+                command += "-u {0} ".format(self.username)
+            if self.password:
+                command += "-p {0} ".format(self.password)
+            if self.username_dest:
+                command += "-U {0} ".format(self.username_dest)
+            if self.password_dest:
+                command += "-P {0} ".format(self.password_dest)
+            if self.verbose:
+                command += " -v "
+
+            self._ssh_client.set_log_channel(None)
+            self._ssh_client.exec_command(command)
+            self.state = CHECKING
+            task_manager.schedule(self, 20)
+        except Exception as e:
+            self.state = FINISHED
+            self.set_exception(e)
+
+    def check(self, task_manager):
+        self.recovery_task = self.rest.get_recovery_task()
+        if self.recovery_task is not None:
+            if not self.started:
+                self.started = True
+            progress = self.rest.get_recovery_progress(self.recovery_task["recoveryStatusURI"])
+            if progress == self.progress:
+                self.log.warn("cbrecovery progress was not changed")
+                if self.retries > 20:
+                    self._ssh_client.close()
+                    self.state = FINISHED
+                    self.set_exception(CBRecoveryFailedException("cbrecovery hangs"))
+                    return
+                self.retries += 1
+                task_manager.schedule(self, 20)
+            else:
+                self.progress = progress
+                self.log.info("cbrecovery progress: {0}".format(self.progress))
+                self.retries = 0
+                task_manager.schedule(self, 20)
+        else:
+            if self.started:
+                self._ssh_client.close()
+                self.log.info("cbrecovery completed succesfully")
+                self.state = FINISHED
+                self.set_result(True)
+            if self.retries > 5:
+                self._ssh_client.close()
+                self.state = FINISHED
+                self.set_exception(CBRecoveryFailedException("cbrecovery was not started"))
+            else:
+                self.retries += 1
+                task_manager.schedule(self, 20)

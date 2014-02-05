@@ -166,3 +166,7 @@ class CBQError(Exception):
 
     def __str__(self):
         return "CBQError: %s" % self._message
+
+class CBRecoveryFailedException(MembaseHttpException):
+    def __init__(self, string=''):
+        self._message = 'CBRecovery Failed: {0}'.format(string)
