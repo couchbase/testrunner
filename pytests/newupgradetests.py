@@ -257,7 +257,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 tmp = min(num_nodes_with_not_default, num_nodes_remove_data)
                 self.delete_data(self.servers[:tmp], [data_path + "/*", index_path + "/*"])
                 #remove data for nodes with default data paths
-                self.delete_data(self.servers[tmp: max(tmp, num_nodes_remove_data)], ["/opt/couchbase/var/lib/couchbase/data"])
+                self.delete_data(self.servers[tmp: max(tmp, num_nodes_remove_data)], ["/opt/couchbase/var/lib/couchbase/data/*"])
                 upgrade_threads = self._async_update(upgrade_version, self.servers[:self.nodes_init])
                 for upgrade_thread in upgrade_threads:
                     upgrade_thread.join()
