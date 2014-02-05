@@ -2865,6 +2865,7 @@ class CBRecoveryTask(Task):
                 self.log.warn("cbrecovery progress was not changed")
                 if self.retries > 20:
                     self._ssh_client.close()
+                    self.rest.print_UI_logs()
                     self.state = FINISHED
                     self.log.warn("ns_server_tasks: {0}".format(self.rest.ns_server_tasks()))
                     self.log.warn("cbrecovery progress: {0}".format(self.rest.get_recovery_progress(self.recovery_task["recoveryStatusURI"])))
@@ -2885,9 +2886,11 @@ class CBRecoveryTask(Task):
                 self.set_result(True)
             if self.retries > 5:
                 self._ssh_client.close()
+                self.rest.print_UI_logs()
                 self.state = FINISHED
                 self.log.warn("ns_server_tasks: {0}".format(self.rest.ns_server_tasks()))
                 self.set_exception(CBRecoveryFailedException("cbrecovery was not started"))
+                return
             else:
                 self.retries += 1
                 task_manager.schedule(self, 20)
