@@ -17,6 +17,7 @@ class QueriesViewsTests(QueryTests):
         super(QueriesViewsTests, self).suite_setUp()
 
     def tearDown(self):
+        self.cluster.delete_view(self.master, self.ddoc_name)
         super(QueriesViewsTests, self).tearDown()
 
     def suite_tearDown(self):
