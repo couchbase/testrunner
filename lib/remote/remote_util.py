@@ -165,7 +165,7 @@ class RemoteMachineShellConnection:
                 else:
                     log.error("Can't establish SSH session: {0}".format(e))
                     exit(1)
-        log.info("Connected")
+        log.info("Connected to {0}".format(serverInfo.ip))
 
     def sleep(self, timeout=1, message=""):
         log.info("{0}:sleep for {1} secs. {2} ...".format(self.ip, timeout, message))
@@ -1409,7 +1409,7 @@ class RemoteMachineShellConnection:
         return output
 
     def execute_command(self, command, info=None, debug=True, use_channel=False):
-        if info is None or getattr(self, "info", None) is None:
+        if info is None and (getattr(self, "info", None) is None):
             self.info = self.extract_remote_info()
         elif getattr(self, "info", None) is None and info is not None :
             self.info = info
