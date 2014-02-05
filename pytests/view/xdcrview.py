@@ -13,15 +13,14 @@ class XDCRViewTests(XDCRReplicationBaseTest, CreateDeleteViewTests):
         self.num_views_per_ddoc = self._input.param("num_views_per_ddoc", 1)
         self.num_ddocs = self._input.param("num_ddocs", 1)
         self.test_with_view = True
-        self.num_items = self._num_items
         self.wait_timeout = self._timeout
         self.updated_map_func = 'function (doc) { emit(null, doc);}'
         if self._replication_direction_str in "bidirection":
-            self.gen_create2 = BlobGenerator('LoadTwo', 'LoadTwo', self._value_size, end=self._num_items)
+            self.gen_create2 = BlobGenerator('LoadTwo', 'LoadTwo', self._value_size, end=self.num_items)
             self.gen_delete2 = BlobGenerator('LoadTwo', 'LoadTwo-', self._value_size,
-                start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
+                start=int((self.num_items) * (float)(100 - self._percent_delete) / 100), end=self.num_items)
             self.gen_update2 = BlobGenerator('LoadTwo', 'LoadTwo-', self._value_size, start=0,
-                end=int(self._num_items * (float)(self._percent_update) / 100))
+                end=int(self.num_items * (float)(self._percent_update) / 100))
 
     def tearDown(self):
         super(XDCRViewTests, self).tearDown()

@@ -18,7 +18,6 @@ class ObserveXdcrTest(XDCRReplicationBaseTest):
         self.default_view = View("default_view", map_func, None)
         self.mutate_by = self._input.param("mutate_by", "set")
         self.wait_timeout = self._timeout
-        self.num_items = self._num_items
 
     def tearDown(self):
         super(ObserveXdcrTest, self).tearDown()

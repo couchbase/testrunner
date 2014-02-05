@@ -100,30 +100,30 @@ class NegativeTests2(XDCRReplicationBaseTest):
         the traditional utf-8 encoding, with xdcr enabled.
     """
     def test_utf_16_keys_with_xdcr(self):
-        gen_create = UTF_16_Generator('loadOne', 'loadOne_', self._value_size, end=self._num_items)
+        gen_create = UTF_16_Generator('loadOne', 'loadOne_', self._value_size, end=self.num_items)
         self._load_all_buckets(self.src_master, gen_create, "create", 0)
         if "update" in self._doc_ops:
             gen_update = UTF_16_Generator('loadOne', 'loadOne_', self._value_size, start=0,
-                    end=int(self._num_items * (float)(self._percent_update) / 100))
+                    end=int(self.num_items * (float)(self._percent_update) / 100))
             self._load_all_buckets(self.src_master, gen_update, "update", self._expires)
         if "delete" in self._doc_ops:
             gen_delete = UTF_16_Generator('loadOne', 'loadOne_', self._value_size,
-                    start=int((self._num_items) * (float)(100 - self._percent_delete) / 100),
-                    end=self._num_items)
+                    start=int((self.num_items) * (float)(100 - self._percent_delete) / 100),
+                    end=self.num_items)
             self._load_all_buckets(self.src_master, gen_delete, "delete", 0)
         self._wait_for_stats_all_buckets(self.src_nodes)
 
         if self._replication_direction_str == "bidirection":
-            gen_create = UTF_16_Generator('loadTwo', 'loadTwo_', self._value_size, end=self._num_items)
+            gen_create = UTF_16_Generator('loadTwo', 'loadTwo_', self._value_size, end=self.num_items)
             self._load_all_buckets(self.dest_master, gen_create, "create", 0)
             if "update" in self._doc_ops_dest:
                 gen_update = UTF_16_Generator('loadTwo', 'loadTwo_', self._value_size, start=0,
-                        end=int(self._num_items * (float)(self._percent_update) / 100))
+                        end=int(self.num_items * (float)(self._percent_update) / 100))
                 self._load_all_buckets(self.dest_master, gen_update, "update", self._expires)
             if "delete" in self._doc_ops_dest:
                 gen_delete = UTF_16_Generator('loadTwo', 'loadTwo_', self._value_size,
-                        start=int((self._num_items) * (float)(100 - self._percent_delete) / 100),
-                        end=self._num_items)
+                        start=int((self.num_items) * (float)(100 - self._percent_delete) / 100),
+                        end=self.num_items)
                 self._load_all_buckets(self.dest_master, gen_delete, "delete", 0)
             self._wait_for_stats_all_buckets(self.dest_nodes)
 

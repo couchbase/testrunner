@@ -241,7 +241,7 @@ class XDCRBaseTest(unittest.TestCase):
             self.default_bucket_name = "default"
 
         self._num_replicas = self._input.param("replicas", 1)
-        self._num_items = self._input.param("items", 1000)
+        self.num_items = self._input.param("items", 1000)
         self._value_size = self._input.param("value_size", 256)
         self._dgm_run_bool = self._input.param("dgm_run", False)
         self._mem_quota_int = 0  # will be set in subsequent methods
@@ -285,12 +285,12 @@ class XDCRBaseTest(unittest.TestCase):
         UPDATE's UPD% of the items starting from 0,
         DELETE's DEL% of the items starting from the end (count(items)).
         """
-        self.gen_create = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self._num_items)
+        self.gen_create = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self.num_items)
         self.gen_delete = BlobGenerator('loadOne', 'loadOne-', self._value_size,
-            start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
+            start=int((self.num_items) * (float)(100 - self._percent_delete) / 100), end=self.num_items)
         self.gen_update = BlobGenerator('loadOne', 'loadOne-', self._value_size, start=0,
-            end=int(self._num_items * (float)(self._percent_update) / 100))
-        self.gen_append = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self._num_items)
+            end=int(self.num_items * (float)(self._percent_update) / 100))
+        self.gen_append = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self.num_items)
 
         self.ord_keys = self._clusters_keys_olst
         self.ord_keys_len = len(self.ord_keys)
@@ -757,9 +757,9 @@ class XDCRBaseTest(unittest.TestCase):
 
     def _get_num_items_ratio(self, op_type):
         if op_type in ["update", "delete"]:
-            return self._num_items / 3
+            return self.num_items / 3
         else:
-            return self._num_items
+            return self.num_items
 
     def _load_gen_data(self, cname, node):
         for op_type in self._seed_data_ops_lst:
@@ -991,7 +991,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         for key in self._clusters_keys_olst:
             cluster_node = self._clusters_dic[key][0]
             cluster_name = self._cluster_names_dic[key]
-            self.log.info("Starting Load # items {0} node {1} , cluster {2}....".format(self._num_items, cluster_node,
+            self.log.info("Starting Load # items {0} node {1} , cluster {2}....".format(self.num_items, cluster_node,
                 cluster_name))
             self._load_gen_data(cluster_name, cluster_node)
             if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_UNIDIRECTION:

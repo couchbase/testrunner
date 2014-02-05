@@ -40,7 +40,7 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
 
         # Perform 20% delete on Source cluster.
         tasks = []
-        self.gen_delete = BlobGenerator('loadOne', 'loadOne-', self._value_size, start=0, end=int((self._num_items) * (float)(self._percent_delete) / 100))
+        self.gen_delete = BlobGenerator('loadOne', 'loadOne-', self._value_size, start=0, end=int((self.num_items) * (float)(self._percent_delete) / 100))
         tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
 
         # Step-6 XDCR Remote -> Source
@@ -76,11 +76,11 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
 
 
     def test_diff_version_xdcr(self):
-        self.gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self._num_items)
+        self.gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self.num_items)
         self.gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size,
-            start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
+            start=int((self.num_items) * (float)(100 - self._percent_delete) / 100), end=self.num_items)
         self.gen_update2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, start=0,
-            end=int(self._num_items * (float)(self._percent_update) / 100))
+            end=int(self.num_items * (float)(self._percent_update) / 100))
 
         # Step-2 Setting up replication clusters.
         src_cluster_name, dest_cluster_name = "remote-dest-src", "remote-src-dest"

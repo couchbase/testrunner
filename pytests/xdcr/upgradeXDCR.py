@@ -166,7 +166,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         bucket = self._get_bucket(self, 'bucket0', self.src_master)
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
         bucket = self._get_bucket(self, 'bucket0', self.dest_master)
-        gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self._num_items)
+        gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self.num_items)
         self._load_bucket(bucket, self.dest_master, gen_create2, 'create', exp=0)
         nodes_to_upgrade = []
         if "src" in upgrade_nodes :
@@ -191,7 +191,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
         self.sleep(60)
         bucket = self._get_bucket(self, 'bucket0', self.src_master)
-        gen_create3 = BlobGenerator('loadThree', 'loadThree', self._value_size, end=self._num_items)
+        gen_create3 = BlobGenerator('loadThree', 'loadThree', self._value_size, end=self.num_items)
         self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
         self.do_merge_bucket(self.src_master, self.dest_master, True, bucket)
         bucket = self._get_bucket(self, 'default', self.src_master)
@@ -227,7 +227,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self._load_bucket(bucket_default, self.src_master, self.gen_create, 'create', exp=0)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_create, 'create', exp=0)
         self._load_bucket(bucket_standard, self.dest_master, self.gen_create, 'create', exp=0)
-        gen_create2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, end=self._num_items)
+        gen_create2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, end=self.num_items)
         self._load_bucket(bucket_sasl, self.dest_master, gen_create2, 'create', exp=0)
 
         self._online_upgrade(self.src_nodes, self.servers[self.src_init + self.dest_init:])
@@ -249,9 +249,9 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.do_merge_bucket(self.src_master, self.dest_master, True, bucket_sasl)
         bucket_sasl = self._get_bucket(self, 'bucket0', self.dest_master)
         gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size,
-            start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
+            start=int((self.num_items) * (float)(100 - self._percent_delete) / 100), end=self.num_items)
         gen_update2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, start=0,
-            end=int(self._num_items * (float)(self._percent_update) / 100))
+            end=int(self.num_items * (float)(self._percent_update) / 100))
         self._load_bucket(bucket_sasl, self.dest_master, gen_delete2, 'delete', exp=0)
         self._load_bucket(bucket_sasl, self.dest_master, gen_update2, 'create', exp=self._expires)
 
@@ -288,7 +288,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         bucket = self._get_bucket(self, 'bucket0', self.src_master)
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
         bucket = self._get_bucket(self, 'bucket0', self.dest_master)
-        gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self._num_items)
+        gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self.num_items)
         self._load_bucket(bucket, self.dest_master, gen_create2, 'create', exp=0)
         self.sleep(self._timeout)
         self._wait_for_replication_to_catchup()
@@ -311,11 +311,11 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
             self.sleep(60)
             bucket = self._get_bucket(self, 'bucket0', self.src_master)
             itemPrefix = "loadThree" + _seq * 'a'
-            gen_create3 = BlobGenerator(itemPrefix, itemPrefix, self._value_size, end=self._num_items)
+            gen_create3 = BlobGenerator(itemPrefix, itemPrefix, self._value_size, end=self.num_items)
             self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
             bucket = self._get_bucket(self, 'default', self.src_master)
             itemPrefix = "loadFour" + _seq * 'a'
-            gen_create4 = BlobGenerator(itemPrefix, itemPrefix, self._value_size, end=self._num_items)
+            gen_create4 = BlobGenerator(itemPrefix, itemPrefix, self._value_size, end=self.num_items)
             self._load_bucket(bucket, self.src_master, gen_create4, 'create', exp=0)
             self.sleep(60)
         bucket = self._get_bucket(self, 'bucket0', self.src_master)

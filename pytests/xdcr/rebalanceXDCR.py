@@ -12,11 +12,11 @@ class Rebalance(XDCRReplicationBaseTest):
     def setUp(self):
         super(Rebalance, self).setUp()
         if self._replication_direction_str in "bidirection":
-            self.gen_create2 = BlobGenerator('LoadTwo', 'LoadTwo', self._value_size, end=self._num_items)
+            self.gen_create2 = BlobGenerator('LoadTwo', 'LoadTwo', self._value_size, end=self.num_items)
             self.gen_delete2 = BlobGenerator('LoadTwo', 'LoadTwo-', self._value_size,
-                start=int((self._num_items) * (float)(100 - self._percent_delete) / 100), end=self._num_items)
+                start=int((self.num_items) * (float)(100 - self._percent_delete) / 100), end=self.num_items)
             self.gen_update2 = BlobGenerator('LoadTwo', 'LoadTwo-', self._value_size, start=0,
-                end=int(self._num_items * (float)(self._percent_update) / 100))
+                end=int(self.num_items * (float)(self._percent_update) / 100))
 
     def tearDown(self):
 #        super(Rebalance, self).tearDown()

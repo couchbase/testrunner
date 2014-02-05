@@ -20,30 +20,30 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
     def setup_doc_gens(self):
         # create json doc generators
-        ordering = range(self._num_items/4)
+        ordering = range(self.num_items/4)
         sites1 = ['google', 'bing', 'yahoo', 'wiki']
         sites2 = ['mashable', 'techcrunch', 'hackernews', 'slashdot']
         template = '{{ "ordering": {0}, "site_name": "{1}" }}'
 
-        delete_start= int((self._num_items) * (float)(100 - self._percent_delete) / 100)
-        update_end = int((self._num_items) * (float)(self._percent_update) / 100)
+        delete_start= int((self.num_items) * (float)(100 - self._percent_delete) / 100)
+        update_end = int((self.num_items) * (float)(self._percent_update) / 100)
 
         self.gen_create =\
             DocumentGenerator('es_xdcr_docs', template, ordering,
-                               sites1, start=0, end=self._num_items)
+                               sites1, start=0, end=self.num_items)
 
         self.gen_recreate =\
             DocumentGenerator('es_xdcr_docs', template, ordering,
-                               sites2, start=0, end=self._num_items)
+                               sites2, start=0, end=self.num_items)
 
         self.gen_update =\
             DocumentGenerator('es_xdcr_docs', template, ordering,
                                sites1, start=0, end=update_end)
         self.gen_delete =\
             DocumentGenerator('es_xdcr_docs', template, ordering,
-                               sites1, start=delete_start, end=self._num_items)
+                               sites1, start=delete_start, end=self.num_items)
 
-        self.gen_blob = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self._num_items)
+        self.gen_blob = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self.num_items)
 
     def _async_modify_data(self):
         tasks = []
