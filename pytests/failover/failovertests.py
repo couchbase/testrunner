@@ -75,7 +75,7 @@ class FailoverTests(FailoverBaseTest):
                                 o, r = shell.execute_command("/sbin/iptables --list")
                             shell.log_command_output(o, r)
                             shell.disconnect()
-                    for i in rest.get_logs(): self.log.error(i)
+                    rest.print_UI_logs()
                     api = rest.baseUrl + 'nodeStatuses'
                     status, content, header = rest._http_request(api)
                     json_parsed = json.loads(content)

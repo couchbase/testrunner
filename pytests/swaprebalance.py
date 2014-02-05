@@ -392,8 +392,7 @@ class SwapRebalanceBase(unittest.TestCase):
         if reached == 100 and not RestHelper(rest).is_cluster_rebalanced():
             # handle situation when rebalance failed at the beginning
             self.log.error('seems rebalance failed!')
-            self.log.info("Latest logs from UI:")
-            for i in rest.get_logs(): self.log.error(i)
+            rest.print_UI_logs()
             self.fail("rebalance failed even before killing memcached")
         bucket = rest.get_buckets()[0].name
         pid = None

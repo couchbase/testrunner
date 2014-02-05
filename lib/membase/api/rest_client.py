@@ -1055,8 +1055,7 @@ class RestConnection(object):
                 if "errorMessage" in json_parsed:
                     msg = '{0} - rebalance failed'.format(json_parsed)
                     log.error(msg)
-                    log.info("Latest logs from UI:")
-                    for i in self.get_logs(): log.error(i)
+                    self.print_UI_logs()
                     raise RebalanceFailedException(msg)
                 elif json_parsed["status"] == "running":
                     total_percentage = 0
@@ -1763,6 +1762,11 @@ class RestConnection(object):
             if contains_text is not None and contains_text in logs[i]["text"]:
                 break
         return result
+
+    def print_UI_logs(self, last_n=10, contains_text=None):
+        logs = self.get_logs(last_n, contains_text)
+        log.info("Latest logs from UI:")
+        for lg in logs: log.error(lg)
 
     def delete_ro_user(self):
         api = self.baseUrl + 'settings/readOnlyUser'

@@ -71,8 +71,7 @@ class AutoFailoverBaseTest(unittest.TestCase):
             time.sleep(2)
 
         rest = RestConnection(master)
-        testcase.log.info("Latest logs from UI:")
-        for i in rest.get_logs(): testcase.log.error(i)
+        rest.print_UI_logs()
         testcase.log.warn("pools/default from {0} : {1}".format(master.ip, rest.cluster_status()))
         testcase.fail("{0} nodes failed over, expected {1} in {2} seconds".
                          format(failover_count, autofailover_count, time.time() - time_start))
