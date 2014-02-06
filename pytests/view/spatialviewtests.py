@@ -287,9 +287,9 @@ class SpatialViewsTests(BaseTestCase):
 
     def delete_views(self, ddocs, views=[], spatial_views=[], bucket=None):
         bucket_views = bucket or self.buckets[0]
-        vs = views or ddoc.views
-        sp_vs = spatial_views or ddoc.spatial_views
         for ddoc in ddocs:
+            vs = views or ddoc.views
+            sp_vs = spatial_views or ddoc.spatial_views
             for view in vs:
                 self.cluster.delete_view(self.master, ddoc.name, view, bucket=bucket_views)
             for view in sp_vs:
