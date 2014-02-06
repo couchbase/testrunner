@@ -1872,6 +1872,27 @@ class RestConnection(object):
                 raise Exception("There is not zone with name: %s in cluster" % zone_name)
         return nodes
 
+    def get_zone_and_nodes(self):
+        """ only return zones with node in its """
+        zones = {}
+        tmp = {}
+        zone_info = self.get_all_zones_info()
+        if len(zone_info["groups"]) >= 1:
+            for i in range(0, len(zone_info["groups"])):
+                tmp = zone_info["groups"][i]["nodes"]
+                if not tmp:
+                    log.info("zone {0} is existed but no node in it".format(tmp))
+                # remove port
+                else:
+                    nodes = []
+                    for node in tmp:
+                        node["hostname"] = node["hostname"].split(":")
+                        node["hostname"] = node["hostname"][0]
+                        print node["hostname"][0]
+                        nodes.append(node["hostname"])
+                    zones[zone_info["groups"][i]["name"]] = nodes
+        return zones
+
     def get_zone_uri(self):
         zone_uri = {}
         zone_info = self.get_all_zones_info()

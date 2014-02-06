@@ -275,6 +275,16 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command("cmd /c schtasks /end /tn upgrademe")
         self.log_command_output(output, error)
 
+    def kill_erlang(self, os="unix"):
+        if os == "windows":
+            o, r = self.execute_command("/taskkill /F /T /IM erl.*")
+            self.log_command_output(o, r)
+            self.disconnect()
+        else:
+            o, r = self.execute_command("killall -9 beam.smp")
+            self.log_command_output(o, r)
+            self.disconnect()
+
     def change_log_level(self, new_log_level):
         log.info("CHANGE LOG LEVEL TO %s".format(new_log_level))
         # ADD NON_ROOT user config_details
