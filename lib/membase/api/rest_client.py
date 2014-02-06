@@ -18,7 +18,8 @@ from memcached.helper.kvstore import KVStore
 from exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException
 from membase.api.exception import BucketCreationException, ServerSelfJoinException, ClusterRemoteException, \
     RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
-    ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, AddNodeException, BucketFlushFailed
+    ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, AddNodeException, \
+    BucketFlushFailed, CBRecoveryFailedException
 log = logger.Logger.get_logger()
 
 #helper library methods built on top of RestConnection interface
@@ -853,7 +854,11 @@ class RestConnection(object):
                 recoveries.append(item)
         for recovery in recoveries:
             api = self.baseUrl + recovery["stopURI"]
-            self._http_request(api, 'POST')
+            status, content, header = self._http_request(api, 'POST')
+            if not status:
+                raise CBRecoveryFailedException("impossible to stop cbrecovery by {0}".format(api))
+            log.info("recovery stopped by {0}".format(api))
+
 
     #params serverIp : the server to add to this cluster
     #raises exceptions when
