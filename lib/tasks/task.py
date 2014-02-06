@@ -2780,7 +2780,7 @@ class MonitorDBFragmentationTask(Task):
 
 class CBRecoveryTask(Task):
     def __init__(self, src_server, dest_server, bucket_src='', bucket_dest='', username='', password='',
-                 username_dest='', password_dest='', verbose=False):
+                 username_dest='', password_dest='', verbose=False, wait_completed=True):
         Task.__init__(self, "cbrecovery_task")
         self.src_server = src_server
         self.dest_server = dest_server
@@ -2795,6 +2795,7 @@ class CBRecoveryTask(Task):
         self.username_dest = username_dest
         self.password_dest = password_dest
         self.verbose = verbose
+        self.wait_completed = wait_completed
 
         try:
             self.shell = RemoteMachineShellConnection(src_server)
@@ -2851,6 +2852,12 @@ class CBRecoveryTask(Task):
         if self.recovery_task is not None:
             if not self.started:
                 self.started = True
+                if not self.wait_completed:
+                    progress = self.rest.get_recovery_progress(self.recovery_task["recoveryStatusURI"])
+                    self.log.info("cbrecovery strarted with progress: {0}".format(progress))
+                    self.log.info("will not wait for the end of the cbrecovery")
+                    self.state = FINISHED
+                    self.set_result(True)
             progress = self.rest.get_recovery_progress(self.recovery_task["recoveryStatusURI"])
             if progress == self.progress:
                 self.log.warn("cbrecovery progress was not changed")

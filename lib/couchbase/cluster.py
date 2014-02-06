@@ -724,7 +724,7 @@ class Cluster(object):
         return _task
 
     def cbrecovery(self, src_server, dest_server, bucket_src='', bucket_dest='', username='', password='',
-                 username_dest='', password_dest='', verbose=False):
+                 username_dest='', password_dest='', verbose=False, wait_completed=True):
         """Synchronously run and monitor cbrecovery
 
         Parameters:
@@ -737,15 +737,16 @@ class Cluster(object):
             username_dest - REST username for destination cluster or server node
             password_dest - REST password for destination cluster or server node
             verbose - verbose logging; more -v's provide more verbosity
+            wait_completed - wait for the end of the cbrecovery
 
         Returns:
             boolean - Whether or not the cbrecovery completed successfully"""
         _task = self.async_cbrecovery(server, src_server, dest_server, bucket_src, bucket_dest, username, password,
-                 username_dest, password_dest, verbose)
+                 username_dest, password_dest, verbose, wait_completed)
         return _task.result(timeout)
 
     def async_cbrecovery(self, src_server, dest_server, bucket_src='', bucket_dest='', username='', password='',
-                 username_dest='', password_dest='', verbose=False):
+                 username_dest='', password_dest='', verbose=False, wait_completed=True):
         """Asyncronously run/monitor cbrecovery
 
         Parameters:
@@ -758,10 +759,11 @@ class Cluster(object):
             username_dest - REST username for destination cluster or server node
             password_dest - REST password for destination cluster or server node
             verbose - verbose logging; more -v's provide more verbosity
+            wait_completed - wait for the end of the cbrecovery
 
         Returns:
             CBRecoveryTask - A task future that is a handle to the scheduled task"""
         _task = CBRecoveryTask(src_server, dest_server, bucket_src, bucket_dest, username, password,
-                 username_dest, password_dest, verbose)
+                 username_dest, password_dest, verbose, wait_completed)
         self.task_manager.schedule(_task)
         return _task
