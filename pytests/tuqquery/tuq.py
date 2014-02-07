@@ -308,16 +308,6 @@ class QueryTests(BaseTestCase):
             expected_result = [{"name" : doc["name"], "job_title" : doc["job_title"]}
                                for doc in result_sorted]
             self._verify_results(actual_result['resultset'], expected_result)
-            self.query = 'SELECT name, job_title, tasks_points.task1 AS CONTACT' +\
-            ' FROM %s ORDER BY 2, 1, 3' % (bucket.name)
-            actual_result = self.run_cbq_query()
-            expected_list = [{"name" : doc["name"], "job_title" : doc["job_title"],
-                              "CONTACT" : doc["tasks_points"]["task1"]}
-                             for doc in full_list]
-            expected_result = sorted(expected_list, key=lambda doc: (doc['job_title'],
-                                                                     doc["name"],
-                                                                     doc["CONTACT"]))
-            self._verify_results(actual_result['resultset'], expected_result)
 
     def test_order_by_alias(self):
         for bucket in self.buckets:
@@ -769,12 +759,6 @@ class QueryTests(BaseTestCase):
                                if doc["join_mo"] > 7]
             expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
-            self._verify_results(actual_result['resultset'], expected_result)
-
-            self.query = "SELECT tasks_points.task1 AS task from %s " % (bucket.name) +\
-                         "WHERE join_mo>7 GROUP BY 1 " +\
-                         "ORDER BY tasks_points.task1"
-            actual_result = self.run_cbq_query()
             self._verify_results(actual_result['resultset'], expected_result)
 
     def test_group_by_having(self):
