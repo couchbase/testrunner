@@ -8,6 +8,7 @@ import re
 import testconstants
 from datetime import date
 import datetime
+import time
 from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
 from couchbase.documentgenerator import DocumentGenerator
@@ -1518,21 +1519,21 @@ class QueryTests(BaseTestCase):
         now = datetime.datetime.now()
         today = date.today()
         res = self.run_cbq_query()
-        expected = "%s-%s-%sT%s:" % (today.year, today.month, today.day, now.hour)
-        self.assertTrue(res["resultset"]["now"].startswith(expected),
+        expected = "%s-%02d-%02dT%s:" % (today.year, today.month, today.day, now.hour)
+        self.assertTrue(res["resultset"][0]["now"].startswith(expected),
                         "Result expected: %s. Actual %s" % (expected, res["resultset"]))
 
     def test_hours(self):
-        self.query = 'select date_part("hour", now_str()) as hour, ' +\
-        'date_part("minute", now_str()) as minute, date_part("second",' +\
-        ' now_str()) as sec, date_part("milliseconds", now_str()) as msec'
+        self.query = 'select date_part_str("hour", now_str()) as hour, ' +\
+        'date_part_str("minute", now_str()) as minute, date_part_str("second",' +\
+        ' now_str()) as sec, date_part_str("milliseconds", now_str()) as msec'
         now = datetime.datetime.now()
         res = self.run_cbq_query()
-        self.assertTrue(res["resultset"]["hour"] == now.hour,
-                        "Result expected: %s. Actual %s" % (now.hour, res["resultset"]))
-        self.assertTrue("minute" in res["resultset"], "No minute field")
-        self.assertTrue("second" in res["resultset"], "No minute field")
-        self.assertTrue("msec" in res["resultset"], "No minute field")
+        self.assertTrue(res["resultset"][0]["hour"] == now.hour,
+                        "Result for hours expected: %s. Actual %s" % (now.hour, res["resultset"]))
+        self.assertTrue("minute" in res["resultset"][0], "No minute field")
+        self.assertTrue("sec" in res["resultset"][0], "No second field")
+        self.assertTrue("msec" in res["resultset"][0], "No msec field")
 
     def test_where(self):
         for bucket in self.buckets:
@@ -1557,6 +1558,58 @@ class QueryTests(BaseTestCase):
                                                                         doc['join_mo'],
                                                                         doc['join_day']))
             self._verify_results(actual_result, expected_result)
+
+    def test_now_millis(self):
+        self.query = "select now_millis() as now"
+        now = time.time()
+        res = self.run_cbq_query()
+        self.assertTrue((res["resultset"][0]["now"] > now * 1000),
+                        "Result expected to be in: [%s ... %s]. Actual %s" % (
+                                        now * 1000, (now + 10) * 1000, res["resultset"]))
+
+    def test_str_to_millis(self):
+        now_millis = time.time()
+        now_time = datetime.datetime.fromtimestamp(now_millis)
+        now_millis = now_millis * 1000
+        try:
+            now_time_zone = round((round((datetime.datetime.now()-datetime.datetime.utcnow()).total_seconds())/1800)/2)
+        except AttributeError, ex:
+            raise Exception("Test requires python 2.7 : SKIPPING TEST")
+        now_time_str = "%s-%02d-%02dT%s:%s:%s+%02d" % (now_time.year, now_time.month, now_time.day,
+                                         now_time.hour, now_time.minute, now_time.second,now_time_zone) +\
+                       ("%.2f" % (now_time_zone-int(now_time_zone)))[1:]
+        self.query = "select str_to_millis(%s) as now" % now_time_str
+        res = self.run_cbq_query()
+        self.assertTrue((res["resultset"][0]["now"] < (now_millis + 999)) and\
+                        (res["resultset"][0]["now"] > (now_millis - 999)),
+                        "Result expected to be in: [%s ... %s]. Actual %s" % (
+                                       now_millis - 999, now_millis + 999, res["resultset"]))
+
+    def test_millis_to_str(self):
+        now_millis = time.time()
+        now_time = datetime.datetime.fromtimestamp(now_millis)
+        expected = "%s-%02d-%02dT%s:%s" % (now_time.year, now_time.month, now_time.day,
+                                         now_time.hour, now_time.minute)
+        self.query = "select millis_to_str(%s) as now" % (now_millis * 1000)
+        res = self.run_cbq_query()
+        self.assertTrue(res["resultset"][0]["now"].startswith(expected),
+                        "Result expected: %s. Actual %s" % (expected, res["resultset"]))
+
+    def test_date_part_millis(self):
+        now_millis = time.time()
+        now_time = datetime.datetime.fromtimestamp(now_millis)
+        now_millis = now_millis * 1000
+        self.query = 'select date_part_millis("hour", %s) as hour, ' % (now_millis) +\
+        'date_part_millis("minute", %s) as minute, date_part_millis("second",' % (now_millis) +\
+        ' %s) as sec, date_part_millis("milliseconds", %s) as msec' % (now_millis,now_millis)
+        res = self.run_cbq_query()
+        self.assertTrue(res["resultset"][0]["hour"] == now_time.hour,
+                        "Result expected: %s. Actual %s" % (now_time.hour, res["resultset"]))
+        self.assertTrue(res["resultset"][0]["minute"] == now_time.minute,
+                        "Result expected: %s. Actual %s" % (now_time.minute, res["resultset"]))
+        self.assertTrue(res["resultset"][0]["sec"] == now_time.second,
+                        "Result expected: %s. Actual %s" % (now_time.second, res["resultset"]))
+        self.assertTrue("msec" in res["resultset"][0], "There are no msec in results")
 
 ##############################################################################################
 #
