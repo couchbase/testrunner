@@ -931,12 +931,14 @@ class XdcrCLITest(CliBaseTest):
         to_bucket = self.input.param("xdcr-to-bucket", None)
         from_bucket = self.input.param("xdcr-from-bucket", None)
         error_expected = self.input.param("error-expected", False)
+        replication_mode = self.input.param("replication_mode", None)
         _, _, xdcr_cluster_name, xdcr_hostname, _, _ = self.__xdcr_setup_create()
         cli_command = "xdcr-replicate"
         options = "--create"
         options += (" --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name), "")[xdcr_cluster_name is None]
         options += (" --xdcr-from-bucket=\'{0}\'".format(from_bucket), "")[from_bucket is None]
         options += (" --xdcr-to-bucket=\'{0}\'".format(to_bucket), "")[to_bucket is None]
+        options += (" --xdcr-replication-mode=\'{0}\'".format(replication_mode), "")[replication_mode is None]
         self.bucket_size = self._get_bucket_size(self.quota, 1)
         if from_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas,
