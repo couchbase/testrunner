@@ -257,12 +257,12 @@ class RackzoneTests(RackzoneBaseTest):
         rest = RestConnection(server)
         buckets = rest.get_buckets()
         for bucket in buckets:
+            self.log.info("start to verify bucket: {0}".format(bucket))
             stats = rest.get_bucket_stats(bucket)
             if stats["curr_items"] == loaded_keys:
-                self.log.info("Keys in bucket: {0} match with \
-                               pre-loaded keys: {1}".format(stats["curr_items"], loaded_keys))
-                return True
+                self.log.info("{0} keys in bucket {2} match with \
+                               pre-loaded keys: {1}".format(stats["curr_items"], loaded_keys, bucket))
             else:
-                raise Exception("Keys in bucket: %s does not match with \
-                                 loaded keys %s" % (stats["curr_items"], loaded_keys))
+                raise Exception("{%s keys in bucket %s does not match with \
+                                 loaded %s keys" % (stats["curr_items"], bucket, loaded_keys))
 
