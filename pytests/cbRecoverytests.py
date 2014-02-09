@@ -280,14 +280,19 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     rest.remove_all_recoveries()
                     self.trigger_rebalance(rest, 15)
                     rest.stop_rebalance()
+                    try:
+                        self.cbr_routine(self.dest_master, self.src_master)
+                        self.log.exception("cbrecovery should be failed when rebalance has been stopped")
+                    except CBRecoveryFailedException, e:
+                        self.log.info("cbrecovery failed  as expected when there are no failovered nodes")
                 elif "rebalance" in when_cbrecovering:
                     try:
                         self.trigger_rebalance(rest)
                         self.log.exception("rebalance is not permitted during cbrecovery")
                     except InvalidArgumentException, e:
                         self.log.info("can't call rebalance during cbrecovery as expected")
-                #here we try to re-call cbrecovery(seems it's supported even it's still running)
-                self.cbr_routine(self.dest_master, self.src_master)
+                    #here we try to re-call cbrecovery(seems it's supported even it's still running)
+                    self.cbr_routine(self.dest_master, self.src_master)
                 self.trigger_rebalance(rest)
                 if self._default_bucket:
                     self.vbucket_map_after = rest.fetch_vbucket_map()
@@ -313,21 +318,26 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 self.dest_nodes.extend(add_nodes)
                 self.sleep(self._timeout / 4)
                 # CALL THE CBRECOVERY ROUTINE
-                self.cbr_routine(self.dest_master, self.src_master, False)
+                self.cbr_routine(self.src_master, self.dest_master)
 
                 if "stop_recovery" in when_cbrecovering:
                     rest.remove_all_recoveries()
                     self.trigger_rebalance(rest, 15)
                     rest.stop_rebalance()
+                    try:
+                        self.cbr_routine(self.src_master, self.dest_master)
+                        self.log.exception("cbrecovery should be failed when rebalance has been stopped")
+                    except CBRecoveryFailedException, e:
+                        self.log.info("cbrecovery failed  as expected when there are no failovered nodes")
+
                 elif "rebalance" in when_cbrecovering:
                     try:
                         self.trigger_rebalance(rest)
                         self.log.exception("rebalance is not permitted during cbrecovery")
                     except InvalidArgumentException, e:
                         self.log.info("can't call rebalance during cbrecovery as expected")
-
-                #here we try to re-call cbrecovery(seems it's supported even it's still running)
-                self.cbr_routine(self.dest_master, self.src_master)
+                    #here we try to re-call cbrecovery(seems it's supported even it's still running)
+                    self.cbr_routine(self.src_master, self.dest_master)
                 self.trigger_rebalance(rest)
                 if self._default_bucket:
                     self.vbucket_map_after = rest.fetch_vbucket_map()
