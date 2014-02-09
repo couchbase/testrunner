@@ -252,7 +252,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
 
     def restart_cbrecover_multiple_failover_swapout_reb_routine(self):
         self.common_preSetup()
-        when_cbrecovering = self._input.param("when_step", "recovery_when_rebalance")
+        when_step = self._input.param("when_step", "recovery_when_rebalance")
         if self._failover is not None:
             if "source" in self._failover:
                 rest = RestConnection(self.src_master)
