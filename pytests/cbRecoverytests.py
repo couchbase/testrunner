@@ -252,13 +252,10 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
 
     def restart_cbrecover_multiple_failover_swapout_reb_routine(self):
         self.common_preSetup()
-        when_cbrecovering = self._input.param("when_cbrecovering", "rebalance")
+        when_cbrecovering = self._input.param("when_step", "recovery_when_rebalance")
         if self._failover is not None:
             if "source" in self._failover:
                 rest = RestConnection(self.src_master)
-                if self._default_bucket:
-                    self.initial_node_count = len(self.src_nodes)
-                    self.vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.src_nodes):
                     raise Exception("Won't failover .. count exceeds available servers on source : SKIPPING TEST")
                 if len(self._floating_servers_set) < self._add_count:
@@ -276,7 +273,17 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 # CALL THE CBRECOVERY ROUTINE WITHOUT WAIT FOR COMPLETED
                 self.cbr_routine(self.dest_master, self.src_master, False)
 
-                if "stop_recovery" in when_cbrecovering:
+                if "recovery_when_rebalance" in when_step:
+                    rest.remove_all_recoveries()
+                    self.trigger_rebalance(rest, 15)
+                    try:
+                        self.cbr_routine(self.dest_master, self.src_master)
+                        self.log.exception("cbrecovery should be failed when rebalance is in progress")
+                    except CBRecoveryFailedException, e:
+                        self.log.info("cbrecovery failed  as expected when there are no failovered nodes")
+                    reached = RestHelper(rest).rebalance_reached(rebalance_reached)
+                    self.assertTrue(reached, "rebalance failed or did not completed")
+                elif "recovery_when_rebalance_stopped" in when_step:
                     rest.remove_all_recoveries()
                     self.trigger_rebalance(rest, 15)
                     rest.stop_rebalance()
@@ -285,7 +292,8 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                         self.log.exception("cbrecovery should be failed when rebalance has been stopped")
                     except CBRecoveryFailedException, e:
                         self.log.info("cbrecovery failed  as expected when there are no failovered nodes")
-                elif "rebalance" in when_cbrecovering:
+                elif "rebalance_when_recovering" in when_step:
+                    #try to call  rebalance during cbrecovery
                     try:
                         self.trigger_rebalance(rest)
                         self.log.exception("rebalance is not permitted during cbrecovery")
@@ -293,16 +301,9 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                         self.log.info("can't call rebalance during cbrecovery as expected")
                     #here we try to re-call cbrecovery(seems it's supported even it's still running)
                     self.cbr_routine(self.dest_master, self.src_master)
-                self.trigger_rebalance(rest)
-                if self._default_bucket:
-                    self.vbucket_map_after = rest.fetch_vbucket_map()
-                    self.final_node_count = len(self.src_nodes)
 
             elif "destination" in self._failover:
                 rest = RestConnection(self.dest_master)
-                if self._default_bucket:
-                    self.initial_node_count = len(self.dest_nodes)
-                    self.vbucket_map_before = rest.fetch_vbucket_map()  # JUST FOR DEFAULT BUCKET AS OF NOW
                 if self._failover_count >= len(self.dest_nodes):
                     raise Exception("Won't failover .. count exceeds available servers on sink : SKIPPING TEST")
                 if len(self._floating_servers_set) < self._add_count:
@@ -320,7 +321,17 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 # CALL THE CBRECOVERY ROUTINE
                 self.cbr_routine(self.src_master, self.dest_master)
 
-                if "stop_recovery" in when_cbrecovering:
+                if "recovery_when_rebalance" in when_step:
+                    rest.remove_all_recoveries()
+                    self.trigger_rebalance(rest, 15)
+                    try:
+                        self.cbr_routine(self.src_master, self.dest_master)
+                        self.log.exception("cbrecovery should be failed when rebalance is in progress")
+                    except CBRecoveryFailedException, e:
+                        self.log.info("cbrecovery failed  as expected when there are no failovered nodes")
+                    reached = RestHelper(rest).rebalance_reached(rebalance_reached)
+                    self.assertTrue(reached, "rebalance failed or did not completed")
+                elif "recovery_when_rebalance_stopped" in when_step:
                     rest.remove_all_recoveries()
                     self.trigger_rebalance(rest, 15)
                     rest.stop_rebalance()
@@ -329,8 +340,8 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                         self.log.exception("cbrecovery should be failed when rebalance has been stopped")
                     except CBRecoveryFailedException, e:
                         self.log.info("cbrecovery failed  as expected when there are no failovered nodes")
-
-                elif "rebalance" in when_cbrecovering:
+                elif "rebalance_when_recovering" in when_step:
+                    #try to call  rebalance during cbrecovery
                     try:
                         self.trigger_rebalance(rest)
                         self.log.exception("rebalance is not permitted during cbrecovery")
@@ -338,11 +349,8 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                         self.log.info("can't call rebalance during cbrecovery as expected")
                     #here we try to re-call cbrecovery(seems it's supported even it's still running)
                     self.cbr_routine(self.src_master, self.dest_master)
-                self.trigger_rebalance(rest)
-                if self._default_bucket:
-                    self.vbucket_map_after = rest.fetch_vbucket_map()
-                    self.final_node_count = len(self.dest_nodes)
 
+        self.trigger_rebalance(rest)
         self.common_tearDown_verification()
 
 
