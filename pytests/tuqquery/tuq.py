@@ -1357,6 +1357,25 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
+    def test_array_remove(self):
+        value = 'employee-1'
+        for bucket in self.buckets:
+            self.query = "SELECT job_title," +\
+                         " array_remove(array_agg(DISTINCT name), '%s') as names" % (value) +\
+                         " FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = self.sort_nested_list(actual_list['resultset'])
+            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "names" : sorted(set([x["name"] for x in full_list
+                                               if x["job_title"] == group and x["name"]!= value]))}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
     def test_poly_length(self):
         for bucket in self.buckets:
             full_list = self._generate_full_docs_list(self.gens_load)
