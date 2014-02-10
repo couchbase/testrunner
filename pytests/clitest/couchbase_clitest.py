@@ -475,11 +475,16 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output[0], "SUCCESS: init localhost")
 
-            options = "{0}-username={1} {2}-password={3} {4}-port={5}".\
-                format(param_prefix, cluster_init_username + "1", param_prefix, cluster_init_password + "1", param_prefix, str(cluster_init_port)[:-1] + "9")
+            if cli_command == "cluster-init":
+                options = "{0}-username={1} {2}-password={3} {4}-port={5} {6}-ramsize={7}".\
+                    format(param_prefix, cluster_init_username + "1", param_prefix, cluster_init_password + "1", param_prefix, str(cluster_init_port)[:-1] + "9", param_prefix, cluster_init_ramsize)
+            elif cli_command == "cluster-edit":
+                options = "{0}-username={1} {2}-password={3} {4}-port={5}".\
+                    format(param_prefix, cluster_init_username + "1", param_prefix, cluster_init_password + "1", param_prefix, str(cluster_init_port)[:-1] + "9")
+
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=cluster_init_username, password=cluster_init_password)
             # MB-8202 cluster-init/edit doesn't provide status
-            self.assertTrue(output == [])
+            self.assertEqual(output[0], "SUCCESS: init localhost")
             server.rest_username = cluster_init_username + "1"
             server.rest_password = cluster_init_password + "1"
             server.port = str(cluster_init_port)[:-1] + "9"
@@ -493,11 +498,15 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertTrue("{0} healthy active".format(str(cluster_init_port)[:-1] + "9") in result)
 
             cli_command = command_init
-            options = "{0}-username={1} {2}-password={3} {4}-port={5}".\
-                format(param_prefix, cluster_init_username, param_prefix, cluster_init_password, param_prefix, cluster_init_port)
+            if cli_command == "cluster-init":
+                options = "{0}-username={1} {2}-password={3} {4}-port={5} {6}-ramsize={7}".\
+                    format(param_prefix, cluster_init_username, param_prefix, cluster_init_password, param_prefix, cluster_init_port, param_prefix, cluster_init_ramsize)
+            elif cli_command == "cluster-edit":
+                options = "{0}-username={1} {2}-password={3} {4}-port={5}".\
+                    format(param_prefix, cluster_init_username, param_prefix, cluster_init_password, param_prefix, cluster_init_port)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=(cluster_init_username + "1"), password=cluster_init_password + "1")
             # MB-8202 cluster-init/edit doesn't provide status
-            self.assertTrue(output == [])
+            self.assertEqual(output[0], "SUCCESS: init localhost")
 
             server.rest_username = cluster_init_username
             server.rest_password = cluster_init_password
@@ -511,10 +520,26 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertTrue("{0} healthy active".format(str(cluster_init_port)) in result)
             remote_client.disconnect()
         finally:
-            rest = RestConnection(server)
-            rest.force_eject_node()
-            self.sleep(5)
-            rest.init_cluster()
+            try:
+                server.rest_username = cluster_init_username
+                server.rest_password = cluster_init_password
+                server.port = cluster_init_port
+                rest = RestConnection(server)
+                rest.force_eject_node()
+                self.sleep(5)
+                rest.init_cluster()
+            except Exception:
+                server.rest_username = cluster_init_username + "1"
+                server.rest_password = cluster_init_password + "1"
+                server.port = str(cluster_init_port)[:-1] + "9"
+                rest = RestConnection(server)
+                rest.force_eject_node()
+                self.sleep(5)
+                rest.init_cluster()
+                # It will go to tearDown function after this finally block
+                server.rest_username = cluster_init_username
+                server.rest_password = cluster_init_password
+                server.port = cluster_init_port
 
     def testClusterInitNegative(self):
         cluster_init_username = self.input.param("cluster_init_username", None)
