@@ -1436,6 +1436,22 @@ class QueryTests(BaseTestCase):
                                                                        doc['period']))
             self._verify_results(actual_result, expected_result)
 
+    def test_case_expr(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, CASE job_title WHEN 'Sales' THEN 'Marketing'" +\
+                         "ELSE job_title END AS dept FROM %s" % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['name'],
+                                                                       doc['dept']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name'],
+                                "dept" : (doc['job_title'], 'Marketing')[doc['job_title'] == 'Sales']}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
+                                                                       doc['dept']))
+            self._verify_results(actual_result, expected_result)
+
     def test_case_arithm(self):
         self.query = "SELECT CASE WHEN 1+1=3 THEN 7+7 WHEN 2+2=5 THEN 8+8 ELSE 2 END"
         actual_result = self.run_cbq_query()
