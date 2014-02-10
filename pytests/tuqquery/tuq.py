@@ -742,6 +742,24 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['email']))
             self._verify_results(actual_result['resultset'], expected_result)
 
+    def test_between(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM {0} WHERE join_mo BETWEEN 1 AND 6 ORDER BY name".format(bucket.name)
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name']} for doc in full_list
+                               if doc["join_mo"] >= 1 and doc["join_mo"] <= 6]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
+            self.query = "SELECT name FROM {0} WHERE join_mo NOT BETWEEN 1 AND 6 ORDER BY name".format(bucket.name)
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name']} for doc in full_list
+                               if not(doc["join_mo"] >= 1 and doc["join_mo"] <= 6)]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_result)
+
 ##############################################################################################
 #
 #   GROUP BY
