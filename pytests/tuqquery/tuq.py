@@ -1458,6 +1458,52 @@ class QueryTests(BaseTestCase):
         expected_result = [{"$1" : 2}]
         self._verify_results(actual_result['resultset'], expected_result)
 
+    def test_in_int(self):
+        for bucket in self.buckets:
+            self.query = "select name from %s where join_mo in [1,6]" % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(len(actual_result['resultset']), key=lambda doc: (
+                                                                       doc['name']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name']}
+                               for doc in full_list
+                               if doc['join_mo'] in [1,6]]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result, expected_result)
+
+            self.query = "select name from %s where join_mo not in [1,6]" % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(len(actual_result['resultset']), key=lambda doc: (
+                                                                       doc['name']))
+            expected_result = [{"name" : doc['name']}
+                               for doc in full_list
+                               if not(doc['join_mo'] in [1,6])]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_in_str(self):
+        for bucket in self.buckets:
+            self.query = "select name from %s where job_title in ['Sales', 'Support']" % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(len(actual_result['resultset']), key=lambda doc: (
+                                                                       doc['name']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name']}
+                               for doc in full_list
+                               if doc['job_title'] in ['Sales', 'Support']]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result, expected_result)
+
+            self.query = "select name from %s where job_title in ['Sales', 'Support']" % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(len(actual_result['resultset']), key=lambda doc: (
+                                                                       doc['name']))
+            expected_result = [{"name" : doc['name']}
+                               for doc in full_list
+                               if not(doc['job_title'] in ['Sales', 'Support'])]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result, expected_result)
+
     def test_logic_expr(self):
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
