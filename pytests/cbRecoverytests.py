@@ -295,6 +295,10 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                         self.log.info("cbrecovery failed  as expected when there are no failovered nodes")
                     reached = RestHelper(rest).rebalance_reached()
                     self.assertTrue(reached, "rebalance failed or did not completed")
+                    if self._replication_direction_str == "unidirection":
+                        self.logger.warn("we expect data lost on source cluster with unidirection replication")
+                        self.logger.warn("verification data will be skipped")
+                        return
                 elif "recovery_when_rebalance_stopped" in when_step:
                     rest.remove_all_recoveries()
                     self.trigger_rebalance(rest, 15)
@@ -337,7 +341,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 self.dest_nodes.extend(add_nodes)
                 self.sleep(self._timeout / 4)
                 # CALL THE CBRECOVERY ROUTINE
-                self.cbr_routine(self.src_master, self.dest_master)
+                self.cbr_routine(self.src_master, self.dest_master, False)
 
                 if "create_bucket_when_recovery" in when_step:
                      name = 'standard_bucket'
@@ -348,7 +352,6 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                      self.cluster.create_standard_bucket(self.src_master, name, STANDARD_BUCKET_PORT + 10, 100, 1)
                      self.cbr_routine(self.src_master, self.dest_master)
                 elif "recovery_when_rebalance" in when_step:
-
                     rest.remove_all_recoveries()
                     self.trigger_rebalance(rest, 15)
                     try:
