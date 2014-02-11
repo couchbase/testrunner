@@ -296,8 +296,8 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     reached = RestHelper(rest).rebalance_reached()
                     self.assertTrue(reached, "rebalance failed or did not completed")
                     if self._replication_direction_str == "unidirection":
-                        self.logger.warn("we expect data lost on source cluster with unidirection replication")
-                        self.logger.warn("verification data will be skipped")
+                        self.logg.warn("we expect data lost on source cluster with unidirection replication")
+                        self.logg.warn("verification data will be skipped")
                         return
                 elif "recovery_when_rebalance_stopped" in when_step:
                     rest.remove_all_recoveries()
