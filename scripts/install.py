@@ -215,10 +215,14 @@ class Installer(object):
                             build.url = build.url.replace("enterprise", "community")
                             build.name = build.name.replace("enterprise", "community")
                         else:
-                            build.url = build.url.replace("http://builds.hq.northscale.net",
-                                                          "http://packages.northscale.com")
-                            build.url = build.url.replace("enterprise", "community")
-                            build.name = build.name.replace("enterprise", "community")
+                            """ since url in S3 insert version into it, we need to put version
+                                in like ..latestbuilds/3.0.0/... """
+                            cb_version = version[:5]
+                            build.url = build.url.replace("http://builds.hq.northscale.net/latestbuilds",
+                                        "http://packages.northscale.com/latestbuilds/{0}".format(cb_version))
+                            """ test enterprise version """
+                            #build.url = build.url.replace("enterprise", "community")
+                            #build.name = build.name.replace("enterprise", "community")
                     return build
             _errors.append(errors["BUILD-NOT-FOUND"])
         msg = "unable to find a build for product {0} version {1} for package_type {2}"
