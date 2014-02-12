@@ -483,7 +483,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 FIND_MASTER = True
                 self.log.info("2.0 Node %s becomes the master" % (new_server.ip))
                 break
-        if not FIND_MASTER:
+        if not FIND_MASTER and not self.is_downgrade:
             raise Exception("After rebalance in 2.0 Nodes, 2.0 doesn't become the master")
 
         servers_out = self.servers[:self.nodes_init]

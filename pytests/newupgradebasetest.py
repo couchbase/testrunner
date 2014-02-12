@@ -27,6 +27,11 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.upgrade_versions = self.input.param('upgrade_version', '2.0.1-170-rel')
         self.upgrade_versions = self.upgrade_versions.split(";")
+
+        self.is_downgrade = self.input.param('downgrade', False)
+        if self.is_downgrade:
+            self.initial_version, self.upgrade_versions = self.upgrade_versions[0], [self.initial_version]
+
         upgrade_path = self.input.param('upgrade_path', [])
         if upgrade_path:
             upgrade_path = upgrade_path.split(",")
@@ -180,7 +185,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             appropriate_build = self._get_build(server, upgrade_version, remote, info=info)
             self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(upgrade_version))
             self.assertTrue(remote.download_build(appropriate_build), "Build wasn't downloaded!")
-            o, e = remote.membase_upgrade(appropriate_build, save_upgrade_config=False)
+            o, e = remote.membase_upgrade(appropriate_build, save_upgrade_config=False, forcefully=self.is_downgrade)
             self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
             remote.disconnect()
             self.sleep(10)

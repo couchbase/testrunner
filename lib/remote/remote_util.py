@@ -852,7 +852,7 @@ class RemoteMachineShellConnection:
         except IOError:
             pass
 
-    def membase_upgrade(self, build, save_upgrade_config=False):
+    def membase_upgrade(self, build, save_upgrade_config=False, forcefully=False):
         # upgrade couchbase server
         if getattr(self, "info", None) is None:
             self.info = self.extract_remote_info()
@@ -871,6 +871,8 @@ class RemoteMachineShellConnection:
                 command = 'INSTALL_UPGRADE_CONFIG_DIR=/opt/membase/var/lib/membase/config {0}'.format(install_command)
             else:
                 command = 'rpm -U /tmp/{0}'.format(build.name)
+                if forcefully:
+                    command = 'rpm -U --force /tmp/{0}'.format(build.name)
         elif self.info.deliverable_type == 'deb':
             if save_upgrade_config:
                 self.membase_uninstall(save_upgrade_config=save_upgrade_config)
@@ -878,6 +880,8 @@ class RemoteMachineShellConnection:
                 command = 'INSTALL_UPGRADE_CONFIG_DIR=/opt/membase/var/lib/membase/config {0}'.format(install_command)
             else:
                 command = 'dpkg -i /tmp/{0}'.format(build.name)
+                if forcefully:
+                    command = 'dpkg -i --force /tmp/{0}'.format(build.name)
         output, error = self.execute_command(command, use_channel=True)
         self.log_command_output(output, error)
         return output, error
