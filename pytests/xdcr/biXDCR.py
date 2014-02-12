@@ -129,7 +129,7 @@ class bidirectional(XDCRReplicationBaseTest):
             if "source" in self._warmup:
                 warmupnodes.append(self.src_master)
             if "destination" in self._warmup:
-                warmupnodes.append(self.src_master)
+                warmupnodes.append(self.dest_master)
         for node in warmupnodes:
             self.do_a_warm_up(node)
         self.sleep(self._timeout / 2)
@@ -185,7 +185,7 @@ class bidirectional(XDCRReplicationBaseTest):
             if "source" in self._warmup:
                 warmupnodes.append(self.src_master)
             if "destination" in self._warmup:
-                warmupnodes.append(self.src_master)
+                warmupnodes.append(self.dest_master)
         for node in warmupnodes:
             self.do_a_warm_up(node)
         self.sleep(self._timeout / 2)
