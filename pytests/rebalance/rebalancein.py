@@ -3,7 +3,7 @@ import time
 from threading import Thread
 from rebalance.rebalance_base import RebalanceBaseTest
 from membase.api.exception import RebalanceFailedException
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -135,7 +135,7 @@ class RebalanceInTests(RebalanceBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers[:i], self.servers[i:i + 2], [])
             if self.doc_ops is not None:
             # define which doc's operation will be performed during rebalancing
-            #only one type of ops can be passed
+            # only one type of ops can be passed
                 if("update" in self.doc_ops):
                     # 1/2th of data will be updated in each iteration
                     self._load_all_buckets(self.master, self.gen_update, "update", 0)
@@ -219,13 +219,13 @@ class RebalanceInTests(RebalanceBaseTest):
             rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
             self.sleep(self.wait_timeout / 5)
 
-            #see that the result of view queries are the same as expected during the test
+            # see that the result of view queries are the same as expected during the test
             for bucket in self.buckets:
                 self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
 
             rebalance.result()
 
-            #verify view queries results after rebalancing
+            # verify view queries results after rebalancing
             for bucket in self.buckets:
                 self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
 
@@ -251,7 +251,7 @@ class RebalanceInTests(RebalanceBaseTest):
         views = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
-        #increase timeout for big data
+        # increase timeout for big data
         timeout = max(self.wait_timeout * 4, self.wait_timeout * self.num_items / 25000)
         query = {}
         query["connectionTimeout"] = 60000;
@@ -280,9 +280,9 @@ class RebalanceInTests(RebalanceBaseTest):
         for i in range(1, self.num_servers, 2):
             rebalance = self.cluster.async_rebalance(self.servers[:i], self.servers[i:i + 2], [])
             self.sleep(self.wait_timeout / 5)
-            #see that the result of view queries are the same as expected during the test
+            # see that the result of view queries are the same as expected during the test
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
-            #verify view queries results after rebalancing
+            # verify view queries results after rebalancing
             rebalance.result()
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
             self.verify_cluster_stats(self.servers[:i + 2])
@@ -470,6 +470,12 @@ class RebalanceInTests(RebalanceBaseTest):
         self.change_password(new_password=new_password)
         try:
             rebalance.result()
-            self.verify_cluster_stats()
+            self.log.exception("rebalance should be failed when password is changing")
+        except Exception as ex:
+            self.sleep(10, "wait for rebalance failed")
+            rest = RestConnection(self.master)
+            self.log.info("Latest logs from UI:")
+            for i in rest.get_logs(): self.log.error(i)
+            self.assertFalse(RestHelper(rest).is_cluster_rebalanced())
         finally:
             self.change_password(new_password=old_pass)
