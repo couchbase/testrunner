@@ -2838,9 +2838,9 @@ class CBRecoveryTask(Task):
                 command += "-P {0} ".format(self.password_dest)
             if self.verbose:
                 command += " -v "
-
             self._ssh_client.set_log_channel(None)
             self._ssh_client.exec_command(command)
+            self.log.info("command was executed: '{0}'".format(command))
             self.state = CHECKING
             task_manager.schedule(self, 20)
         except Exception as e:
@@ -2864,6 +2864,7 @@ class CBRecoveryTask(Task):
                 if self.retries > 20:
                     self._ssh_client.close()
                     self.state = FINISHED
+                    self.log.warn("ns_server_tasks: {0}".format(self.rest(ns_server_tasks())))
                     self.set_exception(CBRecoveryFailedException("cbrecovery hangs"))
                     return
                 self.retries += 1
@@ -2882,6 +2883,7 @@ class CBRecoveryTask(Task):
             if self.retries > 5:
                 self._ssh_client.close()
                 self.state = FINISHED
+                self.log.warn("ns_server_tasks: {0}".format(self.rest(ns_server_tasks())))
                 self.set_exception(CBRecoveryFailedException("cbrecovery was not started"))
             else:
                 self.retries += 1
