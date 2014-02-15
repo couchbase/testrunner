@@ -552,3 +552,29 @@ class unidirectional(XDCRReplicationBaseTest):
         # stop load
         mcsodaLoad.load_stop()
         loadDataThread.join()
+
+    # Test to verify MB-10116
+    def verify_ssl_private_key_not_present_in_logs(self):
+        zip_file = "%s.zip" % (self._input.param("file_name", "collectInfo"))
+        try:
+            self.load_with_ops()
+            self.shell = RemoteMachineShellConnection(self.src_master)
+            self.shell.execute_cbcollect_info(zip_file)
+            if self.shell.extract_remote_info().type.lower() != "windows":
+                command = "unzip %s" % (zip_file)
+                output, error = self.shell.execute_command(command)
+                self.shell.log_command_output(output, error)
+                if len(error) > 0:
+                    raise Exception("unable to unzip the files. Check unzip command output for help")
+                cmd = 'grep -R "BEGIN RSA PRIVATE KEY" cbcollect_info*/'
+                output, _ = self.shell.execute_command(cmd)
+            else:
+                cmd = "curl -0 http://{1}:{2}@{0}:8091/diag 2>/dev/null | grep 'BEGIN RSA PRIVATE KEY'".format(
+                                                    self.src_master.ip,
+                                                    self.src_master.rest_username,
+                                                    self.src_master.rest_password)
+                output, _ = self.shell.execute_command(cmd)
+            self.assertTrue(not output, "XDCR SSL Private Key is found diag logs -> %s" % output)
+        finally:
+            self.shell.delete_files(zip_file)
+            self.shell.delete_files("cbcollect_info*")
