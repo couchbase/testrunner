@@ -476,11 +476,14 @@ class unidirectional(XDCRReplicationBaseTest):
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.sleep(self._timeout)
         self.verify_results()
-        for i in xrange(20 * 1024 - 1):
+        loop_count = self._input.param("loop_count", 20)
+        for i in xrange(loop_count):
+            self.log.info("Append iteration # %s" % i)
             gen = copy.deepcopy(self.gen_append)
-            self._load_all_buckets(self.src_master, gen, "append", 0, batch_size=1)
+            self._load_all_buckets(self.src_master, gen, "append", 0,
+                                   batch_size=1)
             self.sleep(self._timeout)
-            self.verify_results()
+        self.verify_results()
 
     '''
     This method runs cbcollectinfo tool after setting up uniXDCR and check

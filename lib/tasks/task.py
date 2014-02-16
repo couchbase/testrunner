@@ -593,7 +593,7 @@ class GenericLoadingTask(Thread, Task):
         try:
             self.client.append(key, value)
             if self.only_store_hash:
-                 value = str(crc32.crc32_hash(value))
+                old_value = str(crc32.crc32_hash(old_value))
             partition.set(key, old_value)
         except BaseException as error:
             self.state = FINISHED
