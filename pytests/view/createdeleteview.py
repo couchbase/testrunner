@@ -886,11 +886,11 @@ class CreateDeleteViewTests(BaseTestCase):
         query = {"stale" : "false", "full_set" : "true"}
         self.sleep(60, "Node {0} should be warming up".format(server.ip))
         ClusterOperationHelper.wait_for_ns_servers_or_assert([server], self, wait_if_warmup=True)
-        self._wait_for_stats_all_buckets(self.servers)
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
         for bucket, ddoc_view_map in self.bucket_ddoc_map.items():
             for ddoc_name, view_list in ddoc_view_map.items():
                     for view in view_list:
-                        self.cluster.query_view(self.master, ddoc_name, view.name, query)
+                        self.cluster.query_view(server, ddoc_name, view.name, query, self.num_items)
         self._verify_ddoc_ops_all_buckets()
         self._verify_ddoc_data_all_buckets()
 
