@@ -1786,6 +1786,35 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title'],
                                                                        doc['names']))
             self._verify_results(actual_result, expected_result)
+##############################################################################################
+#
+#   CONCATENATION
+##############################################################################################
+
+    def test_concatenation(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name || \" \" || job_title as employee" +\
+            " FROM %s" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'], key=lambda doc: (doc['employee']))
+            expected_result = [{"employee" : doc["name"] + " " + doc["job_title"]}
+                               for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['employee']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_concatenation_where(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT name, skills' +\
+            ' FROM %s WHERE skills[0]=("skill" || "2010")' % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"name" : doc["name"], "skills" : doc["skills"]}
+                               for doc in full_list
+                               if doc["skills"][0] == 'skill2010']
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
 #
