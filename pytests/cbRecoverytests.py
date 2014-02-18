@@ -12,7 +12,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
         if not status:
             self.log.info('failed to change autofailover_settings!')
             return
-        #read settings and verify
+        # read settings and verify
         settings = _rest_.get_autofailover_settings()
         self.assertEquals(settings.enabled, True)
 
@@ -21,7 +21,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
         if not status:
             self.log.info('failed to change autofailover_settings!')
             return
-        #read settings and verify
+        # read settings and verify
         settings = _rest_.get_autofailover_settings()
         self.assertEquals(settings.enabled, False)
 
@@ -94,7 +94,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
         _nodes_ = rest.node_statuses()
         rest.rebalance(otpNodes=[node.id for node in _nodes_], ejectedNodes=[])
         reached = RestHelper(rest).rebalance_reached(rebalance_reached)
-        self.assertTrue(reached, "rebalance failed or did not completed")
+        self.assertTrue(reached, "rebalance failed, stuck or did not completed with expected progress {0}".format(rebalance_reached))
 
     def auto_fail_over(self, master):
         _count_ = 1
@@ -179,7 +179,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                         return False
         return True
 
-#Assumption that at least 4 nodes on every cluster
+# Assumption that at least 4 nodes on every cluster
 class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
     def setUp(self):
         super(cbrecovery, self).setUp()
@@ -237,7 +237,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
 
     def common_tearDown_verification(self):
         if self._failover is not None:
-            #TOVERIFY: Check if vbucket map unchanged if swap rebalance
+            # TOVERIFY: Check if vbucket map unchanged if swap rebalance
             if self._default_bucket:
                 if self._failover_count == self._add_count:
                     _flag_ = self.vbucket_map_checker(self.vbucket_map_before, self.vbucket_map_after, self.initial_node_count, self.final_node_count)
@@ -309,13 +309,13 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     except CBRecoveryFailedException, e:
                         self.log.info("cbrecovery failed  as expected when there are no failovered nodes")
                 elif "rebalance_when_recovering" in when_step:
-                    #try to call  rebalance during cbrecovery
+                    # try to call  rebalance during cbrecovery
                     try:
                         self.trigger_rebalance(rest)
                         self.log.exception("rebalance is not permitted during cbrecovery")
                     except InvalidArgumentException, e:
                         self.log.info("can't call rebalance during cbrecovery as expected")
-                    #here we try to re-call cbrecovery(seems it's supported even it's still running)
+                    # here we try to re-call cbrecovery(seems it's supported even it's still running)
                     self.cbr_routine(self.dest_master, self.src_master)
                 if self._default_bucket:
                     self.vbucket_map_after = rest.fetch_vbucket_map()
@@ -371,13 +371,13 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     except CBRecoveryFailedException, e:
                         self.log.info("cbrecovery failed  as expected when there are no failovered nodes")
                 elif "rebalance_when_recovering" in when_step:
-                    #try to call  rebalance during cbrecovery
+                    # try to call  rebalance during cbrecovery
                     try:
                         self.trigger_rebalance(rest)
                         self.log.exception("rebalance is not permitted during cbrecovery")
                     except InvalidArgumentException, e:
                         self.log.info("can't call rebalance during cbrecovery as expected")
-                    #here we try to re-call cbrecovery(seems it's supported even it's still running)
+                    # here we try to re-call cbrecovery(seems it's supported even it's still running)
                     self.cbr_routine(self.src_master, self.dest_master)
 
                 if self._default_bucket:
