@@ -1844,7 +1844,7 @@ class RemoteMachineShellConnection:
         command = "%s %s%s@%s:%s %s %s" % (backup_command, "http://", login_info,
                                            cluster_ip, cluster_port, backup_file_location, command_options_string)
         if type == 'windows':
-            command = "cmd /c \"%s\" \"%s%s@%s:%s\" \"%s\" %s" % (backup_command, "http://", login_info,
+            command = "cmd /c START \"\" \"%s\" \"%s%s@%s:%s\" \"%s\" %s" % (backup_command, "http://", login_info,
                                                cluster_ip, cluster_port, backup_file_location, command_options_string)
 
         output, error = self.execute_command(command)
