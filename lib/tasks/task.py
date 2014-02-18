@@ -26,10 +26,10 @@ from membase.api.exception import DesignDocCreationException, QueryViewException
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase.documentgenerator import BatchedDocumentGenerator
 
-#TODO: Setup stacktracer
-#TODO: Needs "easy_install pygments"
-#import stacktracer
-#stacktracer.trace_start("trace.html",interval=30,auto=True) # Set auto flag to always update file!
+# TODO: Setup stacktracer
+# TODO: Needs "easy_install pygments"
+# import stacktracer
+# stacktracer.trace_start("trace.html",interval=30,auto=True) # Set auto flag to always update file!
 
 
 PENDING = 'PENDING'
@@ -170,7 +170,7 @@ class BucketCreateTask(Task):
         except BucketCreationException as e:
             self.state = FINISHED
             self.set_exception(e)
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
@@ -219,7 +219,7 @@ class BucketDeleteTask(Task):
                 self.log.info(StatsCommon.get_stats([self.server], self.bucket, "timings"))
                 self.state = FINISHED
                 self.set_result(False)
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
 
         except Exception as e:
             self.state = FINISHED
@@ -236,7 +236,7 @@ class BucketDeleteTask(Task):
             else:
                 self.set_result(False)
             self.state = FINISHED
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
@@ -284,7 +284,7 @@ class RebalanceTask(Task):
     def start_rebalance(self, task_manager):
         nodes = self.rest.node_statuses()
 
-        #Determine whether its a cluster_run/not
+        # Determine whether its a cluster_run/not
         cluster_run = True
 
         firstIp = self.servers[0].ip
@@ -306,7 +306,7 @@ class RebalanceTask(Task):
                     if server.ip == node.ip and int(server.port) == int(node.port):
                         ejectedNodes.append(node.id)
         if self.rest.is_cluster_mixed():
-            #workaround MB-8094
+            # workaround MB-8094
             self.log.warn("cluster is mixed. sleep for 10 seconds before rebalance")
             time.sleep(10)
 
@@ -324,7 +324,7 @@ class RebalanceTask(Task):
             self.state = FINISHED
             self.set_exception(ex)
             self.retry_get_progress += 1
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught in {0} sec".
@@ -525,7 +525,7 @@ class GenericLoadingTask(Thread, Task):
             value = json.dumps(value_json)
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
-                #there is no such item, we do not know what value to set
+                # there is no such item, we do not know what value to set
                 return
             else:
                 self.state = FINISHED
@@ -575,7 +575,7 @@ class GenericLoadingTask(Thread, Task):
             value = json.dumps(value_json)
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
-                #there is no such item, we do not know what value to set
+                # there is no such item, we do not know what value to set
                 return
             else:
                 self.state = FINISHED
@@ -932,12 +932,12 @@ class ValidateDataTask(GenericLoadingTask):
             if self.only_store_hash:
                 if crc32.crc32_hash(d) != int(value):
                     self.state = FINISHED
-                    self.set_exception(Exception('Bad hash result: %d != %d' % (crc32.crc32_hash(d), int(value))))
+                    self.set_exception(Exception('Bad hash result: %d != %d for key %s' % (crc32.crc32_hash(d), int(value), key)))
             else:
                 value = json.dumps(value)
                 if d != json.loads(value):
                     self.state = FINISHED
-                    self.set_exception(Exception('Bad result: %s != %s' % (json.dumps(d), value)))
+                    self.set_exception(Exception('Bad result: %s != %s for key %s' % (json.dumps(d), value, key)))
             if o != flag:
                 self.state = FINISHED
                 self.set_exception(Exception('Bad result for flag value: %s != the value we set: %s' % (o, flag)))
@@ -1017,7 +1017,7 @@ class BatchedValidateDataTask(GenericLoadingTask):
             self.set_exception(error)
             return
         except BaseException, error:
-        #handle all other exception, for instance concurrent.futures._base.TimeoutError
+        # handle all other exception, for instance concurrent.futures._base.TimeoutError
             self.state = FINISHED
             self.set_exception(error)
             return
@@ -1098,7 +1098,7 @@ class VerifyRevIdTask(GenericLoadingTask):
                 self._check_key_revId(self.deleted_keys[self.itr - self.num_valid_keys])
             self.itr += 1
 
-        ## show progress of verification for every 50k items
+        # show progress of verification for every 50k items
         if math.fmod(self.itr, 50000) == 0.0:
             self.log.info("{0} items have been verified".format(self.itr))
 
@@ -1110,7 +1110,7 @@ class VerifyRevIdTask(GenericLoadingTask):
             _, flags_src, exp_src, seqno_src, cas_src = src.getMeta(key)
             _, flags_dest, exp_dest, seqno_dest, cas_dest = dest.getMeta(key)
 
-            ## seqno number should never be zero
+            # seqno number should never be zero
             if seqno_src == 0:
                 self.err_count += 1
                 self.log.error(
@@ -1127,7 +1127,7 @@ class VerifyRevIdTask(GenericLoadingTask):
                     "Dest (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_dest, cas_dest, exp_dest, flags_dest))
                 self.state = FINISHED
 
-            ## verify all metadata
+            # verify all metadata
             if seqno_src != seqno_dest:
                 self.err_count += 1
                 self.log.error(
@@ -1211,7 +1211,7 @@ class ViewCreateTask(Task):
             # appending view to existing design doc
             content, meta = self.rest.get_ddoc(self.bucket, self.design_doc_name)
             ddoc = DesignDocument._init_from_json(self.design_doc_name, content)
-            #if view is to be updated
+            # if view is to be updated
             if self.view:
                 if self.view.is_spatial:
                     ddoc.add_spatial_view(self.view)
@@ -1225,12 +1225,12 @@ class ViewCreateTask(Task):
                     ddoc = DesignDocument(self.design_doc_name, [], spatial_views=[self.view])
                 else:
                     ddoc = DesignDocument(self.design_doc_name, [self.view])
-            #create an empty design doc
+            # create an empty design doc
             else:
                 ddoc = DesignDocument(self.design_doc_name, [])
             if self.ddoc_options:
                 ddoc.options = self.ddoc_options
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
@@ -1245,7 +1245,7 @@ class ViewCreateTask(Task):
             self.state = FINISHED
             self.set_exception(e)
 
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
@@ -1253,7 +1253,7 @@ class ViewCreateTask(Task):
 
     def check(self, task_manager):
         try:
-            #only query if the DDoc has a view
+            # only query if the DDoc has a view
             if self.view:
                 if self.with_query:
                     query = {"stale" : "ok"}
@@ -1278,7 +1278,7 @@ class ViewCreateTask(Task):
                                 self.design_doc_name, self.view.name)))
                 self.log.info("view : {0} was created successfully in ddoc: {1}".format(self.view.name, self.design_doc_name))
             else:
-                #if we have reached here, it means design doc was successfully updated
+                # if we have reached here, it means design doc was successfully updated
                 self.log.info("Design Document : {0} was updated successfully".format(self.design_doc_name))
 
             self.state = FINISHED
@@ -1297,7 +1297,7 @@ class ViewCreateTask(Task):
                 self.state = FINISHED
                 self.log.error("Unexpected Exception Caught")
                 self.set_exception(e)
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
@@ -1314,7 +1314,7 @@ class ViewCreateTask(Task):
         except ReadDocumentException:
             pass
 
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
@@ -1330,7 +1330,7 @@ class ViewCreateTask(Task):
         nodes = self.rest.node_statuses()
         retry_count = 3
 
-        #nothing to check if there is only 1 node
+        # nothing to check if there is only 1 node
         if len(nodes) <= 1:
             return
 
@@ -1403,7 +1403,7 @@ class ViewDeleteTask(Task):
                 self.state = CHECKING
                 task_manager.schedule(self, 2)
             else:
-                #delete the design doc
+                # delete the design doc
                 rest.delete_view(self.bucket, self.design_doc_name)
                 self.log.info("Design Doc : {0} was successfully deleted".format(self.design_doc_name))
                 self.state = FINISHED
@@ -1413,7 +1413,7 @@ class ViewDeleteTask(Task):
             self.state = FINISHED
             self.set_exception(e)
 
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
@@ -1433,7 +1433,7 @@ class ViewDeleteTask(Task):
             self.state = FINISHED
             self.set_result(True)
 
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
@@ -1472,7 +1472,7 @@ class ViewQueryTask(Task):
             # initial query failed, try again
             task_manager.schedule(self, self.retry_time)
 
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
@@ -1513,7 +1513,7 @@ class ViewQueryTask(Task):
             self.state = FINISHED
             self.set_exception(e)
 
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
@@ -1585,7 +1585,7 @@ class MonitorViewQueryResultsTask(Task):
                 str(ex).find('missing') != -1 or \
                 str(ex).find("Undefined set view") != -1:
                 self.log.error(
-                       "view_results not ready yet ddoc=%s , try again in 10 seconds..." %
+                       "view_results not ready yet ddoc=%s , try again in 10 seconds..." % 
                        self.design_doc_name)
                 task_manager.schedule(self, 10)
             elif str(ex).find('timeout') != -1:
@@ -1608,7 +1608,7 @@ class MonitorViewQueryResultsTask(Task):
                 task_manager.schedule(self)
             else:
                 self.log.error(
-                       "view_results not ready yet ddoc=%s , try again in 10 seconds..." %
+                       "view_results not ready yet ddoc=%s , try again in 10 seconds..." % 
                        self.design_doc_name)
                 task_manager.schedule(self, 10)
 
@@ -1711,7 +1711,7 @@ class MonitorViewQueryResultsTask(Task):
                     self.state = FINISHED
                     self.set_result({"passed" : True,
                                      "errors" : []})
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception, e:
             self.state = FINISHED
             self.log.error("Exception caught %s" % str(e))
@@ -1787,7 +1787,7 @@ class ModifyFragmentationConfigTask(Task):
             # subsequent query failed! exit
             self.state = FINISHED
             self.set_exception(e)
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
@@ -1825,7 +1825,7 @@ class MonitorActiveTask(Task):
         if self.type == "indexer":
             self.target_key = "design_documents"
             if target_value.lower() in ['true', 'false']:
-                #track initial_build indexer task
+                # track initial_build indexer task
                 self.target_key = "initial_build"
         elif self.type == "bucket_compaction":
             self.target_key = "original_target"
@@ -1866,12 +1866,12 @@ class MonitorActiveTask(Task):
                     task_manager.schedule(self, 5)
                 return
         if self.wait_task:
-            #task is not performed
+            # task is not performed
             self.state = FINISHED
             self.log.error("expected active task %s:%s was not found" % (self.type, self.target_value))
             self.set_result(False)
         else:
-            #task was completed
+            # task was completed
             self.state = FINISHED
             self.log.info("task for monitoring %s:%s was not found" % (self.type, self.target_value))
             self.set_result(True)
@@ -1880,26 +1880,26 @@ class MonitorActiveTask(Task):
     def check(self, task_manager):
         tasks = self.rest.active_tasks()
         for task in tasks:
-            #if task still exists
+            # if task still exists
             if task["pid"] == self.task_pid:
                 self.log.info("progress %s:%s - %s %%" % (self.type, self.target_value, task["progress"]))
-                #reached expected progress
+                # reached expected progress
                 if task["progress"] >= self.wait_progress:
                         self.state = FINISHED
                         self.log.error("progress was reached %s" % self.wait_progress)
                         self.set_result(True)
-                #progress value was changed
+                # progress value was changed
                 if task["progress"] > self.current_progress:
                     self.current_progress = task["progress"]
                     self.currebt_iter = 0
                     task_manager.schedule(self, 2)
-                #progress value was not changed
+                # progress value was not changed
                 elif task["progress"] == self.current_progress:
                     if self.current_iter < self.num_iterations:
                         time.sleep(2)
                         self.current_iter += 1
                         task_manager.schedule(self, 2)
-                    #num iteration with the same progress = num_iterations
+                    # num iteration with the same progress = num_iterations
                     else:
                         self.state = FINISHED
                         self.log.error("progress for active task was not changed during %s sec" % 2 * self.num_iterations)
@@ -1909,7 +1909,7 @@ class MonitorActiveTask(Task):
                     self.log.error("progress for task %s:%s changed direction!" % (self.type, self.target_value))
                     self.set_result(False)
 
-        #task was completed
+        # task was completed
         self.state = FINISHED
         self.log.info("task %s:%s was completed" % (self.type, self.target_value))
         self.set_result(True)
@@ -1957,7 +1957,7 @@ class MonitorViewFragmentationTask(Task):
         except GetBucketInfoFailed as e:
             self.state = FINISHED
             self.set_exception(e)
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
@@ -2069,7 +2069,7 @@ class ViewCompactionTask(Task):
                           format(self.design_doc_name,
                                  self.compaction_revision, self.precompacted_fragmentation))
             if self.precompacted_fragmentation == 0:
-                self.log.info("%s: There is nothing to compact, fragmentation is 0" %
+                self.log.info("%s: There is nothing to compact, fragmentation is 0" % 
                               self.design_doc_name)
                 self.set_result(False)
                 self.state = FINISHED
@@ -2080,7 +2080,7 @@ class ViewCompactionTask(Task):
         except (CompactViewFailed, SetViewInfoNotFound) as ex:
             self.state = FINISHED
             self.set_exception(ex)
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
@@ -2124,7 +2124,7 @@ class ViewCompactionTask(Task):
                     self.set_result(True)
                 self.state = FINISHED
             else:
-                #Sometimes the compacting is not started immediately
+                # Sometimes the compacting is not started immediately
                 for i in xrange(17):
                     time.sleep(3)
                     if self._is_compacting():
@@ -2135,8 +2135,8 @@ class ViewCompactionTask(Task):
                         self.log.info("{2}: stats compaction: ({0},{1})".
                           format(new_compaction_revision, fragmentation,
                                  self.design_doc_name))
-                        #case of rebalance when with concurrent updates it's possible that
-                        #compaction value has not changed significantly
+                        # case of rebalance when with concurrent updates it's possible that
+                        # compaction value has not changed significantly
                         if new_compaction_revision > self.compaction_revision and self.with_rebalance:
                             self.log.warn("the compaction revision was increased,\
                              but the actual fragmentation value has not changed significantly")
@@ -2145,7 +2145,7 @@ class ViewCompactionTask(Task):
                             return
                         else:
                             continue
-                #print details in case of failure
+                # print details in case of failure
                 self.log.info("design doc {0} is compacting:{1}".format(self.design_doc_name, self._is_compacting()))
                 new_compaction_revision, fragmentation = self._get_compaction_details()
                 self.log.error("stats compaction still: ({0},{1})".
@@ -2158,7 +2158,7 @@ class ViewCompactionTask(Task):
         except (SetViewInfoNotFound) as ex:
             self.state = FINISHED
             self.set_exception(ex)
-        #catch and set all unexpected exceptions
+        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
@@ -2203,7 +2203,7 @@ class FailoverTask(Task):
 
     def _failover_nodes(self, task_manager):
         rest = RestConnection(self.servers[0])
-        #call REST fail_over for the nodes to be failed over
+        # call REST fail_over for the nodes to be failed over
         for server in self.to_failover:
             for node in rest.node_statuses():
                 if server.ip == node.ip and int(server.port) == int(node.port):
@@ -2717,7 +2717,7 @@ class BucketFlushTask(Task):
 
     def check(self, task_manager):
         try:
-            #check if after flush the vbuckets are ready
+            # check if after flush the vbuckets are ready
             if BucketOperationHelper.wait_for_vbuckets_ready_state(self.server, self.bucket):
                 self.set_result(True)
             else:
