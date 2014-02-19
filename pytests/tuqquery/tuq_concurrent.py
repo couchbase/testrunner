@@ -1,7 +1,7 @@
 import threading
 from threading import Event
 from tuqquery.tuq import QueryTests
-from viewquerytests import StoppableThread
+from view.viewquerytests import StoppableThread
 
 class ConcurrentTests(QueryTests):
     def setUp(self):

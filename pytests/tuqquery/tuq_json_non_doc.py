@@ -1,5 +1,5 @@
 from tuqquery.tuq import QueryTests
-from viewquerytests import StoppableThread
+from view.viewquerytests import StoppableThread
 from couchbase.documentgenerator import JSONNonDocGenerator
 
 class JSONNonDocTests(QueryTests):
