@@ -1473,7 +1473,7 @@ class QueryTests(BaseTestCase):
 
             self.query = "select name from %s where join_mo not in [1,6]" % (bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(len(actual_result['resultset']), key=lambda doc: (
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
                                                                        doc['name']))
             expected_result = [{"name" : doc['name']}
                                for doc in full_list
@@ -1496,7 +1496,7 @@ class QueryTests(BaseTestCase):
 
             self.query = "select name from %s where job_title in ['Sales', 'Support']" % (bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(len(actual_result['resultset']), key=lambda doc: (
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
                                                                        doc['name']))
             expected_result = [{"name" : doc['name']}
                                for doc in full_list
