@@ -2865,6 +2865,7 @@ class CBRecoveryTask(Task):
                     self._ssh_client.close()
                     self.state = FINISHED
                     self.log.warn("ns_server_tasks: {0}".format(self.rest.ns_server_tasks()))
+                    self.log.warn("cbrecovery progress: {0}".format(self.rest.get_recovery_progress(self.recovery_task["recoveryStatusURI"])))
                     self.set_exception(CBRecoveryFailedException("cbrecovery hangs"))
                     return
                 self.retries += 1
