@@ -1423,7 +1423,7 @@ class QueryTests(BaseTestCase):
                          "WHEN join_mo < 9 AND join_mo > 5 THEN 'summer' " +\
                          "ELSE 'autumn' END AS period FROM %s" % (bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(len(actual_result['resultset']), key=lambda doc: (
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
                                                                        doc['name'],
                                                                        doc['period']))
             full_list = self._generate_full_docs_list(self.gens_load)
@@ -1462,7 +1462,7 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "select name from %s where join_mo in [1,6]" % (bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(len(actual_result['resultset']), key=lambda doc: (
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
                                                                        doc['name']))
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name']}
@@ -1485,7 +1485,7 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "select name from %s where job_title in ['Sales', 'Support']" % (bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(len(actual_result['resultset']), key=lambda doc: (
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
                                                                        doc['name']))
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name']}
