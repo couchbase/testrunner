@@ -97,8 +97,8 @@ class JoinTests(QueryTests):
     def test_where_join_keys(self):
         for bucket in self.buckets:
             self.query = "SELECT employee.name, employee.tasks_ids, new_project " +\
-            "FROM %s as employee %s JOIN default.project as new_project " % (bucket.name, self.type_join) +\
-            "KEYS employee.tasks_ids WHERE new_project == 'IT'"
+            "FROM %s as employee %s JOIN default as new_project " % (bucket.name, self.type_join) +\
+            "KEYS employee.tasks_ids WHERE new_project.project == 'IT'"
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['resultset'])
             expected_result = self._generate_full_joined_docs_list(join_type=self.type_join)
@@ -125,15 +125,15 @@ class JoinTests(QueryTests):
 
     def test_unnest(self):
         for bucket in self.buckets:
-            self.query = "SELECT emp.name, task FROM %s emp UNNEST emp.tasks_ids task" % bucket.name
+            self.query = "SELECT emp.name, task FROM %s emp %s UNNEST emp.tasks_ids task" % (bucket.name,self.type_join)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc:(
-                                                               doc['name'], doc['task']))
-            expected_result = self._generate_full_joined_docs_list(join_type=self.type_join)
-            expected_result = [{"task" : task, "name" : doc["name"]} for doc in expected_result
-                               for task in doc['tasks_ids'] if doc]
-            expected_result = sorted(expected_result, key=lambda doc:(
-                                                          doc['name'], doc['task']))
+            actual_result = sorted(actual_result['resultset'])
+            expected_result = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"task" : task, "name" : doc["name"]}
+                               for doc in expected_result for task in doc['tasks_ids']]
+            if self.type_join.upper() == JOIN_LEFT:
+                expected_result.extend([{}] * self.gens_tasks[-1].end)
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 ##############################################################################################
 #

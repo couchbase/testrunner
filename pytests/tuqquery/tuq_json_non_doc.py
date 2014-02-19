@@ -43,11 +43,11 @@ class JSONNonDocTests(QueryTests):
 
     def test_string_where(self):
         for bucket in self.buckets:
-            self.query = "select value() from %s where base64_value() = 'Engineer'" % bucket.name
+            self.query = "select value() from %s where value() = 4" % bucket.name
             actual_result = self.run_cbq_query()
             actual_result = [doc["$1"] for doc in actual_result['resultset']]
             expected_result = self._generate_full_docs_list(self.gens_load)
-            expected_result = [doc for doc in expected_result if doc == 'Engineer' ]
+            expected_result = [doc for doc in expected_result if doc == 4 ]
             self._verify_results(sorted(actual_result), sorted(expected_result))
 
     def test_array_where(self):
