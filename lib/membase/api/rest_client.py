@@ -937,9 +937,9 @@ class RestConnection(object):
         params = urllib.urlencode({'otpNode': otpNode})
         status, content, header = self._http_request(api, 'POST', params)
         if status:
-            log.info('fail_over successful')
+            log.info('fail_over node {0} successful'.format(otpNode))
         else:
-            log.error('fail_over error : {0}'.format(content))
+            log.error('fail_over node {0} error : {1}'.format(otpNode, content))
             raise FailoverFailedException(content)
         return status
 
@@ -951,9 +951,9 @@ class RestConnection(object):
         params = urllib.urlencode({'otpNode': otpNode})
         status, content, header = self._http_request(api, 'POST', params)
         if status:
-            log.info('add_back_node successful')
+            log.info('add_back_node {0} successful'.format(otpNode))
         else:
-            log.error('add_back_node error : {0}'.format(content))
+            log.error('add_back_node {0} error : {1}'.format(otpNode, content))
             raise InvalidArgumentException('controller/reAddNode',
                                            parameters=params)
         return status
