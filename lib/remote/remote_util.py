@@ -277,7 +277,7 @@ class RemoteMachineShellConnection:
 
     def kill_erlang(self, os="unix"):
         if os == "windows":
-            o, r = self.execute_command("/taskkill /F /T /IM erl.*")
+            o, r = self.execute_command("/taskkill /F /T /IM erl.exe*")
             self.log_command_output(o, r)
             self.disconnect()
         else:

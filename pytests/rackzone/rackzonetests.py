@@ -184,7 +184,7 @@ class RackzoneTests(RackzoneBaseTest):
             try:
                 result = rest.monitorRebalance()
             except RebalanceFailedException as e:
-                log.error("rebalance failed: {0}".format(e))
+                self.log.error("rebalance failed: {0}".format(e))
                 return False, servers_rebalanced
             msg = "successfully rebalanced cluster {0}"
             self.log.info(msg.format(result))
@@ -220,7 +220,7 @@ class RackzoneTests(RackzoneBaseTest):
             try:
                 result = rest.monitorRebalance()
             except RebalanceFailedException as e:
-                log.error("rebalance failed: {0}".format(e))
+                self.log.error("rebalance failed: {0}".format(e))
                 return False, servers_rebalanced
             msg = "successfully rebalanced in selected nodes from the cluster ? {0}"
             self.log.info(msg.format(result))
@@ -236,16 +236,31 @@ class RackzoneTests(RackzoneBaseTest):
             raise Exception("There is not zone with name: %s in cluster" % name)
 
     def _verify_replica_distribution_in_zones(self, nodes, commmand, saslPassword = "" ):
-        cbstat_command = "%scbstats" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         shell = RemoteMachineShellConnection(self.servers[0])
+        type = shell.extract_remote_info().distribution_type
+        shell.disconnect()
+        if type.lower() == 'linux':
+            cbstat_command = "%scbstats" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        elif type.lower() == 'windows':
+            cbstat_command = "%scbstats.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        elif type.lower() == 'mac':
+            cbstat_command = "%scbstats" % (testconstants.MAC_COUCHBASE_BIN_PATH)
         command = "tap"
         saslPassword = ''
         for group in nodes:
             for node in nodes[group]:
-                commands = "%s %s:11210 %s -b %s -p \"%s\" |grep :vb_filter: |  awk '{print $1}' | xargs \
-                                      | sed 's/eq_tapq:replication_ns_1@//g'  | sed 's/:vb_filter://g'  \
+                if not self.is_windows:
+                    commands = "%s %s:11210 %s -b %s -p \"%s\" |grep :vb_filter: |  awk '{print $1}' \
+                            | xargs | sed 's/eq_tapq:replication_ns_1@//g'  | sed 's/:vb_filter://g' \
+                            " % (cbstat_command, node, command,"default", saslPassword)
+                elif self.is_windows:
+                    """ standalone gawk.exe should be copy to ../ICW/bin for command below to work.
+                        Ask IT to do this if you don't know how """
+                    commands = "%s %s:11210 %s -b %s -p \"%s\" | grep.exe :vb_filter: | gawk.exe '{print $1}' \
+                               | sed.exe 's/eq_tapq:replication_ns_1@//g'  | sed.exe 's/:vb_filter://g' \
                                " % (cbstat_command, node, command,"default", saslPassword)
                 output, error = shell.execute_command(commands)
+                shell.log_command_output(output, error)
                 output = output[0].split(" ")
                 if node not in output:
                     self.log.info("{0}".format(nodes))
