@@ -407,3 +407,45 @@ class NewUpgradeBaseTest(BaseTestCase):
                         remote.log_command_output(output, error)
                         remote.disconnect()
                     raise e
+
+    def _get_vbuckets(self, servers, bucket_name='default'):
+        vbuckets_servers = {}
+        for server in servers:
+            buckets = RestConnection(server).get_buckets()
+            bucket_to_check = [bucket for bucket in buckets
+                           if bucket.name == bucket_name][0]
+            vbuckets_servers[server] = {}
+            vbs_active = [vb.id for vb in bucket_to_check.vbuckets
+                           if vb.master.startswith(str(server.ip))]
+            vbs_replica = []
+            for replica_num in xrange(0, bucket_to_check.numReplicas):
+                vbs_replica.extend([vb.id for vb in bucket_to_check.vbuckets
+                                    if vb.replica[replica_num].startswith(str(server.ip))])
+            vbuckets_servers[server]['active_vb'] = vbs_active
+            vbuckets_servers[server]['replica_vb'] = vbs_replica
+        return vbuckets_servers
+
+    def _verify_vbucket_nums_for_swap(self, old_vbs, new_vbs):
+        out_servers = set(old_vbs) - set(new_vbs)
+        in_servers = set(new_vbs) - set(old_vbs)
+        self.assertEqual(len(out_servers), len(in_servers),
+                        "Seems like it wasn't swap rebalance. Out %s, in %s" % (
+                                                len(out_servers),len(in_servers)))
+        for vb_type in ["active_vb", "replica_vb"]:
+            self.log.info("Checking %s on nodes that remain in cluster..." % vb_type)
+            for server, stats in old_vbs.iteritems():
+                if server in new_vbs:
+                    self.assertTrue(sorted(stats[vb_type]) == sorted(new_vbs[server][vb_type]),
+                    "Server %s Seems like %s vbuckets were shuffled, old vbs is %s, new are %s" %(
+                                    server.ip, vb_type, stats[vb_type], new_vbs[server][vb_type]))
+            self.log.info("%s vbuckets were not suffled" % vb_type)
+            self.log.info("Checking in-out nodes...")
+            vbs_servs_out = vbs_servs_in = []
+            for srv, stat in old_vbs.iteritems():
+                if srv in out_servers:
+                    vbs_servs_out.extend(stat[vb_type])
+            for srv, stat in new_vbs.iteritems():
+                if srv in in_servers:
+                    vbs_servs_in.extend(stat[vb_type])
+            self.assertTrue(sorted(vbs_servs_out) == sorted(vbs_servs_in),
+                            "%s vbuckets seem to be suffled" % vb_type)
