@@ -1329,9 +1329,11 @@ class RestConnection(object):
                       bucketType='membase',
                       replica_index=1,
                       threadsNumber=3,
-                      flushEnabled=1):
+                      flushEnabled=1,
+                      evictionPolicy='valueOnly'):
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.urlencode({})
+
         #this only works for default bucket ?
         if bucket == 'default':
             params = urllib.urlencode({'name': bucket,
@@ -1343,7 +1345,8 @@ class RestConnection(object):
                                        'bucketType': bucketType,
                                        'replicaIndex': replica_index,
                                        'threadsNumber': threadsNumber,
-                                       'flushEnabled': flushEnabled})
+                                       'flushEnabled': flushEnabled,
+                                        'evictionPolicy': evictionPolicy})
         elif authType == 'none':
             params = urllib.urlencode({'name': bucket,
                                        'ramQuotaMB': ramQuotaMB,
@@ -1353,7 +1356,8 @@ class RestConnection(object):
                                        'bucketType': bucketType,
                                        'replicaIndex': replica_index,
                                        'threadsNumber': threadsNumber,
-                                       'flushEnabled': flushEnabled})
+                                       'flushEnabled': flushEnabled,
+                                       'evictionPolicy': evictionPolicy})
         elif authType == 'sasl':
             params = urllib.urlencode({'name': bucket,
                                        'ramQuotaMB': ramQuotaMB,
@@ -1364,7 +1368,8 @@ class RestConnection(object):
                                        'bucketType': bucketType,
                                        'replicaIndex': replica_index,
                                        'threadsNumber': threadsNumber,
-                                       'flushEnabled': flushEnabled})
+                                       'flushEnabled': flushEnabled,
+                                       'evictionPolicy': evictionPolicy})
         log.info("{0} with param: {1}".format(api, params))
         create_start_time = time.time()
         status, content, header = self._http_request(api, 'POST', params)

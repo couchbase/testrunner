@@ -74,6 +74,7 @@ class BaseTestCase(unittest.TestCase):
             self.log_location=self.input.param("log_location", None)
             self.stat_info=self.input.param("stat_info", None)
             self.port_info=self.input.param("port_info", None)
+            self.eviction_policy=self.input.param("eviction_policy", 'valueOnly')
 
             if self.input.param("log_info", None):
                 self.change_log_info()
@@ -254,7 +255,7 @@ class BaseTestCase(unittest.TestCase):
     def _bucket_creation(self):
         if self.default_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas,
-                                               enable_replica_index=self.enable_replica_index)
+                                               enable_replica_index=self.enable_replica_index, eviction_policy=self.eviction_policy)
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self.num_replicas, bucket_size=self.bucket_size))
 
@@ -280,7 +281,8 @@ class BaseTestCase(unittest.TestCase):
                                                                       password,
                                                                       bucket_size,
                                                                       self.num_replicas,
-                                                                      enable_replica_index=self.enable_replica_index))
+                                                                      enable_replica_index=self.enable_replica_index,
+                                                                      eviction_policy=self.eviction_policy))
             self.buckets.append(Bucket(name=name, authType="sasl", saslPassword=password,
                                        num_replicas=self.num_replicas, bucket_size=bucket_size,
                                        master_id=server_id));
