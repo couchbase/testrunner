@@ -1082,6 +1082,9 @@ class WarmUpMemcachedTest(unittest.TestCase):
                     memcached_restarted = True
                     break
                 self.onenodemc.close()
+                # The uptime stat have a 1 sec resolution so there is no point of
+                # retrying more often
+                time.sleep(1)
             except Exception:
                 time.sleep(1)
 
