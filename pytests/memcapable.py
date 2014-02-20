@@ -432,7 +432,7 @@ class GetrTests(BaseTestCase):
         if warmup:
             self.log.info("restarting memcached")
             command = "rpc:multicall(erlang, apply, [fun () -> try ns_server_testrunner_api:restart_memcached(20000) catch _:_ -> ns_port_sup:restart_port_by_name(memcached) end end, []], 20000)."
-            memcached_restarted = self.rest.diag_eval(command)
+            memcached_restarted, content = self.rest.diag_eval(command)
             #wait until memcached starts
             self.assertTrue(memcached_restarted, "unable to restart memcached process through diag/eval")
             RebalanceHelper.wait_for_stats(self.master, self.default_bucket_name, "curr_items_tot", item_count * (replica_count + 1), 600)
@@ -1067,7 +1067,7 @@ class WarmUpMemcachedTest(unittest.TestCase):
         time.sleep(10)
         rest = RestConnection(self.master)
         command = "try ns_server_testrunner_api:kill_memcached(20000) catch _:_ -> [erlang:exit(element(2, X), kill) || X <- supervisor:which_children(ns_port_sup)] end."
-        memcached_restarted = rest.diag_eval(command)
+        memcached_restarted, content = rest.diag_eval(command)
         self.assertTrue(memcached_restarted, "unable to restart memcached/moxi process through diag/eval")
 
         #wait until memcached starts
