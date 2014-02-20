@@ -2,6 +2,7 @@ DIST_DIR=./dist
 DIRS=b conf lib longevity pytests resources scripts unittests
 FILES=Makefile README TestInput.py
 SLEEP_TIME=3
+VERBOSE=0
 
 .PHONY: clean testrunner test test-quick
 
@@ -23,7 +24,7 @@ else
 endif
 
 simple-test:
-	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr.ini conf/simple.conf
+	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr.ini conf/simple.conf ${VERBOSE}
 
 test-views:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/py-view.conf

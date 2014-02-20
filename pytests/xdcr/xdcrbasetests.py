@@ -3,6 +3,7 @@ import time
 import datetime
 import unittest
 import logger
+import logging
 import copy
 from threading import Thread
 
@@ -75,6 +76,13 @@ class XDCRBaseTest(unittest.TestCase):
         try:
             self.log = logger.Logger.get_logger()
             self._input = TestInputSingleton.input
+            if self._input.param("log_level", None):
+                self.log.setLevel(level=0)
+                for hd in self.log.handlers:
+                    if str(hd.__class__).find('FileHandler') != -1:
+                        hd.setLevel(level=logging.DEBUG)
+                    else:
+                        hd.setLevel(level=getattr(logging, self._input.param("log_level", None)))
             self._init_parameters()
             self.cluster = Cluster()
             # REPLICATION RATE STATS

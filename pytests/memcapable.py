@@ -7,6 +7,7 @@ import mc_bin_client
 import time
 import uuid
 import logger
+import logging
 import datetime
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.rebalance_helper import RebalanceHelper
@@ -999,6 +1000,13 @@ class WarmUpMemcachedTest(unittest.TestCase):
     def setUp(self):
         self.log = logger.Logger.get_logger()
         self.params = TestInputSingleton.input.test_params
+        if TestInputSingleton.input.param("log_level", None):
+            self.log.setLevel(level=0)
+            for hd in self.log.handlers:
+                if str(hd.__class__).find('FileHandler') != -1:
+                    hd.setLevel(level=logging.DEBUG)
+                else:
+                    hd.setLevel(level=getattr(logging, TestInputSingleton.input.param("log_level", None)))
         self.master = TestInputSingleton.input.servers[0]
         rest = RestConnection(self.master)
         rest.init_cluster(self.master.rest_username, self.master.rest_password)

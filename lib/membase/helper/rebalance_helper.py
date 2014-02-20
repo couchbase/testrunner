@@ -43,7 +43,7 @@ class RebalanceHelper():
             for k in all_stats:
                 if all_stats[k] and stat_key in all_stats[k]:
                     if actual_stat_value == -1:
-                        print all_stats[k][stat_key]
+                        log.info(all_stats[k][stat_key])
                         actual_stat_value = int(all_stats[k][stat_key])
                     else:
                         actual_stat_value += int(all_stats[k][stat_key])

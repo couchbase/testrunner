@@ -43,6 +43,11 @@ if [[ -f $2 ]] ; then
 else
     conf=" -t $2"
 fi
+if [[ -n $3 ]] && [[ $3 == 0 ]] ; then
+    test_params=" -p log_level=CRITICAL"
+else
+    test_params=""
+fi
 
 servers_count=0
 while read line ; do
@@ -63,8 +68,7 @@ make
 COUCHBASE_NUM_VBUCKETS=64 python ./cluster_run --nodes=$servers_count &> $wd/cluster_run.log &
 pid=$!
 popd
-
-python ./testrunner $conf -i $ini 2>&1 -p makefile=True | tee make_test.log
+python ./testrunner $conf -i $ini $test_params 2>&1 -p makefile=True | tee make_test.log
 
 kill $pid
 wait
