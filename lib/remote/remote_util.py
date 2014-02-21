@@ -746,7 +746,7 @@ class RemoteMachineShellConnection:
         f1 = open(full_src_path_template, 'r')
         f2 = open(full_src_path, 'w')
         # replace ####### with reg ID to install/uninstall
-        if "2.2.0-837" in reg_version:
+        if "2.2.0-837" in version:
             reg_id = "2B630EB8-BBC7-6FE4-C9B8-D8843EB1EFFA"
         log.info("register ID: {0}".format(reg_id))
         for line in f1:
