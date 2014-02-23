@@ -645,15 +645,6 @@ class XDCRBaseTest(unittest.TestCase):
                         src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
                     dest_bucket.kvs[1] = src_bucket.kvs[1]
 
-    # Verify enoent erros
-    def __verify_enoent_erros(self, servers):
-        for server in servers:
-            shell_server = RemoteMachineShellConnection(server)
-            cmd = 'grep -m 10 "by error type, enoent: [1-9]" /opt/couchbase/var/lib/couchbase/logs/xdcr_errors.[0-9]* >/dev/null 2>&1;echo $?'
-            output, _ = shell_server.execute_command(cmd)
-            self.assertEqual(int(output[0]), 1,
-                             "enoent errors found during test execution on server %s" % server.ip)
-
     # CBQE-1695 Wait for replication_changes_left (outbound mutations) to be 0.
     def __wait_for_mutation_to_replicate(self, master_node, timeout=180):
         self.log.info("Waiting for Outbound mutation to be zero on cluster node: %s" % master_node.ip)
@@ -706,18 +697,18 @@ class XDCRBaseTest(unittest.TestCase):
         self._wait_for_stats_all_buckets(dest_nodes, timeout=timeout)
         mutations_replicated = True
         if verify_src:
-            # Mutation will be checked on opposite cluster.
-            mutations_replicated &= self.__wait_for_mutation_to_replicate(self.dest_master)
-            self.__verify_enoent_erros(src_nodes)
             timeout = max(120, end_time - time.time())
             self._verify_stats_all_buckets(src_nodes, timeout=timeout)
             timeout = max(120, end_time - time.time())
+            # Mutation will be checked on opposite cluster.
+            mutations_replicated &= self.__wait_for_mutation_to_replicate(self.dest_master)
+            timeout = max(120, end_time - time.time())
             self._verify_all_buckets(self.src_master, max_verify=self.max_verify)
-        # Mutation will be checked on opposite cluster.
-        mutations_replicated &= self.__wait_for_mutation_to_replicate(self.src_master)
-        self.__verify_enoent_erros(dest_nodes)
         timeout = max(120, end_time - time.time())
         self._verify_stats_all_buckets(dest_nodes, timeout=timeout)
+        timeout = max(120, end_time - time.time())
+        # Mutation will be checked on opposite cluster.
+        mutations_replicated &= self.__wait_for_mutation_to_replicate(self.src_master)
         timeout = max(120, end_time - time.time())
         self._verify_all_buckets(self.dest_master, max_verify=self.max_verify)
 
