@@ -70,11 +70,11 @@ class BaseTestCase(unittest.TestCase):
             self.maxParallelReplicaIndexers = self.input.param("maxParallelReplicaIndexers", None)
             self.quota_percent = self.input.param("quota_percent", None)
             self.port = None
-            self.log_info=self.input.param("log_info", None)
-            self.log_location=self.input.param("log_location", None)
-            self.stat_info=self.input.param("stat_info", None)
-            self.port_info=self.input.param("port_info", None)
-            self.eviction_policy=self.input.param("eviction_policy", 'valueOnly')
+            self.log_info = self.input.param("log_info", None)
+            self.log_location = self.input.param("log_location", None)
+            self.stat_info = self.input.param("stat_info", None)
+            self.port_info = self.input.param("port_info", None)
+            self.eviction_policy = self.input.param("eviction_policy", 'valueOnly')
 
             if self.input.param("log_info", None):
                 self.change_log_info()
@@ -138,7 +138,7 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
             self._log_start(self)
         except Exception, e:
-            self.cluster.shutdown()
+            self.cluster.shutdown(force=True)
             self.fail(e)
 
     def tearDown(self):

@@ -43,7 +43,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         try:
             XDCRReplicationBaseTest.tearDown(self)
         finally:
-            self.cluster.shutdown()
+            self.cluster.shutdown(force=True)
 
     @staticmethod
     def _override_clusters_structure(self):
@@ -152,7 +152,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.src_init + self.dest_init ])
         upgrade_nodes = self.input.param('upgrade_nodes', "src").split(";")
-        self.cluster.shutdown()
+        self.cluster.shutdown(force=True)
         XDCRReplicationBaseTest.setUp(self)
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
         self.sleep(60)
@@ -214,7 +214,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self._install(self.servers[:self.src_init + self.dest_init ])
         self.initial_version = self.upgrade_versions[0]
         self._install(self.servers[self.src_init + self.dest_init:])
-        self.cluster.shutdown()
+        self.cluster.shutdown(force=True)
         XDCRReplicationBaseTest.setUp(self)
         bucket_default = self._get_bucket(self, 'default', self.src_master)
         bucket_sasl = self._get_bucket(self, 'bucket0', self.src_master)
@@ -275,7 +275,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         upgrade_seq = self.input.param("upgrade_seq", "src>dest")
 
         self._install(self.servers[:self.src_init + self.dest_init ])
-        self.cluster.shutdown()
+        self.cluster.shutdown(force=True)
         XDCRReplicationBaseTest.setUp(self)
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
         self.sleep(60)

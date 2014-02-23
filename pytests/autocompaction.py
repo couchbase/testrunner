@@ -47,7 +47,7 @@ class AutoCompactionTests(BaseTestCase):
         # generate load until fragmentation reached
         while monitor_fragm.state != "FINISHED":
             if self.is_crashed.is_set():
-                self.cluster.shutdown()
+                self.cluster.shutdown(force=True)
                 return
             if end_time < time.time():
                self.fail("Fragmentation level is not reached in %s sec" % self.wait_timeout * 50)

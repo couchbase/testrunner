@@ -158,7 +158,7 @@ class XDCRBaseTest(unittest.TestCase):
             self.log.info("==============  XDCRbasetests cleanup was finished for test #{0} {1} =============="\
                 .format(self.case_number, self._testMethodName))
         finally:
-            self.cluster.shutdown()
+            self.cluster.shutdown(force=True)
             self._log_finish(self)
 
     def _print_stats(self, node):

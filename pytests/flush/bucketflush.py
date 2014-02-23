@@ -18,7 +18,7 @@ class BucketFlushTests(BaseTestCase):
         try:
             self.default_test_setup()
         except Exception, e:
-            self.cluster.shutdown()
+            self.cluster.shutdown(force=True)
             self.fail(e)
 
     def tearDown(self):

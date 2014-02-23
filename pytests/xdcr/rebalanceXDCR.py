@@ -49,7 +49,7 @@ class Rebalance(XDCRReplicationBaseTest):
             self.log.info("==============  rebalanceXDCR cleanup was finished for test #{0} {1} =============="\
                     .format(self.case_number, self._testMethodName))
         finally:
-            self.cluster.shutdown()
+            self.cluster.shutdown(force=True)
             self._log_finish(self)
 
     """Load data only at source for unidirectional, and at both source/destination for bidirection replication.

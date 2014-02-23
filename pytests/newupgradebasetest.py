@@ -70,7 +70,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                     or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
         if test_failed:
                 self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
-                self.cluster.shutdown()
+                self.cluster.shutdown(force=True)
                 self.log.info("Test Input params were:")
                 pprint(self.input.test_params)
 
@@ -89,7 +89,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                         temp.append(server)
                 self.servers = temp
             except Exception, e:
-                self.cluster.shutdown()
+                self.cluster.shutdown(force=True)
                 self.fail(e)
             super(NewUpgradeBaseTest, self).tearDown()
 

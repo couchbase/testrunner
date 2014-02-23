@@ -29,7 +29,7 @@ class FailoverBaseTest(BaseTestCase):
             msg = "rebalance failed after adding these nodes {0}".format(nodes)
             self.assertTrue(rest.monitorRebalance(), msg=msg)
         except Exception, e:
-            self.cluster.shutdown()
+            self.cluster.shutdown(force=True)
             self.fail(e)
         self.log.info("==============  FailoverBaseTest setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
@@ -42,7 +42,7 @@ class FailoverBaseTest(BaseTestCase):
                     str(TestInputSingleton.input.test_params['stop-on-failure']).lower() == 'true':
                     # supported starting with python2.7
                     log.warn("CLEANUP WAS SKIPPED")
-                    self.cluster.shutdown()
+                    self.cluster.shutdown(force=True)
                     self._log_finish(self)
         else:
             try:
