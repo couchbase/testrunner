@@ -223,7 +223,6 @@ class XDCRBaseTest(unittest.TestCase):
         # max items number to verify in ValidateDataTask, None - verify all
         self.max_verify = self._input.param("max_verify", None)
 
-
         self._default_bucket = self._input.param("default_bucket", True)
         self._end_replication_flag = self._input.param("end_replication_flag", 0)
 
@@ -266,6 +265,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._failover = self._input.param("failover", None)
         self._demand_encryption = self._input.param("demand_encryption", 0)
         self._rebalance = self._input.param("rebalance", None)
+        self._wait_for_expiration = self._input.param("wait_for_expiration", False)
         if self._warmup is not None:
             self._warmup = self._warmup.split("-")
         if self._failover is not None:
@@ -400,7 +400,6 @@ class XDCRBaseTest(unittest.TestCase):
                     floating_servers.remove(node)
 
         return floating_servers
-
 
     def _init_clusters(self, disabled_consistent_view=None):
         for key in self._clusters_keys_olst:
@@ -626,6 +625,8 @@ class XDCRBaseTest(unittest.TestCase):
                 self.do_merge_buckets(src_master, dest_cluster[0], bidirection)
 
     def do_merge_buckets(self, src_master, dest_master, bidirection):
+        if self._expires and not self._wait_for_expiration:
+            self.sleep(self._expires, "Waiting for expiration of updated items")
         src_buckets = self._get_cluster_buckets(src_master)
         dest_buckets = self._get_cluster_buckets(dest_master)
         for src_bucket in src_buckets:
@@ -636,6 +637,8 @@ class XDCRBaseTest(unittest.TestCase):
                     dest_bucket.kvs[1] = src_bucket.kvs[1]
 
     def do_merge_bucket(self, src_master, dest_master, bidirection, bucket):
+        if self._expires and not self._wait_for_expiration:
+            self.sleep(self._expires, "Waiting for expiration of updated items")
         src_buckets = self._get_cluster_buckets(src_master)
         dest_buckets = self._get_cluster_buckets(dest_master)
         for src_bucket in src_buckets:
@@ -838,6 +841,8 @@ class XDCRBaseTest(unittest.TestCase):
             if "delete" in self._doc_ops:
                 self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
             self._wait_for_stats_all_buckets(self.src_nodes)
+            if self._wait_for_expiration and self._expires:
+                self.sleep(self._expires, "Waiting for expiration of updated items")
 
     def disable_compaction(self, server=None, bucket="default"):
         server = server or self.src_master
@@ -851,7 +856,6 @@ class XDCRBaseTest(unittest.TestCase):
         ref_view = self._default_view
         ref_view.name = (prefix, ref_view.name)[prefix is None]
         return [View(ref_view.name + str(i), ref_view.map_func, None, is_dev_ddoc) for i in xrange(count)]
-
 
     def async_create_views(self, server, design_doc_name, views, bucket="default"):
         tasks = []
@@ -1095,6 +1099,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
         for task in tasks:
             task.result()
+        if self._wait_for_expiration and self._expires:
+            self.sleep(self._expires, "Waiting for expiration of updated items")
 
     def _async_update_delete_data(self):
         self.log.info("The tasks:-")
@@ -1115,6 +1121,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             self.sleep(self._timeout / 6)
         for task in tasks:
             task.result()
+        if self._wait_for_expiration and self._expires:
+            self.sleep(self._expires, "Waiting for expiration of updated items")
 
     def _verify_revIds(self, src_server, dest_server, ops_perf, kv_store=1):
         error_count = 0;
@@ -1181,7 +1189,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 "Verification process not completed after waiting for {0} seconds. Please check logs".format(
                     self._poll_timeout))
 
-
     def _verify_stats_all_buckets(self, servers, timeout=120):
         def verify():
             try:
@@ -1227,6 +1234,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         tasks = []
         tasks.append(self.cluster.async_rebalance(src_nodes, to_add_node, to_remove_node))
         return tasks
+
     def _find_cluster_nodes_by_name(self, cluster_name):
         return self._clusters_dic[[k for k, v in self._cluster_names_dic.iteritems() if v == cluster_name][0]]
 

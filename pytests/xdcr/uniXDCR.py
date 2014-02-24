@@ -374,10 +374,12 @@ class unidirectional(XDCRReplicationBaseTest):
             for view in views:
                 self.cluster.query_view(self.src_master, prefix + ddoc_name, view.name, query)
                 self.cluster.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
-            for task in tasks:
-                if task.state != "FINISHED":
-                    continue
-            break
+            if set([task.state for task in tasks]) != set(["FINISHED"]):
+                continue
+            else:
+                if "update" in self._doc_ops and self._wait_for_expiration:
+                    self.sleep(self._expires)
+                break
 
         tasks = []
         for view in views:

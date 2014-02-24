@@ -72,8 +72,6 @@ class bidirectional(XDCRReplicationBaseTest):
         tasks = []
         if "update" in self._doc_ops:
             tasks += self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires)
-        if "update" in self._doc_ops and "update" in self._doc_ops_dest:
-            self.sleep(30)
         if "update" in self._doc_ops_dest:
             tasks += self._async_load_all_buckets(self.dest_master, self.gen_update, "update", self._expires)
         if "delete" in self._doc_ops:
@@ -83,6 +81,9 @@ class bidirectional(XDCRReplicationBaseTest):
 
         for task in tasks:
             task.result()
+
+        if self._wait_for_expiration and ("update" in self._doc_ops or "update" in self._doc_ops_dest):
+            self.sleep(self._expires)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
@@ -380,7 +381,6 @@ class bidirectional(XDCRReplicationBaseTest):
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
         self.verify_results(verify_src=True)
 
-
     def replication_with_view_queries_and_ops(self):
         tasks = []
         try:
@@ -432,6 +432,9 @@ class bidirectional(XDCRReplicationBaseTest):
                 if set([task.state for task in tasks]) != set(["FINISHED"]):
                     continue
                 else:
+                    if self._wait_for_expiration:
+                        if "update" in self._doc_ops or "update" in self._doc_ops_dest:
+                            self.sleep(self._expires)
                     break
 
             self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
