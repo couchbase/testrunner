@@ -238,7 +238,6 @@ class RackzoneTests(RackzoneBaseTest):
     def _verify_replica_distribution_in_zones(self, nodes, commmand, saslPassword = "" ):
         shell = RemoteMachineShellConnection(self.servers[0])
         type = shell.extract_remote_info().distribution_type
-        shell.disconnect()
         if type.lower() == 'linux':
             cbstat_command = "%scbstats" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         elif type.lower() == 'windows':
@@ -249,11 +248,11 @@ class RackzoneTests(RackzoneBaseTest):
         saslPassword = ''
         for group in nodes:
             for node in nodes[group]:
-                if not self.is_windows:
+                if not type.lower() == 'windows':
                     commands = "%s %s:11210 %s -b %s -p \"%s\" |grep :vb_filter: |  awk '{print $1}' \
                             | xargs | sed 's/eq_tapq:replication_ns_1@//g'  | sed 's/:vb_filter://g' \
                             " % (cbstat_command, node, command,"default", saslPassword)
-                elif self.is_windows:
+                elif type.lower() == 'windows':
                     """ standalone gawk.exe should be copy to ../ICW/bin for command below to work.
                         Ask IT to do this if you don't know how """
                     commands = "%s %s:11210 %s -b %s -p \"%s\" | grep.exe :vb_filter: | gawk.exe '{print $1}' \
@@ -267,6 +266,7 @@ class RackzoneTests(RackzoneBaseTest):
                     self.log.info("replica of node {0} are not in its zone {1}".format(node, group))
                 else:
                     raise Exception("replica of node {0} are on its own zone {1}".format(node, group))
+        shell.disconnect()
 
     def _verify_total_keys(self, server, loaded_keys):
         rest = RestConnection(server)
