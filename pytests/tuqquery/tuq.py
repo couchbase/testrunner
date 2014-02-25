@@ -1707,7 +1707,7 @@ class QueryTests(BaseTestCase):
                       ("test.test[0]", "missing")]
         for bucket in self.buckets:
             for name_item, type_item in types_list:
-                self.query = 'SELECT TYPE(%s) as type_output FROM %s' % (
+                self.query = 'SELECT TYPE_NAME(%s) as type_output FROM %s' % (
                                                         name_item, bucket.name)
                 actual_result = self.run_cbq_query()
                 for doc in actual_result['resultset']:
@@ -1717,12 +1717,12 @@ class QueryTests(BaseTestCase):
                 self.log.info("Type for %s(%s) is checked." % (name_item, type_item))
 
     def test_check_types(self):
-        types_list = [("name", "ISSTR", True), ("skills[0]", "ISSTR", True),
-                      ("test_rate", "ISSTR", False), ("VMs", "ISSTR", False),
+        types_list = [("name", "IS_STR", True), ("skills[0]", "IS_STR", True),
+                      ("test_rate", "IS_STR", False), ("VMs", "IS_STR", False),
                       ("some_wrong_key", "ISSTR", None),
-                      ("false", "ISBOOL", True), ("join_day", "ISBOOL", False),
-                      ("VMs", "ISARRAY", True), ("VMs[0]", "ISARRAY", False),
-                      ("skills[0]", "ISARRAY", False), ("skills", "ISARRAY", True)]
+                      ("false", "IS_BOOL", True), ("join_day", "IS_BOOL", False),
+                      ("VMs", "IS_ARRAY", True), ("VMs[0]", "IS_ARRAY", False),
+                      ("skills[0]", "IS_ARRAY", False), ("skills", "IS_ARRAY", True)]
         for bucket in self.buckets:
             for name_item, fn, expected_result in types_list:
                 self.query = 'SELECT %s(%s) as type_output FROM %s' % (
@@ -1737,9 +1737,9 @@ class QueryTests(BaseTestCase):
     def test_types_in_satisfy(self):
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
-                         "(EVERY vm IN %s.VMs SATISFIES ISOBJ(vm) END) AND" % (
+                         "(EVERY vm IN %s.VMs SATISFIES IS_OBJ(vm) END) AND" % (
                                                             bucket.name) +\
-                         " ISSTR(email) ORDER BY name"
+                         " IS_STR(email) ORDER BY name"
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
             expected_result = [{"name" : doc['name']}
@@ -1749,7 +1749,7 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result['resultset'], expected_result)
 
     def test_to_num(self):
-        self.query = 'SELECT tonum("12.12") - tonum("0.12") as num'
+        self.query = 'SELECT to_num("12.12") - to_num("0.12") as num'
         actual_result = self.run_cbq_query()
         self.assertTrue(actual_result['resultset'][0]['num'] == 12,
                         "Expected: 12. Actual: %s" % (actual_result['resultset']))
@@ -1757,7 +1757,7 @@ class QueryTests(BaseTestCase):
 
     def test_to_str(self):
         for bucket in self.buckets:
-            self.query = "SELECT TOSTR(join_mo) month FROM %s" % bucket.name
+            self.query = "SELECT TO_STR(join_mo) month FROM %s" % bucket.name
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['resultset'])
             full_list = self._generate_full_docs_list(self.gens_load)
@@ -1766,7 +1766,7 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result, expected_result)
 
     def test_to_bool(self):
-        self.query = 'SELECT tobool("true") as boo'
+        self.query = 'SELECT to_bool("true") as boo'
         actual_result = self.run_cbq_query()
         self.assertTrue(actual_result['resultset'][0]['boo'] == True,
                         "Expected: true. Actual: %s" % (actual_result['resultset']))
@@ -1774,7 +1774,7 @@ class QueryTests(BaseTestCase):
 
     def test_to_array(self):
         for bucket in self.buckets:
-            self.query = "SELECT job_title, toarray(name) as names" +\
+            self.query = "SELECT job_title, to_array(name) as names" +\
             " FROM %s" % (bucket.name)
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_list = self.run_cbq_query()
