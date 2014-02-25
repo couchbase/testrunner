@@ -1015,8 +1015,8 @@ class RestConnection(object):
                 if same_progress_count > 50:
                     log.error("apparently rebalance progress code in infinite loop: {0}".format(progress))
                     return False
-            #sleep for 2 seconds
-            time.sleep(2)
+            #sleep for 5 seconds
+            time.sleep(5)
         if progress < 0:
             log.error("rebalance progress code : {0}".format(progress))
             return False
