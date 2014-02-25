@@ -586,7 +586,7 @@ class XDCRBaseTest(unittest.TestCase):
     Returns:
             merged kvs, that we expect to get on both clusters
     """
-    def merge_keys(self, kv_store_first, kv_store_second, kvs_num=1):
+    def __merge_keys(self, kv_store_first, kv_store_second, kvs_num=1):
         valid_keys_first, deleted_keys_first = kv_store_first[kvs_num].key_set()
         valid_keys_second, deleted_keys_second = kv_store_second[kvs_num].key_set()
 
@@ -621,28 +621,30 @@ class XDCRBaseTest(unittest.TestCase):
             # return merged kvs, that we expect to get on both clusters
         return kv_store_first[kvs_num]
 
-    def merge_buckets(self, src_master, dest_master, bidirection=True):
-        self.log.info("merge buckets {0}->{1}, bidirection:{2}".format(src_master.ip, dest_master.ip, bidirection))
-        if self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_CHAIN:
-            self.do_merge_buckets(src_master, dest_master, bidirection)
-        elif self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_STAR:
-            for i in range(1, len(self._clusters_dic)):
-                dest_cluster = self._clusters_dic[i]
-                self.do_merge_buckets(src_master, dest_cluster[0], bidirection)
-
-    def do_merge_buckets(self, src_master, dest_master, bidirection):
-        if self._expires and not self._wait_for_expiration:
-            self.sleep(self._expires, "Waiting for expiration of updated items")
+    def __do_merge_buckets(self, src_master, dest_master, bidirection):
         src_buckets = self._get_cluster_buckets(src_master)
         dest_buckets = self._get_cluster_buckets(dest_master)
         for src_bucket in src_buckets:
             for dest_bucket in dest_buckets:
                 if src_bucket.name == dest_bucket.name:
                     if bidirection:
-                        src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                        src_bucket.kvs[1] = self.__merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
                     dest_bucket.kvs[1] = src_bucket.kvs[1]
 
+    def merge_buckets(self, src_master, dest_master, bidirection=True):
+        self.log.info("merge buckets {0}->{1}, bidirection:{2}".format(src_master.ip, dest_master.ip, bidirection))
+        # Wait for expiration if not already done
+        if self._expires and not self._wait_for_expiration:
+            self.sleep(self._expires, "Waiting for expiration of updated items")
+        if self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_CHAIN:
+            self.__do_merge_buckets(src_master, dest_master, bidirection)
+        elif self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_STAR:
+            for i in range(1, len(self._clusters_dic)):
+                dest_cluster = self._clusters_dic[i]
+                self.__do_merge_buckets(src_master, dest_cluster[0], bidirection)
+
     def do_merge_bucket(self, src_master, dest_master, bidirection, bucket):
+        # Wait for expiration if not already done
         if self._expires and not self._wait_for_expiration:
             self.sleep(self._expires, "Waiting for expiration of updated items")
         src_buckets = self._get_cluster_buckets(src_master)
@@ -651,7 +653,7 @@ class XDCRBaseTest(unittest.TestCase):
             for dest_bucket in dest_buckets:
                 if src_bucket.name == dest_bucket.name and bucket.name == src_bucket.name:
                     if bidirection:
-                        src_bucket.kvs[1] = self.merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                        src_bucket.kvs[1] = self.__merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
                     dest_bucket.kvs[1] = src_bucket.kvs[1]
 
     # CBQE-1695 Wait for replication_changes_left (outbound mutations) to be 0.
