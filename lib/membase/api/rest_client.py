@@ -804,7 +804,6 @@ class RestConnection(object):
             raise Exception("remoteCluster API 'remove cluster' failed")
         return json_parsed
 
-
     #replicationType:continuous toBucket:default toCluster:two fromBucket:default
     def start_replication(self, replicationType, fromBucket, toCluster, rep_type="xmem", toBucket=None):
         toBucket = toBucket or fromBucket
@@ -827,6 +826,36 @@ class RestConnection(object):
         else:
             log.error("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
             raise Exception("create replication failed : status:{0},content:{1}".format(status, content))
+
+    def _pause_replication(self, uri):
+        log.info("Pausing replication uri:{0}".format(uri))
+        api = self.baseUrl + uri
+        param_map = {'pauseRequested': "true"}
+        params = urllib.urlencode(param_map)
+        status, content, _ = self._http_request(api, 'POST', params)
+        if not status:
+            log.error("Replicaiton is not paused as requested: status:{0},content:{1}".format(status, content))
+            raise Exception("Replicaiton is not pause as requested: status:{0},content:{1}".format(status, content))
+
+    def pause_all_replications(self):
+        replications = self.get_replications()
+        for replication in replications:
+            self._pause_replication(replication["settingsURI"])
+
+    def _resume_replication(self, uri):
+        log.info("Resume replication uri:{0}".format(uri))
+        api = self.baseUrl + uri
+        param_map = {'pauseRequested': "false"}
+        params = urllib.urlencode(param_map)
+        status, content, _ = self._http_request(api, 'POST', params)
+        if not status:
+            log.error("Replicaiton is not resumed as requested: status:{0},content:{1}".format(status, content))
+            raise Exception("Replicaiton is not resumed as requested: status:{0},content:{1}".format(status, content))
+
+    def resume_all_replication(self):
+        replications = self.get_replications()
+        for replication in replications:
+            self._resume_replication(replication["settingsURI"])
 
     def get_replications(self):
         replications = []
