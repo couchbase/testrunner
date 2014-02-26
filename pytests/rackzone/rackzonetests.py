@@ -238,12 +238,15 @@ class RackzoneTests(RackzoneBaseTest):
     def _verify_replica_distribution_in_zones(self, nodes, commmand, saslPassword = "" ):
         shell = RemoteMachineShellConnection(self.servers[0])
         type = shell.extract_remote_info().distribution_type
+        cbstat_command = ""
         if type.lower() == 'linux':
             cbstat_command = "%scbstats" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         elif type.lower() == 'windows':
             cbstat_command = "%scbstats.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
         elif type.lower() == 'mac':
             cbstat_command = "%scbstats" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+        else:
+            raise Exception("Not support OS")
         command = "tap"
         saslPassword = ''
         for group in nodes:
