@@ -13,6 +13,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
+from memcached.helper.data_helper import MemcachedClientHelper
 
 
 class NavigationTest(BaseUITestCase):
@@ -63,6 +64,30 @@ class BucketTests(BaseUITestCase):
                             total_views_st, view_st))
         self.log.info("Stat 'views total disk size' and 'disk size' are %s"
                       " as expected" % total_views_st)
+
+    def test_bucket_stats_connections(self):
+        self.bucket = Bucket()
+        NavigationHelper(self).navigate('Data Buckets')
+        BucketHelper(self).create(self.bucket)
+
+        BucketHelper(self).open_stats(self.bucket)
+        conn_st = BucketHelper(self).get_stat("connections")
+        conn_per_sec_st = BucketHelper(self).get_stat("port 8091 reqs/sec")
+        idle_st = BucketHelper(self).get_stat("idle streaming requests")
+        wakeups_st = BucketHelper(self).get_stat("streaming wakeups/sec")
+
+        client = MemcachedClientHelper.direct_client(self.servers[0], self.bucket.name)
+        conn_stat = int(client.stats()["curr_connections"])
+        self.assertEquals(int(conn_st), conn_stat - 1,
+                          "Stats should be equal, but connections on UI is %s"
+                          " and curr_connections is %s" % (
+                            conn_st, conn_stat))
+        self.assertFalse(int(conn_per_sec_st) == 0,
+                        "At least one connection per second is present, and port 8091 reqs/sec is  0")
+        self.assertFalse(int(idle_st) == 0,
+                        "At least one idle streaming requests is present, UI shows 0")
+        self.assertTrue(wakeups_st, "There is no wakup stat on UI")
+        self.log.info("Stats are verified")
 
 class InitializeTest(BaseUITestCase):
     def setUp(self):
