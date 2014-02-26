@@ -1494,7 +1494,7 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result, expected_result)
 
-            self.query = "select name from %s where job_title in ['Sales', 'Support']" % (bucket.name)
+            self.query = "select name from %s where job_title not in ['Sales', 'Support']" % (bucket.name)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['resultset'], key=lambda doc: (
                                                                        doc['name']))
