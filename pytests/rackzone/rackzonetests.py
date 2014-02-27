@@ -250,11 +250,11 @@ class RackzoneTests(RackzoneBaseTest):
         saslPassword = ''
         for group in nodes:
             for node in nodes[group]:
-                if not type.lower() == 'windows':
+                if not info.type.lower() == 'windows':
                     commands = "%s %s:11210 %s -b %s -p \"%s\" |grep :vb_filter: |  awk '{print $1}' \
                             | xargs | sed 's/eq_tapq:replication_ns_1@//g'  | sed 's/:vb_filter://g' \
                             " % (cbstat_command, node, command,"default", saslPassword)
-                elif type.lower() == 'windows':
+                elif info.type.lower() == 'windows':
                     """ standalone gawk.exe should be copy to ../ICW/bin for command below to work.
                         Ask IT to do this if you don't know how """
                     commands = "%s %s:11210 %s -b %s -p \"%s\" | grep.exe :vb_filter: | gawk.exe '{print $1}' \
