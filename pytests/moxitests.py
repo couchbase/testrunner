@@ -75,6 +75,18 @@ class MoxiTests(BaseTestCase):
             task.result()
         self.verify_cluster_stats(self.servers[:self.nodes_init])
 
+    def test_debug_symbols(self):
+        shell = RemoteMachineShellConnection(self.moxi_server)
+        try:
+            command = 'file /opt/moxi/bin/moxi.actual'
+            output, error = shell.execute_command_raw(command)
+            shell.log_command_output(output, error)
+            self.assertTrue(''.join(output).find('dynamically linked') != -1 and\
+                            ''.join(output).find('not stripped') != -1,
+                            "MB-9842 Debug symbols are not included")
+        finally:
+            shell.disconnect()
+
     def run_ops(self):
         tasks = []
         if not self.cluster_ops:
