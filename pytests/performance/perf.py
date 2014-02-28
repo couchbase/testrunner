@@ -4,6 +4,7 @@ import threading
 import os
 import subprocess
 import pprint
+import logging
 
 from TestInput import TestInputSingleton
 from lib import logger
@@ -32,6 +33,13 @@ class PerfBase(unittest.TestCase):
     def setUpBase0(self):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
+        if self.input.param("log_level", None):
+            self.log.setLevel(level=0)
+            for hd in self.log.handlers:
+                if str(hd.__class__).find('FileHandler') != -1:
+                    hd.setLevel(level=logging.DEBUG)
+                else:
+                    hd.setLevel(level=getattr(logging, self.input.param("log_level", None)))
         self.vbucket_count = PerfDefaults.vbuckets
         self.sc = None
         if self.parami("tear_down_on_setup",
