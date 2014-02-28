@@ -181,6 +181,26 @@ class RestHelper(object):
             except Exception, ex:
                 log.error('unable to check index on server %s because of %s' % (server.ip, str(ex)))
 
+    def _get_vbuckets(self, servers, bucket_name='default'):
+        vbuckets_servers = {}
+        for server in servers:
+            buckets = RestConnection(server).get_buckets()
+            if bucket_name:
+                bucket_to_check = [bucket for bucket in buckets
+                               if bucket.name == bucket_name][0]
+            else:
+                bucket_to_check = [bucket for bucket in buckets][0]
+            vbuckets_servers[server] = {}
+            vbs_active = [vb.id for vb in bucket_to_check.vbuckets
+                           if vb.master.startswith(str(server.ip))]
+            vbs_replica = []
+            for replica_num in xrange(0, bucket_to_check.numReplicas):
+                vbs_replica.extend([vb.id for vb in bucket_to_check.vbuckets
+                                    if vb.replica[replica_num].startswith(str(server.ip))])
+            vbuckets_servers[server]['active_vb'] = vbs_active
+            vbuckets_servers[server]['replica_vb'] = vbs_replica
+        return vbuckets_servers
+
 class RestConnection(object):
 
     def __new__(self, serverInfo={}):

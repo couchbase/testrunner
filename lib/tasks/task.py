@@ -262,9 +262,14 @@ class RebalanceTask(Task):
         self.retry_get_progress = 0
         self.use_hostnames = use_hostnames
         self.previous_progress = 0
+        self.old_vbuckets= {}
 
     def execute(self, task_manager):
         try:
+            if len(self.to_add) == len(self.to_remove):
+                self.log.info("This is swap rebalance and we will monitor vbuckets shuffling")
+                non_swap_servers = set(self.servers) - set(self.to_remove)
+                self.old_vbuckets = RestHelper(self.rest)._get_vbuckets(non_swap_servers, None)
             self.add_nodes(task_manager)
             self.start_rebalance(task_manager)
             self.state = CHECKING
@@ -319,6 +324,20 @@ class RebalanceTask(Task):
     def check(self, task_manager):
         progress = -100
         try:
+            if self.old_vbuckets:
+                non_swap_servers = set(self.servers) - set(self.to_remove)
+                new_vbuckets = RestHelper(self.rest)._get_vbuckets(non_swap_servers, None)
+                for vb_type in ["active_vb", "replica_vb"]:
+                    for srv in non_swap_servers:
+                        if not( len(self.old_vbuckets[srv][vb_type]) + 1 >=  len(new_vbuckets[srv][vb_type]) and\
+                           len(self.old_vbuckets[srv][vb_type]) - 1 <=  len(new_vbuckets[srv][vb_type])):
+                            msg = "Vbuckets were suffled! Expected %s for %s" % (vb_type, srv.ip) +\
+                                " are %s. And now are %s" % (
+                                len(self.old_vbuckets[srv][vb_type]),
+                                len(new_vbuckets[srv][vb_type]))
+                            self.log.error(msg)
+                            self.log.error("Old vbuckets: %s, new vbuckets %s" % (self.old_vbuckets, new_vbuckets))
+                            raise Exception(msg)
             progress = self.rest._rebalance_progress()
             # if ServerUnavailableException
             if progress == -100:

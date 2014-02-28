@@ -501,7 +501,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
         self.swap_num_servers = self.input.param('swap_num_servers', 1)
         old_servers = self.servers[:self.nodes_init]
-        new_vb_nums = self._get_vbuckets(old_servers, bucket_name=self.buckets[0].name)
+        new_vb_nums = RestHelper(RestConnection(self.master))._get_vbuckets(old_servers, bucket_name=self.buckets[0].name)
         new_servers = []
         for i in range(self.nodes_init / self.swap_num_servers):
             old_vb_nums = copy.deepcopy(new_vb_nums)
@@ -516,7 +516,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             old_servers = self.servers[((i + 1) * self.swap_num_servers):self.nodes_init]
             new_servers = new_servers + servers_in
             servers = old_servers + new_servers
-            new_vb_nums = self._get_vbuckets(servers, bucket_name=self.buckets[0].name)
+            new_vb_nums = RestHelper(RestConnection(self.master))._get_vbuckets(servers, bucket_name=self.buckets[0].name)
             self._verify_vbucket_nums_for_swap(old_vb_nums, new_vb_nums)
             status, content = ClusterOperationHelper.find_orchestrator(servers[0])
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
