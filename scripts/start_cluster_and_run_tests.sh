@@ -44,6 +44,7 @@ else
     conf=" -t $2"
 fi
 if [[ -n $3 ]] && [[ $3 == 0 ]] ; then
+    quiet=true
     test_params=" -p log_level=CRITICAL"
 else
     test_params=""
@@ -63,8 +64,14 @@ done < $ini
 wd=$(pwd)
 pushd .
 cd ../ns_server
-make dataclean
-make
+if [ "${quiet}" = "true" ]
+then
+   make dataclean >> make.out 2>&1
+   make >> make.out 2>&1
+else
+   make dataclean
+   make
+fi
 COUCHBASE_NUM_VBUCKETS=64 python ./cluster_run --nodes=$servers_count &> $wd/cluster_run.log &
 pid=$!
 popd
