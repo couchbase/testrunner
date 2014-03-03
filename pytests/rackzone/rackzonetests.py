@@ -8,6 +8,7 @@ from rackzone.rackzone_base import RackzoneBaseTest
 from memcached.helper.data_helper import  MemcachedClientHelper
 from membase.api.rest_client import RestConnection, Bucket
 from membase.helper.rebalance_helper import RebalanceHelper
+from membase.api.exception import RebalanceFailedException
 from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
