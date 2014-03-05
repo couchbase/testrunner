@@ -244,12 +244,12 @@ class SpatialHelper:
     # Returns the keys of the deleted documents
     # If you try to delete a document that doesn't exists, just skip it
     def delete_docs(self, num_of_docs, prefix):
-        moxi = MemcachedClientHelper.proxy_client(self.master, self.bucket)
+        smart = VBucketAwareMemcached(RestConnection(self.master), self.bucket)
         doc_names = []
         for i in range(0, num_of_docs):
             key = "{0}-{1}".format(prefix, i)
             try:
-                moxi.delete(key)
+                smart.delete(key)
             except MemcachedError as e:
                 # Don't care if we try to delete a document that doesn't exist
                 if e.status == memcacheConstants.ERR_NOT_FOUND:
