@@ -872,15 +872,28 @@ class CreateDeleteViewTests(BaseTestCase):
             shell = RemoteMachineShellConnection(server)
             if self.boot_op == "warmup":
                 shell.set_environment_variable(None, None)
+                shell.disconnect()
             elif self.boot_op == "reboot":
                 if shell.extract_remote_info().type.lower() == 'windows':
                     o, r = shell.execute_command("shutdown -r -f -t 0")
+                    shell.log_command_output(o, r)
+                    shell.disconnect()
+                    self.log.info("Node {0} is being stopped".format(server.ip))
                 elif shell.extract_remote_info().type.lower() == 'linux':
                     o, r = shell.execute_command("reboot")
-                shell.log_command_output(o, r)
-            self.log.info("Node {0} is being stopped".format(server.ip))
+                    shell.log_command_output(o, r)
+                    shell.disconnect()
+                    self.log.info("Node {0} is being stopped".format(server.ip))
+
+                    time.sleep(self.wait_timeout * 2)
+                    shell = RemoteMachineShellConnection(server)
+                    command = "/sbin/iptables -F"
+                    o, r = shell.execute_command(command)
+                    shell.log_command_output(o, r)
+                    shell.disconnect()
+                    self.log.info("Node {0} backup".format(server.ip))
         finally:
-            shell.disconnect()
+            self.log.info("Warmed-up server .. ".format(server.ip))
 
     def _verify_data(self, server):
         query = {"stale" : "false", "full_set" : "true"}
