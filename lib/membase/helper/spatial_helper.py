@@ -22,8 +22,8 @@ class SpatialHelper:
     def __init__(self, testcase, bucket):
         self.testcase = testcase
         self.bucket = bucket
-        self.servers = TestInputSingleton.input.servers
         self.input = TestInputSingleton.input
+        self.servers = self.input.servers
         self.master = self.servers[0]
         self.rest = RestConnection(self.master)
         self.log = logger.Logger.get_logger()
@@ -239,7 +239,7 @@ class SpatialHelper:
         self.log.info("num results:  {0}".format(len(results["rows"])))
         self.testcase.fail(
             "unable to get spatial view for {0} after {1} tries"
-            .format(view_name, num_tries))
+            .format(view.name, num_tries))
 
     # Returns the keys of the deleted documents
     # If you try to delete a document that doesn't exists, just skip it
