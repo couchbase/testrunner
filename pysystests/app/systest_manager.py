@@ -504,6 +504,10 @@ def parseClusterReq(cluster):
 
 
     rebalance_required = True
+    if 'group' in cluster:
+        clusterMsg['group'] = cluster['group']
+    else:
+        clusterMsg['group'] = "Group 1"
 
     if 'add' in cluster:
         clusterMsg['rebalance_in'] = cluster['add']
@@ -537,9 +541,6 @@ def parseClusterReq(cluster):
     if clusterMsg['soft_restart'] != '' or clusterMsg['hard_restart'] != '' \
         or clusterMsg['only_failover'] == True:
         rebalance_required = False
-
-    if 'group' in cluster:
-        clusterMsg['group'] = cluster['group']
 
     clusterMsg['rebalance_required'] = rebalance_required
     return clusterMsg
