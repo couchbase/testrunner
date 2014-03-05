@@ -164,11 +164,11 @@ class SpatialHelper:
                 doc['geometry']['coordinates'][1] <= params['bbox'][3] and\
                 doc['geometry']['coordinates'][1] >= params['bbox'][1]:
                     if value:
-                        expected_docs.append({'key' : doc['name'], 'value' : doc[value]})
+                        expected_docs.append({'key' : doc['name'], 'value' : doc})
                     else:
                         expected_docs.append(doc)
         else:
-            expected_docs = [{'key' : doc['name'], 'value' : doc[value]} for doc in docs_inserted]
+            expected_docs = [{'key' : doc['name'], 'value' : doc} for doc in docs_inserted]
         if 'skip' in params:
             if int(params['skip']) > len(expected_docs):
                 expected_docs = expected_docs[int(params['skip']):]
@@ -183,10 +183,10 @@ class SpatialHelper:
         self.log.info("Expected {0} items, current {1}".format(
                                    len(expected), len(current)))
         for key in expected:
-            if not key['name'] in [doc['id'] for doc in current]:
+            if not key['key'] in [doc['id'] for doc in current]:
                 missing_docs.append(key)
         for key in current:
-            if not key['id'] in [doc['name'] for doc in expected]:
+            if not key['id'] in [doc['key'] for doc in expected]:
                 extra_docs.append(key)
         if missing_docs or extra_docs:
             self.testcase.fail("Extra docs: {0},\n Missing docs: {1}".format(
