@@ -398,13 +398,17 @@ class StatsWaitTask(Task):
                 client = self._get_connection(server)
                 stats = client.stats(self.param)
                 if not stats.has_key(self.stat):
-                    self.state = FINISHED
-                    self.set_exception(Exception("Stat {0} not found".format(self.stat)))
-                    return
-                if stats[self.stat].isdigit():
-                    stat_result += long(stats[self.stat])
+                    stats = RestConnection(server).fetch_bucket_stats(self.bucket)['op']['samples']
+                    if not stats.has_key(self.stat):
+                        self.state = FINISHED
+                        self.set_exception(Exception("Stat {0} not found".format(self.stat)))
+                        return
+                    stat_result += long(stats[self.stat][-1])
                 else:
-                    stat_result = stats[self.stat]
+                    if stats[self.stat].isdigit():
+                        stat_result += long(stats[self.stat])
+                    else:
+                        stat_result = stats[self.stat]
             except EOFError as ex:
                 self.state = FINISHED
                 self.set_exception(ex)
