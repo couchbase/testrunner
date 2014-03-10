@@ -2404,12 +2404,11 @@ class GenerateExpectedViewResultsTask(Task):
 
 
         if inclusive_end_false:
-            if endkey_set and not endkey_docid_set:
+            if endkey_set and endkey_docid_set:
                 # remove all keys that match endkey
+                expected_rows = [row for row in expected_rows if row['id'] < query['endkey_docid']  or row['key'] < end_key]
+            elif endkey_set:
                 expected_rows = [row for row in expected_rows if row['key'] != end_key]
-            else:
-                # remove last key
-                expected_rows = expected_rows[:-1]
 
         if self.is_reduced:
             groups = {}

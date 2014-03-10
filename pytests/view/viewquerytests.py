@@ -2249,8 +2249,8 @@ class EmployeeDataSet:
                 # based on dataset
                 startkey = "[2008,2,20]"
                 endkey = "[2008,7,1]"
-                startkey_docid = "%s1" % self.views[0]
-                endkey_docid = "%sc" % self.views[0]
+                startkey_docid = "%s1" % self.views[0].name
+                endkey_docid = "%sc" % self.views[0].name
 
                 if 'descending' in extra_params_dict and \
                     extra_params_dict['descending'] == 'true':
