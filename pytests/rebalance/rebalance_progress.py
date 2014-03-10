@@ -41,7 +41,7 @@ class RebalanceProgressTests(RebalanceBaseTest):
             #sum of sending and receiving vbuckets should coincide
             self._check_vb_sums(servers_init, servers_in, new_stats)
             previous_stats = copy.deepcopy(new_stats)
-            time.sleep(1)
+            time.sleep(10)
         rebalance.result()
 
     def test_progress_rebalance_out(self):
@@ -148,28 +148,28 @@ class RebalanceProgressTests(RebalanceBaseTest):
                      docs_total=None, docs_transf=None,
                      active_vb=None, replica_vb=None):
         self.assertTrue(new_stats["buckets_count"] == len(self.buckets),
-                        "Expected buckets %s. Actual stat %s" %(
+                        "Expected buckets %s. Actual stat %s" % (
                                 len(self.buckets), new_stats))
         for server in servers:
             current_stat = new_stats[server.ip][type]
-            previous_stat =  previous_stats[server.ip][type]
+            previous_stat = previous_stats[server.ip][type]
             if new_stats["bucket"] != previous_stats["bucket"]:
                 self.assertTrue(current_stat['activeVBucketsLeft'] >= previous_stat['activeVBucketsLeft'],
-                            "activeVBucketsLeft for node %s increased! Previous stat %s. Actual: %s" %(
+                            "activeVBucketsLeft for node %s increased! Previous stat %s. Actual: %s" % (
                                   server.ip, current_stat, previous_stat))
                 self.assertTrue(current_stat['replicaVBucketsLeft'] >= previous_stat['replicaVBucketsLeft'],
-                                "replicaVBucketsLeft for node %s increased! Previous stat %s. Actual: %s" %(
+                                "replicaVBucketsLeft for node %s increased! Previous stat %s. Actual: %s" % (
                                       server.ip, current_stat, previous_stat))
             else:
                 self.assertTrue(current_stat['activeVBucketsLeft'] <= previous_stat['activeVBucketsLeft'],
-                                "activeVBucketsLeft for node %s increased! Previous stat %s. Actual: %s" %(
+                                "activeVBucketsLeft for node %s increased! Previous stat %s. Actual: %s" % (
                                       server.ip, current_stat, previous_stat))
                 self.assertTrue(current_stat['replicaVBucketsLeft'] <= previous_stat['replicaVBucketsLeft'],
-                                "replicaVBucketsLeft for node %s increased! Previous stat %s. Actual: %s" %(
+                                "replicaVBucketsLeft for node %s increased! Previous stat %s. Actual: %s" % (
                                       server.ip, current_stat, previous_stat))
                 try:
                     if current_stat['docsTotal'] != previous_stat['docsTotal']:
-                        self.log.warn("docsTotal for node %s changed! Previous stat %s. Actual: %s" %(
+                        self.log.warn("docsTotal for node %s changed! Previous stat %s. Actual: %s" % (
                                           server.ip, current_stat, previous_stat))
                 except Exception, ex:
                     if previous_stat['docsTotal'] != 0 and current_stat['docsTotal'] == 0:
@@ -178,7 +178,7 @@ class RebalanceProgressTests(RebalanceBaseTest):
                         self.rest.diag_eval(command)
                     raise ex
                 self.assertTrue(current_stat['docsTransferred'] >= previous_stat['docsTransferred'],
-                                "docsTransferred for node %s decreased! Previous stat %s. Actual: %s" %(
+                                "docsTransferred for node %s decreased! Previous stat %s. Actual: %s" % (
                                       server.ip, current_stat, previous_stat))
             if docs_total is not None:
                 self.assertTrue(current_stat['docsTotal'] == docs_total,
