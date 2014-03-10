@@ -1574,10 +1574,14 @@ class RestConnection(object):
         log.info('Update internal setting {0}={1}'.format(param, value))
         return status
 
-    # Returns a boolean value on whether replication
-    def is_replication_paused(self, src_bucket_name, dest_bucket_name):
-        return self.get_xdcr_per_replication_setting(src_bucket_name,
-                                dest_bucket_name, 'pauseRequested')
+    def get_replication_for_buckets(self, src_bucket_name, dest_bucket_name):
+        replications = self.get_replications()
+        for replication in replications:
+            if src_bucket_name in replication['source'] and \
+                replication['target'].endswith(dest_bucket_name):
+                return replication
+        raise Exception("Replication with Src bucket: {0} and Target bucket: {1} not found".
+                        format(src_bucket_name, dest_bucket_name))
 
     """ By default, these are the global replication settings -
         { optimisticReplicationThreshold:256,
@@ -1586,53 +1590,46 @@ class RestConnection(object):
         docBatchSizeKb":2048,
         checkpointInterval":1800,
         maxConcurrentReps":32}
-        You can override these using set_xdcr_per_replication_settings()
+        You can override these using set_xdcr_param()
     """
-    def set_xdcr_per_replication_setting(self, src_bucket_name,
+    def set_xdcr_param(self, src_bucket_name,
                                          dest_bucket_name, param, value):
-        replications = self.get_replications()
-        for replication in replications:
-            if src_bucket_name in replication['source'] and \
-                replication['target'].endswith(dest_bucket_name):
-                api = self.baseUrl + replication['settingsURI'][1:]
-                value = str(value).lower()
-                params = urllib.urlencode({param : value})
-                status, content, header = self._http_request(api, "POST", params)
-                if not status:
-                    log.error("Unable to set replication setting {0}={1} on bucket {2} on node {3}".
-                             format(param, value, src_bucket_name, self.ip))
-                else:
-                    log.info('Updated replication setting {0}={1} on bucket {2} on node {3}'.
-                             format(param, value, src_bucket_name, self.ip))
-                return status
-        log.error("No replication found between {0} and {1}".format(src_bucket_name, dest_bucket_name))
-        return None
+        replication = self.get_replication_for_buckets(src_bucket_name, dest_bucket_name)
+        api = self.baseUrl + replication['settingsURI']
+        value = str(value).lower()
+        params = urllib.urlencode({param: value})
+        status, _, _ = self._http_request(api, "POST", params)
+        if not status:
+            raise Exception("Unable to set replication setting {0}={1} on bucket {2} on node {3}".
+                            format(param, value, src_bucket_name, self.ip))
 
     # Gets per-replication setting value
-    def get_xdcr_per_replication_setting(self, src_bucket_name,
+    def get_xdcr_param(self, src_bucket_name,
                                     dest_bucket_name, param):
-        replications = self.get_replications()
-        for replication in replications:
-            if src_bucket_name in replication['source'] and \
-                replication['target'].endswith(dest_bucket_name) :
-                api = self.baseUrl + replication['settingsURI'][1:]
-                status, content, header = self._http_request(api)
-                json_parsed = json.loads(content)
-                # when per-replication settings match global(internal) settings,
-                # the param is not returned by rest API
-                # in such cases, return internalSetting value for the param
-                if param not in json_parsed:
-                    if param == 'pauseRequested':
-                        return False
-                    else:
-                        log.info("{0} value is same as the global value, fetching global value...".
-                                     format(param))
-                        return self.get_internalSettings('xdcr'+param[0].upper()+param[1:])
-                else:
-                    return json_parsed[param]
-        log.error("No replication found between {0} and {1}".format(src_bucket_name, dest_bucket_name))
-        return None
+        replication = self.get_replication_for_buckets(src_bucket_name, dest_bucket_name)
+        api = self.baseUrl + replication['settingsURI']
+        status, content, _ = self._http_request(api)
+        if not status:
+            raise Exception("Unable to get replication setting {0} on bucket {1} on node {2}".
+                      format(param, src_bucket_name, self.ip))
+        json_parsed = json.loads(content)
+        # when per-replication settings match global(internal) settings,
+        # the param is not returned by rest API
+        # in such cases, return internalSetting value for the param
+        try:
+            return json_parsed[param]
+        except KeyError:
+            if param == 'pauseRequested':
+                return False
+            else:
+                param = 'xdcr' + param[0].upper() + param[1:]
+                log.info("Trying to fetch xdcr param:{0} from global settings".
+                         format(param))
+                return self.get_internalSettings(param)
 
+    # Returns a boolean value on whether replication
+    def is_replication_paused(self, src_bucket_name, dest_bucket_name):
+        return self.get_xdcr_param(src_bucket_name, dest_bucket_name, 'pauseRequested')
 
     def set_reb_cons_view(self, disable):
         """Enable/disable consistent view for rebalance tasks"""

@@ -398,17 +398,13 @@ class StatsWaitTask(Task):
                 client = self._get_connection(server)
                 stats = client.stats(self.param)
                 if not stats.has_key(self.stat):
-                    stats = RestConnection(server).fetch_bucket_stats(self.bucket)['op']['samples']
-                    if not stats.has_key(self.stat):
-                        self.state = FINISHED
-                        self.set_exception(Exception("Stat {0} not found".format(self.stat)))
-                        return
-                    stat_result += long(stats[self.stat][-1])
+                    self.state = FINISHED
+                    self.set_exception(Exception("Stat {0} not found".format(self.stat)))
+                    return
+                if stats[self.stat].isdigit():
+                    stat_result += long(stats[self.stat])
                 else:
-                    if stats[self.stat].isdigit():
-                        stat_result += long(stats[self.stat])
-                    else:
-                        stat_result = stats[self.stat]
+                    stat_result = stats[self.stat]
             except EOFError as ex:
                 self.state = FINISHED
                 self.set_exception(ex)
@@ -454,6 +450,41 @@ class StatsWaitTask(Task):
             (cmp_type == StatsWaitTask.GREATER_THAN and a > b):
             return True
         return False
+
+
+class XdcrStatsWaitTask(StatsWaitTask):
+    def __init__(self, servers, bucket, param, stat, comparison, value):
+        StatsWaitTask.__init__(self, servers, bucket, param, stat, comparison, value)
+
+    def check(self, task_manager):
+        stat_result = 0
+        for server in self.servers:
+            try:
+                stats = RestConnection(server).fetch_bucket_stats(self.bucket)['op']['samples']
+                if self.stat not in stats:
+                    self.state = FINISHED
+                    self.set_exception(Exception("Stat {0} not found".format(self.stat)))
+                    return
+                try:
+                    stat_result += long(stats[self.stat][-1])
+                except ValueError:
+                    stat_result = stats[self.stat][-1]
+            except EOFError as ex:
+                self.state = FINISHED
+                self.set_exception(ex)
+                return
+        if not self._compare(self.comparison, str(stat_result), self.value):
+            self.log.warn("Not Ready: %s %s %s %s expected on %s, %s bucket" % (self.stat, stat_result,
+                      self.comparison, self.value, self._stringify_servers(), self.bucket))
+            task_manager.schedule(self, 5)
+            return
+        self.log.info("Saw %s %s %s %s expected on %s,%s bucket" % (self.stat, stat_result,
+                      self.comparison, self.value, self._stringify_servers(), self.bucket))
+
+        for server, conn in self.conns.items():
+            conn.close()
+        self.state = FINISHED
+        self.set_result(True)
 
 class GenericLoadingTask(Thread, Task):
     def __init__(self, server, bucket, kv_store):
@@ -1591,7 +1622,7 @@ class MonitorViewQueryResultsTask(Task):
                 str(ex).find('missing') != -1 or \
                 str(ex).find("Undefined set view") != -1:
                 self.log.error(
-                       "view_results not ready yet ddoc=%s , try again in 10 seconds..." % 
+                       "view_results not ready yet ddoc=%s , try again in 10 seconds..." %
                        self.design_doc_name)
                 task_manager.schedule(self, 10)
             elif str(ex).find('timeout') != -1:
@@ -1614,7 +1645,7 @@ class MonitorViewQueryResultsTask(Task):
                 task_manager.schedule(self)
             else:
                 self.log.error(
-                       "view_results not ready yet ddoc=%s , try again in 10 seconds..." % 
+                       "view_results not ready yet ddoc=%s , try again in 10 seconds..." %
                        self.design_doc_name)
                 task_manager.schedule(self, 10)
 
@@ -2075,7 +2106,7 @@ class ViewCompactionTask(Task):
                           format(self.design_doc_name,
                                  self.compaction_revision, self.precompacted_fragmentation))
             if self.precompacted_fragmentation == 0:
-                self.log.info("%s: There is nothing to compact, fragmentation is 0" % 
+                self.log.info("%s: There is nothing to compact, fragmentation is 0" %
                               self.design_doc_name)
                 self.set_result(False)
                 self.state = FINISHED

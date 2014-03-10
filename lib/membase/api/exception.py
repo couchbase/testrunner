@@ -170,3 +170,8 @@ class CBQError(Exception):
 class CBRecoveryFailedException(MembaseHttpException):
     def __init__(self, string=''):
         self._message = 'CBRecovery Failed: {0}'.format(string)
+
+
+class XDCRException(MembaseHttpException):
+    def __init__(self, string=''):
+        self._message = string

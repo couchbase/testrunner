@@ -193,6 +193,29 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
+    def async_wait_for_xdcr_stat(self, servers, bucket, param, stat, comparison, value):
+        """Asynchronously wait for stats
+
+        Waits for stats to match the criteria passed by the stats variable. See
+        couchbase.stats_tool.StatsCommon.build_stat_check(...) for a description of
+        the stats structure and how it can be built.
+
+        Parameters:
+            servers - The servers to get stats from. Specifying multiple servers will
+                cause the result from each server to be added together before
+                comparing. ([TestInputServer])
+            bucket - The name of the bucket (String)
+            param - The stats parameter to use. (String)
+            stat - The stat that we want to get the value from. (String)
+            comparison - How to compare the stat result to the value specified.
+            value - The value to compare to.
+
+        Returns:
+            RebalanceTask - A task future that is a handle to the scheduled task"""
+        _task = XdcrStatsWaitTask(servers, bucket, param, stat, comparison, value)
+        self.task_manager.schedule(_task)
+        return _task
+
     def create_default_bucket(self, server, size, replicas=1, timeout=600,
                               enable_replica_index=1, eviction_policy='valueOnly'):
         """Synchronously creates the default bucket
