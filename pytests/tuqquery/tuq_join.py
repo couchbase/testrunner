@@ -96,9 +96,9 @@ class JoinTests(QueryTests):
 
     def test_where_join_keys(self):
         for bucket in self.buckets:
-            self.query = "SELECT employee.name, employee.tasks_ids, new_project " +\
-            "FROM %s as employee %s JOIN default as new_project " % (bucket.name, self.type_join) +\
-            "KEYS employee.tasks_ids WHERE new_project.project == 'IT'"
+            self.query = "SELECT employee.name, employee.tasks_ids, new_project_full.project new_project " +\
+            "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
+            "KEYS employee.tasks_ids WHERE new_project_full.project == 'IT'"
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['resultset'])
             expected_result = self._generate_full_joined_docs_list(join_type=self.type_join)
