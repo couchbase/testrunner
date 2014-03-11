@@ -460,16 +460,10 @@ class XdcrStatsWaitTask(StatsWaitTask):
         stat_result = 0
         for server in self.servers:
             try:
-                stats = RestConnection(server).fetch_bucket_stats(self.bucket)['op']['samples']
-                if self.stat not in stats:
-                    self.state = FINISHED
-                    self.set_exception(Exception("Stat {0} not found".format(self.stat)))
-                    return
-                try:
-                    stat_result += long(stats[self.stat][-1])
-                except ValueError:
-                    stat_result = stats[self.stat][-1]
-            except EOFError as ex:
+                # just get the required value, don't fetch the big big structure of stats
+                stats_value = RestConnection(server).fetch_bucket_stats(self.bucket)['op']['samples'][self.stat][-1]
+                stat_result += long(stats_value)
+            except (EOFError, Exception)  as ex:
                 self.state = FINISHED
                 self.set_exception(ex)
                 return

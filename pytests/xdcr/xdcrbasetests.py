@@ -1363,6 +1363,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         and the validation is only on the bucket whose replication is paused
     """
     def post_resume_validations(self, master, src_bucket_name, dest_bucket_name):
+        tasks = []
         # if the validation is for source cluster
         if master == self.src_master:
             dest_nodes = self.dest_nodes
@@ -1375,44 +1376,48 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         if rest_conn.is_replication_paused(src_bucket_name, dest_bucket_name):
             raise XDCRException("Replication is not resumed for SrcBucket: {0}, Target Bucket: {1}".
                            format(src_bucket_name, dest_bucket_name))
-        # check - active_vbreps on source back to MaxConcurrentReps?
-        max_active_vbreps = rest_conn.get_xdcr_param(src_bucket_name,
-                                                     dest_bucket_name,
-                                                     'maxConcurrentReps')
-        self.validate_active_vbreps(src_nodes, src_bucket_name, max_active_vbreps)
 
-        # check - incoming ops on remote cluster > 0
-        self.validate_xdc_ops(src_nodes, dest_nodes, src_bucket_name, dest_bucket_name)
-
-    """ Validate the number of active replicators on src_nodes for any given replication """
-    def validate_active_vbreps(self, src_nodes, src_bucket_name, max_active_vbreps):
-        if self.get_xdcr_stat(src_nodes[0], src_bucket_name, 'replication_changes_left') == 0:
-            self.log.info("Replication is complete, skipping replication_active_vbreps validation on source cluster")
-            return True
-
-        #FIXME: Logic needs to be revised, seems error prone
-        waiting_vb_reps = self.get_xdcr_stat(src_nodes[0], src_bucket_name,
-                                             'replication_waiting_vbreps')
-        operator = ">"
-        value_to_check = 0
-        if waiting_vb_reps > max_active_vbreps:
-            operator = "=="
-            value_to_check = max_active_vbreps
-        task = self.cluster.async_wait_for_xdcr_stat(src_nodes,
+        if self.is_cluster_replicating(src_nodes, src_bucket_name):
+            # check active_vbreps on all source nodes
+            tasks = self.cluster.async_wait_for_xdcr_stat(src_nodes,
                                                      src_bucket_name, '',
-                                                     'replication_active_vbreps',
-                                                     operator,
-                                                     value_to_check)
-
-        task.result(self._timeout)
-
-    def validate_xdc_ops(self, src_nodes, dest_nodes, src_bucket_name, dest_bucket_name):
-        # does source first have data to replicate to remote cluster?
-        if self.get_xdcr_stat(src_nodes[0], src_bucket_name, 'replication_changes_left') == 0:
-            self.log.info("Replication is complete, skipping xdc_ops validation on remote cluster")
-            return True
-        # replication is on, verify stat
-        task = self.cluster.async_wait_for_xdcr_stat(dest_nodes,
+                                                     'replication_active_vbreps','>',0)
+            tasks.result(self._timeout)
+            # check incoming xdc_ops on remote nodes
+            tasks = self.cluster.async_wait_for_xdcr_stat(dest_nodes,
                                                      dest_bucket_name, '',
-                                                     'xdc_ops', '>', 0)
-        task.result(self._timeout)
+                                                     'xdc_ops','>',0)
+            tasks.result(self._timeout)
+        else:
+            self.log.info("Replication is complete on {0}, resume validation have been skipped".format(src_nodes[0].ip))
+        return True
+
+    """ Check replication_changes_left on every node, 3 times if 0 """
+    def is_cluster_replicating(self, src_nodes, src_bucket_name):
+        count = 0
+        for node in src_nodes:
+            while count < 3:
+                if self.get_xdcr_stat(node, src_bucket_name, 'replication_changes_left') == 0:
+                    count += 1
+                    continue
+                else:
+                    break
+            else:
+                return False
+        return True
+
+    """ Reboot node, wait till nodes are warmed up """
+    def reboot_node(self, node):
+        self.log.info("Rebooting node '{0}'....".format(node.ip))
+        shell = RemoteMachineShellConnection(node)
+        if shell.extract_remote_info().type.lower() == 'windows':
+            o, r = shell.execute_command("shutdown -r -f -t 0")
+        elif shell.extract_remote_info().type.lower() == 'linux':
+            o, r = shell.execute_command("reboot")
+        shell.log_command_output(o, r)
+        #wait for restart and warmup on all node
+        self.sleep(180)
+        # disable firewall on these nodes
+        self._disable_firewall(node)
+        # wait till node is ready after warmup
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self, wait_if_warmup=True)

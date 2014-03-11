@@ -3,7 +3,9 @@ from xdcrbasetests import XDCRReplicationBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
+from membase.api.exception import ServerUnavailableException, XDCRException
 from random import randrange
+from threading import Thread
 
 #Assumption that at least 2 nodes on every cluster
 #TODO fail the tests if this condition is not met
@@ -236,7 +238,6 @@ class bidirectional(XDCRReplicationBaseTest):
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
-        self.sleep(self._timeout)
 
         self.verify_results(verify_src=True)
 
@@ -522,3 +523,99 @@ class bidirectional(XDCRReplicationBaseTest):
         ClusterOperationHelper.wait_for_ns_servers_or_assert([reboot_node_src], self, wait_if_warmup=True)
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
         self.verify_results(verify_src=True)
+
+    # Test with pause and resume
+    def replication_with_pause_and_resume(self):
+        load_tasks=[]
+        threads=[]
+        count = 0
+        #get input params
+        consecutive_pause_resume = int(self._input.param("consecutive_pause_resume", 1))
+        delete_bucket = self._input.param("delete_bucket", None)
+        reboot = self._input.param("reboot", None)
+        pause_wait = int(self._input.param("pause_wait", 5))
+        rebalance_in = self._input.param("rebalance_in",None)
+        rebalance_out = self._input.param("rebalance_out",None)
+
+        try:
+            load_tasks = self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0)
+            if delete_bucket != None:
+                load_tasks+= self._async_load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
+
+            #are we doing consecutive pause/resume
+            while count < consecutive_pause_resume:
+                # pause all bidirectional replications
+                self.bidirectional_pause_all_replications(True)
+                if count < 1:
+                    # TODO: add all rebalance, failover, code here
+
+                    # delete all destination buckets and recreate them?
+                    if delete_bucket == 'destination':
+                        dest_buckets = self._get_cluster_buckets(self.dest_master)
+                        for bucket in dest_buckets:
+                            RestConnection(self.dest_master).delete_bucket(bucket.name)
+                    self._create_buckets(self.dest_nodes)
+                    # reboot nodes?
+                    if reboot == "dest_node":
+                       self.reboot_node(self.dest_nodes[len(self.dest_nodes) - 1])
+                    elif reboot == "dest_cluster":
+                        for node in self.dest_nodes:
+                            threads.append(Thread(target=self.reboot_node, args=(node,)))
+                        for thread in threads:
+                            thread.start()
+                        for thread in threads:
+                            thread.join()
+                self.sleep(pause_wait)
+                # resume all bidirectional replications
+                self.bidirectional_resume_all_replications(True)
+                count += 1
+            # we're done, wait for load ops to complete
+            self.log.info("Waiting for loading to complete...")
+            for load_task in load_tasks:
+                load_task.result()
+        except (XDCRException, ServerUnavailableException, ValueError, TypeError) as ex:
+            self.log.info("Expected Exception Caught - {0}".format(ex))
+        self._async_update_delete_data()
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+        self.verify_results(verify_src=True)
+
+    def bidirectional_pause_all_replications(self,verify):
+        # pause source -> dest
+        src_buckets = self._get_cluster_buckets(self.src_master)
+        dest_buckets = self._get_cluster_buckets(self.dest_master)
+        self.log.info("Pausing all replications from source -> dest")
+        for bucket in src_buckets:
+            src_bucket_name = dest_bucket_name = bucket.name
+            if not RestConnection(self.src_master).is_replication_paused(src_bucket_name, dest_bucket_name):
+                self.pause_replication(self.src_master, src_bucket_name, dest_bucket_name, verify)
+        # pause dest-> source
+        self.log.info("Pausing all replications from dest -> source")
+        for bucket in dest_buckets:
+            src_bucket_name = dest_bucket_name = bucket.name
+            try:
+                if not RestConnection(self.dest_master).is_replication_paused(dest_bucket_name, src_bucket_name):
+                    self.pause_replication(self.dest_master, dest_bucket_name, src_bucket_name, verify)
+            except XDCRException as ex:
+                print ex
+
+    def bidirectional_resume_all_replications(self,verify):
+         src_buckets = self._get_cluster_buckets(self.src_master)
+         dest_buckets = self._get_cluster_buckets(self.dest_master)
+         # resume source -> dest
+         self.log.info("Resuming all replications from source -> dest")
+         for bucket in src_buckets:
+             src_bucket_name = dest_bucket_name = bucket.name
+             if RestConnection(self.src_master).is_replication_paused(src_bucket_name, dest_bucket_name):
+                self.resume_replication(self.src_master, src_bucket_name, dest_bucket_name, verify)
+         #resume dest -> source
+         self.log.info("Resuming all replications from dest -> source")
+         for bucket in dest_buckets:
+             src_bucket_name = dest_bucket_name = bucket.name
+             try:
+                if RestConnection(self.dest_master).is_replication_paused(dest_bucket_name, src_bucket_name):
+                    self.resume_replication(self.dest_master, dest_bucket_name, src_bucket_name, verify)
+             except XDCRException as ex:
+                 """in case of bucket deletion at dest, replication is absent, this exception is thrown"""
+                 print ex
+
+

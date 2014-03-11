@@ -18,7 +18,7 @@ from exception import ServerAlreadyJoinedException, ServerUnavailableException, 
 from membase.api.exception import BucketCreationException, ServerSelfJoinException, ClusterRemoteException, \
     RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
     ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, AddNodeException, \
-    BucketFlushFailed, CBRecoveryFailedException
+    BucketFlushFailed, CBRecoveryFailedException, XDCRException
 log = logger.Logger.get_logger()
 
 #helper library methods built on top of RestConnection interface
@@ -1580,7 +1580,7 @@ class RestConnection(object):
             if src_bucket_name in replication['source'] and \
                 replication['target'].endswith(dest_bucket_name):
                 return replication
-        raise Exception("Replication with Src bucket: {0} and Target bucket: {1} not found".
+        raise XDCRException("Replication with Src bucket: {0} and Target bucket: {1} not found".
                         format(src_bucket_name, dest_bucket_name))
 
     """ By default, these are the global replication settings -
@@ -1600,8 +1600,9 @@ class RestConnection(object):
         params = urllib.urlencode({param: value})
         status, _, _ = self._http_request(api, "POST", params)
         if not status:
-            raise Exception("Unable to set replication setting {0}={1} on bucket {2} on node {3}".
+            raise XDCRException("Unable to set replication setting {0}={1} on bucket {2} on node {3}".
                             format(param, value, src_bucket_name, self.ip))
+        log.info("Updated {0}={1} on bucket'{2}' on {3}".format(param, value, src_bucket_name, self.ip))
 
     # Gets per-replication setting value
     def get_xdcr_param(self, src_bucket_name,
@@ -1610,7 +1611,7 @@ class RestConnection(object):
         api = self.baseUrl + replication['settingsURI']
         status, content, _ = self._http_request(api)
         if not status:
-            raise Exception("Unable to get replication setting {0} on bucket {1} on node {2}".
+            raise XDCRException("Unable to get replication setting {0} on bucket {1} on node {2}".
                       format(param, src_bucket_name, self.ip))
         json_parsed = json.loads(content)
         # when per-replication settings match global(internal) settings,
