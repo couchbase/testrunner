@@ -34,15 +34,8 @@ class CreateDeleteViewTests(BaseTestCase):
         super(CreateDeleteViewTests, self).tearDown()
 
     def _get_complex_map(self, get_compile):
-        map_fun = 'function(multiline){ '
-        multi_line = 'if(doc.age >0) \
-                            emit(doc.age) \
-                            if(doc.age == 0) \
-                            emit(doc.null,doc.null) \
-                            if(doc.name.length >0) \
-                            emit(doc.name,doc.age) \
-                            if(doc.name.length == 0) \
-                            emit(doc.null,doc.null)' * 30
+        map_fun = 'function(multiline){\n '
+        multi_line = 'if(doc.age >0) \n emit(doc.age) \n if(doc.age == 0) \n emit(doc.null,doc.null) \n if(doc.name.length >0) \n emit(doc.name,doc.age)\n if(doc.name.length == 0) \n emit(doc.null,doc.null)\n ' * 30
         map_fun = map_fun + multi_line
         if get_compile:
             map_fun = map_fun + '}'
@@ -334,17 +327,23 @@ class CreateDeleteViewTests(BaseTestCase):
     """It will test case when map functions are complicated such as more than 200
         line or it function does not get compiled"""
     def test_create_view_multi_map_fun(self):
+        query = {"connectionTimeout" : 60000}
         self._load_doc_data_all_buckets()
         get_compile = self.input.param("get_compile", True)
         map_fun = self._get_complex_map(get_compile)
         view = View("View1", map_fun, None, False)
-        self.cluster.create_view(self.master, self.default_design_doc_name, view, 'default', self.wait_timeout * 2)
-        self.view_list.append(view.name)
-        self.ddoc_view_map[self.default_design_doc_name] = self.view_list
-        self.bucket_ddoc_map['default'] = self.ddoc_view_map
-        self._wait_for_stats_all_buckets([self.master])
-        self._verify_ddoc_ops_all_buckets()
-        self._verify_ddoc_data_all_buckets()
+        if get_compile:
+            self.cluster.create_view(self.master, self.default_design_doc_name, view, 'default', self.wait_timeout * 2)
+            self._wait_for_stats_all_buckets([self.master])
+            self.cluster.query_view(self.master, self.default_design_doc_name, view.name, query)
+        else:
+            try:
+                self.cluster.create_view(self.master, self.default_design_doc_name, view, 'default', self.wait_timeout * 2)
+            except DesignDocCreationException:
+                pass
+            else:
+                self.fail("Server allowed creation of invalid view")
+
 
     def test_view_ops(self):
         self._load_doc_data_all_buckets()
