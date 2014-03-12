@@ -933,7 +933,7 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
 
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
-                       swappiness=10, force=False, openssl=''):
+                       swappiness=10, force=False, openssl='', upr=False):
         server_type = None
         success = True
         track_words = ("warning", "error", "fail")
@@ -997,6 +997,12 @@ class RemoteMachineShellConnection:
                 output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export {0}_NUM_VBUCKETS={1}/' /opt/{2}/etc/{2}_init.d".
                                                     format(server_type.upper(), vbuckets, server_type))
                 success &= self.log_command_output(output, error, track_words)
+            if upr:
+                output, error =\
+                    self.execute_command("sed -i 's/END INIT INFO/END INIT INFO\\nexport COUCHBASE_REPL_TYPE=upr/'\
+                    /opt/{0}/etc/{0}_init.d".format(server_type))
+                success &= self.log_command_output(output, error, track_words)
+
             # skip output: [WARNING] couchbase-server is already started
             track_words = ("error", "fail")
             if startserver:

@@ -43,6 +43,7 @@ Available keys:
  vbuckets=               The number of vbuckets in the server installation.
  sync_threads=True       Sync or acync threads(+S or +A)
  erlang_threads=         Number of erlang threads (default=16:16 for +S type)
+ upr=True                Enable UPR replication
 
 
 Examples:
@@ -444,6 +445,12 @@ class CouchbaseServerInstaller(Installer):
             vbuckets = int(params["vbuckets"][0])
         else:
             vbuckets = None
+
+        if "upr" in params:
+            upr = params["upr"].lower() == 'true'
+        else:
+            upr = False
+
         if type == "windows":
             remote_client.download_binary_in_win(build.url, params["version"])
             success = remote_client.install_server_win(build, params["version"].replace("-rel", ""))
@@ -456,7 +463,7 @@ class CouchbaseServerInstaller(Installer):
             path = server.data_path or '/tmp'
             try:
                 success = remote_client.install_server(build, path=path, vbuckets=vbuckets, \
-                                                       swappiness=swappiness, openssl=openssl)
+                                                       swappiness=swappiness, openssl=openssl, upr=upr)
                 log.info('wait 5 seconds for membase server to start')
                 time.sleep(5)
                 if "rest_vbuckets" in params:
