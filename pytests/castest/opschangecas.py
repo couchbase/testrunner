@@ -4,6 +4,7 @@ from memcacheConstants import ERR_NOT_FOUND
 from castest.cas_base import CasBaseTest
 from couchbase.documentgenerator import BlobGenerator
 from mc_bin_client import MemcachedError
+from memcached.helper.data_helper import MemcachedClientHelper
 
 class OpsChangeCasTests(CasBaseTest):
 
@@ -104,3 +105,39 @@ class OpsChangeCasTests(CasBaseTest):
                 for data_value in data_error_collection:
                     self.log.error("Set operation fails. item-value is {0}, expected is {1}".format(data_value[0], data_value[1]))
                 raise Exception("Set operation fails to change item value")
+
+    def touch_test(self):
+        stats_all_buckets = {}
+        payload = MemcachedClientHelper.create_value('*', self.value_size)
+        mc = MemcachedClientHelper.proxy_client(self.servers[0], "default")
+        prefix = "test_"
+        self.num_items = self.input.param("items", 10000)
+        k = 0
+        while k < 100:
+            key = "{0}{1}".format(prefix, k)
+            mc.set(key, 0, 0, payload)
+            k += 1
+        active_resident_threshold = 10
+        threshold_reached = False
+        while not threshold_reached :
+            if int(mc.stats()["vb_active_perc_mem_resident"]) >= active_resident_threshold:
+                self.log.info("vb_active_perc_mem_resident_ratio reached at %s " % (mc.stats()["vb_active_perc_mem_resident"]))
+                items = self.num_items
+                self.num_items += self.input.param("items", 40000)
+                random_key = self.key_generator()
+                generate_load = BlobGenerator(random_key, '%s-' % random_key, self.value_size, end=self.num_items)
+                self._load_all_buckets(self.servers[0], generate_load, "create", 0, True, batch_size=40000, pause_secs=3)
+            else:
+                threshold_reached = True
+                self.log.info("DGM {0} state achieved!!!!".format(active_resident_threshold))
+        """ at active resident ratio above, the first 100 keys
+            insert into bucket will be non resident.  Then do touch command to test it """
+        self.log.info("Run touch command to test items which are in non resident.")
+        k = 0
+        while k < 100:
+            key = "{0}{1}".format(prefix, k)
+            try:
+                mc.touch(key, 0)
+                k += 1
+            except Exception as ex:
+                raise Exception(ex)
