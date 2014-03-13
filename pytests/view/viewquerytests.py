@@ -713,7 +713,7 @@ class ViewQueryTests(BaseTestCase):
                 rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
                 reached = RestHelper(rest).rebalance_reached(expected_progress)
                 self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
-                stopped = rest.stop_rebalance()
+                stopped = rest.stop_rebalance(wait_timeout=100)
                 self.assertTrue(stopped, msg="unable to stop rebalance")
                 self._query_all_views(data_set.views, gen_load)
 
