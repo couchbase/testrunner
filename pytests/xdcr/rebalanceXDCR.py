@@ -150,9 +150,8 @@ class Rebalance(XDCRReplicationBaseTest):
                 task.result()
 
             # Wait for load data to finish if asynchronous
-            if async_data_load:
-                for load_task in load_tasks:
-                    load_task.result()
+            for load_task in load_tasks:
+                load_task.result()
 
             if self._replication_direction_str in "unidirection":
                 self._async_modify_data()
