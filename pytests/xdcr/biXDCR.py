@@ -526,21 +526,21 @@ class bidirectional(XDCRReplicationBaseTest):
 
     # Test with pause and resume
     def replication_with_pause_and_resume(self):
-        load_tasks=[]
-        threads=[]
+        load_tasks = []
+        threads = []
         count = 0
         #get input params
         consecutive_pause_resume = int(self._input.param("consecutive_pause_resume", 1))
         delete_bucket = self._input.param("delete_bucket", None)
         reboot = self._input.param("reboot", None)
         pause_wait = int(self._input.param("pause_wait", 5))
-        rebalance_in = self._input.param("rebalance_in",None)
-        rebalance_out = self._input.param("rebalance_out",None)
+        rebalance_in = self._input.param("rebalance_in", None)
+        rebalance_out = self._input.param("rebalance_out", None)
 
         try:
             load_tasks = self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0)
             if delete_bucket != "destination":
-                load_tasks+= self._async_load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
+                load_tasks += self._async_load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
             #are we doing consecutive pause/resume
             while count < consecutive_pause_resume:
@@ -558,7 +558,7 @@ class bidirectional(XDCRReplicationBaseTest):
 
                     # reboot nodes?
                     if reboot == "dest_node":
-                       self.reboot_node(self.dest_nodes[len(self.dest_nodes) - 1])
+                        self.reboot_node(self.dest_nodes[len(self.dest_nodes) - 1])
                     elif reboot == "dest_cluster":
                         for node in self.dest_nodes:
                             threads.append(Thread(target=self.reboot_node, args=(node,)))
@@ -580,44 +580,19 @@ class bidirectional(XDCRReplicationBaseTest):
         except (XDCRException, ServerUnavailableException, ValueError, TypeError) as ex:
             self.log.info("Expected Exception Caught - {0}".format(ex))
 
-
-    def bidirectional_pause_all_replications(self,verify):
+    def bidirectional_pause_all_replications(self, verify):
         # pause source -> dest
-        src_buckets = self._get_cluster_buckets(self.src_master)
-        dest_buckets = self._get_cluster_buckets(self.dest_master)
         self.log.info("Pausing all replications from source -> dest")
-        for bucket in src_buckets:
-            src_bucket_name = dest_bucket_name = bucket.name
-            if not RestConnection(self.src_master).is_replication_paused(src_bucket_name, dest_bucket_name):
-                self.pause_replication(self.src_master, src_bucket_name, dest_bucket_name, verify)
+        self.pause_all_replication(self.src_master, verify=verify)
         # pause dest-> source
         self.log.info("Pausing all replications from dest -> source")
-        for bucket in dest_buckets:
-            src_bucket_name = dest_bucket_name = bucket.name
-            try:
-                if not RestConnection(self.dest_master).is_replication_paused(dest_bucket_name, src_bucket_name):
-                    self.pause_replication(self.dest_master, dest_bucket_name, src_bucket_name, verify)
-            except XDCRException as ex:
-                print ex
+        self.pause_all_replication(self.dest_master, verify=verify, fail_expected=True)
 
-    def bidirectional_resume_all_replications(self,verify):
-         src_buckets = self._get_cluster_buckets(self.src_master)
-         dest_buckets = self._get_cluster_buckets(self.dest_master)
-         # resume source -> dest
-         self.log.info("Resuming all replications from source -> dest")
-         for bucket in src_buckets:
-             src_bucket_name = dest_bucket_name = bucket.name
-             if RestConnection(self.src_master).is_replication_paused(src_bucket_name, dest_bucket_name):
-                self.resume_replication(self.src_master, src_bucket_name, dest_bucket_name, verify)
-         #resume dest -> source
-         self.log.info("Resuming all replications from dest -> source")
-         for bucket in dest_buckets:
-             src_bucket_name = dest_bucket_name = bucket.name
-             try:
-                if RestConnection(self.dest_master).is_replication_paused(dest_bucket_name, src_bucket_name):
-                    self.resume_replication(self.dest_master, dest_bucket_name, src_bucket_name, verify)
-             except XDCRException as ex:
-                 """in case of bucket deletion at dest, replication is absent, this exception is thrown"""
-                 print ex
-
+    def bidirectional_resume_all_replications(self, verify):
+        # resume source -> dest
+        self.log.info("Resuming all replications from source -> dest")
+        self.resume_all_replication(self.src_master, verify=verify)
+        #resume dest -> source
+        self.log.info("Resuming all replications from dest -> source")
+        self.resume_all_replication(self.dest_master, verify=verify, fail_expected=True)
 

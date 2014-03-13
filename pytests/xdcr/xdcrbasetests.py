@@ -1275,6 +1275,30 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         return int(RestConnection(server).fetch_bucket_stats(bucket_name)
                    ['op']['samples'][param][-1])
 
+    def pause_all_replication(self, master, verify=False, fail_expected=False):
+        buckets = self._get_cluster_buckets(master)
+        for bucket in buckets:
+            try:
+                src_bucket_name = dest_bucket_name = bucket.name
+                if not RestConnection(self.src_master).is_replication_paused(src_bucket_name, dest_bucket_name):
+                    self.pause_replication(self.src_master, src_bucket_name, dest_bucket_name, verify)
+            except XDCRException, ex:
+                if not fail_expected:
+                    raise
+                print ex
+
+    def resume_all_replication(self, master, verify=False, fail_expected=False):
+        buckets = self._get_cluster_buckets(master)
+        for bucket in buckets:
+            try:
+                src_bucket_name = dest_bucket_name = bucket.name
+                if RestConnection(self.src_master).is_replication_paused(src_bucket_name, dest_bucket_name):
+                    self.resume_replication(self.src_master, src_bucket_name, dest_bucket_name, verify)
+            except XDCRException, ex:
+                if not fail_expected:
+                    raise
+                print ex
+
     """ Pauses replication between src_bucket and dest_bucket
         Argument 'master' indicates if the bucket whose outbound
         replication is paused resides on 'source' or 'destination' cluster
@@ -1283,6 +1307,9 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
     """
     def pause_replication(self, master, src_bucket_name, dest_bucket_name,
                           verify=False):
+        self.log.info("Pausing xdcr on node:{0}, src_bucket:{1} and dest_bucket:{2}"
+                      .format(master.ip, src_bucket_name, dest_bucket_name))
+
         RestConnection(master).set_xdcr_param(src_bucket_name,
                                               dest_bucket_name,
                                               'pauseRequested',
@@ -1299,6 +1326,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
     """
     def resume_replication(self, master, src_bucket_name, dest_bucket_name,
                            verify=False):
+        self.log.info("Resume xdcr on node:{0}, src_bucket:{1} and dest_bucket:{2}"
+                      .format(master.ip, src_bucket_name, dest_bucket_name))
         RestConnection(master).set_xdcr_param(src_bucket_name,
                                               dest_bucket_name,
                                               'pauseRequested',
@@ -1363,7 +1392,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         and the validation is only on the bucket whose replication is paused
     """
     def post_resume_validations(self, master, src_bucket_name, dest_bucket_name):
-        tasks = []
         # if the validation is for source cluster
         if master == self.src_master:
             dest_nodes = self.dest_nodes
@@ -1375,22 +1403,21 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         rest_conn = RestConnection(master)
         if rest_conn.is_replication_paused(src_bucket_name, dest_bucket_name):
             raise XDCRException("Replication is not resumed for SrcBucket: {0}, Target Bucket: {1}".
-                           format(src_bucket_name, dest_bucket_name))
+                                format(src_bucket_name, dest_bucket_name))
 
         if self.is_cluster_replicating(src_nodes, src_bucket_name):
             # check active_vbreps on all source nodes
-            tasks = self.cluster.async_wait_for_xdcr_stat(src_nodes,
-                                                     src_bucket_name, '',
-                                                     'replication_active_vbreps','>',0)
-            tasks.result(self._timeout)
+            task = self.cluster.async_wait_for_xdcr_stat(src_nodes,
+                                                         src_bucket_name, '',
+                                                         'replication_active_vbreps', '>', 0)
+            task.result(self._timeout)
             # check incoming xdc_ops on remote nodes
-            tasks = self.cluster.async_wait_for_xdcr_stat(dest_nodes,
-                                                     dest_bucket_name, '',
-                                                     'xdc_ops','>',0)
-            tasks.result(self._timeout)
+            task = self.cluster.async_wait_for_xdcr_stat(dest_nodes,
+                                                         dest_bucket_name, '',
+                                                         'xdc_ops', '>', 0)
+            task.result(self._timeout)
         else:
             self.log.info("Replication is complete on {0}, resume validation have been skipped".format(src_nodes[0].ip))
-        return True
 
     """ Check replication_changes_left on every node, 3 times if 0 """
     def is_cluster_replicating(self, src_nodes, src_bucket_name):
