@@ -539,7 +539,7 @@ class bidirectional(XDCRReplicationBaseTest):
 
         try:
             load_tasks = self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0)
-            if delete_bucket != None:
+            if delete_bucket != "destination":
                 load_tasks+= self._async_load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
             #are we doing consecutive pause/resume
@@ -554,7 +554,8 @@ class bidirectional(XDCRReplicationBaseTest):
                         dest_buckets = self._get_cluster_buckets(self.dest_master)
                         for bucket in dest_buckets:
                             RestConnection(self.dest_master).delete_bucket(bucket.name)
-                    self._create_buckets(self.dest_nodes)
+                        self._create_buckets(self.dest_nodes)
+
                     # reboot nodes?
                     if reboot == "dest_node":
                        self.reboot_node(self.dest_nodes[len(self.dest_nodes) - 1])
@@ -573,11 +574,12 @@ class bidirectional(XDCRReplicationBaseTest):
             self.log.info("Waiting for loading to complete...")
             for load_task in load_tasks:
                 load_task.result()
+            self._async_update_delete_data()
+            self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+            self.verify_results(verify_src=True)
         except (XDCRException, ServerUnavailableException, ValueError, TypeError) as ex:
             self.log.info("Expected Exception Caught - {0}".format(ex))
-        self._async_update_delete_data()
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-        self.verify_results(verify_src=True)
+
 
     def bidirectional_pause_all_replications(self,verify):
         # pause source -> dest
