@@ -343,7 +343,6 @@ class XDCRBaseTest(unittest.TestCase):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
 
-
     def _replication_stat_keeper(self, arg, node):
         while not self._end_replication_flag == 1:
             if node in self._clusters_dic[0]:
@@ -403,7 +402,6 @@ class XDCRBaseTest(unittest.TestCase):
             for node in floating_servers:
                 if node.ip in str(c_node) and node.port in str(c_node):
                     floating_servers.remove(node)
-
         return floating_servers
 
     def _init_clusters(self, disabled_consistent_view=None):
@@ -525,36 +523,6 @@ class XDCRBaseTest(unittest.TestCase):
     def _get_bucket_size(self, mem_quota, num_buckets, ratio=2.0 / 3.0):
         return int(ratio / float(num_buckets) * float(mem_quota))
 
-    def _poll_for_condition(self, condition):
-        timeout = self._poll_timeout
-        interval = self._poll_interval
-        num_itr = timeout / interval
-        return self._poll_for_condition_rec(condition, interval, num_itr)
-
-    def _poll_for_condition_rec(self, condition, sleep, num_itr):
-        if num_itr == 0:
-            return False
-        else:
-            if condition():
-                return True
-            else:
-                self.sleep(sleep)
-                return self._poll_for_condition_rec(condition, sleep, (num_itr - 1))
-
-    def do_a_warm_up(self, node):
-        shell = RemoteMachineShellConnection(node)
-        shell.stop_couchbase()
-        self.sleep(5)
-        shell.start_couchbase()
-        shell.disconnect()
-
-    def adding_back_a_node(self, master, server):
-        rest = RestConnection(master)
-        nodes = rest.node_statuses()
-        for node in nodes:
-            if server.ip == node.ip and int(server.port) == int(node.port):
-                rest.add_back_node(node.id)
-
     def _get_cluster_buckets(self, master_server):
         rest = RestConnection(master_server)
         master_id = rest.get_nodes_self().id
@@ -576,176 +544,29 @@ class XDCRBaseTest(unittest.TestCase):
             self.log.warn("No bucket(s) found on the server %s" % master_server)
         return buckets
 
-    """merge 2 different kv strores from different clsusters/buckets
-       assume that all elements in the second kvs are more relevant.
+    def do_a_warm_up(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.stop_couchbase()
+        self.sleep(5)
+        shell.start_couchbase()
+        shell.disconnect()
 
-    Returns:
-            merged kvs, that we expect to get on both clusters
-    """
-    def __merge_keys(self, kv_store_first, kv_store_second, kvs_num=1):
-        valid_keys_first, deleted_keys_first = kv_store_first[kvs_num].key_set()
-        valid_keys_second, deleted_keys_second = kv_store_second[kvs_num].key_set()
+    def adding_back_a_node(self, master, server):
+        rest = RestConnection(master)
+        nodes = rest.node_statuses()
+        for node in nodes:
+            if server.ip == node.ip and int(server.port) == int(node.port):
+                rest.add_back_node(node.id)
 
-        for key in valid_keys_second:
-            # replace the values for each key in first kvs if the keys are presented in second one
-            if key in valid_keys_first:
-                partition1 = kv_store_first[kvs_num].acquire_partition(key)
-                partition2 = kv_store_second[kvs_num].acquire_partition(key)
-                key_add = partition2.get_key(key)
-                partition1.set(key, key_add["value"], key_add["expires"], key_add["flag"])
-                kv_store_first[1].release_partition(key)
-                kv_store_second[1].release_partition(key)
-            # add keys/values in first kvs if the keys are presented only in second one
-            else:
-                partition1, num_part = kv_store_first[kvs_num].acquire_random_partition()
-                partition2 = kv_store_second[kvs_num].acquire_partition(key)
-                key_add = partition2.get_key(key)
-                partition1.set(key, key_add["value"], key_add["expires"], key_add["flag"])
-                kv_store_first[kvs_num].release_partition(num_part)
-                kv_store_second[kvs_num].release_partition(key)
-            # add condition when key was deleted in first, but added in second
+    def _async_failover(self, src_nodes, failover_node):
+        tasks = []
+        tasks.append(self.cluster.async_failover(src_nodes, failover_node))
+        return tasks
 
-        for key in deleted_keys_second:
-            # the same keys were deleted in both kvs
-            if key in deleted_keys_first:
-                pass
-            # add deleted keys to first kvs if the where deleted only in second kvs
-            else:
-                partition1 = kv_store_first[kvs_num].acquire_partition(key)
-                partition1.delete(key)
-                kv_store_first[kvs_num].release_partition(key)
-            # return merged kvs, that we expect to get on both clusters
-        return kv_store_first[kvs_num]
-
-    def __do_merge_buckets(self, src_master, dest_master, bidirection):
-        src_buckets = self._get_cluster_buckets(src_master)
-        dest_buckets = self._get_cluster_buckets(dest_master)
-        for src_bucket in src_buckets:
-            for dest_bucket in dest_buckets:
-                if src_bucket.name == dest_bucket.name:
-                    if bidirection:
-                        src_bucket.kvs[1] = self.__merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
-                    dest_bucket.kvs[1] = src_bucket.kvs[1]
-
-    def merge_buckets(self, src_master, dest_master, bidirection=True):
-        self.log.info("merge buckets {0}->{1}, bidirection:{2}".format(src_master.ip, dest_master.ip, bidirection))
-        # Wait for expiration if not already done
-        if self._expires and not self._wait_for_expiration:
-            self.sleep(self._expires, "Waiting for expiration of updated items")
-        if self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_CHAIN:
-            self.__do_merge_buckets(src_master, dest_master, bidirection)
-        elif self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_STAR:
-            for i in range(1, len(self._clusters_dic)):
-                dest_cluster = self._clusters_dic[i]
-                self.__do_merge_buckets(src_master, dest_cluster[0], bidirection)
-
-    def do_merge_bucket(self, src_master, dest_master, bidirection, bucket):
-        # Wait for expiration if not already done
-        if self._expires and not self._wait_for_expiration:
-            self.sleep(self._expires, "Waiting for expiration of updated items")
-        src_buckets = self._get_cluster_buckets(src_master)
-        dest_buckets = self._get_cluster_buckets(dest_master)
-        for src_bucket in src_buckets:
-            for dest_bucket in dest_buckets:
-                if src_bucket.name == dest_bucket.name and bucket.name == src_bucket.name:
-                    if bidirection:
-                        src_bucket.kvs[1] = self.__merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
-                    dest_bucket.kvs[1] = src_bucket.kvs[1]
-
-    # CBQE-1695 Wait for replication_changes_left (outbound mutations) to be 0.
-    def __wait_for_mutation_to_replicate(self, master_node, timeout=180):
-        self.log.info("Waiting for Outbound mutation to be zero on cluster node: %s" % master_node.ip)
-        buckets = self._get_cluster_buckets(master_node)
-        curr_time = time.time()
-        end_time = curr_time + timeout
-        rest = RestConnection(master_node)
-        while curr_time < end_time:
-            found = 0
-            for bucket in buckets:
-                mutations = int(rest.get_xdc_queue_size(bucket.name))
-                self.log.info("Current outbound mutations on cluster node: %s for bucket %s is %s" % (master_node.ip, bucket.name, mutations))
-                if  mutations == 0:
-                    found = found + 1
-            if found == len(buckets):
-                break
-            self.sleep(10)
-            end_time = end_time - 10
-        else:
-            # MB-9707: Updating this code from fail to warning to avoid test to abort, as per this
-            # bug, this particular stat i.e. replication_changes_left is buggy.
-            self.log.error("Timeout occurs while waiting for mutations to be replicated")
-            return False
-        return True
-
-        """Verify the stats at the destination cluster
-        1. Data Validity check - using kvstore-node key-value check
-        2. Item count check on source versus destination
-        3. For deleted and updated items, check the CAS/SeqNo/Expiry/Flags for same key on source/destination
-        * Make sure to call expiry_pager function to flush out temp items(deleted/expired items)"""
-    def verify_xdcr_stats(self, src_nodes, dest_nodes, verify_src=False, timeout=500):
-        self._expiry_pager(self.src_nodes[0], val=10)
-        self._expiry_pager(self.dest_nodes[0], val=10)
-        self.sleep(10)
-
-        if self._failover is not None or self._rebalance is not None:
-            timeout *= 2
-
-        # for verification src and dest clusters need more time
-        if verify_src:
-            timeout *= 3 / 2
-
-        end_time = time.time() + timeout
-        if verify_src:
-            self.log.info("and Verify xdcr replication stats at Source Cluster : {0}".format(self.src_master.ip))
-            timeout = max(120, end_time - time.time())
-            self._wait_for_stats_all_buckets(src_nodes, timeout=timeout)
-        timeout = max(120, end_time - time.time())
-        self.log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_master.ip))
-        self._wait_for_stats_all_buckets(dest_nodes, timeout=timeout)
-        mutations_replicated = True
-        if verify_src:
-            timeout = max(120, end_time - time.time())
-            self._verify_stats_all_buckets(src_nodes, timeout=timeout)
-            timeout = max(120, end_time - time.time())
-            # Mutation will be checked on opposite cluster.
-            mutations_replicated &= self.__wait_for_mutation_to_replicate(self.dest_master)
-            timeout = max(120, end_time - time.time())
-            self._verify_all_buckets(self.src_master, max_verify=self.max_verify)
-        timeout = max(120, end_time - time.time())
-        self._verify_stats_all_buckets(dest_nodes, timeout=timeout)
-        timeout = max(120, end_time - time.time())
-        # Mutation will be checked on opposite cluster.
-        mutations_replicated &= self.__wait_for_mutation_to_replicate(self.src_master)
-        timeout = max(120, end_time - time.time())
-        self._verify_all_buckets(self.dest_master, max_verify=self.max_verify)
-
-        errors_caught = 0
-        if self._doc_ops is not None or self._doc_ops_dest is not None:
-            if "update" in self._doc_ops or (self._doc_ops_dest is not None and "update" in self._doc_ops_dest):
-                errors_caught = self._verify_revIds(self.src_master, self.dest_master, "update")
-
-            if "delete" in self._doc_ops or (self._doc_ops_dest is not None and "delete" in self._doc_ops_dest):
-                errors_caught += self._verify_revIds(self.src_master, self.dest_master, "delete")
-
-        if errors_caught > 0:
-            self.fail("Mismatches on Meta Information on xdcr-replicated items!")
-
-        if not mutations_replicated:
-            self.fail("Test is failed as Outbound mutations has not become zero, check the test logs above.")
-
-    def verify_results(self, verify_src=False):
-        dest_key_index = 1
-        if len(self.ord_keys) == 2:
-            src_nodes = self.get_servers_in_cluster(self.src_master)
-            dest_nodes = self.get_servers_in_cluster(self.dest_master)
-            self.verify_xdcr_stats(src_nodes, dest_nodes, verify_src)
-        else:
-            # Checking replication at destination clusters when more then 2 clusters defined
-            for cluster_num in self.ord_keys[1:]:
-                if dest_key_index == self.ord_keys_len:
-                    break
-                self.dest_nodes = self._clusters_dic[cluster_num]
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, verify_src)
+    def _async_rebalance(self, src_nodes, to_add_node, to_remove_node):
+        tasks = []
+        tasks.append(self.cluster.async_rebalance(src_nodes, to_add_node, to_remove_node))
+        return tasks
 
     def get_servers_in_cluster(self, member):
         nodes = [node for node in RestConnection(member).get_nodes()]
@@ -781,28 +602,6 @@ class XDCRBaseTest(unittest.TestCase):
                     self.log.info("ERROR: ep_warmup_thread's status not complete")
                 mc.close
 
-    def _wait_for_replication_to_catchup(self, timeout=1200):
-        self._expiry_pager(self.src_master)
-        self._expiry_pager(self.dest_master)
-        self.sleep(15)
-
-        rest1 = RestConnection(self.src_master)
-        rest2 = RestConnection(self.dest_master)
-        # 20 minutes by default
-        end_time = time.time() + timeout
-
-        for bucket in self.buckets:
-            _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
-            _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
-            while _count1 != _count2 and (time.time() - end_time) < 0:
-                self.sleep(60, "Expected: {0} items, found: {1}. Waiting for replication to catch up ..".format(_count1, _count2))
-                _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
-                _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
-            if _count1 != _count2:
-                self.fail("not all items replicated in {0} sec for {1} bucket. on source cluster:{2}, on dest:{3}".\
-                          format(timeout, bucket.name, _count1, _count2))
-            self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
-
     def wait_node_restarted(self, server, wait_time=120, wait_if_warmup=False, check_service=False):
         now = time.time()
         if check_service:
@@ -834,19 +633,41 @@ class XDCRBaseTest(unittest.TestCase):
             self.sleep(10, "couchbase service is not running")
         self.fail("Couchbase service is not running after {0} seconds".format(wait_time))
 
-    def _modify_src_data(self):
-        """Setting up creates/updates/deletes at source nodes"""
+    def _enable_firewall(self, server):
+        is_bidirectional = self._replication_direction_str == "bidirection"
+        RemoteUtilHelper.enable_firewall(server, bidirectional=is_bidirectional, xdcr=True)
 
-        if self._doc_ops is not None:
-            if "create" in self._doc_ops:
-                self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-            if "update" in self._doc_ops:
-                self._load_all_buckets(self.src_master, self.gen_update, "update", self._expires)
-            if "delete" in self._doc_ops:
-                self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
-            self._wait_for_stats_all_buckets(self.src_nodes)
-            if self._wait_for_expiration and self._expires:
-                self.sleep(self._expires, "Waiting for expiration of updated items")
+    def _disable_firewall(self, server):
+        shell = RemoteMachineShellConnection(server)
+        o, r = shell.execute_command("iptables -F")
+        shell.log_command_output(o, r)
+        o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j ACCEPT")
+        shell.log_command_output(o, r)
+        if self._replication_direction_str == "bidirection":
+            o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --dport 1000:60000 -j ACCEPT")
+            shell.log_command_output(o, r)
+        o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT")
+        shell.log_command_output(o, r)
+        self.log.info("enabled firewall on {0}".format(server))
+        o, r = shell.execute_command("/sbin/iptables --list")
+        shell.log_command_output(o, r)
+        shell.disconnect()
+
+    """ Reboot node, wait till nodes are warmed up """
+    def reboot_node(self, node):
+        self.log.info("Rebooting node '{0}'....".format(node.ip))
+        shell = RemoteMachineShellConnection(node)
+        if shell.extract_remote_info().type.lower() == 'windows':
+            o, r = shell.execute_command("shutdown -r -f -t 0")
+        elif shell.extract_remote_info().type.lower() == 'linux':
+            o, r = shell.execute_command("reboot")
+        shell.log_command_output(o, r)
+        #wait for restart and warmup on all node
+        self.sleep(180)
+        # disable firewall on these nodes
+        self._disable_firewall(node)
+        # wait till node is ready after warmup
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self, wait_if_warmup=True)
 
     def disable_compaction(self, server=None, bucket="default"):
         server = server or self.src_master
@@ -872,6 +693,122 @@ class XDCRBaseTest(unittest.TestCase):
             tasks.append(t_)
         return tasks
 
+    def _get_num_items_ratio(self, op_type):
+        if op_type in ["update", "delete"]:
+            return self._num_items / 3
+        else:
+            return self._num_items
+
+    def _load_gen_data(self, cname, node):
+        for op_type in self._seed_data_ops_lst:
+            num_items_ratio = self._get_num_items_ratio(op_type)
+            load_gen = BlobGenerator(cname, cname, self._value_size, end=num_items_ratio)
+            self.log.info("Starting Load operation '{0}' for items (ratio) '{1}' on node '{2}'....".format(op_type,
+                num_items_ratio, cname))
+            if self._seed_data_mode_str == XDCRConstants.SEED_DATA_MODE_SYNC:
+                self._load_all_buckets(node, load_gen, op_type, 0)
+                self.log.info("Completed Load of {0}".format(op_type))
+            else:
+                self._async_load_all_buckets(node, load_gen, op_type, 0)
+                self.log.info("Started async Load of {0}".format(op_type))
+
+    def _async_load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
+        gen = copy.deepcopy(kv_gen)
+        task = self.cluster.async_load_gen_docs(server, bucket.name, gen,
+                                                bucket.kvs[kv_store], op_type,
+                                                exp, flag, only_store_hash,
+                                                batch_size, pause_secs, timeout_secs)
+        return task
+
+    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
+        tasks = []
+        buckets = self._get_cluster_buckets(server)
+        for bucket in buckets:
+            gen = copy.deepcopy(kv_gen)
+            tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
+                                                          bucket.kvs[kv_store],
+                                                          op_type, exp, flag, only_store_hash,
+                                                          batch_size, pause_secs, timeout_secs))
+        return tasks
+
+    def _load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
+        task = self._async_load_bucket(bucket, server, kv_gen, op_type, exp, kv_store, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
+        task.result()
+
+    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
+        tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
+        for task in tasks:
+            task.result()
+
+    def _modify_src_data(self):
+        """Setting up creates/updates/deletes at source nodes"""
+
+        if self._doc_ops is not None:
+            if "create" in self._doc_ops:
+                self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+            if "update" in self._doc_ops:
+                self._load_all_buckets(self.src_master, self.gen_update, "update", self._expires)
+            if "delete" in self._doc_ops:
+                self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
+            self._wait_for_stats_all_buckets(self.src_nodes)
+            if self._wait_for_expiration and self._expires:
+                self.sleep(self._expires, "Waiting for expiration of updated items")
+
+    def _async_modify_data(self):
+        tasks = []
+        """Setting up creates/updates/deletes at source nodes"""
+        if self._doc_ops is not None:
+            # allows multiple of them but one by one
+            if "update" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
+            if "create" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0))
+            if "delete" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
+        for task in tasks:
+            task.result()
+        if self._wait_for_expiration and self._expires:
+            self.sleep(self._expires, "Waiting for expiration of updated items")
+
+    def _async_update_delete_data(self):
+        self.log.info("The tasks:-")
+        tasks = []
+        # Setting up doc-ops at source nodes and doc-ops-dest at destination nodes
+        if self._doc_ops is not None:
+            # allows multiple of them but one by one on either of the clusters
+            if "update" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
+            if "delete" in self._doc_ops:
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
+            self.sleep(self._timeout / 6)
+        if self._doc_ops_dest is not None:
+            if "update" in self._doc_ops_dest:
+                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
+            if "delete" in self._doc_ops_dest:
+                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
+            self.sleep(self._timeout / 6)
+        for task in tasks:
+            task.result()
+        if self._wait_for_expiration and self._expires:
+            self.sleep(self._expires, "Waiting for expiration of updated items")
+
+    def _poll_for_condition(self, condition):
+        timeout = self._poll_timeout
+        interval = self._poll_interval
+        num_itr = timeout / interval
+        return self._poll_for_condition_rec(condition, interval, num_itr)
+
+    def _poll_for_condition_rec(self, condition, sleep, num_itr):
+        if num_itr == 0:
+            return False
+        else:
+            if condition():
+                return True
+            else:
+                self.sleep(sleep)
+                return self._poll_for_condition_rec(condition, sleep, (num_itr - 1))
+
+
 #===============================================================================
 # class: XDCRReplicationBaseTest
 # This class links the different clusters defined in ".ini" file and starts the
@@ -889,7 +826,6 @@ class XDCRBaseTest(unittest.TestCase):
 # of .ini file.
 # Cluster/Node ordinals are determined by the sequence of entry of node in .ini file.
 #===============================================================================
-
 class XDCRReplicationBaseTest(XDCRBaseTest):
     def setup_extended(self):
         self._setup_topology()
@@ -1047,88 +983,108 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_database, rep_id))
             self.sleep(5)
 
-    def _load_gen_data(self, cname, node):
-        for op_type in self._seed_data_ops_lst:
-            num_items_ratio = self._get_num_items_ratio(op_type)
-            load_gen = BlobGenerator(cname, cname, self._value_size, end=num_items_ratio)
-            self.log.info("Starting Load operation '{0}' for items (ratio) '{1}' on node '{2}'....".format(op_type,
-                num_items_ratio, cname))
-            if self._seed_data_mode_str == XDCRConstants.SEED_DATA_MODE_SYNC:
-                self._load_all_buckets(node, load_gen, op_type, 0)
-                self.log.info("Completed Load of {0}".format(op_type))
+    """merge 2 different kv strores from different clsusters/buckets
+       assume that all elements in the second kvs are more relevant.
+
+    Returns:
+            merged kvs, that we expect to get on both clusters
+    """
+    def __merge_keys(self, kv_store_first, kv_store_second, kvs_num=1):
+        valid_keys_first, deleted_keys_first = kv_store_first[kvs_num].key_set()
+        valid_keys_second, deleted_keys_second = kv_store_second[kvs_num].key_set()
+
+        for key in valid_keys_second:
+            # replace the values for each key in first kvs if the keys are presented in second one
+            if key in valid_keys_first:
+                partition1 = kv_store_first[kvs_num].acquire_partition(key)
+                partition2 = kv_store_second[kvs_num].acquire_partition(key)
+                key_add = partition2.get_key(key)
+                partition1.set(key, key_add["value"], key_add["expires"], key_add["flag"])
+                kv_store_first[1].release_partition(key)
+                kv_store_second[1].release_partition(key)
+            # add keys/values in first kvs if the keys are presented only in second one
             else:
-                self._async_load_all_buckets(node, load_gen, op_type, 0)
-                self.log.info("Started async Load of {0}".format(op_type))
+                partition1, num_part = kv_store_first[kvs_num].acquire_random_partition()
+                partition2 = kv_store_second[kvs_num].acquire_partition(key)
+                key_add = partition2.get_key(key)
+                partition1.set(key, key_add["value"], key_add["expires"], key_add["flag"])
+                kv_store_first[kvs_num].release_partition(num_part)
+                kv_store_second[kvs_num].release_partition(key)
+            # add condition when key was deleted in first, but added in second
 
-    def _get_num_items_ratio(self, op_type):
-        if op_type in ["update", "delete"]:
-            return self._num_items / 3
-        else:
-            return self._num_items
+        for key in deleted_keys_second:
+            # the same keys were deleted in both kvs
+            if key in deleted_keys_first:
+                pass
+            # add deleted keys to first kvs if the where deleted only in second kvs
+            else:
+                partition1 = kv_store_first[kvs_num].acquire_partition(key)
+                partition1.delete(key)
+                kv_store_first[kvs_num].release_partition(key)
+            # return merged kvs, that we expect to get on both clusters
+        return kv_store_first[kvs_num]
 
-    def _async_load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
-        gen = copy.deepcopy(kv_gen)
-        task = self.cluster.async_load_gen_docs(server, bucket.name, gen,
-                                                          bucket.kvs[kv_store],
-                                                          op_type, exp, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
-        return task
+    def __do_merge_buckets(self, src_master, dest_master, bidirection):
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name == dest_bucket.name:
+                    if bidirection:
+                        src_bucket.kvs[1] = self.__merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                    dest_bucket.kvs[1] = src_bucket.kvs[1]
 
-    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
-        tasks = []
-        buckets = self._get_cluster_buckets(server)
-        for bucket in buckets:
-            gen = copy.deepcopy(kv_gen)
-            tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
-                                                          bucket.kvs[kv_store],
-                                                          op_type, exp, flag, only_store_hash, batch_size, pause_secs, timeout_secs))
-        return tasks
-
-    def _load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
-        task = self._async_load_bucket(bucket, server, kv_gen, op_type, exp, kv_store, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
-        task.result()
-
-    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
-        tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
-        for task in tasks:
-            task.result()
-
-    def _async_modify_data(self):
-        tasks = []
-        """Setting up creates/updates/deletes at source nodes"""
-        if self._doc_ops is not None:
-            # allows multiple of them but one by one
-            if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
-            if "create" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0))
-            if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-        for task in tasks:
-            task.result()
-        if self._wait_for_expiration and self._expires:
+    def merge_buckets(self, src_master, dest_master, bidirection=True):
+        self.log.info("merge buckets {0}->{1}, bidirection:{2}".format(src_master.ip, dest_master.ip, bidirection))
+        # Wait for expiration if not already done
+        if self._expires and not self._wait_for_expiration:
             self.sleep(self._expires, "Waiting for expiration of updated items")
+        if self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_CHAIN:
+            self.__do_merge_buckets(src_master, dest_master, bidirection)
+        elif self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_STAR:
+            for i in range(1, len(self._clusters_dic)):
+                dest_cluster = self._clusters_dic[i]
+                self.__do_merge_buckets(src_master, dest_cluster[0], bidirection)
 
-    def _async_update_delete_data(self):
-        self.log.info("The tasks:-")
-        tasks = []
-        # Setting up doc-ops at source nodes and doc-ops-dest at destination nodes
-        if self._doc_ops is not None:
-            # allows multiple of them but one by one on either of the clusters
-            if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
-            if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-            self.sleep(self._timeout / 6)
-        if self._doc_ops_dest is not None:
-            if "update" in self._doc_ops_dest:
-                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
-            if "delete" in self._doc_ops_dest:
-                tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
-            self.sleep(self._timeout / 6)
-        for task in tasks:
-            task.result()
-        if self._wait_for_expiration and self._expires:
+    def do_merge_bucket(self, src_master, dest_master, bidirection, bucket):
+        # Wait for expiration if not already done
+        if self._expires and not self._wait_for_expiration:
             self.sleep(self._expires, "Waiting for expiration of updated items")
+        src_buckets = self._get_cluster_buckets(src_master)
+        dest_buckets = self._get_cluster_buckets(dest_master)
+        for src_bucket in src_buckets:
+            for dest_bucket in dest_buckets:
+                if src_bucket.name == dest_bucket.name and bucket.name == src_bucket.name:
+                    if bidirection:
+                        src_bucket.kvs[1] = self.__merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                    dest_bucket.kvs[1] = src_bucket.kvs[1]
+
+    def _wait_for_replication_to_catchup(self, timeout=1200):
+        self._expiry_pager(self.src_master)
+        self._expiry_pager(self.dest_master)
+        self.sleep(15)
+
+        rest1 = RestConnection(self.src_master)
+        rest2 = RestConnection(self.dest_master)
+        # 20 minutes by default
+        end_time = time.time() + timeout
+
+        for bucket in self.buckets:
+            _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+            _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+            while _count1 != _count2 and (time.time() - end_time) < 0:
+                self.sleep(60, "Expected: {0} items, found: {1}. Waiting for replication to catch up ..".format(_count1, _count2))
+                _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+                _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+            if _count1 != _count2:
+                self.fail("not all items replicated in {0} sec for {1} bucket. on source cluster:{2}, on dest:{3}".\
+                          format(timeout, bucket.name, _count1, _count2))
+            self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
+
+    """ Gets the required xdcr stat value for the given bucket from a server """
+    def get_xdcr_stat(self, server, bucket_name, param):
+        return int(RestConnection(server).fetch_bucket_stats(bucket_name)
+                   ['op']['samples'][param][-1])
 
     def _verify_revIds(self, src_server, dest_server, ops_perf, kv_store=1):
         error_count = 0;
@@ -1137,8 +1093,10 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         rest = RestConnection(src_server)
         buckets = rest.get_buckets()
         for bucket in buckets:
-            task_info = self.cluster.async_verify_revid(src_server, dest_server, bucket, bucket.kvs[kv_store],
-                ops_perf)
+            task_info = self.cluster.async_verify_revid(src_server,
+                                                        dest_server, bucket,
+                                                        bucket.kvs[kv_store],
+                                                        ops_perf)
             error_count += task_info.err_count
             tasks.append(task_info)
         for task in tasks:
@@ -1231,220 +1189,97 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             raise ValueError(
                 "Verification process not completed after waiting for {0} seconds.".format(self._poll_timeout))
 
-    def _async_failover(self, src_nodes, failover_node):
-        tasks = []
-        tasks.append(self.cluster.async_failover(src_nodes, failover_node))
-        return tasks
-
-    def _async_rebalance(self, src_nodes, to_add_node, to_remove_node):
-        tasks = []
-        tasks.append(self.cluster.async_rebalance(src_nodes, to_add_node, to_remove_node))
-        return tasks
-
-    def _find_cluster_nodes_by_name(self, cluster_name):
-        return self._clusters_dic[[k for k, v in self._cluster_names_dic.iteritems() if v == cluster_name][0]]
-
-    def _find_key_from_cluster_name(self, cluster_name):
-        for k, v in self._cluster_names_dic.iteritems():
-            if v == cluster_name:
-                return k
-        return -1
-
-    def _enable_firewall(self, server):
-        is_bidirectional = self._replication_direction_str == "bidirection"
-        RemoteUtilHelper.enable_firewall(server, bidirectional=is_bidirectional, xdcr=True)
-
-    def _disable_firewall(self, server):
-        shell = RemoteMachineShellConnection(server)
-        o, r = shell.execute_command("iptables -F")
-        shell.log_command_output(o, r)
-        o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j ACCEPT")
-        shell.log_command_output(o, r)
-        if self._replication_direction_str == "bidirection":
-            o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --dport 1000:60000 -j ACCEPT")
-            shell.log_command_output(o, r)
-        o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT")
-        shell.log_command_output(o, r)
-        self.log.info("enabled firewall on {0}".format(server))
-        o, r = shell.execute_command("/sbin/iptables --list")
-        shell.log_command_output(o, r)
-        shell.disconnect()
-
-    """ Gets the required xdcr stat value for the given bucket from a server """
-    def get_xdcr_stat(self, server, bucket_name, param):
-        return int(RestConnection(server).fetch_bucket_stats(bucket_name)
-                   ['op']['samples'][param][-1])
-
-    def pause_all_replication(self, master, verify=False, fail_expected=False):
-        buckets = self._get_cluster_buckets(master)
-        for bucket in buckets:
-            try:
-                src_bucket_name = dest_bucket_name = bucket.name
-                if not RestConnection(self.src_master).is_replication_paused(src_bucket_name, dest_bucket_name):
-                    self.pause_replication(self.src_master, src_bucket_name, dest_bucket_name, verify)
-            except XDCRException, ex:
-                if not fail_expected:
-                    raise
-                print ex
-
-    def resume_all_replication(self, master, verify=False, fail_expected=False):
-        buckets = self._get_cluster_buckets(master)
-        for bucket in buckets:
-            try:
-                src_bucket_name = dest_bucket_name = bucket.name
-                if RestConnection(self.src_master).is_replication_paused(src_bucket_name, dest_bucket_name):
-                    self.resume_replication(self.src_master, src_bucket_name, dest_bucket_name, verify)
-            except XDCRException, ex:
-                if not fail_expected:
-                    raise
-                print ex
-
-    """ Pauses replication between src_bucket and dest_bucket
-        Argument 'master' indicates if the bucket whose outbound
-        replication is paused resides on 'source' or 'destination' cluster
-        If C1 <--> C2 and C1.B1 -> C2.B1 is to be paused
-        C1 is source, C2 is destination
-    """
-    def pause_replication(self, master, src_bucket_name, dest_bucket_name,
-                          verify=False):
-        self.log.info("Pausing xdcr on node:{0}, src_bucket:{1} and dest_bucket:{2}"
-                      .format(master.ip, src_bucket_name, dest_bucket_name))
-
-        RestConnection(master).set_xdcr_param(src_bucket_name,
-                                              dest_bucket_name,
-                                              'pauseRequested',
-                                              'true')
-        if verify:
-            # check if the replication has really been paused
-            self.post_pause_validations(master, src_bucket_name, dest_bucket_name)
-
-    """ Resumes replication between src_bucket and dest_bucket
-        Argument 'master' indicates if the bucket whose outbound
-        replication is to be resumed resides on 'source' or 'destination' cluster
-        If C1 <--> C2 and C1.B1 -> C2.B1 is to be resumed
-        C1 is source, C2 is destination
-    """
-    def resume_replication(self, master, src_bucket_name, dest_bucket_name,
-                           verify=False):
-        self.log.info("Resume xdcr on node:{0}, src_bucket:{1} and dest_bucket:{2}"
-                      .format(master.ip, src_bucket_name, dest_bucket_name))
-        RestConnection(master).set_xdcr_param(src_bucket_name,
-                                              dest_bucket_name,
-                                              'pauseRequested',
-                                              'false')
-        if verify:
-            # check if the replication has really been resumed
-            self.post_resume_validations(master, src_bucket_name, dest_bucket_name)
-
-    """ Post pause validations include -
-        1. incoming replication on remote (paired) bucket falling to 0
-        2. XDCR stat active_vbreps =0 on all nodes
-        3. XDCR queue = 0 on all nodes for the bucket with xdcr paused
-        Note : This method should be called immediately after a call to pause xdcr
-        and the validation is on the replication paused
-        To perform pause validation at both local and remote clusters,
-        call this method specifying 'source' and 'destination' for cluster variable
-        If C1(B1) <--> C2(B1),
-        post_pause_validations('source', src_bucket_name, dest_bucket_name)
-        is called to validate pause on C1.B1 -> C2.B1
-        post_pause_validations('destination', src_bucket_name, dest_bucket_name)
-        is called to validate pause on C2.B1 -> C1.B1
-    """
-    def post_pause_validations(self, master, src_bucket_name, dest_bucket_name):
-        # if the validation is for source cluster
-        if master == self.src_master:
-            dest_nodes = self.dest_nodes
-            src_nodes = self.src_nodes
-        # if validation is for destination cluster, swap the 'src' and 'dest' orientation
-        # because the validation code below is for 'src' cluster
+    # CBQE-1695 Wait for replication_changes_left (outbound mutations) to be 0.
+    def __wait_for_mutation_to_replicate(self, master_node, timeout=180):
+        self.log.info("Waiting for Outbound mutation to be zero on cluster node: %s" % master_node.ip)
+        buckets = self._get_cluster_buckets(master_node)
+        curr_time = time.time()
+        end_time = curr_time + timeout
+        rest = RestConnection(master_node)
+        while curr_time < end_time:
+            found = 0
+            for bucket in buckets:
+                mutations = int(rest.get_xdc_queue_size(bucket.name))
+                self.log.info("Current outbound mutations on cluster node: %s for bucket %s is %s" % (master_node.ip, bucket.name, mutations))
+                if  mutations == 0:
+                    found = found + 1
+            if found == len(buckets):
+                break
+            self.sleep(10)
+            end_time = end_time - 10
         else:
-            dest_nodes = self.src_nodes
-            src_nodes = self.dest_nodes
-
-        # Is bucket replication paused?
-        if not RestConnection(master).is_replication_paused(src_bucket_name,
-                                                            dest_bucket_name):
-            raise XDCRException("XDCR is not paused for SrcBucket: {0}, Target Bucket: {1}".
-                           format(src_bucket_name, dest_bucket_name))
-
-        tasks = []
-        # incoming ops on remote cluster = 0
-        tasks.append(self.cluster.async_wait_for_xdcr_stat(dest_nodes,
-                                                       dest_bucket_name, '',
-                                                       'xdc_ops', '==', 0))
-        # Docs in replication queue at source = 0
-        tasks.append(self.cluster.async_wait_for_xdcr_stat(src_nodes,
-                                                       src_bucket_name, '',
-                                                       'replication_docs_rep_queue',
-                                                       '==', 0))
-        # active_vbreps falls to 0
-        tasks.append(self.cluster.async_wait_for_xdcr_stat(src_nodes,
-                                                       src_bucket_name, '',
-                                                       'replication_active_vbreps',
-                                                       '==', 0))
-        for task in tasks:
-            task.result()
-
-    """ Post pause validations include -
-        1. number of active_vbreps after resume equal the setting value
-        2. XDCR queue != 0 on all nodes for the bucket with xdcr resumed
-        Note : This method should be called immediately after a call to resume xdcr
-        and the validation is only on the bucket whose replication is paused
-    """
-    def post_resume_validations(self, master, src_bucket_name, dest_bucket_name):
-        # if the validation is for source cluster
-        if master == self.src_master:
-            dest_nodes = self.dest_nodes
-            src_nodes = self.src_nodes
-        else:
-            dest_nodes = self.src_nodes
-            src_nodes = self.dest_nodes
-
-        rest_conn = RestConnection(master)
-        if rest_conn.is_replication_paused(src_bucket_name, dest_bucket_name):
-            raise XDCRException("Replication is not resumed for SrcBucket: {0}, Target Bucket: {1}".
-                                format(src_bucket_name, dest_bucket_name))
-
-        if self.is_cluster_replicating(src_nodes, src_bucket_name):
-            # check active_vbreps on all source nodes
-            task = self.cluster.async_wait_for_xdcr_stat(src_nodes,
-                                                         src_bucket_name, '',
-                                                         'replication_active_vbreps', '>', 0)
-            task.result(self._timeout)
-            # check incoming xdc_ops on remote nodes
-            task = self.cluster.async_wait_for_xdcr_stat(dest_nodes,
-                                                         dest_bucket_name, '',
-                                                         'xdc_ops', '>', 0)
-            task.result(self._timeout)
-        else:
-            self.log.info("Replication is complete on {0}, resume validation have been skipped".format(src_nodes[0].ip))
-
-    """ Check replication_changes_left on every node, 3 times if 0 """
-    def is_cluster_replicating(self, src_nodes, src_bucket_name):
-        count = 0
-        for node in src_nodes:
-            while count < 3:
-                if self.get_xdcr_stat(node, src_bucket_name, 'replication_changes_left') == 0:
-                    count += 1
-                    continue
-                else:
-                    break
-            else:
-                return False
+            # MB-9707: Updating this code from fail to warning to avoid test to abort, as per this
+            # bug, this particular stat i.e. replication_changes_left is buggy.
+            self.log.error("Timeout occurs while waiting for mutations to be replicated")
+            return False
         return True
 
-    """ Reboot node, wait till nodes are warmed up """
-    def reboot_node(self, node):
-        self.log.info("Rebooting node '{0}'....".format(node.ip))
-        shell = RemoteMachineShellConnection(node)
-        if shell.extract_remote_info().type.lower() == 'windows':
-            o, r = shell.execute_command("shutdown -r -f -t 0")
-        elif shell.extract_remote_info().type.lower() == 'linux':
-            o, r = shell.execute_command("reboot")
-        shell.log_command_output(o, r)
-        #wait for restart and warmup on all node
-        self.sleep(180)
-        # disable firewall on these nodes
-        self._disable_firewall(node)
-        # wait till node is ready after warmup
-        ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self, wait_if_warmup=True)
+    """Verify the stats at the destination cluster
+    1. Data Validity check - using kvstore-node key-value check
+    2. Item count check on source versus destination
+    3. For deleted and updated items, check the CAS/SeqNo/Expiry/Flags for same key on source/destination
+    * Make sure to call expiry_pager function to flush out temp items(deleted/expired items)"""
+    def verify_xdcr_stats(self, src_nodes, dest_nodes, verify_src=False, timeout=500):
+        self._expiry_pager(self.src_nodes[0], val=10)
+        self._expiry_pager(self.dest_nodes[0], val=10)
+        self.sleep(10)
+
+        if self._failover is not None or self._rebalance is not None:
+            timeout *= 2
+
+        # for verification src and dest clusters need more time
+        if verify_src:
+            timeout *= 3 / 2
+
+        end_time = time.time() + timeout
+        if verify_src:
+            self.log.info("and Verify xdcr replication stats at Source Cluster : {0}".format(self.src_master.ip))
+            timeout = max(120, end_time - time.time())
+            self._wait_for_stats_all_buckets(src_nodes, timeout=timeout)
+        timeout = max(120, end_time - time.time())
+        self.log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_master.ip))
+        self._wait_for_stats_all_buckets(dest_nodes, timeout=timeout)
+        mutations_replicated = True
+        if verify_src:
+            timeout = max(120, end_time - time.time())
+            self._verify_stats_all_buckets(src_nodes, timeout=timeout)
+            timeout = max(120, end_time - time.time())
+            # Mutation will be checked on opposite cluster.
+            mutations_replicated &= self.__wait_for_mutation_to_replicate(self.dest_master)
+            timeout = max(120, end_time - time.time())
+            self._verify_all_buckets(self.src_master, max_verify=self.max_verify)
+        timeout = max(120, end_time - time.time())
+        self._verify_stats_all_buckets(dest_nodes, timeout=timeout)
+        timeout = max(120, end_time - time.time())
+        # Mutation will be checked on opposite cluster.
+        mutations_replicated &= self.__wait_for_mutation_to_replicate(self.src_master)
+        timeout = max(120, end_time - time.time())
+        self._verify_all_buckets(self.dest_master, max_verify=self.max_verify)
+
+        errors_caught = 0
+        if self._doc_ops is not None or self._doc_ops_dest is not None:
+            if "update" in self._doc_ops or (self._doc_ops_dest is not None and "update" in self._doc_ops_dest):
+                errors_caught = self._verify_revIds(self.src_master, self.dest_master, "update")
+
+            if "delete" in self._doc_ops or (self._doc_ops_dest is not None and "delete" in self._doc_ops_dest):
+                errors_caught += self._verify_revIds(self.src_master, self.dest_master, "delete")
+
+        if errors_caught > 0:
+            self.fail("Mismatches on Meta Information on xdcr-replicated items!")
+
+        if not mutations_replicated:
+            self.fail("Test is failed as Outbound mutations has not become zero, check the test logs above.")
+
+    def verify_results(self, verify_src=False):
+        dest_key_index = 1
+        if len(self.ord_keys) == 2:
+            src_nodes = self.get_servers_in_cluster(self.src_master)
+            dest_nodes = self.get_servers_in_cluster(self.dest_master)
+            self.verify_xdcr_stats(src_nodes, dest_nodes, verify_src)
+        else:
+            # Checking replication at destination clusters when more then 2 clusters defined
+            for cluster_num in self.ord_keys[1:]:
+                if dest_key_index == self.ord_keys_len:
+                    break
+                self.dest_nodes = self._clusters_dic[cluster_num]
+                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, verify_src)
