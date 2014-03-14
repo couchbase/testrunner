@@ -1105,11 +1105,11 @@ class QueryTests(BaseTestCase):
                          "HAVING SUM(employees.test_rate) > 0 and " +\
                          "SUM(test_rate) < 100000"
             actual_result = self.run_cbq_query()
-            actual_result = [{"join_mo" : doc["join_mo"], "rate" : int(doc["rate"])} for doc in actual_result['resultset']]
+            actual_result = [{"join_mo" : doc["join_mo"], "rate" : round(doc["rate"])} for doc in actual_result['resultset']]
             actual_result = sorted(actual_result, key=lambda doc: (doc['join_mo']))
             tmp_groups = set([doc['join_mo'] for doc in full_list])
             expected_result = [{"join_mo" : group,
-                                "rate" : int(math.fsum([doc['test_rate']
+                                "rate" : round(math.fsum([doc['test_rate']
                                                           for doc in full_list
                                                           if doc['join_mo'] == group and\
                                                              doc['job_title'] == 'Sales']))}
