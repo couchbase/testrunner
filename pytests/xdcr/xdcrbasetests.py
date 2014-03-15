@@ -568,6 +568,68 @@ class XDCRBaseTest(unittest.TestCase):
         tasks.append(self.cluster.async_rebalance(src_nodes, to_add_node, to_remove_node))
         return tasks
 
+    # Initiates a rebalance-out asynchronously on both clusters
+    def _async_rebalance_out(self):
+        tasks = []
+        if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
+            tasks = self._async_rebalance_out_cluster("source", self.src_nodes, self.src_master)
+        if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
+            tasks += self._async_rebalance_out_cluster("destination", self.dest_nodes, self.dest_master)
+        return tasks
+
+    def _async_rebalance_out_cluster(self,cluster, cluster_nodes, master):
+        remove_nodes = cluster_nodes[len(cluster_nodes) - self._num_rebalance:]
+        if cluster in self._failover:
+            self.cluster.failover(cluster_nodes, remove_nodes)
+        task = self._async_rebalance(cluster_nodes, [], remove_nodes)
+        remove_node_ips = [remove_node.ip for remove_node in remove_nodes]
+        self.log.info(" Starting rebalance-out nodes:{0} at Source cluster {1}".
+                          format(remove_node_ips, master.ip))
+        map(cluster_nodes.remove, remove_nodes)
+        self.__verify_src = True
+        return task
+
+    # Initiates a rebalance-in asynchronously on both clusters
+    def _async_rebalance_in(self):
+        tasks = []
+        if "source" in self._rebalance:
+            tasks = self._async_rebalance_in_cluster(self.src_nodes, self.src_master)
+        if "destination" in self._rebalance:
+            tasks += self._async_rebalance_in_cluster(self.dest_nodes, self.dest_master)
+        return tasks
+
+    def _async_rebalance_in_cluster(self, cluster_nodes, master):
+        add_nodes = self._floating_servers_set[0:self._num_rebalance]
+        map(self._floating_servers_set.remove, add_nodes)
+        task = self._async_rebalance(cluster_nodes, add_nodes, [])
+        add_nodes_ips = [node.ip for node in add_nodes]
+        self.log.info(" Starting rebalance-in nodes {0} at Source cluster {1}".
+                          format(add_nodes_ips, master.ip))
+        map(cluster_nodes.append, add_nodes)
+        self.__verify_src = True
+        return task
+
+    # Initiates a swap-rebalance asynchronously on both clusters
+    def _async_swap_rebalance(self):
+        tasks = []
+        for _ in range(self._num_rebalance):
+            if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
+                tasks = self._async_swap_rebalance_cluster(self.src_nodes, self.src_master)
+            if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
+                tasks += self._async_swap_rebalance_cluster(self.dest_nodes, self.dest_master)
+        return tasks
+
+    def _async_swap_rebalance_cluster(self,cluster_nodes, master):
+        add_node = self._floating_servers_set.pop()
+        remove_node = cluster_nodes[len(cluster_nodes) - 1]
+        task = self._async_rebalance(cluster_nodes, [add_node], [remove_node])
+        self.log.info(" Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}"
+                              .format(master.ip, add_node.ip, remove_node.ip))
+        cluster_nodes.remove(remove_node)
+        cluster_nodes.append(add_node)
+        self.__verify_src = True
+        return task
+
     def get_servers_in_cluster(self, member):
         nodes = [node for node in RestConnection(member).get_nodes()]
         servers = []

@@ -2,11 +2,26 @@ from couchbase.documentgenerator import BlobGenerator
 from xdcrbasetests import XDCRReplicationBaseTest
 from membase.api.rest_client import RestConnection
 from membase.api.exception import XDCRException
+from threading import Thread
 
-
-class PauseResumeBaseTest(XDCRReplicationBaseTest):
+""" Class   :   PauseResumeBaseTest
+    Parent  :   XDCRReplicationBaseTest
+    Methods :   setUp()
+                teardown()
+                pause_xdcr()
+                resume_xdcr()
+                pause_all_replications()
+                resume_all replications()
+                pause_replication()
+                resume_replication()
+                post_pause_validations()
+                post_resume_validations()
+    Usage   :   Base class providing API for Pause-Resume XDCR feature. Just derive this class to test with pause and
+                resume on XDCR. See example - PauseResumeTest(PauseResumeBaseTest)
+    """
+class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
     def setUp(self):
-        super(PauseResumeBaseTest, self).setUp()
+        super(PauseResumeXDCRBaseTest, self).setUp()
         self.gen_create2 = BlobGenerator('loadTwo', 'loadTwo',
                                          self._value_size, end=self._num_items)
         self.gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-',
@@ -19,11 +34,29 @@ class PauseResumeBaseTest(XDCRReplicationBaseTest):
                                          end=int(self._num_items *
                                                  (float)(self._percent_update) / 100))
 
-        self.pause_xdcr_cluster = self._input.param("pause_xdcr", "both")
+        self.pause_xdcr_cluster = self._input.param("pause_xdcr", "source-destination")
+
 
     def tearDown(self):
-        super(PauseResumeBaseTest, self).tearDown()
+        super(PauseResumeXDCRBaseTest, self).tearDown()
 
+    # Method capable of bidirectionally pausing replications
+    # based on self.pause_xdcr_cluster
+    def pause_xdcr(self, verify=True):
+        if "source" in self.pause_xdcr_cluster:
+            self.pause_all_replication(self.src_master, verify=verify)
+        if "destination" in self.pause_xdcr_cluster:
+            self.pause_all_replication(self.dest_master, verify=verify)
+
+    # Method capable of bidirectionally resuming replications
+    # based on self.pause_xdcr_cluster
+    def resume_xdcr(self, verify=True):
+        if "source" in self.pause_xdcr_cluster:
+            self.resume_all_replication(self.src_master, verify=verify)
+        if "destination" in self.pause_xdcr_cluster:
+            self.resume_all_replication(self.dest_master, verify=verify)
+
+    # Pauses all replication from a cluster, uni-directionally
     def pause_all_replication(self, master, verify=False, fail_expected=False):
         buckets = self._get_cluster_buckets(master)
         for bucket in buckets:
@@ -36,6 +69,7 @@ class PauseResumeBaseTest(XDCRReplicationBaseTest):
                     raise
                 print ex
 
+    # Resumes all replication from a cluster, uni-directionally
     def resume_all_replication(self, master, verify=False, fail_expected=False):
         buckets = self._get_cluster_buckets(master)
         for bucket in buckets:
@@ -173,11 +207,157 @@ class PauseResumeBaseTest(XDCRReplicationBaseTest):
         count = 0
         for node in src_nodes:
             while count < 3:
-                if self.get_xdcr_stat(node, src_bucket_name, 'replication_changes_left') == 0:
+                outbound_mutations = self.get_xdcr_stat(node, src_bucket_name, 'replication_changes_left')
+                if outbound_mutations == 0:
+                    self.log.info("Outbound mutations on {0} is {1}".format(node.ip,outbound_mutations))
                     count += 1
                     continue
                 else:
                     break
             else:
+                self.log.info("Outbound mutations on {0} is {1}".format(node.ip,outbound_mutations))
+                self.log.info("Cluster with node {0} is not replicating".format(node.ip))
                 return False
         return True
+
+
+
+class PauseResumeTest(PauseResumeXDCRBaseTest):
+    def setUp(self):
+        super(PauseResumeTest, self).setUp()
+        self.consecutive_pause_resume = int(self._input.param("consecutive_pause_resume", 1))
+        self.delete_bucket = self._input.param("delete_bucket", None)
+        self.reboot = self._input.param("reboot", None)
+        self.pause_wait = self._input.param("pause_wait", 5)
+        self.rebalance_in = self._input.param("rebalance_in", None)
+        self.rebalance_out = self._input.param("rebalance_out", None)
+        self.swap_rebalance = self._input.param("swap_rebalance", None)
+        self.__verify_src = False
+
+    def tearDown(self):
+        super(PauseResumeTest, self).tearDown()
+
+    def __async_load_and_pause_xdcr(self):
+        load_tasks = self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        # if this is not a bidirectional replication or
+        # we plan to delete dest bucket which might result in
+        # uni-directional replication in the middle of the test
+        if self._replication_direction_str in "bidirection" and \
+           self.delete_bucket != "destination":
+            load_tasks += self._async_load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
+        #wait for 20 secs before pause
+        self.sleep(20)
+        self.pause_xdcr()
+        return load_tasks
+
+    def __update_deletes(self):
+        if self._replication_direction_str in "unidirection":
+            self._async_modify_data()
+        elif self._replication_direction_str in "bidirection" and \
+             self.delete_bucket != "destination":
+            self._async_update_delete_data()
+        self.sleep(self._timeout / 2)
+
+    def __merge_buckets(self):
+        if self._replication_direction_str in "unidirection":
+            self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        elif self._replication_direction_str in "bidirection" and \
+             self.delete_bucket != "destination":
+            self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+            self.__verify_src = True
+
+    # Test with pause and resume
+    def replication_with_pause_and_resume(self):
+        count = 0
+        #start loading
+        tasks = self.__async_load_and_pause_xdcr()
+
+        #are we doing consecutive pause/resume
+        while count < self.consecutive_pause_resume:
+
+            if count < 1:
+
+                # rebalance-in?
+                if self.rebalance_in != None:
+                    self._rebalance = self.rebalance_in
+                    tasks += self._async_rebalance_in()
+
+                # rebalance-out/failover
+                if self.rebalance_out != None or self._failover!= None:
+                    self._rebalance = self.rebalance_out
+                    tasks += self._async_rebalance_out()
+
+                 # swap rebalance?
+                if self.swap_rebalance != None:
+                    self._rebalance = self.swap_rebalance
+                    tasks += self._async_swap_rebalance()
+
+                # delete all destination buckets and recreate them?
+                if self.delete_bucket == 'destination':
+                    dest_buckets = self._get_cluster_buckets(self.dest_master)
+                    for bucket in dest_buckets:
+                        RestConnection(self.dest_master).delete_bucket(bucket.name)
+                        # Avoid ValueError
+                        self.buckets.remove(bucket)
+                    self._create_buckets(self.dest_nodes)
+
+                # reboot nodes?
+                if self.reboot == "dest_node":
+                    self.reboot_node(self.dest_nodes[len(self.dest_nodes) - 1])
+                elif self.reboot == "dest_cluster":
+                    threads = []
+                    for node in self.dest_nodes:
+                        threads.append(Thread(target=self.reboot_node, args=(node,)))
+                    for thread in threads:
+                        thread.start()
+                    for thread in threads:
+                        thread.join()
+
+            self.sleep(self.pause_wait)
+
+            # resume all bidirectional replications
+            self.resume_xdcr()
+            count += 1
+
+        # wait for rebalance/failover/load to complete
+        self.log.info("Waiting for loading/rebalance to complete...")
+        for task in tasks:
+            task.result()
+
+        self.__update_deletes()
+        self.__merge_buckets()
+        self.verify_results(verify_src=self.__verify_src)
+
+    def view_query_pause_resume(self):
+        load_tasks = self.__async_load_and_pause_xdcr()
+
+        dest_buckets = self._get_cluster_buckets(self.src_master)
+        for bucket in dest_buckets:
+            views = self.make_default_views(bucket.name, self._num_views,
+                                            self._is_dev_ddoc)
+        ddoc_name = "ddoc1"
+        prefix = ("", "dev_")[self._is_dev_ddoc]
+
+        query = {"full_set": "true", "stale": "false"}
+        tasks = self.async_create_views(self.dest_master, ddoc_name, views,
+                                         self.default_bucket_name)
+
+        [task.result(self._poll_timeout) for task in tasks]
+        # Wait for load data to finish if asynchronous
+        [load_task.result() for load_task in load_tasks]
+
+        # Resume the XDCR's paused
+        self.resume_xdcr()
+
+        self.__merge_buckets()
+        self._verify_stats_all_buckets(self.src_nodes)
+        self._verify_stats_all_buckets(self.dest_nodes)
+        tasks = []
+        for view in views:
+            tasks.append(self.cluster.async_query_view(self.dest_master,
+                                                       prefix + ddoc_name,
+                                                       view.name, query,
+                                                       dest_buckets[0].kvs[1].__len__()))
+
+        [task.result(self._poll_timeout) for task in tasks]
+        self.verify_results(verify_src=self.__verify_src)
