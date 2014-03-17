@@ -123,6 +123,9 @@ class MemcapableTestBase(object):
         self.log.info('decr {0} times with value {1}'.format(decr_time, decr_amt))
         return update_value
 
+    def tearDown(self):
+        ClusterOperationHelper.cleanup_cluster([self.master])
+        BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
 
 class SimpleSetMembaseBucketDefaultPort(unittest.TestCase):
     memcapableTestBase = None
@@ -352,6 +355,8 @@ class GetlTests(unittest.TestCase):
         flags_v, cas_v, get_v = mc.get(key)
         self.assertEquals(get_v, "*")
 
+    def tearDown(self):
+        self.memcapableTestBase.tearDown()
 
 class GetrTests(BaseTestCase):
     NO_REBALANCE = 0
