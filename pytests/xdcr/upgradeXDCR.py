@@ -108,8 +108,8 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         if len(self.repl_buckets_from_dest):
             self._link_clusters(dest_cluster_name, dest_master, src_cluster_name, src_master)
 
-        self._replicate_clusters(self, src_master, dest_cluster_name, self.repl_buckets_from_src)
-        self._replicate_clusters(self, dest_master, src_cluster_name, self.repl_buckets_from_dest)
+        UpgradeTests._replicate_clusters(self, src_master, dest_cluster_name, self.repl_buckets_from_src)
+        UpgradeTests._replicate_clusters(self, dest_master, src_cluster_name, self.repl_buckets_from_dest)
 
     @staticmethod
     def _replicate_clusters(self, src_master, dest_cluster_name, buckets):

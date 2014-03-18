@@ -80,7 +80,8 @@ class XDCRBaseTest(unittest.TestCase):
                     else:
                         hd.setLevel(level=getattr(logging, self._input.param("log_level", None)))
             self._init_parameters()
-            self.cluster = Cluster()
+            if not hasattr(self, 'cluster'):
+                self.cluster = Cluster()
             # REPLICATION RATE STATS
             self._local_replication_rate = {}
             self._xdc_replication_ops = {}

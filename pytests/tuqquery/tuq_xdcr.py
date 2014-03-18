@@ -28,13 +28,13 @@ class XDCRTests(QueryTests, XDCRReplicationBaseTest):
         super(XDCRTests, self).suite_setUp()
 
     def tearDown(self):
+        try:
+            XDCRReplicationBaseTest.tearDown(self)
+        except:
+                self.cluster.shutdown()
         if not self._testMethodName in ['suite_tearDown',
                                         'suite_setUp']:
-            try:
-                XDCRReplicationBaseTest.tearDown(self)
-                return
-            finally:
-                self.cluster.shutdown()
+            return
         super(XDCRTests, self).tearDown()
 
     def suite_tearDown(self):
