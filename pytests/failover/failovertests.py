@@ -90,12 +90,19 @@ class FailoverTests(FailoverBaseTest):
                     self.fail("node status is not unhealthy even after waiting for 5 minutes")
 
             failed_over = rest.fail_over(node.id, graceful=self.graceful)
+            if self.graceful and (failover_reason in ['stop_server', 'firewall']):
+                if failed_over:
+                    # MB-10479
+                    rest.print_UI_logs()
+                self.assertFalse(failed_over, "Graceful Falover was started for unhealthy node!!! ")
+                #perform general Failover
+                failed_over = rest.fail_over(node.id)
             if not failed_over:
                 self.log.info("unable to failover the node the first time. try again in  60 seconds..")
                 # try again in 75 seconds
                 time.sleep(75)
                 failed_over = rest.fail_over(node.id, graceful=self.graceful)
-            if self.graceful:
+            if self.graceful and (failover_reason not in ['stop_server', 'firewall']):
                 reached = RestHelper(rest).rebalance_reached()
                 self.assertTrue(reached, "rebalance failed for Graceful Failover, stuck or did not completed")
 
