@@ -39,12 +39,19 @@ class FailoverTests(FailoverBaseTest):
         log.info("failover_reason : {0}".format(failover_reason))
         log.info('picking server : {0} as the master'.format(self.master))
 
+        rest = RestConnection(self.master)
+        versions = rest.get_nodes_versions()
+        for version in versions:
+            if "3" > version and self.graceful:
+                log.error("Graceful failover can't be applied to nodes with version less then 3.*")
+                log.error("Please check configuration parameters: SKIPPING TEST.")
+                return
+
         self._load_all_buckets(self.master, self.gen_create, "create", 0,
                                batch_size=10000, pause_secs=5, timeout_secs=180)
         self._wait_for_stats_all_buckets(self.servers)
 
         _servers_ = self.servers
-        rest = RestConnection(self.master)
         nodes = rest.node_statuses()
 
         RebalanceHelper.wait_for_replication(self.servers, self.cluster)
@@ -82,12 +89,16 @@ class FailoverTests(FailoverBaseTest):
                     self.log.info("nodeStatuses: {0}".format(json_parsed))
                     self.fail("node status is not unhealthy even after waiting for 5 minutes")
 
-            failed_over = rest.fail_over(node.id)
+            failed_over = rest.fail_over(node.id, graceful=self.graceful)
             if not failed_over:
                 self.log.info("unable to failover the node the first time. try again in  60 seconds..")
                 # try again in 75 seconds
                 time.sleep(75)
-                failed_over = rest.fail_over(node.id)
+                failed_over = rest.fail_over(node.id, graceful=self.graceful)
+            if self.graceful:
+                reached = RestHelper(rest).rebalance_reached()
+                self.assertTrue(reached, "rebalance failed for Graceful Failover, stuck or did not completed")
+
             self.assertTrue(failed_over, "unable to failover node after {0}".format(failover_reason))
             log.info("failed over node : {0}".format(node.id))
             self._failed_nodes.append(node)
