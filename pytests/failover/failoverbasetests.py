@@ -20,18 +20,6 @@ class FailoverBaseTest(BaseTestCase):
         self.during_ops = self.input.param("during_ops", None)
         self.graceful = self.input.param("graceful", False)
 
-        self.log.info("==============  FailoverBaseTest setup was started for test #{0} {1}=============="\
-                      .format(self.case_number, self._testMethodName))
-        try:
-            rest = RestConnection(self.master)
-            ClusterOperationHelper.add_all_nodes_or_assert(self.master, self.servers, credentials, self)
-            nodes = rest.node_statuses()
-            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
-            msg = "rebalance failed after adding these nodes {0}".format(nodes)
-            self.assertTrue(rest.monitorRebalance(), msg=msg)
-        except Exception, e:
-            self.cluster.shutdown(force=True)
-            self.fail(e)
         self.log.info("==============  FailoverBaseTest setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
         self.gen_create = BlobGenerator('loadOne', 'loadOne_', self._value_size, end=self.num_items)

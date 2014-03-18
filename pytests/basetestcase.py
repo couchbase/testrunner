@@ -115,12 +115,13 @@ class BaseTestCase(unittest.TestCase):
 
             self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
-                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port,self.quota_percent)
+                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port, self.quota_percent)
 
             try:
                 if (str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1) or \
                     (str(self.__class__).find('memorysanitytests.MemorySanity') != -1) or \
-                    str(self.__class__).find('negativetests.NegativeTests') != -1:
+                    str(self.__class__).find('negativetests.NegativeTests') != -1 or \
+                    str(self.__class__).find('failover.failovertests.FailoverTests') != -1:
                     # rebalance all nodes into the cluster before each test
                     self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
                 elif self.nodes_init > 1:
