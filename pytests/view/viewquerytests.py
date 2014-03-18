@@ -1702,50 +1702,6 @@ class ViewQueryTests(BaseTestCase):
             RebalanceHelper.wait_for_persistence(server, data_set.bucket)
         data_set.query_verify_value(self)
 
-    def test_employee_dataset_query_different_bucket_types(self):
-        '''
-        Test uses employee data set:
-            -documents are structured as {"name": name<string>,
-                                       "join_yr" : year<int>,
-                                       "join_mo" : month<int>,
-                                       "join_day" : day<int>,
-                                       "email": email<string>,
-                                       "job_title" : title<string>,
-                                       "type" : type<string>,
-                                       "desc" : desc<tring>}
-        Steps to repro:
-            1. Start load data
-            2. start querying multiply buckets, buckets are sasl with password
-        '''
-        data_sets = []
-        for test_bucket in self.buckets:
-            data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day, bucket=test_bucket)
-            data_sets.append(data_set)
-        gen_load = data_set.generate_docs(data_sets[0].views[0])
-        for data_set in data_sets:
-            data_set.add_startkey_endkey_queries()
-            self.load(data_set, gen_load)
-
-        query_bucket_threads = []
-        for data_set in data_sets:
-            t = StoppableThread(target=self._query_all_views,
-                                name="query-bucket-{0}".format(data_set.bucket.name),
-                                args=(data_set.views, gen_load))
-            query_bucket_threads.append(t)
-            t.start()
-
-        while True:
-            if not query_bucket_threads:
-                break
-            self.thread_stopped.wait(60)
-            if self.thread_crashed.is_set():
-                for t in query_bucket_threads:
-                    t.stop()
-                break
-            else:
-                query_bucket_threads = [d for d in query_bucket_threads if d.is_alive()]
-                self.thread_stopped.clear()
-
     def test_boudary_rebalance_queries(self):
         '''
         Test uses simple data set:
