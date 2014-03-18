@@ -135,7 +135,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                     _count_ += 1
                     continue
                 shell = RemoteMachineShellConnection(node)
-                o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
+                o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:65535 -j REJECT")
                 shell.disconnect()
                 self.wait_for_failover_or_assert(master, _count_, self._timeout)
                 rest.reset_autofailover()
@@ -209,7 +209,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     shell = RemoteMachineShellConnection(node)
                     o, r = shell.execute_command("iptables -F")
                     shell.log_command_output(o, r)
-                    o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j ACCEPT")
+                    o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:65535 -j ACCEPT")
                     shell.log_command_output(o, r)
                     shell.disconnect()
             self.sleep(20)

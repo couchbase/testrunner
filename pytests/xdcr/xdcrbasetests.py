@@ -641,10 +641,10 @@ class XDCRBaseTest(unittest.TestCase):
         shell = RemoteMachineShellConnection(server)
         o, r = shell.execute_command("iptables -F")
         shell.log_command_output(o, r)
-        o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j ACCEPT")
+        o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:65535 -j ACCEPT")
         shell.log_command_output(o, r)
         if self._replication_direction_str == "bidirection":
-            o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --dport 1000:60000 -j ACCEPT")
+            o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --dport 1000:65535 -j ACCEPT")
             shell.log_command_output(o, r)
         o, r = shell.execute_command("/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT")
         shell.log_command_output(o, r)

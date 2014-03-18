@@ -998,7 +998,7 @@ class RemoteMachineShellConnection:
                                                     format(server_type.upper(), vbuckets, server_type))
                 success &= self.log_command_output(output, error, track_words)
             if upr:
-                output, error =\
+                output, error = \
                     self.execute_command("sed -i 's/END INIT INFO/END INIT INFO\\nexport COUCHBASE_REPL_TYPE=upr/'\
                     /opt/{0}/etc/{0}_init.d".format(server_type))
                 success &= self.log_command_output(output, error, track_words)
@@ -2247,13 +2247,13 @@ class RemoteUtilHelper(object):
             else:
                 log.error("erlang process failed to suspend")
         else:
-            # Reject incoming connections on port 1000->60000
-            o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:60000 -j REJECT")
+            # Reject incoming connections on port 1000->65535
+            o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:65535 -j REJECT")
             shell.log_command_output(o, r)
 
-            # Reject outgoing connections on port 1000->60000
+            # Reject outgoing connections on port 1000->65535
             if bidirectional:
-                o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --sport 1000:60000 -j REJECT")
+                o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --sport 1000:65535 -j REJECT")
                 shell.log_command_output(o, r)
 
             if xdcr:
