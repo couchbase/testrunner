@@ -929,11 +929,13 @@ class RestConnection(object):
     def force_eject_node(self):
         self.diag_eval("gen_server:cast(ns_cluster, leave).")
 
-    def fail_over(self, otpNode=None):
+    def fail_over(self, otpNode=None, graceful=False):
         if otpNode is None:
             log.error('otpNode parameter required')
             return False
         api = self.baseUrl + 'controller/failOver'
+        if graceful:
+            api = self.baseUrl + 'controller/startGracefulFailover'
         params = urllib.urlencode({'otpNode': otpNode})
         status, content, header = self._http_request(api, 'POST', params)
         if status:
@@ -1252,13 +1254,23 @@ class RestConnection(object):
         return nodes
 
     # this method returns the number of node in cluster
-    def get_cluster_len(self):
+    def get_cluster_size(self):
         nodes = self.get_nodes()
         node_ip = []
         for node in nodes:
             node_ip.append(node.ip)
         log.info("Number of node(s) in cluster is {0} node(s)".format(len(node_ip)))
         return len(node_ip)
+
+    # this method returns the versions of nodes in cluster
+    def get_nodes_versions(self):
+        nodes = self.get_nodes()
+        versions = []
+        for node in nodes:
+            versions.append(node.version)
+        log.info("Node versions in cluster {0}".format(versions))
+        return versions
+
 
     def get_bucket_stats(self, bucket='default'):
         stats = {}

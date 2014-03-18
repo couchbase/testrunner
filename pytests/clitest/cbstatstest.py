@@ -22,7 +22,7 @@ class cbstatsTests(CliBaseTest):
 
     def cbstats_test(self):
         """We use cbstas to check the various stats of server"""
-        cluster_len = RestConnection(self.master).get_cluster_len()
+        cluster_len = RestConnection(self.master).get_cluster_size()
         if self.command == "kvstore":
             self.verify_cluster_stats()
         if self.command != "key":
