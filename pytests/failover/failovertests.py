@@ -1,9 +1,6 @@
 import logger
-import time
 import copy
-import sys
 import json
-import unittest
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from remote.remote_util import RemoteMachineShellConnection
@@ -51,7 +48,7 @@ class FailoverTests(FailoverBaseTest):
                                batch_size=10000, pause_secs=5, timeout_secs=180)
         self._wait_for_stats_all_buckets(self.servers)
 
-        _servers_ = self.servers
+        _servers_ = copy.deepcopy(self.servers)
         nodes = rest.node_statuses()
 
         RebalanceHelper.wait_for_replication(self.servers, self.cluster)
@@ -100,7 +97,7 @@ class FailoverTests(FailoverBaseTest):
             if not failed_over:
                 self.log.info("unable to failover the node the first time. try again in  60 seconds..")
                 # try again in 75 seconds
-                time.sleep(75)
+                self.sleep(75)
                 failed_over = rest.fail_over(node.id, graceful=self.graceful)
             if self.graceful and (failover_reason not in ['stop_server', 'firewall']):
                 reached = RestHelper(rest).rebalance_reached()
@@ -113,17 +110,15 @@ class FailoverTests(FailoverBaseTest):
         if self.add_back_flag:
             for node in self._failed_nodes:
                 rest.add_back_node(node.id)
-                time.sleep(5)
-            log.info("10 seconds sleep after failover before invoking rebalance...")
-            time.sleep(10)
+                self.sleep(5)
+            self.sleep(10, "after failover before invoking rebalance...")
             rest.rebalance(otpNodes=[node.id for node in nodes],
                                ejectedNodes=[])
             msg = "rebalance failed while removing failover nodes {0}".format(chosen)
             self.assertTrue(rest.monitorRebalance(stop_if_loop=True), msg=msg)
         else:
             # Need a delay > min because MB-7168
-            log.info("60 seconds sleep after failover before invoking rebalance...")
-            time.sleep(60)
+            self.sleep(60, "after failover before invoking rebalance...")
             rest.rebalance(otpNodes=[node.id for node in nodes],
                                ejectedNodes=[node.id for node in chosen])
             if self.during_ops:
