@@ -146,9 +146,16 @@ class ViewMergingTests(BaseTestCase):
                 self.merged_query(self.red_view_stats_name, params=params, ddoc='test2')
                 self.assertTrue(False, "Expected exception when querying _stats view")
             except QueryViewException as ex:
-                expectedStr = (
-                    'Error occured querying view ' + self.red_view_stats_name +
-                    ': {"error":"error","reason":"reducer failure"}')
+                # Couchbase version < 3.0
+                if "Builtin _stats" in ex:
+                    expectedStr = 'Error occured querying view ' + self.red_view_stats_name + \
+                        ': {"error":"error","reason":"Builtin _stats function requires map' + \
+                        ' values to be numbers"}'
+                else:
+                    expectedStr = 'Error occured querying view ' + self.red_view_stats_name + \
+                            ': {"error":"error","reason":"Reducer: Error building index for view `' + \
+                            self.red_view_stats_name + '`, reason: Value is not a number (key \\"1\\")"}'
+
                 self.assertEquals(str(ex).strip("\n"), expectedStr)
         else:
             self.assertTrue(nodes > 1)
