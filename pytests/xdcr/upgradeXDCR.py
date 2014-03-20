@@ -132,20 +132,23 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
 
     def _online_upgrade(self, update_servers, extra_servers, check_newmaster=True):
         self.cluster.rebalance(update_servers + extra_servers, extra_servers, [])
-        self.log.info("Rebalance in all 2.0 Nodes")
+        current_versions = RestConnection(update_servers[0]).get_nodes_versions()
+        added_versions = RestConnection(extra_servers[0]).get_nodes_versions()
+        self.log.info("Rebalance in all {0} nodes completed".format(added_versions[0]))
         self.sleep(self.sleep_time)
         status, content = ClusterOperationHelper.find_orchestrator(update_servers[0])
         self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
                         format(status, content))
+        self.log.info("after rebalance in the master is {0}".format(content))
         if check_newmaster:
             FIND_MASTER = False
             for new_server in extra_servers:
                 if content.find(new_server.ip) >= 0:
                     FIND_MASTER = True
-                    self.log.info("2.0 Node %s becomes the master" % (new_server.ip))
+                    self.log.info("{0} Node {1} becomes the master".format(added_versions[0], new_server.ip))
                     break
             if not FIND_MASTER:
-                raise Exception("After rebalance in 2.0 Nodes, 2.0 doesn't become the master")
+                raise Exception("After rebalance in {0} Nodes, one of them doesn't become the master".format(added_versions[0]))
         self.log.info("Rebalanced out all old version nodes")
         self.cluster.rebalance(update_servers + extra_servers, [], update_servers)
 
