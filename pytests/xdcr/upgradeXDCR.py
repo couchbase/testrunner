@@ -131,10 +131,11 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
             return None
 
     def _online_upgrade(self, update_servers, extra_servers, check_newmaster=True):
-        self.cluster.rebalance(update_servers + extra_servers, extra_servers, [])
-        current_versions = RestConnection(update_servers[0]).get_nodes_versions()
+        RestConnection(update_servers[0]).get_nodes_versions()
         added_versions = RestConnection(extra_servers[0]).get_nodes_versions()
+        self.cluster.rebalance(update_servers + extra_servers, extra_servers, [])
         self.log.info("Rebalance in all {0} nodes completed".format(added_versions[0]))
+        RestConnection(update_servers[0]).get_nodes_versions()
         self.sleep(self.sleep_time)
         status, content = ClusterOperationHelper.find_orchestrator(update_servers[0])
         self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
