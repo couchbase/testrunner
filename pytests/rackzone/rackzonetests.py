@@ -12,6 +12,7 @@ from membase.api.exception import RebalanceFailedException
 from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
+from scripts.install import InstallerJob
 
 
 
@@ -227,6 +228,95 @@ class RackzoneTests(RackzoneBaseTest):
             self.log.info(msg.format(result))
         """ Compare current keys in bucekt with initial loaded keys count. """
         self._verify_total_keys(self.servers[0], self.num_items)
+
+    """ to run this test, use these params:
+            nodes_init=3,version=2.5.1-xx,type=community   """
+    def test_zone_enable_after_upgrade_from_ce_to_ee(self):
+        params = {}
+        params['product'] = self.product
+        params['version'] = self.version
+        params['vbuckets'] = [self.vbuckets]
+        params['type'] = self.type
+        """ install couchbasse server community edition to run the test """
+        InstallerJob().parallel_install(self.servers[:3], params)
+
+        params["type"] = "enterprise"
+        zone_name = "AAABBBCCCaakkkkmmm345672"
+        serverInfo = self.servers[0]
+        ini_servers = self.servers[:self.nodes_init]
+        rest = RestConnection(serverInfo)
+        self.user = serverInfo.rest_username
+        self.password = serverInfo.rest_password
+        if len(ini_servers) > 1:
+            self.cluster.rebalance([ini_servers[0]], ini_servers[1:], [])
+        rest = RestConnection(self.master)
+        self._bucket_creation()
+
+        """ verify all nodes in cluster in CE """
+        if rest.is_enterprise_edition():
+            raise Exception("This test needs couchbase server community edition to run")
+
+        self._load_all_buckets(self.servers[0], self.gen_load, "create", 0)
+        try:
+            self.log.info("create zone {0}".format(zone_name))
+            result = rest.add_zone(zone_name)
+            if result:
+                raise Exception("Zone feature should not be available in CE version")
+        except Exception,e :
+            if "Failed" in e:
+                pass
+
+        for i in range(1, int(self.nodes_init) + 1):
+            if i == 1:
+                """ install EE on one node to do swap rebalance """
+                InstallerJob().parallel_install(self.servers[3:], params)
+                self.cluster.rebalance([ini_servers[0]], [self.servers[int(self.nodes_init)]], [self.servers[int(self.nodes_init) - i]])
+                self.log.info("sleep  5 seconds")
+                time.sleep(5)
+                try:
+                    self.log.info("try to create zone {0} when cluster is not completely EE".format(zone_name))
+                    result = rest.add_zone(zone_name)
+                    if result:
+                        raise Exception("Zone feature should not be available in CE version")
+                except Exception,e :
+                    if "Failed" in e:
+                        pass
+            else:
+                InstallerJob().parallel_install([self.servers[int(self.nodes_init) - (i - 1)]], params)
+                self.cluster.rebalance([ini_servers[0]], [self.servers[int(self.nodes_init) - (i -1)]], [self.servers[int(self.nodes_init) - i]])
+                if i < int(self.nodes_init):
+                    try:
+                        self.log.info("try to create zone {0} when cluster is not completely EE".format(zone_name))
+                        result = rest.add_zone(zone_name)
+                        if result:
+                            raise Exception("Zone feature should not be available in CE version")
+                    except Exception,e :
+                        if "Failed" in e:
+                            pass
+        serverInfo = self.servers[1]
+        rest = RestConnection(serverInfo)
+        self.user = serverInfo.rest_username
+        self.password = serverInfo.rest_password
+        if not rest.is_enterprise_edition():
+            raise Exception("Test failed to upgrade cluster from CE to EE")
+        self.log.info("try to create zone {0} when cluster {1} is completely EE".format(zone_name, serverInfo.ip))
+        result = rest.add_zone(zone_name)
+        self.log.info("sleep  5 seconds")
+        time.sleep(5)
+        if result:
+            self.log.info("Zone feature is available in this cluster")
+        else:
+            raise Exception("Could not create zone with name: %s in cluster.  It's a bug" % zone_name)
+        if rest.is_zone_exist(zone_name.strip()):
+            self.log.info("verified! zone '{0}' is existed".format(zone_name.strip()))
+        else:
+            raise Exception("There is not zone with name: %s in cluster.  It's a bug" % zone_name)
+
+        """ re-install enterprise edition for next test if there is any """
+        InstallerJob().parallel_install([self.servers[0]], params)
+
+        """ reset master node to new node to teardown cluster """
+        self.servers = self.servers[1:]
 
     def _verify_zone(self, name):
         serverInfo = self.servers[0]

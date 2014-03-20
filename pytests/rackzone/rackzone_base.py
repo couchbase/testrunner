@@ -6,15 +6,14 @@ from membase.api.rest_client import RestConnection, Bucket
 from remote.remote_util import RemoteMachineShellConnection
 
 
-
 class RackzoneBaseTest(BaseTestCase):
 
     def setUp(self):
         super(RackzoneBaseTest, self).setUp()
-        self.value_size = self.input.param("value_size", 128)
-        self.num_buckets = self.input.param("num_buckets", 0)
-        self.num_items = self.input.param("items", 10000)
-
+        self.product = self.input.param("product", "cb")
+        self.vbuckets = self.input.param("vbuckets", 128)
+        self.version = self.input.param("version", "2.5.1-1082")
+        self.type = self.input.param('type', 'enterprise')
         self.doc_ops = self.input.param("doc_ops", None)
         self.output_time = self.input.param("output_time", False)
         if self.doc_ops is not None:
@@ -32,6 +31,13 @@ class RackzoneBaseTest(BaseTestCase):
             self._load_all_buckets(self.servers[0], self.gen_load, "create", 0)
         else:
             self._load_doc_data_all_buckets()
+        shell = RemoteMachineShellConnection(self.master)
+        type = shell.extract_remote_info().distribution_type
+        shell.disconnect()
+        if type.lower() == 'windows':
+            self.is_linux = False
+        else:
+            self.is_linux = True
 
     def tearDown(self):
         """ Some test involve kill couchbase server.  If the test steps failed

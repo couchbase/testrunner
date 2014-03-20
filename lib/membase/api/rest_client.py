@@ -310,6 +310,22 @@ class RestConnection(object):
                  return True
             return False
 
+    def is_enterprise_edition(self):
+        http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
+        if http_res == u'unknown pool':
+            return False
+        editions = []
+        community_nodes = []
+        """ get the last word in node["version"] as in "version": "2.5.1-1073-rel-enterprise" """
+        for node in http_res["nodes"]:
+            editions.extend(node["version"].split("-")[-1:])
+            if "community" in node["version"].split("-")[-1:]:
+                community_nodes.extend(node["hostname"].split(":")[:1])
+        if "community" in editions:
+            log.error("IP(s) for node(s) with community edition {0}".format(community_nodes))
+            return False
+        return True
+
     def init_http_request(self, api):
         try:
             status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers_with_auth(self.username, self.password))
@@ -1886,6 +1902,7 @@ class RestConnection(object):
                                         params=request_name)
         if status:
             log.info("zone {0} is added".format(zone_name))
+            return True
         else:
             raise Exception("Failed to add zone with name: %s " % zone_name)
 
