@@ -175,3 +175,7 @@ class CBRecoveryFailedException(MembaseHttpException):
 class XDCRException(MembaseHttpException):
     def __init__(self, string=''):
         self._message = string
+
+class BucketCompactionException(MembaseHttpException):
+    def __init__(self, bucket_name=''):
+        self._message = 'Bucket compaction failed: {0}'.format(bucket_name)

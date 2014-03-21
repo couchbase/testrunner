@@ -22,7 +22,7 @@ from tasks.future import Future
 from couchbase.stats_tools import StatsCommon
 from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
                                     GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, \
-                                    ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException
+                                    ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException, BucketCompactionException
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase.documentgenerator import BatchedDocumentGenerator
 
@@ -2922,3 +2922,65 @@ class CBRecoveryTask(Task):
             else:
                 self.retries += 1
                 task_manager.schedule(self, 20)
+
+
+class CompactBucketTask(Task):
+
+    def __init__(self, server, bucket="default"):
+        Task.__init__(self, "bucket_compaction_task")
+        self.server = server
+        self.bucket = bucket
+        self.rest = RestConnection(server)
+        self.retries = 20
+        self.statuses = {}
+
+    def execute(self, task_manager):
+
+        try:
+            status = self.rest.compact_bucket(self.bucket)
+            self.state = CHECKING
+
+        except BucketCompactionException as e:
+            self.log.error("Bucket compaction failed for unknown reason")
+            self.set_exception(e)
+            self.state = FINISHED
+            self.set_result(False)
+
+        task_manager.schedule(self)
+
+
+    def check(self, task_manager):
+
+
+        # check bucket compaction status across all nodes
+        nodes = self.rest.get_nodes()
+
+        for node in nodes:
+            last_status = self.statuses.get(node.id)
+
+            rest = RestConnection(node)
+            running, progress = rest.check_compaction_status(self.bucket)
+            if progress is None and last_status is False:
+                # finished if previously detected running but not == 100%
+                self.statuses[node.id] = True
+
+            if running:
+                self.statuses[node.id] = (progress == 100)
+
+        done = all(self.statuses.values())
+
+        if done:
+            # task was completed sucessfully
+            self.set_result(True)
+            self.state = FINISHED
+
+        else:
+
+            if self.retries > 0:
+                #retry
+                self.retries = self.retries - 1
+                task_manager.schedule(self, 10)
+            else:
+                # never detected a compaction task running
+                self.set_result(False)
+                self.state = FINISHED

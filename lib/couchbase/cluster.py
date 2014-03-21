@@ -794,3 +794,30 @@ class Cluster(object):
                  username_dest, password_dest, verbose, wait_completed)
         self.task_manager.schedule(_task)
         return _task
+
+    def async_compact_bucket(self, server, bucket = "default"):
+        """Asynchronously starts bucket compaction
+
+        Parameters:
+            server - source couchbase server
+            bucket - bucket to compact
+
+        Returns:
+            boolean - Whether or not the compaction started successfully"""
+        _task = CompactBucketTask(server, bucket)
+        self.task_manager.schedule(_task)
+        return _task
+
+
+    def compact_bucket(self, server, bucket = "default"):
+        """Synchronously runs bucket compaction and monitors progress
+
+        Parameters:
+            server - source couchbase server
+            bucket - bucket to compact
+
+        Returns:
+            boolean - Whether or not the cbrecovery completed successfully"""
+        _task = self.async_compact_bucket(server, bucket)
+        status = _task.result()
+        return status

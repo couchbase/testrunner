@@ -2095,6 +2095,15 @@ class RestConnection(object):
                 tasks_warmup.append(task)
         return tasks_warmup
 
+    def compact_bucket(self, bucket ="default"):
+        api = self.baseUrl + 'pools/default/buckets/{0}/controller/compactBucket'.format(bucket)
+        status, content, header = self._http_request(api, 'POST')
+        if status:
+            log.info('bucket compaction successful')
+        else:
+            raise BucketCompactionException(bucket)
+
+        return True
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
@@ -2389,3 +2398,5 @@ class RestParser(object):
                 node.id = nodeDictionary["otpNode"]
             bucket.nodes.append(node)
         return bucket
+
+
