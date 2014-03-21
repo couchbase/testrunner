@@ -343,6 +343,8 @@ class Cluster(object):
 
     def shutdown(self, force=False):
         self.task_manager.shutdown(force)
+        if force:
+            print "Cluster instance shutdown with force"
 
     def async_create_view(self, server, design_doc_name, view, bucket="default", with_query=True,
                           check_replication=False, ddoc_options=None):

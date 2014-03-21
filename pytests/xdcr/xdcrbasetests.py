@@ -577,7 +577,7 @@ class XDCRBaseTest(unittest.TestCase):
             tasks += self._async_rebalance_out_cluster("destination", self.dest_nodes, self.dest_master)
         return tasks
 
-    def _async_rebalance_out_cluster(self,cluster, cluster_nodes, master):
+    def _async_rebalance_out_cluster(self, cluster, cluster_nodes, master):
         remove_nodes = cluster_nodes[len(cluster_nodes) - self._num_rebalance:]
         if cluster in self._failover:
             self.cluster.failover(cluster_nodes, remove_nodes)
@@ -619,7 +619,7 @@ class XDCRBaseTest(unittest.TestCase):
                 tasks += self._async_swap_rebalance_cluster(self.dest_nodes, self.dest_master)
         return tasks
 
-    def _async_swap_rebalance_cluster(self,cluster_nodes, master):
+    def _async_swap_rebalance_cluster(self, cluster_nodes, master):
         add_node = self._floating_servers_set.pop()
         remove_node = cluster_nodes[len(cluster_nodes) - 1]
         task = self._async_rebalance(cluster_nodes, [add_node], [remove_node])
