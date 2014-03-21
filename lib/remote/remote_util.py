@@ -224,13 +224,8 @@ class RemoteMachineShellConnection:
 
     def start_server(self, os="unix"):
         if os == "windows":
-            b_version, s_version, f_version = self.find_build_version()
-            if f_version.startswith("1.8") or f_version.startswith("2."):
-                o, r = self.execute_command("net start couchbaseserver")
-                self.log_command_output(o, r)
-            else:
-                o, r = self.execute_command("net start membaseserver")
-                self.log_command_output(o, r)
+            o, r = self.execute_command("net start couchbaseserver")
+            self.log_command_output(o, r)
         elif os == "unix":
             if self.is_couchbase_installed():
                 o, r = self.execute_command("/etc/init.d/couchbase-server start")
@@ -245,13 +240,8 @@ class RemoteMachineShellConnection:
 
     def stop_server(self, os="unix"):
         if os == "windows":
-            b_version, s_version, f_version = self.find_build_version()
-            if f_version.startswith("1.8") or f_version.startswith("2.0"):
-                o, r = self.execute_command("net stop couchbaseserver")
-                self.log_command_output(o, r)
-            else:
-                o, r = self.execute_command("net stop membaseserver")
-                self.log_command_output(o, r)
+            o, r = self.execute_command("net stop couchbaseserver")
+            self.log_command_output(o, r)
         elif os == "unix":
             if self.is_couchbase_installed():
                 o, r = self.execute_command("/etc/init.d/couchbase-server stop", use_channel=True)
@@ -674,6 +664,7 @@ class RemoteMachineShellConnection:
             if full_version == "1.6.5.4-win64":
                 full_version = "1.6.5.4"
             build_name = short_version = full_version
+            print build_name, short_version, full_version
             return build_name, short_version, full_version
         except IOError:
             log.error('Can not read version file')
@@ -2274,10 +2265,7 @@ class RemoteUtilHelper(object):
     def common_basic_setup(servers):
         for server in servers:
             shell = RemoteMachineShellConnection(server)
-            if shell.is_couchbase_installed():
-                shell.start_couchbase()
-            else:
-                shell.start_membase()
+            shell.start_couchbase()
             shell.disable_firewall()
             shell.unpause_memcached()
             shell.unpause_beam()
@@ -2291,7 +2279,7 @@ class RemoteUtilHelper(object):
         version = RestConnection(server).get_nodes_self().version
         hostname = info.hostname[0]
         time.sleep(5)
-        if version.startswith("1.8.") or version.startswith("2.0."):
+        if version.startswith("1.8.") or version.startswith("2.") or version.startswith("3."):
             shell.stop_couchbase()
             if info.type.lower() == "windows":
                 o = shell.execute_batch_command('ipconfig')

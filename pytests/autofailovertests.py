@@ -1,7 +1,7 @@
 from TestInput import TestInputSingleton
 import logger
 import time
-
+import threading
 import unittest
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -10,6 +10,7 @@ from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
 from membase.helper.rebalance_helper import RebalanceHelper
+
 
 log = logger.Logger.get_logger()
 
@@ -28,9 +29,9 @@ class AutoFailoverBaseTest(unittest.TestCase):
                       .format(testcase.case_number, testcase._testMethodName))
         servers = input.servers
         RemoteUtilHelper.common_basic_setup(servers)
-        ClusterOperationHelper.cleanup_cluster(servers)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
+        ClusterOperationHelper.cleanup_cluster(servers)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase) 
         log.info("==============  common_setup was finished for test #{0} {1} =============="\
                       .format(testcase.case_number, testcase._testMethodName))
 
@@ -337,7 +338,7 @@ class AutoFailoverTests(unittest.TestCase):
                           password=self.master.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
         rest.reset_autofailover()
-        ClusterOperationHelper.add_all_nodes_or_assert(self.master, self.servers, credentials, self)
+        ClusterOperationHelper.add_and_rebalance(self.servers,True)
         bucket_ram = info.memoryQuota * 2 / 3
 
         if num_buckets == 1:
@@ -353,14 +354,12 @@ class AutoFailoverTests(unittest.TestCase):
         for bucket in buckets:
                 ready = BucketOperationHelper.wait_for_memcached(self.master, bucket.name)
                 self.assertTrue(ready, msg="wait_for_memcached failed")
-        nodes = rest.node_statuses()
-        rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
-
+        
+        # We should till all the rebalance is complete, to make sure all nodes are in
 
         for bucket in buckets:
             inserted_keys_cnt = self.load_data(self.master, bucket.name, keys_count)
             log.info('inserted {0} keys'.format(inserted_keys_cnt))
 
-        msg = "rebalance failed after adding these nodes {0}".format(nodes)
-        self.assertTrue(rest.monitorRebalance(), msg=msg)
+        
         self.assertTrue(ready, "wait_for_memcached failed")
