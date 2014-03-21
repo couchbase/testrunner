@@ -566,10 +566,10 @@ class CreateDeleteViewTests(BaseTestCase):
         for bucket in self.buckets:
             if self.ddoc_ops == "create":
                 #create some more ddocs
-                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_test_1", "v1")
+                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_test_1", "v1", check_replication=False)
             elif self.ddoc_ops in ["update", "delete"]:
                 #update delete the same ddocs
-                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_test", "v1")
+                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_test", "v1", check_replication=False)
 
         rest = RestConnection(self.master)
         for node in self.servers[1:]:
