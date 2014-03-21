@@ -850,6 +850,8 @@ class XdcrCLITest(CliBaseTest):
     XDCR_REPLICATE_SUCCESS = {
                           "create": "SUCCESS: start replication",
                           "delete": "SUCCESS: delete replication",
+                          "pause": "SUCCESS: pause replication",
+                          "resume": "SUCCESS: resume replication"
     }
     SSL_MANAGE_SUCCESS = {'retrieve': "SUCCESS: retrieve certificate to \'PATH\'",
                            'regenerate': "SUCCESS: regenerate certificate to \'PATH\'"
@@ -957,6 +959,7 @@ class XdcrCLITest(CliBaseTest):
         from_bucket = self.input.param("xdcr-from-bucket", None)
         error_expected = self.input.param("error-expected", False)
         replication_mode = self.input.param("replication_mode", None)
+        pause_resume = self.input.param("pause-resume", None)
         _, _, xdcr_cluster_name, xdcr_hostname, _, _ = self.__xdcr_setup_create()
         cli_command = "xdcr-replicate"
         options = "--create"
@@ -982,6 +985,30 @@ class XdcrCLITest(CliBaseTest):
         for value in output:
             if value.startswith("stream id"):
                 replicator = value.split(":")[1].strip()
+                if pause_resume is not None:
+                    # pause replication
+                    options = "--pause"
+                    options += (" --xdcr-replicator={0}".format(replicator))
+                    output, _ = self.__execute_cli(cli_command, options)
+                    # validate output message
+                    self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["pause"], output[0])
+                    options = "--list"
+                    output, _ = self.__execute_cli(cli_command, options)
+                    # check if status of replication is "paused"
+                    for value in output:
+                        if value.startswith("status"):
+                            self.assertEqual(value.split(":")[1].strip(),"paused")
+                    # resume replication
+                    options = "--resume"
+                    options += (" --xdcr-replicator={0}".format(replicator))
+                    output, _ = self.__execute_cli(cli_command, options)
+                    self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["resume"], output[0])
+                    # check if status of replication is "running"
+                    options = "--list"
+                    output, _ = self.__execute_cli(cli_command, options)
+                    for value in output:
+                        if value.startswith("status"):
+                            self.assertEqual(value.split(":")[1].strip(),"running")
                 options = "--delete"
                 options += (" --xdcr-replicator={0}".format(replicator))
                 output, _ = self.__execute_cli(cli_command, options)
