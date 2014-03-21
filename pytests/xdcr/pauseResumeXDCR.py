@@ -195,10 +195,11 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
                                                          'replication_active_vbreps', '>', 0)
             task.result(self._timeout)
             # check incoming xdc_ops on remote nodes
-            task = self.cluster.async_wait_for_xdcr_stat(dest_nodes,
+            if self.is_cluster_replicating(src_nodes, src_bucket_name):
+                task = self.cluster.async_wait_for_xdcr_stat(dest_nodes,
                                                          dest_bucket_name, '',
                                                          'xdc_ops', '>', 0)
-            task.result(self._timeout)
+                task.result(self._timeout)
         else:
             self.log.info("Replication is complete on {0}, resume validation have been skipped".format(src_nodes[0].ip))
 
@@ -213,6 +214,8 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
                     count += 1
                     continue
                 else:
+                    self.log.info("Outbound mutations on {0} is {1}".format(node.ip,outbound_mutations))
+                    self.log.info("Node {0} is replicating".format(node.ip))
                     break
             else:
                 self.log.info("Outbound mutations on {0} is {1}".format(node.ip,outbound_mutations))
@@ -226,18 +229,21 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
     def setUp(self):
         super(PauseResumeTest, self).setUp()
         self.consecutive_pause_resume = int(self._input.param("consecutive_pause_resume", 1))
-        self.delete_bucket = self._input.param("delete_bucket", None)
-        self.reboot = self._input.param("reboot", None)
+        self.delete_bucket = self._input.param("delete_bucket", "")
+        self.reboot = self._input.param("reboot", "")
         self.pause_wait = self._input.param("pause_wait", 5)
-        self.rebalance_in = self._input.param("rebalance_in", None)
-        self.rebalance_out = self._input.param("rebalance_out", None)
-        self.swap_rebalance = self._input.param("swap_rebalance", None)
+        self.rebalance_in = self._input.param("rebalance_in", "")
+        self.rebalance_out = self._input.param("rebalance_out", "")
+        self.swap_rebalance = self._input.param("swap_rebalance", "")
+        self._num_rebalance = self._input.param("num_rebalance", 1)
+        self._failover = self._input.param("failover", "")
         self.__verify_src = False
 
     def tearDown(self):
         super(PauseResumeTest, self).tearDown()
 
-    def __async_load_and_pause_xdcr(self):
+
+    def __async_load_xdcr(self):
         load_tasks = self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0)
         # if this is not a bidirectional replication or
         # we plan to delete dest bucket which might result in
@@ -245,9 +251,9 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
         if self._replication_direction_str in "bidirection" and \
            self.delete_bucket != "destination":
             load_tasks += self._async_load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
-        #wait for 20 secs before pause
+
+        #load for 20 secs before pause
         self.sleep(20)
-        self.pause_xdcr()
         return load_tasks
 
     def __update_deletes(self):
@@ -270,25 +276,26 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
     def replication_with_pause_and_resume(self):
         count = 0
         #start loading
-        tasks = self.__async_load_and_pause_xdcr()
-
+        load_tasks = self.__async_load_xdcr()
+        tasks =[]
         #are we doing consecutive pause/resume
         while count < self.consecutive_pause_resume:
 
+            self.pause_xdcr()
             if count < 1:
 
                 # rebalance-in?
-                if self.rebalance_in != None:
+                if self.rebalance_in != "":
                     self._rebalance = self.rebalance_in
                     tasks += self._async_rebalance_in()
 
                 # rebalance-out/failover
-                if self.rebalance_out != None or self._failover!= None:
+                if self.rebalance_out != "" or self._failover!= "":
                     self._rebalance = self.rebalance_out
                     tasks += self._async_rebalance_out()
 
                  # swap rebalance?
-                if self.swap_rebalance != None:
+                if self.swap_rebalance != "":
                     self._rebalance = self.swap_rebalance
                     tasks += self._async_swap_rebalance()
 
@@ -319,9 +326,14 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
             self.resume_xdcr()
             count += 1
 
-        # wait for rebalance/failover/load to complete
-        self.log.info("Waiting for loading/rebalance to complete...")
+        # wait for rebalance to complete
         for task in tasks:
+            self.log.info("Waiting for rebalance to complete...")
+            task.result()
+
+        # wait for load to complete
+        for task in load_tasks:
+            self.log.info("Waiting for loading to complete...")
             task.result()
 
         self.__update_deletes()
@@ -329,7 +341,8 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
         self.verify_results(verify_src=self.__verify_src)
 
     def view_query_pause_resume(self):
-        load_tasks = self.__async_load_and_pause_xdcr()
+
+        load_tasks = self.__async_load_xdcr()
 
         dest_buckets = self._get_cluster_buckets(self.src_master)
         for bucket in dest_buckets:
