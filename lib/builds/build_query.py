@@ -178,8 +178,8 @@ class BuildQuery(object):
                 index_url = "/index_" + version[:version.find("-")] + ".html"
             else:
                 index_url = "/index_" + version + ".html"
-        #try this five times
-        for i in range(0, 5):
+        #try this ten times
+        for _ in range(0, 10):
             try:
                 if timeout:
                     socket.setdefaulttimeout(timeout)
@@ -187,9 +187,9 @@ class BuildQuery(object):
                 soup = BeautifulSoup.BeautifulSoup(page)
                 break
             except:
-                time.sleep(1)
+                time.sleep(5)
         if not page:
-            raise Exception('unable to connect to %s/index.html' % build_page)
+            raise Exception('unable to connect to %s' % (build_page + index_url))
         query = BuildQuery()
         for incident in soup('li'):
             contents = incident.contents
