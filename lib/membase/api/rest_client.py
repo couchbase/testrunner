@@ -2070,6 +2070,14 @@ class RestConnection(object):
             return json.loads(content)
         return None
 
+    def get_warming_up_tasks(self):
+        tasks = self.ns_server_tasks()
+        tasks_warmup = []
+        for task in tasks:
+            if task["type"] == "warming_up":
+                tasks_warmup.append(task)
+        return tasks_warmup
+
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):

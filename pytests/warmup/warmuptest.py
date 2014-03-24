@@ -273,3 +273,45 @@ class WarmUpTests(BaseTestCase):
             output, error = remote_client.execute_command_raw("rm -rf full_disk*", use_channel=True)
             remote_client.log_command_output(output, error)
             remote_client.disconnect()
+
+    def test_warm_up_progress(self):
+        self._load_dgm()
+
+        self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+        self._verify_stats_all_buckets(self.servers[:self.num_servers])
+        for bucket in self.buckets:
+            self._restart_memcache(bucket.name)
+        end_time = time.time() + self.wait_timeout
+        rest = RestConnection(self.master)
+        old_stats = rest.get_warming_up_tasks()
+        while old_stats and time.time() < end_time:
+            new_stats = rest.get_warming_up_tasks()
+            self._check_warm_up_progress_stats(old_stats, new_stats)
+            old_stats = new_stats
+
+    def _check_warm_up_progress_stats(self, old_stats, stats):
+        self.log.info("new stat is %s" % stats)
+        for task in stats:
+            old_task = [o_task for o_task in old_stats
+                        if task["bucket"] == o_task["bucket"] and task["node"] == o_task["node"]][0]
+            self.assertEqual(task["status"], 'running', "Status is not expected")
+            self.assertTrue(task["stats"]["ep_warmup_state"] in ["starting ep-engine","creating vbuckets", "loading data", "loading keys"],
+                            "State is not expected: %s" % task["stats"]["ep_warmup_state"])
+            if task["stats"]["ep_warmup_state"] == "loading data":
+                self.assertEqual(task["stats"]["ep_warmup_thread"], 'running', "ep_warmup_thread is not expected")
+                self.assertEqual(task["stats"]["ep_warmup"], 'enabled', "ep_warmup is not expected")
+                self.assertTrue(int(task["stats"]["ep_warmup_value_count"]) <= int(task["stats"]["ep_warmup_estimated_value_count"]),
+                                "warmed up values are greater than estimated count")
+                self.assertTrue(int(task["stats"]["ep_warmup_key_count"]) <= int(task["stats"]["ep_warmup_estimated_key_count"]),
+                                "warmed up keys are greater than estimated count")
+                if old_task["stats"]["ep_warmup_state"] == "loading data":
+                    self.assertEqual(task["stats"]["ep_warmup_estimated_value_count"],
+                                     old_task["stats"]["ep_warmup_estimated_value_count"],
+                                     "ep_warmup_estimated_value_count is changed")
+                    self.assertEqual(task["stats"]["ep_warmup_estimated_key_count"],
+                                     old_task["stats"]["ep_warmup_estimated_key_count"],
+                                     "ep_warmup_estimated_key_count is not expected")
+                    self.assertTrue(int(task["stats"]["ep_warmup_key_count"]) <= int(old_task["stats"]["ep_warmup_key_count"]),
+                                "warmed up keys are greater than earlier value count")
+                    self.assertTrue(int(task["stats"]["ep_warmup_value_count"]) <= int(old_task["stats"]["ep_warmup_value_count"]),
+                                "warmed up keys are greater than earlier value count")
