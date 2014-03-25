@@ -121,6 +121,7 @@ class BaseTestCase(unittest.TestCase):
                 if (str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1) or \
                     (str(self.__class__).find('memorysanitytests.MemorySanity') != -1) or \
                     str(self.__class__).find('negativetests.NegativeTests') != -1 or \
+                    str(self.__class__).find('warmuptest.WarmUpTests') != -1 or \
                     str(self.__class__).find('failover.failovertests.FailoverTests') != -1:
                     # rebalance all nodes into the cluster before each test
                     self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
@@ -451,12 +452,27 @@ class BaseTestCase(unittest.TestCase):
                         self.log.info("resident ratio is %s greater than %s for %s in bucket %s. Continue loading to the cluster" %
                                       (active_resident, self.active_resident_threshold, self.master.ip, bucket.name))
                         random_key = self.key_generator()
-                        generate_load = BlobGenerator(random_key, '%s-' % random_key, self.value_size, end=20000)
-                        self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                        generate_load = BlobGenerator(random_key, '%s-' % random_key, self.value_size, end=batch_size)
+                        self._load_bucket(bucket, self.master, generate_load, "create", exp=0, kv_store=1, flag=0, only_store_hash=True, batch_size=batch_size, pause_secs=5, timeout_secs=60)
                     else:
                         threshold_reached = True
                         self.log.info("DGM state achieved for %s in bucket %s!" % (self.master.ip, bucket.name))
                         break
+
+
+    def _async_load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
+        gen = copy.deepcopy(kv_gen)
+        task = self.cluster.async_load_gen_docs(server, bucket.name, gen,
+                                                bucket.kvs[kv_store], op_type,
+                                                exp, flag, only_store_hash,
+                                                batch_size, pause_secs, timeout_secs)
+        return task
+
+
+    def _load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
+        task = self._async_load_bucket(bucket, server, kv_gen, op_type, exp, kv_store, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
+        task.result()
+
 
     def key_generator(self, size=6, chars=string.ascii_uppercase + string.digits):
         return ''.join(random.choice(chars) for x in range(size))

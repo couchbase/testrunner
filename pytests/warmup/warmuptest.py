@@ -16,15 +16,15 @@ class WarmUpTests(BaseTestCase):
         self.pre_warmup_stats = {}
         self.timeout = 120
         self.without_access_log = self.input.param("without_access_log", False)
-        self.servers_in = [self.servers[i + 1] for i in range(self.num_servers - 1)]
-        self.cluster.rebalance(self.servers[:1], self.servers_in, [])
-        self.active_resident_threshold = int(self.input.param("active_resident_threshold", 90))
         self.access_log_time = self.input.param("access_log_time", 2)
         self.expire_time = self.input.param("expire_time", 30)
         self.doc_ops = self.input.param("doc_ops", None)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
-        self.load_gen_list = []
+#        self.load_gen_list = []
+        self._load_all_buckets(self.servers[0], self.gen_load, "create", 0)
+        #reinitialize active_resident_threshold
+        self.active_resident_threshold = 0
 
     def tearDown(self):
         super(WarmUpTests, self).tearDown()
@@ -74,7 +74,7 @@ class WarmUpTests(BaseTestCase):
                         self.log.info("curr_items_tot is %s not equal to %s" % (stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'curr_items_tot')[server],
                                                                             self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)]["curr_items_tot"]))
 
-                    time.sleep(10)
+                    self.sleep(10)
 
         for bucket in self.buckets:
             for server in self.servers:
@@ -161,45 +161,51 @@ class WarmUpTests(BaseTestCase):
 
         return access_log_created
 
-    def _load_dgm(self):
-        generate_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
-        self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
-        self.load_gen_list.append(generate_load)
+    def _additional_ops(self):
+        generate_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, generate_update, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+        generate_delete = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, generate_delete, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+        generate_expire = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, generate_expire, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
 
-        stats_all_buckets = {}
-        for bucket in self.buckets:
-            stats_all_buckets[bucket.name] = StatsCommon()
 
-        for bucket in self.buckets:
-            threshold_reached = False
-            while not threshold_reached :
-                for server in self.servers:
-                    active_resident = stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'vb_active_perc_mem_resident')[server]
-                    if int(active_resident) > self.active_resident_threshold:
-                        self.log.info("resident ratio is %s greater than %s for %s in bucket %s. Continue loading to the cluster" %
-                                      (active_resident, self.active_resident_threshold, server.ip, bucket.name))
-                        random_key = self.key_generator()
-                        generate_load = BlobGenerator(random_key, '%s-' % random_key, self.value_size, end=self.num_items)
-                        tasks = self._async_load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
-                        for task in tasks:
-                            task.result()
-                        self.load_gen_list.append(generate_load)
-                    else:
-                        threshold_reached = True
-                        self.log.info("DGM state achieved for %s in bucket %s!" % (server.ip, bucket.name))
-                        break
+#        self.load_gen_list.append(generate_load)
+#
+#        stats_all_buckets = {}
+#        for bucket in self.buckets:
+#            stats_all_buckets[bucket.name] = StatsCommon()
+#
+#        for bucket in self.buckets:
+#            threshold_reached = False
+#            while not threshold_reached :
+#                for server in self.servers:
+#                    active_resident = stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'vb_active_perc_mem_resident')[server]
+#                    if int(active_resident) > self.active_resident_threshold:
+#                        self.log.info("resident ratio is %s greater than %s for %s in bucket %s. Continue loading to the cluster" %
+#                                      (active_resident, self.active_resident_threshold, server.ip, bucket.name))
+#                        random_key = self.key_generator()
+#                        generate_load = BlobGenerator(random_key, '%s-' % random_key, self.value_size, end=self.num_items)
+#                        tasks = self._async_load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+#                        for task in tasks:
+#                            task.result()
+#                        self.load_gen_list.append(generate_load)
+#                    else:
+#                        threshold_reached = True
+#                        self.log.info("DGM state achieved for %s in bucket %s!" % (server.ip, bucket.name))
+#                        break
 
 
         if(self.doc_ops is not None):
             if("update" in self.doc_ops):
-                for gen in self.load_gen_list[:int(len(self.load_gen_list) * 0.5)]:
-                    self._load_all_buckets(self.master, gen, "update", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+#                for gen in self.load_gen_list[:int(len(self.load_gen_list) * 0.5)]:
+                self._load_all_buckets(self.master, generate_update, "update", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
             if("delete" in self.doc_ops):
-                for gen in self.load_gen_list[int(len(self.load_gen_list) * 0.5):]:
-                    self._load_all_buckets(self.master, gen, "delete", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+#                for gen in self.load_gen_list[int(len(self.load_gen_list) * 0.5):]:
+                self._load_all_buckets(self.master, generate_delete, "delete", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
             if("expire" in self.doc_ops):
-                for gen in self.load_gen_list[:int(len(self.load_gen_list) * 0.8)]:
-                    self._load_all_buckets(self.master, gen, "update", self.expire_time, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+#                for gen in self.load_gen_list[:int(len(self.load_gen_list) * 0.8)]:
+                self._load_all_buckets(self.master, generate_expire, "update", self.expire_time, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
                 time.sleep(self.expire_time * 2)
 
                 for server in self.servers:
@@ -207,7 +213,7 @@ class WarmUpTests(BaseTestCase):
                     for bucket in self.buckets:
                         shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
                     shell.disconnect()
-                time.sleep(30)
+                self.sleep(30)
 
 
     def _create_access_log(self):
@@ -242,7 +248,7 @@ class WarmUpTests(BaseTestCase):
 
 
     def warmup_test(self):
-        self._load_dgm()
+        self._additional_ops()
 
         # wait for draining of data before restart and warmup
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
@@ -263,11 +269,11 @@ class WarmUpTests(BaseTestCase):
             generate_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
             if self.doc_ops is not None:
                 if "delete" in self.doc_ops or "expire" in self.doc_ops:
-                    self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                    self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=5000, pause_secs=5, timeout_secs=120)
                 else:
-                    self._load_all_buckets(self.master, generate_load, "update", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                    self._load_all_buckets(self.master, generate_load, "update", 0, 1, 0, True, batch_size=5000, pause_secs=5, timeout_secs=120)
             else:
-                self._load_all_buckets(self.master, generate_load, "update", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                self._load_all_buckets(self.master, generate_load, "update", 0, 1, 0, True, batch_size=5000, pause_secs=5, timeout_secs=120)
         else:
             raise Exception("Warmup check failed. Warmup test failed in some node")
 
