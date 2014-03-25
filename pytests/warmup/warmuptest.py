@@ -1,9 +1,6 @@
 import time
-from membase.api.rest_client import RestConnection, Bucket
-from couchbase.documentgenerator import DocumentGenerator
+from membase.api.rest_client import RestConnection
 from basetestcase import BaseTestCase
-from memcached.helper.kvstore import KVStore
-from mc_bin_client import MemcachedError
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase.documentgenerator import BlobGenerator
 from couchbase.stats_tools import StatsCommon
@@ -21,7 +18,6 @@ class WarmUpTests(BaseTestCase):
         self.doc_ops = self.input.param("doc_ops", None)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
-#        self.load_gen_list = []
         generate_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.servers[0], generate_load, "create", 0, batch_size=2000)
         #reinitialize active_resident_threshold
@@ -120,7 +116,7 @@ class WarmUpTests(BaseTestCase):
                                       (stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'mem_used')[server],
                                        stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'ep_mem_low_wat')[server]))
 
-                    time.sleep(10)
+                    self.sleep(5)
 
         for bucket in self.buckets:
             for server in self.servers:
@@ -148,7 +144,7 @@ class WarmUpTests(BaseTestCase):
 
     def _wait_for_access_run(self, access_log_time, access_scanner_runs, server, bucket, bucket_stats):
         access_log_created = False
-        time.sleep(access_log_time * 60)
+        self.sleep(access_log_time * 60)
         new_scanner_run = int(bucket_stats.get_stats([server], bucket, '', 'ep_num_access_scanner_runs')[server])
         count = 0
         while not access_log_created and count < 5:
@@ -163,51 +159,21 @@ class WarmUpTests(BaseTestCase):
         return access_log_created
 
     def _additional_ops(self):
-        generate_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
+        generate_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items * 3)
         self._load_all_buckets(self.master, generate_update, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
-        generate_delete = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
+        generate_delete = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items * 3)
         self._load_all_buckets(self.master, generate_delete, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
-        generate_expire = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
+        generate_expire = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items * 3)
         self._load_all_buckets(self.master, generate_expire, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
-
-
-#        self.load_gen_list.append(generate_load)
-#
-#        stats_all_buckets = {}
-#        for bucket in self.buckets:
-#            stats_all_buckets[bucket.name] = StatsCommon()
-#
-#        for bucket in self.buckets:
-#            threshold_reached = False
-#            while not threshold_reached :
-#                for server in self.servers:
-#                    active_resident = stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'vb_active_perc_mem_resident')[server]
-#                    if int(active_resident) > self.active_resident_threshold:
-#                        self.log.info("resident ratio is %s greater than %s for %s in bucket %s. Continue loading to the cluster" %
-#                                      (active_resident, self.active_resident_threshold, server.ip, bucket.name))
-#                        random_key = self.key_generator()
-#                        generate_load = BlobGenerator(random_key, '%s-' % random_key, self.value_size, end=self.num_items)
-#                        tasks = self._async_load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
-#                        for task in tasks:
-#                            task.result()
-#                        self.load_gen_list.append(generate_load)
-#                    else:
-#                        threshold_reached = True
-#                        self.log.info("DGM state achieved for %s in bucket %s!" % (server.ip, bucket.name))
-#                        break
-
 
         if(self.doc_ops is not None):
             if("update" in self.doc_ops):
-#                for gen in self.load_gen_list[:int(len(self.load_gen_list) * 0.5)]:
                 self._load_all_buckets(self.master, generate_update, "update", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
             if("delete" in self.doc_ops):
-#                for gen in self.load_gen_list[int(len(self.load_gen_list) * 0.5):]:
                 self._load_all_buckets(self.master, generate_delete, "delete", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
             if("expire" in self.doc_ops):
-#                for gen in self.load_gen_list[:int(len(self.load_gen_list) * 0.8)]:
                 self._load_all_buckets(self.master, generate_expire, "update", self.expire_time, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
-                time.sleep(self.expire_time * 2)
+                self.sleep(self.expire_time + 10)
 
                 for server in self.servers:
                     shell = RemoteMachineShellConnection(server)
