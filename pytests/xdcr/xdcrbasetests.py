@@ -263,7 +263,7 @@ class XDCRBaseTest(unittest.TestCase):
 
         self.case_number = self._input.param("case_number", 0)
         self._expires = self._input.param("expires", 0)
-        self._timeout = self._input.param("timeout", 60)
+        self.wait_timeout = self._input.param("timeout", 60)
         self._percent_update = self._input.param("upd", 30)
         self._percent_delete = self._input.param("del", 30)
         self._warmup = self._input.param("warm", None)
@@ -485,7 +485,7 @@ class XDCRBaseTest(unittest.TestCase):
                                    master_id=server_id))
 
         for task in bucket_tasks:
-            task.result(self._timeout * 10)
+            task.result(self.wait_timeout * 10)
 
     def _create_standard_buckets(self, server, num_buckets, server_id, bucket_size):
         bucket_tasks = []
@@ -500,7 +500,7 @@ class XDCRBaseTest(unittest.TestCase):
                                     port=STANDARD_BUCKET_PORT + i, master_id=server_id))
 
         for task in bucket_tasks:
-            task.result(self._timeout * 10)
+            task.result(self.wait_timeout * 10)
 
     def _create_buckets(self, nodes):
         if self._dgm_run_bool:
@@ -842,13 +842,13 @@ class XDCRBaseTest(unittest.TestCase):
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
             if "delete" in self._doc_ops:
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-            self.sleep(self._timeout / 6)
+            self.sleep(self.wait_timeout / 6)
         if self._doc_ops_dest is not None:
             if "update" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
             if "delete" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
-            self.sleep(self._timeout / 6)
+            self.sleep(self.wait_timeout / 6)
         for task in tasks:
             task.result()
         if self._wait_for_expiration and self._expires:

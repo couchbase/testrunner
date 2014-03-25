@@ -36,7 +36,7 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
         for bucket in dest_master_buckets:
             tasks.append(self.cluster.async_wait_for_stats([self.dest_master], bucket, '', 'curr_items', '>=', expected_items))
         for task in tasks:
-            task.result(self._timeout * 5)
+            task.result(self.wait_timeout * 5)
 
         # Perform 20% delete on Source cluster.
         tasks = []
@@ -53,7 +53,7 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
 
         # Step-7 Wait for all the items to be replicated
         # Step-8 Compare the source and destination cluster items - item count, meta data, data content.
-        self.sleep(self._timeout * 5)
+        self.sleep(self.wait_timeout * 5)
         self.verify_results(verify_src=True)
 
         # Verify if no deletion performed at source node:

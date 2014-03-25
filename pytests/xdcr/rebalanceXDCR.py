@@ -64,7 +64,7 @@ class Rebalance(XDCRReplicationBaseTest):
             if self._replication_direction_str in "bidirection":
                 self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-            self.sleep(self._timeout / 2)
+            self.sleep(self.wait_timeout / 2)
             verify_src = False
             for num_rebalance in range(self._num_rebalance):
                 tasks = []
@@ -84,7 +84,7 @@ class Rebalance(XDCRReplicationBaseTest):
                         self.dest_master.ip))
                     self.dest_nodes.extend([add_node])
 
-                self.sleep(self._timeout / 2)
+                self.sleep(self.wait_timeout / 2)
                 for task in tasks:
                     task.result()
 
@@ -92,7 +92,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     self._async_modify_data()
                 elif self._replication_direction_str in "bidirection":
                     self._async_update_delete_data()
-                self.sleep(self._timeout / 2)
+                self.sleep(self.wait_timeout / 2)
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
@@ -126,7 +126,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
             if not async_data_load:
-                self.sleep(self._timeout / 2)
+                self.sleep(self.wait_timeout / 2)
 
             verify_src = False
             tasks = []
@@ -145,7 +145,7 @@ class Rebalance(XDCRReplicationBaseTest):
                 self.log.info(" Starting rebalance-out nodes:{0} at Destination cluster {1}".format(remove_node_ips, self.dest_master.ip))
                 map(self.dest_nodes.remove, remove_nodes)
 
-                self.sleep(self._timeout / 2)
+                self.sleep(self.wait_timeout / 2)
             for task in tasks:
                 task.result()
 
@@ -157,7 +157,7 @@ class Rebalance(XDCRReplicationBaseTest):
                 self._async_modify_data()
             elif self._replication_direction_str in "bidirection":
                 self._async_update_delete_data()
-            self.sleep(self._timeout / 2)
+            self.sleep(self.wait_timeout / 2)
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
@@ -179,7 +179,7 @@ class Rebalance(XDCRReplicationBaseTest):
             if self._replication_direction_str in "bidirection":
                 self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
             src_buckets = dest_buckets = []
-            self.sleep(self._timeout / 2)
+            self.sleep(self.wait_timeout / 2)
             tasks = []
             verify_src = False
             if "source" in self._rebalance:
@@ -206,7 +206,7 @@ class Rebalance(XDCRReplicationBaseTest):
                 for bucket in dest_buckets:
                     bucket.master_id = master_id
 
-            self.sleep(self._timeout / 2)
+            self.sleep(self.wait_timeout / 2)
             for task in tasks:
                 task.result()
 
@@ -214,7 +214,7 @@ class Rebalance(XDCRReplicationBaseTest):
                 self._async_modify_data()
             elif self._replication_direction_str in "bidirection":
                 self._async_update_delete_data()
-            self.sleep(self._timeout / 2)
+            self.sleep(self.wait_timeout / 2)
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
@@ -237,7 +237,7 @@ class Rebalance(XDCRReplicationBaseTest):
             if self._replication_direction_str in "bidirection":
                 self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-            self.sleep(self._timeout / 2)
+            self.sleep(self.wait_timeout / 2)
             verify_src = False
             for num_rebalance in range(self._num_rebalance):
                 tasks = []
@@ -251,7 +251,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     self.src_nodes.remove(remove_node)
                     self.src_nodes.append(add_node)
                     verify_src = True
-                self.sleep(self._timeout / 2)
+                self.sleep(self.wait_timeout / 2)
                 if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
                     add_node = self._floating_servers_set.pop()
                     remove_node = self.dest_nodes[len(self.dest_nodes) - 1]
@@ -262,7 +262,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     self.dest_nodes.remove(remove_node)
                     self.dest_nodes.append(add_node)
 
-                self.sleep(self._timeout / 2)
+                self.sleep(self.wait_timeout / 2)
                 for task in tasks:
                     task.result()
 
@@ -270,7 +270,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     self._async_modify_data()
                 elif self._replication_direction_str in "bidirection":
                     self._async_update_delete_data()
-                self.sleep(self._timeout / 2)
+                self.sleep(self.wait_timeout / 2)
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
@@ -293,7 +293,7 @@ class Rebalance(XDCRReplicationBaseTest):
             if self._replication_direction_str in "bidirection":
                 self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-            self.sleep(self._timeout / 2)
+            self.sleep(self.wait_timeout / 2)
             verify_src = False
             for num_rebalance in range(self._num_rebalance):
                 tasks = []
@@ -327,7 +327,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     for bucket in dest_buckets:
                         bucket.master_id = master_id
 
-                self.sleep(self._timeout / 2)
+                self.sleep(self.wait_timeout / 2)
                 for task in tasks:
                     task.result()
 
@@ -335,7 +335,7 @@ class Rebalance(XDCRReplicationBaseTest):
                     self._async_modify_data()
                 elif self._replication_direction_str in "bidirection":
                     self._async_update_delete_data()
-                self.sleep(self._timeout * 2)
+                self.sleep(self.wait_timeout * 2)
 
             if self._replication_direction_str in "unidirection":
                 self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
@@ -357,7 +357,7 @@ class Rebalance(XDCRReplicationBaseTest):
             if self._replication_direction_str in "bidirection":
                 self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-            self.sleep(self._timeout / 2)
+            self.sleep(self.wait_timeout / 2)
 
             src_buckets = self._get_cluster_buckets(self.src_master)
             for bucket in src_buckets:
@@ -372,7 +372,7 @@ class Rebalance(XDCRReplicationBaseTest):
                 tasks = []
                 tasks = self.async_create_views(self.src_master, ddoc_name, views, self.default_bucket_name)
                 tasks += self.async_create_views(self.dest_master, ddoc_name, views, self.default_bucket_name)
-                self.sleep(self._timeout / 2)
+                self.sleep(self.wait_timeout / 2)
 
                 if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
                     add_node = self._floating_servers_set.pop()
@@ -430,7 +430,7 @@ class Rebalance(XDCRReplicationBaseTest):
             if self._replication_direction_str in "bidirection":
                 self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
-            self.sleep(self._timeout / 2)
+            self.sleep(self.wait_timeout / 2)
 
             src_buckets = self._get_cluster_buckets(self.src_master)
             dest_buckets = self._get_cluster_buckets(self.src_master)

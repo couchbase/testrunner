@@ -290,7 +290,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         bucket = self._get_bucket(self, 'bucket0', self.dest_master)
         gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self.num_items)
         self._load_bucket(bucket, self.dest_master, gen_create2, 'create', exp=0)
-        self.sleep(self._timeout)
+        self.sleep(self.wait_timeout)
         self._wait_for_replication_to_catchup()
         nodes_to_upgrade = []
         if upgrade_seq == "src>dest":

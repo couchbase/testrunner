@@ -13,7 +13,6 @@ class XDCRViewTests(XDCRReplicationBaseTest, CreateDeleteViewTests):
         self.num_views_per_ddoc = self._input.param("num_views_per_ddoc", 1)
         self.num_ddocs = self._input.param("num_ddocs", 1)
         self.test_with_view = True
-        self.wait_timeout = self._timeout
         self.updated_map_func = 'function (doc) { emit(null, doc);}'
         if self._replication_direction_str in "bidirection":
             self.gen_create2 = BlobGenerator('LoadTwo', 'LoadTwo', self._value_size, end=self.num_items)
@@ -72,7 +71,7 @@ class XDCRViewTests(XDCRReplicationBaseTest, CreateDeleteViewTests):
             for bucket in buckets:
                 self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc, "dev_test", "v1")
             self._query_view()
-            self.sleep(self._timeout / 2)
+            self.sleep(self.wait_timeout / 2)
 
         tasks = []
         if self.ddoc_ops is not None:
@@ -107,7 +106,7 @@ class XDCRViewTests(XDCRReplicationBaseTest, CreateDeleteViewTests):
             verify_src = True
 
         self.verify_results(verify_src=verify_src)
-        self.sleep(self._timeout / 2)
+        self.sleep(self.wait_timeout / 2)
         for bucket in buckets:
             self.num_items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
             break

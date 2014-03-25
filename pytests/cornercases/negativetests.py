@@ -128,11 +128,11 @@ class NegativeTests2(XDCRReplicationBaseTest):
             self._wait_for_stats_all_buckets(self.dest_nodes)
 
             self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-            self.sleep(self._timeout)
+            self.sleep(self.wait_timeout)
             self.verify_results(verify_src=True)
 
         else:
             self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-            self.sleep(self._timeout)
+            self.sleep(self.wait_timeout)
             self.verify_results()
 

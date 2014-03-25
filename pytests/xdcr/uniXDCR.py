@@ -26,7 +26,7 @@ class unidirectional(XDCRReplicationBaseTest):
         self._modify_src_data()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.sleep(self._timeout / 2)
+        self.sleep(self.wait_timeout / 2)
         self.verify_results()
 
     """Testing Unidirectional load( Loading only at source) Verifying whether XDCR replication is successful on
@@ -40,7 +40,7 @@ class unidirectional(XDCRReplicationBaseTest):
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
         self._wait_for_stats_all_buckets(self.src_nodes)
-        self.sleep(self._timeout / 2)
+        self.sleep(self.wait_timeout / 2)
         self.verify_results()
 
     """Testing Unidirectional load( Loading only at source). Failover node at Source/Destination while
@@ -57,7 +57,7 @@ class unidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        self.sleep(self._timeout / 2)
+        self.sleep(self.wait_timeout / 2)
 
         self._modify_src_data()
 
@@ -79,7 +79,7 @@ class unidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.dest_master)
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        self.sleep(self._timeout / 2)
+        self.sleep(self.wait_timeout / 2)
         self._modify_src_data()
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.wait_warmup_completed(warmupnodes)
@@ -87,7 +87,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def load_with_async_ops_with_warmup(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self._timeout)
+        self.sleep(self.wait_timeout)
 
         #warmup
         warmupnodes = []
@@ -98,7 +98,7 @@ class unidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        self.sleep(self._timeout / 2)
+        self.sleep(self.wait_timeout / 2)
         self._async_modify_data()
         self.sleep(30)
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
@@ -108,7 +108,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def load_with_async_ops_with_warmup_master(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self._timeout)
+        self.sleep(self.wait_timeout)
 
         #warmup
         warmupnodes = []
@@ -119,9 +119,9 @@ class unidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.dest_master)
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        self.sleep(self._timeout / 2)
+        self.sleep(self.wait_timeout / 2)
         self._async_modify_data()
-        self.sleep(self._timeout / 2)
+        self.sleep(self.wait_timeout / 2)
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self._wait_for_stats_all_buckets(self.dest_nodes)
         self.wait_warmup_completed(warmupnodes)
@@ -129,7 +129,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def load_with_failover(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self._timeout)
+        self.sleep(self.wait_timeout)
 
         if self._failover is not None:
             if "source" in self._failover:
@@ -159,14 +159,14 @@ class unidirectional(XDCRReplicationBaseTest):
                     self.log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
                                     len(self.dest_nodes)))
 
-        self.sleep(self._timeout / 6)
+        self.sleep(self.wait_timeout / 6)
         self._async_modify_data()
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.verify_results()
 
     def load_with_failover_then_add_back(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self._timeout)
+        self.sleep(self.wait_timeout)
 
         if self._failover is not None:
             if "source" in self._failover:
@@ -211,7 +211,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def load_with_failover_master(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self._timeout)
+        self.sleep(self.wait_timeout)
 
         if self._failover is not None:
             if "source" in self._failover:
@@ -242,7 +242,7 @@ class unidirectional(XDCRReplicationBaseTest):
                     if bucket.master_id == prev_master_id:
                         bucket.master_id = master_id
 
-        self.sleep(self._timeout / 6)
+        self.sleep(self.wait_timeout / 6)
         self._async_modify_data()
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.verify_results()
@@ -253,7 +253,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def load_with_async_failover(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self._timeout)
+        self.sleep(self.wait_timeout)
 
         tasks = []
         """Setting up failover while creates/updates/deletes at source nodes"""
@@ -269,7 +269,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
         self._async_modify_data()
 
-        self.sleep(self._timeout / 4)
+        self.sleep(self.wait_timeout / 4)
         for task in tasks:
             task.result()
 
@@ -302,7 +302,7 @@ class unidirectional(XDCRReplicationBaseTest):
         and then verify that there has been any data loss on all clusters."""
     def replication_with_ddoc_compaction(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self._timeout)
+        self.sleep(self.wait_timeout)
 
         src_buckets = self._get_cluster_buckets(self.src_master)
         for bucket in src_buckets:
@@ -341,7 +341,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
     def replication_with_view_queries_and_ops(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self._timeout)
+        self.sleep(self.wait_timeout)
 
         src_buckets = self._get_cluster_buckets(self.src_master)
         dest_buckets = self._get_cluster_buckets(self.src_master)
@@ -403,7 +403,7 @@ class unidirectional(XDCRReplicationBaseTest):
         and then verify that there has been no data loss on both all clusters."""
     def replication_with_disabled_ddoc_compaction(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self._timeout)
+        self.sleep(self.wait_timeout)
 
         if self.disable_src_comp:
             self.disable_compaction(self.src_master)
@@ -428,7 +428,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self._async_modify_data()
-        self.sleep(self._timeout)
+        self.sleep(self.wait_timeout)
 
         i = len(self.dest_nodes) - 1
         shell = RemoteMachineShellConnection(self.dest_nodes[i])
@@ -455,17 +455,17 @@ class unidirectional(XDCRReplicationBaseTest):
         shell.disable_firewall()
         shell.disconnect()
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.wait_node_restarted(self.dest_nodes[i], wait_time=self._timeout * 4, wait_if_warmup=True)
+        self.wait_node_restarted(self.dest_nodes[i], wait_time=self.wait_timeout * 4, wait_if_warmup=True)
         self.verify_results()
 
     def replication_with_firewall_enabled(self):
         self.set_xdcr_param("xdcrFailureRestartInterval", 1)
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self._timeout / 6)
+        self.sleep(self.wait_timeout / 6)
         self._async_modify_data()
-        self.sleep(self._timeout / 6)
+        self.sleep(self.wait_timeout / 6)
         self._enable_firewall(self.dest_master)
-        self.sleep(self._timeout / 2)
+        self.sleep(self.wait_timeout / 2)
         self._disable_firewall(self.dest_master)
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.verify_results()
@@ -476,7 +476,7 @@ class unidirectional(XDCRReplicationBaseTest):
     def test_append(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.sleep(self._timeout)
+        self.sleep(self.wait_timeout)
         self.verify_results()
         loop_count = self._input.param("loop_count", 20)
         for i in xrange(loop_count):
@@ -484,7 +484,7 @@ class unidirectional(XDCRReplicationBaseTest):
             gen = copy.deepcopy(self.gen_append)
             self._load_all_buckets(self.src_master, gen, "append", 0,
                                    batch_size=1)
-            self.sleep(self._timeout)
+            self.sleep(self.wait_timeout)
         self.verify_results()
 
     '''
