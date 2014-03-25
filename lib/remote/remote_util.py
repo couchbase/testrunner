@@ -447,11 +447,15 @@ class RemoteMachineShellConnection:
         if getattr(self, "info", None) is None:
             self.info = self.extract_remote_info()
         if self.info.type.lower() == "windows":
-            self.execute_command('netsh advfirewall set publicprofile state off')
-            self.execute_command('netsh advfirewall set privateprofile state off')
+            output, error = self.execute_command('netsh advfirewall set publicprofile state off')
+            self.log_command_output(output, error)
+            output, error = self.execute_command('netsh advfirewall set privateprofile state off')
+            self.log_command_output(output, error)
             # for details see RemoteUtilHelper.enable_firewall for windows
-            self.execute_command('netsh advfirewall firewall delete rule name="block erl.exe in"')
-            self.execute_command('netsh advfirewall firewall delete rule name="block erl.exe out"')
+            output, error = self.execute_command('netsh advfirewall firewall delete rule name="block erl.exe in"')
+            self.log_command_output(output, error)
+            output, error = self.execute_command('netsh advfirewall firewall delete rule name="block erl.exe out"')
+            self.log_command_output(output, error)
         else:
             output, error = self.execute_command('/sbin/iptables -F')
             self.log_command_output(output, error)
@@ -2238,8 +2242,10 @@ class RemoteUtilHelper(object):
         shell = RemoteMachineShellConnection(server)
         shell.info = shell.extract_remote_info()
         if shell.info.type.lower() == "windows":
-            shell.execute_command('netsh advfirewall set publicprofile state on')
-            shell.execute_command('netsh advfirewall set privateprofile state on')
+            o, r = shell.execute_command('netsh advfirewall set publicprofile state on')
+            shell.log_command_output(o, r)
+            o, r = shell.execute_command('netsh advfirewall set privateprofile state on')
+            shell.log_command_output(o, r)
             log.info("enabled firewall on {0}".format(server))
             suspend_erlang = shell.windows_process_utils("pssuspend.exe", "erl.exe", option="")
             if suspend_erlang:
