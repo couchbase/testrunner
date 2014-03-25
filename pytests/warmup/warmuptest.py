@@ -23,7 +23,7 @@ class WarmUpTests(BaseTestCase):
             self.doc_ops = self.doc_ops.split(";")
 #        self.load_gen_list = []
         generate_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
-        self._load_all_buckets(self.servers[0], generate_load, "create", 0)
+        self._load_all_buckets(self.servers[0], generate_load, "create", 0, batch_size=2000)
         #reinitialize active_resident_threshold
         self.active_resident_threshold = 0
 

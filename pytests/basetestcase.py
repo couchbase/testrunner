@@ -452,7 +452,7 @@ class BaseTestCase(unittest.TestCase):
                         self.log.info("resident ratio is %s greater than %s for %s in bucket %s. Continue loading to the cluster" %
                                       (active_resident, self.active_resident_threshold, self.master.ip, bucket.name))
                         random_key = self.key_generator()
-                        generate_load = BlobGenerator(random_key, '%s-' % random_key, self.value_size, end=batch_size)
+                        generate_load = BlobGenerator(random_key, '%s-' % random_key, self.value_size, end=batch_size * 50)
                         self._load_bucket(bucket, self.master, generate_load, "create", exp=0, kv_store=1, flag=0, only_store_hash=True, batch_size=batch_size, pause_secs=5, timeout_secs=60)
                     else:
                         threshold_reached = True
