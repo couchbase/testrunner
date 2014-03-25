@@ -48,7 +48,6 @@ class FailoverTests(FailoverBaseTest):
                                batch_size=10000, pause_secs=5, timeout_secs=180)
         self._wait_for_stats_all_buckets(self.servers)
 
-        _servers_ = copy.deepcopy(self.servers)
         nodes = rest.node_statuses()
 
         RebalanceHelper.wait_for_replication(self.servers, self.cluster)
@@ -130,6 +129,7 @@ class FailoverTests(FailoverBaseTest):
                 elif self.during_ops == "change_port":
                     self.change_port(new_port=self.input.param("new_port", "9090"))
                     rest = RestConnection(self.master)
+            _servers_ = copy.deepcopy(self.servers)
             try:
                 msg = "rebalance failed while removing failover nodes {0}".format(chosen)
                 self.assertTrue(rest.monitorRebalance(stop_if_loop=True), msg=msg)

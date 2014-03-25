@@ -38,19 +38,6 @@ class FailoverBaseTest(BaseTestCase):
                 self.log.info("==============  tearDown was started for test #{0} {1} =============="\
                               .format(self.case_number, self._testMethodName))
                 RemoteUtilHelper.common_basic_setup(self.servers)
-                self.log.info("10 seconds delay to wait for membase-server to start")
-                self.sleep(10)
-                for server in self._cleanup_nodes:
-                    shell = RemoteMachineShellConnection(server)
-                    o, r = shell.execute_command("iptables -F")
-                    shell.log_command_output(o, r)
-                    o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:65535 -j ACCEPT")
-                    shell.log_command_output(o, r)
-                    o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp -o eth0 --dport 1000:65535 -j ACCEPT")
-                    shell.log_command_output(o, r)
-                    o, r = shell.execute_command("/etc/init.d/couchbase-server start")
-                    shell.log_command_output(o, r)
-                    shell.disconnect()
                 self.log.info("==============  tearDown was finished for test #{0} {1} =============="\
                               .format(self.case_number, self._testMethodName))
             finally:
