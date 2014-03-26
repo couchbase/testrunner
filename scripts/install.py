@@ -418,7 +418,7 @@ class CouchbaseServerInstaller(Installer):
             log.info('sleep for 5 seconds before trying again ...')
             time.sleep(5)
         if not cluster_initialized:
-            raise Exception("unable to initialize couchbase node")
+            sys.exit("unable to initialize couchbase node")
 
     def install(self, params, queue=None):
         try:
