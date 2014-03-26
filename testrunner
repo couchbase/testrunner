@@ -181,8 +181,6 @@ def create_headers(username, password):
 
 
 def get_server_logs(input, path):
-
-    diag_name = uuid.uuid4()
     for server in input.servers:
         print "grabbing diags from ".format(server.ip)
         diag_url = "http://{0}:{1}/diag".format(server.ip, server.port)
@@ -192,7 +190,7 @@ def get_server_logs(input, path):
             req = urllib2.Request(diag_url)
             req.headers = create_headers(input.membase_settings.rest_username,
                                          input.membase_settings.rest_password)
-            filename = "{0}/{1}-{2}-diag.txt".format(path, diag_name, server.ip)
+            filename = "{0}/{1}-diag.txt".format(path, server.ip)
             page = urllib2.urlopen(req)
             with open(filename, 'wb') as output:
                 os.write(1, "downloading {0} ...".format(server.ip))
@@ -258,18 +256,13 @@ if __name__ == "__main__":
     print "Global Test input params:"
     pprint(TestInputSingleton.input.test_params)
 
-    xunit = XUnitTestResult()
-
     # Create root logs directory
-    if not os.path.exists("logs"):
-        os.makedirs("logs")
-
+    abs_path = os.path.dirname(os.path.abspath(sys.argv[0]))
     # Create testrunner logs subdirectory
     str_time = time.strftime("%y-%b-%d_%H-%M-%S", time.localtime())
-    logs_folder = "logs/testrunner-" + str_time
-    logs_folder_abspath = os.path.abspath(logs_folder)
-    if not os.path.exists(logs_folder):
-        os.makedirs(logs_folder)
+    root_log_dir = os.path.join(abs_path, "logs/testrunner-" + str_time)
+    if not os.path.exists(root_log_dir):
+        os.makedirs(root_log_dir)
 
     results = []
     case_number = 1
@@ -296,20 +289,14 @@ if __name__ == "__main__":
                 print "test '{0}' was skipped".format(name)
                 continue
 
-        log_config_filename = ""
-        #reduce the number of chars in the file name, if there are many(255 bytes filename limit)
-        if len(name) > 237:
-            name = os.path.join(name[:220] + time.strftime("%y-%b-%d_%H-%M-%S", time.localtime())).replace("'", "")
-        if params:
-            log_name = os.path.join(logs_folder_abspath, name + ".log").replace("'", "")
-            log_config_filename = os.path.join(logs_folder_abspath, name + ".logging.conf")
-        else:
-            dotnames = name.split('.')
-            log_name = os.path.join(logs_folder_abspath, dotnames[-1] + ".log")
-            log_config_filename = os.path.join(logs_folder_abspath, dotnames[-1] + ".logging.conf")
-        create_log_file(log_config_filename, log_name, options.loglevel)
+        # Create Log Directory
+        logs_folder = os.path.join(root_log_dir, "test_%s" % case_number)
+        os.mkdir(logs_folder)
+        test_log_file = os.path.join(logs_folder, "test.log")
+        log_config_filename = os.path.join(logs_folder, "test.logging.conf")
+        create_log_file(log_config_filename, test_log_file, options.loglevel)
         logging.config.fileConfig(log_config_filename)
-        print "Logs will be stored at {0}".format(log_config_filename)
+        print "Logs will be stored at {0}".format(logs_folder)
         print "\n./testrunner -i {0} {1} -t {2}\n"\
               .format(arg_i or "", arg_p or "", name)
         name = name.split(",")[0]
@@ -350,6 +337,7 @@ if __name__ == "__main__":
                 if key and value:
                     params += "," + str(key) + ":" + str(value)
 
+        xunit = XUnitTestResult()
         if result.failures or result.errors:
             # Immediately get the server logs, if
             # the test has failed or has errors
@@ -376,7 +364,7 @@ if __name__ == "__main__":
         else:
             xunit.add_test(name=name, time=time_taken, params=params)
             results.append({"result": "pass", "name": name, "time": time_taken})
-        xunit.write("{0}/report-{1}".format(logs_folder, str_time))
+        xunit.write("{0}/report-{1}".format(logs_folder, time.strftime("%y-%b-%d_%H-%M-%S", time.localtime())))
         xunit.print_summary()
         print "testrunner logs, diags and results are available under {0}".format(logs_folder)
         case_number += 1
