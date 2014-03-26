@@ -85,7 +85,7 @@ class RemoteMachineHelper(object):
              process = RemoteMachineProcess()
              process.pid = words[1]
              process.name = words[0]
-             log.info("{0}:process is running on: {1}".format(self.remote_shell.ip, words))
+             log.info("process is running on {0}: {1}".format(self.remote_shell.ip, words))
              return process
         else:
             processes = self.remote_shell.get_running_processes()
@@ -382,12 +382,10 @@ class RemoteMachineShellConnection:
             self.info = self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
-                max_iteration = 4
-                for i in xrange(max_iteration):
-                    if RemoteMachineHelper(self).is_process_running('memcached') and \
-                            RemoteMachineHelper(self).is_process_running('erl'):
-                        return True
-                return False
+                #print running process on windows
+                RemoteMachineHelper(self).is_process_running('memcached')
+                RemoteMachineHelper(self).is_process_running('erl')
+                return True
         elif self.info.distribution_type.lower() == 'mac':
             output, error = self.execute_command('ls %s%s' % (testconstants.MAC_CB_PATH, testconstants.VERSION_FILE))
             self.log_command_output(output, error)
