@@ -7,9 +7,9 @@ from couchbase.document import View
 
 class QueriesViewsTests(QueryTests):
     def setUp(self):
+        self.ddoc_name = "tuq_ddoc"
         super(QueriesViewsTests, self).setUp()
         self.map_fn = 'function (doc){emit([doc.join_yr, doc.join_mo],doc.name);}'
-        self.ddoc_name = "tuq_ddoc"
         self.view_name = "tuq_view"
         self.default_view = View(self.view_name, self.map_fn, None, False)
 
@@ -17,7 +17,10 @@ class QueriesViewsTests(QueryTests):
         super(QueriesViewsTests, self).suite_setUp()
 
     def tearDown(self):
-        self.cluster.delete_view(self.master, self.ddoc_name, None)
+        try:
+            self.cluster.delete_view(self.master, self.ddoc_name, None)
+        except:
+            self.log.error("Ddoc %s wasn't deleted" % self.ddoc_name)
         super(QueriesViewsTests, self).tearDown()
 
     def suite_tearDown(self):
@@ -83,7 +86,7 @@ class QueriesViewsTests(QueryTests):
     def test_view_query_order(self):
         self.cluster.create_view(self.master, self.ddoc_name, self.default_view)
         self.query = 'SELECT join_yr, join_mo, name from default' +\
-            ' WHERE join_yr == 2011 ORDER BY join_yr, join_mo, name DESC'
+            ' WHERE join_yr == 2011 ORDER BY join_yr DESC, join_mo DESC, name DESC'
         tool_res = self.run_cbq_query()
         view_res = RestConnection(self.master).\
                   query_view(self.ddoc_name, self.default_view.name,
