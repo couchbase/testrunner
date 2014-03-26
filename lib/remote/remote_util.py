@@ -717,6 +717,7 @@ class RemoteMachineShellConnection:
                 for key in sorted(info.keys()):
                     content += '{0} = {1}\n'.format(key, info[key])
                 f.write(content)
+                log.info("/cygdrive/c/tmp/windows_info.txt was created with content: {0}".format(content))
             except IOError:
                 log.error('Can not write windows_info.txt file')
             finally:
