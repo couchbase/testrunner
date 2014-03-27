@@ -790,7 +790,7 @@ class BaseTestCase(unittest.TestCase):
         # MB-10136 & MB-9991
         if error:
             raise Exception("Password didn't change! %s" % error)
-        self.log("new password '%s' on nodes: %s" % new_password, [node.ip for node in nodes])
+        self.log("new password '%s' on nodes: %s" % (new_password, [node.ip for node in nodes]))
         for node in nodes:
             for server in self.servers:
                 if server.ip == node.ip and int(server.port) == int(node.port):
@@ -811,7 +811,7 @@ class BaseTestCase(unittest.TestCase):
         if error:
             raise Exception("Port didn't change! %s" % error)
         self.port = new_port
-        self.log("new port '%s' on nodes: %s" % new_port, [node.ip for node in nodes])
+        self.log("new port '%s' on nodes: %s" % (new_port, [node.ip for node in nodes]))
         for node in nodes:
             for server in self.servers:
                 if server.ip == node.ip and int(server.port) == int(node.port):
