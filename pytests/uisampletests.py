@@ -403,6 +403,35 @@ class  RebalanceProgressTests(BaseUITestCase):
                                  stats["vbuckets"]) is not None,
                         "VBuckets in stats %s has incorrect format" % stats)
 
+class  GracefullFailoverTests(BaseUITestCase):
+    def setUp(self):
+        super(GracefullFailoverTests, self).setUp()
+        try:
+            self.nodes_init = self.input.param("nodes_init", 2)
+            self.cluster = Cluster()
+            if self.nodes_init > 1:
+                self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
+            BaseHelper(self).login()
+            num_buckets = self.input.param("num_buckets", 1)
+            self.buckets = []
+            NavigationHelper(self).navigate('Data Buckets')
+            for i in xrange(num_buckets):
+                bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password')
+                BucketHelper(self).create(bucket)
+                self.buckets.append(bucket)
+        except:
+            self.tearDown()
+
+    def tearDown(self):
+        super(GracefullFailoverTests, self).tearDown()
+
+    def test_failover(self):
+        confirm = self.input.param("confirm_failover", True)
+        NavigationHelper(self).navigate('Server Nodes')
+        if len(self.servers) < 2:
+            self.fail("There is no enough VMs. Need at least 2")
+        ServerHelper(self).failover(self.servers[1], confirm=confirm, graceful=True)
+
 '''
 Controls classes for tests
 '''
@@ -443,6 +472,12 @@ class ServerTestControls():
         self.remove_btns = self.helper.find_controls('server_nodes','remove_btn')
         return self
 
+    def server_row_btns(self, server_ip):
+        self.failover_btn = self.helper.find_control('server_info', 'failover_btn',
+                                                     parent_locator='server_row',
+                                                     text=server_ip)
+        return self
+
     def server_info(self, server_ip):
         self.server_arrow = self.helper.find_control('server_info', 'server_arrow',
                                                      parent_locator='server_row',
@@ -459,6 +494,28 @@ class ServerTestControls():
             parent = 'rebalance_progress_out'
         return self.helper.find_control('server_info', 'rebalance_progress',
                                                   text=server_ip)
+    def rebalance_progress_bar(self, server_ip):
+        return self.helper.find_control('server_info', 'rebalance_bar',
+                                                     parent_locator='server_row',
+                                                     text=server_ip)
+
+    def failed_over_msg(self, server_ip):
+        return self.helper.find_control('server_info', 'failover_msg',
+                                                     parent_locator='server_row',
+                                                     text=server_ip)
+
+    def failover_confirmation(self):
+        self.failover_conf_dialog = self.helper.find_control('failover_dialog', 'dialog')
+        self.failover_conf_submit_btn = self.helper.find_control('failover_dialog', 'submit_btn',
+                                                                 parent_locator='dialog')
+        self.failover_conf_cancel_btn = self.helper.find_control('failover_dialog', 'cancel_btn',
+                                                                 parent_locator='dialog')
+        self.failover_conf_gracefull_option = self.helper.find_control('failover_dialog', 'graceful_option',
+                                                                       parent_locator='dialog')
+        return self
+
+    def failover_warning(self):
+        return self.helper.find_control('failover_dialog', 'warn', parent_locator='dialog')
 
 class BucketTestsControls():
     def __init__(self, driver):
@@ -837,6 +894,55 @@ class ServerHelper():
                          src.split("vBuckets to transfer:")[1].split("</p>")[0].replace('\n',' ').replace('</span>',' ')
         self.close_server_stats(server)
         return stats
+
+    def failover(self, server, confirm=True, error=None, graceful=True):
+        self.open_failover_confirmation_dialog(server)
+        self.confirm_failover(confirm=confirm, is_graceful=graceful)
+        if confirm:
+            if error:
+                actual_error = self.get_error_failover()
+                self.tc.assertTrue(actual_error.contains(error),
+                               "Error '%s' is expected. But actual is %s" % (error, actual_error))
+            else:
+                RestConnection(self.tc.servers[0]).monitorRebalance()
+                self.tc.assertTrue(self.is_node_failed_over(server), "Node %s wasn't failed over" % server.ip)
+        else:
+            self.tc.assertFalse(self.is_node_failed_over(server), "Node %s was failed over" % server.ip) 
+
+    def open_failover_confirmation_dialog(self, server):
+        self.tc.log.info("Try to open Confirmation failover dialog for server %s" % server.ip)
+        self.controls.server_row_btns(server.ip).failover_btn.click()
+        self.wait.until(lambda fn: self.is_confirmation_failover_opened(),
+                        "Confirmation dialog is not displayed in %d sec" % (self.wait._timeout))
+        self.tc.log.info("Confirmation failover dialog for server %s is opened" % server.ip)
+
+    def is_confirmation_failover_opened(self):
+        opened = self.controls.failover_confirmation().failover_conf_dialog.is_displayed()
+        opened &= self.controls.failover_confirmation().failover_conf_gracefull_option.is_displayed()
+        opened &= self.controls.failover_confirmation().failover_conf_submit_btn.is_displayed()
+        return opened
+
+    def confirm_failover(self, confirm=True, is_graceful=None):
+        if is_graceful:
+            self.controls.failover_confirmation().failover_conf_gracefull_option.check()
+        if confirm:
+            self.controls.failover_confirmation().failover_conf_submit_btn.click()
+            self.wait.until(lambda fn: not self.is_confirmation_failover_opened() or\
+                                       self.is_error_present_failover(),
+                        "No reaction for failover btn click in %d sec" % (self.wait._timeout))
+            self.tc.log.info("Failover confirmed")
+        else:
+            self.controls.failover_confirmation().failover_conf_cancel_btn.click()
+            self.tc.log.info("Failover cancelled")
+
+    def is_error_present_failover(self):
+        return self.controls.failover_warning().is_displayed()
+
+    def get_error_failover(self):
+        return self.controls.failover_warning().get_text()
+
+    def is_node_failed_over(self, server):
+        return self.controls.failed_over_msg(server.ip).is_displayed()
 
 class BucketHelper():
     def __init__(self, tc):
