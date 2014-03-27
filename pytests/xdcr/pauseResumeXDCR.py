@@ -22,7 +22,7 @@ from threading import Thread
 class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
     def setUp(self):
         super(PauseResumeXDCRBaseTest, self).setUp()
-        self._num_items = self._input.param("items",1000)
+        self._num_items = self._input.param("items", 1000)
         self.pause_xdcr_cluster = self._input.param("pause_xdcr", "source-destination")
         self.gen_create2 = BlobGenerator('loadTwo', 'loadTwo',
                                          self._value_size, end=self._num_items)
@@ -192,13 +192,13 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
             task = self.cluster.async_wait_for_xdcr_stat(src_nodes,
                                                          src_bucket_name, '',
                                                          'replication_active_vbreps', '>', 0)
-            task.result(self._timeout)
+            task.result(self.wait_timeout)
             # check incoming xdc_ops on remote nodes
             if self.is_cluster_replicating(src_nodes, src_bucket_name):
                 task = self.cluster.async_wait_for_xdcr_stat(dest_nodes,
                                                          dest_bucket_name, '',
                                                          'xdc_ops', '>', 0)
-                task.result(self._timeout)
+                task.result(self.wait_timeout)
         else:
             self.log.info("Replication is complete on {0}, resume validation have been skipped".format(src_nodes[0].ip))
 
@@ -209,15 +209,15 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
             while count < 3:
                 outbound_mutations = self.get_xdcr_stat(node, src_bucket_name, 'replication_changes_left')
                 if outbound_mutations == 0:
-                    self.log.info("Outbound mutations on {0} is {1}".format(node.ip,outbound_mutations))
+                    self.log.info("Outbound mutations on {0} is {1}".format(node.ip, outbound_mutations))
                     count += 1
                     continue
                 else:
-                    self.log.info("Outbound mutations on {0} is {1}".format(node.ip,outbound_mutations))
+                    self.log.info("Outbound mutations on {0} is {1}".format(node.ip, outbound_mutations))
                     self.log.info("Node {0} is replicating".format(node.ip))
                     break
             else:
-                self.log.info("Outbound mutations on {0} is {1}".format(node.ip,outbound_mutations))
+                self.log.info("Outbound mutations on {0} is {1}".format(node.ip, outbound_mutations))
                 self.log.info("Cluster with node {0} is not replicating".format(node.ip))
                 return False
         return True
@@ -262,7 +262,7 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
         elif self._replication_direction_str in "bidirection" and \
              self.delete_bucket != "destination":
             self._async_update_delete_data()
-        self.sleep(self._timeout / 2)
+        self.sleep(self.wait_timeout / 2)
 
     def __merge_buckets(self):
         if self._replication_direction_str in "unidirection":
@@ -277,7 +277,7 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
         count = 0
         #start loading
         load_tasks = self.__async_load_xdcr()
-        tasks =[]
+        tasks = []
         #are we doing consecutive pause/resume
         while count < self.consecutive_pause_resume:
 
@@ -290,7 +290,7 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
                     tasks += self._async_rebalance_in()
 
                 # rebalance-out/failover
-                if self.rebalance_out != "" or self._failover!= "":
+                if self.rebalance_out != "" or self._failover != "":
                     self._rebalance = self.rebalance_out
                     tasks += self._async_rebalance_out()
 
