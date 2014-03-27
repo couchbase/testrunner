@@ -22,18 +22,17 @@ from threading import Thread
 class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
     def setUp(self):
         super(PauseResumeXDCRBaseTest, self).setUp()
-        self._num_items = self._input.param("items", 1000)
         self.pause_xdcr_cluster = self._input.param("pause_xdcr", "source-destination")
         self.gen_create2 = BlobGenerator('loadTwo', 'loadTwo',
-                                         self._value_size, end=self._num_items)
+                                         self._value_size, end=self.num_items)
         self.gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-',
                                          self._value_size,
-                                         start=int((self._num_items) *
+                                         start=int((self.num_items) *
                                                    (float)(100 - self._percent_delete) / 100),
-                                         end=self._num_items)
+                                         end=self.num_items)
         self.gen_update2 = BlobGenerator('loadTwo', 'loadTwo-',
                                          self._value_size, start=0,
-                                         end=int(self._num_items *
+                                         end=int(self.num_items *
                                                  (float)(self._percent_update) / 100))
 
     def tearDown(self):
@@ -236,7 +235,7 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
         self.swap_rebalance = self._input.param("swap_rebalance", "")
         self._num_rebalance = self._input.param("num_rebalance", 1)
         self._failover = self._input.param("failover", "")
-        self._encrypt_after_pause = self._input.param("encrypt_after_pause", "")
+        self.encrypt_after_pause = self._input.param("encrypt_after_pause", "")
         self.__verify_src = False
 
     def tearDown(self):
@@ -299,8 +298,8 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
                     self._rebalance = self.swap_rebalance
                     tasks += self._async_swap_rebalance()
 
-                if self._encrypt_after_pause != "":
-                    self._switch_to_encryption(self._encrypt_after_pause)
+                if self.encrypt_after_pause != "":
+                    self._switch_to_encryption(self.encrypt_after_pause)
 
                 # delete all destination buckets and recreate them?
                 if self.delete_bucket == 'destination':
