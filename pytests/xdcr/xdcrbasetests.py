@@ -1035,6 +1035,19 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             dest_master.rest_password, dest_cluster_name,
             demandEncryption=require_encryption, certificate=certificate)
 
+    # Switch to encrypted xdcr
+    def _switch_to_encryption(self, cluster):
+        if "source" in cluster:
+            src_remote_clusters = RestConnection(self.src_master).get_remote_clusters()
+            for remote_cluster in src_remote_clusters:
+                self._modify_clusters(None, self.src_master, remote_cluster['name'], self.dest_master,
+                                      require_encryption=1)
+        if "destination" in cluster:
+            dest_remote_clusters = RestConnection(self.dest_master).get_remote_clusters()
+            for remote_cluster in dest_remote_clusters:
+                self._modify_clusters(None, self.dest_master, remote_cluster['name'], self.src_master,
+                                      require_encryption=1)
+
     # Set up replication
     def _replicate_clusters(self, src_master, dest_cluster_name):
         rest_conn_src = RestConnection(src_master)
