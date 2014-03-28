@@ -432,6 +432,25 @@ class  GracefullFailoverTests(BaseUITestCase):
             self.fail("There is no enough VMs. Need at least 2")
         ServerHelper(self).failover(self.servers[1], confirm=confirm, graceful=True)
 
+    def test_delta_recovery_failover(self):
+        confirm = self.input.param("confirm_recovery", True)
+        # delta or full
+        option = self.input.param("option", 'delta')
+        NavigationHelper(self).navigate('Server Nodes')
+        if len(self.servers) < 2:
+            self.fail("There is no enough VMs. Need at least 2")
+        helper = ServerHelper(self)
+        server = self.servers[1]
+        helper.failover(server, confirm=True, graceful=False)
+        helper.add_node_back()
+        helper.set_recovery(server, option=option, confirm=confirm)
+        option = ('full', 'delta')[confirm]
+        helper.check_recovery(server, option=option)
+        if confirm:
+            helper.start_rebalancing()
+            RestConnection(self.servers[0]).monitorRebalance()
+        self.log.info("Recovery checked")
+
 '''
 Controls classes for tests
 '''
@@ -454,6 +473,9 @@ class ServerTestControls():
         self.num_pend_rebalance = self.helper.find_control('server_nodes', 'num_pend_rebalance',
                                                            parent_locator='pend_rebalance_btn')
 
+    def pending_rebalance_tab(self):
+        return self.helper.find_control('server_nodes', 'pending_rebalance_tab')
+
     def add_server_dialog(self, parent='add_server_pop_up'):
         self.parent = parent
         self.add_server_pop_up = self.helper.find_control('server_nodes', 'add_server_pop_up')
@@ -474,6 +496,9 @@ class ServerTestControls():
 
     def server_row_btns(self, server_ip):
         self.failover_btn = self.helper.find_control('server_info', 'failover_btn',
+                                                     parent_locator='server_row',
+                                                     text=server_ip)
+        self.repair_status = self.helper.find_control('server_info', 'repair_status',
                                                      parent_locator='server_row',
                                                      text=server_ip)
         return self
@@ -516,6 +541,21 @@ class ServerTestControls():
 
     def failover_warning(self):
         return self.helper.find_control('failover_dialog', 'warn', parent_locator='dialog')
+
+    def add_back_failover(self):
+        return self.helper.find_control('add_back_failover', 'add_back_btn')
+
+    def recovery_btn(self, server_ip):
+        return self.helper.find_control('server_info', 'recovery_btn', parent_locator='server_row',
+                                        text=server_ip)
+
+    def recovery_dialog(self):
+        self.conf_dialog = self.helper.find_control('recovery_dialog', 'dialog')
+        self.delta_option = self.helper.find_control('recovery_dialog', 'delta_option', parent_locator='dialog')
+        self.full_option = self.helper.find_control('recovery_dialog', 'full_option', parent_locator='dialog')
+        self.save_recovery_btn = self.helper.find_control('recovery_dialog', 'save_btn', parent_locator='dialog')
+        self.cancel_recovery_btn = self.helper.find_control('recovery_dialog', 'cancel_btn', parent_locator='dialog')
+        return self
 
 class BucketTestsControls():
     def __init__(self, driver):
@@ -904,14 +944,23 @@ class ServerHelper():
                 self.tc.assertTrue(actual_error.contains(error),
                                "Error '%s' is expected. But actual is %s" % (error, actual_error))
             else:
-                RestConnection(self.tc.servers[0]).monitorRebalance()
+                if graceful:
+                    RestConnection(self.tc.servers[0]).monitorRebalance()
                 self.tc.assertTrue(self.is_node_failed_over(server), "Node %s wasn't failed over" % server.ip)
         else:
             self.tc.assertFalse(self.is_node_failed_over(server), "Node %s was failed over" % server.ip) 
 
     def open_failover_confirmation_dialog(self, server):
         self.tc.log.info("Try to open Confirmation failover dialog for server %s" % server.ip)
-        self.controls.server_row_btns(server.ip).failover_btn.click()
+        i = 0
+        while (i < 5):
+            try:
+                self.controls.server_row_btns(server.ip).failover_btn.click()
+                break
+            except Exception, ex:
+                i += 1
+                if i == 4:
+                    raise ex
         self.wait.until(lambda fn: self.is_confirmation_failover_opened(),
                         "Confirmation dialog is not displayed in %d sec" % (self.wait._timeout))
         self.tc.log.info("Confirmation failover dialog for server %s is opened" % server.ip)
@@ -943,6 +992,57 @@ class ServerHelper():
 
     def is_node_failed_over(self, server):
         return self.controls.failed_over_msg(server.ip).is_displayed()
+
+    def add_node_back(self):
+        self.wait.until(lambda fn: self.controls.add_back_failover().is_displayed(),
+                        "Add back node is not displayed in %d sec" % (self.wait._timeout))
+        self.controls.add_back_failover().click()
+        time.sleep(3)
+
+    def open_recovery(self, server):
+        self.tc.log.info("Try to open recovery dialog %s" % (server.ip))
+        self.controls.pending_rebalance_tab().click()
+        time.sleep(3)
+        i = 0
+        while (i < 4):
+            try:
+                self.controls.recovery_btn(server.ip).click()
+                break
+            except Exception, ex:
+                i += 1
+                if i == 4:
+                    raise ex
+        self.wait.until(lambda fn: self.controls.recovery_dialog().conf_dialog.is_displayed(),
+                        "Recovery btn is not displayed in %d sec" % (self.wait._timeout))
+        self.tc.log.info("Dialog is opened")
+
+    def set_recovery(self, server, option='full', confirm=True):
+        self.tc.log.info("Try to set %s option in recovery %s" % (option, server.ip))
+        self.open_recovery(server)
+        if option == 'delta':
+            self.controls.recovery_dialog().delta_option.click()
+        if option == 'full':
+            self.controls.recovery_dialog().full_option.click()
+        if confirm:
+            self.controls.recovery_dialog().save_recovery_btn.click()
+        else:
+            self.controls.recovery_dialog().cancel_recovery_btn.click()
+        self.wait.until(lambda fn: not self.controls.recovery_dialog().conf_dialog.is_displayed(),
+                        "Recovery btn is not displayed in %d sec" % (self.wait._timeout))
+        self.tc.log.info("%s option in recovery %s is set" % (option, server.ip))
+
+    def check_recovery(self, server, option='full'):
+        self.open_recovery(server)
+        if option == 'delta':
+            if self.controls.recovery_dialog().delta_option.get_attribute('checked') != 'true':
+                raise Exception('Delta option is not selected')
+        if option == 'full':
+            if self.controls.recovery_dialog().full_option.get_attribute('checked') != 'true':
+                raise Exception('Full option is not selected')
+        self.controls.recovery_dialog().cancel_recovery_btn.click()
+        self.wait.until(lambda fn: not self.controls.recovery_dialog().conf_dialog.is_displayed(),
+                        "Recovery btn is not displayed in %d sec" % (self.wait._timeout))
+        self.tc.log.info("Recovery checked")
 
 class BucketHelper():
     def __init__(self, tc):
