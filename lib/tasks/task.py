@@ -2111,7 +2111,7 @@ class ViewCompactionTask(Task):
                 self.set_result(False)
                 self.state = FINISHED
                 return
-            self.rest.ddoc_compaction(self.ddoc_id)
+            self.rest.ddoc_compaction(self.ddoc_id, self.bucket)
             self.state = CHECKING
             task_manager.schedule(self, 2)
         except (CompactViewFailed, SetViewInfoNotFound) as ex:

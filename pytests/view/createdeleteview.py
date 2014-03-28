@@ -725,14 +725,16 @@ class CreateDeleteViewTests(BaseTestCase):
     def ddoc_ops_during_compaction(self):
 
         # disable auto compaction
-        self.disable_compaction()
+        for bucket in self.buckets:
+            self.disable_compaction(bucket=bucket.name)
 
         # load initial documents
         self._load_doc_data_all_buckets()
 
         # create ddoc and add views
-        self._execute_ddoc_ops('create', True, self.num_ddocs,
-                                self.num_views_per_ddoc)
+        for bucket in self.buckets:
+            self._execute_ddoc_ops('create', True, self.num_ddocs,
+                                self.num_views_per_ddoc, bucket=bucket)
 
         # start fragmentation monitor
         for bucket, ddoc_view_map in self.bucket_ddoc_map.items():
@@ -740,20 +742,20 @@ class CreateDeleteViewTests(BaseTestCase):
                 fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.master,
                                                                                       ddoc_name,
                                                                                       self.fragmentation_value,
-                                                                                      'default')
+                                                                                      bucket.name)
                 # generate load until fragmentation reached
                 while fragmentation_monitor.state != "FINISHED":
                     # update docs to create fragmentation
                     self._load_doc_data_all_buckets("update")
                     for view in view_list:
                         # run queries to create indexes
-                        query = {"stale" : "false", "full_set" : "true"}
-                        self.cluster.query_view(self.master, ddoc_name, view.name, query)
+                        query = {"stale" : "false", "full_set" : "true"} 
+                        self.cluster.query_view(self.master, ddoc_name, view.name, query, bucket=bucket.name)
                 fragmentation_monitor.result()
 
                 # compact ddoc and make sure fragmentation is less than high_mark
                 # will throw exception if failed
-                compaction_task = self.cluster.async_compact_view(self.master, ddoc_name, 'default')
+                compaction_task = self.cluster.async_compact_view(self.master, ddoc_name, bucket=bucket.name)
 
                 #create more ddocs, update/delete existing depending on the ddoc_ops type
                 if self.ddoc_ops == "create":
