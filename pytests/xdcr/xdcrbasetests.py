@@ -36,7 +36,6 @@ class XDCRConstants:
     INPUT_PARAM_SEED_DATA_MODE = "sdata_mode"
 
     INPUT_PARAM_SEED_DATA_OPERATION = "sdata_op"
-
     INPUT_PARAM_POLL_INTERVAL = "poll_interval"  # in seconds
     INPUT_PARAM_POLL_TIMEOUT = "poll_timeout"  # in seconds
 
@@ -227,7 +226,7 @@ class XDCRBaseTest(unittest.TestCase):
         self.buckets = []
         # max items number to verify in ValidateDataTask, None - verify all
         self.max_verify = self._input.param("max_verify", None)
-
+        self._checkpoint_interval=self._input.param("checkpoint_interval",None)
         self._default_bucket = self._input.param("default_bucket", True)
         self._end_replication_flag = self._input.param("end_replication_flag", 0)
 
@@ -313,7 +312,8 @@ class XDCRBaseTest(unittest.TestCase):
 
         # Set this by default to 1 for all tests
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
-
+        if self._checkpoint_interval:
+            self.set_xdcr_param('xdcrCheckpointInterval', self._checkpoint_interval)
         self._optimistic_xdcr_threshold = self._input.param("optimistic_xdcr_threshold", 256)
         if self.src_master.ip != self.dest_master.ip:  # Only if it's not a cluster_run
             if self._optimistic_xdcr_threshold != 256:
