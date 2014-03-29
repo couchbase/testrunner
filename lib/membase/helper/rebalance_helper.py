@@ -148,7 +148,7 @@ class RebalanceHelper():
         return verified
 
     @staticmethod
-    def wait_for_stats_no_timeout(master, bucket, stat_key, stat_value, timeout_in_seconds= -1, verbose=True):
+    def wait_for_stats_no_timeout(master, bucket, stat_key, stat_value, timeout_in_seconds=-1, verbose=True):
         log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
                                                                                 stat_value, master.ip))
         rest = RestConnection(master)
@@ -187,7 +187,7 @@ class RebalanceHelper():
         return verified
 
     @staticmethod
-    def wait_for_mc_stats_no_timeout(master, bucket, stat_key, stat_value, timeout_in_seconds= -1, verbose=True):
+    def wait_for_mc_stats_no_timeout(master, bucket, stat_key, stat_value, timeout_in_seconds=-1, verbose=True):
         log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
                                                                                 stat_value, master.ip))
         # keep retrying until reaches the server
@@ -289,15 +289,17 @@ class RebalanceHelper():
 
     @staticmethod
     def wait_for_persistence(master, bucket, timeout=120):
-        RebalanceHelper.wait_for_mc_stats_all_nodes(
+        verified = True
+        verified &= RebalanceHelper.wait_for_mc_stats_all_nodes(
             master, bucket, "ep_queue_size", 0,
             timeout_in_seconds=timeout)
-        RebalanceHelper.wait_for_mc_stats_all_nodes(
+        verified &= RebalanceHelper.wait_for_mc_stats_all_nodes(
             master, bucket, "ep_flusher_todo", 0,
             timeout_in_seconds=timeout)
-        RebalanceHelper.wait_for_mc_stats_all_nodes(
+        verified &= RebalanceHelper.wait_for_mc_stats_all_nodes(
             master, bucket, "ep_uncommitted_items", 0,
             timeout_in_seconds=timeout)
+        return verified
 
     @staticmethod
     #TODO: add password and port
