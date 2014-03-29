@@ -1,13 +1,10 @@
 import time
 from membase.api.rest_client import RestConnection, Bucket
-from couchbase.documentgenerator import DocumentGenerator
+from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from basetestcase import BaseTestCase
-from memcached.helper.kvstore import KVStore
 from mc_bin_client import MemcachedError
-from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase.documentgenerator import BlobGenerator
-from remote.remote_util import RemoteMachineShellConnection
 from threading import Thread
 
 class StatsCrashRepro(BaseTestCase):
@@ -46,17 +43,6 @@ class StatsCrashRepro(BaseTestCase):
                     self.log.error("Memcached error 134, wait for 5 seconds and then try again")
                     count += 1
                     time.sleep(5)
-
-    def _wait_for_stats_all_buckets(self, servers):
-
-        for server in servers:
-            for bucket in self.buckets:
-                self.cluster.wait_for_stats([server], bucket, '',
-                                   'ep_queue_size', '==', 0)
-                self.cluster.wait_for_stats([server], bucket, '',
-                                   'ep_flusher_todo', '==', 0)
-                self.cluster.wait_for_stats([server], bucket, '',
-                                   'ep_uncommitted_items', '==', 0)
 
     def _get_stats(self, stat_str='all'):
 
@@ -101,7 +87,8 @@ class StatsCrashRepro(BaseTestCase):
                 self.log.info("DGM state achieved!!!!")
 
         # wait for draining of data before restart and warm up
-        self._wait_for_stats_all_buckets(self.nodes_server)
+        for bucket in self.buckets:
+            RebalanceHelper.wait_for_persistence(self.nodes_server[0], bucket)
 
 
         while 1:
@@ -135,6 +122,3 @@ class StatsCrashRepro(BaseTestCase):
 
 #            read_data_task.result()
             read_data_task.join()
-
-
-

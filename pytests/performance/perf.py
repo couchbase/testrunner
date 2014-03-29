@@ -677,7 +677,7 @@ class PerfBase(unittest.TestCase):
              doc_cache=1,
              use_direct=True,
              report=0,
-             start_at= -1,
+             start_at=-1,
              collect_server_stats=True,
              is_eperf=False,
              hot_shift=0):
@@ -733,7 +733,7 @@ class PerfBase(unittest.TestCase):
         if is_eperf:
             collect_server_stats = self.parami("prefix", 0) == 0
             client_id = self.parami("prefix", 0)
-            sc = self.start_stats("{0}.{1}".format(self.spec_reference, phase), # stats spec e.x: testname.load
+            sc = self.start_stats("{0}.{1}".format(self.spec_reference, phase),  # stats spec e.x: testname.load
                                   test_params=cfg_params, client_id=client_id,
                                   collect_server_stats=collect_server_stats)
 
@@ -902,7 +902,7 @@ class PerfBase(unittest.TestCase):
              doc_cache=1,
              use_direct=True,
              collect_server_stats=True,
-             start_at= -1,
+             start_at=-1,
              report=0,
              ctl=None,
              hot_shift=0,
@@ -1064,16 +1064,10 @@ class PerfBase(unittest.TestCase):
 
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
-
-        RebalanceHelper.wait_for_stats_on_all(master, bucket,
-                                              'ep_queue_size', 0,
-                                              fn=RebalanceHelper.wait_for_stats_no_timeout)
-        RebalanceHelper.wait_for_stats_on_all(master, bucket,
-                                              'ep_flusher_todo', 0,
-                                              fn=RebalanceHelper.wait_for_stats_no_timeout)
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        self.assertTrue(ready, "not all items persisted. see logs")
 
         self.log.info("disk write queue has been drained")
-
         return time.time()
 
     def wait_until_repl(self):

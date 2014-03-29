@@ -51,7 +51,7 @@ class DrainRateTests(unittest.TestCase):
             node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.input.servers)
             info = rest.get_nodes_self()
             available_ram = info.memoryQuota * node_ram_ratio
-            if( available_ram < 256):
+            if(available_ram < 256):
                 available_ram = 256
             rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram), replicaNumber=replica)
             ready = BucketOperationHelper.wait_for_memcached(master, name)
@@ -68,7 +68,7 @@ class DrainRateTests(unittest.TestCase):
         for bucket in buckets:
             name = bucket.name.encode("ascii", "ignore")
             self.bucket_data[name] = {}
-            self.bucket_data[name]["inserted_keys"], self.bucket_data[name]["rejected_keys"] =\
+            self.bucket_data[name]["inserted_keys"], self.bucket_data[name]["rejected_keys"] = \
             MemcachedClientHelper.load_bucket_and_return_the_keys(name=self.bucket,
                                                                   servers=[self.master],
                                                                   value_size_distribution=distribution,
@@ -94,9 +94,7 @@ class DrainRateTests(unittest.TestCase):
         start = time.time()
         stats = rest.get_bucket_stats(self.bucket)
         self.log.info("current ep_queue_size: {0}".format(stats["ep_queue_size"]))
-        verified = RebalanceHelper.wait_for_stats(self.master, self.bucket, 'ep_queue_size', 0, timeout_in_seconds=300, verbose=False)\
-        and RebalanceHelper.wait_for_stats(self.master, self.bucket, 'ep_flusher_todo', 0, timeout_in_seconds=300, verbose=False)
-        self.drained = verified
+        self.drained = RebalanceHelper.wait_for_persistence(self.master, self.bucket, timeout=300)
         self.drained_in_seconds = time.time() - start
 
 

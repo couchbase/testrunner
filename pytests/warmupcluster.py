@@ -94,8 +94,7 @@ class WarmUpClusterTest(unittest.TestCase):
         self.servers = self.input.servers
         self._insert_data(howmany)
 
-        RebalanceHelper.wait_for_stats_on_all(self.master, "default", "ep_queue_size", 0)
-        RebalanceHelper.wait_for_stats_on_all(self.master, "default", "ep_flusher_todo", 0)
+        RebalanceHelper.wait_for_persistence(self.master, "default")
         time.sleep(5)
         rest = RestConnection(self.master)
 

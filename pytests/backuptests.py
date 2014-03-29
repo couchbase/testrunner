@@ -122,10 +122,8 @@ class BackupRestoreTests(unittest.TestCase):
                             msg="replication did not complete")
 
         self.log.info("Sleep {0} seconds after data load".format(delay_after_data_load))
-        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket, 'ep_queue_size', 0)
-        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket, 'ep_flusher_todo', 0)
-        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        self.assertTrue(ready, "not all items persisted. see logs")
         node = RestConnection(self.master).get_nodes_self()
         if not startup_flag:
             for server in self.servers:
@@ -187,10 +185,8 @@ class BackupRestoreTests(unittest.TestCase):
                 self.fail(msg.format(key, client.vbucketId, error.status))
         client.close()
         self.log.info("inserted {0} keys with expiry set to {1}".format(len(keys), expiry))
-        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket, 'ep_queue_size', 0)
-        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket, 'ep_flusher_todo', 0)
-        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        self.assertTrue(ready, "not all items persisted. see logs")
         node = RestConnection(self.master).get_nodes_self()
 
         output, error = self.shell.execute_command(self.perm_command)
@@ -236,10 +232,8 @@ class BackupRestoreTests(unittest.TestCase):
                 self.fail(msg.format(key, client.vbucketId, error.status))
         self.log.info("inserted {0} keys with expiry set to {1}".format(len(keys), expiry))
 
-        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket, 'ep_queue_size', 0)
-        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket, 'ep_flusher_todo', 0)
-        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        self.assertTrue(ready, "not all items persisted. see logs")
 
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
@@ -288,11 +282,8 @@ class BackupRestoreTests(unittest.TestCase):
                                                                                              number_of_threads=2)
 
         self.log.info("Sleep after data load")
-        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket, 'ep_queue_size', 0)
-        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket, 'ep_flusher_todo', 0)
-        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        self.assertTrue(ready, "not all items persisted. see logs")
         #let's create a unique folder in the remote location
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
@@ -347,11 +338,8 @@ class BackupRestoreTests(unittest.TestCase):
 
         client.delete(keys[0])
 
-        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket, 'ep_queue_size', 0)
-        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket, 'ep_flusher_todo', 0)
-        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        self.assertTrue(ready, "not all items persisted. see logs")
         #let's create a unique folder in the remote location
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
@@ -402,11 +390,8 @@ class BackupRestoreTests(unittest.TestCase):
                                                                                              number_of_threads=2)
 
         self.log.info("Sleep after data load")
-        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket_before_backup, 'ep_queue_size', 0)
-        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket_before_backup, 'ep_flusher_todo', 0)
-        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        self.assertTrue(ready, "not all items persisted. see logs")
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             output, error = shell.execute_command(self.perm_command)
@@ -448,10 +433,8 @@ class BackupRestoreTests(unittest.TestCase):
                                                                                              number_of_threads=2)
 
         self.log.info("Sleep after data load")
-        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket_before_backup, 'ep_queue_size', 0)
-        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-        ready = RebalanceHelper.wait_for_stats_on_all(self.master, bucket_before_backup, 'ep_flusher_todo', 0)
-        self.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        self.assertTrue(ready, "not all items persisted. see logs")
 
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
@@ -485,14 +468,14 @@ class BackupRestoreTests(unittest.TestCase):
             return
         original_set = copy.copy(self.servers)
         worker = self.servers[len(self.servers) - 1]
-        self.servers = self.servers[:len(self.servers)-1]
+        self.servers = self.servers[:len(self.servers) - 1]
         shell = RemoteMachineShellConnection(self.master)
         o, r = shell.execute_command("cat /opt/couchbase/VERSION.txt")
         fin = o[0]
         shell.disconnect()
         initial_version = self.input.param("initial_version", fin)
         final_version = self.input.param("final_version", fin)
-        if initial_version==final_version:
+        if initial_version == final_version:
             self.log.error("Same initial and final versions ..")
             return
         if not final_version.startswith('2.0'):
@@ -623,7 +606,7 @@ class BackupRestoreTests(unittest.TestCase):
         if len(self.servers) > 1:
                 removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],
                                           ejectedNodes=[node.id for node in nodes if node.id != master_id],
-                                          wait_for_rebalance=True   )
+                                          wait_for_rebalance=True)
 
         shell = RemoteMachineShellConnection(worker)
         shell.remove_directory(remote_tmp)

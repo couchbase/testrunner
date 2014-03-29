@@ -397,7 +397,7 @@ class GetrTests(BaseTestCase):
         prefix = str(uuid.uuid4())[:7]
 
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
-        BucketOperationHelper.create_bucket(self.master, name=self.default_bucket_name, replica=replica_count, port=11210, test_case=self, bucket_ram= -1, password="")
+        BucketOperationHelper.create_bucket(self.master, name=self.default_bucket_name, replica=replica_count, port=11210, test_case=self, bucket_ram=-1, password="")
 
         if rebalance == GetrTests.DURING_REBALANCE or rebalance == GetrTests.AFTER_REBALANCE:
             # leave 1 node unclustered for rebalance in
@@ -1074,8 +1074,7 @@ class WarmUpMemcachedTest(unittest.TestCase):
             time.sleep(10)
         curr_items = int(self.onenodemc.stats()["curr_items"])
         uptime = int(self.onenodemc.stats()["uptime"])
-        RebalanceHelper.wait_for_stats(self.master, "default", 'ep_queue_size', 0)
-        RebalanceHelper.wait_for_stats(self.master, "default", 'ep_flusher_todo', 0)
+        RebalanceHelper.wait_for_persistence(self.master, "default")
         self.log.info("sleeping for 10 seconds")
         time.sleep(10)
         rest = RestConnection(self.master)

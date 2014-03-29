@@ -199,7 +199,7 @@ class RebalanceBaseTest(unittest.TestCase):
         return bucket_data
 
     @staticmethod
-    def load_data(master, bucket, keys_count= -1, load_ratio= -1, delete_ratio=0, expiry_ratio=0, test=None):
+    def load_data(master, bucket, keys_count=-1, load_ratio=-1, delete_ratio=0, expiry_ratio=0, test=None):
         log = logger.Logger.get_logger()
         inserted_keys, rejected_keys = \
         MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[master],
@@ -222,10 +222,7 @@ class RebalanceBaseTest(unittest.TestCase):
     def verify_data(master, inserted_keys, bucket, test):
         log = logger.Logger.get_logger()
         log.info("Verifying data")
-        ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
-        test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
-        ready = RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
-        test.assertTrue(ready, "wait_for ep_queue_size == 0 failed")
+        ready = RebalanceHelper.wait_for_persistence(master, bucket)
         BucketOperationHelper.keys_exist_or_assert_in_parallel(keys=inserted_keys, server=master, bucket_name=bucket,
             test=test, concurrency=4)
 
@@ -233,7 +230,7 @@ class RebalanceBaseTest(unittest.TestCase):
     def tasks_for_buckets(rest, task_manager,
                           bucket_data,
                           new_doc_seed=None,
-                          new_doc_count= -1,
+                          new_doc_count=-1,
                           DELETE_RATIO=0,
                           ACCESS_RATIO=0,
                           EXPIRY_RATIO=0,
@@ -314,7 +311,7 @@ class RebalanceBaseTest(unittest.TestCase):
 
     @staticmethod
     def load_all_buckets_task(rest, task_manager, bucket_data, ram_load_ratio,
-                              distribution=None, keys_count= -1, seed=None,
+                              distribution=None, keys_count=-1, seed=None,
                               monitor=True):
         buckets = rest.get_buckets()
         tasks = None
@@ -335,7 +332,7 @@ class RebalanceBaseTest(unittest.TestCase):
     @staticmethod
     def load_bucket_task_helper(rest, task_manager, bucket, ram_load_ratio,
                                 kv_store=None, distribution=None,
-                                keys_count= -1, seed=None, monitor=True):
+                                keys_count=-1, seed=None, monitor=True):
         log = logger.Logger().get_logger()
         tasks = []
 
@@ -749,7 +746,7 @@ class IncrementalRebalanceWithParallelReadTests(unittest.TestCase):
                 inserted_keys, rejected_keys = \
                 MemcachedClientHelper.load_bucket_and_return_the_keys(servers=[self.servers[0]],
                     name=name,
-                    ram_load_ratio= -1,
+                    ram_load_ratio=-1,
                     number_of_items=self.keys_count,
                     number_of_threads=1,
                     write_only=True)
