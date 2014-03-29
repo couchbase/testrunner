@@ -1395,7 +1395,7 @@ class RemoteMachineShellConnection:
             log.info(line)
             if any(s.lower() in line.lower() for s in track_words):
                 success = False
-                log.error('something wrong happened!!! error:{0}, track_words:{1}'.format(error, track_words))
+                log.error('something wrong happened on {0}!!! error:{1}, track_words:{2}'.format(self.ip, error, track_words))
         return success
 
     def execute_commands_inside(self, main_command, subcommands=[], min_output_size=0,
