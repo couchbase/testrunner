@@ -584,7 +584,7 @@ class XDCRBaseTest(unittest.TestCase):
             self.cluster.failover(cluster_nodes, remove_nodes)
         task = self._async_rebalance(cluster_nodes, [], remove_nodes)
         remove_node_ips = [remove_node.ip for remove_node in remove_nodes]
-        self.log.info(" Starting rebalance-out nodes:{0} at Source cluster {1}".
+        self.log.info(" Starting rebalance-out nodes:{0} at cluster {1}".
                           format(remove_node_ips, master.ip))
         map(cluster_nodes.remove, remove_nodes)
         self.__verify_src = True
@@ -604,7 +604,7 @@ class XDCRBaseTest(unittest.TestCase):
         map(self._floating_servers_set.remove, add_nodes)
         task = self._async_rebalance(cluster_nodes, add_nodes, [])
         add_nodes_ips = [node.ip for node in add_nodes]
-        self.log.info(" Starting rebalance-in nodes {0} at Source cluster {1}".
+        self.log.info(" Starting rebalance-in nodes {0} at cluster {1}".
                           format(add_nodes_ips, master.ip))
         map(cluster_nodes.append, add_nodes)
         self.__verify_src = True
@@ -624,7 +624,7 @@ class XDCRBaseTest(unittest.TestCase):
         add_node = self._floating_servers_set.pop()
         remove_node = cluster_nodes[len(cluster_nodes) - 1]
         task = self._async_rebalance(cluster_nodes, [add_node], [remove_node])
-        self.log.info(" Starting swap-rebalance at Source cluster {0} add node {1} and remove node {2}"
+        self.log.info(" Starting swap-rebalance at cluster {0} add node {1} and remove node {2}"
                               .format(master.ip, add_node.ip, remove_node.ip))
         cluster_nodes.remove(remove_node)
         cluster_nodes.append(add_node)

@@ -5,7 +5,8 @@ import Queue
 from datetime import datetime
 from membase.api.rest_client import RestConnection, Bucket
 from newupgradebasetest import NewUpgradeBaseTest
-from xdcrbasetests import XDCRReplicationBaseTest, XDCRConstants
+from xdcrbasetests import XDCRConstants
+from pauseResumeXDCR import PauseResumeXDCRBaseTest
 from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
@@ -15,7 +16,7 @@ from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase.document import DesignDocument, View
 
-class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
+class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
     def setUp(self):
         super(UpgradeTests, self).setUp()
         self.bucket_topology = self.input.param("bucket_topology", "default:1><2").split(";")
@@ -36,12 +37,13 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.views_num_dest = self.input.param("view-per-ddoc-dest", 2)
         self.post_upgrade_ops = self.input.param("post-upgrade-actions", None)
         self._use_encryption_after_upgrade = self.input.param("use_encryption_after_upgrade", 0)
+        self.upgrade_same_version = self.input.param("upgrade_same_version",0)
         self.ddocs_src = []
         self.ddocs_dest = []
 
     def tearDown(self):
         try:
-            XDCRReplicationBaseTest.tearDown(self)
+            PauseResumeXDCRBaseTest.tearDown(self)
         finally:
             self.cluster.shutdown(force=True)
 
@@ -141,7 +143,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
                         format(status, content))
         self.log.info("after rebalance in the master is {0}".format(content))
-        if check_newmaster:
+        if check_newmaster and not self.upgrade_same_version:
             FIND_MASTER = False
             for new_server in extra_servers:
                 if content.find(new_server.ip) >= 0:
@@ -157,7 +159,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self._install(self.servers[:self.src_init + self.dest_init ])
         upgrade_nodes = self.input.param('upgrade_nodes', "src").split(";")
         self.cluster.shutdown(force=True)
-        XDCRReplicationBaseTest.setUp(self)
+        PauseResumeXDCRBaseTest.setUp(self)
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
         self.sleep(60)
         bucket = self._get_bucket(self, 'default', self.src_master)
@@ -176,6 +178,8 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
 
         self.sleep(60)
         self._wait_for_replication_to_catchup()
+        if self.pause_xdcr_cluster != "":
+            self.pause_xdcr()
         self._offline_upgrade(nodes_to_upgrade)
 
         if self._use_encryption_after_upgrade and "src" in upgrade_nodes and "dest" in upgrade_nodes and self.upgrade_versions[0] >= "2.5.0":
@@ -193,6 +197,8 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         bucket = self._get_bucket(self, 'bucket0', self.src_master)
         gen_create3 = BlobGenerator('loadThree', 'loadThree', self._value_size, end=self.num_items)
         self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
+        if self.pause_xdcr_cluster != "":
+            self.resume_xdcr()
         self.do_merge_bucket(self.src_master, self.dest_master, True, bucket)
         bucket = self._get_bucket(self, 'default', self.src_master)
         self._load_bucket(bucket, self.src_master, gen_create2, 'create', exp=0)
@@ -219,17 +225,17 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
         self.initial_version = self.upgrade_versions[0]
         self._install(self.servers[self.src_init + self.dest_init:])
         self.cluster.shutdown(force=True)
-        XDCRReplicationBaseTest.setUp(self)
+        PauseResumeXDCRBaseTest.setUp(self)
         bucket_default = self._get_bucket(self, 'default', self.src_master)
         bucket_sasl = self._get_bucket(self, 'bucket0', self.src_master)
         bucket_standard = self._get_bucket(self, 'standard_bucket0', self.dest_master)
-
         self._load_bucket(bucket_default, self.src_master, self.gen_create, 'create', exp=0)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_create, 'create', exp=0)
         self._load_bucket(bucket_standard, self.dest_master, self.gen_create, 'create', exp=0)
         gen_create2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, end=self.num_items)
         self._load_bucket(bucket_sasl, self.dest_master, gen_create2, 'create', exp=0)
-
+        if self.pause_xdcr_cluster != "":
+            self.pause_xdcr()
         self._online_upgrade(self.src_nodes, self.servers[self.src_init + self.dest_init:])
         self._install(self.src_nodes)
         self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.src_nodes, False)
@@ -246,6 +252,8 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
 
         self._load_bucket(bucket_standard, self.dest_master, self.gen_delete, 'delete', exp=0)
         self._load_bucket(bucket_standard, self.dest_master, self.gen_update, 'create', exp=self._expires)
+        if self.pause_xdcr_cluster != "":
+            self.resume_xdcr()
         self.do_merge_bucket(self.src_master, self.dest_master, True, bucket_sasl)
         bucket_sasl = self._get_bucket(self, 'bucket0', self.dest_master)
         gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size,
@@ -280,7 +288,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRReplicationBaseTest):
 
         self._install(self.servers[:self.src_init + self.dest_init ])
         self.cluster.shutdown(force=True)
-        XDCRReplicationBaseTest.setUp(self)
+        PauseResumeXDCRBaseTest.setUp(self)
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
         self.sleep(60)
         bucket = self._get_bucket(self, 'default', self.src_master)

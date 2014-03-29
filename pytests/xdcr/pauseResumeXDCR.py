@@ -22,7 +22,7 @@ from threading import Thread
 class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
     def setUp(self):
         super(PauseResumeXDCRBaseTest, self).setUp()
-        self.pause_xdcr_cluster = self._input.param("pause_xdcr", "source-destination")
+        self.pause_xdcr_cluster = self._input.param("pause", "source-destination")
         self.gen_create2 = BlobGenerator('loadTwo', 'loadTwo',
                                          self._value_size, end=self.num_items)
         self.gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-',
@@ -60,8 +60,8 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
         for bucket in buckets:
             try:
                 src_bucket_name = dest_bucket_name = bucket.name
-                if not RestConnection(self.src_master).is_replication_paused(src_bucket_name, dest_bucket_name):
-                    self.pause_replication(self.src_master, src_bucket_name, dest_bucket_name, verify)
+                if not RestConnection(master).is_replication_paused(src_bucket_name, dest_bucket_name):
+                    self.pause_replication(master, src_bucket_name, dest_bucket_name, verify)
             except XDCRException, ex:
                 if not fail_expected:
                     raise
@@ -73,8 +73,8 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
         for bucket in buckets:
             try:
                 src_bucket_name = dest_bucket_name = bucket.name
-                if RestConnection(self.src_master).is_replication_paused(src_bucket_name, dest_bucket_name):
-                    self.resume_replication(self.src_master, src_bucket_name, dest_bucket_name, verify)
+                if RestConnection(master).is_replication_paused(src_bucket_name, dest_bucket_name):
+                    self.resume_replication(master, src_bucket_name, dest_bucket_name, verify)
             except XDCRException, ex:
                 if not fail_expected:
                     raise
@@ -88,7 +88,7 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
     """
     def pause_replication(self, master, src_bucket_name, dest_bucket_name,
                           verify=False):
-        self.log.info("Pausing xdcr on node:{0}, src_bucket:{1} and dest_bucket:{2}"
+        self.log.info("##### Pausing xdcr on node:{0}, src_bucket:{1} and dest_bucket:{2} #####"
                       .format(master.ip, src_bucket_name, dest_bucket_name))
 
         RestConnection(master).set_xdcr_param(src_bucket_name,
@@ -107,7 +107,7 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
     """
     def resume_replication(self, master, src_bucket_name, dest_bucket_name,
                            verify=False):
-        self.log.info("Resume xdcr on node:{0}, src_bucket:{1} and dest_bucket:{2}"
+        self.log.info("##### Resume xdcr on node:{0}, src_bucket:{1} and dest_bucket:{2} #####"
                       .format(master.ip, src_bucket_name, dest_bucket_name))
         RestConnection(master).set_xdcr_param(src_bucket_name,
                                               dest_bucket_name,
@@ -199,7 +199,8 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
                                                          'xdc_ops', '>', 0)
                 task.result(self.wait_timeout)
         else:
-            self.log.info("Replication is complete on {0}, resume validation have been skipped".format(src_nodes[0].ip))
+            self.log.info("Replication is complete on {0}, resume validations have been skipped".
+                          format(src_nodes[0].ip))
 
     """ Check replication_changes_left on every node, 3 times if 0 """
     def is_cluster_replicating(self, src_nodes, src_bucket_name):
