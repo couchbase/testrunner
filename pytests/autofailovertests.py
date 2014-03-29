@@ -1,15 +1,14 @@
 from TestInput import TestInputSingleton
 import logger
 import time
-import threading
 import unittest
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from memcached.helper.data_helper import MemcachedClientHelper
-from remote.remote_util import RemoteMachineShellConnection
-from remote.remote_util import RemoteUtilHelper
 from membase.helper.rebalance_helper import RebalanceHelper
+from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+
 
 
 log = logger.Logger.get_logger()
@@ -31,7 +30,7 @@ class AutoFailoverBaseTest(unittest.TestCase):
         RemoteUtilHelper.common_basic_setup(servers)
         BucketOperationHelper.delete_all_buckets_or_assert(servers, testcase)
         ClusterOperationHelper.cleanup_cluster(servers)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase) 
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, testcase)
         log.info("==============  common_setup was finished for test #{0} {1} =============="\
                       .format(testcase.case_number, testcase._testMethodName))
 
@@ -320,8 +319,7 @@ class AutoFailoverTests(unittest.TestCase):
         if repeat_count == 5:
             log.exception("impossible to load data")
         log.info("wait until data is completely persisted on the disk")
-        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_queue_size', 0)
-        RebalanceHelper.wait_for_stats_on_all(master, bucket, 'ep_flusher_todo', 0)
+        RebalanceHelper.wait_for_persistence(master, bucket)
         return inserted_keys_cnt
 
     def _cluster_setup(self):
@@ -338,10 +336,10 @@ class AutoFailoverTests(unittest.TestCase):
                           password=self.master.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
         rest.reset_autofailover()
-        ClusterOperationHelper.add_and_rebalance(self.servers,True)
-        bucket_ram = info.memoryQuota * 2 / 3
+        ClusterOperationHelper.add_and_rebalance(self.servers, True)
 
         if num_buckets == 1:
+            bucket_ram = info.memoryQuota * 2 / 3
             rest.create_bucket(bucket=bucket_name,
                                ramQuotaMB=bucket_ram,
                                replicaNumber=replicas,
@@ -354,12 +352,7 @@ class AutoFailoverTests(unittest.TestCase):
         for bucket in buckets:
                 ready = BucketOperationHelper.wait_for_memcached(self.master, bucket.name)
                 self.assertTrue(ready, msg="wait_for_memcached failed")
-        
-        # We should till all the rebalance is complete, to make sure all nodes are in
 
         for bucket in buckets:
             inserted_keys_cnt = self.load_data(self.master, bucket.name, keys_count)
             log.info('inserted {0} keys'.format(inserted_keys_cnt))
-
-        
-        self.assertTrue(ready, "wait_for_memcached failed")

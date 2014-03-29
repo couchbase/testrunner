@@ -131,7 +131,7 @@ class FailoverTests(FailoverBaseTest):
                     rest = RestConnection(self.master)
             _servers_ = copy.deepcopy(self.servers)
             try:
-                msg = "rebalance failed while removing failover nodes {0}".format(chosen)
+                msg = "rebalance failed while removing failover nodes {0}".format([node.id for node in chosen])
                 self.assertTrue(rest.monitorRebalance(stop_if_loop=True), msg=msg)
                 for failed in chosen:
                     for server in _servers_:
