@@ -1064,7 +1064,7 @@ class PerfBase(unittest.TestCase):
 
         master = self.input.servers[0]
         bucket = self.param("bucket", "default")
-        ready = RebalanceHelper.wait_for_persistence(self.master, bucket)
+        ready = RebalanceHelper.wait_for_persistence(master, bucket)
         self.assertTrue(ready, "not all items persisted. see logs")
 
         self.log.info("disk write queue has been drained")

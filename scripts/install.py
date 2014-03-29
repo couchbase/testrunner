@@ -700,8 +700,7 @@ class InstallerJob(object):
             for server in servers:
                 success &= not RemoteMachineShellConnection(server).is_couchbase_installed()
             if not success:
-                print "Server:{0}.Couchbase is still" + \
-                      " installed after uninstall".format(server)
+                print "Server:{0}.Couchbase is still installed after uninstall".format(server)
                 return success
         for t in install_threads:
             t.start()
