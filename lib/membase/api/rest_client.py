@@ -1008,7 +1008,7 @@ class RestConnection(object):
         log.info("diag/masterEvents?o=1 status: {0} content: {1}".format(status, content))
         return status, content
 
-    def monitorRebalance(self, stop_if_loop=False):
+    def monitorRebalance(self, stop_if_loop=True):
         start = time.time()
         progress = 0
         retry = 0
@@ -2095,7 +2095,7 @@ class RestConnection(object):
                 tasks_warmup.append(task)
         return tasks_warmup
 
-    def compact_bucket(self, bucket ="default"):
+    def compact_bucket(self, bucket="default"):
         api = self.baseUrl + 'pools/default/buckets/{0}/controller/compactBucket'.format(bucket)
         status, content, header = self._http_request(api, 'POST')
         if status:
