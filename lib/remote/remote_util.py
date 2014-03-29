@@ -963,6 +963,11 @@ class RemoteMachineShellConnection:
             else:
                 environment = "INSTALL_DONT_START_SERVER=1 "
             log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
+
+            # set default swappiness to 10 unless specify in params in all unix environment
+            output, error = self.execute_command('/sbin/sysctl vm.swappiness={0}'.format(swappiness))
+            success &= self.log_command_output(output, error, track_words)
+
             if self.info.deliverable_type == 'rpm':
                 self.check_openssl_version(self.info.deliverable_type, openssl)
                 self.check_pkgconfig(self.info.deliverable_type, openssl)
@@ -981,10 +986,6 @@ class RemoteMachineShellConnection:
             self.create_directory(path)
             output, error = self.execute_command('/opt/{0}/bin/{1}enable_core_dumps.sh  {2}'.
                                     format(server_type, abbr_product, path))
-            success &= self.log_command_output(output, error, track_words)
-
-            # set default swappiness to 10 unless specify in params in all unix environment
-            output, error = self.execute_command('sysctl vm.swappiness={0}'.format(swappiness))
             success &= self.log_command_output(output, error, track_words)
 
             if vbuckets:
@@ -1631,7 +1632,7 @@ class RemoteMachineShellConnection:
                 win_info = self.create_windows_info()
             o = win_info['Processor(s)']
         elif mac:
-            o, r = self.execute_command_raw('sysctl -n machdep.cpu.brand_string')
+            o, r = self.execute_command_raw('/sbin/sysctl -n machdep.cpu.brand_string')
         else:
             o, r = self.execute_command_raw('sudo cat /proc/cpuinfo')
         if o:
@@ -1645,7 +1646,7 @@ class RemoteMachineShellConnection:
             o += "Virtual Memory Available =" + win_info['Virtual Memory Available'] + '\n'
             o += "Virtual Memory In Use =" + win_info['Virtual Memory In Use']
         elif mac:
-            o, r = self.execute_command_raw('sysctl -n hw.memsize')
+            o, r = self.execute_command_raw('/sbin/sysctl -n hw.memsize')
         else:
             o, r = self.execute_command_raw('sudo cat /proc/meminfo')
         if o:
