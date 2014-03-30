@@ -4,7 +4,7 @@ import uuid
 import paramiko
 import time
 import logging
-
+from datetime import datetime
 import logger
 from builds.build_query import BuildQuery
 import testconstants
@@ -505,6 +505,7 @@ class RemoteMachineShellConnection:
             # figure out what version , check if /tmp/ has the
             # binary and then return True if binary is installed
 
+
     def get_file(self, remotepath, filename, todir):
         if self.file_exists(remotepath, filename):
             sftp = self._ssh_client.open_sftp()
@@ -989,7 +990,7 @@ class RemoteMachineShellConnection:
             success &= self.log_command_output(output, error, track_words)
 
             if vbuckets:
-                output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export {0}_NUM_VBUCKETS={1}/' /opt/{2}/etc/{2}_init.d".
+                self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export {0}_NUM_VBUCKETS={1}/' /opt/{2}/etc/{2}_init.d".
                                                     format(server_type.upper(), vbuckets, server_type))
                 success &= self.log_command_output(output, error, track_words)
             if upr:
@@ -1793,7 +1794,73 @@ class RemoteMachineShellConnection:
             shell.send('export {0}={1}\n'.format(name, value))
             shell.send('/etc/init.d/couchbase-server restart\n')
         shell.close()
-        self.sleep(30)
+
+    def change_env_variables(self, dict):
+        prefix="\\n    "
+        shell = self._ssh_client.invoke_shell()
+        init_file="couchbase_init.d"
+        file_path="/opt/couchbase/etc/"
+        environmentVariables=""
+        if getattr(self, "info", None) is None:
+            self.info = self.extract_remote_info()
+        if self.info.type.lower() == "windows":
+            init_file="service_start.bat"
+            file_path="/cygdrive/c/Program Files/Couchbase/Server/bin/"
+            prefix="\\n"
+        backupfile=file_path+init_file+".bak"
+        sourceFile=file_path+init_file
+        o, r = self.execute_command("cp "+sourceFile+" "+backupfile)
+        self.log_command_output(o, r)
+        command="sed -i 's/{0}/{0}".format("ulimit -l unlimited")
+        for key in dict.keys():
+            o, r = self.execute_command("sed -i 's/{1}.*//' {0}".format(sourceFile,key))
+            self.log_command_output(o, r)
+
+        if self.info.type.lower() == "windows":
+            command="sed -i 's/{0}/{0}".format("set NS_ERTS=%NS_ROOT%\erts-5.8.5.cb1\bin")
+
+        for key in dict.keys():
+            if self.info.type.lower() == "windows":
+                environmentVariables+=prefix+'set {0}={1}'.format(key, dict[key])
+            else:
+                environmentVariables+=prefix+'export {0}={1}'.format(key, dict[key])
+
+        command+=environmentVariables+"/'"+" "+sourceFile
+        o, r = self.execute_command(command)
+        self.log_command_output(o, r)
+
+        if self.info.type.lower() == "linux":
+            o, r = self.execute_command("/etc/init.d/couchbase-server restart")
+            self.log_command_output(o, r)
+        else:
+            o, r = self.execute_command("net stop couchbaseserver")
+            self.log_command_output(o, r)
+            o, r = self.execute_command("net start couchbaseserver")
+            self.log_command_output(o, r)
+        shell.close()
+
+    def reset_env_variables(self):
+        shell = self._ssh_client.invoke_shell()
+        if getattr(self, "info", None) is None:
+            self.info = self.extract_remote_info()
+        init_file="couchbase_init.d"
+        file_path="/opt/couchbase/etc/"
+        if self.info.type.lower() == "windows":
+            init_file="service_start.bat"
+            file_path="/cygdrive/c/Program Files/Couchbase/Server/bin"
+        backupfile=file_path+init_file+".bak"
+        sourceFile=file_path+init_file
+        o, r = self.execute_command("mv "+backupfile+" "+sourceFile)
+        self.log_command_output(o, r)
+        if self.info.type.lower() == "linux":
+            o, r = self.execute_command("/etc/init.d/couchbase-server restart")
+            self.log_command_output(o, r)
+        else:
+            o, r = self.execute_command("net stop couchbaseserver")
+            self.log_command_output(o, r)
+            o, r = self.execute_command("net start couchbaseserver")
+            self.log_command_output(o, r)
+        shell.close()
 
     def set_node_name(self, name):
         """Edit couchbase-server shell script in place and set custom node name.

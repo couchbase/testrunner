@@ -43,7 +43,10 @@ class BaseTestCase(unittest.TestCase):
         self.master = self.servers[0]
         self.cluster = Cluster()
         self.pre_warmup_stats = {}
+        self.cleanup=False
         try:
+            self.vbuckets = self.input.param("vbuckets", None)
+            self.upr = self.input.param("upr", None)
             self.auth_mech = self.input.param("auth_mech", "PLAIN")
             self.wait_timeout = self.input.param("wait_timeout", 60)
             # number of case that is performed from testrunner( increment each time)
@@ -93,7 +96,8 @@ class BaseTestCase(unittest.TestCase):
                 self.change_stat_info()
             if self.input.param("port_info", None):
                 self.change_port_info()
-
+            if self.vbuckets or self.upr:
+                self.change_env_variables()
             if self.input.param("port", None):
                 self.port = str(self.input.param("port", None))
             self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
@@ -111,6 +115,7 @@ class BaseTestCase(unittest.TestCase):
                 if self.case_number > 1000:
                     self.log.warn("teardDown for previous test failed. will retry..")
                     self.case_number -= 1000
+                self.cleanup=True
                 self.tearDown()
                 self.cluster = Cluster()
 
@@ -149,7 +154,7 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
             self._log_start(self)
         except Exception, e:
-            self.cluster.shutdown(force=True)
+            self.cluster.shutdown(force=True )
             self.fail(e)
 
     def tearDown(self):
@@ -204,6 +209,11 @@ class BaseTestCase(unittest.TestCase):
                 self.case_number += 1000
             finally:
                 # stop all existing task manager threads
+                if self.cleanup:
+                    self.cleanup=False
+                else:
+                    if self.vbuckets or self.upr:
+                        self.reset_env_variables()
                 self.cluster.shutdown(force=True)
                 self._log_finish(self)
 
@@ -818,6 +828,27 @@ class BaseTestCase(unittest.TestCase):
                 if server.ip == node.ip and int(server.port) == int(node.port):
                     server.port = new_port
                     break
+
+    def change_env_variables(self):
+        for server in self.servers:
+            dict={}
+            if self.vbuckets:
+                dict["COUCHBASE_NUM_VBUCKETS"]=self.vbuckets
+            if self.upr:
+                dict["COUCHBASE_REPL_TYPE"]="upr"
+            if len(dict) >= 1:
+                remote_client = RemoteMachineShellConnection(server)
+                remote_client.change_env_variables(dict)
+            remote_client.disconnect()
+        self.log.info("========= CHANGED ENVIRONMENT SETTING ===========")
+
+    def reset_env_variables(self):
+        for server in self.servers:
+            if self.upr or self.vbuckets:
+                remote_client = RemoteMachineShellConnection(server)
+                remote_client.reset_env_variables()
+                remote_client.disconnect()
+        self.log.info("========= RESET ENVIRONMENT SETTING TO ORIGINAL ===========")
 
     def change_log_info(self):
         for server in self.servers:
