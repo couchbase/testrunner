@@ -928,7 +928,7 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
 
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
-                       swappiness=10, force=False, openssl='', upr=False):
+                       swappiness=10, force=False, openssl='', upr=False, xdcr_upr=False):
         server_type = None
         success = True
         track_words = ("warning", "error", "fail")
@@ -996,6 +996,11 @@ class RemoteMachineShellConnection:
             if upr:
                 output, error = \
                     self.execute_command("sed -i 's/END INIT INFO/END INIT INFO\\nexport COUCHBASE_REPL_TYPE=upr/'\
+                    /opt/{0}/etc/{0}_init.d".format(server_type))
+                success &= self.log_command_output(output, error, track_words)
+            if xdcr_upr:
+                output, error = \
+                    self.execute_command("sed -i 's/END INIT INFO/END INIT INFO\\nexport XDCR_USE_NEW_PATH=upr/'\
                     /opt/{0}/etc/{0}_init.d".format(server_type))
                 success &= self.log_command_output(output, error, track_words)
 

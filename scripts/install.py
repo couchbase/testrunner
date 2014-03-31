@@ -44,6 +44,7 @@ Available keys:
  sync_threads=True       Sync or acync threads(+S or +A)
  erlang_threads=         Number of erlang threads (default=16:16 for +S type)
  upr=True                Enable UPR replication
+ xdcr_upr=True           Enable UPR for XDCR (temporary param until XDCR with UPR is stable)
 
 
 Examples:
@@ -451,6 +452,11 @@ class CouchbaseServerInstaller(Installer):
         else:
             upr = False
 
+        if "xdcr_upr" in params:
+            xdcr_upr = params["xdcr_upr"].lower() == 'true'
+        else:
+            xdcr_upr = False
+
         if type == "windows":
             remote_client.download_binary_in_win(build.url, params["version"])
             success = remote_client.install_server_win(build, params["version"].replace("-rel", ""))
@@ -462,8 +468,8 @@ class CouchbaseServerInstaller(Installer):
             # TODO: need separate methods in remote_util for couchbase and membase install
             path = server.data_path or '/tmp'
             try:
-                success = remote_client.install_server(build, path=path, vbuckets=vbuckets, \
-                                                       swappiness=swappiness, openssl=openssl, upr=upr)
+                success = remote_client.install_server(build, path=path, vbuckets=vbuckets, swappiness=swappiness,
+                                                       openssl=openssl, upr=upr, xdcr_upr=xdcr_upr)
                 log.info('wait 5 seconds for membase server to start')
                 time.sleep(5)
                 if "rest_vbuckets" in params:
