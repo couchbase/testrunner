@@ -78,6 +78,7 @@ class BaseTestCase(unittest.TestCase):
             self.maxParallelReplicaIndexers = self.input.param("maxParallelReplicaIndexers", None)
             self.quota_percent = self.input.param("quota_percent", None)
             self.port = None
+            self.log_message = self.input.param("log_message", None)
             self.log_info = self.input.param("log_info", None)
             self.log_location = self.input.param("log_location", None)
             self.stat_info = self.input.param("stat_info", None)

@@ -1,4 +1,6 @@
+import time
 from basetestcase import BaseTestCase
+from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, Bucket
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -65,3 +67,20 @@ class CreateBucketTests(BaseTestCase):
             self.cluster.bucket_delete(self.server, self.bucket_name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(self.bucket_name, self.rest, timeout_in_seconds=60),
                             msg='bucket "{0}" was not deleted even after waiting for 30 seconds'.format(self.bucket_name))
+
+    """ put param like -p log_message="Created bucket". If test need a cluster,
+        put nodes_init=x in param to create cluster """
+    def test_log_message_in_log_page(self):
+        if self.log_message is not None:
+            self._load_doc_data_all_buckets(data_op="create", batch_size=5000)
+            serverInfo = self.servers[0]
+            shell = RemoteMachineShellConnection(serverInfo)
+            time.sleep(5)
+            output, error = shell.execute_command("curl -v -u Administrator:password \
+                            http://{0}:8091/logs | grep '{1}'".format(serverInfo.ip, self.log_message))
+            if not output:
+                self.log.info("message {0} is not in log".format(self.log_message))
+            elif output:
+                raise Exception("The message %s is in log." % self.log_message)
+        else:
+            raise Exception("No thing to test.  You need to put log_message=something_to_test")
