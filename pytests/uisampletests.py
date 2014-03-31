@@ -413,10 +413,12 @@ class  GracefullFailoverTests(BaseUITestCase):
                 self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
             BaseHelper(self).login()
             num_buckets = self.input.param("num_buckets", 1)
+            num_replica = self.input.param("replica", 1)
             self.buckets = []
             NavigationHelper(self).navigate('Data Buckets')
             for i in xrange(num_buckets):
-                bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password')
+                bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password',
+                                replica=num_replica)
                 BucketHelper(self).create(bucket)
                 self.buckets.append(bucket)
         except:
@@ -431,6 +433,16 @@ class  GracefullFailoverTests(BaseUITestCase):
         if len(self.servers) < 2:
             self.fail("There is no enough VMs. Need at least 2")
         ServerHelper(self).failover(self.servers[1], confirm=confirm, graceful=True)
+
+    def test_failover_multiply_nodes(self):
+        is_graceful = self.input.param("graceful", "true;true")
+        is_graceful = is_graceful.split(';')
+        is_graceful = [(False,True)[item.lower() == "true"] for item in is_graceful]
+        if len(self.servers) < (len(is_graceful) + 1):
+            self.fail("There is no enough VMs. Need at least %s" % len(is_graceful))
+        NavigationHelper(self).navigate('Server Nodes')
+        for iter in xrange(len(is_graceful)):
+            ServerHelper(self).failover(self.servers[iter + 1], confirm=True, graceful=is_graceful[iter])
 
     def test_delta_recovery_failover(self):
         confirm = self.input.param("confirm_recovery", True)
@@ -1089,7 +1101,7 @@ class BucketHelper():
                 self.controls.bucket_pop_up(parent).enable_replica_cb.check(setTrue=False)
             else:
                 self.controls.bucket_pop_up(parent).enable_replica_cb.check()
-                self.controls.bucket_pop_up(parent).replica_num.select(bucket.num_replica)
+                self.controls.bucket_pop_up(parent).replica_num.select(str(bucket.num_replica))
         if bucket.index_replica is not None:
             self.controls.bucket_pop_up(parent).index_replica_cb.check(setTrue=bucket.index_replica)
 
