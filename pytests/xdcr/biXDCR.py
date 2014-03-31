@@ -372,6 +372,8 @@ class bidirectional(XDCRReplicationBaseTest):
                 # run queries to create indexes
                 self.cluster.query_view(self.src_master, prefix + ddoc_name, view.name, query)
                 self.cluster.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
+            fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.src_master,
+                                                                                  prefix + ddoc_name, self.fragmentation_value, "default")
         fragmentation_monitor.result()
 
         compaction_task = self.cluster.async_compact_view(self.src_master, prefix + ddoc_name, 'default')
