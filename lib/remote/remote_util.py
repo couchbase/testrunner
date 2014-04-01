@@ -198,9 +198,7 @@ class RemoteMachineShellConnection:
                     return float(line.strip().split(' ')[0])
 
     def stop_membase(self):
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
-
+        self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             log.info("STOP SERVER")
             o, r = self.execute_command("net stop membaseserver")
@@ -213,8 +211,7 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
 
     def start_membase(self):
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("net start membaseserver")
             self.log_command_output(o, r)
@@ -368,8 +365,7 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
 
     def is_couchbase_installed(self):
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
                 #print running process on windows
@@ -388,8 +384,7 @@ class RemoteMachineShellConnection:
         return False
 
     def is_moxi_installed(self):
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             self.log.error('Not implemented')
         elif self.info.distribution_type.lower() == 'mac':
@@ -411,8 +406,7 @@ class RemoteMachineShellConnection:
         args += "-Z port_listen={0} -u {1} -t {2} -O {3} -d".format(port,
                                                                     user or prod,
                                                                     threads, log_file)
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         if self.info.type.lower() == "linux":
             o, r = self.execute_command("{0} {1}".format(cli_path, args))
             self.log_command_output(o, r)
@@ -420,8 +414,7 @@ class RemoteMachineShellConnection:
             raise Exception("running standalone moxi is not supported for windows")
 
     def stop_moxi(self):
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         if self.info.type.lower() == "linux":
             o, r = self.execute_command("killall -9 moxi")
             self.log_command_output(o, r)
@@ -432,8 +425,7 @@ class RemoteMachineShellConnection:
         return self.download_binary(build.url, build.deliverable_type, build.name, latest_url=build.url_latest_build)
 
     def disable_firewall(self):
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         if self.info.type.lower() == "windows":
             output, error = self.execute_command('netsh advfirewall set publicprofile state off')
             self.log_command_output(output, error)
@@ -451,8 +443,7 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
 
     def download_binary(self, url, deliverable_type, filename, latest_url=None, skip_md5_check=True):
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         self.disable_firewall()
         if self.info.type.lower() == 'windows':
             self.execute_command('taskkill /F /T /IM msiexec32.exe')
@@ -849,8 +840,7 @@ class RemoteMachineShellConnection:
 
     def membase_upgrade(self, build, save_upgrade_config=False, forcefully=False):
         # upgrade couchbase server
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
         log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
         command = ''
@@ -940,8 +930,7 @@ class RemoteMachineShellConnection:
             abbr_product = "cb"
         else:
             raise Exception("its not a membase or couchbase?")
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
         if self.info.type.lower() == 'windows':
             win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
@@ -1046,8 +1035,7 @@ class RemoteMachineShellConnection:
 
         if remote_path is None:
             raise Exception("its not a membase or couchbase?")
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
         if self.info.type.lower() == 'windows':
             task = "install"
@@ -1078,8 +1066,7 @@ class RemoteMachineShellConnection:
     def install_moxi(self, build):
         success = True
         track_words = ("warning", "error", "fail")
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
         if self.info.type.lower() == 'windows':
             self.log.error('Not implemented')
@@ -1160,8 +1147,7 @@ class RemoteMachineShellConnection:
         terminate_process_list = ["beam.smp", "memcached", "moxi", "vbucketmigrator",
                                   "couchdb", "epmd", "memsup", "cpu_sup"]
         version_file = "VERSION.txt"
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         log.info(self.info.distribution_type)
         type = self.info.distribution_type.lower()
         if type == 'windows':
@@ -1244,8 +1230,7 @@ class RemoteMachineShellConnection:
         task = "uninstall"
         deleted = False
 
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         ex_type = self.info.deliverable_type
         if self.info.architecture_type == "x86_64":
             os_type = "64"
@@ -1301,8 +1286,7 @@ class RemoteMachineShellConnection:
         terminate_process_list = ["beam", "memcached", "moxi", "vbucketmigrator",
                                   "couchdb", "epmd"]
         version_file = "VERSION.txt"
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         log.info(self.info.distribution_type)
         type = self.info.distribution_type.lower()
         if type == 'windows':
@@ -1372,8 +1356,7 @@ class RemoteMachineShellConnection:
 
     def moxi_uninstall(self):
         terminate_process_list = ["moxi"]
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         log.info(self.info.distribution_type)
         type = self.info.distribution_type.lower()
         if type == 'windows':
@@ -1434,10 +1417,10 @@ class RemoteMachineShellConnection:
         return output
 
     def execute_command(self, command, info=None, debug=True, use_channel=False):
-        if info is None and (getattr(self, "info", None) is None):
-            self.info = self.extract_remote_info()
-        elif getattr(self, "info", None) is None and info is not None :
+        if getattr(self, "info", None) is None and info is not None :
             self.info = info
+        else:
+            self.extract_remote_info()
 
         if self.info.type.lower() == 'windows':
             self.use_sudo = False
@@ -1484,17 +1467,13 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_non_sudo_command(self, command, info=None, debug=True, use_channel=False):
-
-        info = info or getattr(self, "info", None)
-        if info is None:
-            info = self.extract_remote_info()
-            self.info = info
+        info = info or self.extract_remote_info()
+        self.info = info
 
         return self.execute_command_raw(command, debug=debug, use_channel=use_channel)
 
     def terminate_process(self, info=None, process_name=''):
-        if not hasattr(self, 'info') or self.info is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("taskkill /F /T /IM {0}*".format(process_name))
             self.log_command_output(o, r)
@@ -1508,6 +1487,8 @@ class RemoteMachineShellConnection:
     def extract_remote_info(self):
         # use ssh to extract remote machine info
         # use sftp to if certain types exists or not
+        if getattr(self, "info", None) is not None and isinstance(self.info, RemoteMachineInfo):
+            return self.info
         mac_check_cmd = "sw_vers | grep ProductVersion | awk '{ print $2 }'"
         stdin, stdout, stderro = self._ssh_client.exec_command(mac_check_cmd)
         stdin.close()
@@ -1583,6 +1564,7 @@ class RemoteMachineShellConnection:
             info.disk = self.get_disk_info(win_info)
             info.ram = self.get_ram_info(win_info)
             info.hostname = self.get_hostname(win_info)
+            self.info = info
             return info
         else:
             # now run uname -m to get the architechtre type
@@ -1608,6 +1590,7 @@ class RemoteMachineShellConnection:
             info.ram = self.get_ram_info(mac=is_mac)
             info.hostname = self.get_hostname()
             info.domain = self.get_domain()
+            self.info = info
             return info
 
     def get_extended_windows_info(self):
@@ -1672,8 +1655,7 @@ class RemoteMachineShellConnection:
             return o
 
     def stop_couchbase(self):
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("net stop couchbaseserver")
             self.log_command_output(o, r)
@@ -1688,8 +1670,7 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
 
     def start_couchbase(self):
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("net start couchbaseserver")
             self.log_command_output(o, r)
@@ -1719,8 +1700,7 @@ class RemoteMachineShellConnection:
 
     # TODO: Windows
     def flush_os_caches(self):
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         if self.info.type.lower() == "linux":
             o, r = self.execute_command("sync")
             self.log_command_output(o, r)
@@ -1747,8 +1727,7 @@ class RemoteMachineShellConnection:
         WMI is required to be intalled on the node
         stats_windows_helper should be located on the node
         '''
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         remote_command = "cd ~; /cygdrive/c/Python27/python stats_windows_helper.py"
         if process_name:
             remote_command.append(" " + process_name)
@@ -1789,8 +1768,7 @@ class RemoteMachineShellConnection:
         """
 
         shell = self._ssh_client.invoke_shell()
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        self.extract_remote_info()
         if self.info.type.lower() == "windows":
             shell.send('net stop CouchbaseServer\n')
             shell.send('set {0}={1}\n'.format(name, value))
@@ -1801,36 +1779,35 @@ class RemoteMachineShellConnection:
         shell.close()
 
     def change_env_variables(self, dict):
-        prefix="\\n    "
+        prefix = "\\n    "
         shell = self._ssh_client.invoke_shell()
-        init_file="couchbase_init.d"
-        file_path="/opt/couchbase/etc/"
-        environmentVariables=""
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
+        init_file = "couchbase_init.d"
+        file_path = "/opt/couchbase/etc/"
+        environmentVariables = ""
+        self.extract_remote_info()
         if self.info.type.lower() == "windows":
-            init_file="service_start.bat"
-            file_path="/cygdrive/c/Program Files/Couchbase/Server/bin/"
-            prefix="\\n"
-        backupfile=file_path+init_file+".bak"
-        sourceFile=file_path+init_file
-        o, r = self.execute_command("cp "+sourceFile+" "+backupfile)
+            init_file = "service_start.bat"
+            file_path = "/cygdrive/c/Program Files/Couchbase/Server/bin/"
+            prefix = "\\n"
+        backupfile = file_path + init_file + ".bak"
+        sourceFile = file_path + init_file
+        o, r = self.execute_command("cp " + sourceFile + " " + backupfile)
         self.log_command_output(o, r)
-        command="sed -i 's/{0}/{0}".format("ulimit -l unlimited")
+        command = "sed -i 's/{0}/{0}".format("ulimit -l unlimited")
         for key in dict.keys():
-            o, r = self.execute_command("sed -i 's/{1}.*//' {0}".format(sourceFile,key))
+            o, r = self.execute_command("sed -i 's/{1}.*//' {0}".format(sourceFile, key))
             self.log_command_output(o, r)
 
         if self.info.type.lower() == "windows":
-            command="sed -i 's/{0}/{0}".format("set NS_ERTS=%NS_ROOT%\erts-5.8.5.cb1\bin")
+            command = "sed -i 's/{0}/{0}".format("set NS_ERTS=%NS_ROOT%\erts-5.8.5.cb1\bin")
 
         for key in dict.keys():
             if self.info.type.lower() == "windows":
-                environmentVariables+=prefix+'set {0}={1}'.format(key, dict[key])
+                environmentVariables += prefix + 'set {0}={1}'.format(key, dict[key])
             else:
-                environmentVariables+=prefix+'export {0}={1}'.format(key, dict[key])
+                environmentVariables += prefix + 'export {0}={1}'.format(key, dict[key])
 
-        command+=environmentVariables+"/'"+" "+sourceFile
+        command += environmentVariables + "/'" + " " + sourceFile
         o, r = self.execute_command(command)
         self.log_command_output(o, r)
 
@@ -1848,14 +1825,14 @@ class RemoteMachineShellConnection:
         shell = self._ssh_client.invoke_shell()
         if getattr(self, "info", None) is None:
             self.info = self.extract_remote_info()
-        init_file="couchbase_init.d"
-        file_path="/opt/couchbase/etc/"
+        init_file = "couchbase_init.d"
+        file_path = "/opt/couchbase/etc/"
         if self.info.type.lower() == "windows":
-            init_file="service_start.bat"
-            file_path="/cygdrive/c/Program Files/Couchbase/Server/bin"
-        backupfile=file_path+init_file+".bak"
-        sourceFile=file_path+init_file
-        o, r = self.execute_command("mv "+backupfile+" "+sourceFile)
+            init_file = "service_start.bat"
+            file_path = "/cygdrive/c/Program Files/Couchbase/Server/bin"
+        backupfile = file_path + init_file + ".bak"
+        sourceFile = file_path + init_file
+        o, r = self.execute_command("mv " + backupfile + " " + sourceFile)
         self.log_command_output(o, r)
         if self.info.type.lower() == "linux":
             o, r = self.execute_command("/etc/init.d/couchbase-server restart")
@@ -1899,10 +1876,8 @@ class RemoteMachineShellConnection:
         backup_command = "%scbbackup" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         backup_file_location = backup_location
         # TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
-        type = self.info.type.lower()
-        if type == 'windows':
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
             backup_command = "%scbbackup.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH_RAW)
             backup_file_location = "C:%s" % (backup_location)
             output, error = self.execute_command("taskkill /F /T /IM cbbackup.exe")
@@ -1921,7 +1896,7 @@ class RemoteMachineShellConnection:
 
         command = "%s %s%s@%s:%s %s %s" % (backup_command, "http://", login_info,
                                            cluster_ip, cluster_port, backup_file_location, command_options_string)
-        if type == 'windows':
+        if self.info.type.lower() == 'windows':
             command = "cmd /c START \"\" \"%s\" \"%s%s@%s:%s\" \"%s\" %s" % (backup_command, "http://", login_info,
                                                cluster_ip, cluster_port, backup_file_location, command_options_string)
 
@@ -1931,10 +1906,8 @@ class RemoteMachineShellConnection:
     def restore_backupFile(self, login_info, backup_location, buckets):
         restore_command = "%scbrestore" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         backup_file_location = backup_location
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
-        type = self.info.type.lower()
-        if type == 'windows':
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
             restore_command = "%scbrestore.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH_RAW)
             backup_file_location = "C:%s" % (backup_location)
         if self.info.distribution_type.lower() == 'mac':
@@ -1943,7 +1916,7 @@ class RemoteMachineShellConnection:
         for bucket in buckets:
             command = "%s %s %s%s@%s:%s %s %s" % (restore_command, backup_file_location, "http://",
                                                   login_info, self.ip, self.port, "-b", bucket)
-            if type == 'windows':
+            if self.info.type.lower() == 'windows':
                 command = "cmd /c \"%s\" \"%s\" \"%s%s@%s:%s\" %s %s" % (restore_command, backup_file_location, "http://",
                                                       login_info, self.ip, self.port, "-b", bucket)
             output, error = self.execute_command(command)
@@ -1956,25 +1929,21 @@ class RemoteMachineShellConnection:
 
     def execute_cbtransfer(self, source, destination, command_options=''):
         transfer_command = "%scbtransfer" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
-        type = self.info.type.lower()
-        if type == 'windows':
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
             transfer_command = "%scbtransfer.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH_RAW)
         if self.info.distribution_type.lower() == 'mac':
             transfer_command = "%scbtransfer" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
         command = "%s %s %s %s" % (transfer_command, source, destination, command_options)
-        if type == 'windows':
+        if self.info.type.lower() == 'windows':
             command = "cmd /c \"%s\" \"%s\" \"%s\" %s" % (transfer_command, source, destination, command_options)
         output, error = self.execute_command(command)
         self.log_command_output(output, error)
 
     def execute_cbdocloader(self, username, password, bucket, memory_quota, file):
         cbdocloader_command = "%stools/cbdocloader" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
-        type = self.info.type.lower()
+        self.extract_remote_info()
         command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
                                                                             username, password, self.ip,
                                                                             self.port, bucket, memory_quota,
@@ -1986,7 +1955,7 @@ class RemoteMachineShellConnection:
                                                                             self.port, bucket, memory_quota,
                                                                             testconstants.MAC_CB_PATH, file)
 
-        if type == 'windows':
+        if self.info.type.lower() == 'windows':
             cbdocloader_command = "%stools/cbdocloader.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
             WIN_COUCHBASE_SAMPLES_PATH = "C:/Program\ Files/Couchbase/Server/samples/"
             command = "%s -u %s -p %s -n %s:%s -b %s -s %s %s%s.zip" % (cbdocloader_command,
@@ -1999,10 +1968,8 @@ class RemoteMachineShellConnection:
 
     def execute_cbcollect_info(self, file):
         cbcollect_command = "%scbcollect_info" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
-        type = self.info.type.lower()
-        if type == 'windows':
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
             cbcollect_command = "%scbcollect_info.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
             cbcollect_command = "%scbcollect_info" % (testconstants.MAC_COUCHBASE_BIN_PATH)
@@ -2014,10 +1981,8 @@ class RemoteMachineShellConnection:
 
     def execute_cbepctl(self, bucket, persistence, param_type, param, value):
         cbepctl_command = "%scbepctl" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
-        type = self.info.type.lower()
-        if type == 'windows':
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
             cbepctl_command = "%scbepctl.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
             cbepctl_command = "%scbepctl" % (testconstants.MAC_COUCHBASE_BIN_PATH)
@@ -2038,10 +2003,8 @@ class RemoteMachineShellConnection:
 
     def execute_cbstats(self, bucket, command, keyname="", vbid=0):
         cbstat_command = "%scbstats" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
-        type = self.info.type.lower()
-        if type == 'windows':
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
             cbstat_command = "%scbstats.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
             cbstat_command = "%scbstats" % (testconstants.MAC_COUCHBASE_BIN_PATH)
@@ -2060,10 +2023,8 @@ class RemoteMachineShellConnection:
 
     def execute_couchbase_cli(self, cli_command, cluster_host='localhost', options='', cluster_port=None, user='Administrator', password='password'):
         cb_client = "%scouchbase-cli" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
-        type = self.info.type.lower()
-        if type == 'windows':
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
             cb_client = "%scouchbase-cli.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
             cb_client = "%scouchbase-cli" % (testconstants.MAC_COUCHBASE_BIN_PATH)
@@ -2084,14 +2045,12 @@ class RemoteMachineShellConnection:
 
     def execute_cbworkloadgen(self, username, password, num_items, ratio, bucket, item_size, command_options):
         cbworkloadgen_command = "%scbworkloadgen" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-        if getattr(self, "info", None) is None:
-            self.info = self.extract_remote_info()
-        type = self.info.type.lower()
+        self.extract_remote_info()
 
         if self.info.distribution_type.lower() == 'mac':
             cbworkloadgen_command = "%scbworkloadgen" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
-        if type == 'windows':
+        if self.info.type.lower() == 'windows':
             cbworkloadgen_command = "%scbworkloadgen.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
 
         command = "%s -n %s:%s -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command, self.ip, self.port,
@@ -2108,12 +2067,10 @@ class RemoteMachineShellConnection:
             command_options_string = ' '.join(command_options)
 
         cbhealthchecker_command = "%scbhealthchecker" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-        info = self.extract_remote_info()
-        type = info.type.lower()
-        if info.distribution_type.lower() == 'mac':
+        if self.info.distribution_type.lower() == 'mac':
             cbhealthchecker_command = "%scbhealthchecker" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
-        if type == 'windows':
+        if self.info.type.lower() == 'windows':
             cbhealthchecker_command = "%scbhealthchecker" % (testconstants.WIN_COUCHBASE_BIN_PATH)
 
         if path_to_store:
