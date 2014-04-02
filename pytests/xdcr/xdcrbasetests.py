@@ -559,77 +559,105 @@ class XDCRBaseTest(unittest.TestCase):
             if server.ip == node.ip and int(server.port) == int(node.port):
                 rest.add_back_node(node.id)
 
-    def _async_failover(self, src_nodes, failover_node):
+    def _async_failover(self, nodes, failover_node):
         tasks = []
-        tasks.append(self.cluster.async_failover(src_nodes, failover_node))
+        tasks.append(self.cluster.async_failover(nodes, failover_node))
         return tasks
 
-    def _async_rebalance(self, src_nodes, to_add_node, to_remove_node):
+    def _async_rebalance(self, nodes, to_add_node, to_remove_node):
         tasks = []
-        tasks.append(self.cluster.async_rebalance(src_nodes, to_add_node, to_remove_node))
+        tasks.append(self.cluster.async_rebalance(nodes, to_add_node, to_remove_node))
         return tasks
+
+    # Change the master_id of buckets to new master node
+    def __change_masterid_buckets(self, new_master, buckets):
+        new_master_id = RestConnection(new_master).get_nodes_self().id
+        for bucket in buckets:
+            bucket.master_id = new_master_id
 
     # Initiates a rebalance-out asynchronously on both clusters
-    def _async_rebalance_out(self):
+    def _async_rebalance_out(self, master=False):
         tasks = []
         if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
-            tasks = self._async_rebalance_out_cluster("source", self.src_nodes, self.src_master)
+            src_buckets = self._get_cluster_buckets(self.src_master)
+            tasks += self.__async_rebalance_out_cluster(self.src_nodes, self.src_master, master=master)
+            if master:
+                self.src_master = self.src_nodes[0]
+                self.__change_masterid_buckets(self.src_master, src_buckets)
+            self.verify_src = True
         if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
-            tasks += self._async_rebalance_out_cluster("destination", self.dest_nodes, self.dest_master)
+            dest_buckets = self._get_cluster_buckets(self.dest_master)
+            tasks += self.__async_rebalance_out_cluster(self.dest_nodes, self.dest_master, master=master, cluster_type="source")
+            if master:
+                self.dest_master = self.dest_nodes[0]
+                self.__change_masterid_buckets(self.dest_master, dest_buckets)
         return tasks
 
-    def _async_rebalance_out_cluster(self, cluster, cluster_nodes, master):
-        remove_nodes = cluster_nodes[len(cluster_nodes) - self._num_rebalance:]
-        if cluster in self._failover:
+    def __async_rebalance_out_cluster(self, cluster_nodes, master_node, master=False, cluster_type="source"):
+        remove_nodes = []
+        if master:
+            remove_nodes = [master_node]
+        else:
+            remove_nodes = cluster_nodes[len(cluster_nodes) - self._num_rebalance:]
+        if self._failover and cluster_type in self._failover:
             self.cluster.failover(cluster_nodes, remove_nodes)
-        task = self._async_rebalance(cluster_nodes, [], remove_nodes)
+        tasks = self._async_rebalance(cluster_nodes, [], remove_nodes)
         remove_node_ips = [remove_node.ip for remove_node in remove_nodes]
-        self.log.info(" Starting rebalance-out nodes:{0} at cluster {1}".
-                          format(remove_node_ips, master.ip))
+        self.log.info(" Starting rebalance-out nodes:{0} at {1} cluster {2}".
+                          format(remove_node_ips, cluster_type, master_node.ip))
         map(cluster_nodes.remove, remove_nodes)
-        self.__verify_src = True
-        return task
+        return tasks
 
     # Initiates a rebalance-in asynchronously on both clusters
     def _async_rebalance_in(self):
         tasks = []
         if "source" in self._rebalance:
-            tasks = self._async_rebalance_in_cluster(self.src_nodes, self.src_master)
+            tasks += self.__async_rebalance_in_cluster(self.src_nodes, self.src_master)
+            self.verify_src = True
         if "destination" in self._rebalance:
-            tasks += self._async_rebalance_in_cluster(self.dest_nodes, self.dest_master)
+            tasks += self.__async_rebalance_in_cluster(self.dest_nodes, self.dest_master, cluster_type="destination")
         return tasks
 
-    def _async_rebalance_in_cluster(self, cluster_nodes, master):
+    def __async_rebalance_in_cluster(self, cluster_nodes, master_node, cluster_type="source"):
         add_nodes = self._floating_servers_set[0:self._num_rebalance]
         map(self._floating_servers_set.remove, add_nodes)
-        task = self._async_rebalance(cluster_nodes, add_nodes, [])
+        tasks = self._async_rebalance(cluster_nodes, add_nodes, [])
         add_nodes_ips = [node.ip for node in add_nodes]
-        self.log.info(" Starting rebalance-in nodes {0} at cluster {1}".
-                          format(add_nodes_ips, master.ip))
+        self.log.info(" Starting rebalance-in nodes:{0} at {1} cluster {2}".
+                          format(add_nodes_ips, cluster_type, master_node.ip))
         map(cluster_nodes.append, add_nodes)
-        self.__verify_src = True
-        return task
-
-    # Initiates a swap-rebalance asynchronously on both clusters
-    def _async_swap_rebalance(self):
-        tasks = []
-        for _ in range(self._num_rebalance):
-            if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
-                tasks = self._async_swap_rebalance_cluster(self.src_nodes, self.src_master)
-            if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
-                tasks += self._async_swap_rebalance_cluster(self.dest_nodes, self.dest_master)
         return tasks
 
-    def _async_swap_rebalance_cluster(self, cluster_nodes, master):
+    # Initiates a swap-rebalance asynchronously on both clusters
+    def _async_swap_rebalance(self, master=False):
+        tasks = []
+        if "source" in self._rebalance and self._num_rebalance < len(self.src_nodes):
+            src_buckets = self._get_cluster_buckets(self.src_master)
+            tasks += self.__async_swap_rebalance_cluster(self.src_nodes, self.src_master, master=master)
+            if master:
+                self.src_master = self.src_nodes[0]
+                self.__change_masterid_buckets(self.src_master, src_buckets)
+            self.verify_src = True
+        if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
+            dest_buckets = self._get_cluster_buckets(self.dest_master)
+            tasks += self.__async_swap_rebalance_cluster(self.dest_nodes, self.dest_master, master=master, cluster_type="destination")
+            if master:
+                self.dest_master = self.dest_nodes[0]
+                self.__change_masterid_buckets(self.dest_master, dest_buckets)
+        return tasks
+
+    def __async_swap_rebalance_cluster(self, cluster_nodes, master_node, master=False, cluster_type="source"):
         add_node = self._floating_servers_set.pop()
-        remove_node = cluster_nodes[len(cluster_nodes) - 1]
-        task = self._async_rebalance(cluster_nodes, [add_node], [remove_node])
-        self.log.info(" Starting swap-rebalance at cluster {0} add node {1} and remove node {2}"
-                              .format(master.ip, add_node.ip, remove_node.ip))
+        if master:
+            remove_node = master_node
+        else:
+            remove_node = cluster_nodes[len(cluster_nodes) - 1]
+        tasks = self._async_rebalance(cluster_nodes, [add_node], [remove_node])
+        self.log.info(" Starting swap-rebalance [remove_node:{0}] -> [add_node:{1}] at {2} cluster {3}"
+                              .format(remove_node.ip, add_node.ip, cluster_type, master_node.ip))
         cluster_nodes.remove(remove_node)
         cluster_nodes.append(add_node)
-        self.__verify_src = True
-        return task
+        return tasks
 
     def get_servers_in_cluster(self, member):
         nodes = [node for node in RestConnection(member).get_nodes()]
@@ -682,8 +710,8 @@ class XDCRBaseTest(unittest.TestCase):
 
     def wait_service_started(self, server, wait_time=120):
         shell = RemoteMachineShellConnection(server)
-        type = shell.extract_remote_info().distribution_type
-        if type.lower() == 'windows':
+        os_type = shell.extract_remote_info().distribution_type
+        if os_type.lower() == 'windows':
             cmd = "sc query CouchbaseServer | grep STATE"
         else:
             cmd = "service couchbase-server status"
