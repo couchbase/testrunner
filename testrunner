@@ -256,6 +256,7 @@ if __name__ == "__main__":
     print "Global Test input params:"
     pprint(TestInputSingleton.input.test_params)
 
+    xunit = XUnitTestResult()
     # Create root logs directory
     abs_path = os.path.dirname(os.path.abspath(sys.argv[0]))
     # Create testrunner logs subdirectory
@@ -337,7 +338,6 @@ if __name__ == "__main__":
                 if key and value:
                     params += "," + str(key) + ":" + str(value)
 
-        xunit = XUnitTestResult()
         if result.failures or result.errors:
             # Immediately get the server logs, if
             # the test has failed or has errors
