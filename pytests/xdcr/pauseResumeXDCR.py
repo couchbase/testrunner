@@ -186,14 +186,14 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
             raise XDCRException("Replication is not resumed for SrcBucket: {0}, Target Bucket: {1}".
                                 format(src_bucket_name, dest_bucket_name))
 
-        if self.is_cluster_replicating(src_nodes, src_bucket_name):
+        if self.is_cluster_replicating(master, src_bucket_name):
             # check active_vbreps on all source nodes
             task = self.cluster.async_wait_for_xdcr_stat(src_nodes,
                                                          src_bucket_name, '',
                                                          'replication_active_vbreps', '>', 0)
             task.result(self.wait_timeout)
             # check incoming xdc_ops on remote nodes
-            if self.is_cluster_replicating(src_nodes, src_bucket_name):
+            if self.is_cluster_replicating(master, src_bucket_name):
                 task = self.cluster.async_wait_for_xdcr_stat(dest_nodes,
                                                          dest_bucket_name, '',
                                                          'xdc_ops', '>', 0)
@@ -202,26 +202,23 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
             self.log.info("Replication is complete on {0}, resume validations have been skipped".
                           format(src_nodes[0].ip))
 
-    """ Check replication_changes_left on every node, 3 times if 0 """
-    def is_cluster_replicating(self, src_nodes, src_bucket_name):
+    """ Check replication_changes_left on master, 3 times if 0 """
+    def is_cluster_replicating(self, master, src_bucket_name):
         count = 0
-        for node in src_nodes:
-            while count < 3:
-                outbound_mutations = self.get_xdcr_stat(node, src_bucket_name, 'replication_changes_left')
-                if outbound_mutations == 0:
-                    self.log.info("Outbound mutations on {0} is {1}".format(node.ip, outbound_mutations))
-                    count += 1
-                    continue
-                else:
-                    self.log.info("Outbound mutations on {0} is {1}".format(node.ip, outbound_mutations))
-                    self.log.info("Node {0} is replicating".format(node.ip))
-                    break
+        while count < 3:
+            outbound_mutations = self.get_xdcr_stat(master, src_bucket_name, 'replication_changes_left')
+            if outbound_mutations == 0:
+                self.log.info("Outbound mutations on {0} is {1}".format(master.ip, outbound_mutations))
+                count += 1
+                continue
             else:
-                self.log.info("Outbound mutations on {0} is {1}".format(node.ip, outbound_mutations))
-                self.log.info("Cluster with node {0} is not replicating".format(node.ip))
-                return False
-        return True
-
+                self.log.info("Outbound mutations on {0} is {1}".format(master.ip, outbound_mutations))
+                self.log.info("Node {0} is replicating".format(master.ip))
+                return True
+        else:
+            self.log.info("Outbound mutations on {0} is {1}".format(master.ip, outbound_mutations))
+            self.log.info("Cluster with node {0} is not replicating".format(master.ip))
+            return False
 
 
 class PauseResumeTest(PauseResumeXDCRBaseTest):
@@ -314,6 +311,7 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
                 # reboot nodes?
                 if self.reboot == "dest_node":
                     self.reboot_node(self.dest_nodes[len(self.dest_nodes) - 1])
+                    self.__update_deletes()
                 elif self.reboot == "dest_cluster":
                     threads = []
                     for node in self.dest_nodes:
@@ -322,6 +320,7 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
                         thread.start()
                     for thread in threads:
                         thread.join()
+                    self.__update_deletes()
 
             self.sleep(self.pause_wait)
 
@@ -376,4 +375,36 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
                                                        dest_buckets[0].kvs[1].__len__()))
 
         [task.result(self._poll_timeout) for task in tasks]
-        self.verify_results(verify_src=self.verify_src)
+        self.verify_results(verify_src=self.__verify_src)
+
+    def pause_resume_single_bucket(self):
+        pause_bucket_name = self._input.param("pause_bucket","default")
+        load_tasks = self.__async_load_xdcr()
+
+        self.pause_replication(self.src_master,pause_bucket_name,pause_bucket_name)
+        # wait till replication is paused
+        self.sleep(10)
+        # check if remote cluster is still replicating
+        if self.is_cluster_replicating(self.dest_master, pause_bucket_name):
+            task = self.cluster.async_wait_for_xdcr_stat(self.src_nodes,
+                                                         pause_bucket_name, '',
+                                                         'xdc_ops', '>', 0)
+            task.result()
+            self.log.info("Inbound mutations for {0} are not affected".format(pause_bucket_name))
+        # check if pause on one bucket does not affect other replications
+        src_buckets = self._get_cluster_buckets(self.src_master)
+        for bucket in src_buckets:
+            if bucket.name != pause_bucket_name:
+                if self.is_cluster_replicating(self.src_master, bucket.name):
+                    task = self.cluster.async_wait_for_xdcr_stat(self.dest_nodes,
+                                                         bucket.name, '',
+                                                         'xdc_ops', '>', 0)
+                    task.result()
+                    self.log.info("Pausing one replication does not affect other replications")
+                else:
+                    self.log.info("Other buckets have completed replication")
+        self.resume_replication(self.src_master,pause_bucket_name,pause_bucket_name)
+        [task.result() for task in load_tasks]
+        self.__merge_buckets()
+        self.verify_results(verify_src=self.__verify_src)
+
