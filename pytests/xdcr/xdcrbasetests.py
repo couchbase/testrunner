@@ -754,7 +754,7 @@ class XDCRBaseTest(unittest.TestCase):
             o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
         #wait for restart and warmup on all node
-        self.sleep(180)
+        self.sleep(self.wait_timeout * 5)
         # disable firewall on these nodes
         self._disable_firewall(node)
         # wait till node is ready after warmup
