@@ -221,7 +221,7 @@ class ViewQueryTests(BaseTestCase):
         generator_load = data_set.generate_docs(data_set.views[0])
         self.load(data_set, generator_load)
         for symbol in symbols:
-            data_set.add_startkey_endkey_non_json_queries(symbol, limit=self.limit)
+            data_set.add_startkey_endkey_non_json_queries(symbol.encode("utf8", "ignore"), limit=self.limit)
             self._query_all_views(data_set.views, generator_load,
                                   verify_expected_keys=True)
 
