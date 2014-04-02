@@ -286,7 +286,7 @@ if __name__ == "__main__":
         if ("GROUP" or "EXCLUDE_GROUP") in test_params:
             #determine if the test relates to the specified group(can be separated by ';')
             if not ("GROUP" in params and len(set(test_params["GROUP"].split(";")) & set(params["GROUP"].split(";")))) or \
-                    "EXCLUDE_GROUP" in params and len(set(test_params["EXCLUDE_GROUP"].split(";")) & set(params["EXCLUDE_GROUP"].split(";"))):
+                    "EXCLUDE_GROUP" in test_params and len(set(test_params["EXCLUDE_GROUP"].split(";")) & set(params["GROUP"].split(";"))):
                 print "test '{0}' was skipped".format(name)
                 continue
 
