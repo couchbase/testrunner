@@ -364,7 +364,7 @@ if __name__ == "__main__":
         else:
             xunit.add_test(name=name, time=time_taken, params=params)
             results.append({"result": "pass", "name": name, "time": time_taken})
-        xunit.write("{0}/report-{1}".format(logs_folder, time.strftime("%y-%b-%d_%H-%M-%S", time.localtime())))
+        xunit.write("{0}/report-{1}".format(os.path.dirname(logs_folder), str_time))
         xunit.print_summary()
         print "testrunner logs, diags and results are available under {0}".format(logs_folder)
         case_number += 1
