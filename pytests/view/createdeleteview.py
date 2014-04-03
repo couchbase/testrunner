@@ -411,8 +411,8 @@ class CreateDeleteViewTests(BaseTestCase):
         max_verify = None
         if self.num_items > 500000:
             max_verify = 100000
-        self._verify_all_buckets(server=self.master, timeout=900, max_verify=max_verify)
-        self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1])
+        self._verify_all_buckets(server=self.master, timeout=self.wait_timeout * 15 if not self.dgm_run else None, max_verify=max_verify)
+        self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1], timeout=self.wait_timeout if not self.dgm_run else None)
         self._verify_ddoc_ops_all_buckets()
         if self.test_with_view:
             self._verify_ddoc_data_all_buckets()
@@ -441,8 +441,8 @@ class CreateDeleteViewTests(BaseTestCase):
             max_verify = None
             if self.num_items > 500000:
                 max_verify = 100000
-            self._verify_all_buckets(server=self.master, timeout=900, max_verify=max_verify)
-            self._verify_stats_all_buckets(self.servers[:i])
+            self._verify_all_buckets(server=self.master, timeout=self.wait_timeout * 15 if not self.dgm_run else None, max_verify=max_verify)
+            self._verify_stats_all_buckets(self.servers[:i], timeout=self.wait_timeout if not self.dgm_run else None)
             self._verify_ddoc_ops_all_buckets()
             if self.test_with_view:
                 self._verify_ddoc_data_all_buckets()
@@ -479,8 +479,8 @@ class CreateDeleteViewTests(BaseTestCase):
         max_verify = None
         if self.num_items > 500000:
             max_verify = 100000
-        self._verify_all_buckets(server=self.master, timeout=900, max_verify=max_verify)
-        self._verify_stats_all_buckets(servs_after_rebal)
+        self._verify_all_buckets(server=self.master, timeout=self.wait_timeout * 15 if not self.dgm_run else None, max_verify=max_verify)
+        self._verify_stats_all_buckets(servs_after_rebal, timeout=self.wait_timeout if not self.dgm_run else None)
         self._verify_ddoc_ops_all_buckets()
         if self.test_with_view:
             self._verify_ddoc_data_all_buckets()
