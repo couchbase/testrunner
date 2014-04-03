@@ -89,6 +89,8 @@ class HealthcheckerTests(CliBaseTest):
                 path = '%s/%s/%s' % (self.path_to_store, self.report_folder_name, f["file"])
                 list_reports = ['%s/minute.html' % path, '%s/day.html' % path,
                                 '%s/week.html' % path, '%s/hour.html' % path]
+        """ since this test only run in few minutes, some data will not have in
+            day, week and month """
         for report in list_reports:
             output, _ = self.shell.execute_command("cat %s" % report)
             page = ' '.join(output)
@@ -96,7 +98,8 @@ class HealthcheckerTests(CliBaseTest):
             soup = BeautifulSoup.BeautifulSoup(page)
             self._check_navigation(soup)
             self._check_buckets(soup)
-            self._check_nodes_list(soup)
+            if "minute" in report or "hour" in report:
+                self._check_nodes_list(soup)
 
 
     def _check_navigation(self, soup):
@@ -153,27 +156,31 @@ class HealthcheckerTests(CliBaseTest):
                                                         node.ip, node.status,
                                                         row.findAll('td')[2].string))
                             embeded_rows = rows[i + 1].findAll('table')[0].findAll('tr')
+
+                            """ add more checks if needed below this """
                             for emb_row in embeded_rows:
+                                """ check data path """
                                 if len(emb_row.findAll('td')) and \
                                    emb_row.findAll('td')[1].string == 'Data path on disk':
                                     self.assertTrue(emb_row.findAll('td')[2].li.string.\
                                                     find(node_info.storage[0].path) != -1,
                                                     "Node %s expected data path is %s, actual is %s" % (
-                                                        node.ip, node_info.storage[0].path,
+                                                    node.ip, node_info.storage[0].path,
                                                         emb_row.findAll('td')[2].li.string))
+                                """ check index path """
                                 if len(emb_row.findAll('td')) and \
                                    emb_row.findAll('td')[1].string == 'Index data path on disk':
                                     self.assertTrue(emb_row.findAll('td')[2].li.string.\
                                                     find(node_info.storage[0].index_path) != -1,
-                                                    "Node %s expected index path is %s, actual is %s" % (
+                                                 "Node %s expected index path is %s, actual is %s" % (
                                                         node.ip, node_info.storage[0].index_path,
                                                         emb_row.findAll('td')[2].li.string))
+                                """ check current active items for 1 replica bucket only """
                                 if len(emb_row.findAll('td')) and \
                                    emb_row.findAll('td')[1].string == 'Current number of active items':
                                     self.assertTrue(emb_row.findAll('td')[2].li.string.\
-                                                    find(str(node_info.curr_items/(self.num_replicas + 1))) != -1,
-                                                    "Node %s expected index path is %s, actual is %s" % (
-                                                        node.ip, str(node_info.curr_items),
-                                                        emb_row.findAll('td')[2].li.string))
+                                                    find(str(unicode(node_info.curr_items/len(self.buckets)))) != -1,
+                                                    "Node %s expected active items is %s, actual is %s" % (
+                                                    node.ip, str(node_info.curr_items),emb_row.findAll('td')[2].li.string))
                             is_checked = True
                     self.assertTrue(is_checked, "there was no node %s found" % node.ip)
