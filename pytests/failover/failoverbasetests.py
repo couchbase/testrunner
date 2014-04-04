@@ -30,7 +30,7 @@ class FailoverBaseTest(BaseTestCase):
                     and 'stop-on-failure' in TestInputSingleton.input.test_params and \
                     str(TestInputSingleton.input.test_params['stop-on-failure']).lower() == 'true':
                     # supported starting with python2.7
-                    log.warn("CLEANUP WAS SKIPPED")
+                    self.log.warn("CLEANUP WAS SKIPPED")
                     self.cluster.shutdown(force=True)
                     self._log_finish(self)
         else:
