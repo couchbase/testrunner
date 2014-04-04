@@ -990,6 +990,7 @@ class RestConnection(object):
             log.info('rebalance operation started')
         else:
             log.error('rebalance operation failed: {0}'.format(content))
+            self.print_UI_logs()
             #extract the error
             raise InvalidArgumentException('controller/rebalance',
                                            parameters=params)
