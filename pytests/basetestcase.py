@@ -43,7 +43,7 @@ class BaseTestCase(unittest.TestCase):
         self.master = self.servers[0]
         self.cluster = Cluster()
         self.pre_warmup_stats = {}
-        self.cleanup=False
+        self.cleanup = False
         try:
             self.vbuckets = self.input.param("vbuckets", None)
             self.upr = self.input.param("upr", None)
@@ -115,7 +115,7 @@ class BaseTestCase(unittest.TestCase):
                 if self.case_number > 1000:
                     self.log.warn("teardDown for previous test failed. will retry..")
                     self.case_number -= 1000
-                self.cleanup=True
+                self.cleanup = True
                 self.tearDown()
                 self.cluster = Cluster()
 
@@ -154,7 +154,7 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
             self._log_start(self)
         except Exception, e:
-            self.cluster.shutdown(force=True )
+            self.cluster.shutdown(force=True)
             self.fail(e)
 
     def tearDown(self):
@@ -210,7 +210,7 @@ class BaseTestCase(unittest.TestCase):
             finally:
                 # stop all existing task manager threads
                 if self.cleanup:
-                    self.cleanup=False
+                    self.cleanup = False
                 else:
                     if self.vbuckets or self.upr:
                         self.reset_env_variables()
@@ -284,9 +284,9 @@ class BaseTestCase(unittest.TestCase):
         self._create_standard_buckets(self.master, self.standard_buckets)
         self._create_memcached_buckets(self.master, self.memcached_buckets)
 
-    def _get_bucket_size(self, mem_quota, num_buckets, ratio=2.0 / 3.0):
+    def _get_bucket_size(self, mem_quota, num_buckets):
         #min size is 100MB now
-        return max(100, int(ratio / float(num_buckets) * float(mem_quota)))
+        return max(100, int(float(mem_quota) / float(num_buckets)))
 
     def _create_sasl_buckets(self, server, num_buckets, server_id=None, bucket_size=None, password='password'):
         if not num_buckets:
@@ -831,11 +831,11 @@ class BaseTestCase(unittest.TestCase):
 
     def change_env_variables(self):
         for server in self.servers:
-            dict={}
+            dict = {}
             if self.vbuckets:
-                dict["COUCHBASE_NUM_VBUCKETS"]=self.vbuckets
+                dict["COUCHBASE_NUM_VBUCKETS"] = self.vbuckets
             if self.upr:
-                dict["COUCHBASE_REPL_TYPE"]="upr"
+                dict["COUCHBASE_REPL_TYPE"] = "upr"
             if len(dict) >= 1:
                 remote_client = RemoteMachineShellConnection(server)
                 remote_client.change_env_variables(dict)

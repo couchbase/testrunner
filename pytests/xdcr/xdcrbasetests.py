@@ -521,8 +521,8 @@ class XDCRBaseTest(unittest.TestCase):
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
 
-    def _get_bucket_size(self, mem_quota, num_buckets, ratio=2.0 / 3.0):
-        return int(ratio / float(num_buckets) * float(mem_quota))
+    def _get_bucket_size(self, mem_quota, num_buckets):
+        return int(float(mem_quota) / float(num_buckets))
 
     def _get_cluster_buckets(self, master_server):
         rest = RestConnection(master_server)
