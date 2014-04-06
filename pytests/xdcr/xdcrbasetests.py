@@ -227,11 +227,11 @@ class XDCRBaseTest(unittest.TestCase):
         self._clusters_dic = self._input.clusters  # clusters is declared as dic in TestInput which is unordered.
         self._clusters_keys_olst = range(
             len(self._clusters_dic))  # clusters are populated in the dic in testrunner such that ordinal is the key.
-        # orderedDic cannot be used in order to maintain the compability with python 2.6
+        # orderedDic cannot be used in order to maintain the compatibility with python 2.6
         self._cluster_counter_temp_int = 0
         self._cluster_names_dic = self._get_cluster_names()
         self._servers = self._input.servers
-        self._disabled_consistent_view = self._input.param("disabled_consistent_view", True)
+        self._disabled_consistent_view = self._input.param("disabled_consistent_view", None)
         self._floating_servers_set = self._get_floating_servers()  # These are the servers defined in .ini file but not linked to any cluster.
         self._cluster_counter_temp_int = 0  # TODO: fix the testrunner code to pass cluster name in params.
         self.buckets = []
