@@ -324,6 +324,9 @@ class RestConnection(object):
         if "community" in editions:
             log.error("IP(s) for node(s) with community edition {0}".format(community_nodes))
             return False
+        elif "enterprise" not in editions:
+            log.error("IP(s) for node(s) with unknown edition {0}".format(community_nodes))
+            return False
         return True
 
     def init_http_request(self, api):
