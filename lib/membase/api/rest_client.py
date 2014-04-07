@@ -6,6 +6,7 @@ import socket
 import time
 import logger
 import uuid
+from copy import deepcopy
 from threading import Thread
 
 try:
@@ -911,6 +912,14 @@ class RestConnection(object):
             if otpNode.ip == '127.0.0.1':
                 otpNode.ip = self.ip
         else:
+            self.print_UI_logs()
+            try:
+                #print logs from node that we want to add
+                wanted_node = deepcopy(self)
+                wanted_node.ip = remoteIp
+                wanted_node.print_UI_logs()
+            except Exception, ex:
+                self.log(ex)
             if content.find('Prepare join failed. Node is already part of cluster') >= 0:
                 raise ServerAlreadyJoinedException(nodeIp=self.ip,
                                                    remoteIp=remoteIp)
@@ -1855,7 +1864,7 @@ class RestConnection(object):
 
     def print_UI_logs(self, last_n=10, contains_text=None):
         logs = self.get_logs(last_n, contains_text)
-        log.info("Latest logs from UI:")
+        log.info("Latest logs from UI on {0}:".format(self.ip))
         for lg in logs: log.error(lg)
 
     def delete_ro_user(self):
