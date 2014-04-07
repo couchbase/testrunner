@@ -22,6 +22,11 @@ class RackzoneBaseTest(BaseTestCase):
 
         #define the data that will be used to test
         self.blob_generator = self.input.param("blob_generator", True)
+        serverInfo = self.servers[0]
+        rest = RestConnection(serverInfo)
+        if not rest.is_enterprise_edition():
+            raise Exception("This couchbase server is not Enterprise Edition.\
+                  This RZA feature requires Enterprise Edition to work")
         if self.blob_generator:
             #gen_load data is used for upload before each test(1000 items by default)
             self.gen_load = BlobGenerator('test', 'test-', self.value_size, end=self.num_items)
