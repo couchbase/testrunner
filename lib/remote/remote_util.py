@@ -1941,6 +1941,34 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command(command)
         self.log_command_output(output, error)
 
+    def get_data_map_using_cbtransfer(self,buckets,data_path=None,userId="Administrator",password="password"):
+        source="http://"+self.ip+":8091"
+        if data_path:
+            source="couchstore-files://"+data_path
+        bucketMap={}
+        headerInfo=""
+        for bucket in buckets:
+            if data_path == None:
+                options=" -b "+bucket.name+" -u "+userId+" -p password --single-node"
+            else:
+                options=" -b "+bucket.name+" -u "+userId+" -p password"
+            fileName=bucket.name+"."+str(uuid.uuid1())+".csv"
+            path="/tmp/"+fileName
+            destination="csv:"+path
+            self.execute_cbtransfer(source, destination, options)
+            file_existed = self.file_exists("/tmp", fileName)
+            if file_existed:
+                self.copy_file_remote_to_local(path,path)
+                self.delete_files(path)
+                content=[]
+                headerInfo=""
+                with open(path) as f:
+                    headerInfo=f.readline()
+                    content=f.readlines()
+                bucketMap[bucket.name]=content
+                os.remove(path)
+        return headerInfo,bucketMap
+
     def execute_cbtransfer(self, source, destination, command_options=''):
         transfer_command = "%scbtransfer" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()

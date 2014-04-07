@@ -156,7 +156,6 @@ class FailoverTests(FailoverBaseTest):
                          self.change_port(new_port='8091',
                                           current_port=self.input.param("new_port", "9090"))
 
-
     def stop_server(self, node):
         log = logger.Logger.get_logger()
         for server in self.servers:
