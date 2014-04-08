@@ -118,6 +118,10 @@ class NodeInitializeTask(Task):
             self.state = FINISHED
             self.set_exception(Exception('unable to get information on a server %s, it is available?' % (self.server.ip)))
             return
+        if info.mcdMemoryReserved == 0:
+            self.state = FINISHED
+            self.set_exception(Exception('mcdMemoryReserved=0 on %s?: {1}' % (self.server.ip, info)))
+            return
         self.quota = int(info.mcdMemoryReserved * 2 / 3)
         if self.quota_percent:
            self.quota = int(info.mcdMemoryReserved * self.quota_percent / 100)
