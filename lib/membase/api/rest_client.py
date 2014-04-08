@@ -19,7 +19,7 @@ from exception import ServerAlreadyJoinedException, ServerUnavailableException, 
 from membase.api.exception import BucketCreationException, ServerSelfJoinException, ClusterRemoteException, \
     RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
     ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, AddNodeException, \
-    BucketFlushFailed, CBRecoveryFailedException, XDCRException
+    BucketFlushFailed, CBRecoveryFailedException, XDCRException, SetRecoveryTypeFailed
 log = logger.Logger.get_logger()
 
 #helper library methods built on top of RestConnection interface
@@ -324,9 +324,6 @@ class RestConnection(object):
                 community_nodes.extend(node["hostname"].split(":")[:1])
         if "community" in editions:
             log.error("IP(s) for node(s) with community edition {0}".format(community_nodes))
-            return False
-        elif "enterprise" not in editions:
-            log.error("IP(s) for node(s) with unknown edition {0}".format(community_nodes))
             return False
         return True
 
@@ -973,6 +970,25 @@ class RestConnection(object):
             raise FailoverFailedException(content)
         return status
 
+    def set_recovery_type(self, otpNode=None, recoveryType=None):
+        log.info("Going to set recoveryType={0} for node :: {1}".format(recoveryType,otpNode))
+        if otpNode == None:
+            log.error('otpNode parameter required')
+            return False
+        if recoveryType == None:
+            log.error('recoveryType is not set')
+            return False
+        api = self.baseUrl + 'controller/setRecoveryType'
+        params = urllib.urlencode({'otpNode': otpNode,
+                                   'recoveryType': recoveryType})
+        status, content, header = self._http_request(api, 'POST', params)
+        if status:
+            log.info('recoveryType for node {0} set successful'.format(otpNode))
+        else:
+            log.error('recoveryType node {0} not set with error : {1}'.format(otpNode, content))
+            raise SetRecoveryTypeFailed(content)
+        return status
+
     def add_back_node(self, otpNode=None):
         if otpNode is None:
             log.error('otpNode parameter required')
@@ -1002,7 +1018,6 @@ class RestConnection(object):
             log.info('rebalance operation started')
         else:
             log.error('rebalance operation failed: {0}'.format(content))
-            self.print_UI_logs()
             #extract the error
             raise InvalidArgumentException('controller/rebalance',
                                            parameters=params)

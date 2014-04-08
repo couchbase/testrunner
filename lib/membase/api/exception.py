@@ -104,6 +104,9 @@ class ServerAlreadyJoinedException(MembaseHttpException):
         self.parameters['remoteIp'] = remoteIp
         self.type = MembaseHttpExceptionTypes.NODE_ALREADY_JOINED
 
+class SetRecoveryTypeFailed(MembaseHttpException):
+    def __init__(self, string=''):
+        self._message = 'Set RecoveryType failed :{0} '.format(string)
 
 class RebalanceFailedException(MembaseHttpException):
     def __init__(self, string=''):

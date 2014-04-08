@@ -32,8 +32,10 @@ class FailoverTests(FailoverBaseTest):
     def common_test_body(self, keys_count, failover_reason):
         log = logger.Logger.get_logger()
         log.info("keys_count : {0}".format(keys_count))
-        log.info("replicas : {0}".format(self.num_replicas))
+        log.info("num_replicas : {0}".format(self.num_replicas))
+        log.info("recoveryType : {0}".format(self.recoveryType))
         log.info("failover_reason : {0}".format(failover_reason))
+        log.info("num_failed_nodes : {0}".format(self.num_failed_nodes))
         log.info('picking server : {0} as the master'.format(self.master))
 
         rest = RestConnection(self.master)
@@ -51,7 +53,7 @@ class FailoverTests(FailoverBaseTest):
         nodes = rest.node_statuses()
 
         RebalanceHelper.wait_for_replication(self.servers, self.cluster)
-        chosen = RebalanceHelper.pick_nodes(self.master, howmany=self.num_replicas)
+        chosen = RebalanceHelper.pick_nodes(self.master, howmany=self.num_failed_nodes)
         for node in chosen:
             # let's do op
             if failover_reason == 'stop_server':
@@ -107,10 +109,14 @@ class FailoverTests(FailoverBaseTest):
             self._failed_nodes.append(node)
 
         if self.add_back_flag:
+            index = 0
             for node in self._failed_nodes:
                 rest.add_back_node(node.id)
                 self.sleep(5)
-            self.sleep(10, "after failover before invoking rebalance...")
+                if self.recoveryType:
+                    rest.set_recovery_type(otpNode=node.id,recoveryType=recoveryType[index])
+                    index += 1
+            self.sleep(2, "after failover before invoking rebalance...")
             rest.rebalance(otpNodes=[node.id for node in nodes],
                                ejectedNodes=[])
             msg = "rebalance failed while removing failover nodes {0}".format(chosen)
