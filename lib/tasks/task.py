@@ -343,7 +343,7 @@ class RebalanceTask(Task):
             else:
                 self.state = FINISHED
                 self.set_result(False)
-                self.set_exception("seems like rebalance hangs. please check logs!")
+                self.set_exception(RebalanceFailedException("seems like rebalance hangs. please check logs!"))
         else:
             success_cleaned = []
             for removed in self.to_remove:
