@@ -114,7 +114,7 @@ class FailoverTests(FailoverBaseTest):
                 rest.add_back_node(node.id)
                 self.sleep(5)
                 if self.recoveryType:
-                    rest.set_recovery_type(otpNode=node.id,recoveryType=recoveryType[index])
+                    rest.set_recovery_type(otpNode=node.id, recoveryType=self.recoveryType[index])
                     index += 1
             self.sleep(2, "after failover before invoking rebalance...")
             rest.rebalance(otpNodes=[node.id for node in nodes],
