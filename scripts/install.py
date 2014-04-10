@@ -455,7 +455,7 @@ class CouchbaseServerInstaller(Installer):
         if "xdcr_upr" in params:
             xdcr_upr = params["xdcr_upr"].lower() == 'true'
         else:
-            xdcr_upr = False
+            xdcr_upr = True
 
         if type == "windows":
             remote_client.download_binary_in_win(build.url, params["version"])
