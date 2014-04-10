@@ -989,7 +989,7 @@ class RemoteMachineShellConnection:
                 success &= self.log_command_output(output, error, track_words)
             if xdcr_upr:
                 output, error = \
-                    self.execute_command("sed -i 's/END INIT INFO/END INIT INFO\\nexport XDCR_USE_NEW_PATH=upr/'\
+                    self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export XDCR_USE_NEW_PATH=true/'\
                     /opt/{0}/etc/{0}_init.d".format(server_type))
                 success &= self.log_command_output(output, error, track_words)
 
