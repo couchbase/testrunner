@@ -76,9 +76,15 @@ class RestHelper(object):
             log.info('rebalance reached >{0}% in {1} seconds '.format(progress, duration))
             return progress
 
-    #get the nodes and verify that all the nodes.status are healthy
+    #return true if cluster balanced, false if it needs rebalance
     def is_cluster_rebalanced(self):
-        return self.rest.rebalance_statuses()
+        command = "ns_orchestrator:needs_rebalance()"
+        status, content = self.rest.diag_eval(command)
+        if status:
+            return content.lower() == "false"
+        log.error("can't define if cluster balanced")
+        return None
+
 
     #this method will rebalance the cluster by passing the remote_node as
     #ejected node
@@ -971,7 +977,7 @@ class RestConnection(object):
         return status
 
     def set_recovery_type(self, otpNode=None, recoveryType=None):
-        log.info("Going to set recoveryType={0} for node :: {1}".format(recoveryType,otpNode))
+        log.info("Going to set recoveryType={0} for node :: {1}".format(recoveryType, otpNode))
         if otpNode == None:
             log.error('otpNode parameter required')
             return False
@@ -1123,19 +1129,6 @@ class RestConnection(object):
             avg_percentage = -100
         return avg_percentage
 
-
-    #if status is none , is there an errorMessage
-    #convoluted logic which figures out if the rebalance failed or succeeded
-    def rebalance_statuses(self):
-        rebalanced = None
-        api = self.baseUrl + 'pools/rebalanceStatuses?waitChange=1'
-        status, content, header = self._http_request(api)
-        json_parsed = json.loads(content)
-        if status:
-            if 'balanced' not in json_parsed:
-                return False
-            rebalanced = json_parsed['balanced']
-        return rebalanced
 
     def log_client_error(self, post):
         api = self.baseUrl + 'logClientError'
