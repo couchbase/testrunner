@@ -36,7 +36,7 @@ class TaskManager(Thread):
                 else:
                     self.sleepq.put(s_task)
 
-    def shutdown(self, force = False):
+    def shutdown(self, force=False):
         self.running = False
         if force:
             while not self.sleepq.empty():
@@ -44,5 +44,10 @@ class TaskManager(Thread):
                 task.cancel()
                 self.readyq.put(task['task'])
             while not self.readyq.empty():
-                task = self.readyq.pop()
-                task.cancel()
+                try:
+#                   Queue.empty() Returns True if the queue is empty, False otherwise (not reliable!)
+#                   see also https://docs.python.org/2/library/queue.html
+                    task = self.readyq.pop()
+                    task.cancel()
+                except Exception, ex:
+                    print ex
