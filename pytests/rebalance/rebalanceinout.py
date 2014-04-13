@@ -264,7 +264,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
                     task.result(min(self.wait_timeout * 30, 36000))
             except Exception, ex:
                 for task in tasks:
-                    task._Thread__stop()
+                    task.cancel()
                 raise ex
 
             self._load_all_buckets(self.master, gen_expire, "create", 0)
