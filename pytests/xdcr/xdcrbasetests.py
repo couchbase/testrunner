@@ -158,6 +158,9 @@ class XDCRBaseTest(unittest.TestCase):
             self.log.info("============== = = = = = = = = END = = = = = = = = = = ==============")
             self.log.info("==============  XDCRbasetests cleanup was started for test #{0} {1} =============="\
                 .format(self.case_number, self._testMethodName))
+            cluster_run = len(set([server.ip for server in self._servers])) == 1
+            if not cluster_run and self.collect_data_files:
+                self.__collect_data_files()
             self.teardown_extended()
             self._do_cleanup()
             self.log.info("==============  XDCRbasetests cleanup was finished for test #{0} {1} =============="\
@@ -165,6 +168,13 @@ class XDCRBaseTest(unittest.TestCase):
         finally:
             self.cluster.shutdown(force=True)
             self._log_finish(self)
+
+    def __collect_data_files(self):
+        logs_folder = self._input.param("logs_folder", "/tmp")
+        from scripts import collect_data_files
+        nodes = self.src_nodes + self.dest_nodes
+        for server in nodes:
+            collect_data_files.cbdatacollectRunner(server, logs_folder).run()
 
     def _print_stats(self, node):
         if node == self.src_master:
@@ -271,6 +281,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._demand_encryption = self._input.param("demand_encryption", 0)
         self._rebalance = self._input.param("rebalance", None)
         self._wait_for_expiration = self._input.param("wait_for_expiration", False)
+        self.collect_data_files = False
         if self._warmup is not None:
             self._warmup = self._warmup.split("-")
         if self._failover is not None:
@@ -1340,30 +1351,31 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         self.log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_master.ip))
         self._wait_for_stats_all_buckets(dest_nodes, timeout=timeout)
         mutations_replicated = True
-        if verify_src:
+        try:
+            if verify_src:
+                timeout = max(120, end_time - time.time())
+                self._verify_stats_all_buckets(src_nodes, timeout=timeout)
+                timeout = max(120, end_time - time.time())
+                # Mutation will be checked on opposite cluster.
+                mutations_replicated &= self.__wait_for_mutation_to_replicate(self.dest_master)
+                timeout = max(120, end_time - time.time())
+                self._verify_all_buckets(self.src_master, max_verify=self.max_verify)
             timeout = max(120, end_time - time.time())
-            self._verify_stats_all_buckets(src_nodes, timeout=timeout)
+            self._verify_stats_all_buckets(dest_nodes, timeout=timeout)
             timeout = max(120, end_time - time.time())
             # Mutation will be checked on opposite cluster.
-            mutations_replicated &= self.__wait_for_mutation_to_replicate(self.dest_master)
+            mutations_replicated &= self.__wait_for_mutation_to_replicate(self.src_master)
             timeout = max(120, end_time - time.time())
-            self._verify_all_buckets(self.src_master, max_verify=self.max_verify)
-        timeout = max(120, end_time - time.time())
-        self._verify_stats_all_buckets(dest_nodes, timeout=timeout)
-        timeout = max(120, end_time - time.time())
-        # Mutation will be checked on opposite cluster.
-        mutations_replicated &= self.__wait_for_mutation_to_replicate(self.src_master)
-        timeout = max(120, end_time - time.time())
-        self._verify_all_buckets(self.dest_master, max_verify=self.max_verify)
-
-        errors_caught = 0
-        bidirection = self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION
-        if self._doc_ops is not None and ("update" in self._doc_ops or "delete" in self._doc_ops):
-            errors_caught += self._verify_revIds(self.src_master, self.dest_master)
-        if bidirection and self._doc_ops_dest is not None and ("update" in self._doc_ops_dest or "delete" in self._doc_ops_dest):
-            errors_caught += self._verify_revIds(self.dest_master, self.src_master)
-        if errors_caught > 0:
-            self.fail("Mismatches on Meta Information on xdcr-replicated items!")
+            self._verify_all_buckets(self.dest_master, max_verify=self.max_verify)
+        finally:
+            errors_caught = 0
+            bidirection = self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION
+            if self._doc_ops is not None and ("update" in self._doc_ops or "delete" in self._doc_ops):
+                errors_caught += self._verify_revIds(self.src_master, self.dest_master)
+            if bidirection and self._doc_ops_dest is not None and ("update" in self._doc_ops_dest or "delete" in self._doc_ops_dest):
+                errors_caught += self._verify_revIds(self.dest_master, self.src_master)
+            if errors_caught > 0:
+                self.fail("Mismatches on Meta Information on xdcr-replicated items!")
 
         if not mutations_replicated:
             if str(self.__class__).find('cbrecovery'):
@@ -1373,6 +1385,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 self.fail("Test is failed as Outbound mutations has not become zero, check the test logs above.")
 
     def verify_results(self, verify_src=False):
+        self.collect_data_files = True
         dest_key_index = 1
         if len(self.ord_keys) == 2:
             src_nodes = self.get_servers_in_cluster(self.src_master)
@@ -1385,3 +1398,4 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                     break
                 self.dest_nodes = self._clusters_dic[cluster_num]
                 self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, verify_src)
+        self.collect_data_files = False

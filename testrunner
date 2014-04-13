@@ -306,6 +306,7 @@ if __name__ == "__main__":
         TestInputSingleton.input.test_params = params
         TestInputSingleton.input.test_params.update(test_params)
         TestInputSingleton.input.test_params["case_number"] = case_number
+        TestInputSingleton.input.test_params["logs_folder"] = logs_folder
         print "Test Input params:"
         print(TestInputSingleton.input.test_params)
         if case_number == 1:

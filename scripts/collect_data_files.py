@@ -7,6 +7,7 @@ from datetime import datetime
 
 sys.path.extend(('.', 'lib'))
 from lib.remote.remote_util import RemoteMachineShellConnection
+from lib.membase.api.rest_client import RestConnection
 import TestInput
 
 
@@ -32,6 +33,18 @@ class cbdatacollectRunner(object):
         self.server = server
         self.path = path
 
+    def __get_data_path(self, os_type):
+        data_path = None
+        node_info = RestConnection(self.server).get_nodes_self()
+        for storage in node_info.storage:
+            if storage.type == 'hdd':
+                data_path = storage.path
+                break
+        if os_type == 'windows':
+            # Windows server will return the path as c:/Program Files/Couchbase/Server/var/lib/couchbase/data
+            data_path = "/cygdrive/c{0}".format(data_path[data_path.find("/"):])
+        return data_path
+
     def run(self):
         remote_client = RemoteMachineShellConnection(self.server)
         now = datetime.now()
@@ -39,12 +52,16 @@ class cbdatacollectRunner(object):
         month = now.month
         year = now.year
         hour = now.timetuple().tm_hour
-        min = now.timetuple().tm_min
+        minute = now.timetuple().tm_min
         file_name = "%s-%s%s%s-%s%s-couch.tar.gz" % (self.server.ip,
-                                                 month, day, year, hour, min)
+                                                     month, day, year, hour,
+                                                     minute)
         print "Collecting data files from %s\n" % self.server.ip
-        output, error = remote_client.execute_command("tar -zcvf {0} /opt/couchbase/var/lib/couchbase/data".
-                                                      format(file_name))
+
+        remote_client.extract_remote_info()
+        data_path = self.__get_data_path(os_type=remote_client.info.type.lower())
+        output, error = remote_client.execute_command("tar -zcvf {0} '{1}' >/dev/null 2>&1".
+                                                      format(file_name, data_path))
         print "\n".join(output)
         print "\n".join(error)
 
@@ -57,30 +74,30 @@ class cbdatacollectRunner(object):
             raise Exception("%s doesn't exists on server" % file_name)
         status = remote_client.get_file(remote_path, file_name,
                                         "%s/%s" % (self.path, file_name))
-        if status:
-            print "Downloading zipped logs from %s" % self.server.ip
-        else:
+        if not status:
             raise Exception("Fail to download zipped logs from %s"
                             % self.server.ip)
+        remote_client.remove_directory("%s/%s" % (remote_path, file_name))
         remote_client.disconnect()
+
 
 def main():
     try:
-        (opts, args) = getopt.getopt(sys.argv[1:], 'hi:p', [])
-        for o, a in opts:
+        (opts, _) = getopt.getopt(sys.argv[1:], 'hi:p', [])
+        for o, _ in opts:
             if o == "-h":
                 usage()
 
-        input = TestInput.TestInputParser.get_test_input(sys.argv)
-        if not input.servers:
+        _input = TestInput.TestInputParser.get_test_input(sys.argv)
+        if not _input.servers:
             usage("ERROR: no servers specified. Please use the -i parameter.")
     except IndexError:
         usage()
     except getopt.GetoptError, error:
         usage("ERROR: " + str(error))
 
-    file_path = input.param("path", ".")
-    remotes = (cbdatacollectRunner(server, file_path) for server in input.servers)
+    file_path = _input.param("path", ".")
+    remotes = (cbdatacollectRunner(server, file_path) for server in _input.servers)
     remote_threads = [Thread(target=remote.run) for remote in remotes]
 
     for remote_thread in remote_threads:
@@ -102,4 +119,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
