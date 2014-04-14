@@ -40,14 +40,12 @@ class TaskManager(Thread):
         self.running = False
         if force:
             while not self.sleepq.empty():
-                task = self.sleepq.pop()['task']
+                task = self.sleepq.get()['task']
                 task.cancel()
                 self.readyq.put(task['task'])
             while not self.readyq.empty():
                 try:
-#                   Queue.empty() Returns True if the queue is empty, False otherwise (not reliable!)
-#                   see also https://docs.python.org/2/library/queue.html
-                    task = self.readyq.pop()
+                    task = self.readyq.get()
                     task.cancel()
                 except Exception, ex:
-                    print ex
+                    raise ex
