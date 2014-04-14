@@ -107,6 +107,7 @@ class OpsChangeCasTests(CasBaseTest):
                 raise Exception("Set operation fails to change item value")
 
     def touch_test(self):
+        timeout = 900  # 15 minutes
         stats_all_buckets = {}
         payload = MemcachedClientHelper.create_value('*', self.value_size)
         mc = MemcachedClientHelper.proxy_client(self.servers[0], "default")
@@ -119,7 +120,8 @@ class OpsChangeCasTests(CasBaseTest):
             k += 1
         active_resident_threshold = 10
         threshold_reached = False
-        while not threshold_reached :
+        end_time = time.time() + float(timeout)
+        while not threshold_reached and time.time() < end_time:
             if int(mc.stats()["vb_active_perc_mem_resident"]) >= active_resident_threshold:
                 self.log.info("vb_active_perc_mem_resident_ratio reached at %s " % (mc.stats()["vb_active_perc_mem_resident"]))
                 items = self.num_items
@@ -130,6 +132,8 @@ class OpsChangeCasTests(CasBaseTest):
             else:
                 threshold_reached = True
                 self.log.info("DGM {0} state achieved!!!!".format(active_resident_threshold))
+        if time.time() > end_time and int(mc.stats()["vb_active_perc_mem_resident"]) >= active_resident_threshold:
+            raise Exception("failed to load items into bucket")
         """ at active resident ratio above, the first 100 keys
             insert into bucket will be non resident.  Then do touch command to test it """
         self.log.info("Run touch command to test items which are in non resident.")
