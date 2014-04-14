@@ -1380,7 +1380,14 @@ class RemoteMachineShellConnection:
         for line in error:
             log.error(line)
             if track_words:
-                success = False
+                if "Warning" in line and "hugepages" in line:
+                    log.info("There is a warning about transparent_hugepage may be in used when install cb server.\
+                              So we will disable transparent_hugepage in this vm")
+                    output, error = self.execute_command("echo never > /sys/kernel/mm/transparent_hugepage/enabled")
+                    self.log_command_output(output, error)
+                    success = True
+                else:
+                    success = False
         for line in output:
             log.info(line)
             if any(s.lower() in line.lower() for s in track_words):
