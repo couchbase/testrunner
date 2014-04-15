@@ -28,6 +28,20 @@ CMD_GAT = 0x1d
 CMD_GET_REPLICA = 0x83
 CMD_OBSERVE = 0x92
 
+# UPR command opcodes
+CMD_OPEN             = 0x50
+CMD_ADD_STREAM       = 0x51
+CMD_CLOSE_STREAM     = 0x52
+CMD_STREAM_REQ       = 0x53
+CMD_GET_FAILOVER_LOG = 0x54
+CMD_STREAM_END       = 0x55
+CMD_SNAPSHOT_MARKER  = 0x56
+CMD_MUTATION         = 0x57
+CMD_DELETION         = 0x58
+CMD_EXPIRATION       = 0x59
+CMD_FLUSH            = 0x5a
+CMD_SET_VB_STATE     = 0x5b
+
 # SASL stuff
 CMD_SASL_LIST_MECHS = 0x20
 CMD_SASL_AUTH = 0x21
@@ -130,6 +144,11 @@ TAP_FLAG_TYPES = {TAP_FLAG_BACKFILL: ">Q",
 # TAP per-message flags
 TAP_FLAG_ACK = 0x01
 TAP_FLAG_NO_VALUE = 0x02 # The value for the key is not included in the packet
+
+# UPR per-message flags
+FLAG_OPEN_CONSUMER = 0x00
+FLAG_OPEN_PRODUCER = 0x01
+FLAG_OPEN_NOTIFIER = 0x02
 
 #CCCP
 CMD_SET_CLUSTER_CONFIG = 0xb4
