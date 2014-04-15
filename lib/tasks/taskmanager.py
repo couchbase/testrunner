@@ -42,7 +42,7 @@ class TaskManager(Thread):
             while not self.sleepq.empty():
                 task = self.sleepq.get()['task']
                 task.cancel()
-                self.readyq.put(task['task'])
+                self.readyq.put(task)
             while not self.readyq.empty():
                 try:
                     task = self.readyq.get()
