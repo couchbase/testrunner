@@ -284,9 +284,8 @@ class RestConnection(object):
         for iteration in xrange(5):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
             if not success and type(http_res) == unicode and\
-               http_res.find('Node is unknown to this cluster') > -1:
-                log.error("Error 'Node is unknown to this cluster' was gotten,\
-                    5 seconds sleep before retry")
+               (http_res.find('Node is unknown to this cluster') > -1 or http_res.find('Unexpected server error, request logged') > -1):
+                log.error("Error {0} was gotten, 5 seconds sleep before retry".format(http_res))
                 time.sleep(5)
                 if iteration == 2:
                     log.error("node {0}:{1} is in a broken state!".format(self.ip, self.port))
