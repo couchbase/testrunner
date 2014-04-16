@@ -155,7 +155,7 @@ help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
 'ssl-manage OPTIONS': {'--retrieve-cert=CERTIFICATE': 'retrieve cluster certificate AND save to a pem file',
                        '--regenerate-cert=CERTIFICATE': 'regenerate cluster certificate AND save to a pem file'}}
 
-
+""" in 3.0, we add 'recovery  recover one or more servers' into couchbase-cli """
 help_short = {'COMMANDs include': {'bucket-compact': 'compact database and index data',
                       'bucket-create': 'add a new bucket to the cluster',
                       'bucket-delete': 'delete an existing bucket',
@@ -164,6 +164,7 @@ help_short = {'COMMANDs include': {'bucket-compact': 'compact database and index
                       'bucket-list': 'list all buckets in a cluster',
                       'cluster-edit': 'modify cluster settings',
                       'cluster-init': 'set the username,password and port of the cluster',
+                      'recovery': 'recover one or more servers',
                       'failover': 'failover one or more servers',
                       'group-manage': 'manage server groups',
                       'help': 'show longer usage/help and examples',
