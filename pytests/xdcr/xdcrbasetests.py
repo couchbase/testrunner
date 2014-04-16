@@ -227,7 +227,7 @@ class XDCRBaseTest(unittest.TestCase):
         self.buckets = []
         # max items number to verify in ValidateDataTask, None - verify all
         self.max_verify = self._input.param("max_verify", None)
-        self._checkpoint_interval=self._input.param("checkpoint_interval",None)
+        self._checkpoint_interval = self._input.param("checkpoint_interval", None)
         self._default_bucket = self._input.param("default_bucket", True)
         self._end_replication_flag = self._input.param("end_replication_flag", 0)
 
@@ -1191,12 +1191,9 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                    ['op']['samples'][param][-1])
 
     def _verify_revIds(self, src_server, dest_server, ops_perf, kv_store=1):
-        error_count = 0;
+        error_count = 0
         tasks = []
-        # buckets = self._get_cluster_buckets(src_server)
-        rest = RestConnection(src_server)
-        buckets = rest.get_buckets()
-        for bucket in buckets:
+        for bucket in self._get_cluster_buckets(src_server):
             task_info = self.cluster.async_verify_revid(src_server,
                                                         dest_server, bucket,
                                                         bucket.kvs[kv_store],
