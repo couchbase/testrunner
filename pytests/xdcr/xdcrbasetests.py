@@ -1190,18 +1190,17 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         return int(RestConnection(server).fetch_bucket_stats(bucket_name)
                    ['op']['samples'][param][-1])
 
-    def _verify_revIds(self, src_server, dest_server, ops_perf, kv_store=1):
+    def _verify_revIds(self, src_server, dest_server, kv_store=1):
         error_count = 0
         tasks = []
         for bucket in self._get_cluster_buckets(src_server):
             task_info = self.cluster.async_verify_revid(src_server,
                                                         dest_server, bucket,
-                                                        bucket.kvs[kv_store],
-                                                        ops_perf)
-            error_count += task_info.err_count
+                                                        bucket.kvs[kv_store])
             tasks.append(task_info)
         for task in tasks:
             task.result()
+            error_count += task.err_count
 
         return error_count
 
@@ -1358,13 +1357,11 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         self._verify_all_buckets(self.dest_master, max_verify=self.max_verify)
 
         errors_caught = 0
-        if self._doc_ops is not None or self._doc_ops_dest is not None:
-            if "update" in self._doc_ops or (self._doc_ops_dest is not None and "update" in self._doc_ops_dest):
-                errors_caught = self._verify_revIds(self.src_master, self.dest_master, "update")
-
-            if "delete" in self._doc_ops or (self._doc_ops_dest is not None and "delete" in self._doc_ops_dest):
-                errors_caught += self._verify_revIds(self.src_master, self.dest_master, "delete")
-
+        bidirection = self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION
+        if self._doc_ops is not None and ("update" in self._doc_ops or "delete" in self._doc_ops):
+            errors_caught += self._verify_revIds(self.src_master, self.dest_master)
+        if bidirection and self._doc_ops_dest is not None and ("update" in self._doc_ops_dest or "delete" in self._doc_ops_dest):
+            errors_caught += self._verify_revIds(self.dest_master, self.src_master)
         if errors_caught > 0:
             self.fail("Mismatches on Meta Information on xdcr-replicated items!")
 

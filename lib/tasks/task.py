@@ -1106,7 +1106,7 @@ class BatchedValidateDataTask(GenericLoadingTask):
 
 
 class VerifyRevIdTask(GenericLoadingTask):
-    def __init__(self, src_server, dest_server, bucket, kv_store, ops_perf):
+    def __init__(self, src_server, dest_server, bucket, kv_store):
         GenericLoadingTask.__init__(self, src_server, bucket, kv_store)
         self.client_dest = VBucketAwareMemcached(RestConnection(dest_server), bucket)
 
@@ -1115,111 +1115,68 @@ class VerifyRevIdTask(GenericLoadingTask):
         self.num_deleted_keys = len(self.deleted_keys)
         self.itr = 0
         self.err_count = 0
-        self.ops_perf = ops_perf
 
     def has_next(self):
-        if self.ops_perf in ["delete", "update"] :
-            if self.itr < (self.num_valid_keys + self.num_deleted_keys):
-                return True
-            self.log.info("Verification done, {0} items have been "
-                          "verified ({1}d items: {2})".format(
-                           self.itr, self.ops_perf, self.num_deleted_keys))
-            return False
+        if self.itr < (self.num_valid_keys + self.num_deleted_keys):
+            return True
+        self.log.info("Verification done, {0} items have been "
+                      "verified ({1} of them deleted)".format(
+                    self.itr, self.num_deleted_keys))
+        return False
 
     def next(self):
-        if self.ops_perf in ["delete", "update"]:
-            if self.itr < self.num_valid_keys:
-                self._check_key_revId(self.valid_keys[self.itr])
-            elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
-                # verify deleted/expired keys
-                self._check_key_revId(self.deleted_keys[self.itr - self.num_valid_keys], True)
-            self.itr += 1
+        if self.itr < self.num_valid_keys:
+            self._check_key_revId(self.valid_keys[self.itr])
+        elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
+            # verify deleted/expired keys
+            self._check_key_revId(self.deleted_keys[self.itr - self.num_valid_keys],
+                                  ignore_meta_data=['expiration'])
+        self.itr += 1
 
         # show progress of verification for every 50k items
         if math.fmod(self.itr, 50000) == 0.0:
             self.log.info("{0} items have been verified".format(self.itr))
 
-
-    def _check_key_revId(self, key, ignore_exp_mismatch=False):
+    def _check_key_revId(self, key, ignore_meta_data=[]):
         try:
             src = self.client.memcached(key)
             dest = self.client_dest.memcached(key)
-            _, flags_src, exp_src, seqno_src, cas_src = src.getMeta(key)
-            _, flags_dest, exp_dest, seqno_dest, cas_dest = dest.getMeta(key)
-
+            src_meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (src.getMeta(key)))
+            dest_meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (dest.getMeta(key)))
+            prev_error_count = self.err_count
+            err_msg = []
             # seqno number should never be zero
-            if seqno_src == 0:
+            if src_meta_data['seqno'] == 0:
                 self.err_count += 1
-                self.log.error(
-                    "(Source) Sequence numbers for key {0}\t is 0, Error Count{1}".format(key, self.err_count))
-                self.log.error(
-                    "Source (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_src, cas_src, exp_src, flags_src))
-                self.state = FINISHED
+                err_msg.append(
+                    "seqno on Source should not be 0, Error Count:{0}".format(self.err_count))
 
-            if seqno_dest == 0:
+            if dest_meta_data['seqno'] == 0:
                 self.err_count += 1
-                self.log.error(
-                    "(Dest) Sequence numbers for key {0}\t is 0,  Error Count{1}".format(key, self.err_count))
-                self.log.error(
-                    "Dest (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_dest, cas_dest, exp_dest, flags_dest))
-                self.state = FINISHED
+                err_msg.append(
+                    "seqno on Destination should not be 0, Error Count:{0}".format(self.err_count))
 
             # verify all metadata
-            if seqno_src != seqno_dest:
-                self.err_count += 1
-                self.log.error(
-                    "Mismatch on sequence numbers for key {0}\t Source Sequence Num:{1}\t Destination Sequence Num:{2}\tError Count{3}".format(
-                        key, seqno_src, seqno_dest, self.err_count))
-
-                self.log.error(
-                    "Source (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_src, cas_src, exp_src, flags_src))
-                self.log.error(
-                    "Dest (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_dest, cas_dest, exp_dest, flags_dest))
-
-                self.state = FINISHED
-            elif cas_src != cas_dest:
-                self.err_count += 1
-                self.log.error(
-                    "Mismatch on CAS for key {0}\t Source CAS:{1}\t Destination CAS:{2}\tError Count{3}".format(key,
-                        cas_src,
-                        cas_dest, self.err_count))
-
-                self.log.error(
-                    "Source (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_src, cas_src, exp_src, flags_src))
-                self.log.error(
-                    "Dest (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_dest, cas_dest, exp_dest, flags_dest))
-
-                self.state = FINISHED
-            elif exp_src != exp_dest:
-                if not ignore_exp_mismatch:
+            for meta_key in src_meta_data.keys():
+                if src_meta_data[meta_key] != dest_meta_data[meta_key] and meta_key not in ignore_meta_data:
                     self.err_count += 1
-                    self.log.error(
-                        "Mismatch on Expiry Flags for key {0}\t Source Expiry Flags:{1}\t Destination Expiry Flags:{2}\tError Count{3}".format(
-                            key,
-                            exp_src, exp_dest, self.err_count))
+                    err_msg.append(
+                        "{0} mismatch: Source {0}:{1}, Destination {0}:{2}, Error Count:{3}"
+                        .format(meta_key, src_meta_data[meta_key],
+                            dest_meta_data[meta_key], self.err_count))
 
-                    self.log.error(
-                        "Source (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_src, cas_src, exp_src, flags_src))
-                    self.log.error(
-                        "Dest (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_dest, cas_dest, exp_dest, flags_dest))
-
-                self.state = FINISHED
-            elif flags_src != flags_dest:
-                self.err_count += 1
-                self.log.error(
-                    "Mismatch on Flags for key {0}\t Source Flags:{1}\t Destination Flags:{2}\tError Count{3}".format(
-                        key,
-                        flags_src, flags_dest, self.err_count))
-
-                self.log.error(
-                    "Source (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_src, cas_src, exp_src, flags_src))
-                self.log.error(
-                    "Dest (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_dest, cas_dest, exp_dest, flags_dest))
-
+            if self.err_count - prev_error_count > 0:
+                self.log.error("===== Verifying rev_ids failed for key: {0} =====".format(key))
+                [self.log.error(err) for err in err_msg]
+                self.log.error("Source meta data: %s" % src_meta_data)
+                self.log.error("Dest  meta  data: %s" % dest_meta_data)
                 self.state = FINISHED
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND:
-                pass
+                if key not in self.deleted_keys:
+                    self.err_count += 1
+                    self.log.error("Key:{0} {1}, Error Count:{2}"
+                                   .format(key, error, self.err_count))
             else:
                 self.state = FINISHED
                 self.set_exception(error)
