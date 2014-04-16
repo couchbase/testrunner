@@ -337,10 +337,14 @@ class CouchbaseCliTest(CliBaseTest):
         nodes_readd = self.input.param("nodes_readd", 0)
         remote_client = RemoteMachineShellConnection(self.master)
         cli_command = "server-add"
-        for num in xrange(nodes_add):
-            options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ["SUCCESS: server-add {0}:8091".format(self.servers[num + 1].ip)])
+        if int(nodes_add) < len(self.servers):
+            for num in xrange(nodes_add):
+                self.log.info("add node {0} to cluster".format(self.servers[num + 1].ip))
+                options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
+                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.assertEqual(output, ["SUCCESS: server-add {0}:8091".format(self.servers[num + 1].ip)])
+        else:
+             raise Exception("Node add should be smaller total number vms in ini file")
 
         cli_command = "rebalance"
         for num in xrange(nodes_rem):
@@ -357,12 +361,14 @@ class CouchbaseCliTest(CliBaseTest):
 
         cli_command = "failover"
         for num in xrange(nodes_failover):
+            self.log.info("failover node {0}".format(self.servers[nodes_add - nodes_rem - num].ip))
             options = "--server-failover={0}:8091".format(self.servers[nodes_add - nodes_rem - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ["SUCCESS: failover ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip)])
+            self.assertEqual(output, ['INFO: graceful failover . ','SUCCESS: failover ns_1@{0}'.format(self.servers[nodes_add - nodes_rem - num].ip)])
 
         cli_command = "server-readd"
         for num in xrange(nodes_readd):
+            self.log.info("add back node {0} to cluster".format(self.servers[nodes_add - nodes_rem - num ].ip))
             options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[nodes_add - nodes_rem - num ].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num ].ip)])
