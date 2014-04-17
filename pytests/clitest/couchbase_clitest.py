@@ -53,9 +53,9 @@ help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
               'Remove a node from a cluster and rebalance': 'couchbase-cli rebalance -c 192.168.0.1:8091 --server-remove=192.168.0.2:8091 -u Administrator -p password',
               'Remove and add nodes from/to a cluster and rebalance': 'couchbase-cli rebalance -c 192.168.0.1:8091 --server-remove=192.168.0.2 --server-add=192.168.0.4 --server-add-username=Administrator1 --server-add-password=password1 --group-name=group1 -u Administrator -p password',
               'Server information': 'couchbase-cli server-info -c 192.168.0.1:8091',
-              'Set data path for an unprovisioned cluster': 'couchbse-cli node-init -c 192.168.0.1:8091 --node-init-data-path=/tmp/data --node-init-index-path=/tmp/index -u Administrator -p password',
-              'Set recovery type to a server': 'couchbase-cli rebalance -c 192.168.0.1:8091 -u Administrator -p password',
-              'Set the username, password, port and ram quota': 'couchbase-cli cluster-init -c 192.168.0.1:8091 --cluster-init-username=Administrator --cluster-init-password=password --cluster-init-port=8080 --cluster-init-ramsize=300',
+              'Set data path and hostname for an unprovisioned cluster': 'couchbse-cli node-init -c 192.168.0.1:8091 --node-init-data-path=/tmp/data --node-init-index-path=/tmp/index --node-init-hostname=myhostname -u Administrator -p password',
+              'Set recovery type to a server': 'couchbase-cli rebalance -c 192.168.0.1:8091 --recovery-buckets="default,bucket1" -u Administrator -p password',
+              'Set the username, password, port and ram quota': 'couchbase-cli cluster-init -c 192.168.0.1:8091 --cluster-username=Administrator --cluster-password=password --cluster-port=8080 --cluster-ramsize=300',
               'Stop the current rebalancing': 'couchbase-cli rebalance-stop -c 192.168.0.1:8091 -u Administrator -p password',
               'change the cluster username, password, port and ram quota': 'couchbase-cli cluster-edit -c 192.168.0.1:8091 --cluster-username=Administrator1 --cluster-password=password1 --cluster-port=8080 --cluster-ramsize=300 -u Administrator -p password'},
  'OPTIONS': {'-o KIND, --output=KIND': 'KIND is json or standard\n-d, --debug',
@@ -91,8 +91,10 @@ help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
                           '--rename=NEWGROUPNAME': ' rename group to new name',
                           '--to-group=GROUPNAME': 'group name tat to move servers to'},
  'node-init OPTIONS': {'--node-init-data-path=PATH': 'per node path to store data',
+                       '--node-init-hostname=NAME': ' hostname for the node. Default is 127.0.0.1',
                        '--node-init-index-path=PATH': ' per node path to store index'},
- 'rebalance OPTIONS': {'--server-add*': ' see server-add OPTIONS',
+ 'rebalance OPTIONS': {'--recovery-buckets=BUCKETS': 'comma separated list of bucket name. Default is for all buckets.',
+                       '--server-add*': ' see server-add OPTIONS',
                        '--server-remove=HOST[:PORT]': ' the server to be removed'},
  'recovery OPTIONS': {'--recovery-type=TYPE[delta|full]': 'type of recovery to be performed for a node',
                       '--server-recovery=HOST[:PORT]': ' server to recover'},
@@ -299,7 +301,10 @@ class CouchbaseCliTest(CliBaseTest):
         cli_command = "bucket-create"
 
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-        self.assertTrue("SUCCESS: bucket-create" in output[0])
+        if "TIMED OUT" in output[0]:
+            raise Exception("Timed out.  Could not create bucket")
+        else:
+            self.assertTrue("SUCCESS: bucket-create" in output[0], "Fail to create bucket")
 
     def testHelp(self):
         remote_client = RemoteMachineShellConnection(self.master)
@@ -467,6 +472,7 @@ class CouchbaseCliTest(CliBaseTest):
             options += ("--node-init-data-path={0} ".format(data_path), "")[data_path is None]
             options += ("--node-init-index-path={0} ".format(index_path), "")[index_path is None]
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.sleep(7)  #time needed to reload couchbase
             self.assertEqual(output[0], "SUCCESS: init localhost")
             rest.init_cluster()
             server_info = self._get_cluster_info(remote_client, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
@@ -508,6 +514,7 @@ class CouchbaseCliTest(CliBaseTest):
                     format(param_prefix, cluster_init_username + "1", param_prefix, cluster_init_password + "1", param_prefix, str(cluster_init_port)[:-1] + "9")
 
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=cluster_init_username, password=cluster_init_password)
+            self.sleep(7)   # time needed to reload couchbase
             # MB-8202 cluster-init/edit doesn't provide status
             self.assertEqual(output[0], "SUCCESS: init localhost")
             server.rest_username = cluster_init_username + "1"
@@ -531,6 +538,7 @@ class CouchbaseCliTest(CliBaseTest):
                     format(param_prefix, cluster_init_username, param_prefix, cluster_init_password, param_prefix, cluster_init_port)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=(cluster_init_username + "1"), password=cluster_init_password + "1")
             # MB-8202 cluster-init/edit doesn't provide status
+            self.sleep(7)  #time needed to reload couchbase
             self.assertEqual(output[0], "SUCCESS: init localhost")
 
             server.rest_username = cluster_init_username
@@ -591,6 +599,7 @@ class CouchbaseCliTest(CliBaseTest):
                 options += "--cluster-init-ramsize={0} ".format(cluster_init_ramsize)
 
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=None, password=None)
+            self.sleep(7)  #time needed to reload couchbase
             self.assertEqual(output[0], 'ERROR: unable to init localhost (400) Bad Request')
             self.assertTrue(output[1] == "[u'Username and password are required.']" or output[1] == "[u'The password must be at least six characters.']")
             remote_client.disconnect()
@@ -618,7 +627,7 @@ class CouchbaseCliTest(CliBaseTest):
         buckets = rest.get_buckets()
         result = True
         if len(buckets) != 1:
-            self.log.error("Expected to ge only 1 bucket")
+            self.log.error("Expected to get only 1 bucket")
             result = False
         bucket = buckets[0]
         if bucket_name != bucket.name:
