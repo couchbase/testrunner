@@ -1132,7 +1132,7 @@ class VerifyRevIdTask(GenericLoadingTask):
                 self._check_key_revId(self.valid_keys[self.itr])
             elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
                 # verify deleted/expired keys
-                self._check_key_revId(self.deleted_keys[self.itr - self.num_valid_keys])
+                self._check_key_revId(self.deleted_keys[self.itr - self.num_valid_keys], True)
             self.itr += 1
 
         # show progress of verification for every 50k items
@@ -1140,7 +1140,7 @@ class VerifyRevIdTask(GenericLoadingTask):
             self.log.info("{0} items have been verified".format(self.itr))
 
 
-    def _check_key_revId(self, key):
+    def _check_key_revId(self, key, ignore_exp_mismatch=False):
         try:
             src = self.client.memcached(key)
             dest = self.client_dest.memcached(key)
@@ -1191,16 +1191,17 @@ class VerifyRevIdTask(GenericLoadingTask):
 
                 self.state = FINISHED
             elif exp_src != exp_dest:
-                self.err_count += 1
-                self.log.error(
-                    "Mismatch on Expiry Flags for key {0}\t Source Expiry Flags:{1}\t Destination Expiry Flags:{2}\tError Count{3}".format(
-                        key,
-                        exp_src, exp_dest, self.err_count))
+                if not ignore_exp_mismatch:
+                    self.err_count += 1
+                    self.log.error(
+                        "Mismatch on Expiry Flags for key {0}\t Source Expiry Flags:{1}\t Destination Expiry Flags:{2}\tError Count{3}".format(
+                            key,
+                            exp_src, exp_dest, self.err_count))
 
-                self.log.error(
-                    "Source (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_src, cas_src, exp_src, flags_src))
-                self.log.error(
-                    "Dest (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_dest, cas_dest, exp_dest, flags_dest))
+                    self.log.error(
+                        "Source (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_src, cas_src, exp_src, flags_src))
+                    self.log.error(
+                        "Dest (Seqno: {0}, CAS: {1}, Exp: {2}, Flag: {3})".format(seqno_dest, cas_dest, exp_dest, flags_dest))
 
                 self.state = FINISHED
             elif flags_src != flags_dest:
