@@ -466,7 +466,6 @@ class CouchbaseCliTest(CliBaseTest):
         try:
             rest = RestConnection(server)
             rest.force_eject_node()
-            self.sleep(5)
             cli_command = "node-init"
             options = ""
             options += ("--node-init-data-path={0} ".format(data_path), "")[data_path is None]
@@ -483,7 +482,6 @@ class CouchbaseCliTest(CliBaseTest):
         finally:
             rest = RestConnection(server)
             rest.force_eject_node()
-            self.sleep(5)
             rest.init_cluster()
 
     def testClusterInit(self):
@@ -497,7 +495,6 @@ class CouchbaseCliTest(CliBaseTest):
         remote_client = RemoteMachineShellConnection(server)
         rest = RestConnection(server)
         rest.force_eject_node()
-        self.sleep(5)
 
         try:
             cli_command = command_init
@@ -559,7 +556,6 @@ class CouchbaseCliTest(CliBaseTest):
                 server.port = cluster_init_port
                 rest = RestConnection(server)
                 rest.force_eject_node()
-                self.sleep(5)
                 rest.init_cluster()
             except Exception:
                 server.rest_username = cluster_init_username + "1"
@@ -567,7 +563,6 @@ class CouchbaseCliTest(CliBaseTest):
                 server.port = str(cluster_init_port)[:-1] + "9"
                 rest = RestConnection(server)
                 rest.force_eject_node()
-                self.sleep(5)
                 rest.init_cluster()
                 # It will go to tearDown function after this finally block
                 server.rest_username = cluster_init_username
@@ -584,7 +579,6 @@ class CouchbaseCliTest(CliBaseTest):
         remote_client = RemoteMachineShellConnection(server)
         rest = RestConnection(server)
         rest.force_eject_node()
-        self.sleep(5)
 
         try:
             cli_command = command_init
@@ -606,7 +600,6 @@ class CouchbaseCliTest(CliBaseTest):
         finally:
             rest = RestConnection(server)
             rest.force_eject_node()
-            self.sleep(5)
             rest.init_cluster()
 
     def testBucketCreation(self):

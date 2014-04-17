@@ -959,6 +959,35 @@ class RestConnection(object):
 
     def force_eject_node(self):
         self.diag_eval("gen_server:cast(ns_cluster, leave).")
+        self.check_delay_restart_coucbase_server()
+
+    """ when we do reset couchbase server by force reject, couchbase server will not
+        down right away but delay few seconds to be down depend on server spec.
+        This fx will detect that delay and return true when couchbase server down and
+        up again after force reject """
+    def check_delay_restart_coucbase_server(self):
+        api = self.baseUrl + 'nodes/self'
+        headers = self._create_headers()
+        break_out = 0
+        count_cbserver_up = 0
+        while break_out < 60 and count_cbserver_up < 2:
+            try:
+                response, content = httplib2.Http(timeout=120).request(api, 'GET', '', headers)
+                if response['status'] in ['200', '201', '202'] and count_cbserver_up == 0:
+                    log.info("couchbase server is up but down soon.")
+                    time.sleep(1)
+                    break_out += 1   # time needed for couchbase server reload after reset config
+                elif response['status'] in ['200', '201', '202']:
+                    count_cbserver_up = 2
+                    log.info("couchbase server is up again")
+            except socket.error as e:
+                log.info("couchbase server is down.  Waiting for couchbase server up")
+                time.sleep(2)
+                break_out += 1
+                count_cbserver_up = 1
+                pass
+        if break_out >= 60:
+            raise Exception("Couchbase server did not start after 120 seconds")
 
     def fail_over(self, otpNode=None, graceful=False):
         if otpNode is None:
