@@ -756,7 +756,7 @@ class CreateDeleteViewTests(BaseTestCase):
                     for view in view_list:
                         # run queries to create indexes
                         query = {"stale" : "false", "full_set" : "true"}
-                        self.cluster.query_view(self.master, ddoc_name, view.name, query, bucket=bucket.name)
+                        self.cluster.query_view(self.master, ddoc_name, view.name, query, bucket=bucket)
                 fragmentation_monitor.result()
 
                 # compact ddoc and make sure fragmentation is less than high_mark
