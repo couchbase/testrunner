@@ -1106,22 +1106,22 @@ class BatchedValidateDataTask(GenericLoadingTask):
 
 
 class VerifyRevIdTask(GenericLoadingTask):
-    def __init__(self, src_server, dest_server, bucket, kv_store):
+    def __init__(self, src_server, dest_server, bucket, kv_store, max_err_count=100):
         GenericLoadingTask.__init__(self, src_server, bucket, kv_store)
         self.client_dest = VBucketAwareMemcached(RestConnection(dest_server), bucket)
 
         self.valid_keys, self.deleted_keys = kv_store.key_set()
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
+        self.keys_not_found = {self.client.rest.ip: [], self.client_dest.rest.ip: []}
         self.itr = 0
         self.err_count = 0
+        self.max_err_count = max_err_count
 
     def has_next(self):
-        if self.itr < (self.num_valid_keys + self.num_deleted_keys):
+        if self.itr < (self.num_valid_keys + self.num_deleted_keys) and self.err_count < self.max_err_count:
             return True
-        self.log.info("Verification done, {0} items have been "
-                      "verified ({1} of them deleted)".format(
-                    self.itr, self.num_deleted_keys))
+        self.log.info("RevId Verification done, {0} items have been verified".format(self.itr))
         return False
 
     def next(self):
@@ -1137,49 +1137,54 @@ class VerifyRevIdTask(GenericLoadingTask):
         if math.fmod(self.itr, 50000) == 0.0:
             self.log.info("{0} items have been verified".format(self.itr))
 
-    def _check_key_revId(self, key, ignore_meta_data=[]):
+    def __get_meta_data(self, client, key):
         try:
-            src = self.client.memcached(key)
-            dest = self.client_dest.memcached(key)
-            src_meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (src.getMeta(key)))
-            dest_meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (dest.getMeta(key)))
-            prev_error_count = self.err_count
-            err_msg = []
-            # seqno number should never be zero
-            if src_meta_data['seqno'] == 0:
-                self.err_count += 1
-                err_msg.append(
-                    "seqno on Source should not be 0, Error Count:{0}".format(self.err_count))
-
-            if dest_meta_data['seqno'] == 0:
-                self.err_count += 1
-                err_msg.append(
-                    "seqno on Destination should not be 0, Error Count:{0}".format(self.err_count))
-
-            # verify all metadata
-            for meta_key in src_meta_data.keys():
-                if src_meta_data[meta_key] != dest_meta_data[meta_key] and meta_key not in ignore_meta_data:
-                    self.err_count += 1
-                    err_msg.append(
-                        "{0} mismatch: Source {0}:{1}, Destination {0}:{2}, Error Count:{3}"
-                        .format(meta_key, src_meta_data[meta_key],
-                            dest_meta_data[meta_key], self.err_count))
-
-            if self.err_count - prev_error_count > 0:
-                self.log.error("===== Verifying rev_ids failed for key: {0} =====".format(key))
-                [self.log.error(err) for err in err_msg]
-                self.log.error("Source meta data: %s" % src_meta_data)
-                self.log.error("Dest  meta  data: %s" % dest_meta_data)
-                self.state = FINISHED
+            mc = client.memcached(key)
+            meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (mc.getMeta(key)))
+            return meta_data
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND:
                 if key not in self.deleted_keys:
                     self.err_count += 1
-                    self.log.error("Key:{0} {1}, Error Count:{2}"
-                                   .format(key, error, self.err_count))
+                    self.keys_not_found[client.rest.ip].append(("key: %s" % key, "vbucket: %s" % client._get_vBucket_id(key)))
             else:
                 self.state = FINISHED
                 self.set_exception(error)
+
+    def _check_key_revId(self, key, ignore_meta_data=[]):
+        src_meta_data = self.__get_meta_data(self.client, key)
+        dest_meta_data = self.__get_meta_data(self.client_dest, key)
+        if not src_meta_data or not dest_meta_data:
+            return
+        prev_error_count = self.err_count
+        err_msg = []
+        # seqno number should never be zero
+        if src_meta_data['seqno'] == 0:
+            self.err_count += 1
+            err_msg.append(
+                "seqno on Source should not be 0, Error Count:{0}".format(self.err_count))
+
+        if dest_meta_data['seqno'] == 0:
+            self.err_count += 1
+            err_msg.append(
+                "seqno on Destination should not be 0, Error Count:{0}".format(self.err_count))
+
+        # verify all metadata
+        for meta_key in src_meta_data.keys():
+            if src_meta_data[meta_key] != dest_meta_data[meta_key] and meta_key not in ignore_meta_data:
+                self.err_count += 1
+                err_msg.append(
+                    "{0} mismatch: Source {0}:{1}, Destination {0}:{2}, Error Count:{3}"
+                    .format(meta_key, src_meta_data[meta_key],
+                        dest_meta_data[meta_key], self.err_count))
+
+        if self.err_count - prev_error_count > 0:
+            self.log.error("===== Verifying rev_ids failed for key: {0} =====".format(key))
+            [self.log.error(err) for err in err_msg]
+            self.log.error("Source meta data: %s" % src_meta_data)
+            self.log.error("Dest  meta  data: %s" % dest_meta_data)
+            self.state = FINISHED
+
 
 class ViewCreateTask(Task):
     def __init__(self, server, design_doc_name, view, bucket="default", with_query=True,

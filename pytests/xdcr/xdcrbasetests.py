@@ -1212,7 +1212,10 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         for task in tasks:
             task.result()
             error_count += task.err_count
-
+            if task.err_count:
+                for ip, values in task.keys_not_found.iteritems():
+                    if values:
+                        self.log.error("%s keys not found on %s:%s" % (len(values), ip, values))
         return error_count
 
     def _expiry_pager(self, master, val=10):
@@ -1371,8 +1374,12 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             errors_caught = 0
             bidirection = self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION
             if self._doc_ops is not None and ("update" in self._doc_ops or "delete" in self._doc_ops):
+                self.log.info("Verifying RevIds for {0} -> {1} XDCR"
+                              .format(self.src_master.ip, self.dest_master.ip))
                 errors_caught += self._verify_revIds(self.src_master, self.dest_master)
             if bidirection and self._doc_ops_dest is not None and ("update" in self._doc_ops_dest or "delete" in self._doc_ops_dest):
+                self.log.info("Verifying RevIds for {0} -> {1} XDCR"
+                              .format(self.dest_master.ip, self.src_master.ip))
                 errors_caught += self._verify_revIds(self.dest_master, self.src_master)
             if errors_caught > 0:
                 self.fail("Mismatches on Meta Information on xdcr-replicated items!")
