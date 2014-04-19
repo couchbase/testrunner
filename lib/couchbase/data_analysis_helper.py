@@ -98,12 +98,14 @@ class DataAnalysisResultAnalyzer:
         else:
             summary+=failureoutputformat.format(actual,lresult)
             output+=failureoutputformat.format(actual,lresult)
+
         if result != None and type == UPDATED_ITEMS:
             for key in result.keys():
-                output+="\n {0}".format(result)
+                output+="\n {0} : {1} ".format(key,result[key])
         else:
             for values in result:
                 output+="\n {0}".format(values)
+
         return logic,output,summary
 
 class DataAnalyzer(object):
@@ -203,7 +205,7 @@ class DataAnalyzer(object):
         for bucket in bucketmap1.keys():
             info1 = bucketmap1[bucket]
             info2 = bucketmap2[bucket]
-            Result[bucket] = self.compare_maps(info1,info2,mainKey)
+            Result[bucket] = self.compare_maps(info1,info2,mainKey,comparisonMap)
         return Result
 
     def compare_per_node_stats_dataset(self,bucketmap1,bucketmap2,mainKey="key",comparisonMap=None):
@@ -240,7 +242,7 @@ class DataAnalyzer(object):
                 for node in map1.keys():
                     info1 = map1[node]
                     info2 = map2[node]
-                    NodeResult[node] = self.compare_maps(info1,info2,mainKey)
+                    NodeResult[node] = self.compare_maps(info1,info2,mainKey,comparisonMap)
             Result[bucket] = NodeResult
         return Result
 
@@ -257,9 +259,9 @@ class DataAnalyzer(object):
             if len(data1.keys()) == len(data2.keys()):
                 for vkey in data1.keys():
                     if comparisonMap != None and vkey in comparisonMap.keys():
-                        self.compare_values(data1[vkey],data2[vkey],key,reason,comparisonMap[vkey])
+                        self.compare_values(data1[vkey],data2[vkey],vkey,reason,comparisonMap[vkey])
                     elif data1[vkey] !=  data2[vkey]:
-                            reason[vkey] = "Expected {0} :: Actual {1}".format(data1[vkey],data2[vkey])
+                        reason[vkey] = "Expected {0} :: Actual {1}".format(data1[vkey],data2[vkey])
             else:
                 reason["number of key mismatch"] = "Key Mismatch :: Expected keys {0} \n Actual keys {1}".format(data1.keys(),data2.keys())
             if len(reason) > 0:
@@ -276,13 +278,14 @@ class DataAnalyzer(object):
         for key in set(info1.keys()) & set(info2.keys()):
             data1 = info1[key].split(",")
             data2 = info2[key].split(",")
+            fields = headerInfo.split(",")
             reason = {}
             if len(data1) == len(data2):
                 for i in range(len(data1)):
                     if comparisonMap != None and headerInfo[i] in comparisonMap.keys():
-                        self.compare_values(data1[i],data2[i],headerInfo[i],reason,comparisonMap[headerInfo[i]])
+                        self.compare_values(data1[i],data2[i],fields[i],reason,comparisonMap[headerInfo[i]])
                     elif data1[i] !=  data2[i]:
-                        reason[headerInfo[i]] = "Expected {0} :: Actual {1}".format(data1[i],data2[i])
+                        reason[fields[i]] = "Expected {0} :: Actual {1}".format(data1[i],data2[i])
             else:
                 reason["number of value mismatch"] = "Number of values mismatch :: Expected values {0} \n Actual values {1}".format(data1,data2)
             if len(reason) > 0:
@@ -319,9 +322,9 @@ class DataAnalyzer(object):
             if val1 != val2:
                 isFail=False
         if isFail:
-            reason[key] = "Condition Fail:: {0} {1} {2}".format(data1[i],logic,data2[i])
+            reason[key] = "Condition Fail:: {0} {1} {2}".format(val1,operation,val2)
 
-    def convert_value(val,type):
+    def convert_value(self,val,type):
         """ Helper method to convert to a typical value """
         if val == None:
             return ""
@@ -331,11 +334,13 @@ class DataAnalyzer(object):
             return long(val)
         elif type == "float":
             return float(val)
+        elif type == "string":
+            return val
 
 class DataCollector(object):
     """ Helper Class to collect stats and data from clusters """
 
-    def collect_data(self,servers,buckets,userId="Administrator",password="password",data_path = None,perNode = True):
+    def collect_data(self,servers,buckets,userId="Administrator",password="password",data_path = None,perNode = True, getReplica = False):
         """
             Method to extract all data information from memory or disk using cbtransfer
             The output is organized like { bucket :{ node { document-key : list of values }}}
@@ -362,7 +367,7 @@ class DataCollector(object):
         headerInfo = None
         for server in servers:
             remote_client = RemoteMachineShellConnection(server)
-            headerInfo,bucketMap = remote_client.get_data_map_using_cbtransfer(buckets,data_path=data_path,userId=userId,password=password)
+            headerInfo,bucketMap = remote_client.get_data_map_using_cbtransfer(buckets,data_path=data_path,userId=userId,password=password, getReplica = getReplica)
             remote_client.disconnect()
             for bucket in bucketMap.keys():
                 newMap = self.translateDataFromCSVToMap(0,bucketMap[bucket])
@@ -408,13 +413,13 @@ class DataCollector(object):
                 client = MemcachedClient(host=server.ip, port=11210)
                 if collect_vbucket:
                     vbucket=client.stats('vbucket')
-                    self.createMapVucket(vbucket,map_data)
+                    self.createMapVbucket(vbucket,map_data)
                 if collect_vbucket_seqno:
                     vbucket_seqno=client.stats('vbucket-seqno')
-                    self.createMapVucket(vbucket_seqno,map_data)
+                    self.createMapVbucket(vbucket_seqno,map_data)
                 if collect_vbucket_details:
                     vbucket_details=client.stats('vbucket-details')
-                    self.createMapVucket(vbucket_details,map_data)
+                    self.createMapVbucket(vbucket_details,map_data)
                 if perNode:
                     dataMap[server.ip] = map_data
                 else:
@@ -456,10 +461,10 @@ class DataCollector(object):
                         vb = tokens[1]
                         key = tokens[3]
                     if vb in map_data.keys():
-                        map_data[vb][key] = value
+                        map_data[vb][key] = value[0]
                     else:
                         m = {}
-                        m[key] = value
+                        m[key] = value[0]
                         map_data[vb] = m
                 if perNode:
                     dataMap[server.ip] = map_data
@@ -468,7 +473,7 @@ class DataCollector(object):
             bucketMap[bucket.name] = dataMap
             return bucketMap
 
-    def createMapVucket(self,details,map_data):
+    def createMapVbucket(self,details,map_data):
         """ Helper method for vbucket information data collection """
         for o in details.keys():
             tokens = o.split(":")
@@ -485,7 +490,7 @@ class DataCollector(object):
             elif len(tokens)  ==  1:
                 vb = tokens[0]
                 value = details[o].strip()
-                if "state" in map_data.keys():
+                if vb in map_data.keys():
                     map_data[vb]["state"] = value
                 else:
                     m = {}

@@ -16,6 +16,36 @@ class RebalanceInOutTests(RebalanceBaseTest):
     def tearDown(self):
         super(RebalanceInOutTests, self).tearDown()
 
+    """Rebalances nodes out and in of the cluster while doing mutations.
+
+    This test begins by loading a given number of items into the cluster. It then
+    removes one node, rebalances that node out the cluster, and then rebalances it back
+    in. During the rebalancing we update all of the items in the cluster. Once the
+    node has been removed and added back we  wait for the disk queues to drain, and
+    then verify that there has been no data loss, sum(curr_items) match the curr_items_total.
+    We then remove and add back two nodes at a time and so on until we have reached the point
+    where we are adding back and removing at least half of the nodes."""
+    def rebalance_in_out_after_mutation(self):
+        gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
+        servs_in = self.servers[self.nodes_init:self.nodes_init+1]
+        servs_out = self.servers[self.nodes_init-1:self.nodes_init]
+        result_nodes = set(self.servers[:self.nodes_init]+ servs_in) - set(servs_out)
+        for task in tasks:
+            task.result(self.wait_timeout * 20)
+        prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init],self.buckets)
+        prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init],self.buckets)
+        self.compare_vbucketseq_failoverlogs(prev_vbucket_stats,prev_failover_stats)
+        record_data_set = self.get_data_set_all(self.servers[:self.num_servers],self.buckets)
+        self.cluster.rebalance(self.servers[:self.num_servers-1], servs_in, servs_out)
+        self.sleep(10)
+        self.verify_cluster_stats(result_nodes)
+        new_failover_stats  = self.compare_failovers_logs(prev_failover_stats,result_nodes,self.buckets)
+        new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats,result_nodes,self.buckets,perNode= False)
+        self.data_analysis_all(record_data_set,result_nodes,self.buckets)
+        self.compare_vbucketseq_failoverlogs(new_vbucket_stats,new_failover_stats)
+
     """Rebalances nodes out and in of the cluster while doing mutations with max
     number of buckets in the cluster.
 
@@ -73,7 +103,6 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.log.info("adding nodes {0} to cluster".format(servs_in))
         self.log.info("removing nodes {0} from cluster".format(servs_out))
         result_nodes = set(servs_init + servs_in) - set(servs_out)
-
         rest = RestConnection(self.master)
         bucket_num = rest.get_internalSettings("maxBucketCount")
         self.bucket_size = self.quota / bucket_num
@@ -191,7 +220,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
                                self.servers[1:init_num_nodes], [])
         gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
-
+        prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.num_servers],self.buckets)
         for i in range(self.num_servers):
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
 
@@ -202,6 +231,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             for task in tasks:
                 task.result()
             self.verify_cluster_stats(self.servers[:init_num_nodes])
+            self.compare_vbucket_seqnos(prev_vbucket_stats,self.servers[:init_num_nodes],self.buckets,perNode= False)
 
     """Rebalances nodes into and out of the cluster while doing mutations and
     deletions.
@@ -219,7 +249,6 @@ class RebalanceInOutTests(RebalanceBaseTest):
                                self.servers[1:self.num_servers], [])
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
                               end=self.num_items)
-
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
             tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
             tasks.extend(self._async_load_all_buckets(self.master, gen_delete, "delete", 0))
@@ -249,7 +278,6 @@ class RebalanceInOutTests(RebalanceBaseTest):
                                self.servers[1:self.num_servers], [])
         gen_expire = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
                               end=self.num_items)
-
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
             self.log.info("iteration #{0}".format(i))
             tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=50)

@@ -1941,7 +1941,10 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command(command)
         self.log_command_output(output, error)
 
-    def get_data_map_using_cbtransfer(self,buckets,data_path=None,userId="Administrator",password="password"):
+    def get_data_map_using_cbtransfer(self,buckets,data_path=None,userId="Administrator",password="password", getReplica = False):
+        replicaOption = ""
+        if getReplica:
+             replicaOption = "  --source-vbucket-state=replica --destination-vbucket-state=replica "
         source="http://"+self.ip+":8091"
         if data_path:
             source="couchstore-files://"+data_path
@@ -1949,9 +1952,9 @@ class RemoteMachineShellConnection:
         headerInfo=""
         for bucket in buckets:
             if data_path == None:
-                options=" -b "+bucket.name+" -u "+userId+" -p password --single-node"
+                options=" -b "+bucket.name+" -u "+userId+" -p password --single-node"+replicaOption
             else:
-                options=" -b "+bucket.name+" -u "+userId+" -p password"
+                options=" -b "+bucket.name+" -u "+userId+" -p password"+replicaOption
             fileName=bucket.name+"."+str(uuid.uuid1())+".csv"
             path="/tmp/"+fileName
             destination="csv:"+path

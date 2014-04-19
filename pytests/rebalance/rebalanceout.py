@@ -4,6 +4,7 @@ from threading import Thread
 from rebalance.rebalance_base import RebalanceBaseTest
 from couchbase.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
+from membase.helper.rebalance_helper import RebalanceHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -19,6 +20,43 @@ class RebalanceOutTests(RebalanceBaseTest):
     """Rebalances nodes out of a cluster while doing docs ops:create, delete, update.
 
     This test begins with all servers clustered together and  loads a user defined
+    number of items into the cluster. Before rebalance we perform docs ops(add/remove/update/read)
+    in the cluster( operate with a half of items that were loaded before).It then remove nodes_out
+    from the cluster at a time and rebalances.  Once the cluster has been rebalanced we wait for the
+    disk queues to drain, and then verify that there has been no data loss, sum(curr_items) match the
+    curr_items_total. We also check for data and its meta-data, vbucket sequene numbers"""
+    def rebalance_out_after_ops(self):
+        gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
+        gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
+        # define which doc's ops will be performed during rebalancing
+        # allows multiple of them but one by one
+        tasks = []
+        if(self.doc_ops is not None):
+            if("update" in self.doc_ops):
+                tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
+            if("create" in self.doc_ops):
+                tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0)
+            if("delete" in self.doc_ops):
+                tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
+            for task in tasks:
+                task.result()
+        servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
+        prev_failover_stats = self.get_failovers_logs(self.servers[:self.num_servers],self.buckets)
+        prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.num_servers],self.buckets)
+        record_data_set = self.get_data_set_all(self.servers[:self.num_servers],self.buckets)
+        self.compare_vbucketseq_failoverlogs(prev_vbucket_stats,prev_failover_stats)
+        rebalance = self.cluster.async_rebalance(self.servers[:1], [], servs_out)
+        rebalance.result()
+        RebalanceHelper.wait_for_replication(self.servers[:self.num_servers - self.nodes_out], self.cluster)
+        self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
+        new_failover_stats  = self.compare_failovers_logs(prev_failover_stats,self.servers[:self.num_servers - self.nodes_out],self.buckets)
+        new_vbucket_stats= self.compare_vbucket_seqnos(prev_vbucket_stats,self.servers[:self.num_servers - self.nodes_out],self.buckets,perNode= False)
+        self.data_analysis_all(record_data_set,self.servers[:self.num_servers - self.nodes_out],self.buckets)
+        self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
+
+    """Rebalances nodes out of a cluster while doing docs ops:create, delete, update.
+
+    This test begins with all servers clustered together and  loads a user defined
     number of items into the cluster. It then remove nodes_out from the cluster at a time
     and rebalances. During the rebalance we perform docs ops(add/remove/update/read)
     in the cluster( operate with a half of items that were loaded before).
@@ -29,6 +67,8 @@ class RebalanceOutTests(RebalanceBaseTest):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
         servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
+        prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.num_servers],self.buckets)
+        prev_failover_stats = self.get_failovers_logs(self.servers[:self.num_servers],self.buckets)
         rebalance = self.cluster.async_rebalance(self.servers[:1], [], servs_out)
         # define which doc's ops will be performed during rebalancing
         # allows multiple of them but one by one
@@ -44,6 +84,9 @@ class RebalanceOutTests(RebalanceBaseTest):
                 task.result()
         rebalance.result()
         self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
+        new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats,self.servers[:self.num_servers - self.nodes_out],self.buckets, perNode= False)
+        new_failover_stats  = self.compare_failovers_logs(prev_failover_stats,self.servers[:self.num_servers - self.nodes_out],self.buckets)
+        self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
 
     """Rebalances nodes from a cluster during getting random keys.
 
