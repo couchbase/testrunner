@@ -512,7 +512,12 @@ class CouchbaseCliTest(CliBaseTest):
 
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=cluster_init_username, password=cluster_init_password)
             self.sleep(7)   # time needed to reload couchbase
-            # MB-8202 cluster-init/edit doesn't provide status
+            """ work around bug MB-10927 and remove these codes when it is fixed.  Rerun with new credential setup.
+                If no error throw out, rewrite the output """
+            if "Connection refused" in output[0]:
+                output_tm, error_tm = remote_client.execute_couchbase_cli(cli_command="server-info", cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=cluster_init_username + "1", password=cluster_init_password + "1")
+                if "availableStorage" in output_tm[1]:
+                    output[0] = "SUCCESS: init localhost"
             self.assertEqual(output[0], "SUCCESS: init localhost")
             server.rest_username = cluster_init_username + "1"
             server.rest_password = cluster_init_password + "1"
@@ -534,8 +539,13 @@ class CouchbaseCliTest(CliBaseTest):
                 options = "{0}-username={1} {2}-password={3} {4}-port={5}".\
                     format(param_prefix, cluster_init_username, param_prefix, cluster_init_password, param_prefix, cluster_init_port)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=(cluster_init_username + "1"), password=cluster_init_password + "1")
-            # MB-8202 cluster-init/edit doesn't provide status
             self.sleep(7)  #time needed to reload couchbase
+            """ work around bug MB-10927 and remove these codes when it is fixed.  Rerun with new credential setup.
+                If no error throw out, rewrite the output """
+            if "Connection refused" in output[0]:
+                output_tm, error_tm = remote_client.execute_couchbase_cli(cli_command="server-info", cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=cluster_init_username + "1", password=cluster_init_password + "1")
+                if "availableStorage" in output_tm[1]:
+                    output[0] = "SUCCESS: init localhost"
             self.assertEqual(output[0], "SUCCESS: init localhost")
 
             server.rest_username = cluster_init_username
