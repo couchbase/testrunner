@@ -1031,7 +1031,7 @@ class XdcrCLITest(CliBaseTest):
                     options += (" --xdcr-replicator={0}".format(replicator))
                     output, _ = self.__execute_cli(cli_command, options)
                     # validate output message
-                    self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["pause"], output[0])
+                    self.assertEqual("The replication is not running yet. Pause is not needed", output[0])
                     options = "--list"
                     output, _ = self.__execute_cli(cli_command, options)
                     # check if status of replication is "paused"
