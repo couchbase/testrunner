@@ -36,7 +36,10 @@ class RestHelper(object):
                 if status is not None and status.status == 'healthy':
                     return True
                 else:
-                    log.warn("server {0}:{1} status is {2}".format(self.rest.ip, self.rest.port, status.status))
+                    if status is not None:
+                        log.warn("server {0}:{1} status is {2}".format(self.rest.ip, self.rest.port, status.status))
+                    else:
+                        log.warn("server {0}:{1} status is down".format(self.rest.ip, self.rest.port))
             except ServerUnavailableException:
                 log.error("server {0}:{1} is unavailable".format(self.rest.ip, self.rest.port))
             time.sleep(1)
