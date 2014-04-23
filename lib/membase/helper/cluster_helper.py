@@ -280,6 +280,11 @@ class ClusterOperationHelper(object):
             for node in set([node for node in nodes if (node.id != master_id)]) - set(success_cleaned):
                 log.error("node {0}:{1} was not cleaned after removing from cluster".format(
                            removed.ip, removed.port))
+                try:
+                    rest = RestConnection(node)
+                    rest.force_eject_node()
+                except Exception as ex:
+                    log.error("force_eject_node {0}:{1} failed: {2}".format(removed.ip, removed.port, ex))
             if len(set([node for node in nodes if (node.id != master_id)])\
                     - set(success_cleaned)) != 0:
                 raise Exception("not all ejected nodes were cleaned successfully")
