@@ -121,6 +121,7 @@ def get_jobs_stats(job_url=None, onlyLastBuild=False):
                 build.actions = json_parsed["actions"]
                 build.result = json_parsed["result"]
                 build.timestamp = json_parsed["timestamp"]
+                build.priority = 'N/A'
                 for action in build.actions:
                     if "failCount" in action:
                         build.failCount = action["failCount"]
@@ -206,17 +207,27 @@ def build_json_result(jobs):
     for job in jobs:
         os = ((('N/A', 'UBUNTU')[job.name.lower().find('ubuntu') != -1], 'CENTOS')[job.name.lower().find('cent') != -1],'WINDOWS')[job.name.lower().find('win') != -1]
         rq = {'name' : job.name, 'os' : os}
+        try:
+            priority = job.build_histories[0]['result'].priority
+        except IndexError:
+            priority = 'N/A'
+        if priority == 'N/A' and job.name[-2:].upper() in ['P0', 'P1', 'P2']:
+            priority = job.name[-2:]
         if len(job.build_histories) > 0:
-            rq.update({'priority': job.build_histories[0]['result'].priority,
+            rq.update({'priority': priority.upper(),
                         'build': job.build_histories[0]['result'].version_number,
                         'timestamp': job.build_histories[0]['result'].timestamp,
                         'totalCount': job.build_histories[0]['result'].totalCount,
                         'failCount': job.build_histories[0]['result'].failCount,
                         'result': job.build_histories[0]['result'].result,
                         'build_id' : job.lastBuild['number']})
-        key = md5(rq["name"] + str(rq["build_id"])).hexdigest()
-        jsons.append((key, json.dumps(rq)))
         print rq
+        try:
+            key = md5(rq["name"] + str(rq["build_id"])).hexdigest()
+            jsons.append((key, json.dumps(rq)))
+            print "Sended"
+        except:
+            print "ERROR forming rq for: %s" % rq
     return jsons
 
 def usage(err=None):
