@@ -3,6 +3,7 @@ import json
 import csv
 import getopt
 import sys
+import re
 from hashlib import md5
 
 sys.path.extend(('.', 'lib'))
@@ -224,6 +225,10 @@ def build_json_result(jobs):
         print rq
         try:
             key = md5(rq["name"] + str(rq["build_id"])).hexdigest()
+            if 'build' not in rq or 'result' not in rq or\
+               ('build' in rq and not re.match(r'[0-9].[0-9].[0-9]-[0-9]+')):
+                print "ERROR forming rq for: %s" % rq
+                continue
             jsons.append((key, json.dumps(rq)))
             print "Sended"
         except:
