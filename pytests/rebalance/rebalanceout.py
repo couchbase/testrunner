@@ -223,7 +223,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             task.result(self.wait_timeout * 2)
         for view in views:
             # run queries to create indexes
-            self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
+            self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query, timeout=self.wait_timeout * 2)
 
         for i in xrange(3):
             active_tasks = self.cluster.async_monitor_active_task(self.servers, "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
