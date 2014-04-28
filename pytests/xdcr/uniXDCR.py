@@ -57,7 +57,7 @@ class unidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        self.sleep(self.wait_timeout / 2)
+        self.sleep(self.wait_timeout)
 
         self._modify_src_data()
 
@@ -79,7 +79,7 @@ class unidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.dest_master)
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        self.sleep(self.wait_timeout / 2)
+        self.sleep(self.wait_timeout)
         self._modify_src_data()
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.wait_warmup_completed(warmupnodes)
@@ -98,7 +98,7 @@ class unidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        self.sleep(self.wait_timeout / 2)
+        self.sleep(self.wait_timeout)
         self._async_modify_data()
         self.sleep(30)
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
@@ -119,7 +119,7 @@ class unidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.dest_master)
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        self.sleep(self.wait_timeout / 2)
+        self.sleep(self.wait_timeout)
         self._async_modify_data()
         self.sleep(self.wait_timeout / 2)
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)

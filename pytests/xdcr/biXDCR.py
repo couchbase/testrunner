@@ -107,7 +107,7 @@ class bidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        self.sleep(self.wait_timeout / 2)
+        self.sleep(self.wait_timeout)
 
         self._async_update_delete_data()
 
@@ -135,7 +135,7 @@ class bidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.dest_master)
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        self.sleep(self.wait_timeout / 2)
+        self.sleep(self.wait_timeout)
 
         self._async_update_delete_data()
 
@@ -163,7 +163,7 @@ class bidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        self.sleep(self.wait_timeout / 2)
+        self.sleep(self.wait_timeout)
 
         self._async_update_delete_data()
 
@@ -191,7 +191,7 @@ class bidirectional(XDCRReplicationBaseTest):
                 warmupnodes.append(self.dest_master)
         for node in warmupnodes:
             self.do_a_warm_up(node)
-        self.sleep(self.wait_timeout / 2)
+        self.sleep(self.wait_timeout)
 
         self._async_update_delete_data()
 
