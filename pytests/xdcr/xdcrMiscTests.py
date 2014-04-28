@@ -51,9 +51,7 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
         for task in tasks:
             task.result()
 
-        # Step-7 Wait for all the items to be replicated
         # Step-8 Compare the source and destination cluster items - item count, meta data, data content.
-        self.sleep(self.wait_timeout * 5)
         self.verify_results(verify_src=True)
 
         # Verify if no deletion performed at source node:
