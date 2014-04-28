@@ -118,7 +118,7 @@ class OpsChangeCasTests(CasBaseTest):
             key = "{0}{1}".format(prefix, k)
             mc.set(key, 0, 0, payload)
             k += 1
-        active_resident_threshold = 10
+        active_resident_threshold = 30
         threshold_reached = False
         end_time = time.time() + float(timeout)
         while not threshold_reached and time.time() < end_time:
