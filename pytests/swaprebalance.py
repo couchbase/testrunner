@@ -389,7 +389,7 @@ class SwapRebalanceBase(unittest.TestCase):
         SwapRebalanceBase.sleep(self, 10, "Rebalance should start")
         self.log.info("FAIL SWAP REBALANCE PHASE @ {0}".format(self.percentage_progress))
         reached = RestHelper(rest).rebalance_reached(self.percentage_progress)
-        if reached == 100 and not RestHelper(rest).is_cluster_rebalanced():
+        if reached and not RestHelper(rest).is_cluster_rebalanced():
             # handle situation when rebalance failed at the beginning
             self.log.error('seems rebalance failed!')
             rest.print_UI_logs()
