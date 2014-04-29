@@ -49,8 +49,7 @@ class FailoverTests(FailoverBaseTest):
         self.nodes = self.rest.node_statuses()
 
         # Set the data path for the cluster
-        node_info = self.rest.get_nodes_self()
-        self.data_path = node_info.storage[0].get_data_path()
+        self.data_path = self.rest.get_data_path()
         # Check if the test case has to be run for 3.0.0
         versions = self.rest.get_nodes_versions()
         for version in versions:
@@ -76,7 +75,7 @@ class FailoverTests(FailoverBaseTest):
 
         # Take snap-shot of data set used for validaiton
         prev_vbucket_stats = self.get_vbucket_seqnos(self.servers, self.buckets)
-        record_static_data_set = self.get_data_set_all(self.servers, self.buckets)
+        record_static_data_set = self.get_data_set_all(self.servers, self.buckets, path = self.data_path)
         prev_failover_stats = self.get_failovers_logs(self.servers, self.buckets)
 
         # Perform Operations relalted to failover
@@ -113,7 +112,7 @@ class FailoverTests(FailoverBaseTest):
             RebalanceHelper.wait_for_replication(_servers_, self.cluster)
             # Verify all data set with meta data if failover happens after failover
             if not self.withOps:
-                self.data_analysis_all(record_static_data_set, _servers_, self.buckets)
+                self.data_analysis_all(record_static_data_set, _servers_, self.buckets, path = self.data_path)
             # Check Cluster Stats and Data as well if max_verify > 0
             self.verify_cluster_stats(_servers_, self.referenceNode)
             # If views were created they can be verified
@@ -164,7 +163,7 @@ class FailoverTests(FailoverBaseTest):
                 recoveryTypeMap, fileMapsForVerification)
         # Comparison of all data if required
         if not self.withOps:
-            self.data_analysis_all(record_static_data_set,self.servers, self.buckets)
+            self.data_analysis_all(record_static_data_set,self.servers, self.buckets,  path = self.data_path)
        # Verify if vbucket sequence numbers are as expected
         new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, self.servers, self.buckets,perNode= False)
         # Verify Stats of cluster and Data is max_verify > 0

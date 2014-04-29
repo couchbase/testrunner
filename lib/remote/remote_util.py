@@ -1942,9 +1942,13 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
 
     def get_data_map_using_cbtransfer(self,buckets,data_path=None,userId="Administrator",password="password", getReplica = False):
+        self.extract_remote_info()
+        temp_path="/tmp/"
+        if self.info.type.lower() == 'windows':
+            temp_path = WIN_TMP_PATH
         replicaOption = ""
         if getReplica:
-             replicaOption = "  --source-vbucket-state=replica --destination-vbucket-state=replica "
+             replicaOption = "  --source-vbucket-state=replica"
         source="http://"+self.ip+":8091"
         if data_path:
             source="couchstore-files://"+data_path
@@ -1952,24 +1956,31 @@ class RemoteMachineShellConnection:
         headerInfo=""
         for bucket in buckets:
             if data_path == None:
-                options=" -b "+bucket.name+" -u "+userId+" -p password --single-node"+replicaOption
+                options=" -b "+bucket.name+" -u "+userId+" -p password --single-node"
             else:
                 options=" -b "+bucket.name+" -u "+userId+" -p password"+replicaOption
-            fileName=bucket.name+"."+str(uuid.uuid1())+".csv"
-            path="/tmp/"+fileName
-            destination="csv:"+path
+            suffix = "_"+bucket.name+"_N%2FA.csv"
+            if data_path == None:
+               suffix = "_"+bucket.name+"_"+self.ip+"_%3A8091.csv"
+            prefix = str(uuid.uuid1())
+            fileName=prefix+".csv"
+            genFileName = prefix + suffix
+            csv_path=temp_path+fileName
+            path=temp_path+genFileName
+            dest_path="/tmp/"+fileName
+            destination="csv:"+csv_path
             self.execute_cbtransfer(source, destination, options)
-            file_existed = self.file_exists("/tmp", fileName)
+            file_existed = self.file_exists(temp_path, genFileName)
             if file_existed:
-                self.copy_file_remote_to_local(path,path)
+                self.copy_file_remote_to_local(path,dest_path)
                 self.delete_files(path)
                 content=[]
                 headerInfo=""
-                with open(path) as f:
+                with open(dest_path) as f:
                     headerInfo=f.readline()
                     content=f.readlines()
                 bucketMap[bucket.name]=content
-                os.remove(path)
+                os.remove(dest_path)
         return headerInfo,bucketMap
 
     def execute_cbtransfer(self, source, destination, command_options=''):

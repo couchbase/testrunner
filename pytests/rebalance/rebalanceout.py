@@ -67,8 +67,6 @@ class RebalanceOutTests(RebalanceBaseTest):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
         servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
-        prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.num_servers],self.buckets)
-        prev_failover_stats = self.get_failovers_logs(self.servers[:self.num_servers],self.buckets)
         rebalance = self.cluster.async_rebalance(self.servers[:1], [], servs_out)
         # define which doc's ops will be performed during rebalancing
         # allows multiple of them but one by one
@@ -84,9 +82,6 @@ class RebalanceOutTests(RebalanceBaseTest):
                 task.result()
         rebalance.result()
         self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
-        new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats,self.servers[:self.num_servers - self.nodes_out],self.buckets, perNode= False)
-        new_failover_stats  = self.compare_failovers_logs(prev_failover_stats,self.servers[:self.num_servers - self.nodes_out],self.buckets)
-        self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
 
     """Rebalances nodes from a cluster during getting random keys.
 

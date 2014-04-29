@@ -17,7 +17,7 @@ class FailoverBaseTest(BaseTestCase):
         self.default_view_name = "default_view"
         self.default_view = View(self.default_view_name, self.defaul_map_func, None)
         self.failoverMaster = self.input.param("failoverMaster", False)
-        self.withOps = self.input.param("withOps", True)
+        self.withOps = self.input.param("withOps", False)
         self.runViews = self.input.param("runViews", False)
         self.withQueries = self.input.param("withQueries", False)
         self.numberViews = self.input.param("numberViews", False)

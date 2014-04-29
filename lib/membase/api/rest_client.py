@@ -477,6 +477,10 @@ class RestConnection(object):
         log.info("DEPRECATED function get_view(" + view + "). use get_ddoc()")
         return self.get_ddoc(bucket, view)
 
+    def get_data_path(self):
+        node_info = self.get_nodes_self()
+        data_path = node_info.storage[0].get_data_path()
+        return data_path
 
     def get_ddoc(self, bucket, ddoc_name):
         status, json, meta = self._get_design_doc(bucket, ddoc_name)
