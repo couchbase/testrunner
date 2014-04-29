@@ -1607,9 +1607,9 @@ class QueryTests(BaseTestCase):
                         "Result expected: %s. Actual %s" % (expected, res["resultset"]))
 
     def test_hours(self):
-        self.query = 'select date_part_str("hour", now_str()) as hour, ' +\
-        'date_part_str("minute", now_str()) as minute, date_part_str("second",' +\
-        ' now_str()) as sec, date_part_str("milliseconds", now_str()) as msec'
+        self.query = 'select date_part_str(now_str(), "hour") as hour, ' +\
+        'date_part_str(now_str(),"minute") as minute, date_part_str(' +\
+        'now_str(),"second") as sec, date_part_str(now_str(),"milliseconds") as msec'
         now = datetime.datetime.now()
         res = self.run_cbq_query()
         self.assertTrue(res["resultset"][0]["hour"] == now.hour,
@@ -1621,8 +1621,8 @@ class QueryTests(BaseTestCase):
     def test_where(self):
         for bucket in self.buckets:
             self.query = 'select name, join_yr, join_mo, join_day from %s' % (bucket.name) +\
-            ' where date_part_str("month", now_str()) < join_mo AND date_part_str("year", now_str())' +\
-            ' > join_yr AND date_part_str("day", now_str()) < join_day'
+            ' where date_part_str(now_str(),"month") < join_mo AND date_part_str(now_str(),"year")' +\
+            ' > join_yr AND date_part_str(now_str(),"day") < join_day'
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result["resultset"], key=lambda doc: (doc['name'],
                                                                                 doc['join_yr'],
@@ -1682,9 +1682,9 @@ class QueryTests(BaseTestCase):
         now_millis = time.time()
         now_time = datetime.datetime.fromtimestamp(now_millis)
         now_millis = now_millis * 1000
-        self.query = 'select date_part_millis("hour", %s) as hour, ' % (now_millis) +\
-        'date_part_millis("minute", %s) as minute, date_part_millis("second",' % (now_millis) +\
-        ' %s) as sec, date_part_millis("milliseconds", %s) as msec' % (now_millis,now_millis)
+        self.query = 'select date_part_millis(%s, "hour") as hour, ' % (now_millis) +\
+        'date_part_millis(%s,"minute") as minute, date_part_millis(' % (now_millis) +\
+        '%s,"second") as sec, date_part_millis(%s,"milliseconds") as msec' % (now_millis,now_millis)
         res = self.run_cbq_query()
         self.assertTrue(res["resultset"][0]["hour"] == now_time.hour,
                         "Result expected: %s. Actual %s" % (now_time.hour, res["resultset"]))
