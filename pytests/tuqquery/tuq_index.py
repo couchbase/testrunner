@@ -247,6 +247,19 @@ class QueriesViewsTests(QueryTests):
                     self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                     self.run_cbq_query()
 
+    def test_index_dates(self):
+        for bucket in self.buckets:
+            index_name = "my_index_date"
+            try:
+                self.query = "CREATE INDEX %s ON %s(" % (index_name, bucket.name) +\
+                "str_to_millis(to_str(join_yr) || '-0' || to_str(join_mo) || '-0' || to_str(join_day))) "
+                self.run_cbq_query()
+            except Exception, ex:
+                self.assertTrue(str(ex).find("Expression is not supported by indexing currently") != -1,
+                                "Error message is %s." % str(ex))
+            else:
+                self.fail("Error message expected")
+
     def _verify_view_is_present(self, view_name, bucket):
         ddoc, _ = RestConnection(self.master).get_ddoc(bucket.name, "ddl_%s" % view_name)
         self.assertTrue(view_name in ddoc["views"], "View %s wasn't created" % view_name)

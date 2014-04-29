@@ -1621,8 +1621,8 @@ class QueryTests(BaseTestCase):
     def test_where(self):
         for bucket in self.buckets:
             self.query = 'select name, join_yr, join_mo, join_day from %s' % (bucket.name) +\
-            ' where date_part("month", now_str()) < join_mo AND date_part("year", now_str())' +\
-            ' > join_yr AND date_part("day", now_str()) < join_day'
+            ' where date_part_str("month", now_str()) < join_mo AND date_part_str("year", now_str())' +\
+            ' > join_yr AND date_part_str("day", now_str()) < join_day'
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result["resultset"], key=lambda doc: (doc['name'],
                                                                                 doc['join_yr'],
@@ -1693,6 +1693,45 @@ class QueryTests(BaseTestCase):
         self.assertTrue(res["resultset"][0]["sec"] == now_time.second,
                         "Result expected: %s. Actual %s" % (now_time.second, res["resultset"]))
         self.assertTrue("msec" in res["resultset"][0], "There are no msec in results")
+
+
+    def test_where_millis(self):
+        for bucket in self.buckets:
+            self.query = "select join_yr, join_mo, join_day, name from %s" % (bucket.name) +\
+            " where join_mo < 10 and join_day < 10 and str_to_millis(to_str(join_yr) || '-0'" +\
+            " || to_str(join_mo) || '-0' || to_str(join_day)) < now_millis()"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result["resultset"], key=lambda doc: (doc['name'],
+                                                                                doc['join_yr'],
+                                                                                doc['join_mo'],
+                                                                                doc['join_day']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name'], "join_yr" : doc['join_yr'],
+                                "join_mo" : doc['join_mo'], "join_day" : doc['join_day']}
+                               for doc in full_list
+                               if doc['join_mo'] < 10 and doc['join_day'] < 10]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
+                                                                        doc['join_yr'],
+                                                                        doc['join_mo'],
+                                                                        doc['join_day']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_order_by_dates(self):
+        orders = ["asc", "desc"]
+        for order in orders:
+            for bucket in self.buckets:
+                self.query = "select millis_to_str(str_to_millis(to_str(join_yr) || '-0' ||" +\
+                " to_str(join_mo) || '-0' || to_str(join_day))) as date from %s" % (bucket.name) +\
+                " where join_mo < 10 and join_day < 10 ORDER BY date %s" % order
+                actual_result = self.run_cbq_query()
+                actual_result = ([{"date" : doc["date"][:10]} for doc in actual_result["resultset"]])
+                full_list = self._generate_full_docs_list(self.gens_load)
+                expected_result = [{"date" : '%s-0%s-0%s' % (doc['join_yr'],
+                                    doc['join_mo'], doc['join_day'])}
+                                   for doc in full_list
+                                   if doc['join_mo'] < 10 and doc['join_day'] < 10]
+                expected_result = sorted(expected_result, key=lambda doc: (doc['date']), reverse=(order=='desc'))
+                self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
 #
