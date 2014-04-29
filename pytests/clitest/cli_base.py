@@ -1,5 +1,8 @@
 from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection
+from testconstants import LINUX_COUCHBASE_BIN_PATH
+from testconstants import WIN_COUCHBASE_BIN_PATH
+from testconstants import MAC_COUCHBASE_BIN_PATH
 import random
 import zlib
 
@@ -14,12 +17,16 @@ class CliBaseTest(BaseTestCase):
         info = self.shell.extract_remote_info()
         type = info.type.lower()
         self.os = 'linux'
+        self.cli_command_path = LINUX_COUCHBASE_BIN_PATH
         if type == 'windows':
             self.os = 'windows'
+            self.cli_command_path = WIN_COUCHBASE_BIN_PATH
         if info.distribution_type.lower() == 'mac':
             self.os = 'mac'
+            self.cli_command_path = MAC_COUCHBASE_BIN_PATH
         self.couchbase_usrname = "%s" % (self.input.membase_settings.rest_username)
         self.couchbase_password = "%s" % (self.input.membase_settings.rest_password)
+        self.cli_command = self.input.param("cli_command", None)
         self.command_options = self.input.param("command_options", None)
         if self.command_options is not None:
             self.command_options = self.command_options.split(";")
