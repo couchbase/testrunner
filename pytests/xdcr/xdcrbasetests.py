@@ -237,7 +237,7 @@ class XDCRBaseTest(unittest.TestCase):
         self.buckets = []
         # max items number to verify in ValidateDataTask, None - verify all
         self.max_verify = self._input.param("max_verify", None)
-        self._checkpoint_interval = self._input.param("checkpoint_interval", None)
+        self._checkpoint_interval = self._input.param("checkpoint_interval", 60)
         self._default_bucket = self._input.param("default_bucket", True)
         self._end_replication_flag = self._input.param("end_replication_flag", 0)
 
