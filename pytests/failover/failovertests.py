@@ -255,6 +255,8 @@ class FailoverTests(FailoverBaseTest):
         ops_tasks += self._async_load_all_buckets(self.referenceNode, self.gen_initial_create, "create", 0)
         for task in ops_tasks:
             task.result()
+        self._wait_for_stats_all_buckets(self.servers)
+        RebalanceHelper.wait_for_replication(self.servers, self.cluster)
         # Update or Delete buckets if items > 0 and options are passed in tests
         # These can run in parallel (withOps = True), or before (withOps = True)
         if(self.doc_ops is not None):

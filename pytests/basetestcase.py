@@ -447,7 +447,7 @@ class BaseTestCase(unittest.TestCase):
         kv_store - The index of the bucket's kv_store to use. (int)
     """
     def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0,
-                          only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30,
+                          only_store_hash=True, batch_size=1000, pause_secs=10, timeout_secs=30,
                           proxy_client=None):
         tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag,
                                              only_store_hash, batch_size, pause_secs, timeout_secs,
