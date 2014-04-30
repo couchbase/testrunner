@@ -44,7 +44,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.rest_settings = self.input.membase_settings
         self.rest = None
         self.rest_helper = None
-        self.sleep_time = 10
+        self.sleep_time = 15
         self.ddocs = []
         self.item_flag = self.input.param('item_flag', 0)
         self.expire_time = self.input.param('expire_time', 0)
@@ -134,6 +134,9 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         self.buckets = []
         gc.collect()
+        if self.input.param('extra_verification', False):
+            self.total_buckets += 2
+            print self.total_buckets
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
         self._bucket_creation()
         if self.stop_persistence:
