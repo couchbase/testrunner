@@ -3,7 +3,6 @@ import argparse
 import paramiko,sys
 import time
 import os
-import testcfg as cfg
 
 def get_ssh_client(ip, timeout=10):
     client = None
@@ -57,7 +56,7 @@ def start_rabbitmq():
     _, stdout, _ = rabbitmq_client.exec_command("sudo rabbitmqctl list_vhosts", timeout=5)
     for line in stdout.readlines():
         sys.stdout.write(line)
-    time.sleep(20)
+    time.sleep(30)
     try:
         Connection(host=cfg.RABBITMQ_IP, userid="guest", password="guest", virtual_host=cfg.CB_CLUSTER_TAG)
         print("Connected to RabbitMQ vhost")
@@ -275,7 +274,7 @@ def run(args):
                                [start_worker(ip) for ip in cfg.WORKERS]
 
     # Cluster-setup/create buckets, set RAM quota
-    "cluster" in exlargs and warn_skip("Cluster") or run_setup()
+    "setup" in exlargs and warn_skip("Cluster setup") or run_setup()
 
     # Start cbmonitor
     "cbmonitor" in exlargs and warn_skip("CBMonitor") or start_cbmonitor()
@@ -290,17 +289,32 @@ def run(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Tool for running system tests \
-                                    \nUsage: python runsystest.py --build 3.0.0-355 --params upr=true,xdcr_upr=false --exclude install,seriesly,worker,cbmonitor,cluster,systest,stats')
-    parser.add_argument("--build", help="build-version for system test to run on", required=True)
-    parser.add_argument("--params", help="optional additional build params eg:vbuckets=1024,upr=true,xdcr_upr=false",
+    parser = argparse.ArgumentParser(description="Tool for running system tests \
+                 \nUsage: python runsystest.py --build 3.0.0-355 \
+                                              --testcfg xdcr/testcfg_source.py \
+                                              --params upr=true,xdcr_upr=false \
+                                              --exclude install,seriesly,worker,cbmonitor,cluster,systest,stats")
+    parser.add_argument("--build", help="required param: build-version for system test to run on", required=True)
+    parser.add_argument("--testcfg", help="required param: location of testcfg file in testcfg dir ", required=True)
+    parser.add_argument("--params", help="optional param: additional build params eg:vbuckets=1024,upr=true,xdcr_upr=false",
                         required=False)
     parser.add_argument("--exclude",
                             nargs='+',
                             default="",
-                            help="--exclude inspect install rabbitmq seriesly worker cbmonitor cluster systest stats",
+                            help="optional param: inspect install rabbitmq seriesly worker cbmonitor setup systest stats",
                             required=False)
 
     args = vars(parser.parse_args())
+    testcfg = 'tests/testcfg/' + args['testcfg']
+    try:
+        os.system("cp -f {} testcfg.py".format(testcfg))
+        print "Copied {0} to {1} as testcfg.py".format(testcfg, os.getcwd())
+        cfg = __import__("testcfg")
+    except Exception as e:
+        print e
+        print "Recheck --testcfg param to contain relative path of the testcfg file inside tests/testcfg directory" \
+              "\nExample: --testcfg xdcr/testcfg_source.py if the file you are referring to is tests/testcfg/xdcr/testcfg_source.py"
+        sys.exit(1)
+
     run(args)
 
