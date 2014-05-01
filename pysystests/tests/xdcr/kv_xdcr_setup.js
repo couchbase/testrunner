@@ -18,7 +18,7 @@
                                  "sasl": {"count": "1",  "quota": "1000", "replicas": "1",
                                           "replica_index": "0"}
                                 },
-                     "runtime" : 240
+                     "runtime" : 120
                  },
                  "2" :
                  {

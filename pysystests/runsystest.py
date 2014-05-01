@@ -43,17 +43,16 @@ def start_rabbitmq():
         print("Deleting RabbitMQ logs from {}".format(cfg.RABBITMQ_LOG_LOCATION))
         rabbitmq_client.exec_command("rm -rf {}/*.*".format(cfg.RABBITMQ_LOG_LOCATION))
     print ("Starting RabbitMQ ...")
-    rabbitmq_client.exec_command("screen -dmS rabbitmq sh -c \'sudo rabbitmq-server start; exec bash;\'", timeout=10)
+    rabbitmq_client.exec_command("screen -dmS rabbitmq sh -c \'sudo rabbitmq-server start; exec bash;\'")
     time.sleep(20)
-    _, stdout, _ = rabbitmq_client.exec_command("sudo rabbitmqctl status", timeout=8)
+    _, stdout, _ = rabbitmq_client.exec_command("sudo rabbitmqctl status")
     for line in stdout.readlines():
        sys.stdout.write(line)
     print("Rabbitmq has been restarted and is now running!")
-    rabbitmq_client.exec_command("sudo rabbitmqctl delete_vhost {0}".format(cfg.CB_CLUSTER_TAG), timeout=5)
-    rabbitmq_client.exec_command("sudo rabbitmqctl add_vhost {0}".format(cfg.CB_CLUSTER_TAG), timeout=5)
-    rabbitmq_client.exec_command("sudo rabbitmqctl set_permissions -p {0} guest '.*' '.*' '.*'".format(cfg.CB_CLUSTER_TAG),
-                                 timeout=5)
-    _, stdout, _ = rabbitmq_client.exec_command("sudo rabbitmqctl list_vhosts", timeout=5)
+    rabbitmq_client.exec_command("sudo rabbitmqctl delete_vhost {0}".format(cfg.CB_CLUSTER_TAG))
+    rabbitmq_client.exec_command("sudo rabbitmqctl add_vhost {0}".format(cfg.CB_CLUSTER_TAG))
+    rabbitmq_client.exec_command("sudo rabbitmqctl set_permissions -p {0} guest '.*' '.*' '.*'".format(cfg.CB_CLUSTER_TAG))
+    _, stdout, _ = rabbitmq_client.exec_command("sudo rabbitmqctl list_vhosts")
     for line in stdout.readlines():
         sys.stdout.write(line)
     time.sleep(30)
