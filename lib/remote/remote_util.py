@@ -1961,7 +1961,7 @@ class RemoteMachineShellConnection:
                 options=" -b "+bucket.name+" -u "+userId+" -p password"+replicaOption
             suffix = "_"+bucket.name+"_N%2FA.csv"
             if data_path == None:
-               suffix = "_"+bucket.name+"_"+self.ip+"_%3A8091.csv"
+               suffix = "_"+bucket.name+"_"+self.ip+"%3A8091.csv"
             prefix = str(uuid.uuid1())
             fileName=prefix+".csv"
             genFileName = prefix + suffix

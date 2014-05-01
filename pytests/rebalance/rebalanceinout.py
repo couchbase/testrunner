@@ -38,14 +38,14 @@ class RebalanceInOutTests(RebalanceBaseTest):
             task.result(self.wait_timeout * 20)
         prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init],self.buckets)
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init],self.buckets)
-        disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init],self.buckets, data_path)
+        disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init],self.buckets, path = data_path)
         self.compare_vbucketseq_failoverlogs(prev_vbucket_stats,prev_failover_stats)
         self.cluster.rebalance(self.servers[:self.num_servers-1], servs_in, servs_out)
         self.sleep(10)
         self.verify_cluster_stats(result_nodes)
         new_failover_stats  = self.compare_failovers_logs(prev_failover_stats,result_nodes,self.buckets)
         new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats,result_nodes,self.buckets,perNode= False)
-        self.data_analysis_active_replica_all(disk_active_dataset,disk_replica_dataset,result_nodes,self.buckets, data_path)
+        self.data_analysis_active_replica_all(disk_active_dataset,disk_replica_dataset,result_nodes,self.buckets, path = data_path)
         self.compare_vbucketseq_failoverlogs(new_vbucket_stats,new_failover_stats)
 
     """Rebalances nodes out and in of the cluster while doing mutations with max
