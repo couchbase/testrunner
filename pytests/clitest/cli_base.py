@@ -16,6 +16,7 @@ class CliBaseTest(BaseTestCase):
         self.shell = RemoteMachineShellConnection(self.master)
         info = self.shell.extract_remote_info()
         type = info.type.lower()
+        self.excluded_commands = self.input.param("excluded_commands", None)
         self.os = 'linux'
         self.cli_command_path = LINUX_COUCHBASE_BIN_PATH
         if type == 'windows':

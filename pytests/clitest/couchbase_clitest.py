@@ -7,6 +7,7 @@ from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from pprint import pprint
+from testconstants import CLI_COMMANDS
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
  'COMMAND': {'bucket-compact': 'compact database and index data',
@@ -307,19 +308,34 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertTrue("SUCCESS: bucket-create" in output[0], "Fail to create bucket")
 
     def testHelp(self):
-        remote_client = RemoteMachineShellConnection(self.master)
-        options = self.input.param('options', "")
-        output, error = remote_client.execute_couchbase_cli(cli_command="", cluster_host=None, user=None, password=None, options=options)
-        result = self._get_dict_from_output(output)
-        expected_result = help_short
-        if "-h" in options:
-            expected_result = help
-        pprint(result)
-        if result == expected_result:
-            self.log.info("Correct help info was found")
-        else:
-            self.fail(set(result.keys()) - set(help.keys()))
-        remote_client.disconnect()
+        command_with_error = {}
+        shell = RemoteMachineShellConnection(self.master)
+        for cli in CLI_COMMANDS:
+            """ excluded_commands should separate by ';' """
+            if self.excluded_commands is not None:
+                if ";" in self.excluded_commands:
+                    excluded_commands = self.excluded_commands.split(";")
+                else:
+                    excluded_commands = self.excluded_commands
+                if cli in excluded_commands:
+                    self.log.info("command {0} test will be skipped.".format(cli))
+                    continue
+            if self.os == "windows":
+                cli = '.'.join([cli, "exe"])
+            option = " -h"
+            if cli == "erl":
+                option = " -version"
+            command = ''.join([self.cli_command_path, cli, option])
+            self.log.info("test -h of command {0}".format(cli))
+            output, error = shell.execute_command(command, use_channel=True)
+            """ check if the first line is not empty """
+            if not output[0]:
+                self.log.error("this help command {0} may not work!".format(cli))
+            if error:
+                command_with_error[cli] = error[0]
+        if command_with_error:
+            raise Exception("some commands throw out error %s " %s command_with_error)
+        shell.disconnect()
 
     def testInfoCommands(self):
         remote_client = RemoteMachineShellConnection(self.master)
