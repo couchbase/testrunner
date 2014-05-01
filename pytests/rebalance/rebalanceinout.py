@@ -222,7 +222,6 @@ class RebalanceInOutTests(RebalanceBaseTest):
                                self.servers[1:init_num_nodes], [])
         gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
-        prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.num_servers],self.buckets)
         for i in range(self.num_servers):
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
 
@@ -233,7 +232,6 @@ class RebalanceInOutTests(RebalanceBaseTest):
             for task in tasks:
                 task.result()
             self.verify_cluster_stats(self.servers[:init_num_nodes])
-            self.compare_vbucket_seqnos(prev_vbucket_stats,self.servers[:init_num_nodes],self.buckets,perNode= False)
 
     """Rebalances nodes into and out of the cluster while doing mutations and
     deletions.
