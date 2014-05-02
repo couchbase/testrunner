@@ -33,14 +33,15 @@ class RebalanceInOutTests(RebalanceBaseTest):
         tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
         servs_in = self.servers[self.nodes_init:self.nodes_init+1]
         servs_out = self.servers[self.nodes_init-1:self.nodes_init]
-        result_nodes = set(self.servers[:self.nodes_init]+ servs_in) - set(servs_out)
+        result_nodes = list(set(self.servers[:self.nodes_init]+ servs_in) - set(servs_out))
         for task in tasks:
             task.result(self.wait_timeout * 20)
         prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init],self.buckets)
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init],self.buckets)
         disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init],self.buckets, path = data_path)
         self.compare_vbucketseq_failoverlogs(prev_vbucket_stats,prev_failover_stats)
-        self.cluster.rebalance(self.servers[:self.num_servers-1], servs_in, servs_out)
+        self.cluster.rebalance(self.servers[:self.nodes_init-1], servs_in, servs_out)
+        RebalanceHelper.wait_for_replication(result_nodes, self.cluster)
         self.sleep(10)
         self.verify_cluster_stats(result_nodes)
         new_failover_stats  = self.compare_failovers_logs(prev_failover_stats,result_nodes,self.buckets)
