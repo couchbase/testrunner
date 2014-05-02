@@ -31,6 +31,8 @@ def get_sftp_client(ip):
         sys.exit(1)
 
 def start_rabbitmq():
+    vhost_present = False
+    tries = 1
     print("\n##### Setting up RabbitMQ @ {0} #####".format(cfg.RABBITMQ_IP))
     rabbitmq_client = get_ssh_client(cfg.RABBITMQ_IP)
     _, stdout, _ = rabbitmq_client.exec_command("ps aux|grep rabbitmq|grep -v grep|awk \'{print $2}\'")
@@ -49,27 +51,49 @@ def start_rabbitmq():
     for line in stdout.readlines():
        sys.stdout.write(line)
     print("Rabbitmq has been restarted and is now running!")
-    rabbitmq_client.exec_command("sudo rabbitmqctl delete_vhost {0}".format(cfg.CB_CLUSTER_TAG))
-    rabbitmq_client.exec_command("sudo rabbitmqctl add_vhost {0}".format(cfg.CB_CLUSTER_TAG))
-    rabbitmq_client.exec_command("sudo rabbitmqctl set_permissions -p {0} guest '.*' '.*' '.*'".format(cfg.CB_CLUSTER_TAG))
     _, stdout, _ = rabbitmq_client.exec_command("sudo rabbitmqctl list_vhosts")
     for line in stdout.readlines():
+        if not vhost_present:
+            if cfg.CB_CLUSTER_TAG in line:
+                vhost_present = True
         sys.stdout.write(line)
+    if not vhost_present :
+        print ("Adding vhost {0} and setting permissions".format(cfg.CB_CLUSTER_TAG))
+        rabbitmq_client.exec_command("sudo rabbitmqctl add_vhost {0}".format(cfg.CB_CLUSTER_TAG))
+        rabbitmq_client.exec_command("sudo rabbitmqctl set_permissions -p {0} guest '.*' '.*' '.*'".format(cfg.CB_CLUSTER_TAG))
+        _, stdout, _ = rabbitmq_client.exec_command("sudo rabbitmqctl list_vhosts")
+        for line in stdout.readlines():
+            sys.stdout.write(line)
     time.sleep(30)
-    try:
-        Connection(host=cfg.RABBITMQ_IP, userid="guest", password="guest", virtual_host=cfg.CB_CLUSTER_TAG)
-        print("Connected to RabbitMQ vhost")
-    except Exception as e:
-        print e
-        sys.exit(1)
+    while True:
+        try:
+            tries += 1
+            Connection(host=cfg.RABBITMQ_IP, userid="guest", password="guest", virtual_host=cfg.CB_CLUSTER_TAG)
+            print("Connected to RabbitMQ vhost")
+            break
+        except Exception as e:
+            print e
+            if tries <= 5:
+                print("Retrying connection {}/5 ...".format(tries))
+                rabbitmq_client.exec_command("sudo rabbitmqctl delete_vhost {0}".format(cfg.CB_CLUSTER_TAG))
+                rabbitmq_client.exec_command("sudo rabbitmqctl add_vhost {0}".format(cfg.CB_CLUSTER_TAG))
+                rabbitmq_client.exec_command("sudo rabbitmqctl set_permissions -p {0} guest '.*' '.*' '.*'".format(cfg.CB_CLUSTER_TAG))
+                time.sleep(30)
+                continue
+            sys.exit(1)
     rabbitmq_client.close()
 
 def start_worker(worker_ip):
     print("##### Setting up Celery Worker @ {0} #####".format(worker_ip))
     worker_client = get_ssh_client(worker_ip)
-    worker_client.exec_command("screen -ls | grep \'celery\' | awk '{print $1}' | xargs -i screen -X -S {} quit")
     # kill celery,remove screenlog
-    worker_client.exec_command("ps aux | grep celery | awk '{print $2}' | xargs killall -9 ")
+    _, stdout, _ = worker_client.exec_command("ps aux|grep celery|grep -v grep|awk \'{print $2}\'")
+    for pid in stdout:
+        if pid == "":
+            continue
+        print ("Killing existing Celery process ...pid {}".format(pid))
+        worker_client.exec_command("sudo kill -9 {0}".format(pid))
+    worker_client.exec_command("screen -ls | grep \'celery\' | awk '{print $1}' | xargs -i screen -X -S {} quit")
     worker_client.exec_command("screen -wipe")
     worker_client.exec_command("rm -rf {0}/screenlog.0".format(cfg.WORKER_PYSYSTESTS_PATH))
     _, stdout, _ = worker_client.exec_command("ps aux|grep memc|grep -v grep|awk \'{print $2}\'")
