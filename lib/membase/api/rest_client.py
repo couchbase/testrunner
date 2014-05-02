@@ -1003,7 +1003,7 @@ class RestConnection(object):
                 if response['status'] in ['200', '201', '202'] and count_cbserver_up == 0:
                     log.info("couchbase server is up but down soon.")
                     time.sleep(1)
-                    break_out += 1   # time needed for couchbase server reload after reset config
+                    break_out += 1  # time needed for couchbase server reload after reset config
                 elif response['status'] in ['200', '201', '202']:
                     count_cbserver_up = 2
                     log.info("couchbase server is up again")
@@ -2244,7 +2244,7 @@ class NodeDiskStorage(object):
 
 class Bucket(object):
     def __init__(self, bucket_size='', name="", authType="sasl", saslPassword="", num_replicas=0, port=11211, master_id=None,
-                 type=''):
+                 type='', eviction_policy="valueOnly"):
         self.name = name
         self.port = port
         self.type = type
@@ -2260,6 +2260,7 @@ class Bucket(object):
         self.kvs = {1:KVStore()}
         self.authType = authType
         self.master_id = master_id
+        self.eviction_policy = eviction_policy
 
     def __str__(self):
         return self.name
