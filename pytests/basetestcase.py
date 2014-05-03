@@ -45,9 +45,9 @@ class BaseTestCase(unittest.TestCase):
         self.cluster = Cluster()
         self.pre_warmup_stats = {}
         self.cleanup = False
-        self.data_collector=DataCollector()
-        self.data_analyzer=DataAnalyzer()
-        self.result_analyzer=DataAnalysisResultAnalyzer()
+        self.data_collector = DataCollector()
+        self.data_analyzer = DataAnalyzer()
+        self.result_analyzer = DataAnalysisResultAnalyzer()
         try:
             self.vbuckets = self.input.param("vbuckets", None)
             self.upr = self.input.param("upr", None)
@@ -447,7 +447,7 @@ class BaseTestCase(unittest.TestCase):
         kv_store - The index of the bucket's kv_store to use. (int)
     """
     def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0,
-                          only_store_hash=True, batch_size=1000, pause_secs=10, timeout_secs=30,
+                          only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30,
                           proxy_client=None):
         tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag,
                                              only_store_hash, batch_size, pause_secs, timeout_secs,
@@ -892,58 +892,58 @@ class BaseTestCase(unittest.TestCase):
             remote_client.disconnect()
         self.log.info("========= CHANGED ALL PORTS ===========")
 
-    def get_vbucket_seqnos(self,servers,buckets):
+    def get_vbucket_seqnos(self, servers, buckets):
         """
             Method to get vbucket information from a cluster using cbstats
         """
-        new_vbucket_stats=self.data_collector.collect_vbucket_stats(buckets,servers,collect_vbucket = False,collect_vbucket_seqno = True,collect_vbucket_details = False, perNode = True)
+        new_vbucket_stats = self.data_collector.collect_vbucket_stats(buckets, servers, collect_vbucket=False, collect_vbucket_seqno=True, collect_vbucket_details=False, perNode=True)
         new_vbucket_stats = self.compare_per_node_for_vbucket_consistency(new_vbucket_stats)
         return new_vbucket_stats
 
-    def get_vbucket_seqnos_per_Node_Only(self,servers,buckets):
+    def get_vbucket_seqnos_per_Node_Only(self, servers, buckets):
         """
             Method to get vbucket information from a cluster using cbstats
         """
-        new_vbucket_stats=self.data_collector.collect_vbucket_stats(buckets,servers,collect_vbucket = False,collect_vbucket_seqno = True,collect_vbucket_details = False, perNode = True)
+        new_vbucket_stats = self.data_collector.collect_vbucket_stats(buckets, servers, collect_vbucket=False, collect_vbucket_seqno=True, collect_vbucket_details=False, perNode=True)
         self.compare_per_node_for_vbucket_consistency(new_vbucket_stats)
         return new_vbucket_stats
 
-    def compare_vbucket_seqnos(self,prev_vbucket_stats,servers,buckets,perNode=False):
+    def compare_vbucket_seqnos(self, prev_vbucket_stats, servers, buckets, perNode=False):
         """
             Method to compare vbucket information to a previously stored value
         """
         compare = "=="
         if  self.withOps:
-            compare  =  "<="
+            compare = "<="
         comp_map = {}
         comp_map["uuid"] = { 'type' : "string", 'operation': "=="}
         comp_map["high_seqno"] = { 'type' : "long", 'operation' :compare}
         comp_map["purge_seqno"] = { 'type' : "string", 'operation' : compare}
 
-        new_vbucket_stats  = {}
+        new_vbucket_stats = {}
         self.log.info(" Begin Verification for vbucket sequence numbers comparison ")
         if perNode:
-            new_vbucket_stats=self.get_vbucket_seqnos_per_Node_Only(servers,buckets)
+            new_vbucket_stats = self.get_vbucket_seqnos_per_Node_Only(servers, buckets)
         else:
-            new_vbucket_stats=self.get_vbucket_seqnos(servers,buckets)
+            new_vbucket_stats = self.get_vbucket_seqnos(servers, buckets)
         isNotSame = True
         result = ""
-        summary  = ""
+        summary = ""
         if not perNode:
-            compare_vbucket_seqnos_result=self.data_analyzer.compare_stats_dataset(prev_vbucket_stats,new_vbucket_stats,"vbucket_id",comparisonMap = comp_map)
-            isNotSame,summary,result=self.result_analyzer.analyze_all_result(compare_vbucket_seqnos_result,addedItems = False, deletedItems = False, updatedItems = False)
+            compare_vbucket_seqnos_result = self.data_analyzer.compare_stats_dataset(prev_vbucket_stats, new_vbucket_stats, "vbucket_id", comparisonMap=comp_map)
+            isNotSame, summary, result = self.result_analyzer.analyze_all_result(compare_vbucket_seqnos_result, addedItems=False, deletedItems=False, updatedItems=False)
         else:
-            compare_vbucket_seqnos_result=self.data_analyzer.compare_per_node_stats_dataset(prev_vbucket_stats,new_vbucket_stats,"vbucket_id",comparisonMap = comp_map)
-            isNotSame,summary,result=self.result_analyzer.analyze_per_node_result(compare_vbucket_seqnos_result,addedItems = False, deletedItems = False, updatedItems = False)
+            compare_vbucket_seqnos_result = self.data_analyzer.compare_per_node_stats_dataset(prev_vbucket_stats, new_vbucket_stats, "vbucket_id", comparisonMap=comp_map)
+            isNotSame, summary, result = self.result_analyzer.analyze_per_node_result(compare_vbucket_seqnos_result, addedItems=False, deletedItems=False, updatedItems=False)
         self.assertTrue(isNotSame, result)
         self.log.info(" End Verification for vbucket sequence numbers comparison ")
         return new_vbucket_stats
 
-    def compare_per_node_for_vbucket_consistency(self,map1,check_high_seqno = False, check_purge_seqno = False):
+    def compare_per_node_for_vbucket_consistency(self, map1, check_high_seqno=False, check_purge_seqno=False):
         """
             Method to check uuid is consistent on active and replica new_vbucket_stats
         """
-        bucketMap={}
+        bucketMap = {}
         logic = True
         for bucket in map1.keys():
             map = {}
@@ -957,13 +957,13 @@ class BaseTestCase(unittest.TestCase):
                     if vbucket in map.keys():
                         if  map[vbucket]['uuid'] != uuid:
                             logic = False
-                            output += "\n bucket {0}, vbucket {1} :: Original in node {2}. UUID {3}, Change in node {4}. UUID {5}".format(bucket,vbucket,nodeMap[vbucket],map[vbucket]['uuid'],node,uuid)
+                            output += "\n bucket {0}, vbucket {1} :: Original in node {2}. UUID {3}, Change in node {4}. UUID {5}".format(bucket, vbucket, nodeMap[vbucket], map[vbucket]['uuid'], node, uuid)
                         if  check_high_seqno and int(map[vbucket]['high_seqno']) != int(high_seqno):
                             logic = False
-                            output += "\n bucket {0}, vbucket {1} :: Original in node {2}. UUID {3}, Change in node {4}. UUID {5}".format(bucket,vbucket,nodeMap[vbucket],map[vbucket]['high_seqno'],node,high_seqno)
+                            output += "\n bucket {0}, vbucket {1} :: Original in node {2}. UUID {3}, Change in node {4}. UUID {5}".format(bucket, vbucket, nodeMap[vbucket], map[vbucket]['high_seqno'], node, high_seqno)
                         if  check_purge_seqno and int(map[vbucket]['purge_seqno']) != int(purge_seqno):
                             logic = False
-                            output += "\n bucket {0}, vbucket {1} :: Original in node {2}. UUID {3}, Change in node {4}. UUID {5}".format(bucket,vbucket,nodeMap[vbucket],map[vbucket]['high_seqno'],node,high_seqno)
+                            output += "\n bucket {0}, vbucket {1} :: Original in node {2}. UUID {3}, Change in node {4}. UUID {5}".format(bucket, vbucket, nodeMap[vbucket], map[vbucket]['high_seqno'], node, high_seqno)
                     else:
                         map[vbucket] = {}
                         map[vbucket]['uuid'] = uuid
@@ -974,7 +974,7 @@ class BaseTestCase(unittest.TestCase):
         self.assertTrue(logic, output)
         return bucketMap
 
-    def print_results_per_node(self,map):
+    def print_results_per_node(self, map):
         """ Method to print map results - Used only for debugging purpose """
         output = ""
         for bucket in map.keys():
@@ -984,30 +984,30 @@ class BaseTestCase(unittest.TestCase):
                 for vbucket in map[bucket][node].keys():
                     print "   for vbucket {0}".format(vbucket)
                     for key in map[bucket][node][vbucket].keys():
-                        print "            :: for key {0} = {1}".format(key,map[bucket][node][vbucket][key])
+                        print "            :: for key {0} = {1}".format(key, map[bucket][node][vbucket][key])
 
-    def get_data_set_all(self,servers,buckets, path = None):
+    def get_data_set_all(self, servers, buckets, path=None):
         """ Method to get all data set for buckets and from the servers """
-        info,memory_dataset=self.data_collector.collect_data(servers, buckets, data_path = path, perNode = False)
+        info, memory_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False)
         return memory_dataset
 
-    def get_and_compare_active_replica_data_set_all(self,servers, buckets, path = None):
+    def get_and_compare_active_replica_data_set_all(self, servers, buckets, path=None):
         """
            Method to get all data set for buckets and from the servers
            1)  Get active and replica data in the cluster
            2)  Compare active and replica data in the cluster
            3)  Return active and replica data
         """
-        info,disk_replica_dataset=self.data_collector.collect_data(servers,buckets, data_path = path, perNode = False, getReplica = True)
-        info,disk_active_dataset=self.data_collector.collect_data(servers,buckets, data_path = path, perNode = False, getReplica = False)
+        info, disk_replica_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=True)
+        info, disk_active_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=False)
         self.log.info(" Begin Verification for Active Vs Replica ")
-        comparison_result = self.data_analyzer.compare_all_dataset(info,disk_replica_dataset,disk_active_dataset)
-        logic,summary,output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems = False, addedItems = False, updatedItems = False)
+        comparison_result = self.data_analyzer.compare_all_dataset(info, disk_replica_dataset, disk_active_dataset)
+        logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=False, addedItems=False, updatedItems=False)
         self.assertTrue(logic, output)
         self.log.info(" End Verification for Active Vs Replica ")
         return disk_replica_dataset, disk_active_dataset
 
-    def data_analysis_active_replica_all(self,prev_data_set_active, prev_data_set_replica, servers, buckets, path = None):
+    def data_analysis_active_replica_all(self, prev_data_set_active, prev_data_set_replica, servers, buckets, path=None):
         """
             Method to do data analysis using cb transfer
             This works at cluster level
@@ -1016,37 +1016,37 @@ class BaseTestCase(unittest.TestCase):
             3) Compare Current Active and Replica data
         """
         self.log.info(" Begin Verification for data comparison ")
-        info,curr_data_set_replica=self.data_collector.collect_data(servers,buckets, data_path = path, perNode = False, getReplica = True)
-        info,curr_data_set_active=self.data_collector.collect_data(servers,buckets, data_path = path, perNode = False, getReplica = False)
+        info, curr_data_set_replica = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=True)
+        info, curr_data_set_active = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=False)
         self.log.info(" Comparing Prev vs Current :: Active and Replica ")
-        comparison_result_replica = self.data_analyzer.compare_all_dataset(info,prev_data_set_replica,curr_data_set_replica)
-        comparison_result_active = self.data_analyzer.compare_all_dataset(info,prev_data_set_active,curr_data_set_active)
-        logic_replica,summary_replica,output_replica = self.result_analyzer.analyze_all_result(comparison_result_replica, deletedItems = False, addedItems = False, updatedItems = False)
-        logic_active,summary_active,output_active = self.result_analyzer.analyze_all_result(comparison_result_active, deletedItems = False, addedItems = False, updatedItems = False)
+        comparison_result_replica = self.data_analyzer.compare_all_dataset(info, prev_data_set_replica, curr_data_set_replica)
+        comparison_result_active = self.data_analyzer.compare_all_dataset(info, prev_data_set_active, curr_data_set_active)
+        logic_replica, summary_replica, output_replica = self.result_analyzer.analyze_all_result(comparison_result_replica, deletedItems=False, addedItems=False, updatedItems=False)
+        logic_active, summary_active, output_active = self.result_analyzer.analyze_all_result(comparison_result_active, deletedItems=False, addedItems=False, updatedItems=False)
         self.assertTrue(logic_replica, output_replica)
         self.assertTrue(logic_active, output_active)
         self.log.info(" Comparing Current :: Active and Replica ")
-        comparison_result = self.data_analyzer.compare_all_dataset(info,curr_data_set_active,curr_data_set_replica)
-        logic,summary,output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems = False, addedItems = False, updatedItems = False)
+        comparison_result = self.data_analyzer.compare_all_dataset(info, curr_data_set_active, curr_data_set_replica)
+        logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=False, addedItems=False, updatedItems=False)
         self.log.info(" End Verification for data comparison ")
 
-    def data_analysis_all(self,prev_data_set,servers,buckets, path = None):
+    def data_analysis_all(self, prev_data_set, servers, buckets, path=None):
         """
             Method to do data analysis using cb transfer
             This works at cluster level
         """
         self.log.info(" Begin Verification for data comparison ")
-        info,curr_data_set=self.data_collector.collect_data(servers,buckets,data_path = path, perNode = False)
-        comparison_result=self.data_analyzer.compare_all_dataset(info,prev_data_set,curr_data_set)
-        logic,summary,output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems = False, addedItems = False, updatedItems = False)
+        info, curr_data_set = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False)
+        comparison_result = self.data_analyzer.compare_all_dataset(info, prev_data_set, curr_data_set)
+        logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=False, addedItems=False, updatedItems=False)
         self.assertTrue(logic, output)
         self.log.info(" End Verification for data comparison ")
 
-    def compare_per_node_for_failovers_consistency(self,map1):
+    def compare_per_node_for_failovers_consistency(self, map1):
         """
             Method to check uuid is consistent on active and replica new_vbucket_stats
         """
-        bucketMap={}
+        bucketMap = {}
         for bucket in map1.keys():
             map = {}
             nodeMap = {}
@@ -1060,13 +1060,13 @@ class BaseTestCase(unittest.TestCase):
                     if vbucket in map.keys():
                         if  map[vbucket]['id'] != id:
                             logic = False
-                            output += "\n bucket {0}, vbucket {1} :: Original node {2}. UUID {3}, Change node {4}. UUID {5}".format(bucket,vbucket,nodeMap[vbucket],map[vbucket]['id'],node,id)
+                            output += "\n bucket {0}, vbucket {1} :: Original node {2}. UUID {3}, Change node {4}. UUID {5}".format(bucket, vbucket, nodeMap[vbucket], map[vbucket]['id'], node, id)
                         if  int(map[vbucket]['seq']) == int(seq):
                             logic = False
-                            output += "\n bucket {0}, vbucket {1} :: Original node {2}. seq {3}, Change node {4}. seq {5}".format(bucket,vbucket,nodeMap[vbucket],map[vbucket]['seq'],node,seq)
+                            output += "\n bucket {0}, vbucket {1} :: Original node {2}. seq {3}, Change node {4}. seq {5}".format(bucket, vbucket, nodeMap[vbucket], map[vbucket]['seq'], node, seq)
                         if  int(map[vbucket]['num_entries']) == int(num_entries):
                             logic = False
-                            output += "\n bucket {0}, vbucket {1} :: Original node {2}. num_entries {3}, Change node {4}. num_entries {5}".format(bucket,vbucket,nodeMap[vbucket],map[vbucket]['num_entries'],node,num_entries)
+                            output += "\n bucket {0}, vbucket {1} :: Original node {2}. num_entries {3}, Change node {4}. num_entries {5}".format(bucket, vbucket, nodeMap[vbucket], map[vbucket]['num_entries'], node, num_entries)
                     else:
                         map[vbucket] = {}
                         map[vbucket]['id'] = id
@@ -1077,15 +1077,15 @@ class BaseTestCase(unittest.TestCase):
         self.assertTrue(logic, output)
         return bucketMap
 
-    def get_failovers_logs(self,servers,buckets):
+    def get_failovers_logs(self, servers, buckets):
         """
             Method to get failovers logs from a cluster using cbstats
         """
-        new_failovers_stats = self.data_collector.collect_failovers_stats(buckets,servers, perNode = True)
+        new_failovers_stats = self.data_collector.collect_failovers_stats(buckets, servers, perNode=True)
         new_failovers_stats = self.compare_per_node_for_failovers_consistency(new_failovers_stats)
         return new_failovers_stats
 
-    def compare_failovers_logs(self,prev_failovers_stats,servers,buckets,perNode=False,comp_map=None):
+    def compare_failovers_logs(self, prev_failovers_stats, servers, buckets, perNode=False, comp_map=None):
         """
             Method to compare failovers log information to a previously stored value
         """
@@ -1095,18 +1095,18 @@ class BaseTestCase(unittest.TestCase):
         comp_map["num_entries"] = { 'type' : "string", 'operation' : "<="}
 
         self.log.info(" Begin Verification for failovers logs comparison ")
-        new_failovers_stats = self.get_failovers_logs(servers,buckets)
-        compare_failovers_result = self.data_analyzer.compare_stats_dataset(prev_failovers_stats,new_failovers_stats,"vbucket_id",comp_map)
-        isNotSame,summary,result = self.result_analyzer.analyze_all_result(compare_failovers_result,addedItems = False, deletedItems = False, updatedItems = False)
+        new_failovers_stats = self.get_failovers_logs(servers, buckets)
+        compare_failovers_result = self.data_analyzer.compare_stats_dataset(prev_failovers_stats, new_failovers_stats, "vbucket_id", comp_map)
+        isNotSame, summary, result = self.result_analyzer.analyze_all_result(compare_failovers_result, addedItems=False, deletedItems=False, updatedItems=False)
         self.assertTrue(isNotSame, result)
         self.log.info(" End Verification for failovers logs comparison ")
         return compare_failovers_result
 
-    def compare_per_node_for_failovers_consistency(self,map1, vbucketMap):
+    def compare_per_node_for_failovers_consistency(self, map1, vbucketMap):
         """
             Method to check uuid is consistent on active and replica new_vbucket_stats
         """
-        bucketMap={}
+        bucketMap = {}
         logic = True
         for bucket in map1.keys():
             map = {}
@@ -1121,13 +1121,13 @@ class BaseTestCase(unittest.TestCase):
                     if vbucket in map.keys():
                         if  map[vbucket]['id'] != id:
                             logic = False
-                            output += "\n bucket {0}, vbucket {1} :: Original node {2} {3} :: UUID {4}, Change node {5} {6} UUID {7}".format(bucket,vbucket,tempMap[vbucket]['node'],tempMap[vbucket]['state'],map[vbucket]['id'],node,state,id)
+                            output += "\n bucket {0}, vbucket {1} :: Original node {2} {3} :: UUID {4}, Change node {5} {6} UUID {7}".format(bucket, vbucket, tempMap[vbucket]['node'], tempMap[vbucket]['state'], map[vbucket]['id'], node, state, id)
                         if  int(map[vbucket]['seq']) != int(seq):
                             logic = False
-                            output += "\n bucket {0}, vbucket {1} :: Original node {2} {3} :: seq {4}, Change node {5} {6}  :: seq {7}".format(bucket,vbucket,tempMap[vbucket]['node'],tempMap[vbucket]['state'],map[vbucket]['seq'],node,state,seq)
+                            output += "\n bucket {0}, vbucket {1} :: Original node {2} {3} :: seq {4}, Change node {5} {6}  :: seq {7}".format(bucket, vbucket, tempMap[vbucket]['node'], tempMap[vbucket]['state'], map[vbucket]['seq'], node, state, seq)
                         if  int(map[vbucket]['num_entries']) != int(num_entries):
                             logic = False
-                            output += "\n bucket {0}, vbucket {1} :: Original node {2} {3} :: num_entries {4}, Change node {5} {6} :: num_entries {7}".format(bucket,vbucket,tempMap[vbucket]['node'],tempMap[vbucket]['state'],map[vbucket]['num_entries'],node,state,num_entries)
+                            output += "\n bucket {0}, vbucket {1} :: Original node {2} {3} :: num_entries {4}, Change node {5} {6} :: num_entries {7}".format(bucket, vbucket, tempMap[vbucket]['node'], tempMap[vbucket]['state'], map[vbucket]['num_entries'], node, state, num_entries)
                     else:
                         map[vbucket] = {}
                         tempMap[vbucket] = {}
@@ -1140,51 +1140,51 @@ class BaseTestCase(unittest.TestCase):
         self.assertTrue(logic, output)
         return bucketMap
 
-    def compare_vbucketseq_failoverlogs(self, vbucketseq = {}, failoverlog = {}):
+    def compare_vbucketseq_failoverlogs(self, vbucketseq={}, failoverlog={}):
         """
             Method to compare failoverlog and vbucket-seq for uuid and  seq no
         """
         isTrue = True
-        output =  ""
+        output = ""
         for bucket in  vbucketseq.keys():
             for  vbucket in vbucketseq[bucket].keys():
-                 seq  =  vbucketseq[bucket][vbucket]['high_seqno']
+                 seq = vbucketseq[bucket][vbucket]['high_seqno']
                  uuid = vbucketseq[bucket][vbucket]['uuid']
-                 fseq =  failoverlog[bucket][vbucket]['seq']
-                 fuuid =  failoverlog[bucket][vbucket]['id']
-                 if  seq <  fseq:
-                    output  +=  "\n Error Condition in bucket {0} vbucket {1}:: seq : vbucket-seq {2} != failoverlog-seq {3}".format(bucket,vbucket,seq,fseq)
+                 fseq = failoverlog[bucket][vbucket]['seq']
+                 fuuid = failoverlog[bucket][vbucket]['id']
+                 if  seq < fseq:
+                    output += "\n Error Condition in bucket {0} vbucket {1}:: seq : vbucket-seq {2} != failoverlog-seq {3}".format(bucket, vbucket, seq, fseq)
                     isTrue = False
-                 if  uuid!=  fuuid:
-                    output  +=  "\n Error Condition in bucket {0} vbucket {1}:: uuid : vbucket-seq {2} != failoverlog-seq {3}".format(bucket,vbucket,uuid,fuuid)
+                 if  uuid != fuuid:
+                    output += "\n Error Condition in bucket {0} vbucket {1}:: uuid : vbucket-seq {2} != failoverlog-seq {3}".format(bucket, vbucket, uuid, fuuid)
                     isTrue = False
         self.assertTrue(isTrue, output)
 
-    def get_failovers_logs(self,servers,buckets):
+    def get_failovers_logs(self, servers, buckets):
         """
             Method to get failovers logs from a cluster using cbstats
         """
-        vbucketMap = self.data_collector.collect_vbucket_stats(buckets,servers,collect_vbucket = True,
-            collect_vbucket_seqno = False,collect_vbucket_details = False, perNode = True)
-        new_failovers_stats = self.data_collector.collect_failovers_stats(buckets,servers, perNode = True)
+        vbucketMap = self.data_collector.collect_vbucket_stats(buckets, servers, collect_vbucket=True,
+            collect_vbucket_seqno=False, collect_vbucket_details=False, perNode=True)
+        new_failovers_stats = self.data_collector.collect_failovers_stats(buckets, servers, perNode=True)
         new_failovers_stats = self.compare_per_node_for_failovers_consistency(new_failovers_stats, vbucketMap)
         return new_failovers_stats
 
-    def compare_failovers_logs(self,prev_failovers_stats,servers,buckets,perNode=False):
+    def compare_failovers_logs(self, prev_failovers_stats, servers, buckets, perNode=False):
         """
             Method to compare failovers log information to a previously stored value
         """
         comp_map = {}
-        compare =  "=="
+        compare = "=="
         if self.withOps:
-            compare =  "<="
+            compare = "<="
         comp_map["id"] = { 'type' : "string", 'operation': "=="}
         comp_map["seq"] = { 'type' : "long", 'operation' : compare}
         comp_map["num_entries"] = { 'type' : "string", 'operation' : compare}
         self.log.info(" Begin Verification for failovers logs comparison ")
-        new_failovers_stats = self.get_failovers_logs(servers,buckets)
-        compare_failovers_result = self.data_analyzer.compare_stats_dataset(prev_failovers_stats,new_failovers_stats,"vbucket_id",comp_map)
-        isNotSame,summary,result = self.result_analyzer.analyze_all_result(compare_failovers_result,addedItems = False, deletedItems = False, updatedItems = False)
+        new_failovers_stats = self.get_failovers_logs(servers, buckets)
+        compare_failovers_result = self.data_analyzer.compare_stats_dataset(prev_failovers_stats, new_failovers_stats, "vbucket_id", comp_map)
+        isNotSame, summary, result = self.result_analyzer.analyze_all_result(compare_failovers_result, addedItems=False, deletedItems=False, updatedItems=False)
         self.assertTrue(isNotSame, result)
         self.log.info(" End Verification for Failovers logs comparison ")
         return new_failovers_stats
