@@ -14,21 +14,26 @@ from remote.remote_util import RemoteMachineShellConnection
 class CreateDeleteViewTests(BaseTestCase):
 
     def setUp(self):
-        super(CreateDeleteViewTests, self).setUp()
-        self.bucket_ddoc_map = {}
-        self.ddoc_ops = self.input.param("ddoc_ops", None)
-        self.boot_op = self.input.param("boot_op", None)
-        self.nodes_in = self.input.param("nodes_in", 1)
-        self.nodes_out = self.input.param("nodes_out", 1)
-        self.test_with_view = self.input.param("test_with_view", False)
-        self.num_views_per_ddoc = self.input.param("num_views_per_ddoc", 1)
-        self.num_ddocs = self.input.param("num_ddocs", 1)
-        self.gen = None
-        self.default_design_doc_name = "Doc1"
-        self.default_map_func = 'function (doc) { emit(doc.age, doc.first_name);}'
-        self.updated_map_func = 'function (doc) { emit(null, doc);}'
-        self.default_view = View("View", self.default_map_func, None, False)
-        self.fragmentation_value = self.input.param("fragmentation_value", 80)
+        try:
+            super(CreateDeleteViewTests, self).setUp()
+            self.bucket_ddoc_map = {}
+            self.ddoc_ops = self.input.param("ddoc_ops", None)
+            self.boot_op = self.input.param("boot_op", None)
+            self.nodes_in = self.input.param("nodes_in", 1)
+            self.nodes_out = self.input.param("nodes_out", 1)
+            self.test_with_view = self.input.param("test_with_view", False)
+            self.num_views_per_ddoc = self.input.param("num_views_per_ddoc", 1)
+            self.num_ddocs = self.input.param("num_ddocs", 1)
+            self.gen = None
+            self.default_design_doc_name = "Doc1"
+            self.default_map_func = 'function (doc) { emit(doc.age, doc.first_name);}'
+            self.updated_map_func = 'function (doc) { emit(null, doc);}'
+            self.default_view = View("View", self.default_map_func, None, False)
+            self.fragmentation_value = self.input.param("fragmentation_value", 80)
+        except Exception as ex:
+            self.input.test_params["stop-on-failure"] = True
+            self.log.error("SETUP WAS FAILED. ALL TESTS WILL BE SKIPPED")
+            self.fail(ex)
 
     def tearDown(self):
         super(CreateDeleteViewTests, self).tearDown()
