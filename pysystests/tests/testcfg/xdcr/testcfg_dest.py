@@ -10,8 +10,8 @@ CLUSTER_RAM_QUOTA = "12500"
 
 # Add cluster setup json path, template and wait time
 SETUP_JSON = "/root/systest-worker/testrunner/pysystests/tests/xdcr/kv_xdcr_setup.js"
-SETUP_TEMPLATES = [r"""--name "default" --kvpair '"email":"$str10@couchbase.com" ''"city":"$str5"' \
- '"list":["$int1","$str1","$fl o1"]' '"map":{"sample" : "$str3", "complex" : "$fl o1", "val" : "$int2"}' \
+SETUP_TEMPLATES = [r"""--name "default" --kvpair '"email":"$str10@couchbase.com" ' \
+'"city":"$str5"' '"list":["$int1","$str1","$fl o1"]' '"map":{"sample" : "$str3", "complex" : "$fl o1", "val" : "$int2"}' \
 '"num":"$int"' '"fl o":"$fl o"' '"st":"$str"' '"li":"$lis"' '"di":"$dic"' '"b":"$boo"' --size 128 256 512""",
  r"""--name "template512" --kvpair '"email":"$str10@couchbase.com" ' '"city":"$str5"'  '"list":["$int1","$str1","$flo1"]' \
  '"map":{"sample" : "$str3", "complex" : "$flo1", "val" : "$int2"}' '"num":"$int"' '"flo":"$flo"' '"st":"$str"' \
