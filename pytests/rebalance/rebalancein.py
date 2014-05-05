@@ -35,20 +35,21 @@ class RebalanceInTests(RebalanceBaseTest):
         for task in tasks:
             task.result()
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
-        if self.output_time:
-            start_time = time.time()
-        prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init], self.buckets)
-        prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init], self.buckets)
-        disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init], self.buckets, path=data_path)
-        self.compare_vbucketseq_failoverlogs(prev_vbucket_stats, prev_failover_stats)
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
+        self._verify_stats_all_buckets(self.servers[:self.nodes_init],timeout = 120)
+        prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init],self.buckets)
+        prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init],self.buckets)
+        disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init],self.buckets, path = data_path)
+        self.compare_vbucketseq_failoverlogs(prev_vbucket_stats,prev_failover_stats)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])
         rebalance.result()
-        RebalanceHelper.wait_for_replication(self.servers[:self.nodes_in + self.nodes_init], self.cluster)
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + self.nodes_init])
+        self._verify_stats_all_buckets(self.servers[:self.nodes_in + self.nodes_init],timeout = 120)
         self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
-        new_failover_stats = self.compare_failovers_logs(prev_failover_stats, self.servers[:self.nodes_in + self.nodes_init], self.buckets)
-        new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, self.servers[:self.nodes_in + self.nodes_init], self.buckets)
-        self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
-        self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, self.servers[:self.nodes_in + self.nodes_init], self.buckets, path=data_path)
+        new_failover_stats = self.compare_failovers_logs(prev_failover_stats,self.servers[:self.nodes_in + self.nodes_init],self.buckets)
+        new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats,self.servers[:self.nodes_in + self.nodes_init],self.buckets)
+        self.compare_vbucketseq_failoverlogs(new_vbucket_stats,new_failover_stats)
+        self.data_analysis_active_replica_all(disk_active_dataset,disk_replica_dataset,self.servers[:self.nodes_in + self.nodes_init],self.buckets, path = data_path)
 
 
     """Rebalances nodes into a cluster while doing docs ops:create, delete, update.
@@ -168,25 +169,23 @@ class RebalanceInTests(RebalanceBaseTest):
     Once all nodes have been rebalanced in the test is finished."""
     def incremental_rebalance_in_with_ops(self):
         for i in range(1, self.num_servers, 2):
-            tasks = []
-            tasks.append(self.cluster.async_rebalance(self.servers[:i], self.servers[i:i + 2], []))
+            rebalance = self.cluster.async_rebalance(self.servers[:i], self.servers[i:i + 2], [])
             if self.doc_ops is not None:
             # define which doc's operation will be performed during rebalancing
             # only one type of ops can be passed
                 if("update" in self.doc_ops):
                     # 1/2th of data will be updated in each iteration
-                    tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
+                    self._load_all_buckets(self.master, self.gen_update, "update", 0)
                 elif("create" in self.doc_ops):
                     # 1/2th of initial data will be added in each iteration
                     gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items * (1 + i) / 2.0 , end=self.num_items * (1 + i / 2.0))
-                    tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0)
+                    self._load_all_buckets(self.master, gen_create, "create", 0)
                 elif("delete" in self.doc_ops):
                     # 1/(num_servers) of initial data will be removed after each iteration
                     # at the end we should get empty base( or couple items)
                     gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=int(self.num_items * (1 - i / (self.num_servers - 1.0))) + 1, end=int(self.num_items * (1 - (i - 1) / (self.num_servers - 1.0))))
-                    tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
-            for task in tasks:
-                task.result()
+                    self._load_all_buckets(self.master, gen_delete, "delete", 0)
+            rebalance.result()
             self.verify_cluster_stats(self.servers[:i + 2])
 
     """Rebalances nodes into a cluster  during view queries.

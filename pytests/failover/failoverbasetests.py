@@ -26,7 +26,7 @@ class FailoverBaseTest(BaseTestCase):
         self.recoveryType = self.input.param("recoveryType", "delta")
         self.bidirectional = self.input.param("bidirectional", False)
         self._value_size = self.input.param("value_size", 256)
-        self.doc_ops = self.input.param("doc_ops", None)
+        self.doc_ops = self.input.param("doc_ops", [])
         self.runViewsDuringFailover = self.input.param("runViewsDuringFailover", False)
         if self.doc_ops:
             self.doc_ops = self.doc_ops.split(":")
@@ -35,7 +35,7 @@ class FailoverBaseTest(BaseTestCase):
         credentials = self.input.membase_settings
         self.add_back_flag = False
         self.during_ops = self.input.param("during_ops", None)
-        self.graceful = self.input.param("graceful", False)
+        self.graceful = self.input.param("graceful", True)
         if self.recoveryType:
             self.recoveryType=self.recoveryType.split(":")
 
