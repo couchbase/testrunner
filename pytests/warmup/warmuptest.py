@@ -275,8 +275,6 @@ class WarmUpTests(BaseTestCase):
             remote_client.disconnect()
 
     def test_warm_up_progress(self):
-        self._load_dgm()
-
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self._verify_stats_all_buckets(self.servers[:self.num_servers])
         for bucket in self.buckets:
