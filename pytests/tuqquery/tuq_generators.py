@@ -34,13 +34,14 @@ class TuqGenerators(object):
         self.distict = False
         self.aggr_fns = {}
         self.aliases = {}
+        self.attr_order_clause_greater_than_select = []
 
     def generate_query(self, template):
         query = template
         for name_type, type_arg in self.type_args.iteritems():
             for attr_type_arg in type_arg:
                 query = query.replace('$%s%s' % (name_type, type_arg.index(attr_type_arg)), attr_type_arg)
-        for expr in [' where ', ' select ', ' from ', ' order by', ' limit ', ' offset ', ' count(' , 'group by']:
+        for expr in [' where ', ' select ', ' from ', ' order by', ' limit ', ' offset ', ' count(' , 'group by', 'unnest']:
             query = query.replace(expr, expr.upper())
         self.log.info("Generated query to be run: '''%s'''" % query)
         self.query = query
@@ -49,9 +50,10 @@ class TuqGenerators(object):
     def generate_expected_result(self):
         self._create_alias_map()
         where_clause = self._format_where_clause()
-        select_clause = self._format_select_clause()
         from_clause = self._format_from_clause()
-        result = self._filter_full_set(select_clause, where_clause)
+        unnest_clause = self._format_unnest_clause(from_clause)
+        select_clause = self._format_select_clause()
+        result = self._filter_full_set(select_clause, where_clause, unnest_clause)
         result = self._order_results(result)
         result = self._limit_and_offset(result)
         return result
@@ -99,6 +101,57 @@ class TuqGenerators(object):
             self.aliases[clause.split()[1]] = clause.split()[0]
         return clause
 
+    def _format_unnest_clause(self, from_clause):
+        if from_clause.find('UNNEST') == -1:
+            return None
+        clause = re.sub(r'.*UNNEST', '', from_clause)
+        attr = clause.split()
+        if len(attr) == 1:
+            clause = 'doc["%s"]' % attr[0]
+        elif len(attr) == 2:
+            attributes = [att for name, group in self.type_args.iteritems()
+                      for att in group if not name.startswith('_')]
+            if attr[0].find('.') != -1:
+                parent, child = attr[0].split('.')
+                if parent in attributes:
+                    clause = 'doc["%s"]["%s"]' % (parent, child)
+                    self.aliases[attr[1]] = (parent, child)
+                else:
+                    if parent not in self.aliases:
+                        clause = 'doc["%s"]' % (child)
+                        self.aliases[attr[1]] = child
+                    elif self.aliases[parent] in attributes:
+                        clause = 'doc["%s"]["%s"]' % (self.aliases[parent], child)
+                        self.aliases[attr[1]] = (self.aliases[parent], child)
+                    else:
+                        clause = 'doc["%s"]' % (child)
+                        self.aliases[attr[1]] = child
+            else:
+                clause = 'doc["%s"]' % attr[0]
+                self.aliases[attr[1]] = attr[0]
+        elif len(attr) == 3 and ('as' in attr or 'AS' in attr):
+            attributes = [att for name, group in self.type_args.iteritems()
+                      for att in group if not name.startswith('_')]
+            if attr[0].find('.') != -1:
+                parent, child = attr[0].split('.')
+                if parent in attributes:
+                    clause = 'doc["%s"]["%s"]' % (parent, child)
+                    self.aliases[attr[2]] = (parent, child)
+                else:
+                    if parent not in self.aliases:
+                        clause = 'doc["%s"]' % (child)
+                        self.aliases[attr[2]] = child
+                    elif self.aliases[parent] in attributes:
+                        clause = 'doc["%s"]["%s"]' % (self.aliases[parent], child)
+                        self.aliases[attr[2]] = (self.aliases[parent], child)
+                    else:
+                        clause = 'doc["%s"]' % (child)
+                        self.aliases[attr[2]] = child
+            else:
+                clause = 'doc["%s"]' % attr[0]
+                self.aliases[attr[2]] = attr[0]
+        return clause
+
     def _format_select_clause(self):
         select_clause = re.sub(r'ORDER BY.*', '', re.sub(r'.*SELECT', '', self.query)).strip()
         select_clause = re.sub(r'WHERE.*', '', re.sub(r'FROM.*', '', select_clause)).strip()
@@ -113,6 +166,11 @@ class TuqGenerators(object):
                     if attr[0].upper() == 'DISTINCT':
                         attr = attr[1:]
                         self.distict= True
+                    if attr[0].find('.') != -1:
+                        parent, child = attr[0].split('.')
+                        attr[0] = child
+                    if attr[0] in self.aliases:
+                        attr[0] = self.aliases[attr[0]]
                     self.aggr_fns['COUNT']['field'] = attr[0]
                     self.aggr_fns['COUNT']['alias'] = ('$1', attr[-1])[len(attr) > 1]
             elif attr[0].upper() == 'DISTINCT':
@@ -137,39 +195,69 @@ class TuqGenerators(object):
         condition += '}'
         return condition
 
-    def _filter_full_set(self, select_clause, where_clause):
+    def _filter_full_set(self, select_clause, where_clause, unnest_clause):
+        if self._order_clause_greater_than_select(select_clause):
+            select_clause = select_clause[:-1] + ','.join(['"%s" : {"%s" : %s}' %([at.replace('"','') for at in re.compile('"\w+"').findall(attr)][0],
+                                                                                  [at.replace('"','') for at in re.compile('"\w+"').findall(attr)][1],
+                                                attr) for attr in self._order_clause_greater_than_select(select_clause)]) + '}'
         if where_clause:
             result = [eval(select_clause) for doc in self.full_set if eval(where_clause)]
         else:
             result = [eval(select_clause) for doc in self.full_set]
         if self.distict:
             result = [dict(y) for y in set(tuple(x.items()) for x in result)]
+        if unnest_clause:
+            result = [item for doc in self.full_set for item in eval(unnest_clause)]
         if self.aggr_fns:
             for fn_name, params in self.aggr_fns.iteritems():
                 if fn_name == 'COUNT':
                     result = [{params['alias'] : len(result)}]
         return result
 
+    def _order_clause_greater_than_select(self, select_clause):
+        order_clause = self._get_order_clause()
+        if not order_clause:
+            return None
+        diff = set(order_clause.split(',')) - set(re.compile('doc\["[\w\']+"\]').findall(select_clause))
+        diff = [attr for attr in diff if attr != '']
+        if diff:
+            self.attr_order_clause_greater_than_select = [re.sub(r'"\].*', '', re.sub(r'doc\["', '', attr)) for attr in diff]
+            return diff
+        return None
+
+    def _get_order_clause(self):
+        if self.query.find('ORDER BY') == -1:
+            return None
+        order_clause = re.sub(r'LIMIT.*', '', re.sub(r'.*ORDER BY', '', self.query)).strip()
+        order_clause = re.sub(r'OFFSET.*', '', order_clause).strip()
+        condition = ""
+        order_attrs = order_clause.split(',')
+        for attr_s in order_attrs:
+            attr = attr_s.split()
+            if attr[0].find('.') != -1:
+                condition += 'doc["%s"]["%s"],' % (attr[0].split('.')[0],attr[0].split('.')[1])
+            else:
+                condition += 'doc["%s"],' % attr[0]
+        return condition
+
     def _order_results(self, result):
-        order_clause = None
-        if self.query.find('ORDER BY') != -1:
-            order_clause = re.sub(r'LIMIT.*', '', re.sub(r'.*ORDER BY', '', self.query)).strip()
-            order_clause = re.sub(r'OFFSET.*', '', order_clause).strip()
+        order_clause = self._get_order_clause()
         key = None
         reverse = False
         if order_clause:
-            condition = ""
             order_attrs = order_clause.split(',')
             for attr_s in order_attrs:
                 attr = attr_s.split()
-                if attr[0].find('.') != -1:
-                    condition += 'doc["%s"]["%s"],' % attr[0].split('.')
-                else:
-                    condition += 'doc["%s"],' % attr[0]
                 if len(attr) == 2 and attr[1].upper() == 'DESC':
                     reverse = True
-            key = lambda doc: eval(condition)
+            key = lambda doc: eval(order_clause)
         result = sorted(result, key=key, reverse=reverse)
+        if self.attr_order_clause_greater_than_select:
+            for doc in result:
+                for attr in self.attr_order_clause_greater_than_select:
+                    if attr.find('.') != -1:
+                        attr = attr.split('.')[0]
+                    del doc[attr]
         return result
 
     def _limit_and_offset(self, result):
