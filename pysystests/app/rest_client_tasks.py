@@ -32,7 +32,6 @@ SDK_IP = '127.0.0.1'
 SDK_PORT = 50008
 ###
 
-
 @celery.task
 def multi_query(count, design_doc_name, view_name, params = None, bucket = "default", password = "", type_ = "view", batch_size = 100, hosts = None):
 
@@ -147,7 +146,9 @@ def parseBucketMsg(bucket):
                  'ramQuotaMB': 1000,
                  'replicas': 1,
                  'replica_index': 1,
-                 'type': 'couchbase'
+                 'type': 'couchbase',
+                 'priority': 3,
+                 'eviction_policy': 'valueOnly'
                  }
 
     if "count" in bucket:
@@ -160,7 +161,10 @@ def parseBucketMsg(bucket):
         bucketMsg['replica_index'] = int(bucket['replica_index'])
     if "type" in bucket:
         bucketMsg['type'] = bucket['type']
-
+    if "priority" in bucket:
+        bucketMsg['priority'] = 8 if bucket['priority'] == 'high' else 3
+    if "eviction_policy" in bucket:
+        bucketMsg['eviction_policy'] = bucket['eviction_policy']
     return bucketMsg
 
 def create_default_buckets(rest, bucketMsg):
@@ -173,7 +177,9 @@ def create_default_buckets(rest, bucketMsg):
                        authType = "none",
                        saslPassword = None,
                        bucketType = bucketMsgParsed['type'],
-                       replica_index = bucketMsgParsed['replica_index'])
+                       replica_index = bucketMsgParsed['replica_index'],
+                       threadsNumber = bucketMsgParsed['priority'],
+                       evictionPolicy = bucketMsgParsed['eviction_policy'])
 
 def create_sasl_buckets(rest, bucketMsg):
     bucketMsgParsed = parseBucketMsg(bucketMsg)
@@ -190,7 +196,9 @@ def create_sasl_buckets(rest, bucketMsg):
                            authType = "sasl",
                            saslPassword = "password",
                            bucketType = bucketMsgParsed['type'],
-                           replica_index = bucketMsgParsed['replica_index'])
+                           replica_index = bucketMsgParsed['replica_index'],
+                           threadsNumber = bucketMsgParsed['priority'],
+                           evictionPolicy = bucketMsgParsed['eviction_policy'])
 
 def create_standard_buckets(rest, bucketMsg):
     bucketMsgParsed = parseBucketMsg(bucketMsg)
@@ -207,7 +215,9 @@ def create_standard_buckets(rest, bucketMsg):
                            authType = "none",
                            saslPassword = None,
                            bucketType = bucketMsgParsed['type'],
-                           replica_index = bucketMsgParsed['replica_index'])
+                           replica_index = bucketMsgParsed['replica_index'],
+                           threadsNumber = bucketMsgParsed['priority'],
+                           evictionPolicy = bucketMsgParsed['eviction_policy'])
 
 
 @celery.task

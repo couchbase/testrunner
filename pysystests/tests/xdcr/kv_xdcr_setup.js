@@ -14,9 +14,9 @@
                     "name" : "create_local_buckets",
                     "desc" :  "create_local_buckets",
                     "buckets" : {"standard" : {"count": "2", "quota": "5000", "replicas": "1",
-                                              "replica_index": "1"},
+                                              "replica_index": "1", "priority": "high", "eviction_policy": "valueOnly" },
                                  "sasl": {"count": "1",  "quota": "1000", "replicas": "1",
-                                          "replica_index": "0"}
+                                          "replica_index": "0", "priority": "low", "eviction_policy": "fullEviction" }
                                 },
                      "runtime" : 120
                  },
