@@ -16,3 +16,5 @@ develop-eggs
 bin
 *.egg-info
 parts
+.*project
+.settings

@@ -3,10 +3,11 @@ import time
 from random import randrange
 from threading import Thread
 
-from xdcrbasetests import XDCRReplicationBaseTest
+from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import LoadWithMcsoda
+from xdcrbasetests import XDCRReplicationBaseTest
 
 
 #Assumption that at least 2 nodes on every cluster
@@ -611,3 +612,69 @@ class unidirectional(XDCRReplicationBaseTest):
         self._async_modify_data()
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.verify_results()
+
+    # Nodes Crashing Scenarios
+    def __kill_processes(self, crashed_nodes=[]):
+        for node in crashed_nodes:
+            shell = RemoteMachineShellConnection(node)
+            os_info = shell.extract_remote_info()
+            shell.kill_erlang(os_info)
+            shell.disconnect()
+
+    def __start_cb_server(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.start_couchbase()
+        shell.disconnect()
+
+    def test_node_crash_master(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        crashed_nodes = []
+        crash = self._input.param("crash", "source").split('-')
+        if "source" in crash:
+            crashed_nodes.append(self.src_master)
+        if "destination" in crash:
+            crashed_nodes.append(self.dest_master)
+
+        self.__kill_processes(crashed_nodes)
+
+        for crashed_node in crashed_nodes:
+            self.__start_cb_server(crashed_node)
+        self.wait_warmup_completed(crashed_nodes)
+
+        self._async_modify_data()
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.verify_results(verify_src=True)
+
+    # Disaster at site.
+    # 1. Crash Source Cluster., Sleep n second
+    # 2. Crash Dest Cluster.
+    # 3. Wait for Source Cluster to warmup. Load more data and perform mutations on Src.
+    # 4. Wait for Dest to warmup.
+    # 5. Verify data.
+    def test_node_crash_cluster(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        crashed_nodes = []
+        crash = self._input.param("crash", "source").split('-')
+        if "source" in crash:
+            crashed_nodes += self.src_nodes
+            self.__kill_processes(crashed_nodes)
+            self.sleep(30)
+        if "destination" in crash:
+            crashed_nodes += self.dest_nodes
+            self.__kill_processes(crashed_nodes)
+
+        for crashed_node in crashed_nodes:
+            self.__start_cb_server(crashed_node)
+
+        if "source" in crash:
+            self.wait_warmup_completed(self.src_nodes)
+            self.gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self.num_items)
+            self._load_all_buckets(self.src_master, self.gen_create2, "create", 0)
+
+        self._async_modify_data()
+
+        if "destination" in crash:
+            self.wait_warmup_completed(self.dest_nodes)
+
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.verify_results(verify_src=True)
