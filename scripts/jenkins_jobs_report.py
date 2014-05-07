@@ -208,6 +208,18 @@ def build_json_result(jobs):
     for job in jobs:
         os = ((('N/A', 'UBUNTU')[job.name.lower().find('ubuntu') != -1], 'CENTOS')[job.name.lower().find('cent') != -1],'WINDOWS')[job.name.lower().find('win') != -1]
         rq = {'name' : job.name, 'os' : os}
+        component = "KV"
+        if job.name.lower().find('xdcr') != -1:
+            component = "XDCR"
+        elif job.name.lower().find('rebalance') != -1:
+            component = "REBALANCE"
+        elif job.name.lower().find('view') != -1:
+            component = "VIEWS"
+        elif job.name.lower().find('cli') != -1:
+            component = "CLI"
+        elif job.name.lower().find('cbtransfer') != -1 or job.name.lower().find('cbrecovery') != -1:
+            component = "TOOLS"
+        rq["component"] = component
         try:
             priority = job.build_histories[0]['result'].priority
         except IndexError:
