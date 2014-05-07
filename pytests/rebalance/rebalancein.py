@@ -66,21 +66,16 @@ class RebalanceInTests(RebalanceBaseTest):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
-        if self.output_time:
-            start_time = time.time()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])
         if(self.doc_ops is not None):
-            tasks = []
             # define which doc's ops will be performed during rebalancing
             # allows multiple of them but one by one
             if("update" in self.doc_ops):
-                tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
+                self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
             if("create" in self.doc_ops):
-                tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0)
+                self._async_load_all_buckets(self.master, gen_create, "create", 0)
             if("delete" in self.doc_ops):
-                tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
-            for task in tasks:
-                task.result()
+                self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
         rebalance.result()
         if self.output_time:
             delta_time = time.time() - start_time
