@@ -580,3 +580,34 @@ class unidirectional(XDCRReplicationBaseTest):
         finally:
             self.shell.delete_files(zip_file)
             self.shell.delete_files("cbcollect_info*")
+
+    # Buckets States
+    def delete_recreate_dest_buckets(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.sleep(self.wait_timeout)
+
+        # Remove destination buckets
+        for bucket in self._get_cluster_buckets(self.dest_master):
+            self.cluster.bucket_delete(self.dest_master, bucket)
+
+        # Create destination buckets
+        self._create_buckets(self.dest_nodes)
+
+        self._async_modify_data()
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.verify_results()
+
+    def flush_dest_buckets(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.sleep(self.wait_timeout)
+
+        # flush destination buckets
+        tasks = []
+        for bucket in self._get_cluster_buckets(self.dest_master):
+            tasks.append(self.cluster.async_bucket_flush(self.dest_master,
+                                                         bucket))
+        [task.result() for task in tasks]
+
+        self._async_modify_data()
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.verify_results()
