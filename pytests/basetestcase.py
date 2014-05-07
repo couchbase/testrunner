@@ -191,6 +191,7 @@ class BaseTestCase(unittest.TestCase):
                     if alerts is not None and len(alerts) != 0:
                         self.log.warn("Alerts were found: {0}".format(alerts))
                     if rest._rebalance_progress_status() == 'running':
+                        self.force_kill_memached()
                         self.log.warning("rebalancing is still running, test should be verified")
                         stopped = rest.stop_rebalance()
                         self.assertTrue(stopped, msg="unable to stop rebalance")
@@ -892,6 +893,12 @@ class BaseTestCase(unittest.TestCase):
             remote_client.start_couchbase()
             remote_client.disconnect()
         self.log.info("========= CHANGED ALL PORTS ===========")
+
+    def force_kill_memached(self):
+        for server in self.servers:
+            remote_client = RemoteMachineShellConnection(server)
+            remote_client.memcached()
+            remote_client.disconnect()
 
     def get_vbucket_seqnos(self, servers, buckets):
         """
