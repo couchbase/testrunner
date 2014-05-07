@@ -1602,7 +1602,7 @@ class QueryTests(BaseTestCase):
         now = datetime.datetime.now()
         today = date.today()
         res = self.run_cbq_query()
-        expected = "%s-%02d-%02dT%s:" % (today.year, today.month, today.day, now.hour)
+        expected = "%s-%02d-%02dT%02d:" % (today.year, today.month, today.day, now.hour)
         self.assertTrue(res["resultset"][0]["now"].startswith(expected),
                         "Result expected: %s. Actual %s" % (expected, res["resultset"]))
 
@@ -1633,9 +1633,9 @@ class QueryTests(BaseTestCase):
             expected_result = [{"name" : doc['name'], "join_yr" : doc['join_yr'],
                                 "join_mo" : doc['join_mo'], "join_day" : doc['join_day']}
                                for doc in full_list
-                               if doc['join_yr'] > today.year and\
-                               doc['join_mo'] < today.month and\
-                               doc['join_day'] < today.day]
+                               if doc['join_yr'] < today.year and\
+                               doc['join_mo'] > today.month and\
+                               doc['join_day'] > today.day]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
                                                                         doc['join_yr'],
                                                                         doc['join_mo'],
@@ -1658,20 +1658,18 @@ class QueryTests(BaseTestCase):
             now_time_zone = round((round((datetime.datetime.now()-datetime.datetime.utcnow()).total_seconds())/1800)/2)
         except AttributeError, ex:
             raise Exception("Test requires python 2.7 : SKIPPING TEST")
-        now_time_str = "%s-%02d-%02dT%s:%s:%s+%02d" % (now_time.year, now_time.month, now_time.day,
-                                         now_time.hour, now_time.minute, now_time.second,now_time_zone) +\
-                       ("%.2f" % (now_time_zone-int(now_time_zone)))[1:]
+        now_time_str = "%s-%02d-%02d" % (now_time.year, now_time.month, now_time.day)
         self.query = "select str_to_millis(%s) as now" % now_time_str
         res = self.run_cbq_query()
-        self.assertTrue((res["resultset"][0]["now"] < (now_millis + 999)) and\
-                        (res["resultset"][0]["now"] > (now_millis - 999)),
+        self.assertTrue((res["resultset"][0]["now"] < (now_millis)) and\
+                        (res["resultset"][0]["now"] > (now_millis - 5184000000)),
                         "Result expected to be in: [%s ... %s]. Actual %s" % (
-                                       now_millis - 999, now_millis + 999, res["resultset"]))
+                                       now_millis - 5184000000, now_millis, res["resultset"]))
 
     def test_millis_to_str(self):
         now_millis = time.time()
         now_time = datetime.datetime.fromtimestamp(now_millis)
-        expected = "%s-%02d-%02dT%s:%s" % (now_time.year, now_time.month, now_time.day,
+        expected = "%s-%02d-%02dT%02d:%02d" % (now_time.year, now_time.month, now_time.day,
                                          now_time.hour, now_time.minute)
         self.query = "select millis_to_str(%s) as now" % (now_millis * 1000)
         res = self.run_cbq_query()
