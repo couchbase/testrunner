@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import getopt
 import sys
+import os
 import time
 from threading import Thread
 from datetime import datetime
@@ -61,6 +62,7 @@ class cbcollectRunner(object):
         else:
             raise Exception("Fail to download zipped logs from %s"
                             % self.server.ip)
+        remote_client.execute_command("rm -f %s" % os.path.join(remote_path, file_name))
         remote_client.disconnect()
 
 def main():

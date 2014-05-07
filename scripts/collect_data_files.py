@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import getopt
 import sys
+import os
 import time
 from threading import Thread
 from datetime import datetime
@@ -77,7 +78,7 @@ class cbdatacollectRunner(object):
         if not status:
             raise Exception("Fail to download zipped logs from %s"
                             % self.server.ip)
-        remote_client.remove_directory("%s/%s" % (remote_path, file_name))
+        remote_client.execute_command("rm -f %s" % os.path.join(remote_path, file_name))
         remote_client.disconnect()
 
 
