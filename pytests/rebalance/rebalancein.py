@@ -178,8 +178,13 @@ class RebalanceInTests(RebalanceBaseTest):
                     # at the end we should get empty base( or couple items)
                     gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=int(self.num_items * (1 - i / (self.num_servers - 1.0))) + 1, end=int(self.num_items * (1 - (i - 1) / (self.num_servers - 1.0))))
                     tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
-            for task in tasks:
-                task.result()
+            try:
+                for task in tasks:
+                    task.result()
+            except Exception, ex:
+                for task in tasks:
+                     task._Thread__stop()
+                raise ex
             self.verify_cluster_stats(self.servers[:i + 2])
 
     """Rebalances nodes into a cluster  during view queries.

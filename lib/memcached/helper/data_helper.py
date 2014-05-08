@@ -1043,7 +1043,7 @@ class VBucketAwareMemcached(object):
                 errors.extend(future.result())
 
             if errors:
-                self.log.error(errors, exc_info=1)
+                self.log.error(list(set(str(error) for error in errors)), exc_info=1)
                 raise errors[0]
 
     def _setMulti_rec(self, memcached_client, exp, flags, keyval, pause, timeout, rec_caller_fn):
