@@ -74,7 +74,10 @@ def get_jobs_stats(job_url=None, onlyLastBuild=False):
     for k in lines:
         url = k.strip() + API
         print "read base info from %s" % url
-        content = urllib2.urlopen(url).read()
+        try:
+            content = urllib2.urlopen(url).read()
+        except:
+            continue
         json_parsed = json.loads(content)
         job = Job()
         job.actions = json_parsed["actions"]
