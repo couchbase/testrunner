@@ -1,7 +1,6 @@
 import os
 import sys
 import uuid
-import paramiko
 import time
 import logging
 from datetime import datetime
@@ -19,6 +18,12 @@ from membase.api.rest_client import RestConnection, RestHelper
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
 
+try:
+    import paramiko
+except ImportError:
+    log.warn("{0} {1} {2}".format("Warning: proceeding without importing",
+                                  "paramiko due to import error.",
+                                  "ssh connections to remote machines will fail!\n"))
 
 class RemoteMachineInfo(object):
     def __init__(self):
