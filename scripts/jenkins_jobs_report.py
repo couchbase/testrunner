@@ -116,7 +116,10 @@ def get_jobs_stats(job_url=None, onlyLastBuild=False):
                     break
                 last -= 1
                 url = build_history["url"] + API
-                content = urllib2.urlopen(url).read()
+                try:
+                    content = urllib2.urlopen(url).read()
+                except:
+                    continue
                 # content = content.replace('None', '"None"').replace(': True', ': "True"').replace(':True', ':"True"').replace(': False', ': "False"').replace(':False', ':"False"')
                 # print content
                 json_parsed = json.loads(content)
@@ -241,7 +244,7 @@ def build_json_result(jobs):
         try:
             key = md5(rq["name"] + str(rq["build_id"])).hexdigest()
             if 'build' not in rq or 'result' not in rq or\
-               ('build' in rq and not re.match(r'[0-9].[0-9].[0-9]-[0-9]+')):
+               ('build' in rq and not re.match(r'[0-9].[0-9].[0-9]-[0-9]+', rq['build'])):
                 print "ERROR forming rq for: %s" % rq
                 continue
             jsons.append((key, json.dumps(rq)))
