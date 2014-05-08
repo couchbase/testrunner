@@ -42,19 +42,19 @@ class RebalanceOutTests(RebalanceBaseTest):
                 task.result()
         servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
-        self._verify_stats_all_buckets(self.servers[:self.num_servers],timeout = 120)
-        prev_failover_stats = self.get_failovers_logs(self.servers[:self.num_servers],self.buckets)
-        prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.num_servers],self.buckets)
-        record_data_set = self.get_data_set_all(self.servers[:self.num_servers],self.buckets)
-        self.compare_vbucketseq_failoverlogs(prev_vbucket_stats,prev_failover_stats)
+        self._verify_stats_all_buckets(self.servers[:self.num_servers], timeout=120)
+        prev_failover_stats = self.get_failovers_logs(self.servers[:self.num_servers], self.buckets)
+        prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.num_servers], self.buckets)
+        record_data_set = self.get_data_set_all(self.servers[:self.num_servers], self.buckets)
+        self.compare_vbucketseq_failoverlogs(prev_vbucket_stats, prev_failover_stats)
         rebalance = self.cluster.async_rebalance(self.servers[:1], [], servs_out)
         rebalance.result()
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
-        self._verify_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out],timeout = 120)
+        self._verify_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out], timeout=120)
         self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
-        new_failover_stats  = self.compare_failovers_logs(prev_failover_stats,self.servers[:self.num_servers - self.nodes_out],self.buckets)
-        new_vbucket_stats= self.compare_vbucket_seqnos(prev_vbucket_stats,self.servers[:self.num_servers - self.nodes_out],self.buckets,perNode= False)
-        self.data_analysis_all(record_data_set,self.servers[:self.num_servers - self.nodes_out],self.buckets)
+        new_failover_stats = self.compare_failovers_logs(prev_failover_stats, self.servers[:self.num_servers - self.nodes_out], self.buckets)
+        new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, self.servers[:self.num_servers - self.nodes_out], self.buckets, perNode=False)
+        self.data_analysis_all(record_data_set, self.servers[:self.num_servers - self.nodes_out], self.buckets)
         self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
 
     """Rebalances nodes out of a cluster while doing docs ops:create, delete, update.
@@ -70,17 +70,18 @@ class RebalanceOutTests(RebalanceBaseTest):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
         servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
-        rebalance = self.cluster.async_rebalance(self.servers[:1], [], servs_out)
+        tasks = [self.cluster.async_rebalance(self.servers[:1], [], servs_out)]
         # define which doc's ops will be performed during rebalancing
         # allows multiple of them but one by one
         if(self.doc_ops is not None):
             if("update" in self.doc_ops):
-                self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
+                tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
             if("create" in self.doc_ops):
-                self._async_load_all_buckets(self.master, gen_create, "create", 0)
+                tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0)
             if("delete" in self.doc_ops):
-                self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
-        rebalance.result()
+                tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
+        for task in tasks:
+            task.result()
         self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
 
     """Rebalances nodes from a cluster during getting random keys.
