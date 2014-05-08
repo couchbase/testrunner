@@ -266,21 +266,17 @@ class RemoteMachineShellConnection:
         if os == "windows":
             o, r = self.execute_command("/taskkill /F /T /IM erl.exe*")
             self.log_command_output(o, r)
-            self.disconnect()
         else:
             o, r = self.execute_command("killall -9 beam.smp")
             self.log_command_output(o, r)
-            self.disconnect()
 
     def kill_memcached(self, os="unix"):
         if os == "windows":
             o, r = self.execute_command("/taskkill /F /T /IM memcached*")
             self.log_command_output(o, r)
-            self.disconnect()
         else:
             o, r = self.execute_command("killall -9 memcached")
             self.log_command_output(o, r)
-            self.disconnect()
 
     def change_log_level(self, new_log_level):
         log.info("CHANGE LOG LEVEL TO %s".format(new_log_level))
@@ -1951,47 +1947,47 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command(command)
         self.log_command_output(output, error)
 
-    def get_data_map_using_cbtransfer(self,buckets,data_path=None,userId="Administrator",password="password", getReplica = False):
+    def get_data_map_using_cbtransfer(self, buckets, data_path=None, userId="Administrator", password="password", getReplica=False):
         self.extract_remote_info()
-        temp_path="/tmp/"
+        temp_path = "/tmp/"
         if self.info.type.lower() == 'windows':
             temp_path = WIN_TMP_PATH
         replicaOption = ""
         if getReplica:
              replicaOption = "  --source-vbucket-state=replica"
-        source="http://"+self.ip+":8091"
+        source = "http://" + self.ip + ":8091"
         if data_path:
-            source="couchstore-files://"+data_path
-        bucketMap={}
-        headerInfo=""
+            source = "couchstore-files://" + data_path
+        bucketMap = {}
+        headerInfo = ""
         for bucket in buckets:
             if data_path == None:
-                options=" -b "+bucket.name+" -u "+userId+" -p password --single-node"
+                options = " -b " + bucket.name + " -u " + userId + " -p password --single-node"
             else:
-                options=" -b "+bucket.name+" -u "+userId+" -p password"+replicaOption
-            suffix = "_"+bucket.name+"_N%2FA.csv"
+                options = " -b " + bucket.name + " -u " + userId + " -p password" + replicaOption
+            suffix = "_" + bucket.name + "_N%2FA.csv"
             if data_path == None:
-               suffix = "_"+bucket.name+"_"+self.ip+"%3A8091.csv"
+               suffix = "_" + bucket.name + "_" + self.ip + "%3A8091.csv"
             prefix = str(uuid.uuid1())
-            fileName=prefix+".csv"
+            fileName = prefix + ".csv"
             genFileName = prefix + suffix
-            csv_path=temp_path+fileName
-            path=temp_path+genFileName
-            dest_path="/tmp/"+fileName
-            destination="csv:"+csv_path
+            csv_path = temp_path + fileName
+            path = temp_path + genFileName
+            dest_path = "/tmp/" + fileName
+            destination = "csv:" + csv_path
             self.execute_cbtransfer(source, destination, options)
             file_existed = self.file_exists(temp_path, genFileName)
             if file_existed:
-                self.copy_file_remote_to_local(path,dest_path)
+                self.copy_file_remote_to_local(path, dest_path)
                 self.delete_files(path)
-                content=[]
-                headerInfo=""
+                content = []
+                headerInfo = ""
                 with open(dest_path) as f:
-                    headerInfo=f.readline()
-                    content=f.readlines()
-                bucketMap[bucket.name]=content
+                    headerInfo = f.readline()
+                    content = f.readlines()
+                bucketMap[bucket.name] = content
                 os.remove(dest_path)
-        return headerInfo,bucketMap
+        return headerInfo, bucketMap
 
     def execute_cbtransfer(self, source, destination, command_options=''):
         transfer_command = "%scbtransfer" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
