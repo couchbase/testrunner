@@ -897,7 +897,7 @@ class BaseTestCase(unittest.TestCase):
     def force_kill_memached(self):
         for server in self.servers:
             remote_client = RemoteMachineShellConnection(server)
-            remote_client.memcached()
+            remote_client.kill_memcached()
             remote_client.disconnect()
 
     def get_vbucket_seqnos(self, servers, buckets):
