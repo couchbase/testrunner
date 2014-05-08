@@ -172,7 +172,7 @@ class RebalanceOutTests(RebalanceBaseTest):
                     task.result()
             except Exception, ex:
                 for task in tasks:
-                     task._Thread__stop()
+                    task.cancel()
                 raise ex
             self.verify_cluster_stats(self.servers[:i])
 
