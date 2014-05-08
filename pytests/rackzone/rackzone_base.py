@@ -15,7 +15,6 @@ class RackzoneBaseTest(BaseTestCase):
         self.version = self.input.param("version", "2.5.1-1082")
         self.type = self.input.param('type', 'enterprise')
         self.doc_ops = self.input.param("doc_ops", None)
-        self.output_time = self.input.param("output_time", False)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
         self.defaul_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"

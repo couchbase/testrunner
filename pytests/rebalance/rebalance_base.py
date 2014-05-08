@@ -9,7 +9,6 @@ class RebalanceBaseTest(BaseTestCase):
         self.value_size = self.input.param("value_size", 256)
         self.doc_ops = self.input.param("doc_ops", None)
         self.withOps = self.input.param("withOps", True)
-        self.output_time = self.input.param("output_time", False)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(":")
         self.defaul_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
