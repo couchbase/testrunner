@@ -246,6 +246,7 @@ class XDCRBaseTest(unittest.TestCase):
         """
         self._standard_buckets = self._input.param("standard_buckets", 0)
         self._sasl_buckets = self._input.param("sasl_buckets", 0)
+        self._extra_buckets = self._input.param("extra_buckets", 0)  #number of buckets to add inside test body
 
         if self._default_bucket:
             self.default_bucket_name = "default"
@@ -521,7 +522,7 @@ class XDCRBaseTest(unittest.TestCase):
         if self._dgm_run_bool:
             self._mem_quota_int = 256
         master_node = nodes[0]
-        total_buckets = self._sasl_buckets + self._default_bucket + self._standard_buckets
+        total_buckets = self._sasl_buckets + self._default_bucket + self._standard_buckets + self._extra_buckets
         bucket_size = self._get_bucket_size(self._mem_quota_int, total_buckets)
         rest = RestConnection(master_node)
         master_id = rest.get_nodes_self().id
