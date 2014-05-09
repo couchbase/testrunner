@@ -158,7 +158,7 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.src_init + self.dest_init ])
         upgrade_nodes = self.input.param('upgrade_nodes', "src").split(";")
-        self.cluster.shutdown(force=True)
+        self.cluster.shutdown()
         PauseResumeXDCRBaseTest.setUp(self)
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
         self.sleep(60)
@@ -224,7 +224,7 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         self._install(self.servers[:self.src_init + self.dest_init ])
         self.initial_version = self.upgrade_versions[0]
         self._install(self.servers[self.src_init + self.dest_init:])
-        self.cluster.shutdown(force=True)
+        self.cluster.shutdown()
         PauseResumeXDCRBaseTest.setUp(self)
         bucket_default = self._get_bucket(self, 'default', self.src_master)
         bucket_sasl = self._get_bucket(self, 'bucket0', self.src_master)
@@ -287,7 +287,7 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         upgrade_seq = self.input.param("upgrade_seq", "src>dest")
 
         self._install(self.servers[:self.src_init + self.dest_init ])
-        self.cluster.shutdown(force=True)
+        self.cluster.shutdown()
         PauseResumeXDCRBaseTest.setUp(self)
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
         self.sleep(60)
