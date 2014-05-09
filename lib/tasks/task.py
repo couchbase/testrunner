@@ -268,7 +268,7 @@ class RebalanceTask(Task):
         try:
             if len(self.to_add) and len(self.to_add) == len(self.to_remove):
                 self.log.info("This is swap rebalance and we will monitor vbuckets shuffling")
-                non_swap_servers = set(self.servers) - set(self.to_remove)
+                non_swap_servers = set(self.servers) - set(self.to_remove) - set(self.to_add)
                 self.old_vbuckets = RestHelper(self.rest)._get_vbuckets(non_swap_servers, None)
             self.add_nodes(task_manager)
             self.start_rebalance(task_manager)
@@ -325,7 +325,7 @@ class RebalanceTask(Task):
         progress = -100
         try:
             if self.old_vbuckets:
-                non_swap_servers = set(self.servers) - set(self.to_remove)
+                non_swap_servers = set(self.servers) - set(self.to_remove) - set(self.to_add)
                 new_vbuckets = RestHelper(self.rest)._get_vbuckets(non_swap_servers, None)
                 for vb_type in ["active_vb", "replica_vb"]:
                     for srv in non_swap_servers:
