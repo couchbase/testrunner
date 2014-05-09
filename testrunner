@@ -8,6 +8,7 @@ import urllib2
 import uuid
 import sys
 from os.path import basename, splitext
+from multiprocessing import Process
 from pprint import pprint
 sys.path = ["lib", "pytests", "pysystests"] + sys.path
 
@@ -226,25 +227,8 @@ def get_cbcollect_info(input, path):
             print "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}".format(server.ip)
 
 
-def watcher():
-    """This little code snippet is from
-    http://greenteapress.com/semaphores/threading_cleanup.py (2012-07-31)
-    It's now possible to interrupt the testrunner via ctrl-c at any time"""
-    child = os.fork()
-    if child == 0: return
-    try:
-        os.wait()
-    except KeyboardInterrupt:
-        print 'KeyBoardInterrupt'
-        try:
-            os.kill(child, signal.SIGKILL)
-        except OSError:
-            pass
-    sys.exit()
 
-if __name__ == "__main__":
-    watcher()
-
+def main():
     BEFORE_SUITE = "suite_setUp"
     AFTER_SUITE = "suite_tearDown"
     names, test_params, arg_i, arg_p, options = parse_args(sys.argv)
@@ -396,3 +380,35 @@ if __name__ == "__main__":
     if TestInputSingleton.input.param("get-delays", False):
         sd.stop_measure_sched_delay()
         sd.fetch_logs()
+
+def watcher():
+    """This little code snippet is from
+    http://greenteapress.com/semaphores/threading_cleanup.py (2012-07-31)
+    It's now possible to interrupt the testrunner via ctrl-c at any time
+    in a platform neutral way."""
+
+    if sys.platform == 'win32':
+        p = Process(target=main, name="MainProcess")
+        p.start()
+        try:
+            p.join()
+        except KeyboardInterrupt:
+            print 'KeyBoardInterrupt'
+            p.terminate()
+    else:
+        child = os.fork()
+        if child == 0:
+            main() # child runs test
+        try:
+            os.wait()
+        except KeyboardInterrupt:
+            print 'KeyBoardInterrupt'
+            try:
+                os.kill(child, signal.SIGKILL)
+            except OSError:
+                pass
+
+    sys.exit()
+
+if __name__ == "__main__":
+    watcher()
