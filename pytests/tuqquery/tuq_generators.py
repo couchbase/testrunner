@@ -68,6 +68,7 @@ class TuqGenerators(object):
         if self.query.find('WHERE') == -1:
             return None
         clause = re.sub(r'ORDER BY.*', '', re.sub(r'.*WHERE', '', self.query))
+        clause = re.sub(r'GROUP BY.*', '', clause)
         attributes = [attr for name, group in self.type_args.iteritems()
                       for attr in group if not name.startswith('_')]
         conditions = clause.replace('IS NULL', 'is None')
@@ -90,7 +91,7 @@ class TuqGenerators(object):
                     conditions = conditions.replace(' %s.%s ' % (parent, child),
                                                     ' doc["%s"] ' % (child))
         for attr in attributes:
-            conditions = conditions.replace(' %s ' % attr, ' doc["%s"] ')
+            conditions = conditions.replace(' %s ' % attr, ' doc["%s"] ' % attr)
         return conditions
 
     def _format_from_clause(self):
@@ -176,11 +177,19 @@ class TuqGenerators(object):
             elif attr[0].upper() == 'DISTINCT':
                 attr = attr[1:]
                 self.distict= True
-            if len(attr) == 1:
+            if attr[0] == '*':
+                condition += '"*" : doc,'
+            elif len(attr) == 1:
                 if attr[0].find('.') != -1:
-                    condition += '"%s" : doc["%s"]["%s"],' % (attr[0], attr[0].split('.')[0], attr[0].split('.')[1])
+                    if attr[0].find('[') != -1:
+                        condition += '"%s" : doc["%s"]%s,' % (attr[0], attr[0][:attr[0].find('[')], attr[0][attr[0].find('['):])
+                    else:
+                        condition += '"%s" : doc["%s"]["%s"],' % (attr[0], attr[0].split('.')[0], attr[0].split('.')[1])
                 else:
-                    condition += '"%s" : doc["%s"],' % (attr[0], attr[0])
+                    if attr[0].find('[') != -1:
+                        condition += '"%s" : doc["%s"]%s,' % (attr[0], attr[0][:attr[0].find('[')], attr[0][attr[0].find('['):])
+                    else:
+                        condition += '"%s" : doc["%s"],' % (attr[0], attr[0])
             elif len(attr) == 2:
                 if attr[0].find('.') != -1:
                     condition += '"%s" : doc["%s"]["%s"],' % (attr[1], attr[0].split('.')[0], attr[0].split('.')[1])
@@ -191,7 +200,10 @@ class TuqGenerators(object):
                 if attr[0].find('.') != -1:
                     condition += '"%s" : doc["%s"]["%s"],' % (attr[2], attr[0].split('.')[0], attr[0].split('.')[1])
                 else:
-                    condition += '"%s" : doc["%s"],' % (attr[2], attr[0])
+                    if attr[0].find('[') != -1:
+                        condition += '"%s" : doc["%s"]%s,' % (attr[2], attr[0][:attr[0].find('[')], attr[0][attr[0].find('['):])
+                    else:
+                        condition += '"%s" : doc["%s"],' % (attr[2], attr[0])
         condition += '}'
         return condition
 
@@ -209,9 +221,12 @@ class TuqGenerators(object):
         if unnest_clause:
             result = [item for doc in self.full_set for item in eval(unnest_clause)]
         if self.aggr_fns:
-            for fn_name, params in self.aggr_fns.iteritems():
-                if fn_name == 'COUNT':
-                    result = [{params['alias'] : len(result)}]
+            if not self._create_groups()[0]:
+                for fn_name, params in self.aggr_fns.iteritems():
+                    if fn_name == 'COUNT':
+                        result = [{params['alias'] : len(result)}]
+            else:
+                result = self._group_results(result)
         return result
 
     def _order_clause_greater_than_select(self, select_clause):
@@ -220,9 +235,11 @@ class TuqGenerators(object):
             return None
         diff = set(order_clause.split(',')) - set(re.compile('doc\["[\w\']+"\]').findall(select_clause))
         diff = [attr for attr in diff if attr != '']
+        if not set(diff) - set(['doc["%s"]' % alias for alias in self.aliases]):
+            return None
         if diff:
             self.attr_order_clause_greater_than_select = [re.sub(r'"\].*', '', re.sub(r'doc\["', '', attr)) for attr in diff]
-            return diff
+            return list(diff)
         return None
 
     def _get_order_clause(self):
@@ -235,9 +252,16 @@ class TuqGenerators(object):
         for attr_s in order_attrs:
             attr = attr_s.split()
             if attr[0].find('.') != -1:
-                condition += 'doc["%s"]["%s"],' % (attr[0].split('.')[0],attr[0].split('.')[1])
+                attributes = [att for name, group in self.type_args.iteritems()
+                      for att in group if not name.startswith('_')]
+                if attr[0].split('.')[0] in self.aliases and (not self.aliases[attr[0].split('.')[0]] in attributes):
+                    condition += 'doc["%s"]["%s"],' % (attr[0].split('.')[0],attr[0].split('.')[1])
+                else:
+                    condition += 'doc["%s"],' % attr[0].split('.')[1]
             else:
                 condition += 'doc["%s"],' % attr[0]
+        print "ORDER CL"
+        print condition
         return condition
 
     def _order_results(self, result):
@@ -245,7 +269,9 @@ class TuqGenerators(object):
         key = None
         reverse = False
         if order_clause:
-            order_attrs = order_clause.split(',')
+            all_order_clause = re.sub(r'LIMIT.*', '', re.sub(r'.*ORDER BY', '', self.query)).strip()
+            all_order_clause = re.sub(r'OFFSET.*', '', all_order_clause).strip()
+            order_attrs = all_order_clause.split(',')
             for attr_s in order_attrs:
                 attr = attr_s.split()
                 if len(attr) == 2 and attr[1].upper() == 'DESC':
@@ -270,4 +296,25 @@ class TuqGenerators(object):
             result = result[:int(limit_clause)]
         if offset_clause:
             result = result[int(limit_clause):]
+        return result
+
+    def _create_groups(self):
+        group_clause = re.sub(r'ORDER BY.*', '', re.sub(r'.*GROUP BY', '', self.query)).strip()
+        if not group_clause:
+            return 0, None
+        attrs = group_clause.split(',')
+        attrs = [attr.strip() for attr in attrs]
+        if len(attrs) == 2:
+            groups = set([(doc[attrs[0]],doc[attrs[1]])  for doc in self.full_set])
+        return attrs, groups
+
+    def _group_results(self, result):
+        attrs, groups = self._create_groups()
+        for fn_name, params in self.aggr_fns.iteritems():
+            if fn_name == 'COUNT':
+                result = [{attrs[0] : group[0], attrs[1] : group[1],
+                                params['alias'] : len([doc for doc in result
+                                if doc[attrs[0]]==group[0] and doc[attrs[1]]==group[1]])}
+                          for group in groups]
+                result = [doc for doc in result if doc[params['alias']] > 0]
         return result
