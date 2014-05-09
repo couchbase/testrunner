@@ -502,6 +502,10 @@ class RestConnection(object):
         data_path = node_info.storage[0].get_data_path()
         return data_path
 
+    def get_memcached_port(self):
+        node_info = self.get_nodes_self()
+        return node_info.memcached
+
     def get_ddoc(self, bucket, ddoc_name):
         status, json, meta = self._get_design_doc(bucket, ddoc_name)
         if not status:

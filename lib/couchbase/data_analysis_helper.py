@@ -1,3 +1,6 @@
+import os
+import os.path
+import uuid
 from remote.remote_util import RemoteMachineShellConnection
 from lib.mc_bin_client import MemcachedClient
 from membase.api.rest_client import RestConnection
@@ -13,6 +16,7 @@ DELETED_ITEMS="deletedItems"
 UPDATED_ITEMS="updatedItems"
 LOGICAL_RESULT="logicalresult"
 RESULT="result"
+MEMCACHED_PORT=11210
 
 class DataAnalysisResultAnalyzer:
     """ Class containing methods to help analyze results for data analysis """
@@ -367,13 +371,17 @@ class DataCollector(object):
             completeMap[bucket.name] = {}
         headerInfo = None
         for server in servers:
-            remote_client = RemoteMachineShellConnection(server)
             if  mode  ==  "disk" and data_path == None:
                 rest = RestConnection(server)
                 data_path = rest.get_data_path()
-
-            headerInfo,bucketMap = remote_client.get_data_map_using_cbtransfer(buckets, data_path=data_path, userId=userId,password=password, getReplica = getReplica, mode = mode)
-            remote_client.disconnect()
+            headerInfo = []
+            bucketMap = {}
+            if  server.ip == "127.0.0.1":
+                headerInfo,bucketMap = self.get_local_data_map_using_cbtransfer(server,buckets, data_path=data_path, userId=userId,password=password, getReplica = getReplica, mode = mode)
+            else:
+                remote_client = RemoteMachineShellConnection(server)
+                headerInfo,bucketMap = remote_client.get_data_map_using_cbtransfer(buckets, data_path=data_path, userId=userId,password=password, getReplica = getReplica, mode = mode)
+                remote_client.disconnect()
             for bucket in bucketMap.keys():
                 newMap = self.translateDataFromCSVToMap(0,bucketMap[bucket])
                 if perNode:
@@ -415,7 +423,9 @@ class DataCollector(object):
             dataMap = {}
             for server in servers:
                 map_data = {}
-                client = MemcachedClient(host=server.ip, port=11210)
+                rest = RestConnection(server)
+                port = rest.get_memcached_port()
+                client = MemcachedClient(host=server.ip, port=port)
                 if collect_vbucket:
                     vbucket=client.stats('vbucket')
                     self.createMapVbucket(vbucket,map_data)
@@ -454,7 +464,9 @@ class DataCollector(object):
         for bucket in buckets:
             dataMap = {}
             for server in servers:
-                client = MemcachedClient(host=server.ip, port=11210)
+                rest = RestConnection(server)
+                port = rest.get_memcached_port()
+                client = MemcachedClient(host=server.ip, port=port)
                 stats = client.stats('failovers')
                 map_data = {}
                 for o in stats.keys():
@@ -509,3 +521,47 @@ class DataCollector(object):
             values = value.split(",")
             bucketMap[values[index]] = value
         return bucketMap
+
+    def get_local_data_map_using_cbtransfer(self, server, buckets, data_path=None, userId="Administrator", password="password", getReplica=False, mode = "memory"):
+        """ Get Local CSV information :: method used when running simple tests only """
+        temp_path = "/tmp/"
+        replicaOption = ""
+        prefix = str(uuid.uuid1())
+        fileName = prefix + ".csv"
+        if getReplica:
+             replicaOption = "  --source-vbucket-state=replica"
+        source = "http://" + server.ip + ":"+server.port
+        if mode == "disk":
+            source = "couchstore-files://" + data_path
+        elif mode == "backup":
+            source = data_path
+            fileName =  ""
+        # Initialize Output
+        bucketMap = {}
+        headerInfo = ""
+        # Iterate per bucket and generate maps
+        for bucket in buckets:
+            if data_path == None:
+                options = " -b " + bucket.name + " -u " + userId + " -p "+password+" --single-node"
+            else:
+                options = " -b " + bucket.name + " -u " + userId + " -p "+password+" "+ replicaOption
+            suffix = "_" + bucket.name + "_N%2FA.csv"
+            if mode == "memory" or mode == "backup":
+               suffix = "_" + bucket.name + "_" + self.ip + "%3A"+server.port+".csv"
+            genFileName = prefix + suffix
+            csv_path = temp_path + fileName
+            dest_path = temp_path+"/"+genFileName
+            destination = "csv:" + csv_path
+            bin_path=os.path.abspath(os.path.join(os.getcwd(), os.pardir))+"/install/bin/cbtransfer"
+            command = "{0} {1} {2} {3}".format(bin_path,source,destination,options)
+            os.system(command)
+            file_existed = os.path.isfile(dest_path)
+            if file_existed:
+                content = []
+                headerInfo = ""
+                with open(dest_path) as f:
+                    headerInfo = f.readline()
+                    content = f.readlines()
+                bucketMap[bucket.name] = content
+                os.remove(dest_path)
+        return headerInfo, bucketMap

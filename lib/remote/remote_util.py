@@ -1981,7 +1981,7 @@ class RemoteMachineShellConnection:
             suffix = "_" + bucket.name + "_N%2FA.csv"
             if mode == "memory" or mode == "backup":
                suffix = "_" + bucket.name + "_" + self.ip + "%3A8091.csv"
-            
+
             genFileName = prefix + suffix
             csv_path = temp_path + fileName
             path = temp_path + genFileName
