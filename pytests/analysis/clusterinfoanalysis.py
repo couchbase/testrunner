@@ -39,7 +39,7 @@ class DataAnalysisTests(BaseTestCase):
 
     def test_data_analysis_disk_memory_comparison_all(self):
         """
-            Method to show disk vs memory comparison using cbtransfer functionality
+            Method to show disk+memory vs memory comparison using cbtransfer functionality
             This will be done cluster level comparison
         """
         self.gen_create = BlobGenerator('loadOne', 'loadOne_', self.value_size, end=self.num_items)
@@ -129,9 +129,8 @@ class DataAnalysisTests(BaseTestCase):
             This works at cluster level
         """
         self.log.info(" Begin Verification for data comparison ")
-        data_path="/opt/couchbase/var/lib/couchbase/data"
-        info,memory_dataset=self.data_collector.collect_data(self.servers,self.buckets,data_path = None, perNode = False)
-        info,disk_dataset=self.data_collector.collect_data(self.servers,self.buckets,data_path = data_path, perNode = False)
+        info,memory_dataset=self.data_collector.collect_data(self.servers,self.buckets,data_path = None, perNode = False, mode = "memory")
+        info,disk_dataset=self.data_collector.collect_data(self.servers,self.buckets, perNode = False, mode = "disk")
         comparison_result=self.data_analyzer.compare_all_dataset(info, memory_dataset, disk_dataset)
         logic,summary,output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems = False, addedItems = False, updatedItems = False)
         self.log.info(" Verification summary :: {0} ".format(summary))

@@ -994,20 +994,20 @@ class BaseTestCase(unittest.TestCase):
                     for key in map[bucket][node][vbucket].keys():
                         print "            :: for key {0} = {1}".format(key, map[bucket][node][vbucket][key])
 
-    def get_data_set_all(self, servers, buckets, path=None):
+    def get_data_set_all(self, servers, buckets, path=None, mode = "memory"):
         """ Method to get all data set for buckets and from the servers """
-        info, memory_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False)
-        return memory_dataset
+        info, dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
+        return dataset
 
-    def get_and_compare_active_replica_data_set_all(self, servers, buckets, path=None):
+    def get_and_compare_active_replica_data_set_all(self, servers, buckets, path=None, mode = "disk"):
         """
            Method to get all data set for buckets and from the servers
            1)  Get active and replica data in the cluster
            2)  Compare active and replica data in the cluster
            3)  Return active and replica data
         """
-        info, disk_replica_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=True)
-        info, disk_active_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=False)
+        info, disk_replica_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=True, mode = mode)
+        info, disk_active_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=False, mode = mode)
         self.log.info(" Begin Verification for Active Vs Replica ")
         comparison_result = self.data_analyzer.compare_all_dataset(info, disk_replica_dataset, disk_active_dataset)
         logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=False, addedItems=False, updatedItems=False)
@@ -1015,7 +1015,7 @@ class BaseTestCase(unittest.TestCase):
         self.log.info(" End Verification for Active Vs Replica ")
         return disk_replica_dataset, disk_active_dataset
 
-    def data_analysis_active_replica_all(self, prev_data_set_active, prev_data_set_replica, servers, buckets, path=None):
+    def data_analysis_active_replica_all(self, prev_data_set_active, prev_data_set_replica, servers, buckets, path=None, mode = "disk"):
         """
             Method to do data analysis using cb transfer
             This works at cluster level
@@ -1024,27 +1024,27 @@ class BaseTestCase(unittest.TestCase):
             3) Compare Current Active and Replica data
         """
         self.log.info(" Begin Verification for data comparison ")
-        info, curr_data_set_replica = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=True)
-        info, curr_data_set_active = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=False)
-        self.log.info(" Comparing Prev vs Current :: Active and Replica ")
+        info, curr_data_set_replica = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=True, mode = mode)
+        info, curr_data_set_active = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=False, mode = mode)
+        self.log.info(" Comparing :: Prev vs Current :: Active and Replica ")
         comparison_result_replica = self.data_analyzer.compare_all_dataset(info, prev_data_set_replica, curr_data_set_replica)
         comparison_result_active = self.data_analyzer.compare_all_dataset(info, prev_data_set_active, curr_data_set_active)
         logic_replica, summary_replica, output_replica = self.result_analyzer.analyze_all_result(comparison_result_replica, deletedItems=False, addedItems=False, updatedItems=False)
         logic_active, summary_active, output_active = self.result_analyzer.analyze_all_result(comparison_result_active, deletedItems=False, addedItems=False, updatedItems=False)
         self.assertTrue(logic_replica, output_replica)
         self.assertTrue(logic_active, output_active)
-        self.log.info(" Comparing Current :: Active and Replica ")
+        self.log.info(" Comparing :: Current :: Active and Replica ")
         comparison_result = self.data_analyzer.compare_all_dataset(info, curr_data_set_active, curr_data_set_replica)
         logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=False, addedItems=False, updatedItems=False)
         self.log.info(" End Verification for data comparison ")
 
-    def data_analysis_all(self, prev_data_set, servers, buckets, path=None):
+    def data_analysis_all(self, prev_data_set, servers, buckets, path=None, mode = "memory"):
         """
             Method to do data analysis using cb transfer
             This works at cluster level
         """
         self.log.info(" Begin Verification for data comparison ")
-        info, curr_data_set = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False)
+        info, curr_data_set = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
         comparison_result = self.data_analyzer.compare_all_dataset(info, prev_data_set, curr_data_set)
         logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=False, addedItems=False, updatedItems=False)
         self.assertTrue(logic, output)

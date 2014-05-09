@@ -27,8 +27,6 @@ class RebalanceInTests(RebalanceBaseTest):
     then verify that there has been no data loss and sum(curr_items) match the curr_items_total.
     Once all nodes have been rebalanced in the test is finished."""
     def rebalance_in_after_ops(self):
-        rest = RestConnection(self.master)
-        data_path = rest.get_data_path()
         gen_update = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
         tasks = []
         tasks += self._async_load_all_buckets(self.master, gen_update, "update", 0)
@@ -39,7 +37,7 @@ class RebalanceInTests(RebalanceBaseTest):
         self._verify_stats_all_buckets(self.servers[:self.nodes_init], timeout=120)
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init], self.buckets)
         prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init], self.buckets)
-        disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init], self.buckets, path=data_path)
+        disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init], self.buckets, path=None)
         self.compare_vbucketseq_failoverlogs(prev_vbucket_stats, prev_failover_stats)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])
         rebalance.result()
@@ -49,7 +47,7 @@ class RebalanceInTests(RebalanceBaseTest):
         new_failover_stats = self.compare_failovers_logs(prev_failover_stats, self.servers[:self.nodes_in + self.nodes_init], self.buckets)
         new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, self.servers[:self.nodes_in + self.nodes_init], self.buckets)
         self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
-        self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, self.servers[:self.nodes_in + self.nodes_init], self.buckets, path=data_path)
+        self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, self.servers[:self.nodes_in + self.nodes_init], self.buckets, path=None)
 
 
     """Rebalances nodes into a cluster while doing docs ops:create, delete, update.

@@ -1952,29 +1952,36 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command(command)
         self.log_command_output(output, error)
 
-    def get_data_map_using_cbtransfer(self, buckets, data_path=None, userId="Administrator", password="password", getReplica=False):
+    def get_data_map_using_cbtransfer(self, buckets, data_path=None, userId="Administrator", password="password", getReplica=False, mode = "memory"):
         self.extract_remote_info()
         temp_path = "/tmp/"
         if self.info.type.lower() == 'windows':
             temp_path = WIN_TMP_PATH
         replicaOption = ""
+        prefix = str(uuid.uuid1())
+        fileName = prefix + ".csv"
         if getReplica:
              replicaOption = "  --source-vbucket-state=replica"
+
         source = "http://" + self.ip + ":8091"
-        if data_path:
+        if mode == "disk":
             source = "couchstore-files://" + data_path
+        elif mode == "backup":
+            source = data_path
+            fileName =  ""
+        # Initialize Output
         bucketMap = {}
         headerInfo = ""
+        # Iterate per bucket and generate maps
         for bucket in buckets:
             if data_path == None:
                 options = " -b " + bucket.name + " -u " + userId + " -p password --single-node"
             else:
                 options = " -b " + bucket.name + " -u " + userId + " -p password" + replicaOption
             suffix = "_" + bucket.name + "_N%2FA.csv"
-            if data_path == None:
+            if mode == "memory" or mode == "backup":
                suffix = "_" + bucket.name + "_" + self.ip + "%3A8091.csv"
-            prefix = str(uuid.uuid1())
-            fileName = prefix + ".csv"
+            
             genFileName = prefix + suffix
             csv_path = temp_path + fileName
             path = temp_path + genFileName

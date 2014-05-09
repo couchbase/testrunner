@@ -26,8 +26,6 @@ class RebalanceInOutTests(RebalanceBaseTest):
     We then remove and add back two nodes at a time and so on until we have reached the point
     where we are adding back and removing at least half of the nodes."""
     def rebalance_in_out_after_mutation(self):
-        rest = RestConnection(self.master)
-        data_path = rest.get_data_path()
         gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
@@ -40,7 +38,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self._verify_stats_all_buckets(self.servers[:self.nodes_init],timeout = 120)
         prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init],self.buckets)
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init],self.buckets)
-        disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init],self.buckets, path = data_path)
+        disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init],self.buckets, path = None)
         self.compare_vbucketseq_failoverlogs(prev_vbucket_stats,prev_failover_stats)
         self.cluster.rebalance(self.servers[:self.nodes_init-1], servs_in, servs_out)
         self._wait_for_stats_all_buckets(result_nodes)
@@ -49,7 +47,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.verify_cluster_stats(result_nodes)
         new_failover_stats  = self.compare_failovers_logs(prev_failover_stats,result_nodes,self.buckets)
         new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats,result_nodes,self.buckets,perNode= False)
-        self.data_analysis_active_replica_all(disk_active_dataset,disk_replica_dataset,result_nodes,self.buckets, path = data_path)
+        self.data_analysis_active_replica_all(disk_active_dataset,disk_replica_dataset,result_nodes,self.buckets, path = None)
         self.compare_vbucketseq_failoverlogs(new_vbucket_stats,new_failover_stats)
 
     """Rebalances nodes out and in of the cluster while doing mutations with max

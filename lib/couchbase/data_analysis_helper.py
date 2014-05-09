@@ -1,5 +1,6 @@
 from remote.remote_util import RemoteMachineShellConnection
 from lib.mc_bin_client import MemcachedClient
+from membase.api.rest_client import RestConnection
 # constants used in this file only
 DELETED_ITEMS_FAILURE_ANALYSIS_FORMAT="\n1) Failure :: Deleted Items :: Expected {0}, Actual {1}"
 DELETED_ITEMS_SUCCESS_ANALYSIS_FORMAT="\n1) Success :: Deleted Items "
@@ -340,7 +341,7 @@ class DataAnalyzer(object):
 class DataCollector(object):
     """ Helper Class to collect stats and data from clusters """
 
-    def collect_data(self,servers,buckets,userId="Administrator",password="password",data_path = None,perNode = True, getReplica = False):
+    def collect_data(self,servers,buckets,userId="Administrator",password="password", data_path = None, perNode = True, getReplica = False, mode = "memory"):
         """
             Method to extract all data information from memory or disk using cbtransfer
             The output is organized like { bucket :{ node { document-key : list of values }}}
@@ -367,7 +368,11 @@ class DataCollector(object):
         headerInfo = None
         for server in servers:
             remote_client = RemoteMachineShellConnection(server)
-            headerInfo,bucketMap = remote_client.get_data_map_using_cbtransfer(buckets,data_path=data_path,userId=userId,password=password, getReplica = getReplica)
+            if  mode  ==  "disk" and data_path == None:
+                rest = RestConnection(server)
+                data_path = rest.get_data_path()
+
+            headerInfo,bucketMap = remote_client.get_data_map_using_cbtransfer(buckets, data_path=data_path, userId=userId,password=password, getReplica = getReplica, mode = mode)
             remote_client.disconnect()
             for bucket in bucketMap.keys():
                 newMap = self.translateDataFromCSVToMap(0,bucketMap[bucket])
