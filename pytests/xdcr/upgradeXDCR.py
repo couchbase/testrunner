@@ -37,7 +37,8 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         self.views_num_dest = self.input.param("view-per-ddoc-dest", 2)
         self.post_upgrade_ops = self.input.param("post-upgrade-actions", None)
         self._use_encryption_after_upgrade = self.input.param("use_encryption_after_upgrade", 0)
-        self.upgrade_same_version = self.input.param("upgrade_same_version",0)
+        self.upgrade_same_version = self.input.param("upgrade_same_version", 0)
+
         self.ddocs_src = []
         self.ddocs_dest = []
 
@@ -160,6 +161,8 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         upgrade_nodes = self.input.param('upgrade_nodes', "src").split(";")
         PauseResumeXDCRBaseTest.setUp(self)
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
+        if self.initial_version < "3.0.0":
+            self.pause_xdcr_cluster = ""
         self.sleep(60)
         bucket = self._get_bucket(self, 'default', self.src_master)
         self._operations()
@@ -224,6 +227,8 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         self.initial_version = self.upgrade_versions[0]
         self._install(self.servers[self.src_init + self.dest_init:])
         PauseResumeXDCRBaseTest.setUp(self)
+        if self.initial_version < "3.0.0":
+            self.pause_xdcr_cluster = ""
         bucket_default = self._get_bucket(self, 'default', self.src_master)
         bucket_sasl = self._get_bucket(self, 'bucket0', self.src_master)
         bucket_standard = self._get_bucket(self, 'standard_bucket0', self.dest_master)
@@ -288,6 +293,8 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
 
         PauseResumeXDCRBaseTest.setUp(self)
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
+        if self.initial_version < "3.0.0":
+            self.pause_xdcr_cluster = ""
         self.sleep(60)
         bucket = self._get_bucket(self, 'default', self.src_master)
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
