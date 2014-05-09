@@ -1589,6 +1589,7 @@ class RemoteMachineShellConnection:
             info.disk = self.get_disk_info(win_info)
             info.ram = self.get_ram_info(win_info)
             info.hostname = self.get_hostname(win_info)
+            info.domain = self.get_domain(win_info)
             self.info = info
             return info
         else:
@@ -1636,9 +1637,20 @@ class RemoteMachineShellConnection:
         if o:
             return o
 
-    def get_domain(self):
-        ret = self.execute_command_raw('hostname -d')
+    def get_domain(self, win_info=None):
+        if win_info:
+            o = self.execute_batch_command('ipconfig')
+            suffix_dns_row = [row for row in o if row.find(" Connection-specific DNS Suffix") != -1]
+            ret = suffix_dns_row[0].split(':')[1].strip()
+        else:
+            ret = self.execute_command_raw('hostname -d')
         return ret
+
+    def get_full_hostname(self):
+        info = self.extract_remote_info()
+        if not info.domain:
+            return None
+        return '%s.%s' % (info.hostname[0], info.domain[0][0])
 
     def get_cpu_info(self, win_info=None, mac=False):
         if win_info:
@@ -2382,16 +2394,11 @@ class RemoteUtilHelper(object):
         shell = RemoteMachineShellConnection(server)
         info = shell.extract_remote_info()
         version = RestConnection(server).get_nodes_self().version
-        hostname = info.hostname[0]
         time.sleep(5)
-        if version.startswith("1.8.") or version.startswith("2.") or version.startswith("3."):
+        hostname = shell.get_full_hostname()
+        if version.startswith("1.8.") or version.startswith("2.0"):
             shell.stop_couchbase()
             if info.type.lower() == "windows":
-                o = shell.execute_batch_command('ipconfig')
-                suffix_dns_row = [row for row in o if row.find(" Connection-specific DNS Suffix") != -1]
-                suffix_dns = suffix_dns_row[0].split(':')[1].strip()
-                hostname = '%s.%s' % (hostname, suffix_dns)
-
                 cmd = "'C:/Program Files/Couchbase/Server/bin/service_unregister.bat'"
                 shell.execute_command_raw(cmd)
                 cmd = 'cat "C:\\Program Files\\Couchbase\\Server\\bin\\service_register.bat"'
@@ -2404,9 +2411,6 @@ class RemoteUtilHelper(object):
                 cmd = 'rm -rf  "C:/Program Files/Couchbase/Server/var/lib/couchbase/mnesia/*"'
                 shell.execute_command_raw(cmd)
             else:
-                o = shell.execute_command_raw('nslookup %s' % hostname)
-                suffix_dns_row = [row for row in o[0] if row.find("Name:") != -1]
-                hostname = suffix_dns_row[0].split(':')[1].strip()
                 cmd = "cat  /opt/couchbase/bin/couchbase-server"
                 old_start = shell.execute_command_raw(cmd)
                 cmd = r"sed -i 's/\(.*\-run ns_bootstrap.*\)/\1\n\t-name ns_1@{0} \\/' \
@@ -2423,9 +2427,6 @@ class RemoteUtilHelper(object):
                 cmd = 'echo "%s" > /opt/couchbase/var/lib/couchbase/ip' % hostname
                 shell.execute_command(cmd)
         else:
-            o = shell.execute_command_raw('nslookup %s' % hostname)
-            suffix_dns_row = [row for row in o[0] if row.find("Name:") != -1]
-            hostname = suffix_dns_row[0].split(':')[1].strip()
             RestConnection(server).rename_node(hostname)
             shell.stop_couchbase()
         shell.start_couchbase()

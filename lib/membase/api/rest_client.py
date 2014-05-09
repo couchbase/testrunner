@@ -273,13 +273,23 @@ class RestConnection(object):
             self.username = serverInfo["username"]
             self.password = serverInfo["password"]
             self.port = serverInfo["port"]
+            self.hostname = ''
+            if "hostname" in serverInfo:
+                self.hostname = serverInfo["hostname"]
         else:
             self.ip = serverInfo.ip
             self.username = serverInfo.rest_username
             self.password = serverInfo.rest_password
             self.port = serverInfo.port
+            self.hostname = ''
+            if hasattr(serverInfo, 'hostname') and serverInfo.hostname and\
+               serverInfo.hostname.find(self.ip)== -1:
+                self.hostname = serverInfo.hostname
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
+        if self.hostname:
+            self.baseUrl = "http://{0}:{1}/".format(self.hostname, self.port)
+            self.capiBaseUrl = "http://{0}:{1}/".format(self.hostname, 8092)
         #for Node is unknown to this cluster error
         for iteration in xrange(5):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
@@ -371,22 +381,14 @@ class RestConnection(object):
             print("{0}: {1}".format(api, content))
             return content, False
 
-    def rename_node(self, hostname, username='Administrator', password='password', port='8091', is_negative_test=False):
-        if not is_negative_test:
-            if not hostname:
-                return ""
-
+    def rename_node(self, hostname, username='Administrator', password='password'):
         params = urllib.urlencode({'username': username,
                                    'password': password,
                                    'hostname': hostname})
 
-        api = "%s%s" % (self.baseUrl, 'node/controller/rename')
-
-        try:
-            status, content, header = self._http_request(api, 'POST', params)
-            return json.loads(content)
-        except ValueError:
-            return ""
+        api = "%snode/controller/rename" % (self.baseUrl)
+        status, content, header = self._http_request(api, 'POST', params)
+        return status, content
 
     def active_tasks(self):
         api = self.capiBaseUrl + "_active_tasks"
