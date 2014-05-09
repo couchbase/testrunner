@@ -115,8 +115,8 @@ def locate_conf_file(filename):
     if filename:
         if os.path.exists(filename):
             return file(filename)
-        if os.path.exists("conf/" + filename):
-            return file("conf/" + filename)
+        if os.path.exists("conf{0}{1}".format(os.sep, filename)):
+            return file("conf{0}{1}".format(os.sep, filename))
         return None
 
 
@@ -261,7 +261,7 @@ if __name__ == "__main__":
     abs_path = os.path.dirname(os.path.abspath(sys.argv[0]))
     # Create testrunner logs subdirectory
     str_time = time.strftime("%y-%b-%d_%H-%M-%S", time.localtime())
-    root_log_dir = os.path.join(abs_path, "logs/testrunner-" + str_time)
+    root_log_dir = os.path.join(abs_path, "logs{0}testrunner-{1}".format(os.sep, str_time))
     if not os.path.exists(root_log_dir):
         os.makedirs(root_log_dir)
 
@@ -294,12 +294,12 @@ if __name__ == "__main__":
         logs_folder = os.path.join(root_log_dir, "test_%s" % case_number)
         os.mkdir(logs_folder)
         test_log_file = os.path.join(logs_folder, "test.log")
-        log_config_filename = os.path.join(logs_folder, "test.logging.conf")
+        log_config_filename = r'{0}'.format(os.path.join(logs_folder, "test.logging.conf"))
         create_log_file(log_config_filename, test_log_file, options.loglevel)
         logging.config.fileConfig(log_config_filename)
         print "Logs will be stored at {0}".format(logs_folder)
-        print "\n./testrunner -i {0} {1} -t {2}\n"\
-              .format(arg_i or "", arg_p or "", name)
+        print "\n.{3}testrunner -i {0} {1} -t {2}\n"\
+              .format(arg_i or "", arg_p or "", name, os.sep)
         name = name.split(",")[0]
 
         # Update the test params for each test
@@ -365,7 +365,7 @@ if __name__ == "__main__":
         else:
             xunit.add_test(name=name, time=time_taken, params=params)
             results.append({"result": "pass", "name": name, "time": time_taken})
-        xunit.write("{0}/report-{1}".format(os.path.dirname(logs_folder), str_time))
+        xunit.write("{0}{2}report-{1}".format(os.path.dirname(logs_folder), str_time, os.sep))
         xunit.print_summary()
         print "testrunner logs, diags and results are available under {0}".format(logs_folder)
         case_number += 1
