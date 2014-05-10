@@ -76,7 +76,7 @@ class RebalanceInTests(RebalanceBaseTest):
                 tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
         for task in tasks:
             task.result()
-        self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + self.nodes_init])
+        self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
 
     def rebalance_in_with_ops_batch(self):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=(self.num_items / 2 - 1), end=self.num_items)

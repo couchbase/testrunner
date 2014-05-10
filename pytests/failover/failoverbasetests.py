@@ -19,6 +19,7 @@ class FailoverBaseTest(BaseTestCase):
         self.failoverMaster = self.input.param("failoverMaster", False)
         self.withOps = self.input.param("withOps", False)
         self.runViews = self.input.param("runViews", False)
+        self.upr_check = self.input.param("upr_check", True)
         self.withQueries = self.input.param("withQueries", False)
         self.numberViews = self.input.param("numberViews", False)
         self.gracefulFailoverFail = self.input.param("gracefulFailoverFail", False)

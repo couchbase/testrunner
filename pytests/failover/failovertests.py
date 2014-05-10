@@ -85,7 +85,7 @@ class FailoverTests(FailoverBaseTest):
         prev_failover_stats = {}
 
         # Capture  vbucket and failover stats if test version >= 2.5.*
-        if self.version_greater_than_2_5:
+        if self.version_greater_than_2_5 and self.upr_check:
             prev_vbucket_stats = self.get_vbucket_seqnos(self.servers, self.buckets)
             prev_failover_stats = self.get_failovers_logs(self.servers, self.buckets)
 
@@ -141,7 +141,7 @@ class FailoverTests(FailoverBaseTest):
                 self.verify_query_task()
             # Check Failover logs :: Not sure about this logic, currently not checking, will update code once confirmed
             # Currently, only  for checking case where we  have graceful failover
-            if self.version_greater_than_2_5 and self.graceful:
+            if self.version_greater_than_2_5 and self.graceful and self.upr_check:
                 new_failover_stats = self.compare_failovers_logs(prev_failover_stats, _servers_, self.buckets)
                 new_vbucket_stats =  self.compare_vbucket_seqnos(prev_vbucket_stats, _servers_, self.buckets)
                 self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
@@ -199,7 +199,7 @@ class FailoverTests(FailoverBaseTest):
 
         # Verify if vbucket sequence numbers and failover logs are as expected
         # We will check only for version  > 2.5.* and if the failover is graceful
-        if self.version_greater_than_2_5 and self.graceful:
+        if self.version_greater_than_2_5 and self.graceful and self.upr_check:
             new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, self.servers, self.buckets,perNode= False)
             new_failover_stats = self.compare_failovers_logs(prev_failover_stats,self.servers,self.buckets)
             self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
