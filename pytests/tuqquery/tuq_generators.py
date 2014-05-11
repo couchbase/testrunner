@@ -34,11 +34,7 @@ class TuqGenerators(object):
                                                                                     if isinstance(attr[1], str) or isinstance(attr[1], unicode)]
             self.type_args['_list_obj%s_int'% (self.type_args['list_obj'].index(obj))] = [attr[0] for attr in full_set[0][obj][0].iteritems()
                                                                                     if isinstance(attr[1], int)]
-        self.distict = False
-        self.aggr_fns = {}
-        self.aliases = {}
-        self.attr_order_clause_greater_than_select = []
-        self.parent_selected = False
+        self._clear_current_query()
 
     def generate_query(self, template):
         query = template
@@ -53,20 +49,23 @@ class TuqGenerators(object):
         return query
 
     def generate_expected_result(self):
-        self._create_alias_map()
-        where_clause = self._format_where_clause()
-        log.info("WHERE clause ===== is %s" % where_clause)
-        from_clause = self._format_from_clause()
-        log.info("FROM clause ===== is %s" % from_clause)
-        unnest_clause = self._format_unnest_clause(from_clause)
-        log.info("UNNEST clause ===== is %s" % unnest_clause)
-        select_clause = self._format_select_clause()
-        log.info("SELECT clause ===== is %s" % select_clause)
-        result = self._filter_full_set(select_clause, where_clause, unnest_clause)
-        result = self._order_results(result)
-        result = self._limit_and_offset(result)
-        log.info("Expected result is %s ..." % str(result[:15]))
-        return result
+        try:
+            self._create_alias_map()
+            where_clause = self._format_where_clause()
+            log.info("WHERE clause ===== is %s" % where_clause)
+            from_clause = self._format_from_clause()
+            log.info("FROM clause ===== is %s" % from_clause)
+            unnest_clause = self._format_unnest_clause(from_clause)
+            log.info("UNNEST clause ===== is %s" % unnest_clause)
+            select_clause = self._format_select_clause()
+            log.info("SELECT clause ===== is %s" % select_clause)
+            result = self._filter_full_set(select_clause, where_clause, unnest_clause)
+            result = self._order_results(result)
+            result = self._limit_and_offset(result)
+            log.info("Expected result is %s ..." % str(result[:15]))
+            return result
+        finally:
+            self._clear_current_query()
 
     def _create_alias_map(self):
         query_dict = self.query.split()
@@ -186,6 +185,9 @@ class TuqGenerators(object):
                         attr[0] = self.aliases[attr[0]]
                     self.aggr_fns['COUNT']['field'] = attr[0]
                     self.aggr_fns['COUNT']['alias'] = ('$1', attr[-1])[len(attr) > 1]
+                    if attr[0] == '*':
+                        condition += '"%s" : doc,' % attr[-1]
+                    continue
             elif attr[0].upper() == 'DISTINCT':
                 attr = attr[1:]
                 self.distict= True
@@ -199,7 +201,8 @@ class TuqGenerators(object):
                         condition = 'doc["%s"]' % (attr[0].split('.')[0])
                         return condition
                     else:
-                        condition += '"%s" : doc["%s"]["%s"],' % (attr[0], attr[0].split('.')[0], attr[0].split('.')[1])
+                        condition += '"%s" : {%s : doc["%s"]["%s"]},' % (attr[0].split('.')[0], attr[0].split('.')[1],
+                                                                         attr[0].split('.')[0], attr[0].split('.')[1])
                 else:
                     if attr[0].find('[') != -1:
                         condition += '"%s" : doc["%s"]%s,' % (attr[0], attr[0][:attr[0].find('[')], attr[0][attr[0].find('['):])
@@ -225,13 +228,19 @@ class TuqGenerators(object):
     def _filter_full_set(self, select_clause, where_clause, unnest_clause):
         diff = self._order_clause_greater_than_select(select_clause)
         if diff and not self._is_parent_selected(select_clause, diff):
-            if diff[0].find('.') != -1:
-                select_clause = select_clause[:-1] + ','.join(['"%s" : {"%s" : %s}' %([at.replace('"','') for at in re.compile('"\w+"').findall(attr)][0],
-                                                                                  [at.replace('"','') for at in re.compile('"\w+"').findall(attr)][1],
-                                                                attr) for attr in self._order_clause_greater_than_select(select_clause)]) + '}'
-            else:
+            if diff[0].find('][') == -1:
                 select_clause = select_clause[:-1] + ','.join(['"%s" : %s' %([at.replace('"','') for at in re.compile('"\w+"').findall(attr)][0],
-                                                                attr) for attr in self._order_clause_greater_than_select(select_clause)]) + '}'
+                                                                            attr) for attr in self._order_clause_greater_than_select(select_clause)]) + '}'
+            else:
+                for attr in self._order_clause_greater_than_select(select_clause):
+                    select_clause = select_clause[:-1]
+                    for at in re.compile('"\w+"').findall(attr):
+                        if attr.find('][') != -1:
+                            attrs_split = [at.replace('"','') for at in re.compile('"\w+"').findall(attr)]
+                            select_clause = select_clause + '"%s" : {"%s" : %s},' %(attrs_split[0], attrs_split[1], attr)
+                        else:
+                            select_clause = select_clause + '"%s" : %s,' %([at.replace('"','') for at in re.compile('"\w+"').findall(attr)][0], attr)
+                    select_clause = select_clause + '}'
         if where_clause:
             result = [eval(select_clause) for doc in self.full_set if eval(where_clause)]
         else:
@@ -240,13 +249,13 @@ class TuqGenerators(object):
             result = [dict(y) for y in set(tuple(x.items()) for x in result)]
         if unnest_clause:
             result = [item for doc in self.full_set for item in eval(unnest_clause)]
+        if self._create_groups()[0]:
+            result = self._group_results(result)
         if self.aggr_fns:
             if not self._create_groups()[0]:
                 for fn_name, params in self.aggr_fns.iteritems():
                     if fn_name == 'COUNT':
                         result = [{params['alias'] : len(result)}]
-            else:
-                result = self._group_results(result)
         return result
 
     def _order_clause_greater_than_select(self, select_clause):
@@ -257,6 +266,8 @@ class TuqGenerators(object):
         diff = [attr for attr in diff if attr != '']
         if not set(diff) - set(['doc["%s"]' % alias for alias in self.aliases]):
             return None
+        else:
+            diff = list(set(diff) - set(['doc["%s"]' % alias for alias in self.aliases]))
         if diff:
             self.attr_order_clause_greater_than_select = [re.sub(r'"\].*', '', re.sub(r'doc\["', '', attr)) for attr in diff]
             return list(diff)
@@ -346,6 +357,8 @@ class TuqGenerators(object):
         return result
 
     def _create_groups(self):
+        if self.query.find('GROUP BY') == -1:
+            return 0, None
         group_clause = re.sub(r'ORDER BY.*', '', re.sub(r'.*GROUP BY', '', self.query)).strip()
         if not group_clause:
             return 0, None
@@ -354,7 +367,11 @@ class TuqGenerators(object):
         if len(attrs) == 2:
             groups = set([(doc[attrs[0]],doc[attrs[1]])  for doc in self.full_set])
         elif len(attrs) == 1:
-            groups = set([doc[attrs[0]]  for doc in self.full_set])
+            if attrs[0].find('.') != -1:
+                groups = set([doc[attrs[0].split('.')[0]][attrs[0].split('.')[1]]
+                              for doc in self.full_set])
+            else:
+                groups = set([doc[attrs[0]]  for doc in self.full_set])
         return attrs, groups
 
     def _group_results(self, result):
@@ -379,21 +396,61 @@ class TuqGenerators(object):
                                 params['alias'] : min([doc[params['field']] for doc in result
                                 if doc[attrs[0]]==group])}
                           for group in groups]
+        else:
+            result = [dict(y) for y in set(tuple(x.items()) for x in result)]
         return result
 
     def get_alias_for(self, value_search):
         for key, value in self.aliases.iteritems():
             if value == value_search:
                 return key
+        return ''
 
     def get_all_attributes(self):
         return [att for name, group in self.type_args.iteritems()
                 for att in group if not name.startswith('_')]
 
     def _is_parent_selected(self, clause, diff):
-        self.parent_selected = [select_el for select_el in re.compile('doc\["[\w\']+"\]').findall(clause)
-                for diff_el in diff if diff_el.find(select_el) != -1] > 0
+        self.parent_selected = len([select_el for select_el in re.compile('doc\["[\w\']+"\]').findall(clause)
+                for diff_el in diff if diff_el.find(select_el) != -1]) > 0
         return self.parent_selected
 
     def format_satisfy_clause(self):
-        return ''
+        if self.query.find('ANY') == -1 and self.query.find('EVERY') == -1:
+            return ''
+        satisfy_clause = re.sub(r'.*ANY', '', re.sub(r'END.*', '', self.query)).strip()
+        satisfy_clause = re.sub(r'.*ALL', '', re.sub(r'.*EVERY', '', satisfy_clause)).strip()
+        if not satisfy_clause:
+            return ''
+        main_attr = re.sub(r'SATISFIES.*', '', re.sub(r'.*IN', '', satisfy_clause)).strip()
+        attributes = self.get_all_attributes()
+        if main_attr in attributes:
+            main_attr = 'doc["%s"]' % (main_attr)
+        else:
+            if main_attr.find('.') != -1:
+                parent, child = main_attr.split('.')
+                if parent in self.aliases and self.aliases[parent] in attributes:
+                    main_attr = 'doc["%s"]["%s"]' % (self.aliases[parent], child)
+                else:
+                    main_attr = 'doc["%s"]' % (child)
+        if self.query.find('ANY') != -1:
+            result_clause = 'len([att for att in %s if ' % main_attr
+        satisfy_expr = re.sub(r'.*SATISFIES', '', re.sub(r'END.*', '', satisfy_clause)).strip()
+        for expr in satisfy_expr.split():
+            if expr.find('.') != -1:
+                result_clause += ' att["%s"] ' % expr.split('.')[1]
+            elif expr.find('=') != -1:
+                result_clause += ' == '
+            elif expr.upper() in ['AND', 'OR', 'NOT']:
+                result_clause += expr.lower()
+            else:
+                result_clause += ' %s ' % expr
+        result_clause += ']) > 0'
+        return result_clause
+
+    def _clear_current_query(self):
+        self.distict = False
+        self.aggr_fns = {}
+        self.aliases = {}
+        self.attr_order_clause_greater_than_select = []
+        self.parent_selected = False

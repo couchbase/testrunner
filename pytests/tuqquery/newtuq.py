@@ -82,8 +82,8 @@ class QueryTests(BaseTestCase):
     def test_consistent_simple_check(self):
         queries = [self.gen_results.generate_query('SELECT $str0, $int0, $int1 FROM %s ' +\
                     'WHERE $str0 IS NOT NULL AND $int0<10 ' +\
-                    'OR $int1 = 6 ORDER BY $int0, join_mo'), 
-                   self.gen_results.generate_query('SELECT $str0, $int0, join_mo FROM %s ' +\
+                    'OR $int1 = 6 ORDER BY $int0, $int1'), 
+                   self.gen_results.generate_query('SELECT $str0, $int0, $int1 FROM %s ' +\
                     'WHERE $int1 = 6 OR $str0 IS NOT NULL AND ' +\
                     '$int0<10 ORDER BY $int0, $int1')]
         for bucket in self.buckets:
@@ -154,7 +154,7 @@ class QueryTests(BaseTestCase):
 
             query_template = 'SELECT COUNT(*) + 1 AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            expected_result = [ { "COUNT_EMPLOYEE": len(expected_result[0]['COUNT_EMPLOYEE']) + 1 } ]
+            expected_result = [ { "COUNT_EMPLOYEE": expected_result[0]['COUNT_EMPLOYEE'] + 1 } ]
             self.assertEquals(actual_result['resultset'], expected_result,
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
                                         actual_result['resultset'], expected_result))
@@ -246,7 +246,7 @@ class QueryTests(BaseTestCase):
 
     def test_order_by_check(self):
         for bucket in self.buckets:
-            query_template = 'SELECT $str0, $str1, $obj0.$_obj0_int0 FROM %s'  % (bucket.name) +\
+            query_template = 'SELECT $str0, $str1, $obj0.$_obj0_int0 points FROM %s'  % (bucket.name) +\
             ' ORDER BY $str1, $str0, $obj0.$_obj0_int0'
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(actual_result['resultset'], expected_result)
@@ -274,7 +274,7 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             query_template = 'SELECT $int0, $int1, count(*) AS emp_per_month from %s'% (
                                                                             bucket.name) +\
-            ' WHERE $int1>7 GROUP BY $int0, $int1 ORDER BY emp_per_month, $int1, $int0'  
+            ' WHERE $int1 >7 GROUP BY $int0, $int1 ORDER BY emp_per_month, $int1, $int0'  
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(actual_result['resultset'], expected_result)
 
