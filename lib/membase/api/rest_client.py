@@ -817,8 +817,8 @@ class RestConnection(object):
 
     def add_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=''):
         #example : password:password username:Administrator hostname:127.0.0.1:9002 name:two
-        msg = "adding remote cluster hostname:{0}:{1} with username:password {2}:{3} name:{4}"
-        log.info(msg.format(remoteIp, remotePort, username, password, name))
+        msg = "adding remote cluster hostname:{0}:{1} with username:password {2}:{3} name:{4} to source node: {5}:{6}"
+        log.info(msg.format(remoteIp, remotePort, username, password, name, self.ip, self.port))
         api = self.baseUrl + 'pools/default/remoteClusters'
         self.__remote_clusters(api, 'add', remoteIp, remotePort, username, password, name, demandEncryption, certificate)
 
@@ -863,8 +863,8 @@ class RestConnection(object):
     def start_replication(self, replicationType, fromBucket, toCluster, rep_type="xmem", toBucket=None):
         toBucket = toBucket or fromBucket
 
-        msg = "starting replication type:{0} from {1} to {2} in the remote cluster {3}"
-        log.info(msg.format(replicationType, fromBucket, toBucket, toCluster))
+        msg = "starting {0} replication type:{1} from {2} to {3} in the remote cluster {4}"
+        log.info(msg.format(replicationType, rep_type, fromBucket, toBucket, toCluster))
         api = self.baseUrl + 'controller/createReplication'
         param_map = {'replicationType': replicationType,
                      'toBucket': toBucket,
