@@ -1,4 +1,7 @@
 import re
+import logger
+
+log = logger.Logger.get_logger()
 
 class TuqGenerators(object):
     
@@ -28,20 +31,22 @@ class TuqGenerators(object):
                                                                                     if isinstance(attr[1], int)]
         for obj in self.type_args['list_obj']:
             self.type_args['_list_obj%s_str' % (self.type_args['list_obj'].index(obj))] = [attr[0] for attr in full_set[0][obj][0].iteritems()
-                                                                                    if isinstance(attr[1], str)]
+                                                                                    if isinstance(attr[1], str) or isinstance(attr[1], unicode)]
             self.type_args['_list_obj%s_int'% (self.type_args['list_obj'].index(obj))] = [attr[0] for attr in full_set[0][obj][0].iteritems()
                                                                                     if isinstance(attr[1], int)]
         self.distict = False
         self.aggr_fns = {}
         self.aliases = {}
         self.attr_order_clause_greater_than_select = []
+        self.parent_selected = False
 
     def generate_query(self, template):
         query = template
         for name_type, type_arg in self.type_args.iteritems():
             for attr_type_arg in type_arg:
                 query = query.replace('$%s%s' % (name_type, type_arg.index(attr_type_arg)), attr_type_arg)
-        for expr in [' where ', ' select ', ' from ', ' order by', ' limit ', ' offset ', ' count(' , 'group by', 'unnest']:
+        for expr in [' where ', ' select ', ' from ', ' order by', ' limit ', 'end',
+                     ' offset ', ' count(' , 'group by', 'unnest', 'min', 'satisfies']:
             query = query.replace(expr, expr.upper())
         self.log.info("Generated query to be run: '''%s'''" % query)
         self.query = query
@@ -50,12 +55,17 @@ class TuqGenerators(object):
     def generate_expected_result(self):
         self._create_alias_map()
         where_clause = self._format_where_clause()
+        log.info("WHERE clause ===== is %s" % where_clause)
         from_clause = self._format_from_clause()
+        log.info("FROM clause ===== is %s" % from_clause)
         unnest_clause = self._format_unnest_clause(from_clause)
+        log.info("UNNEST clause ===== is %s" % unnest_clause)
         select_clause = self._format_select_clause()
+        log.info("SELECT clause ===== is %s" % select_clause)
         result = self._filter_full_set(select_clause, where_clause, unnest_clause)
         result = self._order_results(result)
         result = self._limit_and_offset(result)
+        log.info("Expected result is %s ..." % str(result[:15]))
         return result
 
     def _create_alias_map(self):
@@ -69,10 +79,12 @@ class TuqGenerators(object):
             return None
         clause = re.sub(r'ORDER BY.*', '', re.sub(r'.*WHERE', '', self.query))
         clause = re.sub(r'GROUP BY.*', '', clause)
-        attributes = [attr for name, group in self.type_args.iteritems()
-                      for attr in group if not name.startswith('_')]
+        attributes = self.get_all_attributes()
         conditions = clause.replace('IS NULL', 'is None')
         conditions = conditions.replace('IS NOT NULL', 'is not None')
+        satisfy_expr = self.format_satisfy_clause()
+        if satisfy_expr:
+            conditions = re.sub(r'ANY.*END', '', clause)
         regex = re.compile("[\w']+\.[\w']+")
         atts = regex.findall(conditions)
         for att in atts:
@@ -92,6 +104,8 @@ class TuqGenerators(object):
                                                     ' doc["%s"] ' % (child))
         for attr in attributes:
             conditions = conditions.replace(' %s ' % attr, ' doc["%s"] ' % attr)
+        if satisfy_expr:
+            conditions += '' + satisfy_expr
         return conditions
 
     def _format_from_clause(self):
@@ -110,8 +124,7 @@ class TuqGenerators(object):
         if len(attr) == 1:
             clause = 'doc["%s"]' % attr[0]
         elif len(attr) == 2:
-            attributes = [att for name, group in self.type_args.iteritems()
-                      for att in group if not name.startswith('_')]
+            attributes = self.get_all_attributes()
             if attr[0].find('.') != -1:
                 parent, child = attr[0].split('.')
                 if parent in attributes:
@@ -131,8 +144,7 @@ class TuqGenerators(object):
                 clause = 'doc["%s"]' % attr[0]
                 self.aliases[attr[1]] = attr[0]
         elif len(attr) == 3 and ('as' in attr or 'AS' in attr):
-            attributes = [att for name, group in self.type_args.iteritems()
-                      for att in group if not name.startswith('_')]
+            attributes = self.get_all_attributes()
             if attr[0].find('.') != -1:
                 parent, child = attr[0].split('.')
                 if parent in attributes:
@@ -183,6 +195,9 @@ class TuqGenerators(object):
                 if attr[0].find('.') != -1:
                     if attr[0].find('[') != -1:
                         condition += '"%s" : doc["%s"]%s,' % (attr[0], attr[0][:attr[0].find('[')], attr[0][attr[0].find('['):])
+                    elif attr[0].split('.')[1] == '*':
+                        condition = 'doc["%s"]' % (attr[0].split('.')[0])
+                        return condition
                     else:
                         condition += '"%s" : doc["%s"]["%s"],' % (attr[0], attr[0].split('.')[0], attr[0].split('.')[1])
                 else:
@@ -208,10 +223,15 @@ class TuqGenerators(object):
         return condition
 
     def _filter_full_set(self, select_clause, where_clause, unnest_clause):
-        if self._order_clause_greater_than_select(select_clause):
-            select_clause = select_clause[:-1] + ','.join(['"%s" : {"%s" : %s}' %([at.replace('"','') for at in re.compile('"\w+"').findall(attr)][0],
+        diff = self._order_clause_greater_than_select(select_clause)
+        if diff and not self._is_parent_selected(select_clause, diff):
+            if diff[0].find('.') != -1:
+                select_clause = select_clause[:-1] + ','.join(['"%s" : {"%s" : %s}' %([at.replace('"','') for at in re.compile('"\w+"').findall(attr)][0],
                                                                                   [at.replace('"','') for at in re.compile('"\w+"').findall(attr)][1],
-                                                attr) for attr in self._order_clause_greater_than_select(select_clause)]) + '}'
+                                                                attr) for attr in self._order_clause_greater_than_select(select_clause)]) + '}'
+            else:
+                select_clause = select_clause[:-1] + ','.join(['"%s" : %s' %([at.replace('"','') for at in re.compile('"\w+"').findall(attr)][0],
+                                                                attr) for attr in self._order_clause_greater_than_select(select_clause)]) + '}'
         if where_clause:
             result = [eval(select_clause) for doc in self.full_set if eval(where_clause)]
         else:
@@ -251,17 +271,33 @@ class TuqGenerators(object):
         order_attrs = order_clause.split(',')
         for attr_s in order_attrs:
             attr = attr_s.split()
+            if attr[0] in self.aliases.itervalues():
+                    condition += 'doc["%s"],' % (self.get_alias_for(attr[0]))
+                    continue
+            if attr[0].find('MIN') != -1:
+                self.aggr_fns['MIN'] = {}
+                attr[0]= attr[0][4:-1]
+                self.aggr_fns['MIN']['field'] = attr[0]
+                self.aggr_fns['MIN']['alias'] = '$gr1'
             if attr[0].find('.') != -1:
-                attributes = [att for name, group in self.type_args.iteritems()
-                      for att in group if not name.startswith('_')]
-                if attr[0].split('.')[0] in self.aliases and (not self.aliases[attr[0].split('.')[0]] in attributes):
+                attributes = self.get_all_attributes()
+                if attr[0].split('.')[0] in self.aliases and (not self.aliases[attr[0].split('.')[0]] in attributes) or\
+                   attr[0].split('.')[0] in attributes:
                     condition += 'doc["%s"]["%s"],' % (attr[0].split('.')[0],attr[0].split('.')[1])
                 else:
-                    condition += 'doc["%s"],' % attr[0].split('.')[1]
+                    if attr[0].split('.')[0].find('[') != -1:
+                        ind = attr[0].split('.')[0].index('[')
+                        condition += 'doc["%s"]%s["%s"],' % (attr[0].split('.')[0][:ind], attr[0].split('.')[0][ind:],
+                                                             attr[0].split('.')[1])
+                    else:
+                        condition += 'doc["%s"],' % attr[0].split('.')[1]
             else:
-                condition += 'doc["%s"],' % attr[0]
-        print "ORDER CL"
-        print condition
+                if attr[0].find('[') != -1:
+                    ind = attr[0].index('[')
+                    condition += 'doc["%s"]%s,' % (attr[0].split('.')[0][:ind], attr[0].split('.')[0][ind:])
+                else:
+                    condition += 'doc["%s"],' % attr[0]
+        log.info("ORDER clause ========= is %s" % condition)
         return condition
 
     def _order_results(self, result):
@@ -276,14 +312,25 @@ class TuqGenerators(object):
                 attr = attr_s.split()
                 if len(attr) == 2 and attr[1].upper() == 'DESC':
                     reverse = True
+            for att_name in re.compile('"[\w\']+"').findall(order_clause):
+                if att_name[1:-1] in self.aliases.itervalues():
+                    order_clause = order_clause.replace(att_name[1:-1],
+                                                        self.get_alias_for(att_name[1:-1]))
+                if self.aggr_fns and att_name[1:-1] in [params['field'] for params in self.aggr_fns.itervalues()]:
+                    order_clause = order_clause.replace(att_name[1:-1],
+                                                        [params['alias'] for params in self.aggr_fns.itervalues()
+                                                         if params['field'] == att_name[1:-1]][0])
             key = lambda doc: eval(order_clause)
         result = sorted(result, key=key, reverse=reverse)
-        if self.attr_order_clause_greater_than_select:
+        if self.attr_order_clause_greater_than_select and not self.parent_selected:
             for doc in result:
                 for attr in self.attr_order_clause_greater_than_select:
                     if attr.find('.') != -1:
                         attr = attr.split('.')[0]
-                    del doc[attr]
+                    if attr in doc:
+                        del doc[attr]
+                    elif '$gr1' in doc:
+                        del doc['$gr1']
         return result
 
     def _limit_and_offset(self, result):
@@ -306,6 +353,8 @@ class TuqGenerators(object):
         attrs = [attr.strip() for attr in attrs]
         if len(attrs) == 2:
             groups = set([(doc[attrs[0]],doc[attrs[1]])  for doc in self.full_set])
+        elif len(attrs) == 1:
+            groups = set([doc[attrs[0]]  for doc in self.full_set])
         return attrs, groups
 
     def _group_results(self, result):
@@ -317,4 +366,34 @@ class TuqGenerators(object):
                                 if doc[attrs[0]]==group[0] and doc[attrs[1]]==group[1]])}
                           for group in groups]
                 result = [doc for doc in result if doc[params['alias']] > 0]
+            if fn_name == 'MIN':
+                if isinstance(list(groups)[0], tuple):
+                    result = [{attrs[0] : group[0], attrs[1] : group[1],
+                                    params['alias'] : min([doc[params['field']] for doc in result
+                                    if doc[attrs[0]]==group[0] and doc[attrs[1]]==group[1]])}
+                              for group in groups]
+                else:
+                    if attrs[0] in self.aliases.itervalues():
+                        attrs[0] = self.get_alias_for(attrs[0])
+                    result = [{attrs[0] : group,
+                                params['alias'] : min([doc[params['field']] for doc in result
+                                if doc[attrs[0]]==group])}
+                          for group in groups]
         return result
+
+    def get_alias_for(self, value_search):
+        for key, value in self.aliases.iteritems():
+            if value == value_search:
+                return key
+
+    def get_all_attributes(self):
+        return [att for name, group in self.type_args.iteritems()
+                for att in group if not name.startswith('_')]
+
+    def _is_parent_selected(self, clause, diff):
+        self.parent_selected = [select_el for select_el in re.compile('doc\["[\w\']+"\]').findall(clause)
+                for diff_el in diff if diff_el.find(select_el) != -1] > 0
+        return self.parent_selected
+
+    def format_satisfy_clause(self):
+        return ''
