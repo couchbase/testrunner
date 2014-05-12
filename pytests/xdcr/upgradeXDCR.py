@@ -224,10 +224,11 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
 
     def online_cluster_upgrade(self):
         self._install(self.servers[:self.src_init + self.dest_init ])
+        prev_initial_version = self.initial_version
         self.initial_version = self.upgrade_versions[0]
         self._install(self.servers[self.src_init + self.dest_init:])
         PauseResumeXDCRBaseTest.setUp(self)
-        if self.initial_version < "3.0.0":
+        if prev_initial_version < "3.0.0":
             self.pause_xdcr_cluster = ""
         bucket_default = self._get_bucket(self, 'default', self.src_master)
         bucket_sasl = self._get_bucket(self, 'bucket0', self.src_master)
@@ -293,8 +294,6 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
 
         PauseResumeXDCRBaseTest.setUp(self)
         self.set_xdcr_param('xdcrFailureRestartInterval', 1)
-        if self.initial_version < "3.0.0":
-            self.pause_xdcr_cluster = ""
         self.sleep(60)
         bucket = self._get_bucket(self, 'default', self.src_master)
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
