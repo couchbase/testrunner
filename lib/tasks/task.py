@@ -988,15 +988,15 @@ class ValidateDataTask(GenericLoadingTask):
             if self.only_store_hash:
                 if crc32.crc32_hash(d) != int(value):
                     self.state = FINISHED
-                    self.set_exception(Exception('Bad hash result: %d != %d for key %s' % (crc32.crc32_hash(d), int(value), key)))
+                    self.set_exception(Exception('Key: %s, Bad hash result: %d != %d for key %s' % (key, crc32.crc32_hash(d), int(value), key)))
             else:
                 value = json.dumps(value)
                 if d != json.loads(value):
                     self.state = FINISHED
-                    self.set_exception(Exception('Bad result: %s != %s for key %s' % (json.dumps(d), value, key)))
+                    self.set_exception(Exception('Key: %s, Bad result: %s != %s for key %s' % (key, json.dumps(d), value, key)))
             if o != flag:
                 self.state = FINISHED
-                self.set_exception(Exception('Bad result for flag value: %s != the value we set: %s' % (o, flag)))
+                self.set_exception(Exception('Key: %s, Bad result for flag value: %s != the value we set: %s' % (key, o, flag)))
 
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
@@ -1093,19 +1093,18 @@ class BatchedValidateDataTask(GenericLoadingTask):
                 if self.only_store_hash:
                     if crc32.crc32_hash(d) != int(value):
                         self.state = FINISHED
-                        self.set_exception(Exception('Bad hash result: %d != %d' % (crc32.crc32_hash(d), int(value))))
+                        self.set_exception(Exception('Key: %s Bad hash result: %d != %d' % (key, crc32.crc32_hash(d), int(value))))
                 else:
                     value = json.dumps(value)
                     if d != json.loads(value):
                         self.state = FINISHED
-                        self.set_exception(Exception('Bad result: %s != %s' % (json.dumps(d), value)))
+                        self.set_exception(Exception('Key: %s Bad result: %s != %s' % (key, json.dumps(d), value)))
                 if o != flag:
                     self.state = FINISHED
-                    self.set_exception(Exception('Bad result for flag value: %s != the value we set: %s' % (o, flag)))
+                    self.set_exception(Exception('Key: %s Bad result for flag value: %s != the value we set: %s' % (key, o, flag)))
             except KeyError as error:
                 self.state = FINISHED
                 self.set_exception(error)
-
 
     def _check_deleted_key(self, key):
         partition = self.kv_store.acquire_partition(key)
