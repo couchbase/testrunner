@@ -943,7 +943,7 @@ class BaseTestCase(unittest.TestCase):
         else:
             compare_vbucket_seqnos_result = self.data_analyzer.compare_per_node_stats_dataset(prev_vbucket_stats, new_vbucket_stats, "vbucket_id", comparisonMap=comp_map)
             isNotSame, summary, result = self.result_analyzer.analyze_per_node_result(compare_vbucket_seqnos_result, addedItems=False, deletedItems=False, updatedItems=False)
-        self.assertTrue(isNotSame, result)
+        self.assertTrue(isNotSame, summary)
         self.log.info(" End Verification for vbucket sequence numbers comparison ")
         return new_vbucket_stats
 
@@ -1011,7 +1011,7 @@ class BaseTestCase(unittest.TestCase):
         self.log.info(" Begin Verification for Active Vs Replica ")
         comparison_result = self.data_analyzer.compare_all_dataset(info, disk_replica_dataset, disk_active_dataset)
         logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=False, addedItems=False, updatedItems=False)
-        self.assertTrue(logic, output)
+        self.assertTrue(logic, summary)
         self.log.info(" End Verification for Active Vs Replica ")
         return disk_replica_dataset, disk_active_dataset
 
@@ -1047,7 +1047,7 @@ class BaseTestCase(unittest.TestCase):
         info, curr_data_set = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
         comparison_result = self.data_analyzer.compare_all_dataset(info, prev_data_set, curr_data_set)
         logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=False, addedItems=False, updatedItems=False)
-        self.assertTrue(logic, output)
+        self.assertTrue(logic, summary)
         self.log.info(" End Verification for data comparison ")
 
     def compare_per_node_for_failovers_consistency(self, map1):
@@ -1106,7 +1106,7 @@ class BaseTestCase(unittest.TestCase):
         new_failovers_stats = self.get_failovers_logs(servers, buckets)
         compare_failovers_result = self.data_analyzer.compare_stats_dataset(prev_failovers_stats, new_failovers_stats, "vbucket_id", comp_map)
         isNotSame, summary, result = self.result_analyzer.analyze_all_result(compare_failovers_result, addedItems=False, deletedItems=False, updatedItems=False)
-        self.assertTrue(isNotSame, result)
+        self.assertTrue(isNotSame, summary)
         self.log.info(" End Verification for failovers logs comparison ")
         return compare_failovers_result
 
@@ -1193,6 +1193,6 @@ class BaseTestCase(unittest.TestCase):
         new_failovers_stats = self.get_failovers_logs(servers, buckets)
         compare_failovers_result = self.data_analyzer.compare_stats_dataset(prev_failovers_stats, new_failovers_stats, "vbucket_id", comp_map)
         isNotSame, summary, result = self.result_analyzer.analyze_all_result(compare_failovers_result, addedItems=False, deletedItems=False, updatedItems=False)
-        self.assertTrue(isNotSame, result)
+        self.assertTrue(isNotSame, summary)
         self.log.info(" End Verification for Failovers logs comparison ")
         return new_failovers_stats
