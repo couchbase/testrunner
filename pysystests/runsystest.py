@@ -318,7 +318,7 @@ if __name__ == "__main__":
                                               --params upr=true,xdcr_upr=false \
                                               --exclude install,seriesly,worker,cbmonitor,cluster,systest,stats")
     parser.add_argument("--build", help="required param: build-version for system test to run on", required=True)
-    parser.add_argument("--testcfg", help="required param: location of testcfg file in testcfg dir ", required=True)
+    parser.add_argument("--testcfg", default="testcfg.py", help="required param: location of testcfg file in testcfg dir ")
     parser.add_argument("--params", help="optional param: additional build params eg:vbuckets=1024,upr=true,xdcr_upr=false",
                         required=False)
     parser.add_argument("--exclude",
@@ -328,7 +328,7 @@ if __name__ == "__main__":
                             required=False)
 
     args = vars(parser.parse_args())
-    testcfg = 'tests/testcfg/' + args['testcfg']
+    testcfg = args['testcfg']
     try:
         os.system("cp -f {} testcfg.py".format(testcfg))
         print "Copied {0} to {1} as testcfg.py".format(testcfg, os.getcwd())
