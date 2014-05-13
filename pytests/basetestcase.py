@@ -999,6 +999,12 @@ class BaseTestCase(unittest.TestCase):
         info, dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
         return dataset
 
+    def get_data_set_with_data_distribution_all(self, servers, buckets, path=None, mode = "disk"):
+        """ Method to get all data set for buckets and from the servers """
+        info, dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
+        distribution  = self.data_analyzer.analyze_data_distribution(dataset)
+        return dataset,distribution
+
     def get_and_compare_active_replica_data_set_all(self, servers, buckets, path=None, mode = "disk"):
         """
            Method to get all data set for buckets and from the servers

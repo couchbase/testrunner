@@ -116,6 +116,24 @@ class DataAnalysisResultAnalyzer:
 class DataAnalyzer(object):
     """ Class which defines logic for data comparison """
 
+    def analyze_data_distribution(self,sourceMap):
+        """
+            Method to compare data sets and given as input of two bucket maps
+
+            Paramters:
+
+            sourceMap: input contains csv format of dataset
+
+            Returns:
+
+            Map per Bucket information of data: total, max per vbucket, min  per vbucket, mean, std
+        """
+        Result = {}
+        for bucket in sourceMap.keys():
+            info = sourceMap[bucket]
+            Result[bucket] = self.find_data_distribution(info)
+        return Result
+
     def compare_all_dataset(self,headerInfo,sourceMap,targetMap,comparisonMap=None):
         """
             Method to compare data sets and given as input of two bucket maps
@@ -274,6 +292,30 @@ class DataAnalyzer(object):
         comparisonResult = {DELETED_ITEMS:deletedItemsList,ADD_ITEMS:addedItemsList,UPDATED_ITEMS:updatedItemsMap}
         logicalResult = {DELETED_ITEMS:(len(deletedItemsList) > 0),ADD_ITEMS:(len(addedItemsList) > 0),UPDATED_ITEMS:(len(updatedItemsMap) > 0)}
         return {LOGICAL_RESULT:logicalResult,RESULT:comparisonResult}
+
+    def find_data_distribution(self,info):
+        """ Method to extract data distribution from map info """
+        distribution_map = {}
+        for key in info.keys():
+            data = info[key].split(",")
+            vbucket = data[len(data) - 1]
+            if vbucket in distribution_map.keys():
+                distribution_map[vbucket] += 1
+            else:
+                distribution_map[vbucket] = 1
+        array  =  []
+        total  = 0
+        for key in distribution_map.keys():
+            array.append(distribution_map[key])
+        max_val  =  max(array)
+        min_val =  min(array)
+        total = sum(array)
+        mean =  total / float(len(array))
+        diffSum = 0
+        for val in array:
+            diffSum += pow((val - mean),2)
+        std  =  (diffSum/len(array))**(.5)
+        return {"max":max_val,"min":min_val, "total" : total, "mean" : mean, "std" :  std, "map" : distribution_map}
 
     def compare_data_maps(self,info1,info2,headerInfo,mainKey,comparisonMap=None):
         """ Method to help comparison of datasets """

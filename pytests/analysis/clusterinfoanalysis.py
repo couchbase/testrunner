@@ -25,17 +25,17 @@ class DataAnalysisTests(BaseTestCase):
     def tearDown(self):
         super(DataAnalysisTests, self).tearDown()
 
-    def test_data_analysis_disk_memory_comparison_per_node(self):
+    def test_data_distribution(self):
         """
             Test to show disk vs memory comparison using cbtransfer functionality
             This will be done per node level comparison
         """
+        self.std = self.input.param("std", 1.0)
         self.gen_create = BlobGenerator('loadOne', 'loadOne_', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, self.gen_create, "create", 0,
                                batch_size=10000, pause_secs=10, timeout_secs=60)
         self._wait_for_stats_all_buckets(self.servers)
-        RebalanceHelper.wait_for_replication(self.servers, self.cluster)
-        self.data_analysis_per_node()
+        self.data_distribution_analysis(self.num_items,self.std)
 
     def test_data_analysis_disk_memory_comparison_all(self):
         """
@@ -46,7 +46,6 @@ class DataAnalysisTests(BaseTestCase):
         self._load_all_buckets(self.master, self.gen_create, "create", 0,
                                batch_size=10000, pause_secs=10, timeout_secs=60)
         self._wait_for_stats_all_buckets(self.servers)
-        RebalanceHelper.wait_for_replication(self.servers, self.cluster)
         self.data_analysis_all()
 
     def test_data_analysis_active_replica_comparison_all(self):
@@ -58,7 +57,6 @@ class DataAnalysisTests(BaseTestCase):
         self._load_all_buckets(self.master, self.gen_create, "create", 0,
                                batch_size=10000, pause_secs=10, timeout_secs=60)
         self._wait_for_stats_all_buckets(self.servers)
-        RebalanceHelper.wait_for_replication(self.servers, self.cluster)
         self.data_analysis_all_replica_active()
 
     def test_failoverlogs_extraction_equals(self):
@@ -108,20 +106,17 @@ class DataAnalysisTests(BaseTestCase):
         logic,output = self.compare_per_node_maps(vbucket_stats)
         self.assertTrue(logic, output)
 
-    def data_analysis_per_node(self):
+    def data_distribution_analysis(self, total_items = 0, std = 1.0):
         """
-            Method to do disk vs memory data analysis using cb transfer
-            This works per node level
+            Method to check data analysis
         """
-        self.log.info(" Begin Verification for per Node data comparison ")
-        data_path="/opt/couchbase/var/lib/couchbase/data"
-        info,memory_dataset=self.data_collector.collect_data(self.servers,self.buckets,data_path = None, perNode = True)
-        info,disk_dataset=self.data_collector.collect_data(self.servers,self.buckets,data_path = data_path, perNode = True)
-        comparison_result=self.data_analyzer.compare_per_node_dataset(info, memory_dataset, disk_dataset)
-        logic,summary,output = self.result_analyzer.analyze_per_node_result(comparison_result, deletedItems = False,addedItems = False,updatedItems = False)
-        self.log.info(" Verification summary :: {0} ".format(summary))
-        self.assertTrue(logic, output)
-        self.log.info(" End Verification for per Node data comparison ")
+        self.log.info(" Begin Verification for per Node data comparison")
+        data,map=self.get_data_set_with_data_distribution_all(self.servers,self.buckets)
+        for bucket in map:
+            map1 = map[bucket]
+            self.log.info(" Verification summary :: {0} ".format(map1))
+            self.assertTrue(map1["total"] == total_items, "item do not match")
+            self.assertTrue(map1["std"] >= 0.0 and map1["std"] < std, "std test failed, not within [0,1]")
 
     def data_analysis_all(self):
         """
