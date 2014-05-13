@@ -334,7 +334,7 @@ class CouchbaseCliTest(CliBaseTest):
             if error:
                 command_with_error[cli] = error[0]
         if command_with_error:
-            raise Exception("some commands throw out error %s " %s command_with_error)
+            raise Exception("some commands throw out error %s " % command_with_error)
         shell.disconnect()
 
     def testInfoCommands(self):
@@ -385,7 +385,7 @@ class CouchbaseCliTest(CliBaseTest):
             self.log.info("failover node {0}".format(self.servers[nodes_add - nodes_rem - num].ip))
             options = "--server-failover={0}:8091".format(self.servers[nodes_add - nodes_rem - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ['INFO: graceful failover . ','SUCCESS: failover ns_1@{0}'.format(self.servers[nodes_add - nodes_rem - num].ip)])
+            self.assertEqual(output, ['INFO: graceful failover . ', 'SUCCESS: failover ns_1@{0}'.format(self.servers[nodes_add - nodes_rem - num].ip)])
 
         cli_command = "server-readd"
         for num in xrange(nodes_readd):
@@ -527,7 +527,7 @@ class CouchbaseCliTest(CliBaseTest):
                     format(param_prefix, cluster_init_username + "1", param_prefix, cluster_init_password + "1", param_prefix, str(cluster_init_port)[:-1] + "9")
 
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=cluster_init_username, password=cluster_init_password)
-            self.sleep(7)   # time needed to reload couchbase
+            self.sleep(7)  # time needed to reload couchbase
             """ work around bug MB-10927 and remove these codes when it is fixed.  Rerun with new credential setup.
                 If no error throw out, rewrite the output """
             if "Connection refused" in output[0]:
@@ -1053,7 +1053,7 @@ class XdcrCLITest(CliBaseTest):
                     # check if status of replication is "paused"
                     for value in output:
                         if value.startswith("status"):
-                            self.assertEqual(value.split(":")[1].strip(),"paused")
+                            self.assertEqual(value.split(":")[1].strip(), "paused")
                     # resume replication
                     options = "--resume"
                     options += (" --xdcr-replicator={0}".format(replicator))
@@ -1064,7 +1064,7 @@ class XdcrCLITest(CliBaseTest):
                     output, _ = self.__execute_cli(cli_command, options)
                     for value in output:
                         if value.startswith("status"):
-                            self.assertEqual(value.split(":")[1].strip(),"running")
+                            self.assertEqual(value.split(":")[1].strip(), "running")
                 options = "--delete"
                 options += (" --xdcr-replicator={0}".format(replicator))
                 output, _ = self.__execute_cli(cli_command, options)
