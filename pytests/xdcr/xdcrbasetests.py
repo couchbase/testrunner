@@ -5,6 +5,8 @@ import unittest
 import logger
 import logging
 import copy
+import string
+import random
 from threading import Thread
 
 from membase.api.rest_client import RestConnection, Bucket
@@ -17,6 +19,7 @@ from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from mc_bin_client import MemcachedError
 from remote.remote_util import RemoteUtilHelper
+from couchbase.stats_tools import StatsCommon
 
 from couchbase.documentgenerator import BlobGenerator
 from membase.api.exception import ServerUnavailableException, XDCRException
@@ -110,7 +113,7 @@ class XDCRBaseTest(unittest.TestCase):
                 .format(self.case_number, self._testMethodName))
             # # THREADS FOR STATS KEEPING
             if str(self.__class__).find('upgradeXDCR') == -1  and \
-               str(self.__class__).find('tuq_xdcr') == -1:
+               str(self.__class__).find('tuq_xdcr') == -1 and self.print_stats:
                 self._stats_thread1 = Thread(target=self._replication_stat_keeper, args=["replication_data_replicated", self.src_master])
                 self._stats_thread2 = Thread(target=self._replication_stat_keeper, args=["xdc_ops", self.dest_master])
                 self._stats_thread3 = Thread(target=self._replication_stat_keeper, args=["data_replicated", self.src_master])
@@ -147,7 +150,7 @@ class XDCRBaseTest(unittest.TestCase):
             if str(self.__class__).find('tuq_xdcr') != -1:
                 self._do_cleanup()
                 return
-            if str(self.__class__).find('upgradeXDCR') == -1:
+            if str(self.__class__).find('upgradeXDCR') == -1 and self.print_stats:
                 self._stats_thread1.join()
                 self._stats_thread2.join()
                 self._stats_thread3.join()
@@ -267,7 +270,8 @@ class XDCRBaseTest(unittest.TestCase):
         self.eviction_policy = self._input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
         self.num_items = self._input.param("items", 1000)
         self._value_size = self._input.param("value_size", 256)
-        self._dgm_run_bool = self._input.param("dgm_run", False)
+        self._dgm_run = self._input.param("dgm_run", False)
+        self.active_resident_threshold = int(self._input.param("active_resident_threshold", 0))
 
         self.rep_type = self._input.param("replication_type", "capi")
 
@@ -293,6 +297,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._failover = self._input.param("failover", None)
         self._demand_encryption = self._input.param("demand_encryption", 0)
         self._rebalance = self._input.param("rebalance", None)
+        self.print_stats = self._input.param("print_stats", False)
         self._wait_for_expiration = self._input.param("wait_for_expiration", False)
         self.collect_data_files = False
         if self._warmup is not None:
@@ -521,7 +526,7 @@ class XDCRBaseTest(unittest.TestCase):
             task.result(self.wait_timeout * 10)
 
     def _create_buckets(self, nodes):
-        if self._dgm_run_bool:
+        if self._dgm_run:
             self._mem_quota_int = 256
         master_node = nodes[0]
         total_buckets = self._sasl_buckets + self._default_bucket + self._standard_buckets + self._extra_buckets
@@ -844,10 +849,33 @@ class XDCRBaseTest(unittest.TestCase):
         task = self._async_load_bucket(bucket, server, kv_gen, op_type, exp, kv_store, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
         task.result()
 
+    def key_generator(self, size=6, chars=string.ascii_uppercase + string.digits):
+        return ''.join(random.choice(chars) for x in range(size))
+
     def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
         tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag, only_store_hash, batch_size, pause_secs, timeout_secs)
         for task in tasks:
             task.result()
+
+        if self.active_resident_threshold:
+            stats_all_buckets = {}
+            for bucket in self._get_cluster_buckets(server):
+                stats_all_buckets[bucket.name] = StatsCommon()
+
+            for bucket in self._get_cluster_buckets(server):
+                threshold_reached = False
+                while not threshold_reached:
+                    active_resident = stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'vb_active_perc_mem_resident')[server]
+                    if int(active_resident) > self.active_resident_threshold:
+                        self.log.info("resident ratio is %s greater than %s for %s in bucket %s. Continue loading to the cluster" %
+                                      (active_resident, self.active_resident_threshold, server.ip, bucket.name))
+                        random_key = self.key_generator()
+                        generate_load = BlobGenerator(random_key, '%s-' % random_key, self._value_size, end=batch_size * 50)
+                        self._load_bucket(bucket, server, generate_load, "create", exp=0, kv_store=1, flag=0, only_store_hash=True, batch_size=batch_size, pause_secs=5, timeout_secs=60)
+                    else:
+                        threshold_reached = True
+                        self.log.info("DGM state achieved for %s in bucket %s!" % (server.ip, bucket.name))
+                        break
 
     def _modify_src_data(self):
         """Setting up creates/updates/deletes at source nodes"""
