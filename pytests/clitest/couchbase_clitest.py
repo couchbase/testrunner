@@ -355,6 +355,7 @@ class CouchbaseCliTest(CliBaseTest):
         nodes_add = self.input.param("nodes_add", 1)
         nodes_rem = self.input.param("nodes_rem", 1)
         nodes_failover = self.input.param("nodes_failover", 0)
+        force_failover = self.input.param("force_failover", False)
         nodes_readd = self.input.param("nodes_readd", 0)
         remote_client = RemoteMachineShellConnection(self.master)
         cli_command = "server-add"
@@ -384,8 +385,14 @@ class CouchbaseCliTest(CliBaseTest):
         for num in xrange(nodes_failover):
             self.log.info("failover node {0}".format(self.servers[nodes_add - nodes_rem - num].ip))
             options = "--server-failover={0}:8091".format(self.servers[nodes_add - nodes_rem - num].ip)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ['INFO: graceful failover . ', 'SUCCESS: failover ns_1@{0}'.format(self.servers[nodes_add - nodes_rem - num].ip)])
+            if force_failover:
+                options += " --force"
+                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.assertEqual(output, ['SUCCESS: failover ns_1@{0}'.format(self.servers[nodes_add - nodes_rem - num].ip)])
+            else:
+                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.assertEqual(output, ['INFO: graceful failover . ', 'SUCCESS: failover ns_1@{0}'.format(self.servers[nodes_add - nodes_rem - num].ip)])
+
 
         cli_command = "server-readd"
         for num in xrange(nodes_readd):
