@@ -406,6 +406,82 @@ class CouchbaseCliTest(CliBaseTest):
         self.assertEqual(output, ["INFO: rebalancing . ", "SUCCESS: rebalanced cluster"])
         remote_client.disconnect()
 
+
+    def testAddRemoveNodesWithRecovery(self):
+        nodes_add = self.input.param("nodes_add", 1)
+        nodes_rem = self.input.param("nodes_rem", 1)
+        nodes_failover = self.input.param("nodes_failover", 0)
+        nodes_recovery = self.input.param("nodes_recovery", 0)
+        force_failover = self.input.param("force_failover", False)
+        nodes_readd = self.input.param("nodes_readd", 0)
+        remote_client = RemoteMachineShellConnection(self.master)
+        cli_command = "server-add"
+        if int(nodes_add) < len(self.servers):
+            for num in xrange(nodes_add):
+                self.log.info("add node {0} to cluster".format(self.servers[num + 1].ip))
+                options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
+                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.assertEqual(output, ["SUCCESS: server-add {0}:8091".format(self.servers[num + 1].ip)])
+        else:
+             raise Exception("Node add should be smaller total number vms in ini file")
+
+        cli_command = "rebalance"
+        for num in xrange(nodes_rem):
+            options = "--server-remove={0}:8091".format(self.servers[nodes_add - num].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertTrue("INFO: rebalancing" in output[0])
+            self.assertEqual(output[1], "SUCCESS: rebalanced cluster")
+
+        if nodes_rem == 0 and nodes_add > 0:
+            cli_command = "rebalance"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+            self.assertTrue(output, ["INFO: rebalancing . ", "SUCCESS: rebalanced cluster"])
+
+        self._create_bucket(remote_client)
+
+        cli_command = "failover"
+        for num in xrange(nodes_failover):
+            self.log.info("failover node {0}".format(self.servers[nodes_add - nodes_rem - num].ip))
+            options = "--server-failover={0}:8091".format(self.servers[nodes_add - nodes_rem - num].ip)
+            if force_failover or num == nodes_failover - 1:
+                options += " --force"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertTrue('SUCCESS: failover ns_1@{0}'.format(self.servers[nodes_add - nodes_rem - num].ip) in output, error)
+
+        cli_command = "recovery"
+        for num in xrange(nodes_failover):
+            #negative case will try recovery when nodes failovered
+            options = "--server-recovery={0}:8091 --recovery-type=delta".format(self.servers[nodes_add - nodes_rem - num].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual("ERROR: unable to setRecoveryType for node ns_1@{0} (400) Bad Request".format(self.servers[nodes_add - nodes_rem - num].ip), output[0])
+            self.assertEqual("{u'otpNode': u\"invalid node name or node can't be used for delta recovery\"}", output[1])
+
+
+        for num in xrange(nodes_recovery):
+            cli_command = "server-readd"
+            self.log.info("add node {0} back to cluster".format(self.servers[nodes_add - nodes_rem - num].ip))
+            options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[nodes_add - nodes_rem - num].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip)])
+            cli_command = "recovery"
+            options = "--server-recovery={0}:8091 --recovery-type=delta".format(self.servers[nodes_add - nodes_rem - num].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["SUCCESS: setRecoveryType for node ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip)])
+
+        cli_command = "server-readd"
+        for num in xrange(nodes_readd):
+            self.log.info("add back node {0} to cluster".format(self.servers[nodes_add - nodes_rem - num ].ip))
+            options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[nodes_add - nodes_rem - num ].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num ].ip)])
+
+        cli_command = "rebalance"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+        self.assertTrue("INFO: rebalancing . " in output[0])
+        self.assertEqual("SUCCESS: rebalanced cluster", output[1])
+        remote_client.disconnect()
+
+
     def testStartStopRebalance(self):
         nodes_add = self.input.param("nodes_add", 1)
         nodes_rem = self.input.param("nodes_rem", 1)
