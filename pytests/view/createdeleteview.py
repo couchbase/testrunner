@@ -940,3 +940,37 @@ class CreateDeleteViewTests(BaseTestCase):
         for task in tasks:
             task.result(self.wait_timeout * 2)
         self._verify_data(server)
+
+    """ Test Steps:
+    1) upload the dev and production design docs
+    2) query both with stale=false
+    3) delete the development design doc
+    4) query the production one with stale=ok
+    5) Verify that the results you got in step 4 are exactly the same as the ones you got in step 2 """
+
+    def test_create_delete_similar_views(self):
+        ddoc_name_prefix = "ddoc"
+        view_name = "test_view"
+        self._load_doc_data_all_buckets()
+        ddocs = [DesignDocument(ddoc_name_prefix + "1", [View(view_name, self.default_map_func,
+                                                             dev_view=False)],
+                                options={"updateMinChanges":0, "replicaUpdateMinChanges":0}),
+                DesignDocument(ddoc_name_prefix + "2", [View(view_name, self.default_map_func,
+                                                            dev_view=True)],
+                               options={"updateMinChanges":0, "replicaUpdateMinChanges":0})]
+        for ddoc in ddocs:
+            for view in ddoc.views:
+                self.cluster.create_view(self.master, ddoc.name, view, bucket=self.default_bucket_name)
+                prefix = ("", "dev_")[ddoc.views[0].dev_view]
+                self.cluster.query_view(self.master, prefix + ddoc.name, view.name,
+                                        {"stale" : "false", "full_set" : "true"}, self.num_items, bucket=self.default_bucket_name)
+        try:
+            self.cluster.delete_view(self.servers[0], ddocs[1].name, ddocs[1].views[0])
+        except Exception as e:
+            self.cluster.shutdown()
+            self.fail(e)
+
+        result = self.cluster.query_view(self.master, ddocs[0].name, ddocs[0].views[0].name,
+                                         {"stale" : "ok", "full_set" : "true"}, self.num_items, bucket=self.default_bucket_name)
+        if not result:
+                self.fail("View query didn't return expected result")
