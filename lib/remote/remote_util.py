@@ -1952,7 +1952,7 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command(command)
         self.log_command_output(output, error)
 
-    def get_data_map_using_cbtransfer(self, buckets, data_path=None, userId="Administrator", password="password", getReplica=False, mode = "memory"):
+    def get_data_map_using_cbtransfer(self, buckets, data_path=None, userId="Administrator", password="password", getReplica=False, mode="memory"):
         self.extract_remote_info()
         temp_path = "/tmp/"
         if self.info.type.lower() == 'windows':
@@ -1968,7 +1968,7 @@ class RemoteMachineShellConnection:
             source = "couchstore-files://" + data_path
         elif mode == "backup":
             source = data_path
-            fileName =  ""
+            fileName = ""
         # Initialize Output
         bucketMap = {}
         headerInfo = ""
@@ -2012,7 +2012,7 @@ class RemoteMachineShellConnection:
         command = "%s %s %s %s" % (transfer_command, source, destination, command_options)
         if self.info.type.lower() == 'windows':
             command = "cmd /c \"%s\" \"%s\" \"%s\" %s" % (transfer_command, source, destination, command_options)
-        output, error = self.execute_command(command)
+        output, error = self.execute_command(command, use_channel=True)
         self.log_command_output(output, error)
 
     def execute_cbdocloader(self, username, password, bucket, memory_quota, file):
