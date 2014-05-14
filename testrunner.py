@@ -98,7 +98,7 @@ def create_log_file(log_config_file_name, log_file_name, level):
     log_file.truncate()
     for line in tmpl_log_file:
         newline = line.replace("@@LEVEL@@", level)
-        newline = newline.replace("@@FILENAME@@", log_file_name)
+        newline = newline.replace("@@FILENAME@@", log_file_name.replace('\\', '/'))
         log_file.write(newline)
     log_file.close()
     tmpl_log_file.close()
