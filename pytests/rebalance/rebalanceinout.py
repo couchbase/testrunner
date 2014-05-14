@@ -29,26 +29,26 @@ class RebalanceInOutTests(RebalanceBaseTest):
         gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
-        servs_in = self.servers[self.nodes_init:self.nodes_init+1]
-        servs_out = self.servers[self.nodes_init-1:self.nodes_init]
-        result_nodes = list(set(self.servers[:self.nodes_init]+ servs_in) - set(servs_out))
+        servs_in = self.servers[self.nodes_init:self.nodes_init + 1]
+        servs_out = self.servers[self.nodes_init - 1:self.nodes_init]
+        result_nodes = list(set(self.servers[:self.nodes_init] + servs_in) - set(servs_out))
         for task in tasks:
             task.result(self.wait_timeout * 20)
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
-        self._verify_stats_all_buckets(self.servers[:self.nodes_init],timeout = 120)
-        prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init],self.buckets)
-        prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init],self.buckets)
-        disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init],self.buckets, path = None)
-        self.compare_vbucketseq_failoverlogs(prev_vbucket_stats,prev_failover_stats)
-        self.cluster.rebalance(self.servers[:self.nodes_init-1], servs_in, servs_out)
+        self._verify_stats_all_buckets(self.servers[:self.nodes_init], timeout=120)
+        prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init], self.buckets)
+        prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init], self.buckets)
+        disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init], self.buckets, path=None)
+        self.compare_vbucketseq_failoverlogs(prev_vbucket_stats, prev_failover_stats)
+        self.cluster.rebalance(self.servers[:self.nodes_init - 1], servs_in, servs_out)
         self._wait_for_stats_all_buckets(result_nodes)
-        self._verify_stats_all_buckets(result_nodes,timeout = 120)
+        self._verify_stats_all_buckets(result_nodes, timeout=120)
         self.sleep(10)
         self.verify_cluster_stats(result_nodes)
-        new_failover_stats  = self.compare_failovers_logs(prev_failover_stats,result_nodes,self.buckets)
-        new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats,result_nodes,self.buckets,perNode= False)
-        self.data_analysis_active_replica_all(disk_active_dataset,disk_replica_dataset,result_nodes,self.buckets, path = None)
-        self.compare_vbucketseq_failoverlogs(new_vbucket_stats,new_failover_stats)
+        new_failover_stats = self.compare_failovers_logs(prev_failover_stats, result_nodes, self.buckets)
+        new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, result_nodes, self.buckets, perNode=False)
+        self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, result_nodes, self.buckets, path=None)
+        self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
 
     """Rebalances nodes out and in of the cluster while doing mutations with max
     number of buckets in the cluster.
@@ -448,8 +448,8 @@ class RebalanceInOutTests(RebalanceBaseTest):
         while len(tasks) > 0 and time.time() - start_time < self.wait_timeout * 30 :
             completed_tasks = []
             for task in  tasks:
-                if tasks[task].done:
-                    if tasks[task].result():
+                if tasks[task].done():
+                    if tasks[task].result(self.wait_timeout * 30 + start_time - time.time()):
                         self.log.info("expected query result with view {0} was obtained in {1} seconds".\
                                  format(task, time.time() - start_time))
                         completed_tasks += [task]
