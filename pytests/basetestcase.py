@@ -994,7 +994,7 @@ class BaseTestCase(unittest.TestCase):
                     for key in map[bucket][node][vbucket].keys():
                         print "            :: for key {0} = {1}".format(key, map[bucket][node][vbucket][key])
 
-    def get_data_set_all(self, servers, buckets, path=None, mode = "memory"):
+    def get_data_set_all(self, servers, buckets, path=None, mode = "disk"):
         """ Method to get all data set for buckets and from the servers """
         info, dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
         return dataset
@@ -1044,7 +1044,7 @@ class BaseTestCase(unittest.TestCase):
         logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=False, addedItems=False, updatedItems=False)
         self.log.info(" End Verification for data comparison ")
 
-    def data_analysis_all(self, prev_data_set, servers, buckets, path=None, mode = "memory"):
+    def data_analysis_all(self, prev_data_set, servers, buckets, path=None, mode = "disk"):
         """
             Method to do data analysis using cb transfer
             This works at cluster level
