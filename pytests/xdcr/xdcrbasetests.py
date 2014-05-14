@@ -94,6 +94,17 @@ class XDCRBaseTest(unittest.TestCase):
                 self._cleanup_previous_setup()
 
             self._init_clusters(self._disabled_consistent_view)
+
+            # XDCR global settings
+            # Set this by default to 1 for all tests
+            self.set_xdcr_param('xdcrFailureRestartInterval', 1)
+            if self._checkpoint_interval:
+                self.set_xdcr_param('xdcrCheckpointInterval', self._checkpoint_interval)
+            self._optimistic_xdcr_threshold = self._input.param("optimistic_xdcr_threshold", 256)
+            if self.src_master.ip != self.dest_master.ip:  # Only if it's not a cluster_run
+                if self._optimistic_xdcr_threshold != 256:
+                    self.set_xdcr_param('xdcrOptimisticReplicationThreshold', self._optimistic_xdcr_threshold)
+
             self.setup_extended()
             self.log.info("==============  XDCRbasetests setup was finished for test #{0} {1} =============="\
                 .format(self.case_number, self._testMethodName))
@@ -323,15 +334,6 @@ class XDCRBaseTest(unittest.TestCase):
         self.fragmentation_value = self._input.param("fragmentation_value", 80)
         self.disable_src_comp = self._input.param("disable_src_comp", True)
         self.disable_dest_comp = self._input.param("disable_dest_comp", True)
-
-        # Set this by default to 1 for all tests
-        self.set_xdcr_param('xdcrFailureRestartInterval', 1)
-        if self._checkpoint_interval:
-            self.set_xdcr_param('xdcrCheckpointInterval', self._checkpoint_interval)
-        self._optimistic_xdcr_threshold = self._input.param("optimistic_xdcr_threshold", 256)
-        if self.src_master.ip != self.dest_master.ip:  # Only if it's not a cluster_run
-            if self._optimistic_xdcr_threshold != 256:
-                self.set_xdcr_param('xdcrOptimisticReplicationThreshold', self._optimistic_xdcr_threshold)
 
         self.log.info("Initializing input parameters completed.")
 
