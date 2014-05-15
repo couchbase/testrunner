@@ -91,7 +91,7 @@ class XDCRBaseTest(unittest.TestCase):
             self._xdc_replication_rate = {}
             self._start_replication_time = {}
 
-            self.log.info("==============  XDCRbasetests setup was started for test #{0} {1}=============="\
+            self.log.info("==============  XDCRbasetests setup is started for test #{0} {1}=============="\
                 .format(self.case_number, self._testMethodName))
             if not self._input.param("skip_cleanup", False) and str(self.__class__).find('upgradeXDCR') == -1:
                 self._cleanup_previous_setup()
@@ -109,7 +109,7 @@ class XDCRBaseTest(unittest.TestCase):
                     self.set_xdcr_param('xdcrOptimisticReplicationThreshold', self._optimistic_xdcr_threshold)
 
             self.setup_extended()
-            self.log.info("==============  XDCRbasetests setup was finished for test #{0} {1} =============="\
+            self.log.info("==============  XDCRbasetests setup is finished for test #{0} {1} =============="\
                 .format(self.case_number, self._testMethodName))
             # # THREADS FOR STATS KEEPING
             if str(self.__class__).find('upgradeXDCR') == -1  and \
@@ -144,13 +144,17 @@ class XDCRBaseTest(unittest.TestCase):
         try:
             test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
                     or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
-            self.log.info("==============  XDCRbasetests stats for test #{0} {1} =============="\
-                    .format(self.case_number, self._testMethodName))
             self._end_replication_flag = 1
             if str(self.__class__).find('tuq_xdcr') != -1:
                 self._do_cleanup()
                 return
-            if str(self.__class__).find('upgradeXDCR') == -1 and self.print_stats:
+            if str(self.__class__).find('upgradeXDCR') != -1:
+                if test_failed:
+                    self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
+                    return
+            if self.print_stats:
+                self.log.info("==============  XDCRbasetests stats for test #{0} {1} =============="\
+                              .format(self.case_number, self._testMethodName))
                 self._stats_thread1.join()
                 self._stats_thread2.join()
                 self._stats_thread3.join()
@@ -158,26 +162,23 @@ class XDCRBaseTest(unittest.TestCase):
                     self._stats_thread4.join()
                     self._stats_thread5.join()
                     self._stats_thread6.join()
-            elif test_failed:
-                if test_failed:
-                    self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
-                    return
-            if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
-                self.log.info("Type of run: BIDIRECTIONAL XDCR")
-            else:
-                self.log.info("Type of run: UNIDIRECTIONAL XDCR")
-            self._print_stats(self.src_master)
-            if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
-                self._print_stats(self.dest_master)
-            self.log.info("============== = = = = = = = = END = = = = = = = = = = ==============")
-            self.log.info("==============  XDCRbasetests cleanup was started for test #{0} {1} =============="\
+                if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
+                    self.log.info("Type of run: BIDIRECTIONAL XDCR")
+                else:
+                    self.log.info("Type of run: UNIDIRECTIONAL XDCR")
+                self._print_stats(self.src_master)
+                if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
+                    self._print_stats(self.dest_master)
+                self.log.info("============== = = = = = = = = END = = = = = = = = = = ==============")
+            self.log.info("==============  XDCRbasetests cleanup is started for test #{0} {1} =============="\
                 .format(self.case_number, self._testMethodName))
+
             cluster_run = len(set([server.ip for server in self._servers])) == 1
             if not cluster_run and self.collect_data_files:
                 self.__collect_data_files()
             self.teardown_extended()
             self._do_cleanup()
-            self.log.info("==============  XDCRbasetests cleanup was finished for test #{0} {1} =============="\
+            self.log.info("==============  XDCRbasetests cleanup is finished for test #{0} {1} =============="\
                 .format(self.case_number, self._testMethodName))
         finally:
             self.cluster.shutdown(force=True)
