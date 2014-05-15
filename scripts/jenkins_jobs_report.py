@@ -11,7 +11,7 @@ from lib.memcached.helper.data_helper import MemcachedClientHelper
 
 API = "/api/json"
 JOBS_FILE = "scripts/jobs.ini"
-JENKINS_URL = "http://qa.hq.northscale.net/job/"
+JENKINS_URL = "http://qa.hq.northscale.net/"
 CB_BUCKET_NAME = "jenkins"
 
 class Job(object):
@@ -64,10 +64,14 @@ class TestReport(object):
          self.skipCount = None
          self.suites = []
 
-def get_jobs_stats(job_url=None, onlyLastBuild=False):
+def get_jobs_stats(job_url=None, onlyLastBuild=False, get_current_jobs=True):
     if not job_url:
         f = open(JOBS_FILE, 'r')
         lines = f.readlines()
+    elif get_current_jobs:
+        content = urllib2.urlopen(JENKINS_URL + 'api/json').read()
+        json_parsed = json.loads(content)
+        lines = [job['url'] for job in json_parsed["jobs"]]
     else:
         lines = [job_url]
     jobs = []
@@ -247,6 +251,9 @@ def build_json_result(jobs):
                ('build' in rq and not re.match(r'[0-9].[0-9].[0-9]-[0-9]+', rq['build'])):
                 print "ERROR forming rq for: %s" % rq
                 continue
+            if not (rq['totalCount'] and rq['failCount'] and rq['result']):
+                print "ERROR forming rq for: %s" % rq
+                continue
             jsons.append((key, json.dumps(rq)))
             print "Sended"
         except:
@@ -274,7 +281,7 @@ Examples:
 def _parse_variables():
     varbls = {"-o" : "file", "-s" : None, "-p" : '8091',
             "--user" : 'Administrator', "--pass": "password",
-            "--jenkins" : JENKINS_URL, "--name" : None,
+            "--jenkins" : JENKINS_URL + 'job/', "--name" : None,
             "server_info" : None}
     (opts, _) = getopt.getopt(sys.argv[1:], 'o:s:p:', ['user=','password=','jenkins=','name='])
     for o, a in opts:
@@ -294,7 +301,7 @@ def _parse_variables():
 
 def send_json(server_info, job=None):
     if job:
-        jobs = get_jobs_stats(onlyLastBuild=True, job_url=JENKINS_URL + job)
+        jobs = get_jobs_stats(onlyLastBuild=True, job_url=JENKINS_URL + 'job/' + job)
     else:
         jobs = get_jobs_stats(onlyLastBuild=True)
     jsons = build_json_result(jobs)
