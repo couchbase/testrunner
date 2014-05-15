@@ -8,7 +8,6 @@ import json
 import re
 import math
 import crc32
-import paramiko
 from httplib import IncompleteRead
 from threading import Thread
 from memcacheConstants import ERR_NOT_FOUND
@@ -2819,11 +2818,7 @@ class CBRecoveryTask(Task):
         try:
             self.shell = RemoteMachineShellConnection(src_server)
             self.info = self.shell.extract_remote_info()
-            self.shell.disconnect()
             self.rest = RestConnection(dest_server)
-            self._ssh_client = paramiko.SSHClient()
-            self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            self._ssh_client.connect(hostname=src_server.ip, username=src_server.ssh_username, password=src_server.ssh_password)
         except Exception, e:
             self.log.error(e)
             self.state = FINISHED
@@ -2857,8 +2852,7 @@ class CBRecoveryTask(Task):
                 command += "-P {0} ".format(self.password_dest)
             if self.verbose:
                 command += " -v "
-            self._ssh_client.set_log_channel(None)
-            self._ssh_client.exec_command(command)
+            self.shell.execute_command(command, info=self.info)
             self.log.info("command was executed: '{0}'".format(command))
             self.state = CHECKING
             task_manager.schedule(self, 20)
@@ -2881,7 +2875,7 @@ class CBRecoveryTask(Task):
             if progress == self.progress:
                 self.log.warn("cbrecovery progress was not changed")
                 if self.retries > 20:
-                    self._ssh_client.close()
+                    self.shell.disconnect()
                     self.rest.print_UI_logs()
                     self.state = FINISHED
                     self.log.warn("ns_server_tasks: {0}".format(self.rest.ns_server_tasks()))
@@ -2897,12 +2891,12 @@ class CBRecoveryTask(Task):
                 task_manager.schedule(self, 20)
         else:
             if self.started:
-                self._ssh_client.close()
+                self.shell.disconnect()
                 self.log.info("cbrecovery completed succesfully")
                 self.state = FINISHED
                 self.set_result(True)
             if self.retries > 5:
-                self._ssh_client.close()
+                self.shell.disconnect()
                 self.rest.print_UI_logs()
                 self.state = FINISHED
                 self.log.warn("ns_server_tasks: {0}".format(self.rest.ns_server_tasks()))
