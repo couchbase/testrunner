@@ -1044,7 +1044,7 @@ class BaseTestCase(unittest.TestCase):
         logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=False, addedItems=False, updatedItems=False)
         self.log.info(" End Verification for data comparison ")
 
-    def data_analysis_all(self, prev_data_set, servers, buckets, path=None, mode = "disk"):
+    def data_analysis_all(self, prev_data_set, servers, buckets, path=None, mode = "disk", deletedItems=False, addedItems=False, updatedItems=False):
         """
             Method to do data analysis using cb transfer
             This works at cluster level
@@ -1052,7 +1052,7 @@ class BaseTestCase(unittest.TestCase):
         self.log.info(" Begin Verification for data comparison ")
         info, curr_data_set = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
         comparison_result = self.data_analyzer.compare_all_dataset(info, prev_data_set, curr_data_set)
-        logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=False, addedItems=False, updatedItems=False)
+        logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=deletedItems, addedItems=addedItems, updatedItems=updatedItems)
         self.assertTrue(logic, summary)
         self.log.info(" End Verification for data comparison ")
 

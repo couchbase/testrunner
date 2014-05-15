@@ -131,7 +131,7 @@ class FailoverTests(FailoverBaseTest):
             self.log.info("Begin VERIFICATION for Rebalance after Failover Only")
             # Verify all data set with meta data if failover happens after failover
             if not self.withOps:
-                self.data_analysis_all(record_static_data_set, _servers_, self.buckets, path = None)
+                self.data_analysis_all(record_static_data_set, _servers_, self.buckets, path = None, addedItems = None)
             # Check Cluster Stats and Data as well if max_verify > 0
             self.verify_cluster_stats(_servers_, self.referenceNode)
             # If views were created they can be verified
@@ -192,7 +192,7 @@ class FailoverTests(FailoverBaseTest):
 
         # Comparison of all data if required
         if not self.withOps:
-            self.data_analysis_all(record_static_data_set,self.servers, self.buckets,  path = None)
+            self.data_analysis_all(record_static_data_set,self.servers, self.buckets,  path = None, addedItems = None)
 
         # Verify Stats of cluster and Data is max_verify > 0
         self.verify_cluster_stats(self.servers, self.referenceNode)
@@ -222,6 +222,7 @@ class FailoverTests(FailoverBaseTest):
     def run_failover_operations(self, chosen, failover_reason):
         """ Method to run fail over operations used in the test scenario based on failover reason """
         # Perform Operations relalted to failover
+        failed_over = True
         for node in chosen:
             if failover_reason == 'stop_server':
                 self.stop_server(node)
@@ -255,8 +256,12 @@ class FailoverTests(FailoverBaseTest):
                     self.log.info("nodeStatuses: {0}".format(json_parsed))
                     self.fail("node status is not unhealthy even after waiting for 5 minutes")
 
-        # define precondition check for failover
-        failed_over = self.rest.fail_over(node.id, graceful=self.graceful)
+            # define precondition check for failover
+            success_failed_over = self.rest.fail_over(node.id, graceful=self.graceful)
+            if self.graceful:
+                msg = "rebalance failed while removing failover nodes {0}".format(node.id)
+                self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
+            failed_over = failed_over and success_failed_over
 
         # Check for negative cases
         if self.graceful and (failover_reason in ['stop_server', 'firewall']):

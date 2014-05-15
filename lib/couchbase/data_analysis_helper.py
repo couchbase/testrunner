@@ -96,6 +96,8 @@ class DataAnalysisResultAnalyzer:
         logic=False
         lresult=logicalresult[type]
         result=analysis[type]
+        if  actual == None:
+            return True, "Not Applicable", "Not Applicable"
         if lresult == actual:
                 logic=True
                 summary+=successoutputformat
