@@ -273,8 +273,8 @@ class Rebalance(XDCRReplicationBaseTest):
 
                 self.__merge_buckets()
 
-                self._verify_stats_all_buckets(self.src_nodes)
-                self._verify_stats_all_buckets(self.dest_nodes)
+                self._verify_item_count(self.src_nodes)
+                self._verify_item_count(self.dest_nodes)
                 tasks = []
                 for view in views:
                     tasks.append(

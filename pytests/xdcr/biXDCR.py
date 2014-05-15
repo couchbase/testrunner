@@ -38,8 +38,8 @@ class bidirectional(XDCRReplicationBaseTest):
                 self._load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0)
 
         self.sleep(self.wait_timeout / 2)
-        self._wait_for_stats_all_buckets(self.src_nodes)
-        self._wait_for_stats_all_buckets(self.dest_nodes)
+        self._wait_flusher_empty(self.src_nodes)
+        self._wait_flusher_empty(self.dest_nodes)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
@@ -439,8 +439,8 @@ class bidirectional(XDCRReplicationBaseTest):
                     break
 
             self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-            self._verify_stats_all_buckets(self.src_nodes)
-            self._verify_stats_all_buckets(self.dest_nodes)
+            self._verify_item_count(self.src_nodes)
+            self._verify_item_count(self.dest_nodes)
 
             tasks = []
             for view in views:

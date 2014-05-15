@@ -22,7 +22,7 @@ from threading import Thread
 class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
     def setUp(self):
         super(PauseResumeXDCRBaseTest, self).setUp()
-        self.pause_xdcr_cluster = self._input.param("pause", "source-destination")
+        self.pause_xdcr_cluster = self._input.param("pause", "")
         self.gen_create2 = BlobGenerator('loadTwo', 'loadTwo',
                                          self._value_size, end=self.num_items)
         self.gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-',
@@ -340,7 +340,7 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
 
         self.__update_deletes()
         self.__merge_buckets()
-        self.verify_results(verify_src=self.verify_src)
+        self.verify_results()
 
     def view_query_pause_resume(self):
 
@@ -365,8 +365,8 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
         self.resume_xdcr()
 
         self.__merge_buckets()
-        self._verify_stats_all_buckets(self.src_nodes)
-        self._verify_stats_all_buckets(self.dest_nodes)
+        self._verify_item_count(self.src_nodes)
+        self._verify_item_count(self.dest_nodes)
         tasks = []
         for view in views:
             tasks.append(self.cluster.async_query_view(self.dest_master,
@@ -375,7 +375,7 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
                                                        dest_buckets[0].kvs[1].__len__()))
 
         [task.result(self._poll_timeout) for task in tasks]
-        self.verify_results(verify_src=self.__verify_src)
+        self.verify_results()
 
     def pause_resume_single_bucket(self):
         pause_bucket_name = self._input.param("pause_bucket","default")
@@ -406,5 +406,5 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
         self.resume_replication(self.src_master,pause_bucket_name,pause_bucket_name)
         [task.result() for task in load_tasks]
         self.__merge_buckets()
-        self.verify_results(verify_src=self.__verify_src)
+        self.verify_results()
 

@@ -54,12 +54,12 @@ class ESReplicationBaseTest(object):
         dest_master = self.xd_ref.dest_master
 
         # prepare for verification
-        xd_ref._wait_for_stats_all_buckets(src_nodes)
+        xd_ref._wait_flusher_empty(src_nodes)
 
         xd_ref._expiry_pager(src_master)
         self.sleep(30)
         if verify_src:
-            xd_ref._verify_stats_all_buckets(src_nodes)
+            xd_ref._verify_item_count(src_nodes)
 
         self._log.info("Verifing couchbase to elasticsearch replication")
         self.verify_es_num_docs(src_master, dest_master, verification_count=verification_count)
