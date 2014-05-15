@@ -33,8 +33,8 @@ class RebalanceInTests(RebalanceBaseTest):
         for task in tasks:
             task.result()
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
-        self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
         self._verify_stats_all_buckets(self.servers[:self.nodes_init], timeout=120)
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init], self.buckets)
         prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init], self.buckets)
         disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init], self.buckets, path=None)

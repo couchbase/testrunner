@@ -41,16 +41,16 @@ class RebalanceOutTests(RebalanceBaseTest):
             for task in tasks:
                 task.result()
         servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
-        self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self._verify_stats_all_buckets(self.servers[:self.num_servers], timeout=120)
+        self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.num_servers], self.buckets)
         prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.num_servers], self.buckets)
         record_data_set = self.get_data_set_all(self.servers[:self.num_servers], self.buckets)
         self.compare_vbucketseq_failoverlogs(prev_vbucket_stats, prev_failover_stats)
         rebalance = self.cluster.async_rebalance(self.servers[:1], [], servs_out)
         rebalance.result()
-        self._wait_for_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
         self._verify_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out], timeout=120)
+        self._wait_for_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
         self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
         new_failover_stats = self.compare_failovers_logs(prev_failover_stats, self.servers[:self.num_servers - self.nodes_out], self.buckets)
         new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, self.servers[:self.num_servers - self.nodes_out], self.buckets, perNode=False)

@@ -125,8 +125,8 @@ class FailoverTests(FailoverBaseTest):
             self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
 
             #  Drain Queue and make sure intra-cluster replication is complete
-            self._wait_for_stats_all_buckets(_servers_)
             self._verify_stats_all_buckets(_servers_,timeout = 120)
+            self._wait_for_stats_all_buckets(_servers_)
 
             self.log.info("Begin VERIFICATION for Rebalance after Failover Only")
             # Verify all data set with meta data if failover happens after failover
@@ -181,8 +181,8 @@ class FailoverTests(FailoverBaseTest):
         self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
 
         #  Drain ep_queue and make sure that intra-cluster replication is complete
-        self._wait_for_stats_all_buckets(self.servers)
         self._verify_stats_all_buckets(self.servers,timeout = 120)
+        self._wait_for_stats_all_buckets(self.servers)
 
         self.log.info("Begin VERIFICATION for Add-back and rebalance")
 
@@ -287,8 +287,8 @@ class FailoverTests(FailoverBaseTest):
         tasks += self._async_load_all_buckets(self.referenceNode, self.gen_initial_create, "create", 0)
         for task in tasks:
             task.result()
-        self._wait_for_stats_all_buckets(self.servers)
         self._verify_stats_all_buckets(self.servers,timeout = 120)
+        self._wait_for_stats_all_buckets(self.servers)
         # Update or Delete buckets if items > 0 and options are passed in tests
         # These can run in parallel (withOps = True), or before (withOps = True)
         ops_tasks = []
