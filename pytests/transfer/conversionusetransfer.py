@@ -13,6 +13,7 @@ class ConversionUseTransfer(TransferBaseTest):
         super(ConversionUseTransfer, self).setUp()
         self.command_options = self.input.param("command_options", '-x rehash=1')
         self.latest_version = self.input.param('latest_version', '2.1.0-718-rel')
+        self.openssl = self.input.param('openssl', '')
 
     def tearDown(self):
         if not self.input.param("skip_cleanup", True):
@@ -33,6 +34,7 @@ class ConversionUseTransfer(TransferBaseTest):
         params['product'] = 'couchbase-server'
         params['version'] = version
         params['vbuckets'] = [vbuckets]
+        params['openssl'] = self.openssl
         InstallerJob().parallel_install(servers, params)
         success = True
         for server in servers:
