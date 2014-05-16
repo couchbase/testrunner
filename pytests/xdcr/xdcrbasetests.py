@@ -1324,7 +1324,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         except TimeoutError:
             for task in stats_tasks:
                 task.cancel()
-            raise XDCRException("Item count verification was not completed in {} seconds".format(timeout))
+            raise XDCRException("Item count verification was not completed in {0} seconds".format(timeout))
         return False
 
     # CBQE-1695 Wait for replication_changes_left (outbound mutations) to be 0.
