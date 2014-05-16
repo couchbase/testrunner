@@ -1374,6 +1374,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         self._wait_flusher_empty(dest_nodes)
 
         mutations_replicated = True
+        data_verified = False
         try:
             # Source validations
             mutations_replicated &= self.__wait_for_outbound_mutations_zero(self.dest_master)
@@ -1383,6 +1384,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             mutations_replicated &= self.__wait_for_outbound_mutations_zero(self.src_master)
             self._verify_item_count(dest_nodes, timeout=timeout)
             self._verify_data_all_buckets(self.dest_master, max_verify=self.max_verify)
+            data_verified = True
         finally:
             errors_caught = 0
             bidirection = self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION
@@ -1396,6 +1398,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 errors_caught += self._verify_revIds(self.dest_master, self.src_master)
             if errors_caught > 0:
                 self.fail("Mismatches on Meta Information on xdcr-replicated items!")
+            if data_verified:
+                self.collect_data_files = False
 
         if not mutations_replicated:
             if str(self.__class__).find('cbrecovery'):
@@ -1418,4 +1422,3 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                     break
                 self.dest_nodes = self._clusters_dic[cluster_num]
                 self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, verify_src)
-        self.collect_data_files = False
