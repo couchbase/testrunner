@@ -1899,33 +1899,122 @@ class QueryTests(BaseTestCase):
 
     def generate_docs_sabre(self, docs_per_day, start=0):
         generators = []
-        types = ['Engineer', 'Sales', 'Support']
+        dests = ['BOS', 'MIA', 'SFO']
         join_yr = [2010, 2011]
         join_mo = xrange(1, 12 + 1)
         join_day = xrange(1, 28 + 1)
-        template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
-        template += ' "email":"{4}", "job_title":"{5}", "test_rate":{8}, "skills":{9},'
-        template += '"VMs": {10},'
-        template += ' "tasks_points" : {{"task1" : {6}, "task2" : {7}}}}}'
-        for info in types:
+        template = '{{ "Amount":{0}, "CurrencyCode":"{1}",'
+        template += ' "TotalTax":{{"DecimalPlaces" : {2}, "Amount" : {3}, "CurrencyCode" : "{4}",}}, ,'
+        template += ' "Tax":{5}, "FareBasisCode":{6}, "PassengerTypeQuantity":{7}, "TicketType":"{8}",'
+        template += '"SequenceNumber": {9},'
+        template += ' "DirectionInd" : "{10}",  "Itinerary" : {11}, "Destination" : "{12}",'
+        template += '"join_yr":{13}, "join_mo":{14}, "join_day":{15}, "Codes" :{16}}}'
+        for dest in dests:
             for year in join_yr:
                 for month in join_mo:
                     for day in join_day:
-                        prefix = str(uuid.uuid4())[:7]
-                        name = ["employee-%s" % (str(day))]
-                        email = ["%s-mail@couchbase.com" % (str(day))]
-                        vms = [{"RAM": month, "os": "ubuntu",
-                                "name": "vm_%s" % month, "memory": month},
-                               {"RAM": month, "os": "windows",
-                                "name": "vm_%s"% (month + 1), "memory": month}]
-                        generators.append(DocumentGenerator("query-test" + prefix,
-                                               template,
-                                               name, [year], [month], [day],
-                                               email, [info], range(1,10), range(1,10),
-                                               [float("%s.%s" % (month, month))],
-                                               [["skill%s" % y for y in join_yr]],
-                                               [vms],
-                                               start=start, end=docs_per_day))
+                        prefix = '%s_%s-%s-%s' % (dest, year, month, day)
+                        amount = [float("%s.%s" % (month, month))]
+                        currency = [("USD", "EUR")[month in [1,3,5]]]
+                        decimal_tax = [1,2]
+                        amount_tax = [day]
+                        currency_tax = currency
+                        taxes = [{"DecimalPlaces": 2, "Amount": float(amount_tax)/3,
+                                  "TaxCode": "US1", "CurrencyCode": currency},
+                                 {"DecimalPlaces": 2, "Amount": float(amount_tax)/4,
+                                  "TaxCode": "US2", "CurrencyCode": currency},
+                                 {"DecimalPlaces": 2, "Amount": amount_tax - float(amount_tax)/4-\
+                                  float(amount_tax)/3,
+                                  "TaxCode": "US2", "CurrencyCode": currency}]
+
+                        fare_basis = [{"content": "XA21A0NY", "DepartureAirportCode": dest,
+                                       "BookingCode": "X", "ArrivalAirportCode": "MSP"},
+                                      {"content": "XA21A0NY", "DepartureAirportCode": "MSP",
+                                       "AvailabilityBreak": True, "BookingCode": "X",
+                                       "ArrivalAirportCode": "BOS"}]
+                        pass_amount = [day]
+                        ticket_type = [("eTicket", "testType")[month in [1,3,5]]]
+                        sequence = [year]
+                        direction = [("oneWay", "return")[month in [2,6,10]]]
+                        itinerary = {"OriginDestinationOptions":
+                                     {"OriginDestinationOption": [
+                                       {"FlightSegment": [
+                                         {"TPA_Extensions":
+                                           {"eTicket": {"Ind": True}},
+                                           "MarketingAirline": {"Code": dest},
+                                           "StopQuantity": month,
+                                           "DepartureTimeZone": {"GMTOffset": -7},
+                                           "OperatingAirline": {"Code": "DL",
+                                                                "FlightNumber": year + month},
+                                           "DepartureAirport": {"LocationCode": "SFO"},
+                                           "ArrivalTimeZone": {"GMTOffset": -5},
+                                           "ResBookDesigCode": "X",
+                                           "FlightNumber": year + day,
+                                           "ArrivalDateTime": "2014-07-12T06:07:00",
+                                           "ElapsedTime": 212,
+                                           "Equipment": {"AirEquipType": 763},
+                                           "DepartureDateTime": "2014-07-12T00:35:00",
+                                           "MarriageGrp": "O",
+                                           "ArrivalAirport": {"LocationCode": "MSP"}},
+                                        {"TPA_Extensions":
+                                           {"eTicket": {"Ind": False}},
+                                           "MarketingAirline": {"Code": dest},
+                                           "StopQuantity": month,
+                                           "DepartureTimeZone": {"GMTOffset": -7},
+                                           "OperatingAirline": {"Code": "DL",
+                                                                "FlightNumber": year + month + 1},
+                                           "DepartureAirport": {"LocationCode": "SFO"},
+                                           "ArrivalTimeZone": {"GMTOffset": -3},
+                                           "ResBookDesigCode": "X",
+                                           "FlightNumber": year + day,
+                                           "ArrivalDateTime": "2014-07-12T06:07:00",
+                                           "ElapsedTime": 212,
+                                           "Equipment": {"AirEquipType": 764},
+                                           "DepartureDateTime": "2014-07-12T00:35:00",
+                                           "MarriageGrp": "1",
+                                           "ArrivalAirport": {"LocationCode": "MSP"}}],
+                                    "ElapsedTime": 619},
+                                   {"FlightSegment": [
+                                         {"TPA_Extensions":
+                                           {"eTicket": {"Ind": True}},
+                                           "MarketingAirline": {"Code": dest},
+                                           "StopQuantity": month,
+                                           "DepartureTimeZone": {"GMTOffset": -7},
+                                           "OperatingAirline": {"Code": "DL",
+                                                                "FlightNumber": year + month},
+                                           "DepartureAirport": {"LocationCode": "SFO"},
+                                           "ArrivalTimeZone": {"GMTOffset": -5},
+                                           "ResBookDesigCode": "X",
+                                           "FlightNumber": year + day,
+                                           "ArrivalDateTime": "2014-07-12T06:07:00",
+                                           "ElapsedTime": 212,
+                                           "Equipment": {"AirEquipType": 763},
+                                           "DepartureDateTime": "2014-07-12T00:35:00",
+                                           "MarriageGrp": "O",
+                                           "ArrivalAirport": {"LocationCode": "MSP"}},
+                                        {"TPA_Extensions":
+                                           {"eTicket": {"Ind": False}},
+                                           "MarketingAirline": {"Code": dest},
+                                           "StopQuantity": month,
+                                           "DepartureTimeZone": {"GMTOffset": -7},
+                                           "OperatingAirline": {"Code": "DL",
+                                                                "FlightNumber": year + month + 1},
+                                           "DepartureAirport": {"LocationCode": "SFO"},
+                                           "ArrivalTimeZone": {"GMTOffset": -3},
+                                           "ResBookDesigCode": "X",
+                                           "FlightNumber": year + day,
+                                           "ArrivalDateTime": "2014-07-12T06:07:00",
+                                           "ElapsedTime": 212,
+                                           "Equipment": {"AirEquipType": 764},
+                                           "DepartureDateTime": "2014-07-12T00:35:00",
+                                           "MarriageGrp": "1",
+                                           "ArrivalAirport": {"LocationCode": "MSP"}}]}]},
+                                     "DirectionInd": "Return"}
+                        generators.append(DocumentGenerator(prefix, template,
+                                               amount, currency, decimal_tax, amount_tax, currency_tax,
+                                               [taxes], [fare_basis], pass_amount, ticket_type, sequence,
+                                               direction, itinerary, [dest], [year], [month], [day],
+                                               [[dest, dest]], start=start, end=docs_per_day))
         return generators
 
     def load(self, generators_load, exp=0, flag=0,
