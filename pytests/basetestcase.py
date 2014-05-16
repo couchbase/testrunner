@@ -1202,3 +1202,9 @@ class BaseTestCase(unittest.TestCase):
         self.assertTrue(isNotSame, summary)
         self.log.info(" End Verification for Failovers logs comparison ")
         return new_failovers_stats
+
+    def expire_pager(self, servers, val=10):
+        for bucket in self.buckets:
+            for server in servers:
+                ClusterOperationHelper.flushctl_set(server, "exp_pager_stime", val, bucket)
+        self.sleep(val, "wait for expiry pager to run on all these nodes")
