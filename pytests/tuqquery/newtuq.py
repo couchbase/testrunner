@@ -34,6 +34,7 @@ class QueryTests(BaseTestCase):
         self.buckets = RestConnection(self.master).get_buckets()
         docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
+        self.dataset = self.input.param("dataset", "default")
         self.gens_load = self.generate_docs(docs_per_day)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
@@ -1859,7 +1860,44 @@ class QueryTests(BaseTestCase):
             output = output[:output.find("tuq_client>")].strip()
         return json.loads(output)
 
-    def generate_docs(self, docs_per_day, start=0):
+    def generate_docs(self, num_items, start=0):
+        try:
+            return getattr(self, 'enerate_docs_' + self.dataset)()
+        except:
+            self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
+
+    def generate_docs_default(self, docs_per_day, start=0):
+        generators = []
+        types = ['Engineer', 'Sales', 'Support']
+        join_yr = [2010, 2011]
+        join_mo = xrange(1, 12 + 1)
+        join_day = xrange(1, 28 + 1)
+        template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
+        template += ' "email":"{4}", "job_title":"{5}", "test_rate":{8}, "skills":{9},'
+        template += '"VMs": {10},'
+        template += ' "tasks_points" : {{"task1" : {6}, "task2" : {7}}}}}'
+        for info in types:
+            for year in join_yr:
+                for month in join_mo:
+                    for day in join_day:
+                        prefix = str(uuid.uuid4())[:7]
+                        name = ["employee-%s" % (str(day))]
+                        email = ["%s-mail@couchbase.com" % (str(day))]
+                        vms = [{"RAM": month, "os": "ubuntu",
+                                "name": "vm_%s" % month, "memory": month},
+                               {"RAM": month, "os": "windows",
+                                "name": "vm_%s"% (month + 1), "memory": month}]
+                        generators.append(DocumentGenerator("query-test" + prefix,
+                                               template,
+                                               name, [year], [month], [day],
+                                               email, [info], range(1,10), range(1,10),
+                                               [float("%s.%s" % (month, month))],
+                                               [["skill%s" % y for y in join_yr]],
+                                               [vms],
+                                               start=start, end=docs_per_day))
+        return generators
+
+    def generate_docs_sabre(self, docs_per_day, start=0):
         generators = []
         types = ['Engineer', 'Sales', 'Support']
         join_yr = [2010, 2011]
