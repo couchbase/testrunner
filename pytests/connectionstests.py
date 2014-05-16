@@ -5,7 +5,7 @@ import os
 from couchbase.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
 from basetestcase import BaseTestCase
-from remote.remote_util import RemoteMachineShellConnection
+from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 from scripts.memcachetest_runner import MemcachetestRunner
 
 class ConnectionTests(BaseTestCase):
@@ -135,3 +135,18 @@ class ConnectionTests(BaseTestCase):
                     self.log.error("'ep_tap_user_count' for bucket '{0}' after test:{1}".format(bucket.name, buckets_stats_after[bucket.name]))
                     self.log.error("'ep_tap_user_count' != 0 as expected");
             self.log.info("'ep_tap_user_count' for bucket '{0}' = 0 for the entire test".format(bucket.name));
+
+    #CBQE-1489 memcached recovery
+    def test_kill_memcached(self):
+        node_to_kill_mem = self.servers[:self.nodes_init][-1]
+        iterations = self.input.param('iterations', 10)
+        shell = RemoteMachineShellConnection(node_to_kill_mem)
+        timeout = 10
+        try:
+            for i in xrange(iterations):
+                shell.kill_memcached()
+                self.sleep(timeout, "wait for memcached recovery...")
+                self.assertTrue(RemoteMachineHelper(shell).is_process_running('memcached'),
+                                "Memcached wasn't recover during %s seconds" % timeout)
+        finally:
+            shell.disconnect()

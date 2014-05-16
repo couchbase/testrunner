@@ -275,8 +275,9 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("killall -9 beam.smp")
             self.log_command_output(o, r)
 
-    def kill_memcached(self, os="unix"):
-        if os == "windows":
+    def kill_memcached(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
             o, r = self.execute_command("/taskkill /F /T /IM memcached*")
             self.log_command_output(o, r)
         else:
