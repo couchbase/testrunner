@@ -251,7 +251,7 @@ def build_json_result(jobs):
                ('build' in rq and not re.match(r'[0-9].[0-9].[0-9]-[0-9]+', rq['build'])):
                 print "ERROR forming rq for: %s" % rq
                 continue
-            if not (rq['totalCount'] and rq['failCount'] and rq['result']):
+            if not (rq['totalCount'] and rq['failCount'] != '' and rq['result']):
                 print "ERROR forming rq for: %s" % rq
                 continue
             jsons.append((key, json.dumps(rq)))
