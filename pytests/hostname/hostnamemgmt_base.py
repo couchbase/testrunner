@@ -49,3 +49,11 @@ class HostnameBaseTests(BaseTestCase):
             self.assertTrue(current_hostname.find(hostnames[server]) != -1,
                             "Server %s: Expected hostname %s, actual is %s" %(
                             server, hostnames[server], current_hostname))
+
+    def verify_referenced_by_ip(self, servers):
+        for server in servers:
+            rest = RestConnection(server)
+            current_hostname = rest.get_nodes_self().hostname
+            self.assertTrue(current_hostname.startswith(server.ip),
+                            "Server %s: Expected hostname %s, actual is %s" %(
+                            server, server.ip, current_hostname))
