@@ -4,10 +4,10 @@ from membase.api.rest_client import RestConnection
 class HostnameMgmtTests(HostnameBaseTests):
 
     def setUp(self):
-        super(HostnameTests, self).setUp()
+        super(HostnameMgmtTests, self).setUp()
 
     def tearDown(self):
-        super(HostnameTests, self).tearDown()
+        super(HostnameMgmtTests, self).tearDown()
 
     def test_add_node(self):
         hostnames = self.rename_nodes(self.servers)
