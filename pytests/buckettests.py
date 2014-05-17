@@ -1,11 +1,12 @@
 import time
 from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection, Bucket
+from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
 from couchbase.documentgenerator import BlobGenerator
 from testconstants import STANDARD_BUCKET_PORT
+from scripts.install import InstallerJob
 
 class CreateBucketTests(BaseTestCase):
     def setUp(self):
@@ -38,6 +39,23 @@ class CreateBucketTests(BaseTestCase):
             self.fail('created a bucket with invalid name {0}'.format(self.bucket_name))
         except BucketCreationException as ex:
             self.log.info(ex)
+
+    def test_win_specific_names(self):
+        version = self._get_cb_version()
+        if self._get_cb_os() != 'windows':
+            self.log.warn('This test is windows specific')
+            return
+        try:
+            self.test_banned_bucket_name()
+        finally:
+            try:
+                self.log.info('Will check if ns_server is running')
+                RestConnection(self.master)
+                self.assertTrue(RestHelper(rest).is_ns_server_running(timeout_in_seconds=60))
+            except:
+                self._reinstall(version)
+                self.fail("ns_server is not running after bucket '%s' creation" %(
+                                           self.bucket_name))
 
     # Bucket creation with names as mentioned in MB-5844(isasl.pw, ns_log)
     def test_valid_bucket_name(self, password='password'):
@@ -111,3 +129,30 @@ class CreateBucketTests(BaseTestCase):
         """ delete diag file after create """
         sftp.remove(file_path)
         sftp.close()
+
+    def _get_cb_version(self):
+        rest = RestConnection(self.master)
+        version = rest.get_nodes_self().version
+        return version[:version.rfind('-')]
+
+    def _get_cb_os(self):
+        rest = RestConnection(self.master)
+        return rest.get_nodes_self().os
+
+    def _reinstall(self, version):
+        servs = self.servers[:self.nodes_init]
+        params = {}
+        params['num_nodes'] = len(servs)
+        params['product'] = 'cb'
+        params['version'] = version
+        params['vbuckets'] = [self.input.param('vbuckets', 1024)]
+        self.log.info("will install {0} on {1}".format(version, [s.ip for s in servs]))
+        InstallerJob().parallel_install(servs, params)
+        if params['product'] in ["couchbase", "couchbase-server", "cb"]:
+            success = True
+            for server in servs:
+                success &= RemoteMachineShellConnection(server).is_couchbase_installed()
+                if not success:
+                    self.input.test_params["stop-on-failure"] = True
+                    self.log.error("Couchbase wasn't recovered. All downstream tests will be skipped")
+                    self.fail("some nodes were not install successfully!")
