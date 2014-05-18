@@ -57,7 +57,7 @@ if [ ${run_install} = true ]
 fi
 
 echo '---------------------------- TESTS RUN -----------------------'
-./testrunner -i ${ini_file} -c conf/py-documentkeys.conf -p ${test_params}
+./testrunner -i ${ini_file} -c ${config_file} -p ${test_params}
 
 
 
