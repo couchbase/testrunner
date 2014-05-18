@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+   <actions />
+   <description />
+   <logRotator class="hudson.tasks.LogRotator">
+      <daysToKeep>31</daysToKeep>
+      <numToKeep>10</numToKeep>
+      <artifactDaysToKeep>31</artifactDaysToKeep>
+      <artifactNumToKeep>31</artifactNumToKeep>
+   </logRotator>
+   <keepDependencies>false</keepDependencies>
+   <properties>
+      <hudson.plugins.buildblocker.BuildBlockerProperty plugin="build-blocker-plugin@1.4.1">
+         <useBuildBlocker>false</useBuildBlocker>
+      </hudson.plugins.buildblocker.BuildBlockerProperty>
+      <com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty plugin="build-failure-analyzer@1.7.0">
+         <doNotScan>false</doNotScan>
+      </com.sonyericsson.jenkins.plugins.bfa.model.ScannerJobProperty>
+      <com.coravy.hudson.plugins.github.GithubProjectProperty plugin="github@1.8">
+         <projectUrl>https://github.com/couchbase/testrunner/</projectUrl>
+      </com.coravy.hudson.plugins.github.GithubProjectProperty>
+      <jenkins.advancedqueue.AdvancedQueueSorterJobProperty plugin="PrioritySorter@2.6">
+         <useJobPriority>false</useJobPriority>
+         <priority>-1</priority>
+      </jenkins.advancedqueue.AdvancedQueueSorterJobProperty>
+      <hudson.model.ParametersDefinitionProperty>
+         <parameterDefinitions>
+            <hudson.model.StringParameterDefinition>
+               <name>config_file</name>
+               <description />
+               <defaultValue>PATH_TO_CONF_FILE!!!</defaultValue>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+               <name>version_number</name>
+               <description />
+               <defaultValue>3.0.0-xxx-rel</defaultValue>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+               <name>test_params</name>
+               <description />
+               <defaultValue>get-cbcollect-info=True,get-logs=False,stop-on-failure=False</defaultValue>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.ChoiceParameterDefinition>
+               <name>vbuckets</name>
+               <description />
+               <choices class="java.util.Arrays$ArrayList">
+                  <a class="string-array">
+                     <string>1024</string>
+                     <string>8</string>
+                     <string>16</string>
+                     <string>64</string>
+                     <string>128</string>
+                  </a>
+               </choices>
+            </hudson.model.ChoiceParameterDefinition>
+            <hudson.model.ChoiceParameterDefinition>
+               <name>upr</name>
+               <description />
+               <choices class="java.util.Arrays$ArrayList">
+                  <a class="string-array">
+                     <string>True</string>
+                     <string>False</string>
+                  </a>
+               </choices>
+            </hudson.model.ChoiceParameterDefinition>
+            <hudson.model.ChoiceParameterDefinition>
+               <name>group</name>
+               <description />
+               <choices class="java.util.Arrays$ArrayList">
+                  <a class="string-array">
+                     <string>ALL</string>
+                     <string>P0</string>
+                     <string>P1</string>
+                     <string>P2</string>
+                  </a>
+               </choices>
+            </hudson.model.ChoiceParameterDefinition>
+            <hudson.model.BooleanParameterDefinition>
+               <name>run_install</name>
+               <description>run installation</description>
+               <defaultValue>true</defaultValue>
+            </hudson.model.BooleanParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+               <name>ini_file</name>
+               <description />
+               <defaultValue>LINUX_JOB_TEMPLATE.ini(better use $env.JOB_NAME)!!!</defaultValue>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+               <name>MAILING_LIST</name>
+               <description />
+               <defaultValue>andrei.baranouski@gmail.com</defaultValue>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
+               <name>OWNERS</name>
+               <description />
+               <defaultValue>PUT_OWNERS!!!</defaultValue>
+            </hudson.model.StringParameterDefinition>
+         </parameterDefinitions>
+      </hudson.model.ParametersDefinitionProperty>
+   </properties>
+   <scm class="hudson.plugins.git.GitSCM" plugin="git@2.2.0">
+      <configVersion>2</configVersion>
+      <userRemoteConfigs>
+         <hudson.plugins.git.UserRemoteConfig>
+            <url>git://github.com/couchbase/testrunner.git</url>
+         </hudson.plugins.git.UserRemoteConfig>
+      </userRemoteConfigs>
+      <branches>
+         <hudson.plugins.git.BranchSpec>
+            <name>master</name>
+         </hudson.plugins.git.BranchSpec>
+      </branches>
+      <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+      <browser class="hudson.plugins.backlog.BacklogGitRepositoryBrowser" plugin="backlog@1.9">
+         <repoName />
+         <url />
+      </browser>
+      <submoduleCfg class="list" />
+      <extensions />
+   </scm>
+   <assignedNode>P0_MV</assignedNode>
+   <canRoam>false</canRoam>
+   <disabled>false</disabled>
+   <blockBuildWhenDownstreamBuilding>true</blockBuildWhenDownstreamBuilding>
+   <blockBuildWhenUpstreamBuilding>true</blockBuildWhenUpstreamBuilding>
+   <triggers />
+   <concurrentBuild>false</concurrentBuild>
+   <builders>
+      <hudson.tasks.Shell>
+         <command>echo "PUT_INI_FILE!!!" &gt; ${ini_file}</command>
+      </hudson.tasks.Shell>
+      <hudson.tasks.Shell>
+         <command>cp scripts/run_job_linux.sh . chmod 777 -R run_job_linux.sh ./run_job_linux.sh</command>
+      </hudson.tasks.Shell>
+   </builders>
+   <publishers>
+      <hudson.tasks.ArtifactArchiver>
+         <artifacts>changes.*,*.zip,**/*.log,*.gz,**/*.xml, **/*.zip</artifacts>
+         <latestOnly>false</latestOnly>
+         <allowEmptyArchive>false</allowEmptyArchive>
+      </hudson.tasks.ArtifactArchiver>
+      <hudson.tasks.junit.JUnitResultArchiver>
+         <testResults>**/*.xml</testResults>
+         <keepLongStdio>false</keepLongStdio>
+         <testDataPublishers />
+      </hudson.tasks.junit.JUnitResultArchiver>
+      <hudson.plugins.descriptionsetter.DescriptionSetterPublisher plugin="description-setter@1.8">
+         <regexp>version=(.*)</regexp>
+         <regexpForFailed />
+         <setForMatrix>false</setForMatrix>
+      </hudson.plugins.descriptionsetter.DescriptionSetterPublisher>
+      <hudson.plugins.emailext.ExtendedEmailPublisher plugin="email-ext@2.37.2.2">
+         <recipientList>$MAILING_LIST</recipientList>
+         <configuredTriggers>
+            <hudson.plugins.emailext.plugins.trigger.FailureTrigger>
+               <email>
+                  <recipientList />
+                  <subject>$PROJECT_DEFAULT_SUBJECT</subject>
+                  <body>$PROJECT_DEFAULT_CONTENT</body>
+                  <sendToDevelopers>false</sendToDevelopers>
+                  <sendToRequester>false</sendToRequester>
+                  <includeCulprits>false</includeCulprits>
+                  <sendToRecipientList>true</sendToRecipientList>
+                  <attachmentsPattern />
+                  <attachBuildLog>false</attachBuildLog>
+                  <compressBuildLog>false</compressBuildLog>
+                  <replyTo />
+                  <contentType>project</contentType>
+               </email>
+            </hudson.plugins.emailext.plugins.trigger.FailureTrigger>
+            <hudson.plugins.emailext.plugins.trigger.SuccessTrigger>
+               <email>
+                  <recipientList />
+                  <subject>$PROJECT_DEFAULT_SUBJECT</subject>
+                  <body>$PROJECT_DEFAULT_CONTENT</body>
+                  <sendToDevelopers>false</sendToDevelopers>
+                  <sendToRequester>false</sendToRequester>
+                  <includeCulprits>false</includeCulprits>
+                  <sendToRecipientList>true</sendToRecipientList>
+                  <attachmentsPattern />
+                  <attachBuildLog>false</attachBuildLog>
+                  <compressBuildLog>false</compressBuildLog>
+                  <replyTo>$PROJECT_DEFAULT_REPLYTO</replyTo>
+                  <contentType>project</contentType>
+               </email>
+            </hudson.plugins.emailext.plugins.trigger.SuccessTrigger>
+            <hudson.plugins.emailext.plugins.trigger.UnstableTrigger>
+               <email>
+                  <recipientList />
+                  <subject>$PROJECT_DEFAULT_SUBJECT</subject>
+                  <body>$PROJECT_DEFAULT_CONTENT</body>
+                  <sendToDevelopers>false</sendToDevelopers>
+                  <sendToRequester>false</sendToRequester>
+                  <includeCulprits>false</includeCulprits>
+                  <sendToRecipientList>true</sendToRecipientList>
+                  <attachmentsPattern />
+                  <attachBuildLog>false</attachBuildLog>
+                  <compressBuildLog>false</compressBuildLog>
+                  <replyTo>$PROJECT_DEFAULT_REPLYTO</replyTo>
+                  <contentType>project</contentType>
+               </email>
+            </hudson.plugins.emailext.plugins.trigger.UnstableTrigger>
+            <hudson.plugins.emailext.plugins.trigger.FixedTrigger>
+               <email>
+                  <recipientList />
+                  <subject>$PROJECT_DEFAULT_SUBJECT</subject>
+                  <body>$PROJECT_DEFAULT_CONTENT</body>
+                  <sendToDevelopers>false</sendToDevelopers>
+                  <sendToRequester>false</sendToRequester>
+                  <includeCulprits>false</includeCulprits>
+                  <sendToRecipientList>true</sendToRecipientList>
+                  <attachmentsPattern />
+                  <attachBuildLog>false</attachBuildLog>
+                  <compressBuildLog>false</compressBuildLog>
+                  <replyTo>$PROJECT_DEFAULT_REPLYTO</replyTo>
+                  <contentType>project</contentType>
+               </email>
+            </hudson.plugins.emailext.plugins.trigger.FixedTrigger>
+         </configuredTriggers>
+         <contentType>default</contentType>
+         <defaultSubject>QE OWNER: ${ENV , var="OWNERS"} - ${BUILD_STATUS}: ${ENV , var="version_number"} - ${JOB_NAME}</defaultSubject>
+         <defaultContent>${JELLY_SCRIPT, template="couchbase"}</defaultContent>
+         <attachmentsPattern />
+         <presendScript />
+         <attachBuildLog>false</attachBuildLog>
+         <compressBuildLog>false</compressBuildLog>
+         <replyTo />
+         <saveOutput>false</saveOutput>
+      </hudson.plugins.emailext.ExtendedEmailPublisher>
+      <hudson.plugins.parameterizedtrigger.BuildTrigger plugin="parameterized-trigger@2.24">
+         <configs>
+            <hudson.plugins.parameterizedtrigger.BuildTriggerConfig>
+               <configs>
+                  <hudson.plugins.parameterizedtrigger.CurrentBuildParameters />
+               </configs>
+               <projects />
+               <condition>ALWAYS</condition>
+               <triggerWithNoParameters>false</triggerWithNoParameters>
+            </hudson.plugins.parameterizedtrigger.BuildTriggerConfig>
+         </configs>
+      </hudson.plugins.parameterizedtrigger.BuildTrigger>
+   </publishers>
+   <buildWrappers>
+      <hudson.plugins.build__timeout.BuildTimeoutWrapper plugin="build-timeout@1.13">
+         <strategy class="hudson.plugins.build_timeout.impl.ElasticTimeOutStrategy">
+            <timeoutPercentage>200</timeoutPercentage>
+            <numberOfBuilds>3</numberOfBuilds>
+            <timeoutMinutesElasticDefault>2000</timeoutMinutesElasticDefault>
+         </strategy>
+         <operationList />
+      </hudson.plugins.build__timeout.BuildTimeoutWrapper>
+      <org.jenkinsci.plugins.buildnamesetter.BuildNameSetter plugin="build-name-setter@1.3">
+         <template>${version_number}</template>
+      </org.jenkinsci.plugins.buildnamesetter.BuildNameSetter>
+   </buildWrappers>
+</project>
