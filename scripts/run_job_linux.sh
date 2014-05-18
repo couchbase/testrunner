@@ -20,10 +20,19 @@ else
 fi
 export
 
+echo "ini_file to be used: " ${ini_file}
+INI_NOT_FOUND=`cat ${ini_file} 2>&1| grep "No such file or directory"| wc -l`
+
+if [ ${INI_NOT_FOUND} -ge 1 ]
+    then
+    echo "ini_file doesn't exist!: " ${ini_file}
+    exit ${INI_NOT_FOUND}
+fi
+
 
 set +x
 echo '---------------------------- PRE-SETUP VERIFICATION -----------------------'
-echo version=${version_number}
+echo ${version_number}
 FAIL_CONNECTIONS=`python scripts/ssh.py -i ${ini_file} 'ls' 2>&1| grep 'No handlers' | wc -l`
 
 if [ ${FAIL_CONNECTIONS} -ge 1 ]
