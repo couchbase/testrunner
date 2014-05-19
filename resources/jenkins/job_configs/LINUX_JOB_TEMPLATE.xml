@@ -81,6 +81,11 @@
                <defaultValue>true</defaultValue>
             </hudson.model.BooleanParameterDefinition>
             <hudson.model.StringParameterDefinition>
+               <name>install_params</name>
+               <description>params that use in installer.py</description>
+               <defaultValue>product=cb,parallel=True</defaultValue>
+            </hudson.model.StringParameterDefinition>
+            <hudson.model.StringParameterDefinition>
                <name>ini_file</name>
                <description />
                <defaultValue>LINUX_JOB_TEMPLATE.ini(better use $env.JOB_NAME)!!!</defaultValue>
