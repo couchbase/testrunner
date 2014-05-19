@@ -7,6 +7,7 @@ import os
 import urllib2
 import uuid
 import sys
+import threading
 from os.path import basename, splitext
 from multiprocessing import Process
 from pprint import pprint
@@ -20,6 +21,7 @@ import re
 import time
 import unittest
 import logging.config
+from threading import Thread, Event
 from xunit import XUnitTestResult
 from TestInput import TestInputParser, TestInputSingleton
 from optparse import OptionParser, OptionGroup
@@ -226,7 +228,31 @@ def get_cbcollect_info(input, path):
         except:
             print "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}".format(server.ip)
 
+class StoppableThreadWithResult(Thread):
+    """Thread class with a stop() method. The thread itself has to check
+    regularly for the stopped() condition."""
 
+    def __init__(self, group=None, target=None, name=None,
+                 args=(), kwargs=None, verbose=None):
+        super(StoppableThreadWithResult, self).__init__(group=group, target=target,
+                        name=name, args=args, kwargs=kwargs, verbose=verbose)
+        self._stop = Event()
+
+    def stop(self):
+        self._stop.set()
+        self._Thread__stop()
+
+    def stopped(self):
+        return self._stop.isSet()
+
+    def run(self):
+        if self._Thread__target is not None:
+            self._return = self._Thread__target(*self._Thread__args,
+                                                **self._Thread__kwargs)
+
+    def join(self, timeout=None):
+        Thread.join(self, timeout=None)
+        return self._return
 
 def main():
     BEFORE_SUITE = "suite_setUp"
@@ -255,7 +281,6 @@ def main():
         print "Only cases in GROUPs '{0}' will be executed".format(test_params["GROUP"])
     if "EXCLUDE_GROUP" in test_params:
         print "Cases from GROUPs '{0}' will be excluded".format(test_params["EXCLUDE_GROUP"])
-
 
     if TestInputSingleton.input.param("get-delays", False):
         #start measure_sched_delays on all servers
@@ -312,7 +337,20 @@ def main():
             result = unittest.TextTestRunner(verbosity=2)._makeResult()
             result.errors = [(name, e.message)]
         else:
-            result = unittest.TextTestRunner(verbosity=2).run(suite)
+            test_timeout = TestInputSingleton.input.param("test_timeout", None)
+            t = StoppableThreadWithResult(target=unittest.TextTestRunner(verbosity=2).run,
+               name="test_thread",
+               args=(suite))
+            t.start()
+            result = t.join(timeout=test_timeout)
+            if not result:
+                for t in threading.enumerate():
+                    if t != threading.current_thread():
+                        t._Thread__stop()
+                result = unittest.TextTestRunner(verbosity=2)._makeResult()
+                case_number += 1000
+                print ("========TEST WAS STOPPED DUE TO  TIMEOUT=========")
+                result.errors = [(name, "Test was stopped due to timeout")]
         time_taken = time.time() - start_time
 
         # Concat params to test name

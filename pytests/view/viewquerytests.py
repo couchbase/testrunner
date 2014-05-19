@@ -1927,7 +1927,8 @@ class ViewQueryTests(BaseTestCase):
                                                  bucket.kvs[kv_store], op_type, exp, flag,
                                                  only_store_hash, batch_size, pause_secs,
                                                  timeout_secs)
-            if 'stop' in dir(threading.currentThread()):
+            if 'stop' in dir(threading.currentThread()) and\
+                isinstance(threading.currentThread(), StoppableThread):
                 threading.currentThread().tasks.append(task)
             task.result()
             RebalanceHelper.wait_for_persistence(data_set.server, bucket.name)
@@ -1938,7 +1939,8 @@ class ViewQueryTests(BaseTestCase):
             self.log.error("At least one of load data threads is crashed: {0}".format(ex))
             self.thread_crashed.set()
             if task:
-                if 'stop' in dir(threading.currentThread()):
+                if 'stop' in dir(threading.currentThread()) and\
+                   isinstance(threading.currentThread(), StoppableThread):
                     threading.currentThread().tasks.append(task)
                     threading.currentThread().stop()
                 else:
@@ -2088,7 +2090,8 @@ class QueryView:
                     task = tc.cluster.async_generate_expected_view_results(doc_gens, self.view,
                                                                             params_gen_results,
                                                                             type_query=query.type_)
-                    if 'stop' in dir(threading.currentThread()):
+                    if 'stop' in dir(threading.currentThread()) and\
+                   isinstance(threading.currentThread(), StoppableThread):
                         threading.currentThread().tasks.append(task)
                     expected_results = task.result()
                 tc.log.info("%s:%s: Generated results contains %s items" % (
@@ -2098,7 +2101,8 @@ class QueryView:
                                          query.params, expected_docs=expected_results, bucket=self.bucket,
                                          retries=retries, error=query.error, verify_rows=verify_expected_keys,
                                          server_to_query=server_to_query, type_query=query.type_)
-                if 'stop' in dir(threading.currentThread()):
+                if 'stop' in dir(threading.currentThread()) and\
+                   isinstance(threading.currentThread(), StoppableThread):
                     if threading.currentThread().tasks:
                         threading.currentThread().tasks[0] = task
                     else:
@@ -2118,7 +2122,8 @@ class QueryView:
                                                    num_verified_docs=len(expected_results),
                                                    bucket=self.bucket,
                                                    results=result_query["results"])
-                        if 'stop' in dir(threading.currentThread()):
+                        if 'stop' in dir(threading.currentThread()) and\
+                   isinstance(threading.currentThread(), StoppableThread):
                             threading.currentThread().tasks[0] = task
                         debug_info = task.result()
                         msg += "DEBUG INFO: %s" % debug_info["errors"]
@@ -2129,7 +2134,8 @@ class QueryView:
             self.results.addError(tc, (Exception, str(ex), sys.exc_info()[2]))
             tc.thread_crashed.set()
             if task:
-                if 'stop' in dir(threading.currentThread()):
+                if 'stop' in dir(threading.currentThread()) and\
+                   isinstance(threading.currentThread(), StoppableThread):
                     threading.currentThread().tasks.append(task)
                     threading.currentThread().stop()
                 else:
