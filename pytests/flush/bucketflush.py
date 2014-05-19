@@ -18,6 +18,8 @@ class BucketFlushTests(BaseTestCase):
         try:
             self.default_test_setup()
         except Exception, e:
+            # increase case_number to retry tearDown in setup for the next test
+            self.case_number += 1000
             self.cluster.shutdown(force=True)
             self.fail(e)
 
