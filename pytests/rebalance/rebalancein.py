@@ -64,20 +64,18 @@ class RebalanceInTests(RebalanceBaseTest):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])
+        tasks = [self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])]
         if(self.doc_ops is not None):
             # define which doc's ops will be performed during rebalancing
             # allows multiple of them but one by one
             if("update" in self.doc_ops):
-                self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
+                tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
             if("create" in self.doc_ops):
-                self._async_load_all_buckets(self.master, gen_create, "create", 0)
+                tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0)
             if("delete" in self.doc_ops):
-                self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
-        try:
-            rebalance.result()
-        except Exception, ex:
-            raise ex
+                tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
+        for task in tasks:
+            task.result()
         self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
 
     def rebalance_in_with_ops_batch(self):
@@ -94,10 +92,7 @@ class RebalanceInTests(RebalanceBaseTest):
                 self._load_all_buckets(self.servers[0], gen_create, "create", 0, 1, 4294967295, True, batch_size=20000, pause_secs=5, timeout_secs=180)
             if("delete" in self.doc_ops):
                 self._load_all_buckets(self.servers[0], gen_delete, "delete", 0, 1, 4294967295, True, batch_size=20000, pause_secs=5, timeout_secs=180)
-        try:
-            rebalance.result()
-        except Exception, ex:
-            raise ex
+        rebalance.result()
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + 1])
         self._verify_all_buckets(self.master, 1, 1000, None, only_store_hash=True, batch_size=5000)
         self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1])
@@ -139,10 +134,8 @@ class RebalanceInTests(RebalanceBaseTest):
             else:
                 result = temp_result
             num_iter += 1
-        try:
-            rebalance.result()
-        except Exception, ex:
-            raise ex
+
+        rebalance.result()
         # get random keys for new added nodes
         rest_cons = [RestConnection(self.servers[i]) for i in xrange(self.nodes_init + self.nodes_in)]
         list_threads = []
@@ -167,25 +160,28 @@ class RebalanceInTests(RebalanceBaseTest):
     Once all nodes have been rebalanced in the test is finished."""
     def incremental_rebalance_in_with_ops(self):
         for i in range(1, self.num_servers, 2):
-            rebalance = self.cluster.async_rebalance(self.servers[:i], self.servers[i:i + 2], [])
+            tasks = [self.cluster.async_rebalance(self.servers[:i], self.servers[i:i + 2], [])]
             if self.doc_ops is not None:
             # define which doc's operation will be performed during rebalancing
             # only one type of ops can be passed
                 if("update" in self.doc_ops):
                     # 1/2th of data will be updated in each iteration
-                    self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
+                    tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
                 elif("create" in self.doc_ops):
                     # 1/2th of initial data will be added in each iteration
                     gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items * (1 + i) / 2.0 , end=self.num_items * (1 + i / 2.0))
-                    self._async_load_all_buckets(self.master, gen_create, "create", 0)
+                    tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0)
                 elif("delete" in self.doc_ops):
                     # 1/(num_servers) of initial data will be removed after each iteration
                     # at the end we should get empty base( or couple items)
                     gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=int(self.num_items * (1 - i / (self.num_servers - 1.0))) + 1, end=int(self.num_items * (1 - (i - 1) / (self.num_servers - 1.0))))
-                    self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
+                    tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
             try:
-                rebalance.result()
+                for task in tasks:
+                    task.result()
             except Exception, ex:
+                for task in tasks:
+                    task.cancel()
                 raise ex
             self.verify_cluster_stats(self.servers[:i + 2])
 
@@ -261,10 +257,8 @@ class RebalanceInTests(RebalanceBaseTest):
             for bucket in self.buckets:
                 self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
 
-            try:
-                rebalance.result()
-            except Exception, ex:
-                raise ex
+            rebalance.result()
+
             # verify view queries results after rebalancing
             for bucket in self.buckets:
                 self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
@@ -323,10 +317,7 @@ class RebalanceInTests(RebalanceBaseTest):
             # see that the result of view queries are the same as expected during the test
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
             # verify view queries results after rebalancing
-            try:
-                rebalance.result()
-            except Exception, ex:
-                raise ex
+            rebalance.result()
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
             self.verify_cluster_stats(self.servers[:i + 2])
 
@@ -360,10 +351,7 @@ class RebalanceInTests(RebalanceBaseTest):
 
             self.log.info("second attempt to rebalance")
             rebalance = self.cluster.async_rebalance(servs_init + servs_in, [], [])
-            try:
-                rebalance.result()
-            except Exception, ex:
-                raise ex
+            rebalance.result()
         self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
 
 
@@ -433,10 +421,7 @@ class RebalanceInTests(RebalanceBaseTest):
         rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
         result = compaction_task.result(self.wait_timeout * 10)
         self.assertTrue(result)
-        try:
-            rebalance.result()
-        except Exception, ex:
-            raise ex
+        rebalance.result()
         self.verify_cluster_stats(self.servers[:self.nodes_in + 1])
 
     """Rebalances nodes into a cluster while doing mutations and deletions.
@@ -477,10 +462,7 @@ class RebalanceInTests(RebalanceBaseTest):
             self._load_all_buckets(self.master, self.gen_update, "update", 0)
             self._load_all_buckets(self.master, gen_2, "update", 5)
             self.sleep(5)
-            try:
-                rebalance.result()
-            except Exception, ex:
-                raise ex
+            rebalance.result()
             self._load_all_buckets(self.master, gen_2, "create", 0)
             self.verify_cluster_stats(self.servers[:i + 1])
 
@@ -506,10 +488,7 @@ class RebalanceInTests(RebalanceBaseTest):
                             if bucket.authType == 'sasl' and bucket.name != 'default'][0]
         rest.change_bucket_props(bucket_to_change, saslPassword=new_pass)
         rebalance = self.cluster.async_rebalance(servs_result, servs_in_second, [])
-        try:
-            rebalance.result()
-        except Exception, ex:
-            raise ex
+        rebalance.result()
 
     '''
     test changes password of cluster during rebalance.
