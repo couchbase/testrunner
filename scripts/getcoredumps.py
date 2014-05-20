@@ -1,7 +1,9 @@
+#!/usr/bin/env python
+import getopt
 import sys
 import os
 import time
-
+from threading import Thread
 
 sys.path.append('.')
 sys.path.append('lib')
@@ -9,16 +11,36 @@ from remote.remote_util import RemoteMachineShellConnection
 
 from TestInput import TestInputParser
 
-if __name__ == "__main__":
-    input = TestInputParser.get_test_input(sys.argv)
-    remote = RemoteMachineShellConnection(input.servers[0])
-    server_type = 'membase'
-    if remote.is_couchbase_installed():
-        server_type = 'couchbase'
-    stamp = time.strftime("%d_%m_%Y_%H_%M")
-    for serverInfo in input.servers:
+
+def usage(error=None):
+    print """\
+Syntax: getcoredumps.py [options]
+
+Options
+ -i <file>        Path to .ini file containing cluster information.
+ -p <key=val,...> Comma-separated key=value info.
+
+Available keys:
+ path=<file_path> The destination path you want to put your zipped diag file
+
+Example:
+ getcoredumps.py -i cluster.ini -p path=/tmp/nosql
+"""
+    sys.exit(error)
+
+
+class Getcoredumps(object):
+    def __init__(self, server, path):
+        self.server = server
+        self.path = path
+
+    def run(self):
+        remote = RemoteMachineShellConnection(self.server)
+        server_type = 'membase'
+        if remote.is_couchbase_installed():
+            server_type = 'couchbase'
+        stamp = time.strftime("%d_%m_%Y_%H_%M")
         try:
-            remote = RemoteMachineShellConnection(serverInfo)
             info = remote.extract_remote_info()
             if info.type.lower() != 'windows':
                 core_files = []
@@ -37,29 +59,25 @@ if __name__ == "__main__":
                 for core_file in core_files:
                     if core_file.find('erl_crash.dump') != -1:
                         #let's just copy that file back
-                        erl_crash_file_name = "erlang-{0}-{1}.log".format(serverInfo.ip, i)
-                        erl_crash_path = "/opt/{0}/var/lib/{0}/{1}".format(server_type, erl_crash_file_name)
-                        remote.execute_command('cp {0} {1}'.format(core_file, erl_crash_path))
-                        destination = "{0}/{1}".format(os.getcwd(), erl_crash_file_name)
-                        if remote.get_file(remotepath="/opt/{0}/var/lib/{0}/".format(server_type),
-                                           filename=erl_crash_file_name,
-                                           todir=destination):
-                            print 'downloaded core file : {0}'.format(destination)
+                        erl_crash_file_name = "erlang-{0}-{1}.log".format(self.server.ip, i)
+                        remote_path, file_name = os.path.dirname(core_file), os.path.basename(core_file)
+                        if remote.get_file(remote_path, file_name, os.path.join(self.path, erl_crash_file_name)):
+                            print 'downloaded core file : {0}'.format(core_file)
                             i += 1
                     else:
                         command = "/opt/{0}/bin/tools/cbanalyze-core".format(server_type)
-                        core_file_name = "core-{0}-{1}.log".format(serverInfo.ip, i)
+                        core_file_name = "core-{0}-{1}.log".format(self.server.ip, i)
                         core_log_output = "/tmp/{0}".format(core_file_name)
-                        output, error = remote.execute_command('{0} {1} -f {2}'.format(command, core_file, core_log_output))
+                        output, _ = remote.execute_command('{0} {1} -f {2}'.format(command, core_file, core_log_output))
                         print output
-                        destination = "{0}/{1}".format(os.getcwd(), core_file_name)
-                        if remote.get_file(remotepath="/tmp", filename=core_file_name, todir=destination):
-                            print 'downloaded core file : {0}'.format(destination)
+                        remote_path, file_name = os.path.dirname(core_log_output), os.path.basename(core_log_output)
+                        if remote.get_file(remote_path, file_name, os.path.join(self.path, core_file_name)):
+                            print 'downloaded core file : {0}'.format(core_log_output)
                             i += 1
                 if i > 0:
                     command = "mkdir -p /tmp/backup_crash/{0};mv -f /tmp/core* /tmp/backup_crash/{0}; mv -f /opt/{0}/var/lib/{1}/erl_crash.dump* /tmp/backup_crash/{0}".\
                         format(stamp, server_type)
-                    print "put all crashes on {0} in backup folder: /tmp/backup_crash/{1}".format(serverInfo.ip, stamp)
+                    print "put all crashes on {0} in backup folder: /tmp/backup_crash/{1}".format(self.server.ip, stamp)
                     remote.execute_command(command)
                     output, error = remote.execute_command("ls -la /tmp/backup_crash/{0}".format(stamp))
                     for o in output:
@@ -69,3 +87,43 @@ if __name__ == "__main__":
                     remote.disconnect()
         except Exception as ex:
             print ex
+
+
+def main():
+    try:
+        (opts, args) = getopt.getopt(sys.argv[1:], 'hi:p', [])
+        for o, a in opts:
+            if o == "-h":
+                usage()
+
+        input = TestInputParser.get_test_input(sys.argv)
+        if not input.servers:
+            usage("ERROR: no servers specified. Please use the -i parameter.")
+    except IndexError:
+        usage()
+    except getopt.GetoptError, error:
+        usage("ERROR: " + str(error))
+
+    file_path = input.param("path", ".")
+    remotes = (Getcoredumps(server, file_path) for server in input.servers)
+    remote_threads = [Thread(target=remote.run) for remote in remotes]
+
+    for remote_thread in remote_threads:
+        remote_thread.daemon = True
+        remote_thread.start()
+        run_time = 0
+        while remote_thread.isAlive() and run_time < 1200:
+            time.sleep(15)
+            run_time += 15
+            print "Waiting for another 15 seconds (time-out after 20 min)"
+        if run_time == 1200:
+            print "collect core dumps hung on this node. Jumping to next node"
+        print "collect core dumps info done"
+
+    for remote_thread in remote_threads:
+        remote_thread.join(120)
+        if remote_thread.isAlive():
+            raise Exception("collect core dumps hung on remote node")
+
+if __name__ == "__main__":
+    main()
