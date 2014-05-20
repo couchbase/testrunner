@@ -424,7 +424,7 @@ class BaseTestCase(unittest.TestCase):
         A list of all of the tasks created.
     """
     def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0,
-                                only_store_hash=True, batch_size=500, pause_secs=1, timeout_secs=30,
+                                only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30,
                                 proxy_client=None):
         tasks = []
         for bucket in self.buckets:
@@ -994,26 +994,26 @@ class BaseTestCase(unittest.TestCase):
                     for key in map[bucket][node][vbucket].keys():
                         print "            :: for key {0} = {1}".format(key, map[bucket][node][vbucket][key])
 
-    def get_data_set_all(self, servers, buckets, path=None, mode="disk"):
+    def get_data_set_all(self, servers, buckets, path=None, mode = "disk"):
         """ Method to get all data set for buckets and from the servers """
-        info, dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode=mode)
+        info, dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
         return dataset
 
-    def get_data_set_with_data_distribution_all(self, servers, buckets, path=None, mode="disk"):
+    def get_data_set_with_data_distribution_all(self, servers, buckets, path=None, mode = "disk"):
         """ Method to get all data set for buckets and from the servers """
-        info, dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode=mode)
-        distribution = self.data_analyzer.analyze_data_distribution(dataset)
-        return dataset, distribution
+        info, dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
+        distribution  = self.data_analyzer.analyze_data_distribution(dataset)
+        return dataset,distribution
 
-    def get_and_compare_active_replica_data_set_all(self, servers, buckets, path=None, mode="disk"):
+    def get_and_compare_active_replica_data_set_all(self, servers, buckets, path=None, mode = "disk"):
         """
            Method to get all data set for buckets and from the servers
            1)  Get active and replica data in the cluster
            2)  Compare active and replica data in the cluster
            3)  Return active and replica data
         """
-        info, disk_replica_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=True, mode=mode)
-        info, disk_active_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=False, mode=mode)
+        info, disk_replica_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=True, mode = mode)
+        info, disk_active_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=False, mode = mode)
         self.log.info(" Begin Verification for Active Vs Replica ")
         comparison_result = self.data_analyzer.compare_all_dataset(info, disk_replica_dataset, disk_active_dataset)
         logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=False, addedItems=False, updatedItems=False)
@@ -1021,7 +1021,7 @@ class BaseTestCase(unittest.TestCase):
         self.log.info(" End Verification for Active Vs Replica ")
         return disk_replica_dataset, disk_active_dataset
 
-    def data_analysis_active_replica_all(self, prev_data_set_active, prev_data_set_replica, servers, buckets, path=None, mode="disk"):
+    def data_analysis_active_replica_all(self, prev_data_set_active, prev_data_set_replica, servers, buckets, path=None, mode = "disk"):
         """
             Method to do data analysis using cb transfer
             This works at cluster level
@@ -1030,8 +1030,8 @@ class BaseTestCase(unittest.TestCase):
             3) Compare Current Active and Replica data
         """
         self.log.info(" Begin Verification for data comparison ")
-        info, curr_data_set_replica = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=True, mode=mode)
-        info, curr_data_set_active = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=False, mode=mode)
+        info, curr_data_set_replica = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=True, mode = mode)
+        info, curr_data_set_active = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=False, mode = mode)
         self.log.info(" Comparing :: Prev vs Current :: Active and Replica ")
         comparison_result_replica = self.data_analyzer.compare_all_dataset(info, prev_data_set_replica, curr_data_set_replica)
         comparison_result_active = self.data_analyzer.compare_all_dataset(info, prev_data_set_active, curr_data_set_active)
@@ -1044,13 +1044,13 @@ class BaseTestCase(unittest.TestCase):
         logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=False, addedItems=False, updatedItems=False)
         self.log.info(" End Verification for data comparison ")
 
-    def data_analysis_all(self, prev_data_set, servers, buckets, path=None, mode="disk", deletedItems=False, addedItems=False, updatedItems=False):
+    def data_analysis_all(self, prev_data_set, servers, buckets, path=None, mode = "disk", deletedItems=False, addedItems=False, updatedItems=False):
         """
             Method to do data analysis using cb transfer
             This works at cluster level
         """
         self.log.info(" Begin Verification for data comparison ")
-        info, curr_data_set = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode=mode)
+        info, curr_data_set = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
         comparison_result = self.data_analyzer.compare_all_dataset(info, prev_data_set, curr_data_set)
         logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=deletedItems, addedItems=addedItems, updatedItems=updatedItems)
         self.assertTrue(logic, summary)
