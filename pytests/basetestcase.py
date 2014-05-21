@@ -186,6 +186,8 @@ class BaseTestCase(unittest.TestCase):
 
                     self.log.info("==============  basetestcase cleanup was started for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
+                    if TestInputSingleton.input.param('force_kill_memached', False):
+                        self.force_kill_memached()
                     rest = RestConnection(self.master)
                     alerts = rest.get_alerts()
                     if alerts is not None and len(alerts) != 0:
@@ -210,6 +212,8 @@ class BaseTestCase(unittest.TestCase):
                     self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
             except BaseException:
+                # kill memcached
+                self.force_kill_memached()
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
             finally:
