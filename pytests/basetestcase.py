@@ -163,6 +163,10 @@ class BaseTestCase(unittest.TestCase):
 
     def tearDown(self):
             try:
+                if TestInputSingleton.input.param('force_kill_memached', False):
+                    self.force_kill_memached()
+                if self.input.param("forceEject", False):
+                    self.force_eject_nodes()
                 if hasattr(self, 'skip_buckets_handle') and self.skip_buckets_handle:
                     return
                 test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
@@ -186,8 +190,6 @@ class BaseTestCase(unittest.TestCase):
 
                     self.log.info("==============  basetestcase cleanup was started for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
-                    if TestInputSingleton.input.param('force_kill_memached', False):
-                        self.force_kill_memached()
                     rest = RestConnection(self.master)
                     alerts = rest.get_alerts()
                     if alerts is not None and len(alerts) != 0:
@@ -198,22 +200,19 @@ class BaseTestCase(unittest.TestCase):
                         stopped = rest.stop_rebalance()
                         self.assertTrue(stopped, msg="unable to stop rebalance")
                     BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-                    if self.input.param("forceEject", False):
-                        for server in self.servers:
-                            if server != self.servers[0]:
-                                try:
-                                    rest = RestConnection(server)
-                                    rest.force_eject_node()
-                                except BaseException, e:
-                                    self.log.error(e)
                     ClusterOperationHelper.cleanup_cluster(self.servers)
                     self.sleep(10)
                     ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
                     self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
+            except Exception:
+                # kill memcached
+                self.force_kill_memached()
+                self.force_eject_nodes()
             except BaseException:
                 # kill memcached
                 self.force_kill_memached()
+                self.force_eject_nodes()
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
             finally:
@@ -897,6 +896,15 @@ class BaseTestCase(unittest.TestCase):
             remote_client.start_couchbase()
             remote_client.disconnect()
         self.log.info("========= CHANGED ALL PORTS ===========")
+
+    def force_eject_nodes(self):
+        for server in self.servers:
+            if server != self.servers[0]:
+                try:
+                    rest = RestConnection(server)
+                    rest.force_eject_node()
+                except BaseException, e:
+                    self.log.error(e)
 
     def force_kill_memached(self):
         for server in self.servers:
