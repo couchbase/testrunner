@@ -11,6 +11,7 @@ then
     export config_file=`python -c 'import sys;import jenkins; import os;import json; j = jenkins.Jenkins(os.environ["HUDSON_URL"]); [sys.stdout.write(p["defaultParameterValue"]["value"]) for p in j.get_job_info(os.environ["JOB_NAME"])["actions"][1]["parameterDefinitions"] if p["name"] == "config_file"]'`
     export test_params=`python -c 'import sys;import jenkins; import os;import json; j = jenkins.Jenkins(os.environ["HUDSON_URL"]); [sys.stdout.write(p["defaultParameterValue"]["value"]) for p in j.get_job_info(os.environ["JOB_NAME"])["actions"][1]["parameterDefinitions"] if p["name"] == "test_params"]'`
     export install_params=`python -c 'import sys;import jenkins; import os;import json; j = jenkins.Jenkins(os.environ["HUDSON_URL"]); [sys.stdout.write(p["defaultParameterValue"]["value"]) for p in j.get_job_info(os.environ["JOB_NAME"])["actions"][1]["parameterDefinitions"] if p["name"] == "install_params"]'`
+    export run_install=`python -c 'import sys;import jenkins; import os;import json; j = jenkins.Jenkins(os.environ["HUDSON_URL"]); [sys.stdout.write(p["defaultParameterValue"]["value"]) for p in j.get_job_info(os.environ["JOB_NAME"])["actions"][1]["parameterDefinitions"] if p["name"] == "run_install"]'`
   elif [ "$BUILD_CAUSE" = "MANUALTRIGGER" ]
   then
     echo "WILL USE JOB's PARAMETERS:"
