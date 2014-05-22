@@ -91,6 +91,7 @@ class BaseTestCase(unittest.TestCase):
             self.stat_info = self.input.param("stat_info", None)
             self.port_info = self.input.param("port_info", None)
             self.eviction_policy = self.input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
+            self.absolute_path = self.input.param("absolute_path", True)
 
             if self.input.param("log_info", None):
                 self.change_log_info()
