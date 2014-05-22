@@ -144,6 +144,8 @@ def get_jobs_stats(job_url=None, onlyLastBuild=False, get_current_jobs=True):
                         # report_content = report_content.replace('None', '"None"').replace(': True', ': "True"').replace(': False', ': "False"')  # .replace(':False', ':"False"')
                         # print report_content
                         report_json_parsed = json.loads(report_content)
+                        if not "duration" in report_json_parsed:
+                            continue
                         build.testReport.duration = report_json_parsed["duration"]
                         build.testReport.failCount = report_json_parsed["failCount"]
                         build.testReport.passCount = report_json_parsed["passCount"]
