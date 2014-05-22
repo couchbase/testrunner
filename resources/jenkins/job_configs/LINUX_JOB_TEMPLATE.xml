@@ -38,7 +38,7 @@
             <hudson.model.StringParameterDefinition>
                <name>test_params</name>
                <description />
-               <defaultValue>get-cbcollect-info=True,get-logs=False,stop-on-failure=False</defaultValue>
+               <defaultValue>get-cbcollect-info=True,get-logs=False,stop-on-failure=False,get-coredumps=True</defaultValue>
             </hudson.model.StringParameterDefinition>
             <hudson.model.ChoiceParameterDefinition>
                <name>vbuckets</name>
