@@ -57,21 +57,20 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
         # Verify if no deletion performed at source node:
         src_master_buckets = self._get_cluster_buckets(self.src_master)
         for bucket in src_master_buckets:
-            src_stat_ep_num_ops_del_meta = StatsCommon.get_stats([self.src_master], bucket, '', 'ep_num_ops_del_meta')
-            src_stat_ep_num_ops_set_meta = StatsCommon.get_stats([self.src_master], bucket, '', 'ep_num_ops_set_meta')
+            src_stat_ep_num_ops_del_meta = int(StatsCommon.get_stats([self.src_master], bucket, '', 'ep_num_ops_del_meta')[self.src_master])
+            src_stat_ep_num_ops_set_meta = int(StatsCommon.get_stats([self.src_master], bucket, '', 'ep_num_ops_set_meta')[self.src_master])
             self.assertNotEqual(src_stat_ep_num_ops_set_meta, 0, "Number of set [%s] operation occurs at bucket = %s, while expected to 0" % (src_stat_ep_num_ops_set_meta, bucket))
             self.assertNotEqual(src_stat_ep_num_ops_del_meta, 0, "Number of delete [%s] operation occurs at bucket = %s, while expected to 0" % (src_stat_ep_num_ops_del_meta, bucket))
             if self.rep_type == "xmem":
-                src_stat_ep_num_ops_del_meta_res_fail = StatsCommon.get_stats([self.src_master], bucket, '', 'ep_num_ops_del_meta_res_fail')
-                src_stat_ep_num_ops_set_meta_res_fail = StatsCommon.get_stats([self.src_master], bucket, '', 'ep_num_ops_set_meta_res_fail')
-                dest_stat_ep_num_ops_del_meta = StatsCommon.get_stats([self.dest_master], bucket, '', 'ep_num_ops_del_meta')
+                src_stat_ep_num_ops_del_meta_res_fail = int(StatsCommon.get_stats([self.src_master], bucket, '', 'ep_num_ops_del_meta_res_fail')[self.src_master])
+                src_stat_ep_num_ops_set_meta_res_fail = int(StatsCommon.get_stats([self.src_master], bucket, '', 'ep_num_ops_set_meta_res_fail')[self.src_master])
+                dest_stat_ep_num_ops_del_meta = int(StatsCommon.get_stats([self.dest_master], bucket, '', 'ep_num_ops_del_meta')[self.dest_master])
 
                 self.assertNotEqual(src_stat_ep_num_ops_del_meta_res_fail, dest_stat_ep_num_ops_del_meta, "Number of failed delete [%s] operation occurs at bucket = %s, while expected to %s" % (src_stat_ep_num_ops_del_meta_res_fail, bucket, dest_stat_ep_num_ops_del_meta))
                 self.assertTrue(src_stat_ep_num_ops_set_meta_res_fail > 0, "Number of failed set [%s] operation occurs at bucket = %s, while expected greater than 0" % (src_stat_ep_num_ops_set_meta_res_fail, bucket))
             elif self.rep_type == "capi":
-                src_stat_ep_num_ops_get_meta = StatsCommon.get_stats([self.src_master], bucket, '', 'ep_num_ops_get_meta')
+                src_stat_ep_num_ops_get_meta = int(StatsCommon.get_stats([self.src_master], bucket, '', 'ep_num_ops_get_meta')[self.src_master])
                 self.assertTrue(src_stat_ep_num_ops_get_meta > 0, "Number of get [%s] operation occurs at bucket = %s, while expected greater than 0" % (src_stat_ep_num_ops_get_meta, bucket))
-
 
     def test_diff_version_xdcr(self):
         self.gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self.num_items)
