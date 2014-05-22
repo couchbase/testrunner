@@ -748,6 +748,7 @@ params = {"ini": "resources/jenkins/fusion.ini",
           "product": "ms", "version": "1.7.1r-31", "amazon": "false"}
 
 def main():
+    log_install_failed = "some nodes were not install successfully!"
     try:
         (opts, args) = getopt.getopt(sys.argv[1:], 'hi:p:', [])
         for o, a in opts:
@@ -775,21 +776,21 @@ def main():
     else:
         success = InstallerJob().sequential_install(input.servers, input.test_params)
     if not success:
-        sys.exit("some nodes were not install successfully!")
+        sys.exit(log_install_failed)
     if "product" in input.test_params and input.test_params["product"] in ["couchbase", "couchbase-server", "cb"]:
         print "verify installation..."
         success = True
         for server in input.servers:
             success &= RemoteMachineShellConnection(server).is_couchbase_installed()
         if not success:
-            sys.exit("some nodes were not install successfully!")
+            sys.exit(log_install_failed)
     if "product" in input.test_params and input.test_params["product"] in ["moxi", "moxi-server"]:
         print "verify installation..."
         success = True
         for server in input.servers:
             success &= RemoteMachineShellConnection(server).is_moxi_installed()
         if not success:
-            sys.exit("some nodes were not install successfully!")
+            sys.exit(log_install_failed)
 
 if __name__ == "__main__":
     main()

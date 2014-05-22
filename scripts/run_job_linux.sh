@@ -76,10 +76,19 @@ $python_exe scripts/ssh.py -i ${ini_file} "df"
 $python_exe scripts/ssh.py -i ${ini_file} "free"
 $python_exe scripts/ssh.py -i ${ini_file} "ls -la /tmp/"
 ulimit -a
+
 if [ ${run_install} = true ]
        then
        echo '---------------------------- INSTALLATION -----------------------'
-       $python_exe scripts/install.py -i ${ini_file} -p version=${version_number},vbuckets=${vbuckets},upr=${upr},${install_params}
+       echo "python_exe scripts/install.py -i ${ini_file} -p version=${version_number},vbuckets=${vbuckets},upr=${upr},${install_params}  2>&1 | tee install.log"
+       python_exe scripts/install.py -i ${ini_file} -p version=${version_number},vbuckets=${vbuckets},upr=${upr},${install_params}  2>&1 | tee install.log
+       INSTALL_FAILED=`cat install.log 2>&1| grep "some nodes were not install successfully!"| wc -l`
+
+       if [ ${INSTALL_FAILED} -ge 1 ]
+          then
+             echo "some nodes were not install successfully! Tests will not run!"
+             exit ${INSTALL_FAILED}
+       fi
 fi
 
 echo '---------------------------- TESTS RUN -----------------------'
