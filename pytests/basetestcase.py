@@ -68,7 +68,8 @@ class BaseTestCase(unittest.TestCase):
             self.nodes_init = self.input.param("nodes_init", 1)
             self.nodes_in = self.input.param("nodes_in", 1)
             self.nodes_out = self.input.param("nodes_out", 1)
-
+            self.forceEject = self.input.param("forceEject", False)
+            self.force_kill_memcached  = TestInputSingleton.input.param('force_kill_memcached', False)
             self.num_replicas = self.input.param("replicas", 1)
             self.enable_replica_index = self.input.param("index_replicas", 1)
             self.num_items = self.input.param("items", 1000)
@@ -93,18 +94,6 @@ class BaseTestCase(unittest.TestCase):
             self.eviction_policy = self.input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
             self.absolute_path = self.input.param("absolute_path", True)
 
-            if self.input.param("log_info", None):
-                self.change_log_info()
-            if self.input.param("log_location", None):
-                self.change_log_location()
-            if self.input.param("stat_info", None):
-                self.change_stat_info()
-            if self.input.param("port_info", None):
-                self.change_port_info()
-            if self.vbuckets or self.upr:
-                self.change_env_variables()
-            if self.input.param("port", None):
-                self.port = str(self.input.param("port", None))
             self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
                           .format(self.case_number, self._testMethodName))
             # avoid any cluster operations in setup for new upgrade & upgradeXDCR tests
@@ -123,11 +112,23 @@ class BaseTestCase(unittest.TestCase):
                 self.cleanup = True
                 self.tearDown()
                 self.cluster = Cluster()
-
+            self.change_checkpoint_params()
             self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
                                             self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port, self.quota_percent)
 
+            if self.input.param("log_info", None):
+                self.change_log_info()
+            if self.input.param("log_location", None):
+                self.change_log_location()
+            if self.input.param("stat_info", None):
+                self.change_stat_info()
+            if self.input.param("port_info", None):
+                self.change_port_info()
+            if self.vbuckets or self.upr:
+                self.change_env_variables()
+            if self.input.param("port", None):
+                self.port = str(self.input.param("port", None))
             try:
                 if (str(self.__class__).find('rebalanceout.RebalanceOutTests') != -1) or \
                     (str(self.__class__).find('memorysanitytests.MemorySanity') != -1) or \
@@ -189,14 +190,14 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
                     rest = RestConnection(self.master)
                     alerts = rest.get_alerts()
-                    if TestInputSingleton.input.param('force_kill_memcached', False):
-                        self.force_kill_memcached()
-                    if self.input.param("forceEject", False):
+                    if self.force_kill_memcached:
+                        self.kill_memcached()
+                    if self.forceEject:
                         self.force_eject_nodes()
                     if alerts is not None and len(alerts) != 0:
                         self.log.warn("Alerts were found: {0}".format(alerts))
                     if rest._rebalance_progress_status() == 'running':
-                        self.force_kill_memcached()
+                        self.kill_memcached()
                         self.log.warning("rebalancing is still running, test should be verified")
                         stopped = rest.stop_rebalance()
                         self.assertTrue(stopped, msg="unable to stop rebalance")
@@ -208,14 +209,9 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
             except BaseException:
                 # kill memcached
-                self.force_kill_memcached()
-                self.force_eject_nodes()
+                self.kill_memcached()
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
-            except Exception:
-                # kill memcached
-                self.force_kill_memcached()
-                self.force_eject_nodes()
             finally:
                 # stop all existing task manager threads
                 if self.cleanup:
@@ -798,6 +794,17 @@ class BaseTestCase(unittest.TestCase):
                     pass
         client.close()
 
+    def change_checkpoint_params(self):
+        self.chk_max_items = self.input.param("chk_max_items", None)
+        self.chk_period = self.input.param("chk_period", None)
+        if self.chk_max_items or self.chk_period:
+            for server in self.servers:
+                rest = RestConnection(server)
+                if self.chk_max_items:
+                    rest.set_chk_max_items(chk_max_items)
+                if self.chk_period:
+                    rest.set_chk_period(chk_period)
+
     def change_password(self, new_password="new_password"):
         nodes = RestConnection(self.master).node_statuses()
         remote_client = RemoteMachineShellConnection(self.master)
@@ -907,7 +914,7 @@ class BaseTestCase(unittest.TestCase):
                 except BaseException, e:
                     self.log.error(e)
 
-    def force_kill_memcached(self):
+    def kill_memcached(self):
         for server in self.servers:
             remote_client = RemoteMachineShellConnection(server)
             remote_client.kill_memcached()

@@ -1100,6 +1100,14 @@ class RestConnection(object):
                  format(self.ip, self.port, status, content, code))
         return status, content
 
+    def set_chk_max_items(self,max_items):
+        status, content = self.diag_eval("ns_config:set(chk_max_items, "+max_items+")")
+        return status, content
+
+    def set_chk_period(self,period):
+        status, content = self.diag_eval("ns_config:set(chk_period, "+period+")")
+        return status, content
+
     def diag_master_events(self):
         api = '{0}{1}'.format(self.baseUrl, 'diag/masterEvents?o=1')
         status, content, header = self._http_request(api, "GET")
