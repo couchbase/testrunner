@@ -257,7 +257,7 @@ def build_json_result(jobs):
                 print "ERROR forming rq for: %s" % rq
                 continue
             jsons.append((key, json.dumps(rq)))
-            print "Sended"
+            print "Sent"
         except:
             print "ERROR forming rq for: %s" % rq
     return jsons
