@@ -65,7 +65,7 @@ class TestReport(object):
          self.suites = []
 
 def get_jobs_stats(job_url=None, onlyLastBuild=False, get_current_jobs=True):
-    if not job_url:
+    if not job_url and not get_current_jobs:
         f = open(JOBS_FILE, 'r')
         lines = f.readlines()
     elif get_current_jobs:
@@ -270,7 +270,7 @@ Options:
  -p <port>          Server port with CB. Default is 8091
  --user <user>          User for server with CB
  --pass <password>      Password for server with CB
- --jenkins <jenkins url>   Jenkins url, default is http://qa.hq.northscale.net/job/
+ --jenkins <jenkins url>   Jenkins url, default is http://qa.hq.northscale.net/
  --name <job name>      job name, if None all jobs statistics will be collected
 
 Examples:
@@ -314,6 +314,8 @@ def send_json(server_info, job=None):
 
 if __name__ == "__main__":
     varbls = _parse_variables()
+    if "--jenkins" in varbls:
+        JENKINS_URL = varbls["--jenkins"]
     if varbls["-o"] == "json":
         send_json(varbls["server_info"], varbls["--name"])
     else:
