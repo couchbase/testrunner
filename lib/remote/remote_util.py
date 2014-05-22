@@ -1923,8 +1923,9 @@ class RemoteMachineShellConnection:
         if self.info.distribution_type.lower() == 'mac':
             backup_command = "%scbbackup" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
-        self.delete_files(backup_file_location)
-        self.create_directory(backup_file_location)
+        if '-m accu' not in command_options_string and '-m diff' not in command_options_string:
+            self.delete_files(backup_file_location)
+            self.create_directory(backup_file_location)
 
         command_options_string = ""
         if command_options is not '':
