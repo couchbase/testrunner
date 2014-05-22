@@ -163,10 +163,6 @@ class BaseTestCase(unittest.TestCase):
 
     def tearDown(self):
             try:
-                if TestInputSingleton.input.param('force_kill_memached', False):
-                    self.force_kill_memached()
-                if self.input.param("forceEject", False):
-                    self.force_eject_nodes()
                 if hasattr(self, 'skip_buckets_handle') and self.skip_buckets_handle:
                     return
                 test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
@@ -192,10 +188,14 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
                     rest = RestConnection(self.master)
                     alerts = rest.get_alerts()
+                    if TestInputSingleton.input.param('force_kill_memcached', False):
+                        self.force_kill_memcached()
+                    if self.input.param("forceEject", False):
+                        self.force_eject_nodes()
                     if alerts is not None and len(alerts) != 0:
                         self.log.warn("Alerts were found: {0}".format(alerts))
                     if rest._rebalance_progress_status() == 'running':
-                        self.force_kill_memached()
+                        self.force_kill_memcached()
                         self.log.warning("rebalancing is still running, test should be verified")
                         stopped = rest.stop_rebalance()
                         self.assertTrue(stopped, msg="unable to stop rebalance")
@@ -205,16 +205,16 @@ class BaseTestCase(unittest.TestCase):
                     ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
                     self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
-            except Exception:
-                # kill memcached
-                self.force_kill_memached()
-                self.force_eject_nodes()
             except BaseException:
                 # kill memcached
-                self.force_kill_memached()
+                self.force_kill_memcached()
                 self.force_eject_nodes()
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
+            except Exception:
+                # kill memcached
+                self.force_kill_memcached()
+                self.force_eject_nodes()
             finally:
                 # stop all existing task manager threads
                 if self.cleanup:
@@ -906,7 +906,7 @@ class BaseTestCase(unittest.TestCase):
                 except BaseException, e:
                     self.log.error(e)
 
-    def force_kill_memached(self):
+    def force_kill_memcached(self):
         for server in self.servers:
             remote_client = RemoteMachineShellConnection(server)
             remote_client.kill_memcached()
