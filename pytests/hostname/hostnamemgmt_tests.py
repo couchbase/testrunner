@@ -16,7 +16,7 @@ class HostnameMgmtTests(HostnameBaseTests):
         master_rest = RestConnection(self.master)
         self.sleep(5, "Sleep to wait renaming")
         for server in self.servers[1:self.nodes_in + 1]:
-            master_rest.add_node(server.rest_username, server.rest_password, hostnames[server])
+            master_rest.add_node(server.rest_username, server.rest_password, hostnames[server], server.port)
         self.verify_referenced_by_names(self.servers, hostnames)
 
     def test_add_nodes_and_rebalance(self):
