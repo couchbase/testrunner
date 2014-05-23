@@ -43,15 +43,16 @@ class DataAnalysisTests(BaseTestCase):
             This will be done cluster level comparison
         """
         create = BlobGenerator('loadOne', 'loadOne_', self.value_size, end=self.num_items)
-        delete = BlobGenerator('loadOne', 'loadOne-', self.value_size, start=self.num_items / 2, end=self.num_items)
         update = BlobGenerator('loadOne', 'loadOne-', self.value_size, end=(self.num_items / 2 - 1))
         self._load_all_buckets(self.master, create, "create", 0,
                                batch_size=10000, pause_secs=10, timeout_secs=60)
-        self._async_load_all_buckets(self.master, update, "update", 0)
-        self._async_load_all_buckets(self.master, delete, "delete", 0)
-        self.num_items -=  self.num_items - self.num_items / 2
+        self.num_items=self.num_items - self.num_items / 2
         self._verify_stats_all_buckets(self.servers, timeout=120)
         self._wait_for_stats_all_buckets(self.servers)
+        self._async_load_all_buckets(self.master, update, "update", 0)
+        self._verify_stats_all_buckets(self.servers, timeout=120)
+        self._wait_for_stats_all_buckets(self.servers)
+        self.sleep(60)
         self.data_analysis_all()
 
     def test_data_analysis_active_replica_comparison_all(self):
@@ -132,15 +133,21 @@ class DataAnalysisTests(BaseTestCase):
         """
         self.log.info(" Begin Verification for data comparison ")
         info,memory_dataset=self.data_collector.collect_data(self.servers,self.buckets,data_path = None, perNode = False, mode = "memory")
-        info,disk_dataset_active=self.data_collector.collect_data(self.servers,self.buckets,data_path = None, perNode = False)
-        info,disk_dataset_replica=self.data_collector.collect_data(self.servers,self.buckets,data_path = None, perNode = False, getReplica = True)
+        info,memory_dataset=self.data_collector.collect_data(self.servers,self.buckets,data_path = None, perNode = False, mode = "memory")
+        info,disk_dataset_active=self.data_collector.collect_data(self.servers,self.buckets,data_path = None, perNode = False, mode= "disk")
+        info,disk_dataset_replica=self.data_collector.collect_data(self.servers,self.buckets,data_path = None, perNode = False, getReplica = True, mode = "disk")
         active_comparison_result=self.data_analyzer.compare_all_dataset(info, memory_dataset, disk_dataset_active)
         replica_comparison_result=self.data_analyzer.compare_all_dataset(info, memory_dataset, disk_dataset_replica)
+        comparison_result=self.data_analyzer.compare_all_dataset(info, disk_dataset_active, disk_dataset_replica)
+        logic,summary,output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems = False, addedItems = False, updatedItems = False)
         active_logic,active_summary,active_output = self.result_analyzer.analyze_all_result(active_comparison_result, deletedItems = False, addedItems = False, updatedItems = False)
         replica_logic,replica_summary,replica_output = self.result_analyzer.analyze_all_result(replica_comparison_result, deletedItems = False, addedItems = False, updatedItems = False)
-        self.assertTrue(active_logic, active_summary)
-        self.assertTrue(replica_logic, replica_summary)
+        total_logic = logic and active_logic and replica_logic
+        total_summary = " active vs replica  {0} \n memory vs active {1} \n memory vs replica {2}".format(summary,active_summary,replica_summary)
+        total_output = " active vs replica  {0} \n memory vs active {1} \n memory vs replica {2}".format(output,active_output,replica_output)
+        self.assertTrue(total_logic, total_summary+"\n"+total_output)
         self.log.info(" End Verification for data comparison ")
+
 
     def data_analysis_all_replica_active(self):
         """
