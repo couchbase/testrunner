@@ -250,6 +250,7 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         self._load_bucket(bucket_sasl, self.src_master, self.gen_update, 'create', exp=self._expires)
         self.sleep(120)
 
+        self._install(self.servers[self.src_init + self.dest_init:])
         self._online_upgrade(self.dest_nodes, self.servers[self.src_init + self.dest_init:])
         self._install(self.dest_nodes)
         self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.dest_nodes, False)
