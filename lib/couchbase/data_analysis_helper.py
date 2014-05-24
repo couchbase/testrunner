@@ -515,12 +515,12 @@ class DataCollector(object):
                 map_data = {}
                 for o in stats.keys():
                     tokens = o.split(":")
-                    vb = tokens[1]
-                    key = tokens[2]
+                    vb = tokens[0]
+                    key = tokens[1]
                     value = stats[o].split()
-                    if len(tokens)  ==  4:
-                        vb = tokens[1]
-                        key = tokens[3]
+                    if len(tokens)  ==  3:
+                        vb = tokens[0]
+                        key = tokens[2]
                     if vb in map_data.keys():
                         map_data[vb][key] = value[0]
                     else:
