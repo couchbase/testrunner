@@ -930,7 +930,7 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
 
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
-                       swappiness=10, force=False, openssl='', upr=False, xdcr_upr=True):
+                       swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None):
         server_type = None
         success = True
         track_words = ("warning", "error", "fail")
@@ -994,15 +994,21 @@ class RemoteMachineShellConnection:
                 output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export {0}_NUM_VBUCKETS={1}/' /opt/{2}/etc/{2}_init.d".
                                                     format(server_type.upper(), vbuckets, server_type))
                 success &= self.log_command_output(output, error, track_words)
-            if upr:
+            if upr is not None:
+                protocol = "tap"
+                if upr:
+                    protocol = "upr"
                 output, error = \
-                    self.execute_command("sed -i 's/END INIT INFO/END INIT INFO\\nexport COUCHBASE_REPL_TYPE=upr/'\
-                    /opt/{0}/etc/{0}_init.d".format(server_type))
+                self.execute_command("sed -i 's/END INIT INFO/END INIT INFO\\nexport COUCHBASE_REPL_TYPE={1}/'\
+                    /opt/{0}/etc/{0}_init.d".format(server_type, protocol))
                 success &= self.log_command_output(output, error, track_words)
-            if not xdcr_upr:
+            if xdcr_upr is not None:
+                XDCR_USE_OLD_PATH = "false"
+                if not xdcr_upr:
+                    XDCR_USE_OLD_PATH = "true"
                 output, error = \
-                    self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export XDCR_USE_OLD_PATH=true/'\
-                    /opt/{0}/etc/{0}_init.d".format(server_type))
+                    self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export XDCR_USE_OLD_PATH={1}/'\
+                    /opt/{0}/etc/{0}_init.d".format(server_type, XDCR_USE_OLD_PATH))
                 success &= self.log_command_output(output, error, track_words)
 
             # skip output: [WARNING] couchbase-server is already started

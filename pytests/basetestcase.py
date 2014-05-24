@@ -118,6 +118,7 @@ class BaseTestCase(unittest.TestCase):
                                             self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
                                             self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port, self.quota_percent)
 
+            self.change_env_variables()
             if self.input.param("log_info", None):
                 self.change_log_info()
             if self.input.param("log_location", None):
@@ -126,8 +127,6 @@ class BaseTestCase(unittest.TestCase):
                 self.change_stat_info()
             if self.input.param("port_info", None):
                 self.change_port_info()
-            if self.vbuckets or self.upr:
-                self.change_env_variables()
             if self.input.param("port", None):
                 self.port = str(self.input.param("port", None))
             try:
@@ -218,8 +217,7 @@ class BaseTestCase(unittest.TestCase):
                 if self.cleanup:
                     self.cleanup = False
                 else:
-                    if self.vbuckets or self.upr:
-                        self.reset_env_variables()
+                    self.reset_env_variables()
                 self.cluster.shutdown(force=True)
                 self._log_finish(self)
 
@@ -848,24 +846,28 @@ class BaseTestCase(unittest.TestCase):
                     break
 
     def change_env_variables(self):
-        for server in self.servers:
-            dict = {}
-            if self.vbuckets:
-                dict["COUCHBASE_NUM_VBUCKETS"] = self.vbuckets
-            if self.upr:
-                dict["COUCHBASE_REPL_TYPE"] = "upr"
-            if len(dict) >= 1:
-                remote_client = RemoteMachineShellConnection(server)
-                remote_client.change_env_variables(dict)
-            remote_client.disconnect()
+        if self.vbuckets != None or self.upr != None:
+            for server in self.servers:
+                dict = {}
+                if self.vbuckets:
+                    dict["COUCHBASE_NUM_VBUCKETS"] = self.vbuckets
+                if self.upr:
+                    dict["COUCHBASE_REPL_TYPE"] = "upr"
+                else:
+                    dict["COUCHBASE_REPL_TYPE"] = "tap"
+                if len(dict) >= 1:
+                    remote_client = RemoteMachineShellConnection(server)
+                    remote_client.change_env_variables(dict)
+                remote_client.disconnect()
         self.log.info("========= CHANGED ENVIRONMENT SETTING ===========")
 
     def reset_env_variables(self):
-        for server in self.servers:
-            if self.upr or self.vbuckets:
-                remote_client = RemoteMachineShellConnection(server)
-                remote_client.reset_env_variables()
-                remote_client.disconnect()
+        if self.vbuckets != None or self.upr != None:
+            for server in self.servers:
+                if self.upr or self.vbuckets:
+                    remote_client = RemoteMachineShellConnection(server)
+                    remote_client.reset_env_variables()
+                    remote_client.disconnect()
         self.log.info("========= RESET ENVIRONMENT SETTING TO ORIGINAL ===========")
 
     def change_log_info(self):
