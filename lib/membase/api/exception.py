@@ -122,8 +122,8 @@ class DesignDocCreationException(MembaseHttpException):
         self._message = 'Error occured design document %s: %s' % (design_doc_name, reason)
 
 class QueryViewException(MembaseHttpException):
-    def __init__(self, view_name, reason=''):
-        self._message = 'Error occured querying view %s: %s' % (view_name, reason)
+    def __init__(self, view_name, reason='', status=''):
+        self._message = 'Status %s.Error occured querying view %s: %s' % (status, view_name, reason)
 
 class ReadDocumentException(MembaseHttpException):
     def __init__(self, doc_id, reason=''):

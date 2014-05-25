@@ -459,9 +459,12 @@ class RestConnection(object):
         return None, None
 
     def query_view(self, design_doc_name, view_name, bucket, query, timeout=120, invalid_query=False, type="view"):
-        status, content = self._query(design_doc_name, view_name, bucket, type, query, timeout)
+        status, content, header = self._query(design_doc_name, view_name, bucket, type, query, timeout)
         if not status and not invalid_query:
-            raise QueryViewException(view_name, content)
+            stat = ''
+            if 'status' in header:
+                stat = header['status']
+            raise QueryViewException(view_name, content, status=stat)
         return json.loads(content)
 
     def _query(self, design_doc_name, view_name, bucket, view_type, query, timeout):
@@ -486,7 +489,7 @@ class RestConnection(object):
         else:
             status, content, header = self._http_request(api, headers=self._create_capi_headers(),
                                              timeout=timeout)
-        return status, content
+        return status, content, header
 
     def view_results(self, bucket, ddoc_name, params, limit=100, timeout=120,
                      view_name=None):
