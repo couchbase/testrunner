@@ -81,6 +81,18 @@ class QueryTests(BaseTestCase):
                           'FROM %s SELECT name WHERE id=null' : 'Parse Error - syntax error',}
         self.negative_common_body(queries_errors)
 
+    def test_escaped_identifiers(self):
+        queries_errors = {'SELECT name FROM {0} as bucket' :
+                          'Parse Error - syntax error'}
+        self.negative_common_body(queries_errors)
+        for bucket in self.buckets:
+            self.query = 'SELECT name FROM %s as `bucket`ORDER BY name' % (bucket.name)
+            actual_result = self.run_cbq_query()
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_list = [{"name" : doc["name"]} for doc in full_list]
+            expected_list_sorted = sorted(expected_list, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['resultset'], expected_list_sorted)
+
     def test_consistent_simple_check(self):
         queries = ['SELECT name, join_day, join_mo FROM %s '
                     'WHERE name IS NOT NULL AND join_day<10 '
