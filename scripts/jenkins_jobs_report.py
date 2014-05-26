@@ -140,7 +140,10 @@ def get_jobs_stats(job_url=None, onlyLastBuild=False, get_current_jobs=True):
                         build.skipCount = action["skipCount"]
                         build.urlName = action["urlName"]
                         report_url = build_history["url"] + build.urlName + API
-                        report_content = urllib2.urlopen(report_url).read()
+                        try:
+                            report_content = urllib2.urlopen(report_url).read()
+                        except:
+                            continue
                         # report_content = report_content.replace('None', '"None"').replace(': True', ': "True"').replace(': False', ': "False"')  # .replace(':False', ':"False"')
                         # print report_content
                         report_json_parsed = json.loads(report_content)
@@ -253,6 +256,13 @@ def build_json_result(jobs):
                ('build' in rq and not re.match(r'[0-9].[0-9].[0-9]-[0-9]+', rq['build'])):
                 print "ERROR forming rq for: %s" % rq
                 continue
+            if rq['build'].find(',') != -1:
+                build_num = [attr for attr in rq['build'].split(',')
+                             if re.match(r'[0-9].[0-9].[0-9]-[0-9]+', attr)]
+                if not build_num:
+                    print "ERROR forming rq for: %s" % rq
+                    continue
+                rq['build'] = build_num[0]
             if not (rq['totalCount'] and rq['failCount'] != '' and rq['result']):
                 print "ERROR forming rq for: %s" % rq
                 continue
