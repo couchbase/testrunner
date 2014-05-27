@@ -93,6 +93,7 @@ class BaseTestCase(unittest.TestCase):
             self.port_info = self.input.param("port_info", None)
             self.eviction_policy = self.input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
             self.absolute_path = self.input.param("absolute_path", True)
+            self.test_timeout = self.input.param("test_timeout", 3600)  # kill hang test and jump to next one.
 
             self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
                           .format(self.case_number, self._testMethodName))
