@@ -258,7 +258,7 @@ class FailoverTests(FailoverBaseTest):
 
             # define precondition check for failover
             success_failed_over = self.rest.fail_over(node.id, graceful=self.graceful)
-            if self.graceful:
+            if self.graceful and not self.gracefulFailoverFail:
                 msg = "rebalance failed while removing failover nodes {0}".format(node.id)
                 self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
             failed_over = failed_over and success_failed_over
