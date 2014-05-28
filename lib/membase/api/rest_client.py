@@ -1764,6 +1764,26 @@ class RestConnection(object):
     def is_replication_paused(self, src_bucket_name, dest_bucket_name):
         return self.get_xdcr_param(src_bucket_name, dest_bucket_name, 'pauseRequested')
 
+
+    def get_recent_xdcr_vb_ckpt(self, src_bucket_name, dest_bucket_name, vbucket_id):
+        replication = self.get_replication_for_buckets(src_bucket_name, dest_bucket_name)
+
+        sub_url1 = "default/master"
+        sub_url1 = urllib.quote(sub_url1, '')
+
+        sub_url2 = "%s/%s" % (replication['id'], vbucket_id)
+        # Double encoding
+        sub_url2 = urllib.quote(sub_url2, '')
+        sub_url2 = urllib.quote(sub_url2, '')
+
+        api = self.capiBaseUrl + "%s/_local/30-ck-%s" % (sub_url1, sub_url2)
+        status, content, _ = self._http_request(api, headers=self._create_capi_headers())
+        json_parsed = json.loads(content)
+        if not status:
+            raise Exception("Unable to get recent checkpoint information")
+        return json_parsed
+
+
     def set_reb_cons_view(self, disable):
         """Enable/disable consistent view for rebalance tasks"""
         api = self.baseUrl + "internalSettings"
@@ -1813,6 +1833,11 @@ class RestConnection(object):
         log.info('max parallel replica indexers threads was set as maxParallelReplicaIndexers={0}'.\
                  format(count))
         return status
+
+    def get_internal_replication_type(self):
+        buckets = self.get_buckets()
+        cmd = "\'{ok, BC} = ns_bucket:get_bucket(%s), ns_bucket:replication_type(BC).\'" % buckets[0].name
+        return self.diag_eval(cmd)
 
     def set_mc_threads(self, mc_threads=4):
         """
