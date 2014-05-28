@@ -851,15 +851,16 @@ class BaseTestCase(unittest.TestCase):
                 dict = {}
                 if self.vbuckets:
                     dict["COUCHBASE_NUM_VBUCKETS"] = self.vbuckets
-                if self.upr:
-                    dict["COUCHBASE_REPL_TYPE"] = "upr"
-                else:
-                    dict["COUCHBASE_REPL_TYPE"] = "tap"
+                if  self.upr != None:
+                    if self.upr:
+                        dict["COUCHBASE_REPL_TYPE"] = "upr"
+                    else:
+                        dict["COUCHBASE_REPL_TYPE"] = "tap"
                 if len(dict) >= 1:
                     remote_client = RemoteMachineShellConnection(server)
                     remote_client.change_env_variables(dict)
                 remote_client.disconnect()
-        self.log.info("========= CHANGED ENVIRONMENT SETTING ===========")
+            self.log.info("========= CHANGED ENVIRONMENT SETTING ===========")
 
     def reset_env_variables(self):
         if self.vbuckets != None or self.upr != None:
@@ -868,7 +869,7 @@ class BaseTestCase(unittest.TestCase):
                     remote_client = RemoteMachineShellConnection(server)
                     remote_client.reset_env_variables()
                     remote_client.disconnect()
-        self.log.info("========= RESET ENVIRONMENT SETTING TO ORIGINAL ===========")
+            self.log.info("========= RESET ENVIRONMENT SETTING TO ORIGINAL ===========")
 
     def change_log_info(self):
         for server in self.servers:
