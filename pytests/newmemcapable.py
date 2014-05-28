@@ -83,6 +83,7 @@ class GetrTests(BaseTestCase):
         try:
             self.log.info("READ REPLICA PHASE")
             servrs = self.servers[:self.nodes_init]
+            self.expire_pager(servrs)
             if self.failover in [GetrTests.FAILOVER_NO_REBALANCE, GetrTests.FAILOVER_REBALANCE]:
                 servrs = self.servers[:self.nodes_init - self.failover_factor]
             if self.rebalance == GetrTests.AFTER_REBALANCE:
@@ -123,6 +124,7 @@ class GetrTests(BaseTestCase):
 
         self.log.info("READ REPLICA PHASE")
         self.log.info("Checking replica read")
+        self.expire_pager([self.master])
         try:
             self._load_all_buckets(self.master, gen_1, 'read_replica', self.expiration, batch_size=1)
         except Exception, ex:
