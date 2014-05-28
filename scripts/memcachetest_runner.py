@@ -54,7 +54,9 @@ class MemcachetestRunner():
             # try to get from git and install
             output, error = self.shell.execute_command_raw("cd {0}; git clone git://github.com/membase/memcachetest.git".format(self.path))
             self.shell.log_command_output(output, error)
-            output, error = self.shell.execute_command_raw("cd {0}memcachetest; ./config/autorun.sh && ./configure && make install".format(self.path))
+            if "git: command not found" in output[0]:
+                self.fail("Git should be installed on hosts!")
+            output, error = self.shell.execute_command_raw("cd {0}/memcachetest; ./config/autorun.sh && ./configure && make install".format(self.path))
             self.shell.log_command_output(output, error)
         else:
             self.log.info("memcachetest already set on {0}:/usr/local/bin/memcachetest".format(self.server.ip, self.path))
