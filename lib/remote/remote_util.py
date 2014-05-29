@@ -1002,13 +1002,10 @@ class RemoteMachineShellConnection:
                 self.execute_command("sed -i 's/END INIT INFO/END INIT INFO\\nexport COUCHBASE_REPL_TYPE={1}/'\
                     /opt/{0}/etc/{0}_init.d".format(server_type, protocol))
                 success &= self.log_command_output(output, error, track_words)
-            if xdcr_upr is not None:
-                XDCR_USE_OLD_PATH = "false"
-                if not xdcr_upr:
-                    XDCR_USE_OLD_PATH = "true"
+            if xdcr_upr == False:
                 output, error = \
                     self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export XDCR_USE_OLD_PATH={1}/'\
-                    /opt/{0}/etc/{0}_init.d".format(server_type, XDCR_USE_OLD_PATH))
+                    /opt/{0}/etc/{0}_init.d".format(server_type, "true"))
                 success &= self.log_command_output(output, error, track_words)
 
             # skip output: [WARNING] couchbase-server is already started

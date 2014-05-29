@@ -44,7 +44,7 @@ Available keys:
  sync_threads=True       Sync or acync threads(+S or +A)
  erlang_threads=         Number of erlang threads (default=16:16 for +S type)
  upr=True                Enable UPR replication
- xdcr_upr=True           Enable UPR for XDCR (temporary param until XDCR with UPR is stable)
+ xdcr_upr=               Enable UPR for XDCR (temporary param until XDCR with UPR is stable), values: None | True | False
 
 
 Examples:
@@ -452,10 +452,10 @@ class CouchbaseServerInstaller(Installer):
         else:
             upr = None
 
-        if "xdcr_upr" in params and params["xdcr_upr"].lower() != "none":
-            xdcr_upr = params["xdcr_upr"].lower() == 'true'
-        else:
+        if "xdcr_upr" not in params:
             xdcr_upr = None
+        else:
+            xdcr_upr = eval(params["xdcr_upr"].capitalize())
 
         if type == "windows":
             remote_client.download_binary_in_win(build.url, params["version"])
