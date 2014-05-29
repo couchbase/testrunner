@@ -1,9 +1,9 @@
 #!/bin/bash
 
-python_exe = "python";
+python_exe="python";
 grep "centos" /etc/issue -i -q
 if [ $? = '0' ];then
-python_exe = "python27"
+python_exe="python27"
 fi
 
 if [ -n $BUILD_CAUSE ]
