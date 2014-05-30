@@ -239,6 +239,8 @@ def build_json_result(jobs):
             priority = job.build_histories[0]['result'].priority
         except IndexError:
             priority = 'N/A'
+        if priority not in ['P0', 'P1', 'P2', 'N/A']:
+            priority = 'N/A'
         if priority == 'N/A' and job.name[-2:].upper() in ['P0', 'P1', 'P2']:
             priority = job.name[-2:]
         if len(job.build_histories) > 0:
@@ -263,7 +265,11 @@ def build_json_result(jobs):
                     print "ERROR forming rq for: %s" % rq
                     continue
                 rq['build'] = build_num[0]
-            if not (rq['totalCount'] and rq['failCount'] != '' and rq['result']):
+            if rq['totalCount'] == '':
+                rq['totalCount'] = 0
+            if rq['failCount'] == '':
+                rq['failCount'] = 0
+            if not rq['result']:
                 print "ERROR forming rq for: %s" % rq
                 continue
             jsons.append((key, json.dumps(rq)))
