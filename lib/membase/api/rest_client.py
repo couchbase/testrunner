@@ -1346,6 +1346,14 @@ class RestConnection(object):
         nodes = []
         api = self.baseUrl + 'pools/default'
         status, content, header = self._http_request(api)
+        count = 0
+        while not content and count < 7:
+            log.info("sleep 5 seconds and retry")
+            time.sleep(5)
+            status, content, header = self._http_request(api)
+            count += 1
+        if count == 7:
+            raise Exception("could not get node info after 30 seconds")
         json_parsed = json.loads(content)
         if status:
             if "nodes" in json_parsed:
