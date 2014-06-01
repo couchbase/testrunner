@@ -2032,6 +2032,7 @@ class RemoteMachineShellConnection:
             command = "cmd /c \"%s\" \"%s\" \"%s\" %s" % (transfer_command, source, destination, command_options)
         output, error = self.execute_command(command, use_channel=True)
         self.log_command_output(output, error)
+        return output
 
     def execute_cbdocloader(self, username, password, bucket, memory_quota, file):
         cbdocloader_command = "%stools/cbdocloader" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
