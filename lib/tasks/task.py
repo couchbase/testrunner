@@ -1140,7 +1140,7 @@ class VerifyRevIdTask(GenericLoadingTask):
             if self.itr == self.num_valid_keys:
                 self.log.info("RevId Verification : {0} existing items have been verified".format(self.itr))
             return True
-        self.log.info("RevId Verification : {0} deleted items have been verified".format(self.itr - self.num_valid_keys ))
+        self.log.info("RevId Verification : {0} deleted items have been verified".format(self.itr - self.num_valid_keys))
         return False
 
     def next(self):
@@ -2852,7 +2852,7 @@ class CBRecoveryTask(Task):
                 command += "-P {0} ".format(self.password_dest)
             if self.verbose:
                 command += " -v "
-            self.shell.execute_command(command, info=self.info)
+            self.shell._ssh_client.exec_command(command)
             self.log.info("command was executed: '{0}'".format(command))
             self.state = CHECKING
             task_manager.schedule(self, 20)
@@ -2960,7 +2960,7 @@ class CompactBucketTask(Task):
         else:
 
             if self.retries > 0:
-                #retry
+                # retry
                 self.retries = self.retries - 1
                 task_manager.schedule(self, 10)
             else:
