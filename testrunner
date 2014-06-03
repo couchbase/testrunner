@@ -294,7 +294,7 @@ def main():
         print "Cases from GROUPs '{0}' will be excluded".format(test_params["EXCLUDE_GROUP"])
 
     if TestInputSingleton.input.param("get-delays", False):
-        #start measure_sched_delays on all servers
+        # start measure_sched_delays on all servers
         sd = SchedDelays(TestInputSingleton.input.servers)
         sd.start_measure_sched_delays()
 
@@ -304,7 +304,7 @@ def main():
         params = dict(zip(argument_split[::2], argument_split[1::2]))
 
         if ("GROUP" or "EXCLUDE_GROUP") in test_params:
-            #determine if the test relates to the specified group(can be separated by ';')
+            # determine if the test relates to the specified group(can be separated by ';')
             if not ("GROUP" in params and len(set(test_params["GROUP"].split(";")) & set(params["GROUP"].split(";"))) or "ALL" in test_params["GROUP"].split(";")) or\
                     "EXCLUDE_GROUP" in test_params and len(set(test_params["EXCLUDE_GROUP"].split(";")) & set(params["GROUP"].split(";"))):
                 print "test '{0}' was skipped".format(name)
@@ -460,6 +460,8 @@ def watcher():
                 os.kill(child, signal.SIGKILL)
             except OSError:
                 pass
+        except OSError:
+            pass
 
     sys.exit()
 
