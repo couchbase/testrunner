@@ -50,6 +50,19 @@ class UprClient(MemcachedClient):
         op = OpenNotifier(name)
         return self._handle_op(op)
 
+    def flow_control(self, buffer_size):
+        """ sent to notify producer how much data a client is able to receive
+            while streaming mutations"""
+
+        op = FlowControl(buffer_size)
+        return self._handle_op(op)
+
+    def ack(self, nbytes):
+        """ sent to notify producer number of bytes client has received"""
+
+        op = Ack(nbytes)
+        return self._handle_op(op)
+
     def add_stream(self, vbucket, takeover = 0):
         """ sent to upr-consumer to add stream on a particular vbucket.
             the takeover flag is there for completeness and is used by
@@ -357,4 +370,36 @@ class StreamRequest(Operation):
                          'opcode'  :  opcode,
                          'status'  : -1 }
 
+        return response
+
+
+class FlowControl(Operation):
+    """ FlowControl spec """
+
+    def __init__(self, buffer_size):
+        opcode = CMD_FLOW_CONTROL
+        Operation.__init__(self, opcode,
+                           key = "connection_buffer_size",
+                           value = str(buffer_size))
+
+    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+        response = { 'opcode'        : opcode,
+                     'status'        : status,
+                     'body'          : body}
+        return response
+
+class Ack(Operation):
+    """ Ack spec """
+
+    def __init__(self, nbytes):
+        opcode = CMD_UPR_ACK
+        self.nbytes = nbytes
+        acked = struct.pack(">L", self.nbytes)
+        Operation.__init__(self, opcode,
+                           value = acked)
+
+    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+        response = { 'opcode'        : opcode,
+                     'status'        : status,
+                     'body'          : body}
         return response

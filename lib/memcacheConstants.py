@@ -41,6 +41,9 @@ CMD_DELETION         = 0x58
 CMD_EXPIRATION       = 0x59
 CMD_FLUSH            = 0x5a
 CMD_SET_VB_STATE     = 0x5b
+CMD_UPR_NOOP         = 0x5c
+CMD_UPR_ACK          = 0x5d
+CMD_FLOW_CONTROL     = 0x5e
 
 # SASL stuff
 CMD_SASL_LIST_MECHS = 0x20
