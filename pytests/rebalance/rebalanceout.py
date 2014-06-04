@@ -154,7 +154,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             tasks = [self.cluster.async_rebalance(self.servers[:i], [], self.servers[i:i + 2])]
             if self.doc_ops is not None:
             # define which doc's operation will be performed during rebalancing
-            #only one type of ops can be passed
+            # only one type of ops can be passed
                 if("update" in self.doc_ops):
                     # 1/2th of data will be updated in each iteration
                     tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=batch_size)
@@ -232,10 +232,10 @@ class RebalanceOutTests(RebalanceBaseTest):
         servs_out = self.servers[-self.nodes_out:]
         rebalance = self.cluster.async_rebalance([self.master], [], servs_out)
         self.sleep(self.wait_timeout / 5)
-        #see that the result of view queries are the same as expected during the test
+        # see that the result of view queries are the same as expected during the test
         for bucket in self.buckets:
            self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
-        #verify view queries results after rebalancing
+        # verify view queries results after rebalancing
         rebalance.result()
         for bucket in self.buckets:
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
@@ -257,7 +257,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         views = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
-        #increase timeout for big data
+        # increase timeout for big data
         timeout = max(self.wait_timeout * 5, self.wait_timeout * self.num_items / 25000)
         query = {}
         query["connectionTimeout"] = 60000;
@@ -287,9 +287,9 @@ class RebalanceOutTests(RebalanceBaseTest):
         for i in reversed(range(1, self.num_servers, 2)):
             rebalance = self.cluster.async_rebalance(self.servers[:i], [], self.servers[i:i + 2])
             self.sleep(self.wait_timeout / 5)
-            #see that the result of view queries are the same as expected during the test
+            # see that the result of view queries are the same as expected during the test
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
-            #verify view queries results after rebalancing
+            # verify view queries results after rebalancing
             rebalance.result()
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
             self.verify_cluster_stats(self.servers[:i])
@@ -371,7 +371,11 @@ class RebalanceOutTests(RebalanceBaseTest):
             self._load_all_buckets(self.master, self.gen_update, "update", 0)
             for view in views:
                 # run queries to create indexes
-                self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
+                try:
+                    self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
+                except SetViewInfoNotFound, e:
+                    fragmentation_monitor.result(10)
+                    raise e
 
         if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
             self.fail("impossible to reach compaction value {0} after {1} sec".
@@ -413,7 +417,7 @@ class RebalanceOutTests(RebalanceBaseTest):
                               end=self.num_items)
         batch_size = 50
         for i in reversed(range(self.num_servers)[1:]):
-            #don't use batch for rebalance out 2-1 nodes
+            # don't use batch for rebalance out 2-1 nodes
             if i == 1:
                 batch_size = 1
             tasks = [self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])]
@@ -439,7 +443,7 @@ class RebalanceOutTests(RebalanceBaseTest):
                               end=self.num_items)
         batch_size = 50
         for i in reversed(range(self.num_servers)[2:]):
-            #don't use batch for rebalance out 2-1 nodes
+            # don't use batch for rebalance out 2-1 nodes
             if i == 1:
                 batch_size = 1
             rebalance = self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])
