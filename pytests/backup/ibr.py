@@ -41,8 +41,13 @@ class IBRTests(BackupBaseTest):
         self._verify_stats_all_buckets(self.servers[:self.num_servers])
 
     def verify_dir_structure(self, total_backups, buckets, nodes):
+
         cmd = 'find ' + self.backup_location + ' -type f'
+        if self.shell.info.type.lower() == 'windows':
+            cmd = 'cmd.exe /C "dir /s /b C:\\tmp\\backup"'
+
         output, error = self.shell.execute_command(cmd)
+        self.log.info("output = {0} error = {1}".format(output,error))
 
         if error:
             raise Exception('Got error {0}',format(error))
@@ -58,8 +63,8 @@ class IBRTests(BackupBaseTest):
         pattern_bucket = 'bucket-\w+'
         pattern_node = 'node\-\d{1,3}\.\d{1,3}\.\d{1,3}.\d{1,3}.+'
 
-        pattern_design_json = timestamp + '/|\\' + timestamp_backup + '/|\\' + pattern_bucket
-        pattern_backup_files = pattern_design_json +  '/|\\' + pattern_node
+        pattern_design_json = timestamp + '/|\\\\' + timestamp_backup + '/|\\\\' + pattern_bucket
+        pattern_backup_files = pattern_design_json +  '/|\\\\' + pattern_node
 
         data_cbb = 0
         failover = 0
@@ -77,7 +82,7 @@ class IBRTests(BackupBaseTest):
                 if re.search(pattern_backup_files, line):
                     meta_json += 1
             if 'design.json' in line:
-                if re.search(pattern_backup_files, line):
+                if re.search(pattern_design_json, line):
                     design_json += 1
 
         self.log.info("expected_data_cbb {0} data_cbb {1}".format(expected_data_cbb, data_cbb))
@@ -92,8 +97,7 @@ class IBRTests(BackupBaseTest):
         return False
 
     def testFullBackupDirStructure(self):
-        total_nodes = self.nodes_in + 1
-        if not self.verify_dir_structure(self.total_backups, len(self.buckets), total_nodes):
+        if not self.verify_dir_structure(self.total_backups, len(self.buckets), len(self.servers)):
             raise Exception('Backup Directory Verification Failed for Full Backup')
 
     def testMultipleFullBackupDirStructure(self):
@@ -112,8 +116,7 @@ class IBRTests(BackupBaseTest):
             self.total_backups += 1
             self.sleep(120)
 
-        total_nodes = self.nodes_in + 1
-        if not self.verify_dir_structure(self.total_backups, len(self.buckets), total_nodes):
+        if not self.verify_dir_structure(self.total_backups, len(self.buckets), len(self.servers)):
             raise Exception('Backup Directory Verification Failed for Full Backup')
 
 
@@ -129,8 +132,8 @@ class IBRTests(BackupBaseTest):
         self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, options)
 
         self.total_backups += 1
-        total_nodes = self.nodes_in + 1
-        if not self.verify_dir_structure(self.total_backups, len(self.buckets), total_nodes):
+
+        if not self.verify_dir_structure(self.total_backups, len(self.buckets), len(self.servers)):
             raise Exception('Backup Directory Verification Failed for Incremental Backup')
 
     def testMultipleIncrBackupDirStructure(self):
@@ -150,8 +153,7 @@ class IBRTests(BackupBaseTest):
             self.log.info("sleeping for 60 secs")
             self.sleep(60)
 
-        total_nodes = self.nodes_in + 1
-        if not self.verify_dir_structure(self.total_backups, len(self.buckets), total_nodes):
+        if not self.verify_dir_structure(self.total_backups, len(self.buckets), len(self.servers)):
             raise Exception('Backup Directory Verification Failed for Incremental Backup')
 
     def testMultipleDiffBackupDirStructure(self):
@@ -170,8 +172,7 @@ class IBRTests(BackupBaseTest):
             self.total_backups += 1
             self.sleep(60)
 
-        total_nodes = self.nodes_in + 1
-        if not self.verify_dir_structure(self.total_backups, len(self.buckets), total_nodes):
+        if not self.verify_dir_structure(self.total_backups, len(self.buckets), len(self.servers)):
             raise Exception('Backup Directory Verification Failed for Differential Backup')
 
 
@@ -204,8 +205,7 @@ class IBRTests(BackupBaseTest):
             self.total_backups += 1
             self.sleep(60)
 
-        total_nodes = self.nodes_in + 1
-        if not self.verify_dir_structure(self.total_backups, len(self.buckets), total_nodes):
+        if not self.verify_dir_structure(self.total_backups, len(self.buckets), len(self.servers)):
             raise Exception('Backup Directory Verification Failed for Combo Incr and Diff Backup')
 
     def testMultipleFullIncrDiffBackupDirStructure(self):
@@ -250,8 +250,7 @@ class IBRTests(BackupBaseTest):
             self.total_backups += 1
             self.sleep(60)
 
-        total_nodes = self.nodes_in + 1
-        if not self.verify_dir_structure(self.total_backups, len(self.buckets), total_nodes):
+        if not self.verify_dir_structure(self.total_backups, len(self.buckets), len(self.servers)):
             raise Exception('Backup Directory Verification Failed for Combo Full,Incr and Diff Backups')
 
     def testDiffBackupDirStructure(self):
@@ -266,8 +265,7 @@ class IBRTests(BackupBaseTest):
         self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, options)
 
         self.total_backups += 1
-        total_nodes = self.nodes_in + 1
-        if not self.verify_dir_structure(self.total_backups, len(self.buckets), total_nodes):
+        if not self.verify_dir_structure(self.total_backups, len(self.buckets), len(self.servers)):
             raise Exception('Backup Directory Verification Failed for Differential Backup')
 
     def testIncrementalBackup(self):
