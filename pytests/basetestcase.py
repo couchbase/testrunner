@@ -1138,7 +1138,7 @@ class BaseTestCase(unittest.TestCase):
         isNotSame, summary, result = self.result_analyzer.analyze_all_result(compare_failovers_result, addedItems=False, deletedItems=False, updatedItems=False)
         self.assertTrue(isNotSame, summary)
         self.log.info(" End Verification for failovers logs comparison ")
-        return compare_failovers_result
+        return new_failovers_stats
 
     def compare_per_node_for_failovers_consistency(self, map1, vbucketMap):
         """
