@@ -48,10 +48,10 @@ class MemcachetestRunner():
         self.log = logger.Logger.get_logger()
 
     def start_memcachetest(self):
-        #check that memcachetest already installed
+        # check that memcachetest already installed
         exists = self.shell.file_exists('/usr/local/bin/', 'memcachetest')
         if not exists:
-            #try to get from git and install
+            # try to get from git and install
             output, error = self.shell.execute_command_raw("cd {0}; git clone git://github.com/membase/memcachetest.git".format(self.path))
             self.shell.log_command_output(output, error)
             output, error = self.shell.execute_command_raw("cd {0}memcachetest; ./config/autorun.sh && ./configure && make install".format(self.path))
@@ -68,7 +68,7 @@ class MemcachetestRunner():
         else:
             command = "/usr/local/bin/memcachetest -h {0}:{1} -i {2} {3}".format(self.memcached_ip, self.memcached_port, self.num_items, self.extra_params)
         output, error = self.shell.execute_command_raw(command)
-        status = self.shell.log_command_output(output, error, track_words="downstream timeout")
+        return self.shell.log_command_output(output, error, track_words=("downstream timeout",))
 
     def stop_memcachetest(self):
         cmd = "killall memcachetest"
