@@ -1,0 +1,22 @@
+""" Test constants """
+CONSUMER = "consumer"
+NOTIFIER = "notifier"
+PRODUCER = "producer"
+DEFAULT  = "default"
+MCD      = "mcd"
+UPR      = "upr"
+SUCCESS  = 0
+DEFAULT_CONN_NAME = "default_upr_connection"
+
+FAILOVER_STAT = "failovers"
+VBSEQNO_STAT  = "vbucket-seqno"
+
+""" Error Messages """
+EINV_KEY        = "ERROR: Recieved invald key"
+EINV_RESPONSE   = "ERROR: received invalid stream response"
+ENO_BUCKET      = "ERROR: unable to find bucket"
+ENO_CLIENT      = "ERROR: failed to create client"
+ENO_END         = "ERROR: did not receive STREAM_END"
+ENO_STREAM      = "ERROR: stream does not exist"
+ENO_STAT        = "ERROR: no stats retrieved for this vbucket"
+ENO_KEYMAP      = "ERROR: no keymap exists for specified vbucket"
