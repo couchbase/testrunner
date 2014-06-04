@@ -58,8 +58,8 @@ class UprClient(MemcachedClient):
         op = AddStream(vbucket, takeover)
         return self._handle_op(op)
 
-    def stream_request(self, vbucket, start_seqno, end_seqno,
-                       vb_uuid, high_seqno, takeover = 0):
+    def stream_request(self, vbucket, start_seqno, end_seqno, vb_uuid,
+                       snap_start = 0, snap_end = 0, takeover = 0):
         """" sent to upr-producer to stream mutations from
              a particular vbucket.
 
@@ -69,10 +69,11 @@ class UprClient(MemcachedClient):
              start_seqno = seqno to begin streaming
              end_seqno = seqno to specify end of stream
              vb_uuid = vbucket uuid as specified in failoverlog
-             high_seqno = high seqno at time vbucket was generated"""
+             snapt_start = start seqno of snapshot
+             snap_end = end seqno of snapshot """
 
         op = StreamRequest(vbucket, start_seqno, end_seqno,
-                           vb_uuid, high_seqno, takeover)
+                           vb_uuid, snap_start, snap_end, takeover)
 
         response = self._handle_op(op)
 
@@ -276,14 +277,15 @@ class StreamRequest(Operation):
     """ StreamRequest spec """
 
     def __init__(self, vbucket, start_seqno, end_seqno,
-                 vb_uuid, high_seqno, takeover = 0):
+                 vb_uuid, snap_start = 0, snap_end = 0, takeover = 0):
 
         opcode = CMD_STREAM_REQ
-        extras = struct.pack(">IIQQQQ", takeover, 0,
+        extras = struct.pack(">IIQQQQQ", takeover, 0,
                              start_seqno,
                              end_seqno,
                              vb_uuid,
-                             high_seqno)
+                             snap_start,
+                             snap_end)
 
         Operation.__init__(self, opcode,
                            extras = extras,
@@ -291,8 +293,10 @@ class StreamRequest(Operation):
         self.start_seqno = start_seqno
         self.end_seqno = end_seqno
         self.vb_uuid = vb_uuid
-        self.high_seqno = high_seqno
         self.takeover = takeover
+        self.snap_start = snap_start
+        self.snap_end = snap_end
+
 
     def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
         if opcode == CMD_STREAM_REQ:
