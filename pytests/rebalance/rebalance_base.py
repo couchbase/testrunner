@@ -6,6 +6,9 @@ class RebalanceBaseTest(BaseTestCase):
 
     def setUp(self):
         super(RebalanceBaseTest, self).setUp()
+        if self.enable_flow_control:
+            servers  = self.get_nodes_in_cluster()
+            self.set_upr_flow_control(flow=True, servers=servers)
         self.value_size = self.input.param("value_size", 256)
         self.doc_ops = self.input.param("doc_ops", None)
         self.withOps = self.input.param("withOps", True)
@@ -28,4 +31,7 @@ class RebalanceBaseTest(BaseTestCase):
             self._load_doc_data_all_buckets()
 
     def tearDown(self):
+        if self.enable_flow_control:
+            servers  = self.get_nodes_in_cluster()
+            self.wait_for_max_unacked_bytes_all_buckets(servers = servers)
         super(RebalanceBaseTest, self).tearDown()

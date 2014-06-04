@@ -62,6 +62,7 @@ class BaseTestCase(unittest.TestCase):
             self.sasl_buckets = self.input.param("sasl_buckets", 0)
             self.num_buckets = self.input.param("num_buckets", 0)
             self.memcached_buckets = self.input.param("memcached_buckets", 0)
+            self.enable_flow_control = self.input.param("enable_flow_control", False)
             self.total_buckets = self.sasl_buckets + self.default_bucket + self.standard_buckets + self.memcached_buckets
             self.num_servers = self.input.param("servers", len(self.servers))
             # initial number of items in the cluster
@@ -516,6 +517,28 @@ class BaseTestCase(unittest.TestCase):
         for task in tasks:
             task.result(timeout)
 
+    """Waits for max_unacked_bytes = 0 on all servers and buckets in a cluster.
+
+    A utility function that waits upr flow with max_unacked_bytes = 0
+
+    Args:
+        servers - A list of all of the servers in the cluster. ([TestInputServer])
+        max_unacked_bytes - expected ep_queue_size (int)
+        max_unacked_bytes - condition for comparing (str)
+        timeout - Waiting the end of the thread. (str)
+    """
+    def wait_for_max_unacked_bytes_all_buckets(self, servers, max_unacked_bytes=0, \
+                                     max_unacked_bytes_cond='==', timeout=360):
+        tasks = []
+        for server in servers:
+            for bucket in self.buckets:
+                if bucket.type == 'memcached':
+                    continue
+                tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
+                                   'ep_upr_max_unacked_bytes', max_unacked_bytes_cond, max_unacked_bytes))
+        for task in tasks:
+            task.result(timeout)
+
     """Verifies data on all of the nodes in a cluster.
 
     Verifies all of the data in a specific kv_store index for all buckets in
@@ -793,6 +816,16 @@ class BaseTestCase(unittest.TestCase):
                     pass
         client.close()
 
+    def get_nodes_in_cluster(self):
+        rest = RestConnection(self.master)
+        nodes = rest.node_statuses()
+        server_set = []
+        for node in nodes:
+            for server in self.servers:
+                if server.ip == node.ip:
+                    server_set.append(server)
+        return server_set
+
     def change_checkpoint_params(self):
         self.chk_max_items = self.input.param("chk_max_items", None)
         self.chk_period = self.input.param("chk_period", None)
@@ -917,6 +950,17 @@ class BaseTestCase(unittest.TestCase):
                     rest.force_eject_node()
                 except BaseException, e:
                     self.log.error(e)
+
+    def set_upr_flow_control(self,flow=True,servers=[]):
+        for bucket in self.buckets:
+            for server in servers:
+                 rest = RestConnection(server)
+                 rest.set_enable_flow_control(bucket=bucket.name,flow=flow)
+        for server in self.servers:
+            remote_client = RemoteMachineShellConnection(server)
+            remote_client.stop_couchbase()
+            remote_client.start_couchbase()
+            remote_client.disconnect()
 
     def kill_memcached(self):
         for server in self.servers:
