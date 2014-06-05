@@ -368,7 +368,14 @@ class RebalanceOutTests(RebalanceBaseTest):
         # generate load until fragmentation reached
         while fragmentation_monitor.state != "FINISHED" and end_time > time.time():
             # update docs to create fragmentation
-            self._load_all_buckets(self.master, self.gen_update, "update", 0)
+            """
+            it's better to use _load_all_buckets instead of _async_load_all_buckets
+            it's workaround: unable to load data when disable_compaction
+            now we have a lot of issues for views & compaction....
+            """
+            update_tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
+            for update_task in update_tasks:
+                update_task.result(600)
             if fragmentation_monitor.state == "FINISHED":
                 fragmentation_monitor._Thread__stop()
                 self.fail("async_monitor_view_fragmentation failed prematurely")
