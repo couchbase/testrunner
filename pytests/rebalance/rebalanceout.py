@@ -374,7 +374,8 @@ class RebalanceOutTests(RebalanceBaseTest):
                 try:
                     self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
                 except SetViewInfoNotFound, e:
-                    fragmentation_monitor.result(10)
+                    self.log.warn("exception on self.cluster.query_view")
+                    fragmentation_monitor.cancel()
                     raise e
 
         if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
