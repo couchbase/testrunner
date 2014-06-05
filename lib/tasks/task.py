@@ -361,6 +361,7 @@ class RebalanceTask(Task):
             else:
                 self.state = FINISHED
                 self.set_result(False)
+                self.rest.print_UI_logs()
                 self.set_exception(RebalanceFailedException("seems like rebalance hangs. please check logs!"))
         else:
             success_cleaned = []
