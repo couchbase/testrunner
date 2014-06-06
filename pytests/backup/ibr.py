@@ -243,9 +243,9 @@ class IBRTests(BackupBaseTest):
                                    pause_secs=5, timeout_secs=180)
             self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
-            #Take a incremental backup
+            #Take a full backup
             options = self.command_options + [' -m full']
-            self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, options)
+            self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, options, delete_backup=False)
 
             self.total_backups += 1
             self.sleep(60)

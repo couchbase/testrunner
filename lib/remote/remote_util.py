@@ -1913,7 +1913,7 @@ class RemoteMachineShellConnection:
         self.start_couchbase()
 
     def execute_cluster_backup(self, login_info="Administrator:password", backup_location="/tmp/backup",
-                               command_options='', cluster_ip="", cluster_port="8091"):
+                               command_options='', cluster_ip="", cluster_port="8091",delete_backup = True):
         backup_command = "%scbbackup" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         backup_file_location = backup_location
         # TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
@@ -1932,7 +1932,7 @@ class RemoteMachineShellConnection:
         cluster_ip = cluster_ip or self.ip
         cluster_port = cluster_port or self.port
 
-        if '-m accu' not in command_options_string and '-m diff' not in command_options_string:
+        if '-m accu' not in command_options_string and '-m diff' not in command_options_string and delete_backup:
             self.delete_files(backup_file_location)
             self.create_directory(backup_file_location)
 
