@@ -97,7 +97,8 @@ class ConnectionTests(BaseTestCase):
             self._run_moxi(self.master, moxi_port, self.master.ip, "default")
             self._run_mcsoda_localy(self.master.ip, moxi_port, "default", mcsoda_items=mcsoda_items)
             self.sleep(30)
-            sd = MemcachetestRunner(self.master, num_items=memcachetest_items, extra_params="-W 320 -t 320 -c 0 -M 2")
+            sd = MemcachetestRunner(self.master, num_items=memcachetest_items, \
+                                     extra_params="-W 16 -t 16 -c 0 -M 2")  # MB-8083
             status = sd.start_memcachetest()
             if not status:
                 self.fail("see logs above!")
@@ -107,7 +108,7 @@ class ConnectionTests(BaseTestCase):
                 sd.stop_memcachetest()
 
 
-    #CBQE-1245 implement verification tap client activity when the client is not using a TAP client
+    # CBQE-1245 implement verification tap client activity when the client is not using a TAP client
     def checks_tap_connections_tests(self):
         servs_init = self.servers[:self.nodes_init]
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
@@ -136,7 +137,7 @@ class ConnectionTests(BaseTestCase):
                     self.log.error("'ep_tap_user_count' != 0 as expected");
             self.log.info("'ep_tap_user_count' for bucket '{0}' = 0 for the entire test".format(bucket.name));
 
-    #CBQE-1489 memcached recovery
+    # CBQE-1489 memcached recovery
     def test_kill_memcached(self):
         node_to_kill_mem = self.servers[:self.nodes_init][-1]
         iterations = self.input.param('iterations', 10)
