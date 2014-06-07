@@ -2189,6 +2189,18 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
+    def execute_vbuckettool(self, keys, prefix=None):
+        command = "%stools/vbuckettool" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            command = "%stools/vbuckettool.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        if prefix:
+            command = prefix + command
+        command = "%s - %s" % (command, ' '.join(keys))
+        output, error = self.execute_command(command, use_channel=True)
+        self.log_command_output(output, error)
+        return output, error
+
     def execute_batch_command(self, command):
         remote_command = "echo \"{0}\" > /tmp/cmd.bat; /tmp/cmd.bat".format(command)
         o, r = self.execute_command_raw(remote_command)
