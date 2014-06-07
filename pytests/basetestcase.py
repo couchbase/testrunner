@@ -61,6 +61,7 @@ class BaseTestCase(unittest.TestCase):
             self.standard_buckets = self.input.param("standard_buckets", 0)
             self.sasl_buckets = self.input.param("sasl_buckets", 0)
             self.num_buckets = self.input.param("num_buckets", 0)
+            self.verify_max_unacked_bytes = self.input.param("verify_max_unacked_bytes", False)
             self.memcached_buckets = self.input.param("memcached_buckets", 0)
             self.enable_flow_control = self.input.param("enable_flow_control", False)
             self.total_buckets = self.sasl_buckets + self.default_bucket + self.standard_buckets + self.memcached_buckets
@@ -157,6 +158,9 @@ class BaseTestCase(unittest.TestCase):
                 self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
             if str(self.__class__).find('newupgradetests') == -1:
                 self._bucket_creation()
+            if self.enable_flow_control:
+                servers  = self.get_nodes_in_cluster()
+                self.set_upr_flow_control(flow=True, servers=servers)
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
             self._log_start(self)

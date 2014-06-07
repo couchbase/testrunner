@@ -37,9 +37,6 @@ class FailoverBaseTest(BaseTestCase):
         self.add_back_flag = False
         self.during_ops = self.input.param("during_ops", None)
         self.graceful = self.input.param("graceful", True)
-        if self.enable_flow_control:
-            servers  = self.get_nodes_in_cluster()
-            self.set_upr_flow_control(flow=True, servers=servers)
         if self.recoveryType:
             self.recoveryType=self.recoveryType.split(":")
 
@@ -54,9 +51,9 @@ class FailoverBaseTest(BaseTestCase):
 
     @staticmethod
     def tearDown(self):
-        if self.enable_flow_control:
+        if self.enable_flow_control and self.verify_max_unacked_bytes:
             servers  = self.get_nodes_in_cluster()
-            self.wait_for_max_unacked_bytes_all_buckets(servers = servers)
+            self.wait_for_max_unacked_bytes_all_buckets(servers = servers, timeout = 60)
         if hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures) > 0 \
                     and 'stop-on-failure' in TestInputSingleton.input.test_params and \
                     str(TestInputSingleton.input.test_params['stop-on-failure']).lower() == 'true':
