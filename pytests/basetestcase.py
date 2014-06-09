@@ -161,6 +161,7 @@ class BaseTestCase(unittest.TestCase):
             if self.enable_flow_control:
                 servers  = self.get_nodes_in_cluster()
                 self.set_upr_flow_control(flow=True, servers=servers)
+                self.sleep(30)
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
             self._log_start(self)
