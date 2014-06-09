@@ -71,7 +71,7 @@ class UPRBase(BaseTestCase):
         stats = mcd_client.stats(UPR)
 
         acked = 'eq_uprq:{0}:total_acked_bytes'.format(connection)
-        unacked = 'eq_uprq:{0}:total_unacked_bytes'.format(connection)
+        unacked = 'eq_uprq:{0}:unacked_bytes'.format(connection)
         sent = 'eq_uprq:{0}:total_bytes_sent'.format(connection)
         return int(stats[acked]), int(stats[sent]), int(stats[unacked])
 
