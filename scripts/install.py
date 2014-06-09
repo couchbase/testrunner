@@ -49,6 +49,7 @@ Available keys:
 
 Examples:
  install.py -i /tmp/ubuntu.ini -p product=cb,version=2.2.0-792
+ install.py -i /tmp/ubuntu.ini -p product=cb,version=2.2.0-792,url=http://builds.hq.northscale.net/latestbuilds....
  install.py -i /tmp/ubuntu.ini -p product=mb,version=1.7.1r-38,parallel=true,toy=keith
  install.py -i /tmp/ubuntu.ini -p product=mongo,version=2.0.2
  install.py -i /tmp/ubuntu.ini -p product=cb,version=0.0.0-704-toy,toy=couchstore,parallel=true,vbuckets=1024
@@ -112,6 +113,8 @@ class Installer(object):
         server = ''
         openssl = ''
         names = []
+        url = None
+        direct_build_url = None
 
         # replace "v" with version
         # replace p with product
@@ -154,6 +157,9 @@ class Installer(object):
             if "openssl" in params:
                 openssl = params["openssl"]
 
+        if ok:
+            if "url" in params:
+                direct_build_url = params["url"]
         if ok:
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
             cb_alias = ["couchbase", "couchbase-server", "cb"]
@@ -203,10 +209,11 @@ class Installer(object):
                                                                      build_version=version,
                                                                      product=name)
                 else:
-                    builds, changes = BuildQuery().get_all_builds(version=version, timeout=timeout)
+                    builds, changes = BuildQuery().get_all_builds(version=version, timeout=timeout, \
+                                                                  direct_build_url=direct_build_url)
                     build = BuildQuery().find_build(builds, name, info.deliverable_type,
                                                         info.architecture_type, version, toy=toy,
-                                                        openssl=openssl)
+                                                        openssl=openssl, direct_build_url=direct_build_url)
 
                 if build:
                     if 'amazon' in params:

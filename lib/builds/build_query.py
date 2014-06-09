@@ -7,6 +7,7 @@ import urllib2
 import re
 import socket
 import BeautifulSoup
+import testconstants
 
 
 class MembaseBuild(object):
@@ -63,12 +64,19 @@ class BuildQuery(object):
         #parse build page and create build object
         pass
 
-    def find_build(self, builds, product, type, arch, version, toy='', openssl=''):
-        for build in builds:
-            if build.product_version.find(version) != -1 and product == build.product\
-               and build.architecture_type == arch and type == build.deliverable_type\
-               and build.toy == toy:
-                return build
+    def find_build(self, builds, product, type, arch, version, toy='', openssl='', direct_build_url=None):
+        if direct_build_url is None:
+            for build in builds:
+                if build.product_version.find(version) != -1 and product == build.product\
+                   and build.architecture_type == arch and type == build.deliverable_type\
+                   and build.toy == toy:
+                    return build
+        else:
+            if builds.product_version.find(version) != -1 and product == builds.product\
+               and builds.architecture_type == arch and type == builds.deliverable_type:
+                return builds
+            else:
+                raise Exception("Check your url. Some params don't match")
         return None
 
     def find_membase_build(self, builds, product, deliverable_type, os_architecture, build_version, is_amazon=False):
@@ -154,74 +162,124 @@ class BuildQuery(object):
     def get_sustaining_latest_builds(self):
         return self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds/sustaining')
 
-    def get_all_builds(self, version=None, timeout=None):
+    def get_all_builds(self, version=None, timeout=None, direct_build_url=None):
         try:
             latestbuilds, latestchanges = \
-                self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds', version=version, timeout=timeout)
+                self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds', version=version, \
+                                           timeout=timeout, direct_build_url=direct_build_url)
         except Exception as e:
             print e
             latestbuilds, latestchanges = \
-                self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds', version=version, timeout=timeout)
+                self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds', \
+                                           version=version, timeout=timeout, direct_build_url=direct_build_url)
 
         return latestbuilds, latestchanges
 
 
     #baseurl = 'http://builds.hq.northscale.net/latestbuilds/'
-    def _get_and_parse_builds(self, build_page, version=None, timeout=None):
+    def _get_and_parse_builds(self, build_page, version=None, timeout=None, direct_build_url=None):
         builds = []
         changes = []
-        page = None
-        soup = None
-        index_url = '/index.html'
-        if version:
-            if version.find("-") != -1:
-                index_url = "/index_" + version[:version.find("-")] + ".html"
-            else:
-                index_url = "/index_" + version + ".html"
-        #try this ten times
-        for _ in range(0, 10):
-            try:
-                if timeout:
-                    socket.setdefaulttimeout(timeout)
-                page = urllib2.urlopen(build_page + index_url)
-                soup = BeautifulSoup.BeautifulSoup(page)
-                break
-            except:
-                time.sleep(5)
-        if not page:
-            raise Exception('unable to connect to %s' % (build_page + index_url))
-        query = BuildQuery()
-        for incident in soup('li'):
-            contents = incident.contents
-            build_id = ''
-            build_description = ''
-            for content in contents:
-                if BeautifulSoup.isString(content):
-                    build_description = content.string
-                elif content.name == 'a':
-                    build_id = content.string.string
-            if build_id.lower().startswith('changes'):
-                change = query.create_change_info(build_id, build_description)
-                change.url = '%s/%s' % (build_page, build_id)
-                changes.append(change)
-            else:
-                build = query.create_build_info(build_id, build_description)
-                build.url = '%s/%s' % (build_page, build_id)
-                builds.append(build)
-                #now let's reconcile the builds and changes?
-
-        for build in builds:
-            for change in changes:
-                if change.build_number == build.product_version:
-                    build.change = change
-                    #                    print 'change : ', change.url,change.build_number
+        if direct_build_url is not None:
+            query = BuildQuery()
+            build = query.create_build_info_from_direct_url(direct_build_url)
+            return build, changes
+        else:
+            page = None
+            soup = None
+            index_url = '/index.html'
+            if version:
+                if version.find("-") != -1:
+                    index_url = "/index_" + version[:version.find("-")] + ".html"
+                else:
+                    index_url = "/index_" + version + ".html"
+            #try this ten times
+            for _ in range(0, 10):
+                try:
+                    if timeout:
+                        socket.setdefaulttimeout(timeout)
+                    page = urllib2.urlopen(build_page + index_url)
+                    soup = BeautifulSoup.BeautifulSoup(page)
                     break
-            #let's filter those builds with version that starts with 'v'
-        filtered_builds = []
-        for build in builds:
-        #            if not '{0}'.format(build.product_version).startswith('v'):
-            filtered_builds.append(build)
-        return  filtered_builds, changes
+                except:
+                    time.sleep(5)
+            if not page:
+                raise Exception('unable to connect to %s' % (build_page + index_url))
+            query = BuildQuery()
+            for incident in soup('li'):
+                contents = incident.contents
+                build_id = ''
+                build_description = ''
+                for content in contents:
+                    if BeautifulSoup.isString(content):
+                        build_description = content.string
+                    elif content.name == 'a':
+                        build_id = content.string.string
+                if build_id.lower().startswith('changes'):
+                    change = query.create_change_info(build_id, build_description)
+                    change.url = '%s/%s' % (build_page, build_id)
+                    changes.append(change)
+                else:
+                    build = query.create_build_info(build_id, build_description)
+                    build.url = '%s/%s' % (build_page, build_id)
+                    builds.append(build)
+                    #now let's reconcile the builds and changes?
+            for build in builds:
+                for change in changes:
+                    if change.build_number == build.product_version:
+                        build.change = change
+                        """ print 'change : ', change.url,change.build_number """
+                        break
+                #let's filter those builds with version that starts with 'v'
+            filtered_builds = []
+            for build in builds:
+            #         if not '{0}'.format(build.product_version).startswith('v'):
+                filtered_builds.append(build)
+            return  filtered_builds, changes
+
+    def create_build_info_from_direct_url(self, direct_build_url):
+        build = MembaseBuild()
+        build.url = direct_build_url
+        build.toy = ""
+        build_info = direct_build_url.split("/")
+        build_info = build_info[len(build_info)-1]
+        build.name = build_info
+        deliverable_type = ["exe", "rpm", "deb", "zip"]
+        if build_info[-3:] in deliverable_type:
+            build.deliverable_type = build_info[-3:]
+            if build_info[-3:] != "exe":
+                build_info = build_info[:-4]
+            else:
+                build_info = build_info[:-10]
+        else:
+            raise Exception('Check your url. Deliverable type %s does not support yet' \
+                             % (direct_build_url[-3:]))
+        """ build name at this location couchbase-server-enterprise_x86_64_3.0.0-797-rel """
+
+        """ Remove the code below when cb name is standardlized (MB-11372) """
+        if "factory" in direct_build_url and build.deliverable_type == "exe":
+            l = list(build_info)
+            l[27] = "_x86_64_"
+            build_info = "".join(l)
+        """ End remove here """
+
+        product_version = build_info.split("_")
+        product_version = product_version[len(product_version)-1]
+        if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
+             build.product_version = product_version
+             build_info = build_info.replace("_" + product_version,"")
+        else:
+            raise Exception('Check your url. Couchbase server does not have version %s yet' \
+                            % (product_version[:5]))
+        product_name = build_info.split("_")
+        product_name = product_name[0]
+        if product_name.startswith("couchbase-server"):
+            build.product = product_name
+            build_info = build_info.replace(product_name+ "_", "")
+        architecture_type = ["x86_64", "x86"]
+        if build_info in architecture_type:
+            build.architecture_type = build_info
+        return build
 
     def create_build_info(self, build_id, build_decription):
         build = MembaseBuild()

@@ -573,6 +573,9 @@ class RemoteMachineShellConnection:
                 if name.filename == filename and int(name.st_size) > 0:
                     sftp.close()
                     return True
+                elif name.filename == filename and int(name.st_size) == 0:
+                    log.info("File {0} will be deleted".format(filename))
+                    sftp.remove(remotepath + filename)
             sftp.close()
             return False
         except IOError:
