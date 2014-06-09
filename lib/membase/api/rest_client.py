@@ -1877,8 +1877,8 @@ class RestConnection(object):
     def set_auto_compaction(self, parallelDBAndVC="false",
                             dbFragmentThreshold=None,
                             viewFragmntThreshold=None,
-                            dbFragmentThresholdPercentage=100,
-                            viewFragmntThresholdPercentage=100,
+                            dbFragmentThresholdPercentage=None,
+                            viewFragmntThresholdPercentage=None,
                             allowedTimePeriodFromHour=None,
                             allowedTimePeriodFromMin=None,
                             allowedTimePeriodToHour=None,
@@ -1911,7 +1911,7 @@ class RestConnection(object):
         if dbFragmentThreshold is not None:
             params["databaseFragmentationThreshold[size]"] = dbFragmentThreshold
         if viewFragmntThreshold is not None:
-            params["viewFragmentationThreshold[percentage]"] = viewFragmntThreshold
+            params["viewFragmentationThreshold[size]"] = viewFragmntThreshold
         if dbFragmentThresholdPercentage is not None:
             params["databaseFragmentationThreshold[percentage]"] = dbFragmentThresholdPercentage
         if viewFragmntThresholdPercentage is not None:

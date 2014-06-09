@@ -741,17 +741,33 @@ class Cluster(object):
         _task = self.async_bucket_flush(server, bucket)
         return _task.result(timeout)
 
-    def async_monitor_db_fragmentation(self, server, fragmentation, bucket):
+    def async_monitor_db_fragmentation(self, server, fragmentation, bucket, get_view_frag=False):
         """Asyncronously monitor db fragmentation
 
         Parameters:
             servers - server to check(TestInputServers)
             bucket - bucket to check
             fragmentation - fragmentation to reach
+            get_view_frag - Monitor view fragmentation. In case enabled When <fragmentation_value> is reached this method will return (boolean)
 
         Returns:
             MonitorDBFragmentationTask - A task future that is a handle to the scheduled task"""
-        _task = MonitorDBFragmentationTask(server, fragmentation, bucket)
+        _task = MonitorDBFragmentationTask(server, fragmentation, bucket, get_view_frag)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_monitor_disk_size_fragmentation(self, server, fragmentation, bucket, get_view_frag=False):
+        """Asyncronously monitor disk size fragmentation
+
+        Parameters:
+            servers - server to check(TestInputServers)
+            bucket - bucket to check
+            fragmentation - fragmentation to reach
+            get_view_frag - Monitor view fragmentation. In case enabled When <fragmentation_value> is reached this method will return (boolean)
+
+        Returns:
+            MonitorDiskSizeFragmentationTask - A task future that is a handle to the scheduled task"""
+        _task = MonitorDiskSizeFragmentationTask(server, fragmentation, bucket, get_view_frag)
         self.task_manager.schedule(_task)
         return _task
 
@@ -826,3 +842,43 @@ class Cluster(object):
         _task = self.async_compact_bucket(server, bucket)
         status = _task.result()
         return status
+
+    def async_monitor_compact_view(self, server, design_doc_name, bucket="default", with_rebalance=False, frag_value=0):
+        """Asynchronously montior view compaction.
+
+        Parameters:
+            server - The server to handle fragmentation config task. (TestInputServer)
+            design_doc_name - design doc with views represented in index file. (String)
+            bucket - The name of the bucket design_doc belongs to. (String)
+            with_rebalance - there are two cases that process this parameter:
+                "Error occured reading set_view _info" will be ignored if True
+                (This applies to rebalance in case),
+                and with concurrent updates(for instance, with rebalance)
+                it's possible that compaction value has not changed significantly
+            frag_value - ViewFragmentationThresholdPercentage set to be compared with fragmentaion value after compaction
+
+        Returns:
+            MonitorViewCompactionTask - A task future that is a handle to the scheduled task."""
+
+
+        _task = MonitorViewCompactionTask(server, design_doc_name, bucket, with_rebalance, frag_value)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def monitor_compact_view(self, server, design_doc_name, bucket="default", timeout=None, with_rebalance=False, frag_value=0):
+        """Synchronously monitor view compaction.
+
+        Parameters:
+            server - The server to handle fragmentation config task. (TestInputServer)
+            design_doc_name - design doc with views represented in index file. (String)
+            bucket - The name of the bucket design_doc belongs to. (String)
+            with_rebalance - "Error occured reading set_view _info" will be ignored if True
+                and with concurrent updates(for instance, with rebalance)
+                it's possible that compaction value has not changed significantly
+            frag_value - ViewFragmentationThresholdPercentage set to be compared with fragmentaion value after compaction
+
+        Returns:
+            boolean - True file size reduced after compaction, False if successful but no work done """
+
+        _task = self.async_monitor_compact_view(server, design_doc_name, bucket, with_rebalance, frag_value)
+        return _task.result(timeout)

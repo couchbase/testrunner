@@ -6,7 +6,7 @@ import time
 import string
 import random
 import logging
-
+import json
 from couchbase.documentgenerator import BlobGenerator
 from couchbase.cluster import Cluster
 from couchbase.document import View
@@ -22,6 +22,8 @@ from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.api.exception import ServerUnavailableException
 from couchbase.data_analysis_helper import *
 from testconstants import STANDARD_BUCKET_PORT
+from testconstants import MIN_COMPACTION_THRESHOLD
+from testconstants import MAX_COMPACTION_THRESHOLD
 
 
 class BaseTestCase(unittest.TestCase):
@@ -522,13 +524,13 @@ class BaseTestCase(unittest.TestCase):
 
      A utility function that waits upr flow with unacked_bytes = 0
     """
-    def verify_unacked_bytes_all_buckets(self, filter_list = [],sleep_time=5):
+    def verify_unacked_bytes_all_buckets(self, filter_list = [], sleep_time=5):
         if self.verify_unacked_bytes:
             self.sleep(sleep_time)
             servers  = self.get_nodes_in_cluster()
             map =  self.data_collector.collect_compare_upr_stats(self.buckets,servers, filter_list = filter_list)
             for bucket in map.keys():
-                self.assertTrue(map[bucket]," the bucket {0} has unacked bytes != 0".format(bucket))
+                self.assertTrue(map[bucket], " the bucket {0} has unacked bytes != 0".format(bucket))
 
     """Verifies data on all of the nodes in a cluster.
 
@@ -1064,7 +1066,7 @@ class BaseTestCase(unittest.TestCase):
         """ Method to get all data set for buckets and from the servers """
         info, dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
         distribution  = self.data_analyzer.analyze_data_distribution(dataset)
-        return dataset,distribution
+        return dataset, distribution
 
     def get_and_compare_active_replica_data_set_all(self, servers, buckets, path=None, mode = "disk"):
         """
@@ -1269,3 +1271,18 @@ class BaseTestCase(unittest.TestCase):
             for server in servers:
                 ClusterOperationHelper.flushctl_set(server, "exp_pager_stime", val, bucket)
         self.sleep(val, "wait for expiry pager to run on all these nodes")
+
+    def set_auto_compaction(self, rest, parallelDBAndVC="false", dbFragmentThreshold=None, viewFragmntThreshold=None, dbFragmentThresholdPercentage=None,
+                            viewFragmntThresholdPercentage=None, allowedTimePeriodFromHour=None, allowedTimePeriodFromMin=None, allowedTimePeriodToHour=None,
+                            allowedTimePeriodToMin=None, allowedTimePeriodAbort=None):
+        output, rq_content, header = rest.set_auto_compaction(parallelDBAndVC, dbFragmentThreshold, viewFragmntThreshold, dbFragmentThresholdPercentage,
+                                                              viewFragmntThresholdPercentage, allowedTimePeriodFromHour, allowedTimePeriodFromMin, allowedTimePeriodToHour,
+                                                              allowedTimePeriodToMin, allowedTimePeriodAbort)
+
+        if not output and (dbFragmentThresholdPercentage, dbFragmentThreshold, viewFragmntThresholdPercentage, viewFragmntThreshold <= MIN_COMPACTION_THRESHOLD
+                           or dbFragmentThresholdPercentage, viewFragmntThresholdPercentage >= MAX_COMPACTION_THRESHOLD):
+            self.assertFalse(output, "it should be  impossible to set compaction value = {0}%".format(viewFragmntThresholdPercentage))
+            self.assertTrue(json.loads(rq_content).has_key("errors"), "Error is not present in response")
+            self.assertTrue(str(json.loads(rq_content)["errors"]).find("Allowed range is 2 - 100") > -1, \
+                            "Error 'Allowed range is 2 - 100' expected, but was '{0}'".format(str(json.loads(rq_content)["errors"])))
+            self.log.info("Response contains error = '%(errors)s' as expected" % json.loads(rq_content))
