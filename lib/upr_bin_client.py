@@ -28,6 +28,7 @@ class UprClient(MemcachedClient):
 
     def _restart_reader(self):
         """ restart reader thread """
+        self.reconnect()
         self.conn = UprClient.Reader(self)
         self.conn.start()
 
@@ -48,6 +49,13 @@ class UprClient(MemcachedClient):
         """ opens an upr notifier connection """
 
         op = OpenNotifier(name)
+
+        return self._handle_op(op)
+
+    def get_failover_log(self, vbucket):
+        """ get upr failover log """
+
+        op = GetFailoverLog(vbucket)
         return self._handle_op(op)
 
     def flow_control(self, buffer_size):
@@ -71,32 +79,42 @@ class UprClient(MemcachedClient):
         op = AddStream(vbucket, takeover)
         return self._handle_op(op)
 
-    def stream_request(self, vbucket, start_seqno, end_seqno, vb_uuid,
-                       snap_start = 0, snap_end = 0, takeover = 0):
+    def close_stream(self, vbucket):
+        """ sent either to producer or consumer to close stream openned by
+            this clients connection on specified vbucket """
+
+        op = CloseStream(vbucket)
+        return self._handle_op(op)
+
+    def stream_req(self, vbucket, takeover, start_seqno, end_seqno,
+                       vb_uuid, snap_start = None, snap_end = None):
         """" sent to upr-producer to stream mutations from
              a particular vbucket.
 
              upon sucessful stream request an UprStream object is created
              that can be used by the client to receive mutations.
 
+             vbucket = vbucket number to strem mutations from
+             takeover = specify takeover flag 0|1
              start_seqno = seqno to begin streaming
              end_seqno = seqno to specify end of stream
              vb_uuid = vbucket uuid as specified in failoverlog
              snapt_start = start seqno of snapshot
              snap_end = end seqno of snapshot """
 
-        op = StreamRequest(vbucket, start_seqno, end_seqno,
-                           vb_uuid, snap_start, snap_end, takeover)
+        op = StreamRequest(vbucket, takeover, start_seqno, end_seqno,
+                                        vb_uuid, snap_start, snap_end)
 
         response = self._handle_op(op)
 
-        if response['status'] == 0:
+        stream = UprStream(op, response)
 
-            # upon successful stream request create stream object
-            stream = UprStream(op)
+        if stream.status  == 0:
+            # upon successful stream request associate stream object
+            # with vbucket
             self.streams[vbucket] = stream
 
-        return response
+        return stream
 
     def get_stream(self, vbucket):
         """ for use by external clients to get stream
@@ -109,18 +127,34 @@ class UprClient(MemcachedClient):
             if the received response is for another op then it will
             attempt to get the next response and retry 5 times."""
 
-        self.send_op(op)
-        self.ops[op.opaque] = op
-
         if not self.conn.isAlive():
             self._restart_reader()
 
-        try:
-            return op.queue.get(timeout=30)
-        except Queue.Empty:
-            assert False,\
-                "ERROR: Never received response for op: %s" % op.opcode
+        self.send_op(op)
+        self.ops[op.opaque] = op
 
+
+        # poll op queue for a response
+        wait = 30
+        resp = None
+        while wait > 0 and resp is None:
+            try:
+                resp = op.queue.get(timeout=1)
+            except Queue.Empty:
+                pass
+
+            wait -= 1
+
+            # check if op caused ClientError
+            if not self.conn.isAlive():
+                resp = {'opcode'  : op.opcode,
+                        'status'  : 0xff}
+
+
+        assert resp is not None,\
+            "ERROR: Never received response for op: %s" % op.opcode
+
+        return resp
 
     def send_op(self, op):
         """ sends op details to mcd client for lowlevel packet assembly """
@@ -142,6 +176,7 @@ class UprClient(MemcachedClient):
         def __init__(self, client):
             threading.Thread.__init__(self)
             self.client = client
+            self.max_timeouts = 5
 
         def run(self):
 
@@ -161,55 +196,71 @@ class UprClient(MemcachedClient):
                         # stream_req ops received during add_stream request
                         self.ack_stream_req(opaque)
 
-                except EOFError: # reached end of socket
-                    break
+                except Exception as ex:
+                    if 'Timeout waiting' in str(ex):
+                        if self.max_timeouts == 0:
+                            return
+                        else:
+                            self.max_timeouts -= 1
+                            pass # ignore timeout read
+                    else:
+                        return # bad fds or client error
 
-    def ack_stream_req(self, opaque):
-        body   = struct.pack("<QQ", 123456, 0)
-        header = struct.pack(REQ_PKT_FMT,
-                             RES_MAGIC_BYTE,
-                             CMD_STREAM_REQ,
-                             0, 0, 0, 0,
-                             len(body), opaque, 0)
-        self.client.s.send(header + body)
+        def ack_stream_req(self, opaque):
+            body   = struct.pack("<QQ", 123456, 0)
+            header = struct.pack(REQ_PKT_FMT,
+                                 RES_MAGIC_BYTE,
+                                 CMD_STREAM_REQ,
+                                 0, 0, 0, 0,
+                                 len(body), opaque, 0)
+            self.client.s.send(header + body)
 
 class UprStream(object):
     """ UprStream class manages the responses received from producers
        during active stream requests """
 
-    def __init__(self, op):
+    def __init__(self, op, response):
+
         self.op = op
+        self.opcode = op.opcode
         self.vbucket = op.vbucket
         self.last_by_seqno = 0
+
+        self.failover_log = response.get('failover_log')
+        self.err_msg = response.get('err_msg')
+        self.status = response.get('status')
+        self.rollback = response.get('rollback')
+        self.rollback_seqno = response.get('seqno')
+
         self._ended = False
+        if self.status != 0:
+            self._ended = True
 
     @property
     def ended(self):
         return self._ended
 
-    def has_message(self):
+    def has_response(self):
         """ true if END has not been received or timeout waiting for items in recv q """
         return not self._ended
 
-    def next_message(self):
+    def next_response(self, timeout = 5):
         """ Fetch next message from op queue. verify that mutations
             are recieved in expected order.
             Deactivate if end_stream command received """
 
         msg = None
 
-        if self.has_message():
+        if self.has_response():
 
             try:
-                msg = self.op.queue.get(timeout=15)
+                msg = self.op.queue.get(timeout = timeout)
             except Queue.Empty:
-                err_msg = "Timeout receiving msg from stream. last_by_seqno = %s, end_seqno = %s" %\
-                                (self.last_by_seqno, self.op.end_seqno)
-                self._ended = True
-                raise Exception(err_msg)
+                return None
 
             # mutation response verification
-            if msg['opcode'] == CMD_MUTATION:
+            if msg['opcode'] in (CMD_MUTATION, CMD_DELETION):
+
                 assert 'by_seqno' in msg,\
                      "ERROR: vbucket(%s) received mutation without seqno: %s"\
                          % (self.vbucket, msg)
@@ -222,6 +273,18 @@ class UprStream(object):
                 self._ended = True
 
         return msg
+
+    def run(self, end=None):
+        mutations = []
+        while self.has_response():
+            response = self.next_response()
+            if response is None:
+                break
+            mutations.append(response)
+            if end and self.last_by_seqno >= end:
+                break
+
+        return mutations
 
 class Operation(object):
     """ Operation Class generically represents any upr operation providing
@@ -266,6 +329,19 @@ class OpenNotifier(Open):
     def __init__(self, name):
         Open.__init__(self, name, FLAG_OPEN_NOTIFIER)
 
+class CloseStream(Operation):
+    """ CloseStream spec """
+
+    def __init__(self, vbucket, takeover = 0):
+        opcode = CMD_CLOSE_STREAM
+        Operation.__init__(self, opcode,
+                           vbucket = vbucket)
+
+    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+        response = { 'opcode'        : opcode,
+                     'status'        : status,
+                     'value'         : body}
+        return response
 
 class AddStream(Operation):
     """ AddStream spec """
@@ -285,12 +361,16 @@ class AddStream(Operation):
         return response
 
 
-
 class StreamRequest(Operation):
     """ StreamRequest spec """
 
-    def __init__(self, vbucket, start_seqno, end_seqno,
-                 vb_uuid, snap_start = 0, snap_end = 0, takeover = 0):
+    def __init__(self, vbucket, takeover, start_seqno, end_seqno,
+                 vb_uuid, snap_start = None, snap_end = None):
+
+        if snap_start is None:
+            snap_start = start_seqno
+        if snap_end is None:
+            snap_end = start_seqno
 
         opcode = CMD_STREAM_REQ
         extras = struct.pack(">IIQQQQQ", takeover, 0,
@@ -315,7 +395,9 @@ class StreamRequest(Operation):
         if opcode == CMD_STREAM_REQ:
 
             response = { 'opcode' : opcode,
-                         'status' : status }
+                         'status' : status,
+                         'failover_log' : [],
+                         'err_msg'   : None}
 
             if status == 0:
                 assert (len(body) % 16) == 0
@@ -327,6 +409,12 @@ class StreamRequest(Operation):
                     vb_uuid, seqno = struct.unpack(">QQ", body[pos:pos+16])
                     response['failover_log'].append((vb_uuid, seqno))
                     pos += 16
+            elif status == 35:
+
+                seqno = struct.unpack(">II",body)
+                response['seqno'] = seqno[0]
+                response['rollback'] = seqno[1]
+
             else:
                 response['err_msg'] = body
 
@@ -363,8 +451,21 @@ class StreamRequest(Operation):
                          'key'        : key }
 
         elif opcode == CMD_SNAPSHOT_MARKER:
+
+            assert len(body) == 20
+            snap_start, snap_end, flag =\
+                struct.unpack(">QQI", body)
+            assert flag in (0,1) , "Invalid snapshot flag: %s" % flag
+            assert snap_start <= snap_end, "Snapshot start: %s > end: %s" %\
+                                                (snap_start, snap_end)
+            flag = ('memory','disk')[flag]
+
             response = { 'opcode'     : opcode,
-                         'vbucket'    : status }
+                         'vbucket'    : status,
+                         'snap_start_seqno' : snap_start,
+                         'snap_end_seqno'   : snap_end,
+                         'flag'   : flag }
+
         else:
             response = { 'err_msg' : "(Stream Request) Unknown response",
                          'opcode'  :  opcode,
@@ -372,6 +473,31 @@ class StreamRequest(Operation):
 
         return response
 
+class GetFailoverLog(Operation):
+    """ GetFailoverLog spec """
+
+    def __init__(self, vbucket):
+        opcode = CMD_GET_FAILOVER_LOG
+        Operation.__init__(self, opcode,
+                           vbucket = vbucket)
+
+    def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
+
+        failover_log = []
+
+        if status == 0:
+            assert len(body) % 16 == 0
+            pos = 0
+            bodylen = len(body)
+            while bodylen > pos:
+                vb_uuid, seqno = struct.unpack(">QQ", body[pos:pos+16])
+                failover_log.append((vb_uuid, seqno))
+                pos += 16
+
+        response = { 'opcode'        : opcode,
+                     'status'        : status,
+                     'value'         : failover_log}
+        return response
 
 class FlowControl(Operation):
     """ FlowControl spec """
