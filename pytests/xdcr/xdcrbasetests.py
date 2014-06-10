@@ -1278,7 +1278,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         except TimeoutError:
             for task in tasks:
                 task.cancel()
-            self.log.warning("Flusher queue was not emptied in {} seconds!".format(timeout))
+            self.log.warning("Flusher queue was not emptied in {0} seconds!".format(timeout))
             return False
 
     def _verify_data_all_buckets(self, server, kv_store=1, timeout=None, max_verify=None, only_store_hash=True, batch_size=1000):
@@ -1366,7 +1366,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             timeout *= 2
 
         # Wait for ep_queue_size on source to become 0
-        self.log.info("and Verify xdcr replication stats at Source Cluster : {0}".format(self.src_master.ip))
+        self.log.info("Verify xdcr replication stats at Source Cluster : {0}".format(self.src_master.ip))
         self._wait_flusher_empty(src_nodes)
 
         # Wait for ep_queue_size on dest to become 0
