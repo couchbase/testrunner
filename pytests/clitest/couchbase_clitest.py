@@ -450,12 +450,10 @@ class CouchbaseCliTest(CliBaseTest):
 
         cli_command = "recovery"
         for num in xrange(nodes_failover):
-            #negative case will try recovery when nodes failovered
+            # try to set recovery when nodes failovered (MB-11230)
             options = "--server-recovery={0}:8091 --recovery-type=delta".format(self.servers[nodes_add - nodes_rem - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual("ERROR: unable to setRecoveryType for node ns_1@{0} (400) Bad Request".format(self.servers[nodes_add - nodes_rem - num].ip), output[0])
-            self.assertEqual("{u'otpNode': u\"invalid node name or node can't be used for delta recovery\"}", output[1])
-
+            self.assertEqual("SUCCESS: setRecoveryType for node ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip), output[0])
 
         for num in xrange(nodes_recovery):
             cli_command = "server-readd"
@@ -570,7 +568,7 @@ class CouchbaseCliTest(CliBaseTest):
             options += ("--node-init-data-path={0} ".format(data_path), "")[data_path is None]
             options += ("--node-init-index-path={0} ".format(index_path), "")[index_path is None]
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.sleep(7)  #time needed to reload couchbase
+            self.sleep(7)  # time needed to reload couchbase
             self.assertEqual(output[0], "SUCCESS: init localhost")
             rest.init_cluster()
             server_info = self._get_cluster_info(remote_client, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
@@ -638,7 +636,7 @@ class CouchbaseCliTest(CliBaseTest):
                 options = "{0}-username={1} {2}-password={3} {4}-port={5}".\
                     format(param_prefix, cluster_init_username, param_prefix, cluster_init_password, param_prefix, cluster_init_port)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=(cluster_init_username + "1"), password=cluster_init_password + "1")
-            self.sleep(7)  #time needed to reload couchbase
+            self.sleep(7)  # time needed to reload couchbase
             """ work around bug MB-10927 and remove these codes when it is fixed.  Rerun with new credential setup.
                 If no error throw out, rewrite the output """
             if "Connection refused" in output[0]:
@@ -702,7 +700,7 @@ class CouchbaseCliTest(CliBaseTest):
                 options += "--cluster-init-ramsize={0} ".format(cluster_init_ramsize)
 
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=None, password=None)
-            self.sleep(7)  #time needed to reload couchbase
+            self.sleep(7)  # time needed to reload couchbase
             self.assertEqual(output, [u'ERROR: Both username and password are required.'] or output == [u'The password must be at least six characters.'])
             remote_client.disconnect()
         finally:
@@ -838,7 +836,7 @@ class CouchbaseCliTest(CliBaseTest):
 
         remote_client.disconnect()
 
-    #MB-8566
+    # MB-8566
     def testSettingCompacttion(self):
         '''setting-compacttion OPTIONS:
         --compaction-db-percentage=PERCENTAGE     at which point database compaction is triggered
@@ -878,60 +876,60 @@ class CouchbaseCliTest(CliBaseTest):
         cluster_status = rest.cluster_status()
         remote_client.disconnect()
 
-#tests for the group-manage option. group creation, renaming and deletion are tested . These tests require a cluster of four or more nodes.
+# tests for the group-manage option. group creation, renaming and deletion are tested . These tests require a cluster of four or more nodes.
     def testCreateRenameDeleteGroup(self):
         remote_client = RemoteMachineShellConnection(self.master)
         cli_command = "group-manage"
 
-#create group
+# create group
         options = " --create --group-name=group2"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
         self.assertEqual(output, ["SUCCESS: group created group2"])
-#create existing group. operation should fail
+# create existing group. operation should fail
         options = " --create --group-name=group2"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
         self.assertEqual(output[0], "ERROR: unable to create group group2 (400) Bad Request")
         self.assertEqual(output[1], "{u'name': u'already exists'}")
-#rename group test
+# rename group test
         options = " --rename=group3 --group-name=group2"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
         self.assertEqual(output, ["SUCCESS: group renamed group2"])
-#delete group test
+# delete group test
         options = " --delete --group-name=group3"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
         self.assertEqual(output, ["SUCCESS: group deleted group3"])
-#delete non-empty group test
+# delete non-empty group test
         options = " --delete --group-name=\"Group 1\""
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
         self.assertEqual(output[0], "ERROR: unable to delete group Group 1 (400) Bad Request")
         self.assertEqual(output[1], "{u'_': u'group is not empty'}")
-#delete non-existing group
+# delete non-existing group
         options = " --delete --group-name=groupn"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
         self.assertEqual(output, ["ERROR: invalid group name:groupn"])
         remote_client.disconnect()
 
-#tests for the group-manage option. adding and moving servers between groups are tested. These tests require a cluster of four or more nodes.
+# tests for the group-manage option. adding and moving servers between groups are tested. These tests require a cluster of four or more nodes.
     def testAddMoveServerListGroup(self):
         nodes_add = self.input.param("nodes_add", 1)
         remote_client = RemoteMachineShellConnection(self.master)
         cli_command = "group-manage"
-#create a group to use in this testcase
+# create a group to use in this testcase
         options = " --create --group-name=group2"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
         self.assertEqual(output, ["SUCCESS: group created group2"])
-#add multiple servers to group
+# add multiple servers to group
         for num in xrange(nodes_add):
             options = "--add-servers=\"{0}:8091;{1}:8091\" --group-name=group2 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip, self.servers[num + 2].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="{0}:8091".format(self.servers[num].ip), user="Administrator", password="password")
             self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'group2'".format(self.servers[num + 1].ip))
             self.assertEqual(output[1], "SUCCESS: add server '{0}:8091' to group 'group2'".format(self.servers[num + 2].ip))
-#add single server to group
+# add single server to group
         for num in xrange(nodes_add):
             options = "--add-servers={0}:8091 --group-name=group2 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 3].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'group2'".format(self.servers[num + 3].ip)])
-#list servers in group
+# list servers in group
         for num in xrange(nodes_add):
             options = " --list --group-name=group2"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
@@ -939,24 +937,24 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertEqual(output[1], " server: {0}:8091".format(self.servers[num + 1].ip))
             self.assertEqual(output[2], " server: {0}:8091".format(self.servers[num + 2].ip))
             self.assertEqual(output[3], " server: {0}:8091".format(self.servers[num + 3].ip))
-#test move multiple servers
+# test move multiple servers
         for num in xrange(nodes_add):
             options = "--from-group=group2 --to-group=\"Group 1\" --move-servers=\"{0}:8091;{1}:8091;{2}:8091\"".format(self.servers[num + 1].ip, self.servers[num + 2].ip, self.servers[num + 3].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output, ["SUCCESS: move servers from group 'group2' to group 'Group 1'"])
-#clean up by deleting group
+# clean up by deleting group
         options = " --delete --group-name=group2"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
         self.assertEqual(output, ["SUCCESS: group deleted group2"])
 
-#tests for the server-add option with group manage rider.  These tests require a cluster of four or more nodes.
+# tests for the server-add option with group manage rider.  These tests require a cluster of four or more nodes.
 
     def testServerAddRebalancewithGroupManage(self):
         nodes_add = self.input.param("nodes_add", 1)
         remote_client = RemoteMachineShellConnection(self.master)
 
 
-#test server-add command with group manage option
+# test server-add command with group manage option
         cli_command = "server-add"
         for num in xrange(nodes_add):
             options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password --group-name=\"Group 1\"".format(self.servers[num + 1].ip)
@@ -964,7 +962,7 @@ class CouchbaseCliTest(CliBaseTest):
             self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'Group 1'".format(self.servers[num + 1].ip)])
 
 
-#test rebalance command with add server and group manage option
+# test rebalance command with add server and group manage option
         cli_command = "rebalance"
         for num in xrange(nodes_add):
             options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password --group-name=\"Group 1\"".format(self.servers[num + 2].ip)
@@ -1061,13 +1059,13 @@ class XdcrCLITest(CliBaseTest):
                 output_error = output_error.replace("HOSTNAME", (self.servers[xdcr_hostname].ip, "")[xdcr_hostname is None])
             self.assertEqual(output, eval(output_error))
             return
-        #MB-8570 can't edit xdcr-setup through couchbase-cli
+        # MB-8570 can't edit xdcr-setup through couchbase-cli
         if xdcr_cluster_name:
             options = options.replace("--create ", "--edit ")
             output, _ = self.__execute_cli(cli_command=cli_command, options=options)
             self.assertEqual(XdcrCLITest.XDCR_SETUP_SUCCESS["edit"].replace("CLUSTERNAME", (xdcr_cluster_name, "")[xdcr_cluster_name is None]), output[0])
         if not xdcr_cluster_name:
-            #MB-8573 couchbase-cli: quotes are not supported when try to remove remote xdcr cluster that has white spaces in the name
+            # MB-8573 couchbase-cli: quotes are not supported when try to remove remote xdcr cluster that has white spaces in the name
             options = "--delete --xdcr-cluster-name=\'{0}\'".format("remote cluster")
         else:
             options = "--delete --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name)
