@@ -24,10 +24,14 @@ class ObserveTests(BaseTestCase):
         self.access_log = self.input.param("access_log", False)
         self.servs_in = [self.servers[i + 1] for i in range(self.nodes_in)]
         self.mutate_by = self.input.param("mutate_by", "set")
-        self.log.info("Observe Rebalance Started")
-        self.cluster.rebalance(self.servers[:1], self.servs_in, [])
         self.nodes_init = self.input.param("nodes_init", 2)
         self.without_access_log = self.input.param("without_access_log", False)
+        try:
+            self.log.info("Observe Rebalance Started")
+            self.cluster.rebalance(self.servers[:1], self.servs_in, [])
+        except Exception, e:
+            self.tearDown()
+            self.fail(e)
 
     def tearDown(self):
         super(ObserveTests, self).tearDown()
