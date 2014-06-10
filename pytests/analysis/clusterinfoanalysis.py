@@ -23,9 +23,9 @@ class DataAnalysisTests(BaseTestCase):
         self.log.info("==============  DataAnalysisTests setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
     def tearDown(self):
-        if self.enable_flow_control and self.verify_max_unacked_bytes:
+        if self.enable_flow_control and self.verify_unacked_bytes:
             servers  = self.get_nodes_in_cluster()
-            self.wait_for_max_unacked_bytes_all_buckets(servers = servers, timeout = 60)
+            self.verify_unacked_bytes_all_buckets(servers = servers)
         super(DataAnalysisTests, self).tearDown()
 
     def test_data_distribution(self):

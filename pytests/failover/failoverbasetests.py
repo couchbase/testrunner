@@ -51,9 +51,9 @@ class FailoverBaseTest(BaseTestCase):
 
     @staticmethod
     def tearDown(self):
-        if self.enable_flow_control and self.verify_max_unacked_bytes:
+        if self.enable_flow_control and self.verify_unacked_bytes:
             servers  = self.get_nodes_in_cluster()
-            self.wait_for_max_unacked_bytes_all_buckets(servers = servers, timeout = 60)
+            self.verify_unacked_bytes_all_buckets(servers = servers)
         if hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures) > 0 \
                     and 'stop-on-failure' in TestInputSingleton.input.test_params and \
                     str(TestInputSingleton.input.test_params['stop-on-failure']).lower() == 'true':

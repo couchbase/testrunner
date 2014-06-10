@@ -61,7 +61,7 @@ class BaseTestCase(unittest.TestCase):
             self.standard_buckets = self.input.param("standard_buckets", 0)
             self.sasl_buckets = self.input.param("sasl_buckets", 0)
             self.num_buckets = self.input.param("num_buckets", 0)
-            self.verify_max_unacked_bytes = self.input.param("verify_max_unacked_bytes", False)
+            self.verify_unacked_bytes = self.input.param("verify_unacked_bytes", False)
             self.memcached_buckets = self.input.param("memcached_buckets", 0)
             self.enable_flow_control = self.input.param("enable_flow_control", False)
             self.total_buckets = self.sasl_buckets + self.default_bucket + self.standard_buckets + self.memcached_buckets
@@ -524,25 +524,15 @@ class BaseTestCase(unittest.TestCase):
 
     """Waits for max_unacked_bytes = 0 on all servers and buckets in a cluster.
 
-    A utility function that waits upr flow with max_unacked_bytes = 0
+    A utility function that waits upr flow with unacked_bytes = 0
 
     Args:
-        servers - A list of all of the servers in the cluster. ([TestInputServer])
-        max_unacked_bytes - expected ep_queue_size (int)
-        max_unacked_bytes - condition for comparing (str)
-        timeout - Waiting the end of the thread. (str)
+        servers - A list of all of the servers in the cluster.
     """
-    def wait_for_max_unacked_bytes_all_buckets(self, servers, max_unacked_bytes=0, \
-                                     max_unacked_bytes_cond='==', timeout=360):
-        tasks = []
-        for server in servers:
-            for bucket in self.buckets:
-                if bucket.type == 'memcached':
-                    continue
-                tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
-                                   'ep_upr_max_unacked_bytes', max_unacked_bytes_cond, max_unacked_bytes))
-        for task in tasks:
-            task.result(timeout)
+    def verify_unacked_bytes_all_buckets(self, servers):
+        map =  self.data_collector.collect_compare_upr_stats(self.buckets,servers)
+        for bucket in map.keys():
+            self.assertTrue(map[bucket]," the bucket{0} has unacked bytes != 0".format(bucket))
 
     """Verifies data on all of the nodes in a cluster.
 

@@ -28,7 +28,7 @@ class RebalanceBaseTest(BaseTestCase):
             self._load_doc_data_all_buckets()
 
     def tearDown(self):
-        if self.enable_flow_control and self.verify_max_unacked_bytes:
+        if self.enable_flow_control and self.verify_unacked_bytes:
             servers  = self.get_nodes_in_cluster()
-            self.wait_for_max_unacked_bytes_all_buckets(servers = servers, timeout = 60)
+            self.verify_unacked_bytes_all_buckets(servers = servers)
         super(RebalanceBaseTest, self).tearDown()

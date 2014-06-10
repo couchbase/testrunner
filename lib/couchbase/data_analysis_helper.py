@@ -532,7 +532,42 @@ class DataCollector(object):
                 else:
                     dataMap.update(map_data)
             bucketMap[bucket.name] = dataMap
-            return bucketMap
+        return bucketMap
+
+    def collect_compare_upr_stats(self,buckets,servers,perNode = True, stat_name = 'unacked_bytes', compare_value = 0):
+        """
+            Method to extract the failovers stats given by cbstats tool
+
+            Paramters:
+
+            buckets: bucket informaiton
+            servers: server information
+            stat_name: stat we are searching to compare
+            compare_value: the comparison value to be satisfied
+
+            Returns:
+
+            map of bucket informing if stat matching was satisfied/not satisfied
+
+            example:: unacked_bytes in upr
+        """
+        bucketMap = {}
+        for bucket in buckets:
+            bucketMap[bucket.name] = True
+        for bucket in buckets:
+            dataMap = {}
+            for server in servers:
+                rest = RestConnection(server)
+                port = rest.get_memcached_port()
+                client = MemcachedClient(host=server.ip, port=port)
+                stats = client.stats('upr')
+                map_data = {}
+                for key in stats.keys():
+                    if stat_name in key:
+                        value = int(stats[key])
+                        if value != compare_value:
+                            bucketMap[bucket] = False
+        return bucketMap
 
     def createMapVbucket(self,details,map_data):
         """ Helper method for vbucket information data collection """
