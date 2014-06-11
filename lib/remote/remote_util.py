@@ -380,7 +380,7 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             if self.file_exists(testconstants.WIN_CB_PATH, testconstants.VERSION_FILE):
-                #print running process on windows
+                # print running process on windows
                 RemoteMachineHelper(self).is_process_running('memcached')
                 RemoteMachineHelper(self).is_process_running('erl')
                 return True
@@ -1024,11 +1024,13 @@ class RemoteMachineShellConnection:
         elif self.info.deliverable_type in ["zip"]:
             o, r = self.execute_command("ps aux | grep Archive | awk '{print $2}' | xargs kill -9")
             self.log_command_output(o, r)
-            self.sleep(60)
+            self.sleep(30)
             output, error = self.execute_command("cd ~/Downloads ; open couchbase-server*.zip")
             self.log_command_output(output, error)
-            self.sleep(60)
+            self.sleep(30)
             output, error = self.execute_command("mv ~/Downloads/couchbase-server*/Couchbase\ Server.app /Applications/")
+            self.log_command_output(output, error)
+            output, error = self.execute_command("xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app")
             self.log_command_output(output, error)
             output, error = self.execute_command("open /Applications/Couchbase\ Server.app")
             self.log_command_output(output, error)
@@ -1913,7 +1915,7 @@ class RemoteMachineShellConnection:
         self.start_couchbase()
 
     def execute_cluster_backup(self, login_info="Administrator:password", backup_location="/tmp/backup",
-                               command_options='', cluster_ip="", cluster_port="8091",delete_backup = True):
+                               command_options='', cluster_ip="", cluster_port="8091", delete_backup=True):
         backup_command = "%scbbackup" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         backup_file_location = backup_location
         # TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
