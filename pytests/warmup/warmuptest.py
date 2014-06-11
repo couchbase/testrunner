@@ -244,7 +244,7 @@ class WarmUpTests(BaseTestCase):
                 self._load_all_buckets(self.master, generate_load, "update", 0, 1, 0, True, batch_size=5000, pause_secs=5, timeout_secs=120)
         else:
             raise Exception("Warmup check failed. Warmup test failed in some node")
-
+        self.expire_pager(self.servers[:self.num_servers])
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self._verify_stats_all_buckets(self.servers[:self.num_servers])
 
