@@ -99,6 +99,8 @@ class FailoverTests(FailoverBaseTest):
             else:
                 self.run_rebalance_after_failover_and_verify(self.chosen, prev_vbucket_stats, record_static_data_set, prev_failover_stats)
 
+        self.verify_unacked_bytes_all_buckets()
+
     def run_rebalance_after_failover_and_verify(self, chosen, prev_vbucket_stats, record_static_data_set, prev_failover_stats):
         """ Method to run rebalance after failover and verify """
         # Need a delay > min because MB-7168

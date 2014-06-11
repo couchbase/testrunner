@@ -23,9 +23,6 @@ class DataAnalysisTests(BaseTestCase):
         self.log.info("==============  DataAnalysisTests setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
     def tearDown(self):
-        if self.enable_flow_control and self.verify_unacked_bytes:
-            servers  = self.get_nodes_in_cluster()
-            self.verify_unacked_bytes_all_buckets(servers = servers)
         super(DataAnalysisTests, self).tearDown()
 
     def test_data_distribution(self):
@@ -57,6 +54,7 @@ class DataAnalysisTests(BaseTestCase):
         self._wait_for_stats_all_buckets(self.servers)
         self.sleep(60)
         self.data_analysis_all()
+        self.verify_unacked_bytes_all_buckets()
 
     def test_data_analysis_active_replica_comparison_all(self):
         """

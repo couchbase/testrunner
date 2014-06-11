@@ -49,6 +49,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, result_nodes, self.buckets, perNode=False)
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, result_nodes, self.buckets, path=None)
         self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes out and in of the cluster while doing mutations with max
     number of buckets in the cluster.
@@ -87,6 +88,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], [])
             self.verify_cluster_stats(self.servers[:self.num_servers])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes in/out at once while doing mutations with max
     number of buckets in the cluster.
@@ -126,6 +128,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self._async_load_all_buckets(self.master, gen, "update", 0)
         rebalance.result()
         self.verify_cluster_stats(result_nodes)
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes out and in of the cluster while doing mutations.
 
@@ -155,6 +158,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             for task in tasks:
                 task.result(self.wait_timeout * 20)
             self.verify_cluster_stats(self.servers[:self.num_servers])
+        self.verify_unacked_bytes_all_buckets()
 
     """Start-stop rebalance in/out with adding/removing aditional after stopping rebalance.
 
@@ -206,6 +210,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
                 self.log.info("rebalance is still required")
                 self._wait_for_stats_all_buckets(servs_init)
                 self._verify_all_buckets(self.master, timeout=None, max_verify=self.max_verify, batch_size=1)
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes in and out of the cluster while doing mutations.
 
@@ -234,6 +239,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             for task in tasks:
                 task.result()
             self.verify_cluster_stats(self.servers[:init_num_nodes])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes into and out of the cluster while doing mutations and
     deletions.
@@ -293,6 +299,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
                 task.result(min(self.wait_timeout * 30, 36000))
             self._load_all_buckets(self.master, gen_expire, "create", 0)
             self.verify_cluster_stats(self.servers[:self.num_servers])
+        self.verify_unacked_bytes_all_buckets()
 
     """PERFORMANCE:Rebalance in/out at once.
 
@@ -314,6 +321,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         result_nodes = set(servs_init + servs_in) - set(servs_out)
         self.cluster.rebalance(servs_init[:self.nodes_init], servs_in, servs_out)
         self.verify_cluster_stats(result_nodes)
+        self.verify_unacked_bytes_all_buckets()
 
     """PERFORMANCE:Rebalance in/out at once with stopped persistence.
 
@@ -363,6 +371,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         for bucket in self.buckets:
             verified &= RebalanceHelper.wait_till_total_numbers_match(self.master, bucket)
         self.assertTrue(verified, "Lost items!!! Replication was completed but sum(curr_items) don't match the curr_items_total")
+        self.verify_unacked_bytes_all_buckets()
 
 
     """PERFORMANCE:Test to measure time to index doc during rebalance
@@ -458,3 +467,4 @@ class RebalanceInOutTests(RebalanceBaseTest):
         rebalance.result()
 
         self.verify_cluster_stats(result_nodes)
+        self.verify_unacked_bytes_all_buckets()

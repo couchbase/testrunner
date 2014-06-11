@@ -525,14 +525,13 @@ class BaseTestCase(unittest.TestCase):
     """Waits for max_unacked_bytes = 0 on all servers and buckets in a cluster.
 
     A utility function that waits upr flow with unacked_bytes = 0
-
-    Args:
-        servers - A list of all of the servers in the cluster.
     """
-    def verify_unacked_bytes_all_buckets(self, servers):
-        map =  self.data_collector.collect_compare_upr_stats(self.buckets,servers)
-        for bucket in map.keys():
-            self.assertTrue(map[bucket]," the bucket{0} has unacked bytes != 0".format(bucket))
+    def verify_unacked_bytes_all_buckets(self):
+        if self.enable_flow_control and self.verify_unacked_bytes:
+            servers  = self.get_nodes_in_cluster()
+            map =  self.data_collector.collect_compare_upr_stats(self.buckets,servers)
+            for bucket in map.keys():
+                self.assertTrue(map[bucket]," the bucket {0} has unacked bytes != 0".format(bucket))
 
     """Verifies data on all of the nodes in a cluster.
 

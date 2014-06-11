@@ -56,6 +56,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, self.servers[:self.num_servers - self.nodes_out], self.buckets, perNode=False)
         self.data_analysis_all(record_data_set, self.servers[:self.num_servers - self.nodes_out], self.buckets)
         self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes out of a cluster while doing docs ops:create, delete, update.
 
@@ -83,6 +84,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         for task in tasks:
             task.result()
         self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes from a cluster during getting random keys.
 
@@ -135,6 +137,7 @@ class RebalanceOutTests(RebalanceBaseTest):
 
         rebalance.result()
         self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes out of a cluster while doing docs' ops.
 
@@ -175,6 +178,7 @@ class RebalanceOutTests(RebalanceBaseTest):
                     task.cancel()
                 raise ex
             self.verify_cluster_stats(self.servers[:i])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes out of a cluster during view queries.
 
@@ -240,6 +244,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         for bucket in self.buckets:
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
         self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes out of a cluster during view queries incrementally.
 
@@ -293,6 +298,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             rebalance.result()
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
             self.verify_cluster_stats(self.servers[:i])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes into a cluster when one node is warming up.
 
@@ -328,6 +334,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers, [], servs_out)
             rebalance.result()
         self.verify_cluster_stats(self.servers[:len(self.servers) - self.nodes_out])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes out of cluster  during ddoc compaction.
 
@@ -414,6 +421,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         self.assertTrue(result)
         rebalance.result()
         self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes out of a cluster while doing mutations and deletions.
 
@@ -440,6 +448,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             self.sleep(5)
             self._load_all_buckets(self.master, gen_2, "create", 0)
             self.verify_cluster_stats(self.servers[:i])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes out of a cluster while doing mutations and expirations.
 
@@ -465,3 +474,4 @@ class RebalanceOutTests(RebalanceBaseTest):
             self.sleep(5)
             self._load_all_buckets(self.master, gen_2, "create", 0)
             self.verify_cluster_stats(self.servers[:i])
+        self.verify_unacked_bytes_all_buckets()

@@ -48,6 +48,7 @@ class RebalanceInTests(RebalanceBaseTest):
         new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, self.servers[:self.nodes_in + self.nodes_init], self.buckets)
         self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, self.servers[:self.nodes_in + self.nodes_init], self.buckets, path=None)
+        self.verify_unacked_bytes_all_buckets()
 
 
     """Rebalances nodes into a cluster while doing docs ops:create, delete, update.
@@ -77,6 +78,7 @@ class RebalanceInTests(RebalanceBaseTest):
         for task in tasks:
             task.result()
         self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
+        self.verify_unacked_bytes_all_buckets()
 
     def rebalance_in_with_ops_batch(self):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=(self.num_items / 2 - 1), end=self.num_items)
@@ -96,6 +98,7 @@ class RebalanceInTests(RebalanceBaseTest):
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + 1])
         self._verify_all_buckets(self.master, 1, 1000, None, only_store_hash=True, batch_size=5000)
         self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes into a cluster during getting random keys.
 
@@ -147,6 +150,7 @@ class RebalanceInTests(RebalanceBaseTest):
               t.start()
         [t.join() for t in list_threads]
         self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
+        self.verify_unacked_bytes_all_buckets()
 
 
     """Rebalances nodes into a cluster while doing mutations.
@@ -179,6 +183,7 @@ class RebalanceInTests(RebalanceBaseTest):
             for task in tasks:
                 task.result()
             self.verify_cluster_stats(self.servers[:i + 2])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes into a cluster  during view queries.
 
@@ -263,6 +268,7 @@ class RebalanceInTests(RebalanceBaseTest):
                 rebalance = self.cluster.async_rebalance(self.servers, [], servs_in)
                 rebalance.result()
                 self.sleep(self.wait_timeout)
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes into a cluster incremental during view queries.
 
@@ -315,6 +321,7 @@ class RebalanceInTests(RebalanceBaseTest):
             rebalance.result()
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
             self.verify_cluster_stats(self.servers[:i + 2])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes into a cluster when one node is warming up.
 
@@ -348,6 +355,7 @@ class RebalanceInTests(RebalanceBaseTest):
             rebalance = self.cluster.async_rebalance(servs_init + servs_in, [], [])
             rebalance.result()
         self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
+        self.verify_unacked_bytes_all_buckets()
 
 
     """Rebalances nodes into a cluster during ddoc compaction.
@@ -418,6 +426,7 @@ class RebalanceInTests(RebalanceBaseTest):
         self.assertTrue(result)
         rebalance.result()
         self.verify_cluster_stats(self.servers[:self.nodes_in + 1])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes into a cluster while doing mutations and deletions.
 
@@ -439,6 +448,7 @@ class RebalanceInTests(RebalanceBaseTest):
             rebalance.result()
             self._load_all_buckets(self.master, gen_delete, "create", 0)
             self.verify_cluster_stats(self.servers[:i + 1])
+        self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes into a cluster while doing mutations and expirations.
 
@@ -460,6 +470,7 @@ class RebalanceInTests(RebalanceBaseTest):
             rebalance.result()
             self._load_all_buckets(self.master, gen_2, "create", 0)
             self.verify_cluster_stats(self.servers[:i + 1])
+        self.verify_unacked_bytes_all_buckets()
 
     '''
     test rebalances nodes_in nodes ,
@@ -484,6 +495,7 @@ class RebalanceInTests(RebalanceBaseTest):
         rest.change_bucket_props(bucket_to_change, saslPassword=new_pass)
         rebalance = self.cluster.async_rebalance(servs_result, servs_in_second, [])
         rebalance.result()
+        self.verify_unacked_bytes_all_buckets()
 
     '''
     test changes password of cluster during rebalance.
@@ -501,6 +513,7 @@ class RebalanceInTests(RebalanceBaseTest):
         try:
             rebalance.result()
             self.log.exception("rebalance should be failed when password is changing")
+            self.verify_unacked_bytes_all_buckets()
         except Exception as ex:
             self.sleep(10, "wait for rebalance failed")
             rest = RestConnection(self.master)
