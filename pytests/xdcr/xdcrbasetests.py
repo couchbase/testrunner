@@ -889,7 +889,7 @@ class XDCRBaseTest(unittest.TestCase):
                 self._load_all_buckets(self.src_master, self.gen_update, "update", self._expires)
             if "delete" in self._doc_ops:
                 self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
-            self._wait_flusher_empty(self.src_nodes)
+            self._wait_flusher_empty(self.src_master, self.src_nodes)
             if self._wait_for_expiration and self._expires:
                 self.sleep(self._expires, "Waiting for expiration of updated items")
 
@@ -1261,10 +1261,11 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", val, bucket)
             self.log.info("wait for expiry pager to run on all these nodes")
 
-    def _wait_flusher_empty(self, servers, timeout=120):
+    def _wait_flusher_empty(self, master, servers, timeout=120):
         try:
             tasks = []
-            buckets = self._get_cluster_buckets(servers[0])
+            buckets = self._get_cluster_buckets(master)
+            self.assertTrue(buckets, "No buckets recieved from the server {0} for verification".format(master.ip))
             for server in servers:
                 for bucket in buckets:
                     tasks.append(self.cluster.async_wait_for_stats([server], bucket, '', 'ep_queue_size', '==', 0))
@@ -1286,6 +1287,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             try:
                 tasks = []
                 buckets = self._get_cluster_buckets(server)
+                self.assertTrue(buckets, "No buckets recieved from the server {0} for verification".format(server.ip))
                 for bucket in buckets:
                     tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size, timeout_sec=60))
                 for task in tasks:
@@ -1302,10 +1304,11 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 "Verification process not completed after waiting for {0} seconds. Please check logs".format(
                     self._poll_timeout))
 
-    def _verify_item_count(self, servers, timeout=120):
+    def _verify_item_count(self, master, servers, timeout=120):
         try:
             stats_tasks = []
-            buckets = self._get_cluster_buckets(servers[0])
+            buckets = self._get_cluster_buckets(master)
+            self.assertTrue(buckets, "No buckets recieved from the server {0} for verification".format(master.ip))
             for bucket in buckets:
                 items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
                 stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
@@ -1367,22 +1370,22 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
         # Wait for ep_queue_size on source to become 0
         self.log.info("Verify xdcr replication stats at Source Cluster : {0}".format(self.src_master.ip))
-        self._wait_flusher_empty(src_nodes)
+        self._wait_flusher_empty(self.src_master, src_nodes)
 
         # Wait for ep_queue_size on dest to become 0
         self.log.info("Verify xdcr replication stats at Destination Cluster : {0}".format(self.dest_master.ip))
-        self._wait_flusher_empty(dest_nodes)
+        self._wait_flusher_empty(self.dest_master, dest_nodes)
 
         mutations_replicated = True
         data_verified = False
         try:
             # Source validations
             mutations_replicated &= self.__wait_for_outbound_mutations_zero(self.dest_master)
-            self._verify_item_count(src_nodes, timeout=timeout)
+            self._verify_item_count(self.src_master, src_nodes, timeout=timeout)
             self._verify_data_all_buckets(self.src_master, max_verify=self.max_verify)
             # Dest validations
             mutations_replicated &= self.__wait_for_outbound_mutations_zero(self.src_master)
-            self._verify_item_count(dest_nodes, timeout=timeout)
+            self._verify_item_count(self.dest_master, dest_nodes, timeout=timeout)
             self._verify_data_all_buckets(self.dest_master, max_verify=self.max_verify)
             data_verified = True
         finally:
