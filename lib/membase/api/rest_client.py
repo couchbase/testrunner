@@ -461,9 +461,9 @@ class RestConnection(object):
     def query_view(self, design_doc_name, view_name, bucket, query, timeout=120, invalid_query=False, type="view"):
         status, content, header = self._query(design_doc_name, view_name, bucket, type, query, timeout)
         if not status and not invalid_query:
-            stat = ''
+            stat = 0
             if 'status' in header:
-                stat = header['status']
+                stat = int(header['status'])
             raise QueryViewException(view_name, content, status=stat)
         return json.loads(content)
 
