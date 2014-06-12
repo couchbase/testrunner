@@ -269,11 +269,21 @@ class IBRTests(BackupBaseTest):
             raise Exception('Backup Directory Verification Failed for Differential Backup')
 
     def testIncrementalBackup(self):
-        # Update data
-        gen_update = BlobGenerator('testdata', 'testdata-', self.value_size, end=5)
-        self._load_all_buckets(self.master, gen_update, "update", 0, 1, self.item_flag, True, batch_size=20000,
-                               pause_secs=5, timeout_secs=180)
-        self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+        gen_extra = BlobGenerator('testdata', 'testdata-', self.value_size, end=self.num_mutate_items)
+        extra_items_deleted_flag = 0
+
+        if(self.doc_ops is not None):
+            self._load_all_buckets(self.master, gen_extra, "create", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+            if("update" in self.doc_ops):
+                self._load_all_buckets(self.master, gen_extra, "update", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+            if("delete" in self.doc_ops):
+                self._load_all_buckets(self.master, gen_extra, "delete", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                extra_items_deleted_flag = 1
+            if("expire" in self.doc_ops):
+                if extra_items_deleted_flag == 1:
+                    self._load_all_buckets(self.master, gen_extra, "create", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                self._load_all_buckets(self.master, gen_extra, "update", self.expire_time, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+
 
         #Take a incremental backup
         options = self.command_options + [' -m accu']
@@ -294,10 +304,23 @@ class IBRTests(BackupBaseTest):
 
 
     def testDifferentialBackup(self):
-        # Update data
-        gen_update = BlobGenerator('testdata', 'testdata-', self.value_size, end=5)
-        self._load_all_buckets(self.master, gen_update, "update", 0, 1, self.item_flag, True, batch_size=20000,
-                               pause_secs=5, timeout_secs=180)
+
+        gen_extra = BlobGenerator('testdata', 'testdata-', self.value_size, end=self.num_mutate_items)
+        extra_items_deleted_flag = 0
+
+        if(self.doc_ops is not None):
+            self._load_all_buckets(self.master, gen_extra, "create", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+            if("update" in self.doc_ops):
+                self._load_all_buckets(self.master, gen_extra, "update", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+            if("delete" in self.doc_ops):
+                self._load_all_buckets(self.master, gen_extra, "delete", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                extra_items_deleted_flag = 1
+            if("expire" in self.doc_ops):
+                if extra_items_deleted_flag == 1:
+                    self._load_all_buckets(self.master, gen_extra, "create", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+                self._load_all_buckets(self.master, gen_extra, "update", self.expire_time, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
+
+
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         #Take a diff backup
