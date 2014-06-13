@@ -90,10 +90,10 @@ class HostnameMgmtTests(HostnameBaseTests):
         if len(self.servers) < 2:
             self.fail("test require more than 1 node")
         hostnames = self.rename_nodes(self.servers[:self.nodes_in + self.nodes_init])
-        self.cluster.rebalance(self.servers[:self.nodes_init],
-                                                 self.servers[self.nodes_in + self.nodes_init], [])
-        self.verify_referenced_by_names(self.servers[:self.nodes_init], hostnames)
         self._set_hostames_to_servers_objs(hostnames)
+        self.cluster.rebalance(self.servers[:self.nodes_init],
+                               self.servers[self.nodes_init:self.nodes_in + self.nodes_init], [], use_hostnames=True)
+        self.verify_referenced_by_names(self.servers[:self.nodes_init], hostnames)
         warmup_node = self.servers[:self.nodes_in + self.nodes_init][-1]
         shell = RemoteMachineShellConnection(warmup_node)
         shell.stop_couchbase()
