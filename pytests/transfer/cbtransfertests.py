@@ -1,12 +1,10 @@
-from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH
 from transfer.transfer_base import TransferBaseTest
-from membase.api.rest_client import RestConnection, Bucket
-from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
 from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
 from mc_bin_client import MemcachedClient
 from memcached.helper.kvstore import KVStore
+from memcached.helper.data_helper import VBucketAwareMemcached
 import copy
-import json
 
 
 class CBTransferTests(TransferBaseTest):
@@ -31,7 +29,7 @@ class CBTransferTests(TransferBaseTest):
             self.cluster.load_gen_docs(self.server_origin, bucket.name, gen_load,
                                        self.buckets[0].kvs[2], "create", exp=0, flag=0, only_store_hash=True, batch_size=1000)
             self.cluster.load_gen_docs(self.server_origin, bucket.name, gen_load2,
-                                       self.buckets[0].kvs[1],"create", exp=0, flag=0, only_store_hash=True, batch_size=1000)
+                                       self.buckets[0].kvs[1], "create", exp=0, flag=0, only_store_hash=True, batch_size=1000)
         transfer_source = 'http://%s:%s' % (self.server_origin.ip, self.server_origin.port)
         transfer_destination = 'http://%s:%s' % (self.server_recovery.ip, self.server_recovery.port)
         self._run_cbtransfer_all_buckets(transfer_source, transfer_destination,
@@ -54,7 +52,7 @@ class CBTransferTests(TransferBaseTest):
     def test_vbucket_id_option(self):
         bucket = RestConnection(self.server_origin).get_bucket(self.buckets[0])
         self.num_items = self.num_items - (self.num_items % len(bucket.vbuckets))
-        num_items_per_vb = self.num_items/len(bucket.vbuckets)
+        num_items_per_vb = self.num_items / len(bucket.vbuckets)
         template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
         gen_load = DocumentGenerator('cbtransfer', template, range(5), ['james', 'john'], start=0, end=self.num_items)
         client = MemcachedClient(self.server_origin.ip,
@@ -79,9 +77,9 @@ class CBTransferTests(TransferBaseTest):
                                  int(bucket.vbuckets[0].master.split(':')[1]))
         for key, value in kv_value_dict.iteritems():
             _, _, d = client.get(key, vbucket=vb_id_to_check)
-            self.assertEquals(d, value, 'Key: %s expected. Value expected %s. Value actual %s' %(
+            self.assertEquals(d, value, 'Key: %s expected. Value expected %s. Value actual %s' % (
                                         key, value, d))
-           
+
     def test_vbucket_state_option(self):
         template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
         gen_load = DocumentGenerator('cbtransfer', template, range(5), ['james', 'john'], start=0, end=self.num_items)
@@ -104,11 +102,11 @@ class CBTransferTests(TransferBaseTest):
         template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
         gen_load = DocumentGenerator('cbtransfer', template, range(5), ['james', 'john'], start=0, end=self.num_items)
         gen_load2 = DocumentGenerator('cbtransfer', template, range(5), ['helena', 'karen'], start=0, end=self.num_items)
-        verify_gen = copy.deepcopy((gen_load2,gen_load)[dest_op == 'set'])
+        verify_gen = copy.deepcopy((gen_load2, gen_load)[dest_op == 'set'])
         self.cluster.load_gen_docs(self.server_origin, self.buckets[0].name, gen_load,
                                    self.buckets[0].kvs[1], "create", exp=0, flag=0, only_store_hash=True, batch_size=1000)
         self.cluster.load_gen_docs(self.server_recovery, self.buckets[0].name, gen_load2,
-                                   self.buckets[0].kvs[1],"create", exp=0, flag=0, only_store_hash=True, batch_size=1000)
+                                   self.buckets[0].kvs[1], "create", exp=0, flag=0, only_store_hash=True, batch_size=1000)
         transfer_source = 'http://%s:%s' % (self.server_origin.ip, self.server_origin.port)
         transfer_destination = 'http://%s:%s' % (self.server_recovery.ip, self.server_recovery.port)
         self.buckets = list(self.buckets[:1])
@@ -127,7 +125,7 @@ class CBTransferTests(TransferBaseTest):
                 key, value = gen.next()
                 try:
                     _, _, d = client.get(key)
-                    self.assertEquals(d, value, 'Key: %s expected. Value expected %s. Value actual %s' %(
+                    self.assertEquals(d, value, 'Key: %s expected. Value expected %s. Value actual %s' % (
                                             key, value, d))
                 except Exception, ex:
                     raise Exception('Key %s not found %s' % (key, str(ex)))
