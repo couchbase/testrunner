@@ -75,7 +75,7 @@ fi
 COUCHBASE_NUM_VBUCKETS=64 python ./cluster_run --nodes=$servers_count &> $wd/cluster_run.log &
 pid=$!
 popd
-python ./testrunner $conf -i $ini $test_params 2>&1 -p makefile=True | tee make_test.log
+python ./testrunner.py $conf -i $ini $test_params 2>&1 -p makefile=True | tee make_test.log
 
 kill $pid
 wait
