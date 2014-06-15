@@ -51,13 +51,13 @@ class TuqGenerators(object):
     def generate_expected_result(self):
         try:
             self._create_alias_map()
-            where_clause = self._format_where_clause()
-            log.info("WHERE clause ===== is %s" % where_clause)
             from_clause = self._format_from_clause()
             log.info("FROM clause ===== is %s" % from_clause)
+            where_clause = self._format_where_clause(from_clause)
+            log.info("WHERE clause ===== is %s" % where_clause)
             unnest_clause = self._format_unnest_clause(from_clause)
             log.info("UNNEST clause ===== is %s" % unnest_clause)
-            select_clause = self._format_select_clause()
+            select_clause = self._format_select_clause(from_clause)
             log.info("SELECT clause ===== is %s" % select_clause)
             result = self._filter_full_set(select_clause, where_clause, unnest_clause)
             result = self._order_results(result)
@@ -73,7 +73,7 @@ class TuqGenerators(object):
             if word.upper() == 'AS':
                 self.aliases[query_dict[query_dict.index(word) + 1]] = query_dict[query_dict.index(word) - 1]
 
-    def _format_where_clause(self):
+    def _format_where_clause(self, from_clause=None):
         if self.query.find('WHERE') == -1:
             return None
         clause = re.sub(r'ORDER BY.*', '', re.sub(r'.*WHERE', '', self.query))
@@ -105,6 +105,13 @@ class TuqGenerators(object):
             conditions = conditions.replace(' %s ' % attr, ' doc["%s"] ' % attr)
         if satisfy_expr:
             conditions += '' + satisfy_expr
+        if from_clause and from_clause.find('.') != -1:
+            sub_attrs = [att for name, group in self.type_args.iteritems()
+                         for att in group if att not in attributes]
+            for attr in sub_attrs:
+                conditions = conditions.replace(' %s ' % attr, ' doc["%s"] ' % attr)
+            conditions = conditions.replace('doc[', 'doc["%s"][' % from_clause.split('.')[-1])
+        conditions = conditions.replace(' = ', ' == ')
         return conditions
 
     def _format_from_clause(self):
@@ -164,7 +171,7 @@ class TuqGenerators(object):
                 self.aliases[attr[2]] = attr[0]
         return clause
 
-    def _format_select_clause(self):
+    def _format_select_clause(self, from_clause=None):
         select_clause = re.sub(r'ORDER BY.*', '', re.sub(r'.*SELECT', '', self.query)).strip()
         select_clause = re.sub(r'WHERE.*', '', re.sub(r'FROM.*', '', select_clause)).strip()
         select_attrs = select_clause.split(',')
@@ -223,6 +230,8 @@ class TuqGenerators(object):
                     else:
                         condition += '"%s" : doc["%s"],' % (attr[2], attr[0])
         condition += '}'
+        if from_clause and from_clause.find('.') != -1:
+            condition = condition.replace('doc[', 'doc["%s"][' % from_clause.split('.')[-1])
         return condition
 
     def _filter_full_set(self, select_clause, where_clause, unnest_clause):
@@ -350,10 +359,10 @@ class TuqGenerators(object):
             limit_clause = re.sub(r'OFFSET.*', '', re.sub(r'.*LIMIT', '', self.query)).strip()
         if self.query.find('OFFSET') != -1:
             offset_clause = re.sub(r'.*OFFSET', '', self.query).strip()
+        if offset_clause:
+            result = result[int(offset_clause):]
         if limit_clause:
             result = result[:int(limit_clause)]
-        if offset_clause:
-            result = result[int(limit_clause):]
         return result
 
     def _create_groups(self):
