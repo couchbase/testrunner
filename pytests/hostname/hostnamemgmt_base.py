@@ -37,9 +37,11 @@ class HostnameBaseTests(BaseTestCase):
                 shell.disconnect()
         return hostnames
 
-    def _set_hostames_to_servers_objs(self, hostnames):
+    def _set_hostames_to_servers_objs(self, hostnames, server=None):
         for i in xrange(len(self.servers)):
             if self.servers[i] in hostnames:
+                if server and server.ip != self.servers[i].ip:
+                    continue
                 self.servers[i].hostname = hostnames[self.servers[i]]
 
     def verify_referenced_by_names(self, servers, hostnames):

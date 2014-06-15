@@ -327,7 +327,10 @@ class RebalanceTask(Task):
                     if int(server.port) == int(node.port):
                         ejectedNodes.append(node.id)
                 else:
-                    if server.ip == node.ip and int(server.port) == int(node.port):
+                    if self.use_hostnames:
+                        if server.hostname == node.ip and int(server.port) == int(node.port):
+                            ejectedNodes.append(node.id)
+                    elif server.ip == node.ip and int(server.port) == int(node.port):
                         ejectedNodes.append(node.id)
         if self.rest.is_cluster_mixed():
             # workaround MB-8094

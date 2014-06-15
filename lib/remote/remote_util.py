@@ -528,6 +528,25 @@ class RemoteMachineShellConnection:
             except IOError:
                 return False
 
+    def read_remote_file(self, remote_path, filename):
+        if self.file_exists(remote_path, filename):
+            sftp = self._ssh_client.open_sftp()
+            remote_file = sftp.open('{0}/{1}'.format(remote_path, filename))
+            try:
+                out = remote_file.readlines()
+            finally:
+                remote_file.close()
+            return out
+        return None
+
+    def write_remote_file(self, remote_path, filename, lines):
+        sftp = self._ssh_client.open_sftp()
+        remote_file = sftp.open('{0}/{1}'.format(remote_path, filename), 'w+')
+        try:
+            remote_file.writelines(lines)
+        finally:
+            remote_file.close()
+
     def remove_directory(self, remote_path):
         sftp = self._ssh_client.open_sftp()
         try:
