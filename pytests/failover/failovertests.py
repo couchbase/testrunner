@@ -41,6 +41,7 @@ class FailoverTests(FailoverBaseTest):
         # Pick the reference node for communication
         # We pick a node in the cluster which will NOT be failed over
         self.referenceNode = self.master
+        self.filter_list = []
         if self.failoverMaster:
             self.referenceNode = self.servers[1]
         self.log.info(" Picking node {0} as reference node for test case".format(self.referenceNode.ip))
@@ -99,7 +100,7 @@ class FailoverTests(FailoverBaseTest):
             else:
                 self.run_rebalance_after_failover_and_verify(self.chosen, prev_vbucket_stats, record_static_data_set, prev_failover_stats)
 
-        self.verify_unacked_bytes_all_buckets()
+        self.verify_unacked_bytes_all_buckets(filter_list = self.filter_list)
 
     def run_rebalance_after_failover_and_verify(self, chosen, prev_vbucket_stats, record_static_data_set, prev_failover_stats):
         """ Method to run rebalance after failover and verify """
@@ -233,6 +234,7 @@ class FailoverTests(FailoverBaseTest):
                 self.assertTrue(RestHelper(self.rest).wait_for_node_status(node, "unhealthy", 300),
                                     msg="node status is not unhealthy even after waiting for 5 minutes")
             elif failover_reason == "firewall":
+                self.filter_list.append (node.ip)
                 server = [srv for srv in self.servers if node.ip == srv.ip][0]
                 RemoteUtilHelper.enable_firewall(server, bidirectional=self.bidirectional)
                 status = RestHelper(self.rest).wait_for_node_status(node, "unhealthy", 300)

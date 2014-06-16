@@ -534,7 +534,7 @@ class DataCollector(object):
             bucketMap[bucket.name] = dataMap
         return bucketMap
 
-    def collect_compare_upr_stats(self,buckets,servers,perNode = True, stat_name = 'unacked_bytes', compare_value = 0):
+    def collect_compare_upr_stats(self,buckets,servers,perNode = True, stat_name = 'unacked_bytes', compare_value = 0,  flow_control_buffer_size = 20971520, filter_list = []):
         """
             Method to extract the failovers stats given by cbstats tool
 
@@ -563,10 +563,19 @@ class DataCollector(object):
                 stats = client.stats('upr')
                 map_data = {}
                 for key in stats.keys():
+                    filter = False
                     if stat_name in key:
+                        for filter_key in filter_list:
+                            if filter_key in key:
+                                filter = True
                         value = int(stats[key])
-                        if value != compare_value:
-                            bucketMap[bucket] = False
+                        if not filter:
+                            if value != compare_value:
+                                if "eq_uprq:mapreduce_view" in key:
+                                    if value >= flow_control_buffer_size:
+                                        bucketMap[bucket] = False
+                                else:
+                                    bucketMap[bucket] = False
         return bucketMap
 
     def createMapVbucket(self,details,map_data):
