@@ -83,7 +83,7 @@ if [ ${run_install} = true ]
 fi
 
 echo '---------------------------- TESTS RUN -----------------------'
-$python_exe ./testrunner -i ${ini_file} -c ${config_file} -p ${test_params}
+$python_exe testrunner.py -i ${ini_file} -c ${config_file} -p ${test_params}
 
 
 
