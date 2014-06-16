@@ -158,7 +158,7 @@ class Installer(object):
                 openssl = params["openssl"]
 
         if ok:
-            if "url" in params and params["url"] is not None":
+            if "url" in params and params["url"] is not None:
                 direct_build_url = params["url"]
         if ok:
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
