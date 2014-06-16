@@ -71,7 +71,8 @@ class BuildQuery(object):
                    and build.architecture_type == arch and type == build.deliverable_type\
                    and build.toy == toy:
                     return build
-        else:
+        elif direct_build_url != "":
+            """ direct url only need one build """
             if builds.product_version.find(version) != -1 and product == builds.product\
                and builds.architecture_type == arch and type == builds.deliverable_type:
                 return builds
@@ -180,7 +181,7 @@ class BuildQuery(object):
     def _get_and_parse_builds(self, build_page, version=None, timeout=None, direct_build_url=None):
         builds = []
         changes = []
-        if direct_build_url is not None:
+        if direct_build_url is not None and direct_build_url != "":
             query = BuildQuery()
             build = query.create_build_info_from_direct_url(direct_build_url)
             return build, changes
@@ -238,48 +239,49 @@ class BuildQuery(object):
             return  filtered_builds, changes
 
     def create_build_info_from_direct_url(self, direct_build_url):
-        build = MembaseBuild()
-        build.url = direct_build_url
-        build.toy = ""
-        build_info = direct_build_url.split("/")
-        build_info = build_info[len(build_info)-1]
-        build.name = build_info
-        deliverable_type = ["exe", "rpm", "deb", "zip"]
-        if build_info[-3:] in deliverable_type:
-            build.deliverable_type = build_info[-3:]
-            if build_info[-3:] != "exe":
-                build_info = build_info[:-4]
+        if direct_build_url is not None and direct_build_url != "":
+            build = MembaseBuild()
+            build.url = direct_build_url
+            build.toy = ""
+            build_info = direct_build_url.split("/")
+            build_info = build_info[len(build_info)-1]
+            build.name = build_info
+            deliverable_type = ["exe", "rpm", "deb", "zip"]
+            if build_info[-3:] in deliverable_type:
+                build.deliverable_type = build_info[-3:]
+                if build_info[-3:] != "exe":
+                    build_info = build_info[:-4]
+                else:
+                    build_info = build_info[:-10]
             else:
-                build_info = build_info[:-10]
-        else:
-            raise Exception('Check your url. Deliverable type %s does not support yet' \
-                             % (direct_build_url[-3:]))
-        """ build name at this location couchbase-server-enterprise_x86_64_3.0.0-797-rel """
+                raise Exception('Check your url. Deliverable type %s does not support yet' \
+                                 % (direct_build_url[-3:]))
+            """ build name at this location couchbase-server-enterprise_x86_64_3.0.0-797-rel """
 
-        """ Remove the code below when cb name is standardlized (MB-11372) """
-        if "factory" in direct_build_url and build.deliverable_type == "exe":
-            l = list(build_info)
-            l[27] = "_x86_64_"
-            build_info = "".join(l)
-        """ End remove here """
+            """ Remove the code below when cb name is standardlized (MB-11372) """
+            if "factory" in direct_build_url and build.deliverable_type == "exe":
+                l = list(build_info)
+                l[27] = "_x86_64_"
+                build_info = "".join(l)
+            """ End remove here """
 
-        product_version = build_info.split("_")
-        product_version = product_version[len(product_version)-1]
-        if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
-             build.product_version = product_version
-             build_info = build_info.replace("_" + product_version,"")
-        else:
-            raise Exception('Check your url. Couchbase server does not have version %s yet' \
-                            % (product_version[:5]))
-        product_name = build_info.split("_")
-        product_name = product_name[0]
-        if product_name.startswith("couchbase-server"):
-            build.product = product_name
-            build_info = build_info.replace(product_name+ "_", "")
-        architecture_type = ["x86_64", "x86"]
-        if build_info in architecture_type:
-            build.architecture_type = build_info
-        return build
+            product_version = build_info.split("_")
+            product_version = product_version[len(product_version)-1]
+            if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
+                build.product_version = product_version
+                build_info = build_info.replace("_" + product_version,"")
+            else:
+                raise Exception('Check your url. Couchbase server does not have version %s yet' \
+                                % (product_version[:5]))
+            product_name = build_info.split("_")
+            product_name = product_name[0]
+            if product_name.startswith("couchbase-server"):
+                build.product = product_name
+                build_info = build_info.replace(product_name+ "_", "")
+            architecture_type = ["x86_64", "x86"]
+            if build_info in architecture_type:
+                build.architecture_type = build_info
+            return build
 
     def create_build_info(self, build_id, build_decription):
         build = MembaseBuild()
