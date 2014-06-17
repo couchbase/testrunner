@@ -8,7 +8,7 @@
                     "name" : "load_dgm",
                     "desc" :  "load_hotset",
                     "workload" : [{"spec" : "b:standardbucket,t:template512,s:100,e:20,ttl:86400,ccq:std1ph5keys,ops:60000",
-                                  "conditions" : "post:vb_active_resident_items_ratio < 30"},
+                                  "conditions" : "post:vb_active_resident_items_ratio < 50"},
                                   {"spec" : "b:standardbucket1,e:30,s:100,ttl:86400,ccq:std2ph5keys,ops:40000",
                                   "conditions" : "post:count = 20000000"},
                                   {"spec" : "b:saslbucket,pwd:password,s:100,ccq:saslph5keys,ops:60000",
@@ -30,9 +30,9 @@
                  {
                     "name" : "access_phase",
                     "desc" :  "post_upgrade_access",
-                    "workload" : ["b:standardbucket,coq:defaultkeys,ccq:std1ph5keys,s:2,g:98,ops:10000",
-                                  "b:standardbucket1,coq:defaultkeys,ccq:std2sph5keys,s:2,g:98,ops:10000",
-                                  "b:saslbucket,pwd:password,ccq:saslph5keys,g:100,ops:10000"],
+                    "workload" : ["b:standardbucket,coq:defaultkeys,ccq:std1ph5keys,d:50,g:50,ops:10000",
+                                  "b:standardbucket1,coq:defaultkeys,ccq:std2sph5keys,d:50,g:50,ops:10000",
+                                  "b:saslbucket,pwd:password,ccq:saslph5keys,g:50,d:50,ops:10000"],
                     "runtime" : 10800
                  },
                  "2" :
