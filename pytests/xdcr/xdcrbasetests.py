@@ -149,9 +149,8 @@ class XDCRBaseTest(unittest.TestCase):
             if str(self.__class__).find('tuq_xdcr') != -1:
                 self._do_cleanup()
                 return
-            if str(self.__class__).find('upgradeXDCR') != -1:
-                if test_failed:
-                    self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
+            if test_failed and (str(self.__class__).find('upgradeXDCR') != -1 or TestInputSingleton.input.param("stop-on-failure", False)):
+                    self.log.warn("CLEANUP WAS SKIPPED")
                     return
             if self.print_stats:
                 self.log.info("==============  XDCRbasetests stats for test #{0} {1} =============="\
@@ -262,7 +261,7 @@ class XDCRBaseTest(unittest.TestCase):
         """
         self._standard_buckets = self._input.param("standard_buckets", 0)
         self._sasl_buckets = self._input.param("sasl_buckets", 0)
-        self._extra_buckets = self._input.param("extra_buckets", 0)  #number of buckets to add inside test body
+        self._extra_buckets = self._input.param("extra_buckets", 0)  # number of buckets to add inside test body
 
         if self._default_bucket:
             self.default_bucket_name = "default"
@@ -535,7 +534,7 @@ class XDCRBaseTest(unittest.TestCase):
         bucket_size = self._get_bucket_size(self._mem_quota_int, total_buckets)
         rest = RestConnection(master_node)
         master_id = rest.get_nodes_self().id
-        if len(set([server.ip for server in self._servers])) != 1:  #if not cluster run use ip addresses instead of lh
+        if len(set([server.ip for server in self._servers])) != 1:  # if not cluster run use ip addresses instead of lh
             master_id = master_id.replace("127.0.0.1", master_node.ip).replace("localhost", master_node.ip)
 
         self._create_sasl_buckets(master_node, self._sasl_buckets, master_id, bucket_size)
@@ -563,7 +562,7 @@ class XDCRBaseTest(unittest.TestCase):
                     bucket.master_id = bucket.master_id.replace("127.0.0.1", new_ip).\
                     replace("localhost", new_ip)
 
-        if len(set([server.ip for server in self._servers])) != 1:  #if not cluster run use ip addresses instead of lh
+        if len(set([server.ip for server in self._servers])) != 1:  # if not cluster run use ip addresses instead of lh
             master_id = master_id.replace("127.0.0.1", master_server.ip).replace("localhost", master_server.ip)
         buckets = filter(lambda bucket: bucket.master_id == master_id, self.buckets)
         if not buckets:
@@ -778,7 +777,7 @@ class XDCRBaseTest(unittest.TestCase):
         elif shell.extract_remote_info().type.lower() == 'linux':
             o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
-        #wait for restart and warmup on all node
+        # wait for restart and warmup on all node
         self.sleep(self.wait_timeout * 5)
         # disable firewall on these nodes
         self._disable_firewall(node)
