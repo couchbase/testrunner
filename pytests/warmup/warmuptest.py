@@ -207,7 +207,7 @@ class WarmUpTests(BaseTestCase):
                 path = testconstants.WIN_COUCHBASE_DATA_PATH
 
             for bucket in self.buckets:
-                command = "cd %s%s & remove *access*" % (path, bucket.name)
+                command = "cd %s%s & rm -rf *access*" % (path, bucket.name)
                 output, error = shell.execute_command(command)
                 shell.log_command_output(output, error)
 
