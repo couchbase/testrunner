@@ -283,7 +283,10 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                          self.cluster.create_standard_bucket(self.src_master, name, STANDARD_BUCKET_PORT + 10, 100, 1)
                      except BucketCreationException, e:
                          self.log.info("bucket creation failed during cbrecovery as expected")
+                     # but still able to create bucket on destination
                      self.cluster.create_standard_bucket(self.dest_master, name, STANDARD_BUCKET_PORT + 10, 100, 1)
+                     # here we try to re-call cbrecovery(seems it's supported even it's still running)
+                     # if recovery fast(=completed) we can get "No recovery needed"
                      self.cbr_routine(self.dest_master, self.src_master)
                 elif "recovery_when_rebalance" in when_step:
                     rest.remove_all_recoveries()
