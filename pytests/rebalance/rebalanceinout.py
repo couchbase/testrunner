@@ -36,6 +36,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             task.result(self.wait_timeout * 20)
         self._verify_stats_all_buckets(self.servers[:self.nodes_init], timeout=120)
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
+        self.sleep(20)
         prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init], self.buckets)
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init], self.buckets)
         disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init], self.buckets, path=None)

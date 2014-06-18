@@ -43,6 +43,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
         self._verify_stats_all_buckets(self.servers[:self.num_servers], timeout=120)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+        self.sleep(20)
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.num_servers], self.buckets)
         prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.num_servers], self.buckets)
         record_data_set = self.get_data_set_all(self.servers[:self.num_servers], self.buckets)

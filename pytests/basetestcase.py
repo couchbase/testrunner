@@ -158,10 +158,6 @@ class BaseTestCase(unittest.TestCase):
                 self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
             if str(self.__class__).find('newupgradetests') == -1:
                 self._bucket_creation()
-            if self.enable_flow_control:
-                servers  = self.get_nodes_in_cluster()
-                self.set_upr_flow_control(flow=True, servers=servers)
-                self.sleep(30)
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
             self._log_start(self)
@@ -526,8 +522,9 @@ class BaseTestCase(unittest.TestCase):
 
      A utility function that waits upr flow with unacked_bytes = 0
     """
-    def verify_unacked_bytes_all_buckets(self, filter_list = []):
-        if self.enable_flow_control and self.verify_unacked_bytes:
+    def verify_unacked_bytes_all_buckets(self, filter_list = [],sleep_time=5):
+        self.sleep(sleep_time)
+        if self.verify_unacked_bytes:
             servers  = self.get_nodes_in_cluster()
             map =  self.data_collector.collect_compare_upr_stats(self.buckets,servers, filter_list = filter_list)
             for bucket in map.keys():
