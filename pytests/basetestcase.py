@@ -523,8 +523,8 @@ class BaseTestCase(unittest.TestCase):
      A utility function that waits upr flow with unacked_bytes = 0
     """
     def verify_unacked_bytes_all_buckets(self, filter_list = [],sleep_time=5):
-        self.sleep(sleep_time)
         if self.verify_unacked_bytes:
+            self.sleep(sleep_time)
             servers  = self.get_nodes_in_cluster()
             map =  self.data_collector.collect_compare_upr_stats(self.buckets,servers, filter_list = filter_list)
             for bucket in map.keys():
