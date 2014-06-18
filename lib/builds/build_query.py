@@ -8,6 +8,7 @@ import re
 import socket
 import BeautifulSoup
 import testconstants
+import logger
 
 
 class MembaseBuild(object):
@@ -56,6 +57,7 @@ class MembaseChange(object):
 
 class BuildQuery(object):
     def __init__(self):
+        self.log = logger.Logger.get_logger()
         pass
 
     # let's look at buildlatets or latest/sustaining or any other
@@ -77,7 +79,7 @@ class BuildQuery(object):
                and builds.architecture_type == arch and type == builds.deliverable_type:
                 return builds
             else:
-                raise Exception("Check your url. Some params don't match")
+                self.log.info("if build not found, url link may not match...")
         return None
 
     def find_membase_build(self, builds, product, deliverable_type, os_architecture, build_version, is_amazon=False):
@@ -273,14 +275,18 @@ class BuildQuery(object):
             else:
                 raise Exception('Check your url. Couchbase server does not have version %s yet' \
                                 % (product_version[:5]))
-            product_name = build_info.split("_")
-            product_name = product_name[0]
-            if product_name.startswith("couchbase-server"):
-                build.product = product_name
-                build_info = build_info.replace(product_name+ "_", "")
-            architecture_type = ["x86_64", "x86"]
-            if build_info in architecture_type:
-                build.architecture_type = build_info
+
+            if "x86_64" in build_info:
+                build.architecture_type = "x86_64"
+                build_info = build_info.replace("_x86_64", "")
+            elif "x86" in build_info:
+                build.architecture_type = "x86"
+                build_info = build_info.replace("_x86", "")
+
+            if build_info.startswith("couchbase-server"):
+                build.product = build_info
+            else:
+                self.fail("unknown server name")
             return build
 
     def create_build_info(self, build_id, build_decription):
