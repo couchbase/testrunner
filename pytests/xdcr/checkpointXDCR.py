@@ -33,9 +33,6 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         self.num_pre_replicate_calls_so_far = 0
         self.num_successful_prereps_so_far = 0
         self.num_failed_prereps_so_far = 0
-        # since we do not install before every test, discounting already recorded checkpoints, pre-replicates"""
-        self.num_commit_for_chkpt_beginning = self.num_successful_chkpts_beginning = self.num_failed_chkpts_beginning = 0
-        self.num_pre_replicates_beginning = self.num_successful_prereps_beginning = self.num_failed_prereps_beginning = 0
         self.read_chkpt_history_new_vb0node()
 
     """ * Call everytime the active vb0 on dest moves *
@@ -46,6 +43,9 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         and was_checkpointing_successful(), we should get a log snapshot to compare against
     """
     def read_chkpt_history_new_vb0node(self):
+        # since we do not install before every test, discounting already recorded checkpoints, pre-replicates"""
+        self.num_commit_for_chkpt_beginning = self.num_successful_chkpts_beginning = self.num_failed_chkpts_beginning = 0
+        self.num_pre_replicates_beginning = self.num_successful_prereps_beginning = self.num_failed_prereps_beginning = 0
         # get these numbers from logs
         node = self.get_active_vb0_node(self.dest_master)
         self.num_commit_for_chkpt_beginning, self.num_successful_chkpts_beginning, self.num_failed_chkpts_beginning = \
@@ -177,7 +177,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
             self.log.info("Checkpoint on this node (this run): {}".format(checkpoint_number))
         shell.disconnect()
         total_commit_failures = int(total_chkpt_calls[0]) - int(total_successful_chkpts[0])
-        return int(total_chkpt_calls[0]), int(total_successful_chkpts[0]) , total_commit_failures
+        return int(total_chkpt_calls[0]), int(total_successful_chkpts[0]), total_commit_failures
 
     """ Gets total number of pre_replicate responses made from dest, number of
         successful and failed pre_replicate calls so far on the current dest node """
@@ -251,6 +251,10 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         active_src_node = self.get_active_vb0_node(self.src_master)
         while count <=n:
             self.sleep(self._checkpoint_interval + 10)
+            remote_vbuuid, remote_highseqno = self.get_failover_log(self.dest_master)
+            local_vbuuid, local_highseqno = self.get_failover_log(self.src_master)
+            self.log.info("Local failover log: [{}, {}]".format(local_vbuuid,local_highseqno))
+            self.log.info("Remote failover log: [{}, {}]".format(remote_vbuuid,remote_highseqno))
             self.log.info("################ New mutation:{} ##################".format(self.key_counter+1))
             self.load_one_mutation_into_source_vb0(active_src_node)
             if self.was_checkpointing_successful():
@@ -306,6 +310,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
             else:
                 self.log.info("Current internal replication = UPR,hence destination vb_uuid did not change," \
                           "Subsequent _commit_for_checkpoints are expected to pass")
+                self.read_chkpt_history_new_vb0node()
                 self.verify_next_checkpoint_passes()
 
     """ Failover active vb0 node from a cluster """
@@ -316,12 +321,20 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         node = self.get_active_vb0_node(master)
         self.log.info("Node {} contains active vb0".format(node))
         if master == self.src_master:
-            nodes = self.src_nodes
+            tasks = self._async_failover(self.src_nodes, [node])
+            tasks = self._async_rebalance(self.src_nodes, [], [])
+            for task in tasks:
+                task.result()
+            self.src_nodes.remove(node)
+            self.src_master = self.src_nodes[0]
         else:
-            nodes = self.dest_nodes
-        tasks = self._async_failover(nodes, [node])
-        for task in tasks:
-            task.result()
+            tasks = self._async_failover(self.dest_nodes, [node])
+            tasks = self._async_rebalance(self.dest_nodes, [], [])
+            for task in tasks:
+                task.result()
+            self.dest_nodes.remove(node)
+            self.dest_master = self.dest_nodes[0]
+
         if "source" in self._failover:
             post_failover_uuid, _= self.get_failover_log(self.get_active_vb0_node(self.src_master))
         else:
@@ -478,3 +491,4 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
                 missing_keys = True
         if missing_keys:
             self.fail("Some keys are missing at destination")
+
