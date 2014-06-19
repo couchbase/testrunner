@@ -8,6 +8,7 @@ import json
 import re
 import math
 import crc32
+import traceback
 from httplib import IncompleteRead
 from threading import Thread
 from memcacheConstants import ERR_NOT_FOUND
@@ -2853,7 +2854,11 @@ class CBRecoveryTask(Task):
                 command += "-P {0} ".format(self.password_dest)
             if self.verbose:
                 command += " -v "
-            self.shell._ssh_client.exec_command(command)
+            transport = self.shell._ssh_client.get_transport()
+            transport.set_keepalive(1)
+            self.chan = transport.open_session()
+            self.chan.settimeout(10 * 60.0)
+            self.chan.exec_command(command)
             self.log.info("command was executed: '{0}'".format(command))
             self.state = CHECKING
             task_manager.schedule(self, 20)
@@ -2861,7 +2866,21 @@ class CBRecoveryTask(Task):
             self.state = FINISHED
             self.set_exception(e)
 
+    #it was done to keep connection alive
+    def checkChannel(self):
+        try:
+            if self.chan.exit_status_ready():
+                if self.chan.recv_ready():
+                    output = self.chan.recv(1048576)
+            if self.chan.recv_stderr_ready():
+                error = self.chan.recv_stderr(1048576)
+        except socket.timeout:
+            print("SSH channel timeout exceeded.")
+        except Exception:
+            traceback.print_exc()
+
     def check(self, task_manager):
+        self.checkChannel()
         self.recovery_task = self.rest.get_recovery_task()
         if self.recovery_task is not None:
             if not self.started:
