@@ -385,7 +385,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             for update_task in update_tasks:
                 update_task.result(600)
             if fragmentation_monitor.state == "FINISHED":
-                fragmentation_monitor._Thread__stop()
+                fragmentation_monitor.cancel()
                 self.fail("async_monitor_view_fragmentation failed prematurely")
             for view in views:
                 # run queries to create indexes
@@ -394,7 +394,7 @@ class RebalanceOutTests(RebalanceBaseTest):
                     self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
                 except SetViewInfoNotFound, e:
                     self.log.warn("exception on self.cluster.query_view")
-                    fragmentation_monitor._Thread__stop()
+                    fragmentation_monitor.cancel()
                     raise e
 
         if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
