@@ -1228,6 +1228,11 @@ class RemoteMachineShellConnection:
                 # delete binary after uninstall
                 output, error = self.execute_command("rm /cygdrive/c/tmp/{0}".format(build_name))
                 self.log_command_output(output, error)
+
+                """ the code below need to remove when bug MB-11328 is fixed in 3.0.1 """
+                output, error = self.kill_erlang(os="windows")
+                self.log_command_output(output, error)
+                """ end remove code """
             else:
                 log.info("No couchbase server on {0} server. Free to install".format(self.ip))
         elif type in ["ubuntu", "centos", "red hat"]:
@@ -1311,6 +1316,11 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
             output, error = self.execute_command("rm /cygdrive/c/tmp/{0}".format(build_name))
             self.log_command_output(output, error)
+
+            """ the code below need to remove when bug MB-11328 is fixed in 3.0.1 """
+            output, error = self.kill_erlang(os="windows")
+            self.log_command_output(output, error)
+            """ end remove code """
         else:
             log.info('No couchbase server on this server')
 
