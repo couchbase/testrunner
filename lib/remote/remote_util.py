@@ -1208,6 +1208,12 @@ class RemoteMachineShellConnection:
                 self.modify_bat_file('/cygdrive/c/automation', bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
                 log.info('sleep for 5 seconds before running task schedule uninstall on {0}'.format(self.ip))
+
+                """ the code below need to remove when bug MB-11328 is fixed in 3.0.1 """
+                output, error = self.kill_erlang(os="windows")
+                self.log_command_output(output, error)
+                """ end remove code """
+
                 time.sleep(5)
                 # run schedule task uninstall couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
@@ -1286,6 +1292,12 @@ class RemoteMachineShellConnection:
             self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
             # modify bat file to run uninstall schedule task
             self.modify_bat_file('/cygdrive/c/automation', bat_file, product, rm_version, task)
+
+            """ the code below need to remove when bug MB-11328 is fixed in 3.0.1 """
+            output, error = self.kill_erlang(os="windows")
+            self.log_command_output(output, error)
+            """ end remove code """
+
             self.sleep(5, "before running task schedule uninstall")
             # run schedule task uninstall couchbase server
             output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
