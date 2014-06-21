@@ -26,7 +26,7 @@ class WarmUpTests(BaseTestCase):
     def tearDown(self):
         super(WarmUpTests, self).tearDown()
 
-    def _warmup_check(self):
+    def _warmup_check(self, timeout=1800):
         warmed_up = {}
         stats_all_buckets = {}
         for bucket in self.buckets:
@@ -38,9 +38,10 @@ class WarmUpTests(BaseTestCase):
         for bucket in self.buckets:
             for server in self.servers:
                 start = time.time()
+                end_time = start + timeout
                 warmup_complete = False
 
-                while not warmup_complete:
+                while not warmup_complete and time.time() < end_time:
                     try:
                         if stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_thread')[server] == "complete":
                             self.log.info("warmup completed for %s in bucket %s" % (server.ip, bucket.name))
@@ -54,6 +55,8 @@ class WarmUpTests(BaseTestCase):
                             self.log.info("ep_warmup_time is %s for %s in bucket %s" % (warmup_time, server.ip, bucket.name))
                     except Exception as e:
                         self.log.error("Could not get warmup_time stats from server %s:%s, exception %s" % (server.ip, server.port, e))
+
+                self.assertTrue(warmup_complete, "Warm up wasn't complete in %s sec" % end_time)
 
                 start = time.time()
                 while time.time() - start < self.timeout and not warmed_up[bucket.name][server]:
