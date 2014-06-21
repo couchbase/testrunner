@@ -145,15 +145,15 @@ class RebalanceInOutTests(RebalanceBaseTest):
                                self.servers[1:self.num_servers], [])
         gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
-
+        batch_size = 50
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
-            tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
+            tasks = self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=batch_size, timeout_secs=60)
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
             self.sleep(10)
             for task in tasks:
                 task.result(self.wait_timeout * 20)
-            tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
+            tasks = self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=batch_size, timeout_secs=60)
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], [])
             for task in tasks:
