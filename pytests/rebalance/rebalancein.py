@@ -523,3 +523,20 @@ class RebalanceInTests(RebalanceBaseTest):
             self.assertFalse(RestHelper(rest).is_cluster_rebalanced())
         finally:
             self.change_password(new_password=old_pass)
+
+    '''
+    test changes ram quota during rebalance.
+    http://www.couchbase.com/issues/browse/CBQE-1649
+    '''
+    def test_rebalance_in_with_cluster_ramquota_change(self):
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 self.servers[self.nodes_init:self.nodes_init + self.nodes_in],
+                                                 [])
+        self.sleep(10, "Wait for rebalance have some progress")
+        remote = RemoteMachineShellConnection(self.master)
+        cli_command = "cluster-init"
+        options = "--cluster-init-ramsize=%s" % (self.quota + 10)
+        output, error = remote.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost",
+                                                     user=self.master.rest_username, password=self.master.rest_password)
+        self.assertTrue('\n'.join(output).find('SUCCESS') != -1, 'RAM wasn\'t chnged')
+        rebalance.result()

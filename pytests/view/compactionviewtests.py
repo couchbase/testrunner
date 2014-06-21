@@ -4,6 +4,7 @@ from basetestcase import BaseTestCase
 from couchbase.documentgenerator import DocumentGenerator
 from couchbase.documentgenerator import BlobGenerator
 from couchbase.document import DesignDocument, View
+from remote.remote_util import RemoteMachineShellConnection
 
 class CompactionViewTests(BaseTestCase):
 
@@ -79,3 +80,40 @@ class CompactionViewTests(BaseTestCase):
                 self.cluster.create_view(self.master, ddoc.name, [], bucket=bucket_views)
             for view in ddoc.views:
                 self.cluster.create_view(self.master, ddoc.name, view, bucket=bucket_views)
+
+    '''
+    test changes ram quota during index.
+    http://www.couchbase.com/issues/browse/CBQE-1649
+    '''
+    def test_compaction_with_cluster_ramquota_change(self):
+        self.make_ddocs(self.ddocs_num, self.view_per_ddoc)
+        self.create_ddocs()
+        gen_load = BlobGenerator('test_view_compaction',
+                                 'test_view_compaction-',
+                                 self.value_size,
+                                 end=self.num_items)
+        self._load_all_buckets(self.master, gen_load, "create", 0)
+        for ddoc in self.ddocs:
+            fragmentation_monitor = \
+                self.cluster.async_monitor_view_fragmentation(self.master,
+                                                              ddoc.name,
+                                                              self.fragmentation_value)
+            while fragmentation_monitor.state != "FINISHED":
+                self._load_all_buckets(self.master, gen_load, "update", 0)
+                for view in ddoc.views:
+                    self.cluster.query_view(self.master, ddoc.name, view.name, {})
+            fragmentation_monitor.result()
+
+        compaction_tasks = []
+        for ddoc in self.ddocs:
+            compaction_tasks.append(self.cluster.async_compact_view(self.master, ddoc.name))
+        
+        remote = RemoteMachineShellConnection(self.master)
+        cli_command = "cluster-init"
+        options = "--cluster-init-ramsize=%s" % (self.quota + 10)
+        output, error = remote.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost",
+                                                     user=self.master.rest_username, password=self.master.rest_password)
+        self.assertTrue('\n'.join(output).find('SUCCESS') != -1, 'ram wasn\'t changed')
+        self.log.info('Quota was changed')
+        for task in compaction_tasks:
+            task.result()

@@ -1872,6 +1872,30 @@ class ViewQueryTests(BaseTestCase):
                 query_threads = [d for d in query_threads if d.is_alive()]
                 self.thread_stopped.clear()
 
+    '''
+    test changes ram quota during index.
+    http://www.couchbase.com/issues/browse/CBQE-1649
+    '''
+    def test_index_in_with_cluster_ramquota_change(self):
+        data_set = SimpleDataSet(self.master, self.cluster, self.num_docs)
+        data_set.add_stale_queries(stale_param="false", limit=self.limit)
+        generator_load = data_set.generate_docs(data_set.views[0], end=self.num_docs)
+        self.load(data_set, generator_load)
+
+        for view in data_set.views:
+            self.cluster.query_view(self.master, view.name, view.name,
+                                    {'stale' : 'false', 'limit' : 1000})
+        remote = RemoteMachineShellConnection(self.master)
+        cli_command = "cluster-init"
+        options = "--cluster-init-ramsize=%s" % (self.quota + 10)
+        output, error = remote.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost",
+                                                     user=self.master.rest_username, password=self.master.rest_password)
+        self.assertTrue('\n'.join(output).find('SUCCESS') != -1, 'ram wasn\'t changed')
+        self.log.info('Quota changed')
+        gen_query = copy.deepcopy(generator_load)
+        self._query_all_views(data_set.views, gen_query, verify_expected_keys=True)
+
+
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
