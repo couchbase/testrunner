@@ -259,8 +259,8 @@ class RebalanceInOutTests(RebalanceBaseTest):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
                               end=self.num_items)
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
-            tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
-            tasks.extend(self._async_load_all_buckets(self.master, gen_delete, "delete", 0))
+            tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=50)
+            tasks.extend(self._async_load_all_buckets(self.master, gen_delete, "delete", 0, batch_size=50))
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
             self.sleep(10)
