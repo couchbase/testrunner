@@ -238,7 +238,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    [], self.servers[init_num_nodes:init_num_nodes + i + 1])
             for task in tasks:
-                task.result()
+                task.result(self.wait_timeout * 30)
             self.verify_cluster_stats(self.servers[:init_num_nodes])
         self.verify_unacked_bytes_all_buckets()
 
@@ -259,15 +259,17 @@ class RebalanceInOutTests(RebalanceBaseTest):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
                               end=self.num_items)
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
-            tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=50)
-            tasks.extend(self._async_load_all_buckets(self.master, gen_delete, "delete", 0, batch_size=50))
+            tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0,
+                                                  batch_size=50, timeout_secs=60)
+            tasks.extend(self._async_load_all_buckets(self.master, gen_delete, "delete", 0,
+                                                 batch_size=50, timeout_secs=60))
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
             self.sleep(10)
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], [])
             for task in tasks:
-                task.result()
+                task.result(self.wait_timeout * 30)
             self._load_all_buckets(self.master, gen_delete, "create", 0)
             self.verify_cluster_stats(self.servers[:self.num_servers])
 
