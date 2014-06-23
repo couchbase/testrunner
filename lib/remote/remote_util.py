@@ -269,22 +269,24 @@ class RemoteMachineShellConnection:
 
     def kill_erlang(self, os="unix"):
         if os == "windows":
-            o, r = self.execute_command("/taskkill /F /T /IM epmd.exe*")
+            o, r = self.execute_command("taskkill /F /T /IM epmd.exe*")
             self.log_command_output(o, r)
-            o, r = self.execute_command("/taskkill /F /T /IM erl.exe*")
+            o, r = self.execute_command("taskkill /F /T /IM erl.exe*")
             self.log_command_output(o, r)
         else:
             o, r = self.execute_command("killall -9 beam.smp")
             self.log_command_output(o, r)
+        return o,r
 
     def kill_memcached(self):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            o, r = self.execute_command("/taskkill /F /T /IM memcached*")
+            o, r = self.execute_command("taskkill /F /T /IM memcached*")
             self.log_command_output(o, r)
         else:
             o, r = self.execute_command("killall -9 memcached")
             self.log_command_output(o, r)
+        return o,r
 
     def change_log_level(self, new_log_level):
         log.info("CHANGE LOG LEVEL TO %s".format(new_log_level))
