@@ -4,6 +4,10 @@ import paramiko,sys
 import time
 import os
 
+python_exe = "python"
+if os.system("grep \'centos\' /etc/issue -i -q") == 0:
+    python_exe = "python27"
+
 def get_ssh_client(ip, timeout=10):
     client = None
     try:
@@ -195,15 +199,15 @@ def run_setup():
     # Import templates if needed
     for template in cfg.SETUP_TEMPLATES:
         print ("Importing document template {0}...".format(template.split('--')[1].split('--')[0]))
-        temp = "python cbsystest.py import template {0}".format(template)
+        temp = "{0} cbsystest.py import template {1}".format(python_exe, template)
         print temp
-        _, stdout, _ = worker_client.exec_command("cd {0}; python cbsystest.py import template {1} --cluster {2}".
-                                                  format(cfg.WORKER_PYSYSTESTS_PATH, template, cfg.CB_CLUSTER_TAG))
+        _, stdout, _ = worker_client.exec_command("cd {0}; {1} cbsystest.py import template {2} --cluster {3}".
+                                                  format(cfg.WORKER_PYSYSTESTS_PATH,python_exe,template, cfg.CB_CLUSTER_TAG))
         for line in stdout.readlines():
             print line
     print ("Running test ...")
-    _, stdout, _ = worker_client.exec_command("cd {0}; python cbsystest.py run test --cluster \'{1}\' --fromfile \'{2}\'".
-                                              format(cfg.WORKER_PYSYSTESTS_PATH, cfg.CB_CLUSTER_TAG, cfg.SETUP_JSON))
+    _, stdout, _ = worker_client.exec_command("cd {0}; {1} cbsystest.py run test --cluster \'{2}\' --fromfile \'{3}\'".
+                                              format(cfg.WORKER_PYSYSTESTS_PATH,python_exe,cfg.CB_CLUSTER_TAG, cfg.SETUP_JSON))
     read_screenlog(cfg.WORKERS[0], cfg.WORKER_PYSYSTESTS_PATH)
     worker_client.close()
 
@@ -214,16 +218,16 @@ def run_test():
     worker_client = get_ssh_client(cfg.WORKERS[0])
     for template in cfg.TEST_TEMPLATES:
         print ("Importing document template {0}...".format(template.split('--')[1].split('--')[0]))
-        temp = "python cbsystest.py import template {0}".format(template)
+        temp = "{0} cbsystest.py import template {1}".format(python_exe, template)
         print temp
-        _, stdout, _ = worker_client.exec_command("cd {0}; python cbsystest.py import template {1} --cluster {2}".
-                                                  format(cfg.WORKER_PYSYSTESTS_PATH,template,cfg.CB_CLUSTER_TAG))
+        _, stdout, _ = worker_client.exec_command("cd {0}; {1} cbsystest.py import template {2} --cluster {3}".
+                                                  format(cfg.WORKER_PYSYSTESTS_PATH, python_exe, template, cfg.CB_CLUSTER_TAG))
         for line in stdout.readlines():
             print line
     # Start sys test
     print ("Starting system test from {0}...".format(cfg.TEST_JSON))
-    _, stdout, _ = worker_client.exec_command("cd {0}; python cbsystest.py run test --cluster \'{1}\' --fromfile \'{2}\'".
-                                              format(cfg.WORKER_PYSYSTESTS_PATH, cfg.CB_CLUSTER_TAG, cfg.TEST_JSON))
+    _, stdout, _ = worker_client.exec_command("cd {0}; {1} cbsystest.py run test --cluster \'{2}\' --fromfile \'{3}\'".
+                                              format(cfg.WORKER_PYSYSTESTS_PATH, python_exe, cfg.CB_CLUSTER_TAG, cfg.TEST_JSON))
     time.sleep(5)
     for line in stdout.readlines():
         sys.stdout.write(line)
@@ -253,8 +257,8 @@ def pre_install_check():
 def upload_stats():
     print "\n##### Uploading stats to CBFS #####"
     worker_client = get_ssh_client(cfg.WORKERS[0])
-    push_stats_cmd = "cd {0}; python tools/push_stats.py  --version {1} --build {2} --spec {3} \
-    --name {4} --cluster {5}".format(cfg.WORKER_PYSYSTESTS_PATH, args['build'].split('-')[0],args['build'].split('-')[1],
+    push_stats_cmd = "cd {0}; {1} tools/push_stats.py  --version {2} --build {3} --spec {4} \
+    --name {5} --cluster {6}".format(cfg.WORKER_PYSYSTESTS_PATH,python_exe, args['build'].split('-')[0],args['build'].split('-')[1],
     cfg.TEST_JSON,  cfg.TEST_JSON[cfg.TEST_JSON.rfind('/')+1 : cfg.TEST_JSON.find('.')] , cfg.CB_CLUSTER_TAG)
     print ("Executing {}".format(push_stats_cmd))
     _, stdout, _  = worker_client.exec_command(push_stats_cmd)
@@ -265,8 +269,8 @@ def upload_stats():
 
 def install_couchbase():
     print("Inspection complete! \nInstalling version {0} Couchbase on servers ...".format(args['build']))
-    install_cmd = "cd ..; python scripts/install.py -i {0} -p product=cb,version={1},parallel=true,{2}".\
-                    format(cfg.CLUSTER_INI,args['build'],args['params'])
+    install_cmd = "cd ..; {0} scripts/install.py -i {1} -p product=cb,version={2},parallel=true,{3}".\
+                    format(python_exe, cfg.CLUSTER_INI, args['build'], args['params'])
     print("Executing : {}".format(install_cmd))
     os.system(install_cmd)
     if cfg.CLUSTER_RAM_QUOTA != "":
