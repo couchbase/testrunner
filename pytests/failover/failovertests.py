@@ -100,7 +100,8 @@ class FailoverTests(FailoverBaseTest):
             else:
                 self.run_rebalance_after_failover_and_verify(self.chosen, prev_vbucket_stats, record_static_data_set, prev_failover_stats)
 
-        self.verify_unacked_bytes_all_buckets(filter_list = self.filter_list)
+        if self.during_ops == None:
+            self.verify_unacked_bytes_all_buckets(filter_list = self.filter_list)
 
     def run_rebalance_after_failover_and_verify(self, chosen, prev_vbucket_stats, record_static_data_set, prev_failover_stats):
         """ Method to run rebalance after failover and verify """
@@ -119,43 +120,42 @@ class FailoverTests(FailoverBaseTest):
             elif self.during_ops == "change_port":
                 self.change_port(new_port=self.input.param("new_port", "9090"))
                 self.rest = RestConnection(self.referenceNode)
-        try:
-            # Run operations if required during rebalance after failover
-            if self.withOps:
-                for task in self.ops_tasks:
-                    task.result()
-            msg = "rebalance failed while removing failover nodes {0}".format([node.id for node in chosen])
-            self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
 
-            #  Drain Queue and make sure intra-cluster replication is complete
-            self._verify_stats_all_buckets(_servers_,timeout = 120)
-            self._wait_for_stats_all_buckets(_servers_)
+        # Run operations if required during rebalance after failover
+        if self.withOps:
+            for task in self.ops_tasks:
+                task.result()
+        msg = "rebalance failed while removing failover nodes {0}".format([node.id for node in chosen])
+        self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
+        if self.during_ops:
+            if self.during_ops == "change_password":
+                self.change_password(new_password=old_pass)
+            elif self.during_ops == "change_port":
+                self.change_port(new_port='8091',
+                current_port=self.input.param("new_port", "9090"))
+            return
+        #  Drain Queue and make sure intra-cluster replication is complete
+        self._verify_stats_all_buckets(_servers_,timeout = 120)
+        self._wait_for_stats_all_buckets(_servers_)
 
-            self.log.info("Begin VERIFICATION for Rebalance after Failover Only")
-            # Verify all data set with meta data if failover happens after failover
-            if not self.withOps:
-                self.data_analysis_all(record_static_data_set, _servers_, self.buckets, path = None, addedItems = None)
-            # Check Cluster Stats and Data as well if max_verify > 0
-            self.verify_cluster_stats(_servers_, self.referenceNode)
-            # If views were created they can be verified
-            if self.runViews:
-                if self.runViewsDuringFailover:
-                    self.monitor_view_tasks(_servers_)
-                self.verify_query_task()
-            # Check Failover logs :: Not sure about this logic, currently not checking, will update code once confirmed
-            # Currently, only  for checking case where we  have graceful failover
-            if self.version_greater_than_2_5 and self.graceful and self.upr_check:
-                new_failover_stats = self.compare_failovers_logs(prev_failover_stats, _servers_, self.buckets)
-                new_vbucket_stats =  self.compare_vbucket_seqnos(prev_vbucket_stats, _servers_, self.buckets)
-                self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
-            self.log.info("End VERIFICATION for Rebalance after Failover Only")
-        finally:
-            if self.during_ops:
-                if self.during_ops == "change_password":
-                    self.change_password(new_password=old_pass)
-                elif self.during_ops == "change_port":
-                    self.change_port(new_port='8091',
-                    current_port=self.input.param("new_port", "9090"))
+        self.log.info("Begin VERIFICATION for Rebalance after Failover Only")
+        # Verify all data set with meta data if failover happens after failover
+        if not self.withOps:
+            self.data_analysis_all(record_static_data_set, _servers_, self.buckets, path = None, addedItems = None)
+        # Check Cluster Stats and Data as well if max_verify > 0
+        self.verify_cluster_stats(_servers_, self.referenceNode)
+        # If views were created they can be verified
+        if self.runViews:
+            if self.runViewsDuringFailover:
+                self.monitor_view_tasks(_servers_)
+            self.verify_query_task()
+        # Check Failover logs :: Not sure about this logic, currently not checking, will update code once confirmed
+        # Currently, only  for checking case where we  have graceful failover
+        if self.version_greater_than_2_5 and self.graceful and self.upr_check:
+            new_failover_stats = self.compare_failovers_logs(prev_failover_stats, _servers_, self.buckets)
+            new_vbucket_stats =  self.compare_vbucket_seqnos(prev_vbucket_stats, _servers_, self.buckets)
+            self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
+        self.log.info("End VERIFICATION for Rebalance after Failover Only")
 
     def run_add_back_operation_and_verify(self, chosen, prev_vbucket_stats, record_static_data_set, prev_failover_stats):
         """
