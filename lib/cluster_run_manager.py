@@ -195,6 +195,7 @@ class Node:
         args = ["python",
                 "cluster_run",
                 "--node=%s" % 1,
+                "--dont-rename",
                 "--start-index=%s" % self.index]
         self.instance = subprocess.Popen(
             args, cwd=NSDIR,
