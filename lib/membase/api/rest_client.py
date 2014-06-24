@@ -1775,7 +1775,7 @@ class RestConnection(object):
     """ Enable master trace logging for xdcr
     wget -O- --post-data='ale:set_loglevel(xdcr_trace, debug).' http://Administrator:asdasd@127.0.0.1:8091/diag/eval"""
     def enable_xdcr_trace_logging(self):
-        self.diag_eval("\'ale:set_loglevel(xdcr_trace, debug).\'")
+        self.diag_eval('ale:set_loglevel(xdcr_trace, debug).')
 
     def get_recent_xdcr_vb_ckpt(self, src_bucket_name, dest_bucket_name, vbucket_id):
         replication = self.get_replication_for_buckets(src_bucket_name, dest_bucket_name)
