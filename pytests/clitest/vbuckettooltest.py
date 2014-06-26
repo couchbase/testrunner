@@ -1,4 +1,5 @@
 import json
+import zlib
 from clitest.cli_base import CliBaseTest
 from memcached.helper.data_helper import  MemcachedClientHelper
 from membase.api.rest_client import RestConnection
@@ -47,14 +48,14 @@ class VBucketToolTests(CliBaseTest):
                 o, _ = shell.execute_vbuckettool(items, prefix)
                 result = self._parse_vbuckets(o)
                 for item in items:
-                    self.assertTrue(result[item][1].startswith(bucket.vbuckets[vb.id].master),
+                    self.assertTrue(result[item][1].startswith(bucket.vbuckets[vb].master),
                                     'Key: %s. Vbucket master expected is %s. Actual: %s' % (
-                                     item, bucket.vbuckets[vb.id].master, result[item]))
+                                     item, bucket.vbuckets[vb].master, result[item]))
                     self.assertFalse(set([replica[:replica.index(':')]
                                           for replica in result[item][2]]) -
-                                     set(bucket.vbuckets[vb.id].replica),
+                                     set(bucket.vbuckets[vb].replica),
                                     'Key: %s. Vbucket master expected is %s. Actual: %s' % (
-                                     item, bucket.vbuckets[vb.id].replica, result[item]))
+                                     item, bucket.vbuckets[vb].replica, result[item]))
         finally:
             shell.disconnect()
 
@@ -67,12 +68,15 @@ class VBucketToolTests(CliBaseTest):
                                      start=0, end=self.num_items)
         self._get_clients(bucket)
         for vb in bucket.vbuckets:
-            cur_items_per_vb = []
-            while len(cur_items_per_vb) < num_items_per_vb:
-                key, value = gen_load.next()
-                self.clients[vb.master].set(key, 0, 0, value, vb.id)
-                cur_items_per_vb.append(key)
-            self.keys_per_vbuckets_dict[vb] = cur_items_per_vb
+            self.keys_per_vbuckets_dict[vb] = []
+        for i in xrange(gen_load.end):
+            key, value = gen_load.next()
+            vb_id = self._get_vBucket_id(key)
+            self.clients[vb.master].set(key, 0, 0, value, vb_id)
+            self.keys_per_vbuckets_dict[vb_id].append(key)
+
+    def _get_vBucket_id(self, key):
+        return (zlib.crc32(key) >> 16) & (len(self.vBucketMap) - 1)
 
     def _get_clients(self, bucket):
         for vbucket in bucket.vbuckets:
