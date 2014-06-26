@@ -18,7 +18,7 @@ class WarmUpTests(BaseTestCase):
         self.doc_ops = self.input.param("doc_ops", None)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
-        generate_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
+        generate_load = BlobGenerator('nosqlini', 'nosqlini-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.servers[0], generate_load, "create", 0, batch_size=2000)
         #reinitialize active_resident_threshold
         self.active_resident_threshold = 0
@@ -56,7 +56,7 @@ class WarmUpTests(BaseTestCase):
                     except Exception as e:
                         self.log.error("Could not get warmup_time stats from server %s:%s, exception %s" % (server.ip, server.port, e))
 
-                self.assertTrue(warmup_complete, "Warm up wasn't complete in %s sec" % end_time)
+                self.assertTrue(warmup_complete, "Warm up wasn't complete in %s sec" % timeout)
 
                 start = time.time()
                 while time.time() - start < self.timeout and not warmed_up[bucket.name][server]:
@@ -162,11 +162,11 @@ class WarmUpTests(BaseTestCase):
         return access_log_created
 
     def _additional_ops(self):
-        generate_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items * 3)
+        generate_update = BlobGenerator('nosql', 'nosql-', self.value_size, start=0, end=self.num_items)
         self._load_all_buckets(self.master, generate_update, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
-        generate_delete = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items * 3)
+        generate_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items, end=self.num_items * 2)
         self._load_all_buckets(self.master, generate_delete, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
-        generate_expire = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items * 3)
+        generate_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items * 2, end=self.num_items * 3)
         self._load_all_buckets(self.master, generate_expire, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
 
         if(self.doc_ops is not None):
@@ -178,11 +178,7 @@ class WarmUpTests(BaseTestCase):
                 self._load_all_buckets(self.master, generate_expire, "update", self.expire_time, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
                 self.sleep(self.expire_time + 10)
 
-                for server in self.servers:
-                    shell = RemoteMachineShellConnection(server)
-                    for bucket in self.buckets:
-                        shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
-                    shell.disconnect()
+                self.expire_pager(self.servers[:self.num_servers])
                 self.sleep(30)
 
 
@@ -239,12 +235,17 @@ class WarmUpTests(BaseTestCase):
         if self._warmup_check():
             generate_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
             if self.doc_ops is not None:
-                if "delete" in self.doc_ops or "expire" in self.doc_ops:
-                    self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=5000, pause_secs=5, timeout_secs=120)
-                else:
-                    self._load_all_buckets(self.master, generate_load, "update", 0, 1, 0, True, batch_size=5000, pause_secs=5, timeout_secs=120)
+                for ops in self.doc_ops:
+                    if "delete" in self.doc_ops or "expire" in self.doc_ops:
+                        self._load_all_buckets(self.master, generate_load, "create", 0, 1, 0, True, batch_size=5000, pause_secs=5, timeout_secs=120)
+                    if ops == 'expire':
+                        self._load_all_buckets(self.master, generate_load, "update", self.expire_time, 1, 0, True, batch_size=5000, pause_secs=5, timeout_secs=120)
+                        self.sleep(self.expire_time + 1, 'wait for expiration')
+                    else:
+                        self._load_all_buckets(self.master, generate_load, ops, 0, 1, 0, True, batch_size=5000, pause_secs=5, timeout_secs=120)
             else:
                 self._load_all_buckets(self.master, generate_load, "update", 0, 1, 0, True, batch_size=5000, pause_secs=5, timeout_secs=120)
+            self.expire_pager(self.servers[:self.num_servers])
         else:
             raise Exception("Warmup check failed. Warmup test failed in some node")
         self.expire_pager(self.servers[:self.num_servers])
