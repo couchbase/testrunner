@@ -25,7 +25,7 @@
                               "replication_type" : "unidirection",
                               "buckets" : ["standardbucket","standardbucket1"]
                              }
-                 }
+                 },
                 "2" :
                  {
                     "name" : "access_phase",
@@ -35,7 +35,7 @@
                                   "b:saslbucket,pwd:password,ccq:saslph5keys,g:50,d:50,ops:10000"],
                     "runtime" : 10800
                  },
-                 "2" :
+                 "3" :
                  {
                     "name" : "rebalance_out_one_at_source",
                     "desc" : "Rebalance-out-1",
@@ -44,7 +44,7 @@
                                   "b:saslbucket,pwd:password,s:3,u:22,g:70,d:3,e:2,m:5,ttl:3000,ccq:saslph5keys,ops:3000"],
                     "cluster" : {"rm" : "1"}
                  },
-                 "3" :
+                 "4" :
                  {
                     "name" : "rebalance_in_one_source",
                     "desc" : "Rebalance-in-1",
@@ -53,7 +53,7 @@
                                   "b:saslbucket,pwd:password,s:3,u:22,g:70,d:3,e:2,m:5,ttl:3000,ccq:saslph5keys,ops:3000"],
                     "cluster" : {"add" : "1"}
                  },
-                 "3" :
+                 "5" :
                  {
                     "name" : "failover_one_and_rebalance_out",
                     "desc" : "failover_one_and_rebalance_out_at_source",
@@ -62,7 +62,7 @@
                                   "b:saslbucket,pwd:password,s:3,u:22,g:70,d:3,e:2,m:5,ttl:3000,ccq:saslph5keys,ops:3000"],
                     "cluster" : {"auto_failover" : "1"}
                  },
-                 "4" :
+                 "6" :
                  {
                     "name" : "failover_one_and_add_back",
                     "desc" : "failover_one_and_add_back_at_source",
@@ -71,7 +71,7 @@
                                   "b:saslbucket,pwd:password,s:3,u:22,g:70,d:3,e:2,m:5,ttl:3000,ccq:saslph5keys,ops:3000"],
                     "cluster" : {"auto_failover" : "1", "add_back": "1"}
                  },
-                 "5" :
+                 "7" :
                  {
                     "name" : "rebalance_out_one_at_destination",
                     "desc" : "Rebalance-out-1node at target cluster",
@@ -80,7 +80,7 @@
                                   "b:saslbucket,pwd:password,s:3,u:22,g:70,d:3,e:2,m:5,ttl:3000,ccq:saslph5keys,ops:3000"],
                     "cluster" : {"remote" : "remote1", "rm" : "1"}
                  },
-                 "6" :
+                 "8" :
                  {
                      "name" : "rebalance_in_one_destination",
                      "desc" : "Rebalance-in 1 node at target cluster",
@@ -89,7 +89,7 @@
                                   "b:saslbucket,pwd:password,s:3,u:22,g:70,d:3,e:2,m:5,ttl:3000,ccq:saslph5keys,ops:3000"],
                      "cluster" : {"remote" : "remote1", "add" : "1"}
                  },
-                 "7" :
+                 "9" :
                  {
                     "name" : "failover_one_and_rebalance_out_dest",
                     "desc" : "failover_one_and_rebalance_out_at_dest",
@@ -98,7 +98,7 @@
                                   "b:saslbucket,pwd:password,s:3,u:22,g:70,d:3,e:2,m:5,ttl:3000,ccq:saslph5keys,ops:3000"],
                     "cluster" : {"remote" : "remote1", "auto_failover" : "1"}
                  },
-                 "8" :
+                 "10" :
                  {
                     "name" : "failover_one_and_add_back_dest",
                     "desc" : "failover_one_and_add_back_at_dest",
@@ -107,7 +107,7 @@
                                   "b:saslbucket,pwd:password,s:3,u:22,g:70,d:3,e:2,m:5,ttl:3000,ccq:default,ops:3000"],
                     "cluster" : {"remote" : "remote1", "auto_failover" : "1", "add_back": "1"}
                  },
-                 "9" :
+                 "11" :
                  {
                     "name" : "reboot_source",
                     "desc" :  "reboot all nodes on source",
@@ -117,7 +117,7 @@
                     "cluster" : {"soft_restart" : "7"},
                     "runtime": 1200
                  },
-                 "10" :
+                 "12" :
                  {
                     "name" : "reboot_dest",
                     "desc" :  "reboot all nodes on dest",

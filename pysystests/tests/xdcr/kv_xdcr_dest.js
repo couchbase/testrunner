@@ -5,15 +5,6 @@
     "phases" : {
                 "0" :
                  {
-                    "name" : "load_dgm",
-                    "desc" :  "load_hotset",
-                    "workload" : [{"spec" : "b:standardbucket,t:template512,s:100,e:50,ttl:86400,ccq:std1ph5keys,ops:60000",
-                                  "conditions" : "post:vb_active_resident_items_ratio < 50"},
-                                  {"spec" : "b:saslbucket,pwd:password,s:100,ccq:saslph5keys,ops:60000",
-                                   "conditions" : "post:vb_active_resident_items_ratio < 70"}]
-                 },
-                 "1" :
-                 {
                     "name" : "pair_sites_for_standardbucket",
                     "desc" :  "set_replication_type_for_standardbucket",
                     "xdcr" : {
@@ -23,6 +14,15 @@
                               "replication_type" : "unidirection",
                               "buckets" : ["standardbucket"]
                              }
+                 },
+                "1" :
+                 {
+                    "name" : "load_dgm",
+                    "desc" :  "load_hotset",
+                    "workload" : [{"spec" : "b:standardbucket,t:template512,s:100,e:50,ttl:86400,ccq:std1ph5keys,ops:60000",
+                                  "conditions" : "post:vb_active_resident_items_ratio < 50"},
+                                  {"spec" : "b:saslbucket,pwd:password,s:100,ccq:saslph5keys,ops:60000",
+                                   "conditions" : "post:vb_active_resident_items_ratio < 70"}]
                  },
                 "2" :
                  {
