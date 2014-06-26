@@ -28,6 +28,7 @@ class FailoverBaseTest(BaseTestCase):
         self.bidirectional = self.input.param("bidirectional", False)
         self._value_size = self.input.param("value_size", 256)
         self.doc_ops = self.input.param("doc_ops", [])
+        self.deltaRecoveryBuckets = self.input.param("deltaRecoveryBuckets", None)
         self.runViewsDuringFailover = self.input.param("runViewsDuringFailover", False)
         if self.doc_ops:
             self.doc_ops = self.doc_ops.split(":")
@@ -39,7 +40,8 @@ class FailoverBaseTest(BaseTestCase):
         self.graceful = self.input.param("graceful", True)
         if self.recoveryType:
             self.recoveryType=self.recoveryType.split(":")
-
+        if self.deltaRecoveryBuckets:
+            self.deltaRecoveryBuckets=self.deltaRecoveryBuckets.split(":")
         # Defintions of Blod Generator used in tests
         self.gen_initial_create = BlobGenerator('failover', 'failover', self.value_size, end=self.num_items)
         self.gen_create = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items + 1 , end=self.num_items * 1.5)

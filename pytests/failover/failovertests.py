@@ -174,8 +174,7 @@ class FailoverTests(FailoverBaseTest):
                 self.rest.set_recovery_type(otpNode=node.id, recoveryType=self.recoveryType[index])
                 index += 1
         self.sleep(20, "After failover before invoking rebalance...")
-        self.rest.rebalance(otpNodes=[node.id for node in self.nodes],
-                               ejectedNodes=[])
+        self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[],deltaRecoveryBuckets = self.deltaRecoveryBuckets)
         msg = "rebalance failed while removing failover nodes {0}".format(chosen)
         # Run operations if required during rebalance after failover
         if self.withOps:
@@ -190,8 +189,7 @@ class FailoverTests(FailoverBaseTest):
         self.log.info("Begin VERIFICATION for Add-back and rebalance")
 
         # Verify recovery Type succeeded if we added-back nodes
-        self.verify_for_recovery_type(chosen, serverMap, self.buckets,
-                recoveryTypeMap, fileMapsForVerification)
+        self.verify_for_recovery_type(chosen, serverMap, self.buckets,recoveryTypeMap, fileMapsForVerification, self.deltaRecoveryBuckets)
 
         # Comparison of all data if required
         if not self.withOps:
@@ -334,16 +332,19 @@ class FailoverTests(FailoverBaseTest):
                     self._cleanup_nodes.append(server)
         return _servers_
 
-    def verify_for_recovery_type(self, chosen = [], serverMap = {}, buckets = [], recoveryTypeMap = {}, fileMap = {}):
+    def verify_for_recovery_type(self, chosen = [], serverMap = {}, buckets = [], recoveryTypeMap = {}, fileMap = {}, deltaRecoveryBuckets = []):
         """ Verify recovery type is delta or full """
-        logic = True
         summary = ""
+        logic = True
         for server in self.chosen:
             shell = RemoteMachineShellConnection(serverMap[server.ip])
             for bucket in buckets:
                 path = fileMap[server.ip][bucket.name]
                 exists = shell.file_exists(path,"check.txt")
-                if recoveryTypeMap[server.ip] == "delta" and not exists:
+                if deltaRecoveryBuckets != None and recoveryTypeMap[server.ip] == "delta"  and (bucket.name in deltaRecoveryBuckets) and not exists:
+                    logic = False
+                    summary += "\n Failed Condition :: node {0}, bucket {1} :: Expected Delta, Actual Full".format(server.ip,bucket.name)
+                elif recoveryTypeMap[server.ip] == "delta"  and not exists:
                     logic = False
                     summary += "\n Failed Condition :: node {0}, bucket {1} :: Expected Delta, Actual Full".format(server.ip,bucket.name)
                 elif recoveryTypeMap[server.ip] == "full" and exists:

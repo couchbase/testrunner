@@ -1077,13 +1077,21 @@ class RestConnection(object):
                                            parameters=params)
         return status
 
-    def rebalance(self, otpNodes, ejectedNodes):
+    def rebalance(self, otpNodes = [], ejectedNodes = [], deltaRecoveryBuckets = None):
         knownNodes = ','.join(otpNodes)
         ejectedNodesString = ','.join(ejectedNodes)
-        params = urllib.urlencode({'knownNodes': knownNodes,
-                                   'ejectedNodes': ejectedNodesString,
-                                   'user': self.username,
-                                   'password': self.password})
+        if deltaRecoveryBuckets  == None:
+            params = urllib.urlencode({'knownNodes': knownNodes,
+                                    'ejectedNodes': ejectedNodesString,
+                                    'user': self.username,
+                                    'password': self.password})
+        else:
+            deltaRecoveryBuckets=",".join(deltaRecoveryBuckets)
+            params = urllib.urlencode({'knownNodes': knownNodes,
+                                    'ejectedNodes': ejectedNodesString,
+                                    'deltaRecoveryBuckets': deltaRecoveryBuckets,
+                                    'user': self.username,
+                                    'password': self.password})
         log.info('rebalance params : {0}'.format(params))
         api = self.baseUrl + "controller/rebalance"
         status, content, header = self._http_request(api, 'POST', params)
