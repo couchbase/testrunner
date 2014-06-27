@@ -247,24 +247,22 @@ class BuildQuery(object):
             build.toy = ""
             build_info = direct_build_url.split("/")
             build_info = build_info[len(build_info)-1]
+            """ windows build name: couchbase_server-enterprise-windows-amd64-3.0.0-892.exe """
             build.name = build_info
             deliverable_type = ["exe", "rpm", "deb", "zip"]
             if build_info[-3:] in deliverable_type:
                 build.deliverable_type = build_info[-3:]
-                if build_info[-3:] != "exe":
-                    build_info = build_info[:-4]
-                else:
-                    build_info = build_info[:-10]
+                build_info = build_info[:-4]
             else:
                 raise Exception('Check your url. Deliverable type %s does not support yet' \
                                  % (direct_build_url[-3:]))
-            """ build name at this location couchbase-server-enterprise_x86_64_3.0.0-797-rel """
+            """ build name at this location couchbase-server-enterprise_x86_64_3.0.0-797-rel
+                windows build name: couchbase_server-enterprise-windows-amd64-3.0.0-892 """
 
             """ Remove the code below when cb name is standardlized (MB-11372) """
             if "factory" in direct_build_url and build.deliverable_type == "exe":
-                l = list(build_info)
-                l[27] = "_x86_64_"
-                build_info = "".join(l)
+                build_info = build_info.replace("-windows-amd64-","_x86_64_")
+                build_info = build_info.replace("couchbase_server","couchbase-server")
             """ End remove here """
 
             product_version = build_info.split("_")
