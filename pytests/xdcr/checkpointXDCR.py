@@ -133,8 +133,6 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         if int(remote_uuid) != int(vb_uuid):
             raise XDCRCheckpointException("vb_uuid in commitopaque {} does not match remote vb_uuid {}"
                                           .format(remote_uuid))
-        if int(remote_highseq) != int(high_seqno):
-            raise XDCRCheckpointException("vb_high_seqno in commitopaque does not match remote vb_high_seqno")
 
     """ Gets failover log [vb_uuid, high_seqno] from node containing vb0 """
     def get_failover_log(self, master):
@@ -210,7 +208,8 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
                           format(self.num_failed_chkpts_so_far, failures))
             self.num_failed_chkpts_so_far = failures
         elif total_commit_calls == self.num_commit_for_chkpt_calls_so_far:
-            self.log.info("Checkpointing did not happen!")
+            self.log.info("Checkpointing did not happen: last recorded call :{} , now :{}".
+                          format(self.num_commit_for_chkpt_calls_so_far, total_commit_calls))
         return False
 
     """ Tells if pre-replicate was successful based on source->dest _pre_replicate CAPI posts """
@@ -349,20 +348,18 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         node = self.get_active_vb0_node(master)
         self.log.info("Crashing node {} containing vb0 ...".format(node))
         shell = RemoteMachineShellConnection(node)
-        os_info = shell.extract_remote_info()
-        shell.kill_erlang(os_info)
+        shell.terminate_process(process_name='memcached')
+        shell.disconnect()
         # If we are killing dest node, try to mutate key at source to cause xdcr activity
         if master == self.dest_master:
             while count < 5:
                 self.load_one_mutation_into_source_vb0(self.get_active_vb0_node(self.src_master))
                 count += 1
-        shell.start_couchbase()
-        shell.disconnect()
         self.sleep(10)
         post_crash_uuid, _=self.get_failover_log(master)
-        self.log.info("Remote uuid before crash :{}, after crash : {}".format(pre_crash_uuid, post_crash_uuid))
+        self.log.info("vb_uuid before crash :{}, after crash : {}".format(pre_crash_uuid, post_crash_uuid))
         self.assertTrue(int(pre_crash_uuid) != int(post_crash_uuid),
-                        "Remote vb_uuid is same before and after erlang crash - MB-11085 ")
+                        "vb_uuid is same before and after erlang crash - MB-11085 ")
 
     """Tests dest node(containing vb0) crash"""
     def test_dest_node_crash(self):
