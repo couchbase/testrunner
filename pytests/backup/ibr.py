@@ -12,6 +12,7 @@ from couchbase.data_analysis_helper import *
 class IBRTests(BackupBaseTest):
     def setUp(self):
         super(IBRTests, self).setUp()
+        self.num_mutate_items = self.input.param("mutate_items", 1000)
         gen_load = BlobGenerator('testdata', 'testdata-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", 0, 1, self.item_flag, True, batch_size=20000,
                                pause_secs=5, timeout_secs=180)
