@@ -16,12 +16,19 @@ class UPRBase(BaseTestCase):
         self.crm = None
         self.input = TestInputSingleton.input
         self.use_cluster_run = self.input.param('dev', False)
+        self.test = self.input.param('test', None)
+
         self.doc_num = 0
         if self.use_cluster_run:
             num_nodes = self.input.param('num_nodes', 4)
             self.crm = CRManager(num_nodes, 0)
 
     def setUp(self):
+
+        if self.test:
+            if self.test !=  self._testMethodName:
+                self.skipTest("disabled")
+
         self.is_setup = True
 
         if self.use_cluster_run:
