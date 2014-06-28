@@ -23,6 +23,9 @@ test:
 simple-test:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr.ini conf/simple.conf $(VERBOSE)
 
+upr-test:
+	python testrunner.py -i b/resources/dev-4-nodes.ini -c conf/py-upr.conf -p skip_cleanup=False,dev=True,test=$(TEST)
+
 #test-views:
 #	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/py-view.conf
 test-viewquery:
