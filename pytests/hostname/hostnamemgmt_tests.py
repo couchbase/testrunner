@@ -53,6 +53,7 @@ class HostnameMgmtTests(HostnameBaseTests):
             self.fail("test require more than 1 node")
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  self.servers[self.nodes_init:self.nodes_in + self.nodes_init], [])
+        self.sleep(5, 'wait for some progress in rebalance...')
         try:
             hostnames = self.rename_nodes(self.servers[:self.nodes_in + self.nodes_init])
         except Exception, ex:
