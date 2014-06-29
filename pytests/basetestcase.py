@@ -682,6 +682,8 @@ class BaseTestCase(unittest.TestCase):
                 shell = RemoteMachineShellConnection(server)
                 command = "/sbin/iptables -F"
                 output, error = shell.execute_command(command)
+                command = "iptables -F"
+                output, error = shell.execute_command(command)
                 shell.log_command_output(output, error)
                 shell.disconnect()
 

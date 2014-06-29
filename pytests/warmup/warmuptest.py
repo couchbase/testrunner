@@ -248,7 +248,6 @@ class WarmUpTests(BaseTestCase):
             self.expire_pager(self.servers[:self.num_servers])
         else:
             raise Exception("Warmup check failed. Warmup test failed in some node")
-        self.expire_pager(self.servers[:self.num_servers])
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self._verify_stats_all_buckets(self.servers[:self.num_servers])
 
@@ -284,6 +283,7 @@ class WarmUpTests(BaseTestCase):
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self._verify_stats_all_buckets(self.servers[:self.num_servers])
         for bucket in self.buckets:
+            self._stats_befor_warmup(bucket.name)
             self._restart_memcache(bucket.name)
         end_time = time.time() + self.wait_timeout
         rest = RestConnection(self.master)

@@ -340,7 +340,7 @@ class RestConnection(object):
             t.start()
         except:
             log.warn("thread is not started")
-            return null
+            return None
         return t
 
     def is_cluster_mixed(self):
