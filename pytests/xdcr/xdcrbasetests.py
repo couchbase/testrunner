@@ -1243,6 +1243,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         error_count = 0
         tasks = []
         for bucket in self._get_cluster_buckets(src_server):
+            self.log.info("Verifying RevIds for {0} -> {1}, bucket: {2}"
+                          .format(src_server.ip, dest_server.ip, bucket))
             task_info = self.cluster.async_verify_revid(src_server,
                                                         dest_server, bucket,
                                                         bucket.kvs[kv_store])
@@ -1393,12 +1395,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             errors_caught = 0
             bidirection = self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION
             if self._doc_ops is not None and ("update" in self._doc_ops or "delete" in self._doc_ops):
-                self.log.info("Verifying RevIds for {0} -> {1} XDCR"
-                              .format(self.src_master.ip, self.dest_master.ip))
                 errors_caught += self._verify_revIds(self.src_master, self.dest_master)
             if bidirection and self._doc_ops_dest is not None and ("update" in self._doc_ops_dest or "delete" in self._doc_ops_dest):
-                self.log.info("Verifying RevIds for {0} -> {1} XDCR"
-                              .format(self.dest_master.ip, self.src_master.ip))
                 errors_caught += self._verify_revIds(self.dest_master, self.src_master)
             if errors_caught > 0:
                 self.fail("Mismatches on Meta Information on xdcr-replicated items!")
