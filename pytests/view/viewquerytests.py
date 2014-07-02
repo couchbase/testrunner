@@ -1837,6 +1837,13 @@ class ViewQueryTests(BaseTestCase):
         self._query_all_views(data_set.views, generator_load,
                               verify_expected_keys=True)
 
+    def test_add_MB_7764_reproducer(self):
+        data_set = SalesDataSet(self.master, self.cluster, self.docs_per_day, custom_reduce=True)
+        data_set.add_reduce_queries({'reduce' :'true'})
+        generator_load = data_set.generate_docs(data_set.views[0])
+        self.load(data_set, generator_load)
+        self._query_all_views(data_set.views, generator_load)
+
     def test_concurrent_threads(self):
         num_ddocs = self.input.param("num_ddocs", 8)
         #threads per view
@@ -2684,7 +2691,8 @@ class SimpleDataSet:
         self.add_stale_queries(views, limit)
 
 class SalesDataSet:
-    def __init__(self, server, cluster, docs_per_day=200, bucket="default", test_datatype=False, template_items_num=None):
+    def __init__(self, server, cluster, docs_per_day=200, bucket="default", test_datatype=False, template_items_num=None,
+                 custom_reduce=True):
         self.server = server
         self.cluster = cluster
         self.docs_per_day = docs_per_day
@@ -2694,6 +2702,7 @@ class SalesDataSet:
         self.bucket = bucket
         self.test_datatype = test_datatype
         self.template_items_num = template_items_num
+        self.custom_reduce = custom_reduce
         self.views = self.create_views()
         self.name = "sales_dataset"
         self.kv_store = None
@@ -2720,6 +2729,14 @@ class SalesDataSet:
             vfn1 = "function (doc) { emit([doc.join_yr, doc.join_mo, doc.join_day], doc.sales);}"
             views = [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn1),
                      QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn1, reduce_fn="_count")]
+        elif self.custom_reduce:
+            reduce_fn = "function(key, values, rereduce) {  if (rereduce)" +\
+             " { var result = 0;  for (var i = 0; i < values.length; i++) " +\
+             "{ emit(key,values[0]);  result += values[i]; }   return result;" +\
+             " } else { emit(key,values[0]);     return values.length;  }}"
+            views = [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn, reduce_fn=reduce_fn)]
+            for view in views:
+                view.view.red_func = '_count'
         else:
             views = [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn, reduce_fn="_count"),
                      QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn, reduce_fn="_sum"),
