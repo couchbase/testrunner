@@ -67,20 +67,26 @@ class UPRRebalanceTests(UPRBase):
 
         # stop and failover nodeA
         assert self.stop_node(0)
-        assert self.cluster.failover([nodeB], [nodeA])
-        assert self.cluster.rebalance([nodeB], [], [])
+        try:
+            assert self.cluster.failover([nodeB], [nodeA])
+            assert self.cluster.rebalance([nodeB], [], [])
+            # verify seqnos and stream mutations
+            rest = RestConnection(nodeB)
+            vbuckets = rest.get_vbuckets()
+            total_mutations = 0
 
-        # verify seqnos and stream mutations
-        rest = RestConnection(nodeB)
-        vbuckets = rest.get_vbuckets()
-        total_mutations = 0
+            for vb in vbuckets:
+                mcd_client = self.mcd_client(nodeB)
+                stats = mcd_client.stats(VBSEQNO_STAT)
+                vbucket = vb.id
+                key = 'vb_{0}:high_seqno'.format(vbucket)
+                total_mutations += int(stats[key])
 
-        for vb in vbuckets:
-            vbucket = vb.id
-            vb_uuid, seqno, high_seqno = self.vb_info(nodeB, vbucket)
-            total_mutations += high_seqno
-
-        assert total_mutations == self.num_items
+            assert total_mutations == self.num_items
+        finally:
+            task = self.cluster.async_rebalance([nodeB], [], [nodeC])
+            self.start_node(0)
+            task.result()
 
     def test_stream_req_during_failover(self):
         """stream_req mutations before and after failover from state-changing vbucket"""
@@ -146,7 +152,7 @@ class UPRRebalanceTests(UPRBase):
         # load nodeA only
         rest = RestConnection(nodeA)
         vbuckets = rest.get_vbuckets()
-        for vb_info in vbuckets:
+        for vb_info in vbuckets[0:4]:
             vbucket = vb_info.id
             self.load_docs(nodeA, vbucket, self.num_items)
 
@@ -165,7 +171,7 @@ class UPRRebalanceTests(UPRBase):
         # load nodeB only
         rest = RestConnection(nodeB)
         vbuckets = rest.get_vbuckets()
-        for vb_info in vbuckets:
+        for vb_info in vbuckets[0:4]:
             vbucket = vb_info.id
             self.load_docs(nodeB, vbucket, self.num_items)
 
@@ -184,14 +190,14 @@ class UPRRebalanceTests(UPRBase):
         # load nodeA only
         rest = RestConnection(nodeA)
         vbuckets = rest.get_vbuckets()
-        for vb_info in vbuckets:
+        for vb_info in vbuckets[0:4]:
             vbucket = vb_info.id
             self.load_docs(nodeA, vbucket, self.num_items)
 
         # check failover table entries
         mcd_client = self.mcd_client(nodeA)
         stats = mcd_client.stats('failovers')
-        for vb_info in vbuckets:
+        for vb_info in vbuckets[0:4]:
             vb = vb_info.id
             assert long(stats['vb_'+str(vb)+':num_entries']) == 2
 

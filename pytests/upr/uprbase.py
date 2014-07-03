@@ -6,6 +6,7 @@ from mc_bin_client import MemcachedClient
 from lib.cluster_run_manager  import CRManager
 from membase.api.rest_client import RestConnection
 from TestInput import TestInputSingleton
+from remote.remote_util import RemoteMachineShellConnection
 
 class UPRBase(BaseTestCase):
 
@@ -150,7 +151,7 @@ class UPRBase(BaseTestCase):
         status = False
         if self.use_cluster_run:
             status = self.crm.stop(index)
-        elif index in self.servers:
+        elif len(self.servers) >= index:
             node = self.servers[index]
             shell = RemoteMachineShellConnection(node)
             shell.stop_couchbase()
@@ -163,7 +164,7 @@ class UPRBase(BaseTestCase):
         status = False
         if self.use_cluster_run:
             status = self.crm.start(index)
-        elif index in self.servers:
+        elif len(self.servers) >= index:
             node = self.servers[index]
             shell = RemoteMachineShellConnection(node)
             shell.start_couchbase()
