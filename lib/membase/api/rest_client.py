@@ -2214,6 +2214,40 @@ class RestConnection(object):
             log.error("There is not zone with name: {0} in cluster.".format(zone_name))
             return False
 
+    def start_cluster_logs_collection(self, nodes="*", upload=False,\
+                                      uploadHost=None, customer=None, ticket=None):
+        if not upload:
+            params = urllib.urlencode({"nodes":nodes})
+        else:
+            params = urllib.urlencode({"nodes":nodes, "uploadHost":uploadHost, \
+                                       "customer":customer, "ticket":ticket})
+        api = self.baseUrl + "controller/startLogsCollection"
+        status, content, header = self._http_request(api, "POST", params)
+        return status, content
+
+    def get_cluster_logs_collection_info(self):
+        api = self.baseUrl + "pools/default/tasks/"
+        status, content, header = self._http_request(api, "GET")
+        if status:
+            tmp = json.loads(content)
+            for k in tmp:
+                if k["type"] == "clusterLogsCollection":
+                    content = k
+                    return content
+        return None
+
+    """ result["progress"]: progress logs collected at cluster level
+        result["status]: status logs collected at cluster level
+        result["perNode"]: all information logs collected at each node """
+    def get_cluster_logs_collection_status(self):
+        result = self.get_cluster_logs_collection_info()
+        return result["progress"], result["status"], result["perNode"]
+
+    def cancel_cluster_logs_collection(self):
+        api = self.baseUrl + "controller/cancelLogsCollection"
+        status, content, header = self._http_request(api, "POST")
+        return status, content
+
     def get_bucket_CCCP(self, bucket):
         log.info("Getting CCCP config ")
         api = '%spools/default/b/%s' % (self.baseUrl, bucket)
@@ -2223,7 +2257,6 @@ class RestConnection(object):
         if status:
             return json.loads(content)
         return None
-
 
     def get_recovery_task(self):
         content = self.ns_server_tasks()

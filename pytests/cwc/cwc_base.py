@@ -12,6 +12,12 @@ class CWCBaseTest(BaseTestCase):
         self.vbuckets = self.input.param("vbuckets", 128)
         self.version = self.input.param("version", None)
         self.doc_ops = self.input.param("doc_ops", None)
+        self.upload = self.input.param("upload", False)
+        self.uploadHost = self.input.param("uploadHost", None)
+        self.customer_id = self.input.param("customer_id", None)
+        self.ticket = self.input.param("ticket", None)
+        self.num_collect_nodes = self.input.param("num_collect_nodes", "*")
+        self.shutdown_nodes = self.input.param("shutdown_nodes", None)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
         self.defaul_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
