@@ -929,7 +929,6 @@ class ViewQueryTests(BaseTestCase):
             2. start queries: stale, group, starkey/endkey, stratkey_docid
         '''
         data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day)
-
         data_set.add_all_query_sets()
         if self.wait_persistence:
             gen_load = data_set.generate_docs(data_set.views[0])
@@ -1955,7 +1954,7 @@ class ViewQueryTests(BaseTestCase):
     ##
     def _query_all_views(self, views, generators, kv_store=None,
                          verify_expected_keys=False, threads=[], retries=100,
-                         server_to_query=0):
+                         server_to_query=0, timeout=1200):
 
         query_threads = []
         for view in views:
@@ -1966,7 +1965,8 @@ class ViewQueryTests(BaseTestCase):
             query_threads.append(t)
             t.start()
 
-        while True:
+        end_time = time.time() + float(timeout)
+        while True and time.time() < end_time:
             if not query_threads:
                 return
             self.thread_stopped.wait(60)
@@ -1984,6 +1984,8 @@ class ViewQueryTests(BaseTestCase):
                 query_threads = [d for d in query_threads if d.is_alive()]
                 self.log.info("Current amount of threads %s" % len(query_threads))
                 self.thread_stopped.clear()
+        if time.time() > end_time:
+            raise Exception("Test failed to finish in %s seconds" % timeout)
 
         self._check_view_intergrity(views)
 
