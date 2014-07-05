@@ -384,9 +384,6 @@ class RebalanceOutTests(RebalanceBaseTest):
             update_tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
             for update_task in update_tasks:
                 update_task.result(600)
-            if fragmentation_monitor.state == "FINISHED":
-                fragmentation_monitor.cancel()
-                self.fail("async_monitor_view_fragmentation failed prematurely")
             for view in views:
                 # run queries to create indexes
                 try:
