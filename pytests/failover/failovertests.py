@@ -341,15 +341,20 @@ class FailoverTests(FailoverBaseTest):
             for bucket in buckets:
                 path = fileMap[server.ip][bucket.name]
                 exists = shell.file_exists(path,"check.txt")
-                if deltaRecoveryBuckets != None and recoveryTypeMap[server.ip] == "delta"  and (bucket.name in deltaRecoveryBuckets) and not exists:
-                    logic = False
-                    summary += "\n Failed Condition :: node {0}, bucket {1} :: Expected Delta, Actual Full".format(server.ip,bucket.name)
-                elif recoveryTypeMap[server.ip] == "delta"  and not exists:
-                    logic = False
-                    summary += "\n Failed Condition :: node {0}, bucket {1} :: Expected Delta, Actual Full".format(server.ip,bucket.name)
-                elif recoveryTypeMap[server.ip] == "full" and exists:
-                    logic = False
-                    summary += "\n Failed Condition :: node {0}, bucket {1}  :: Expected Full, Actual Delta".format(server.ip,bucket.name)
+                if deltaRecoveryBuckets != None:
+                    if recoveryTypeMap[server.ip] == "delta" and (bucket.name in deltaRecoveryBuckets) and not exists:
+                        logic = False
+                        summary += "\n Failed Condition :: node {0}, bucket {1} :: Expected Delta, Actual Full".format(server.ip,bucket.name)
+                    elif recoveryTypeMap[server.ip] == "delta" and (bucket.name not in deltaRecoveryBuckets) and exists:
+                        summary += "\n Failed Condition :: node {0}, bucket {1} :: Expected Full, Actual Delta".format(server.ip,bucket.name)
+                        logic = False
+                else:
+                    if recoveryTypeMap[server.ip] == "delta"  and not exists:
+                        logic = False
+                        summary += "\n Failed Condition :: node {0}, bucket {1} :: Expected Delta, Actual Full".format(server.ip,bucket.name)
+                    elif recoveryTypeMap[server.ip] == "full" and exists:
+                        logic = False
+                        summary += "\n Failed Condition :: node {0}, bucket {1}  :: Expected Full, Actual Delta".format(server.ip,bucket.name)
             shell.disconnect()
         self.assertTrue(logic, summary)
 
