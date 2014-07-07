@@ -1204,8 +1204,8 @@ class VerifyRevIdTask(GenericLoadingTask):
         if self.err_count - prev_error_count > 0:
             self.log.error("===== Verifying rev_ids failed for key: {0} =====".format(key))
             [self.log.error(err) for err in err_msg]
-            self.log.error("Source meta data: %s" % (self.client.rest.ip, self.client.bucket, src_meta_data))
-            self.log.error("Dest meta data: %s" % (self.client_dest.rest.ip, self.client_dest.bucket, dest_meta_data))
+            self.log.error("Source meta data: %s" % src_meta_data)
+            self.log.error("Dest meta data: %s" % dest_meta_data)
             self.state = FINISHED
 
 
