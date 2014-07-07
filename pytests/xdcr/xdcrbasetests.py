@@ -1364,6 +1364,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
     3. For deleted and updated items, check the CAS/SeqNo/Expiry/Flags for same key on source/destination
     * Make sure to call expiry_pager function to flush out temp items(deleted/expired items)"""
     def verify_xdcr_stats(self, src_nodes, dest_nodes, verify_src=True, timeout=200):
+        self.collect_data_files = True
         self._expiry_pager(self.src_nodes[0], val=10)
         self._expiry_pager(self.dest_nodes[0], val=10)
         self.sleep(10)
@@ -1411,7 +1412,6 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 self.fail("Test is failed as Outbound mutations has not become zero, check the test logs above.")
 
     def verify_results(self, verify_src=False):
-        self.collect_data_files = True
         dest_key_index = 1
         if len(self.ord_keys) == 2:
             src_nodes = self.get_servers_in_cluster(self.src_master)
