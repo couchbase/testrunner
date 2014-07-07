@@ -67,26 +67,25 @@ class UPRRebalanceTests(UPRBase):
 
         # stop and failover nodeA
         assert self.stop_node(0)
-        try:
-            assert self.cluster.failover([nodeB], [nodeA])
-            assert self.cluster.rebalance([nodeB], [], [])
-            # verify seqnos and stream mutations
-            rest = RestConnection(nodeB)
-            vbuckets = rest.get_vbuckets()
-            total_mutations = 0
+        self.stopped_nodes.append(0)
 
-            for vb in vbuckets:
-                mcd_client = self.mcd_client(nodeB)
-                stats = mcd_client.stats(VBSEQNO_STAT)
-                vbucket = vb.id
-                key = 'vb_{0}:high_seqno'.format(vbucket)
-                total_mutations += int(stats[key])
+        assert self.cluster.failover([nodeB], [nodeA])
+        assert self.cluster.rebalance([nodeB], [], [])
+        # verify seqnos and stream mutations
+        rest = RestConnection(nodeB)
+        vbuckets = rest.get_vbuckets()
+        total_mutations = 0
 
-            assert total_mutations == self.num_items
-        finally:
-            task = self.cluster.async_rebalance([nodeB], [], [nodeC])
-            self.start_node(0)
-            task.result()
+        for vb in vbuckets:
+            mcd_client = self.mcd_client(nodeB)
+            stats = mcd_client.stats(VBSEQNO_STAT)
+            vbucket = vb.id
+            key = 'vb_{0}:high_seqno'.format(vbucket)
+            total_mutations += int(stats[key])
+
+        assert total_mutations == self.num_items
+        task = self.cluster.async_rebalance([nodeB], [], [nodeC])
+        task.result()
 
     def test_stream_req_during_failover(self):
         """stream_req mutations before and after failover from state-changing vbucket"""
@@ -106,13 +105,14 @@ class UPRRebalanceTests(UPRBase):
                          self.servers)
 
         assert self.stop_node(index)
+        self.stopped_nodes.append(index)
         assert self.cluster.failover(ready_n, [fail_n])
         rebalance_t = self.cluster.async_rebalance(ready_n, [], [])
 
         # vbucket has moved, set another key in new location
         rest = RestConnection(ready_n[0])
         index = self.vbucket_host_index(rest, vbucket)
-        new_master = ready_n[index]
+        new_master = ready_n[0]
         mcd_client = self.mcd_client(new_master)
         mcd_client.set('key2', 0, 0, 'value', vbucket)
 
@@ -139,6 +139,7 @@ class UPRRebalanceTests(UPRBase):
 
         assert stream.last_by_seqno == 2
         assert rebalance_t.result()
+        self.cluster.rebalance([new_master], [], ready_n[1:])
 
 
     def test_failover_log_table_updated(self):
@@ -165,6 +166,7 @@ class UPRRebalanceTests(UPRBase):
 
         # stop nodeA and failover
         assert self.stop_node(0)
+        self.stopped_nodes.append(0)
         assert self.cluster.failover([nodeB], [nodeA])
         assert self.cluster.rebalance([nodeB], [], [])
 
@@ -177,6 +179,7 @@ class UPRRebalanceTests(UPRBase):
 
         # add nodeA back
         assert self.start_node(0)
+        del self.stopped_nodes[0]
         rest = RestHelper(RestConnection(nodeA))
         assert rest.is_ns_server_running()
         time.sleep(10)
@@ -184,6 +187,7 @@ class UPRRebalanceTests(UPRBase):
 
         # stop nodeB and failover
         assert self.stop_node(1)
+        self.stopped_nodes.append(1)
         assert self.cluster.failover([nodeA], [nodeB])
         assert self.cluster.rebalance([nodeA], [], [])
 

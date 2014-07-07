@@ -18,6 +18,7 @@ class UPRBase(BaseTestCase):
         self.input = TestInputSingleton.input
         self.use_cluster_run = self.input.param('dev', False)
         self.test = self.input.param('test', None)
+        self.stopped_nodes = []
 
         self.doc_num = 0
         if self.use_cluster_run:
@@ -41,6 +42,10 @@ class UPRBase(BaseTestCase):
         self.is_setup = False
 
     def tearDown(self):
+
+        for index in self.stopped_nodes:
+            self.start_node(index)
+
         if self.use_cluster_run and not self.is_setup:
             assert self.crm.stop_nodes()
             self.cluster.shutdown(force=True)
