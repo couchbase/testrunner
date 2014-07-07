@@ -33,7 +33,8 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_create_sasl_bucket(self, server, name, password, size, replicas, enable_replica_index=1, eviction_policy='valueOnly'):
+    def async_create_sasl_bucket(self, server, name, password, size, replicas, enable_replica_index=1,
+                                 eviction_policy='valueOnly', bucket_priority=None):
         """Asynchronously creates a sasl bucket
 
         Parameters:
@@ -46,11 +47,13 @@ class Cluster(object):
         Returns:
             BucketCreateTask - A task future that is a handle to the scheduled task."""
         _task = BucketCreateTask(server, name, replicas, size, password=password,
-                                 enable_replica_index=enable_replica_index, eviction_policy=eviction_policy)
+                                 enable_replica_index=enable_replica_index, eviction_policy=eviction_policy,
+                                 bucket_priority=bucket_priority)
         self.task_manager.schedule(_task)
         return _task
 
-    def async_create_standard_bucket(self, server, name, port, size, replicas, enable_replica_index=1, eviction_policy='valueOnly'):
+    def async_create_standard_bucket(self, server, name, port, size, replicas, enable_replica_index=1,
+                                     eviction_policy='valueOnly', bucket_priority=None):
         """Asynchronously creates a standard bucket
 
         Parameters:
@@ -63,7 +66,8 @@ class Cluster(object):
         Returns:
             BucketCreateTask - A task future that is a handle to the scheduled task."""
         _task = BucketCreateTask(server, name, replicas, size, port,
-                                 enable_replica_index=enable_replica_index, eviction_policy=eviction_policy)
+                                 enable_replica_index=enable_replica_index,
+                                 eviction_policy=eviction_policy, bucket_priority=bucket_priority)
         self.task_manager.schedule(_task)
         return _task
 
@@ -229,10 +233,11 @@ class Cluster(object):
             boolean - Whether or not the bucket was created."""
 
         _task = self.async_create_default_bucket(server, size, replicas,
-                                                 enable_replica_index=enable_replica_index, eviction_policy=eviction_policy)
+                                                 enable_replica_index=enable_replica_index,
+                                                 eviction_policy=eviction_policy)
         return _task.result(timeout)
 
-    def create_sasl_bucket(self, server, name, password, size, replicas, timeout=None):
+    def create_sasl_bucket(self, server, name, password, size, replicas, timeout=None, bucket_priority=None):
         """Synchronously creates a sasl bucket
 
         Parameters:
@@ -244,11 +249,11 @@ class Cluster(object):
 
         Returns:
             boolean - Whether or not the bucket was created."""
-        _task = self.async_create_sasl_bucket(server, name, password, replicas, size)
+        _task = self.async_create_sasl_bucket(server, name, password, replicas, size, bucket_priority=bucket_priority)
         self.task_manager.schedule(_task)
         return _task.result(timeout)
 
-    def create_standard_bucket(self, server, name, port, size, replicas, timeout=None):
+    def create_standard_bucket(self, server, name, port, size, replicas, timeout=None, bucket_priority=None):
         """Synchronously creates a standard bucket
 
         Parameters:
@@ -260,7 +265,7 @@ class Cluster(object):
 
         Returns:
             boolean - Whether or not the bucket was created."""
-        _task = self.async_create_standard_bucket(server, name, port, size, replicas)
+        _task = self.async_create_standard_bucket(server, name, port, size, replicas, bucket_priority=bucket_priority)
         return _task.result(timeout)
 
     def bucket_delete(self, server, bucket='default', timeout=None):

@@ -269,6 +269,12 @@ class XDCRBaseTest(unittest.TestCase):
         self._num_replicas = self._input.param("replicas", 1)
         self._mem_quota_int = 0  # will be set in subsequent methods
         self.eviction_policy = self._input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
+        self.mixed_priority = self._input.param("mixed_priority",None)
+        # if mixed priority is set by user, set high priority for sasl and standard buckets
+        if self.mixed_priority:
+            self.bucket_priority = 'high'
+        else:
+            self.bucket_priority = None
         self.num_items = self._input.param("items", 1000)
         self._value_size = self._input.param("value_size", 256)
         self._dgm_run = self._input.param("dgm_run", False)
@@ -504,7 +510,8 @@ class XDCRBaseTest(unittest.TestCase):
             name = "sasl_bucket_" + str(i + 1)
             bucket_tasks.append(self.cluster.async_create_sasl_bucket(server, name, 'password',
                                                                               bucket_size, self._num_replicas,
-                                                                              eviction_policy=self.eviction_policy))
+                                                                              eviction_policy=self.eviction_policy,
+                                                                              bucket_priority=self.bucket_priority))
             self.buckets.append(Bucket(name=name, authType="sasl", saslPassword="password",
                                    num_replicas=self._num_replicas, bucket_size=bucket_size,
                                    master_id=server_id, eviction_policy=self.eviction_policy))
@@ -520,7 +527,8 @@ class XDCRBaseTest(unittest.TestCase):
                                                                                   STANDARD_BUCKET_PORT + i,
                                                                                   bucket_size,
                                                                                   self._num_replicas,
-                                                                                  eviction_policy=self.eviction_policy))
+                                                                                  eviction_policy=self.eviction_policy,
+                                                                                  bucket_priority=self.bucket_priority))
             self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
                                     num_replicas=self._num_replicas, bucket_size=bucket_size,
                                     port=STANDARD_BUCKET_PORT + i, master_id=server_id, eviction_policy=self.eviction_policy))

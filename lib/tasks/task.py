@@ -131,8 +131,8 @@ class NodeInitializeTask(Task):
 
 
 class BucketCreateTask(Task):
-    def __init__(self, server, bucket='default', replicas=1, size=0, port=11211,
-                 password=None, bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly'):
+    def __init__(self, server, bucket='default', replicas=1, size=0, port=11211,password=None, bucket_type='membase',
+                 enable_replica_index=1, eviction_policy='valueOnly', bucket_priority=None):
         Task.__init__(self, "bucket_create_task")
         self.server = server
         self.bucket = bucket
@@ -143,6 +143,9 @@ class BucketCreateTask(Task):
         self.bucket_type = bucket_type
         self.enable_replica_index = enable_replica_index
         self.eviction_policy = eviction_policy
+        self.bucket_priority = None
+        if bucket_priority is not None:
+            self.bucket_priority = 8
 
     def execute(self, task_manager):
         try:
@@ -157,8 +160,21 @@ class BucketCreateTask(Task):
 
         authType = 'none' if self.password is None else 'sasl'
 
+        version = rest.get_nodes_self().version
         try:
-            rest.create_bucket(bucket=self.bucket,
+            if float(version[:2]) >= 3.0 and self.bucket_priority is not None:
+                rest.create_bucket(bucket=self.bucket,
+                               ramQuotaMB=self.size,
+                               replicaNumber=self.replicas,
+                               proxyPort=self.port,
+                               authType=authType,
+                               saslPassword=self.password,
+                               bucketType=self.bucket_type,
+                               replica_index=self.enable_replica_index,
+                               evictionPolicy=self.eviction_policy,
+                               threadsNumber=self.bucket_priority)
+            else:
+                rest.create_bucket(bucket=self.bucket,
                                ramQuotaMB=self.size,
                                replicaNumber=self.replicas,
                                proxyPort=self.port,
@@ -1093,6 +1109,7 @@ class BatchedValidateDataTask(GenericLoadingTask):
                 continue
             try:
                 o, c, d = key_vals[key]
+
                 if self.only_store_hash:
                     if crc32.crc32_hash(d) != int(value):
                         self.state = FINISHED
@@ -1130,7 +1147,6 @@ class VerifyRevIdTask(GenericLoadingTask):
     def __init__(self, src_server, dest_server, bucket, kv_store, max_err_count=100):
         GenericLoadingTask.__init__(self, src_server, bucket, kv_store)
         self.client_dest = VBucketAwareMemcached(RestConnection(dest_server), bucket)
-
         self.valid_keys, self.deleted_keys = kv_store.key_set()
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
@@ -1196,8 +1212,7 @@ class VerifyRevIdTask(GenericLoadingTask):
         for meta_key in src_meta_data.keys():
             if src_meta_data[meta_key] != dest_meta_data[meta_key] and meta_key not in ignore_meta_data:
                 self.err_count += 1
-                err_msg.append(
-                    "{0} mismatch: Source {0}:{1}, Destination {0}:{2}, Error Count:{3}"
+                err_msg.append("{0} mismatch: Source {0}:{1}, Destination {0}:{2}, Error Count:{3}"
                     .format(meta_key, src_meta_data[meta_key],
                         dest_meta_data[meta_key], self.err_count))
 
