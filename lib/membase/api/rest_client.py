@@ -2241,7 +2241,9 @@ class RestConnection(object):
         result["perNode"]: all information logs collected at each node """
     def get_cluster_logs_collection_status(self):
         result = self.get_cluster_logs_collection_info()
-        return result["progress"], result["status"], result["perNode"]
+        if result:
+            return result["progress"], result["status"], result["perNode"]
+        return None, None, None
 
     def cancel_cluster_logs_collection(self):
         api = self.baseUrl + "controller/cancelLogsCollection"
