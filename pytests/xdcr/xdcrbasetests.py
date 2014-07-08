@@ -486,6 +486,8 @@ class XDCRBaseTest(unittest.TestCase):
             self._create_buckets(self, nodes)
         else:
             self._create_buckets(nodes)
+            for node in nodes:
+                RestConnection(node).enable_xdcr_trace_logging()
 
     def _init_nodes(self, nodes, disabled_consistent_view=None):
         _tasks = []
@@ -495,8 +497,6 @@ class XDCRBaseTest(unittest.TestCase):
             mem_quota_node = task.result()
             if mem_quota_node < self._mem_quota_int or self._mem_quota_int == 0:
                 self._mem_quota_int = mem_quota_node
-        for node in nodes:
-            RestConnection(node).enable_xdcr_trace_logging()
 
     def _create_sasl_buckets(self, server, num_buckets, server_id, bucket_size):
         bucket_tasks = []
