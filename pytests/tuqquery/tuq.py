@@ -1864,7 +1864,35 @@ class QueryTests(BaseTestCase):
                                if doc["skills"][0] == 'skill2010']
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+##############################################################################################
+#
+#   SPLIT
+##############################################################################################
 
+    def test_select_split_fn(self):
+        for bucket in self.buckets:
+            self.query = "SELECT SPLIT(email, '@')[0] as login" +\
+            " FROM %s" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"login" : doc["email"].split('@')[0]}
+                               for doc in full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_split_where(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT name' +\
+            ' FROM %s WHERE SPLIT(email, \'-\')[0] = SPLIT(name, \'-\')[1]' % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"name" : doc["name"]}
+                               for doc in full_list
+                               if doc["email"].split[0] == doc["name"].split[1]]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
 ##############################################################################################
 #
 #   COMMON FUNCTIONS
