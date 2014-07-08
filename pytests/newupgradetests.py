@@ -181,6 +181,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 remote.start_couchbase()
                 remote.disconnect()
             ClusterOperationHelper.wait_for_ns_servers_or_assert(stoped_nodes, self)
+            self.log.info("Need to sleep 15 seconds for couchbase server startup completely")
+            self.sleep(15)
             self.verification(self.servers[:self.nodes_init])
 
     def offline_cluster_upgrade_and_rebalance(self):
