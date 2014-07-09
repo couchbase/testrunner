@@ -270,7 +270,9 @@ class IBRTests(BackupBaseTest):
             raise Exception('Backup Directory Verification Failed for Differential Backup')
 
     def testIncrementalBackup(self):
-        gen_extra = BlobGenerator('testdata', 'testdata-', self.value_size, end=self.num_mutate_items)
+        gen_extra = BlobGenerator('testdata', 'testdata-', self.value_size, end=self.num_items)
+        self.log.info("Starting Incremental backup")
+
         extra_items_deleted_flag = 0
 
         if(self.doc_ops is not None):
@@ -306,7 +308,9 @@ class IBRTests(BackupBaseTest):
 
     def testDifferentialBackup(self):
 
-        gen_extra = BlobGenerator('testdata', 'testdata-', self.value_size, end=self.num_mutate_items)
+        gen_extra = BlobGenerator('testdata', 'testdata-', self.value_size, end=self.num_items)
+        self.log.info("Starting Differential backup")
+
         extra_items_deleted_flag = 0
 
         if(self.doc_ops is not None):
