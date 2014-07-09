@@ -149,6 +149,11 @@ class XDCRBaseTest(unittest.TestCase):
             if str(self.__class__).find('tuq_xdcr') != -1:
                 self._do_cleanup()
                 return
+
+            cluster_run = len(set([server.ip for server in self._servers])) == 1
+            if not cluster_run and self.collect_data_files:
+                self.__collect_data_files()
+
             if test_failed and (str(self.__class__).find('upgradeXDCR') != -1 or TestInputSingleton.input.param("stop-on-failure", False)):
                     self.log.warn("CLEANUP WAS SKIPPED")
                     return
@@ -172,10 +177,6 @@ class XDCRBaseTest(unittest.TestCase):
                 self.log.info("============== = = = = = = = = END = = = = = = = = = = ==============")
             self.log.info("==============  XDCRbasetests cleanup is started for test #{0} {1} =============="\
                 .format(self.case_number, self._testMethodName))
-
-            cluster_run = len(set([server.ip for server in self._servers])) == 1
-            if not cluster_run and self.collect_data_files:
-                self.__collect_data_files()
             self.teardown_extended()
             self._do_cleanup()
             self.log.info("==============  XDCRbasetests cleanup is finished for test #{0} {1} =============="\
