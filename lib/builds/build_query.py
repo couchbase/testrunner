@@ -9,6 +9,8 @@ import socket
 import BeautifulSoup
 import testconstants
 import logger
+import traceback
+import sys
 
 
 class MembaseBuild(object):
@@ -171,7 +173,6 @@ class BuildQuery(object):
                 self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds', version=version, \
                                            timeout=timeout, direct_build_url=direct_build_url)
         except Exception as e:
-            print e
             latestbuilds, latestchanges = \
                 self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds', \
                                            version=version, timeout=timeout, direct_build_url=direct_build_url)
@@ -199,6 +200,7 @@ class BuildQuery(object):
             #try this ten times
             for _ in range(0, 10):
                 try:
+                    self.log.info("Try collecting build information from url: %s" % (build_page + index_url))
                     if timeout:
                         socket.setdefaulttimeout(timeout)
                     page = urllib2.urlopen(build_page + index_url)
@@ -218,27 +220,26 @@ class BuildQuery(object):
                         build_description = content.string
                     elif content.name == 'a':
                         build_id = content.string.string
-                if build_id.lower().startswith('changes'):
-                    change = query.create_change_info(build_id, build_description)
-                    change.url = '%s/%s' % (build_page, build_id)
-                    changes.append(change)
-                else:
-                    build = query.create_build_info(build_id, build_description)
-                    build.url = '%s/%s' % (build_page, build_id)
-                    builds.append(build)
-                    #now let's reconcile the builds and changes?
+                try:
+                    if build_id.lower().startswith('changes'):
+                        change = query.create_change_info(build_id, build_description)
+                        change.url = '%s/%s' % (build_page, build_id)
+                        changes.append(change)
+                    else:
+                        build = query.create_build_info(build_id, build_description)
+                        build.url = '%s/%s' % (build_page, build_id)
+                        builds.append(build)
+                except Exception as e:
+                    print "Build_id: %s , Build_Description: %s" % (build_id, build_description)
+                    print traceback.print_exc(file=sys.stderr)
+                    raise e
             for build in builds:
                 for change in changes:
                     if change.build_number == build.product_version:
                         build.change = change
                         """ print 'change : ', change.url,change.build_number """
                         break
-                #let's filter those builds with version that starts with 'v'
-            filtered_builds = []
-            for build in builds:
-            #         if not '{0}'.format(build.product_version).startswith('v'):
-                filtered_builds.append(build)
-            return  filtered_builds, changes
+            return builds, changes
 
     def create_build_info_from_direct_url(self, direct_build_url):
         if direct_build_url is not None and direct_build_url != "":
