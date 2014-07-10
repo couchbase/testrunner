@@ -33,7 +33,11 @@ then
 	install_params="product=cb,parallel=True";
 fi
 
-
+if [ -z "$group" ];
+then
+	echo "group not set! Will run all tests: GROUP=ALL";
+	group="ALL";
+fi
 
 export
 
@@ -92,7 +96,7 @@ if [ ${run_install} = true ]
 fi
 
 echo '---------------------------- TESTS RUN -----------------------'
-$python_exe testrunner.py -i ${ini_file} -c ${config_file} -p ${test_params}
+$python_exe testrunner.py -i ${ini_file} -c ${config_file} -p ${test_params},GROUP=${group}
 
 
 
