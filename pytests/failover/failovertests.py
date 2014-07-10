@@ -94,7 +94,7 @@ class FailoverTests(FailoverBaseTest):
         self.run_failover_operations(self.chosen, failover_reason)
 
         # Perform Add Back Operation with Rebalance Or only Rebalance with Verificaitons
-        if not self.gracefulFailoverFail:
+        if not self.gracefulFailoverFail and self.runRebalanceAfterFailover:
             if self.add_back_flag:
                 self.run_add_back_operation_and_verify(self.chosen, prev_vbucket_stats, record_static_data_set, prev_failover_stats)
             else:
@@ -223,15 +223,20 @@ class FailoverTests(FailoverBaseTest):
     def run_failover_operations(self, chosen, failover_reason):
         """ Method to run fail over operations used in the test scenario based on failover reason """
         # Perform Operations relalted to failover
+        graceful_count = 0
+        graceful_failover = True
         failed_over = True
         for node in chosen:
+            unreachable = False
             if failover_reason == 'stop_server':
+                unreachable=True
                 self.stop_server(node)
                 self.log.info("10 seconds delay to wait for membase-server to shutdown")
                 # wait for 5 minutes until node is down
                 self.assertTrue(RestHelper(self.rest).wait_for_node_status(node, "unhealthy", 300),
                                     msg="node status is not unhealthy even after waiting for 5 minutes")
             elif failover_reason == "firewall":
+                unreachable=True
                 self.filter_list.append (node.ip)
                 server = [srv for srv in self.servers if node.ip == srv.ip][0]
                 RemoteUtilHelper.enable_firewall(server, bidirectional=self.bidirectional)
@@ -257,10 +262,12 @@ class FailoverTests(FailoverBaseTest):
                     json_parsed = json.loads(content)
                     self.log.info("nodeStatuses: {0}".format(json_parsed))
                     self.fail("node status is not unhealthy even after waiting for 5 minutes")
-
+            # verify the failover type
+            if self.check_verify_failover_type:
+                graceful_count, graceful_failover = self.verify_failover_type(node, graceful_count, self.num_replicas, unreachable)
             # define precondition check for failover
-            success_failed_over = self.rest.fail_over(node.id, graceful=self.graceful)
-            if self.graceful and not self.gracefulFailoverFail:
+            success_failed_over = self.rest.fail_over(node.id, graceful=(self.graceful and graceful_failover))
+            if self.graceful and graceful_failover:
                 msg = "rebalance failed while removing failover nodes {0}".format(node.id)
                 self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
             failed_over = failed_over and success_failed_over
@@ -272,9 +279,9 @@ class FailoverTests(FailoverBaseTest):
                 self.rest.print_UI_logs()
             self.assertFalse(failed_over, "Graceful Falover was started for unhealthy node!!! ")
             return
-        elif self.gracefulFailoverFail and failed_over:
+        elif self.gracefulFailoverFail and not failed_over:
             """ Check if the fail_over fails as expected """
-            self.assertTrue(not failed_over,""" Graceful failover should fail due to not enough replicas """)
+            self.assertFalse(failed_over,""" Graceful failover should fail due to not enough replicas """)
             return
 
         # Check if failover happened as expected or re-try one more time
@@ -437,6 +444,44 @@ class FailoverTests(FailoverBaseTest):
             fileMap[server.ip] = map
             shell.disconnect()
         return fileMap
+
+    def verify_failover_type(self, chosen = None, graceful_count = 0, replica_count = 0, unreachable = False):
+        logic = True
+        summary  = ""
+        nodes = self.rest.node_statuses()
+        node_count = len(nodes)
+        change_graceful_count = graceful_count
+        graceful_failover = True
+        if unreachable:
+            node_count -= 1
+        else:
+            change_graceful_count += 1
+        if replica_count != 0:
+            for node in nodes:
+                if unreachable and node.ip == chosen.ip:
+                    graceful_failover = node.gracefulFailoverPossible
+                    if node.gracefulFailoverPossible:
+                        logic = False
+                        summary += "\n failover type for unreachable node {0} Expected :: Hard, Actual :: Graceful".format(node.ip)
+                elif node.ip == chosen.ip:
+                    graceful_failover = node.gracefulFailoverPossible
+                    if replica_count > graceful_count and (node_count - 1)+ graceful_count >= replica_count:
+                        if not node.gracefulFailoverPossible:
+                            logic = False
+                            summary += "\n failover type for node {0} Expected :: Graceful, Actual :: Hard".format(node.ip)
+                    else:
+                        if node.gracefulFailoverPossible:
+                            logic = False
+                            summary += "\n failover type for  {0} Expected :: Hard, Actual :: Graceful".format(node.ip)
+        else:
+            for node in nodes:
+                if node.ip == chosen.ip:
+                    graceful_failover = node.gracefulFailoverPossible
+                    if node.gracefulFailoverPossible:
+                        logic = False
+                        summary += "\n failover type for node {0} Expected :: Hard, Actual :: Graceful".format(node.ip)
+        self.assertTrue(logic,summary)
+        return change_graceful_count,graceful_failover
 
     def get_server_map(self,node):
         """ Map of ips and server information """

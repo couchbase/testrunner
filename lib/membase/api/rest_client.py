@@ -1253,6 +1253,10 @@ class RestConnection(object):
                     node.ip = self.ip
                 node.port = int(key[key.rfind(":") + 1:])
                 node.replication = value['replication']
+                if 'gracefulFailoverPossible' in value.keys():
+                    node.gracefulFailoverPossible = value['gracefulFailoverPossible']
+                else:
+                    node.gracefulFailoverPossible =  False
                 nodes.append(node)
         return nodes
 
@@ -2306,6 +2310,7 @@ class OtpNode(object):
         self.ip = ''
         self.replication = ''
         self.port = 8091
+        self.gracefulFailoverPossible = 'true'
         #extract ns ip from the otpNode string
         #its normally ns_1@10.20.30.40
         if id.find('@') >= 0:
