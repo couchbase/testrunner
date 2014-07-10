@@ -228,7 +228,7 @@ class RemoteMachineShellConnection:
         if os == "windows":
             o, r = self.execute_command("net start couchbaseserver")
             self.log_command_output(o, r)
-        elif os == "unix":
+        elif os == "unix" or os == "linux":
             if self.is_couchbase_installed():
                 o, r = self.execute_command("/etc/init.d/couchbase-server start")
             else:
@@ -244,7 +244,7 @@ class RemoteMachineShellConnection:
         if os == "windows":
             o, r = self.execute_command("net stop couchbaseserver")
             self.log_command_output(o, r)
-        elif os == "unix":
+        elif os == "unix" or os == "linux":
             if self.is_couchbase_installed():
                 o, r = self.execute_command("/etc/init.d/couchbase-server stop", use_channel=True)
             else:

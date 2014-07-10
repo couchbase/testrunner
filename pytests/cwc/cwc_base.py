@@ -2,6 +2,9 @@ from basetestcase import BaseTestCase
 from couchbase.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, Bucket
 from remote.remote_util import RemoteMachineShellConnection
+from testconstants import LINUX_CW_LOG_PATH
+from testconstants import MAC_CW_LOG_PATH
+from testconstants import WINDOWS_CW_LOG_PATH
 
 
 class CWCBaseTest(BaseTestCase):
@@ -16,7 +19,7 @@ class CWCBaseTest(BaseTestCase):
         self.uploadHost = self.input.param("uploadHost", None)
         self.customer_id = self.input.param("customer_id", None)
         self.ticket = self.input.param("ticket", None)
-        self.num_collect_nodes = self.input.param("num_collect_nodes", "*")
+        self.collect_nodes = self.input.param("collect_nodes", "*")
         self.shutdown_nodes = self.input.param("shutdown_nodes", None)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
@@ -24,8 +27,8 @@ class CWCBaseTest(BaseTestCase):
 
         #define the data that will be used to test
         self.blob_generator = self.input.param("blob_generator", True)
-        serverInfo = self.servers[0]
-        rest = RestConnection(serverInfo)
+        server = self.servers[0]
+        rest = RestConnection(server)
         if self.blob_generator:
             #gen_load data is used for upload before each test(1000 items by default)
             self.gen_load = BlobGenerator('test', 'test-', self.value_size, end=self.num_items)
@@ -38,18 +41,19 @@ class CWCBaseTest(BaseTestCase):
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
+        self.log_path = ""
         if type.lower() == 'windows':
-            self.is_linux = False
-        else:
-            self.is_linux = True
+            self.log_path = WINDOWS_CW_LOG_PATH
+        elif type.lower() in ["ubuntu", "centos", "red hat"]:
+            self.log_path = LINUX_CW_LOG_PATH
+        elif type.lower() == "mac":
+            self.log_path = MAC_CW_LOG_PATH
 
     def tearDown(self):
         super(CWCBaseTest, self).tearDown()
-        """ delete all zones except Group 1 """
-        serverInfo = self.servers[0]
-        rest = RestConnection(serverInfo)
-        zones = rest.get_zone_names()
-        for zone in zones:
-            if zone != "Group 1":
-                rest.delete_zone(zone)
-        super(CWCBaseTest, self).tearDown()
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            info = shell.extract_remote_info()
+            shell.stop_server(info.type.lower())
+            shell.start_server(info.type.lower())
+            shell.disconnect()
