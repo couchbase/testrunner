@@ -261,7 +261,7 @@ class BuildQuery(object):
                 windows build name: couchbase_server-enterprise-windows-amd64-3.0.0-892 """
 
             """ Remove the code below when cb name is standardlized (MB-11372) """
-            if "factory" in direct_build_url and build.deliverable_type == "exe":
+            if "windows" in direct_build_url and build.deliverable_type == "exe":
                 build_info = build_info.replace("-windows-amd64-","_x86_64_")
                 build_info = build_info.replace("couchbase_server","couchbase-server")
             """ End remove here """
