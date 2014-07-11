@@ -540,12 +540,8 @@ class RemoteMachineShellConnection:
         return None
 
     def write_remote_file(self, remote_path, filename, lines):
-        sftp = self._ssh_client.open_sftp()
-        remote_file = sftp.open('{0}/{1}'.format(remote_path, filename), 'w+')
-        try:
-            remote_file.writelines(lines)
-        finally:
-            remote_file.close()
+        cmd = 'echo "%s" > %s/%s' % (''.join(lines), remote_path, filename)
+        self.execute_command(cmd)
 
     def remove_directory(self, remote_path):
         sftp = self._ssh_client.open_sftp()
