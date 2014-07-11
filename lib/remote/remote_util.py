@@ -2005,7 +2005,7 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         temp_path = "/tmp/"
         if self.info.type.lower() == 'windows':
-            temp_path = WIN_TMP_PATH
+            temp_path = testconstants.WIN_TMP_PATH
         replicaOption = ""
         prefix = str(uuid.uuid1())
         fileName = prefix + ".csv"
