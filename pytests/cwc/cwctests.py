@@ -1,4 +1,3 @@
-import json
 import time
 import unittest
 import random
@@ -6,7 +5,7 @@ import testconstants
 from TestInput import TestInputSingleton
 
 from cwc.cwc_base import CWCBaseTest
-from membase.api.rest_client import RestConnection, Bucket
+from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 
 
@@ -28,8 +27,7 @@ class CWCTests(CWCBaseTest):
     def test_start_collect_log_without_upload(self):
         rest = RestConnection(self.master)
         shell = RemoteMachineShellConnection(self.master)
-        if "*" not in str(self.collect_nodes) and self.nodes_init > 1 and \
-            self.collect_nodes <= self.nodes_init:
+        if "*" not in str(self.collect_nodes) and self.nodes_init > 1:
             self.collect_nodes = self._generate_random_collecting_node(rest)
         status, content = rest.start_cluster_logs_collection(nodes=self.collect_nodes)
         if status:
@@ -65,7 +63,8 @@ class CWCTests(CWCBaseTest):
         node_failed_to_collect = []
         for node in perNode:
             for server in self.servers[:self.nodes_init]:
-                if server.ip in node:
+                if server.ip in node or (self.nodes_init == 1 \
+                                         and "127.0.0.1" in node):
                     shell = RemoteMachineShellConnection(server)
             file_name = perNode[node]["path"].replace(self.log_path, "")
             collected = False
