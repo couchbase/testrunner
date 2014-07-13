@@ -1,6 +1,6 @@
 from couchbase.document import View
 from hostnamemgmt_base import HostnameBaseTests
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection
 
 class HostnameMgmtTests(HostnameBaseTests):
@@ -125,3 +125,65 @@ class HostnameMgmtTests(HostnameBaseTests):
                 self.assertTrue(str(ex).find(self.error) != -1, "Unexpected error msg")
             else:
                 raise ex
+
+    def test_rename_rebalance_start_stop(self):
+        expected_progress = self.input.param('expected_progress', 30)
+        if len(self.servers) < 2:
+            self.fail("test require more than 1 node")
+        hostnames = self.rename_nodes(self.servers[:self.nodes_in + self.nodes_init])
+        self._set_hostames_to_servers_objs(hostnames)
+        self.verify_referenced_by_names(self.servers[:self.nodes_in + self.nodes_init], hostnames)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 self.servers[self.nodes_init:self.nodes_in + self.nodes_init], [],
+                                                 use_hostnames=True)
+        self.sleep(3, 'wait for some progress in rebalance...')
+        rest = RestConnection(self.master)
+        reached = RestHelper(rest).rebalance_reached(expected_progress)
+        self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
+        if not RestHelper(rest).is_cluster_rebalanced():
+            stopped = rest.stop_rebalance(wait_timeout=self.wait_timeout / 3)
+            self.assertTrue(stopped, msg="unable to stop rebalance")
+        self.verify_referenced_by_names(self.servers[:self.nodes_in + self.nodes_init], hostnames)
+        self.cluster.rebalance(self.servers[:self.nodes_init + self.nodes_init],
+                               [], [], use_hostnames=True)
+        self.verify_referenced_by_names(self.servers[:self.nodes_in + self.nodes_init], hostnames)
+
+    def test_rename_swap_rebalance(self):
+        if len(self.servers) < 3:
+            self.fail("test require more than 2 nodes")
+        hostnames = self.rename_nodes(self.servers[:self.nodes_in + self.nodes_init + self.nodes_out])
+        self._set_hostames_to_servers_objs(hostnames)
+        self.verify_referenced_by_names(self.servers[:self.nodes_in + self.nodes_init + self.nodes_out], hostnames)
+        self.cluster.rebalance(self.servers[:self.nodes_init],
+                               self.servers[self.nodes_init:self.nodes_in + self.nodes_init], [],
+                               use_hostnames=True)
+        self.verify_referenced_by_names(self.servers[:self.nodes_in + self.nodes_init + self.nodes_out], hostnames)
+        rebalance = self.cluster.rebalance(self.servers[self.nodes_init:self.nodes_in + self.nodes_init],
+                                           self.servers[self.nodes_in + self.nodes_init:self.nodes_in + self.nodes_init + self.nodes_out],
+                                           self.servers[self.nodes_init:self.nodes_in + self.nodes_init],
+                                           use_hostnames=True)
+        self.verify_referenced_by_names(self.servers[:self.nodes_in + self.nodes_init + self.nodes_out], hostnames)
+
+    def test_rename_failover_add_back(self):
+        if len(self.servers) < 2:
+            self.fail("test require more than 1 node")
+        failover_factor = self.input.param("failover-factor", 1)
+        failover_nodes = self.servers[self.nodes_in : self.nodes_in + failover_factor + 1]
+        hostnames = self.rename_nodes(self.servers[:self.nodes_in + failover_factor + 1])
+        self._set_hostames_to_servers_objs(hostnames)
+        self.verify_referenced_by_names(self.servers[:self.nodes_in + failover_factor + 1], hostnames)
+        self.cluster.rebalance(self.servers[:self.nodes_init],
+                               self.servers[self.nodes_init:self.nodes_in + failover_factor + 1], [],
+                               use_hostnames=True)
+        rest = RestConnection(self.master)
+        nodes_all = rest.node_statuses()
+        nodes = []
+        for failover_node in failover_nodes:
+            nodes.extend([node for node in nodes_all
+                if node.ip != failover_node.ip or str(node.port) != failover_node.port])
+        self.cluster.failover(self.servers, failover_nodes)
+        self.verify_referenced_by_names(self.servers[:self.nodes_in + failover_factor + 1], hostnames)
+        for node in nodes:
+            rest.add_back_node(node.id)
+        self.cluster.rebalance(self.servers[:self.nodes_in + failover_factor + 1], [], [], use_hostnames=True)
+        self.verify_referenced_by_names(self.servers[:self.nodes_in + failover_factor + 1], hostnames)
