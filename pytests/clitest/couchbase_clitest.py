@@ -701,7 +701,7 @@ class CouchbaseCliTest(CliBaseTest):
 
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=None, password=None)
             self.sleep(7)  # time needed to reload couchbase
-            self.assertEqual(output, [u'ERROR: Both username and password are required.'] or output == [u'The password must be at least six characters.'])
+            self.assertEqual(output, [u'ERROR: Username cannot be empty. Please use -u or set environment variable CB_REST_USERNAME.'] or output == [u'The password must be at least six characters.'])
             remote_client.disconnect()
         finally:
             rest = RestConnection(server)
@@ -1057,8 +1057,14 @@ class XdcrCLITest(CliBaseTest):
                 output_error = output_error.replace("CLUSTERNAME", (xdcr_cluster_name, "")[xdcr_cluster_name is None])
             if output_error.find("HOSTNAME") != -1:
                 output_error = output_error.replace("HOSTNAME", (self.servers[xdcr_hostname].ip, "")[xdcr_hostname is None])
-            self.assertEqual(output, eval(output_error))
-            return
+
+            for element in output:
+                self.log.info("element {0}".format(element))
+                if "ERROR: unable to set up xdcr remote site remote (400) Bad Request" in element:
+                    self.log.info("match {0}".format(element))
+                    return True
+            self.assertFalse("output string did not match")
+
         # MB-8570 can't edit xdcr-setup through couchbase-cli
         if xdcr_cluster_name:
             options = options.replace("--create ", "--edit ")
