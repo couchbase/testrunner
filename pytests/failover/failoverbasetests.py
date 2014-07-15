@@ -28,6 +28,7 @@ class FailoverBaseTest(BaseTestCase):
         self.check_verify_failover_type = self.input.param("check_verify_failover_type", True)
         self.recoveryType = self.input.param("recoveryType", "delta")
         self.bidirectional = self.input.param("bidirectional", False)
+        self.stopGracefulFailover = self.input.param("stopGracefulFailover", False)
         self._value_size = self.input.param("value_size", 256)
         self.doc_ops = self.input.param("doc_ops", [])
         self.deltaRecoveryBuckets = self.input.param("deltaRecoveryBuckets", None)

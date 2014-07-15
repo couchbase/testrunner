@@ -268,8 +268,21 @@ class FailoverTests(FailoverBaseTest):
             # define precondition check for failover
             success_failed_over = self.rest.fail_over(node.id, graceful=(self.graceful and graceful_failover))
             if self.graceful and graceful_failover:
-                msg = "rebalance failed while removing failover nodes {0}".format(node.id)
-                self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
+                if self.stopGracefulFailover:
+                    # Logic to stop graceful and start it again
+                    # Stop  Graceful
+                    reached = RestHelper(self.rest).rebalance_reached(20)
+                    if reached:
+                        self.log.info(" Stopping Graceful failover")
+                        stopped = self.rest.stop_rebalance(wait_timeout=self.wait_timeout / 3)
+                        self.assertTrue(stopped, msg="unable to stop rebalance")
+                        # Start Graceful Again
+                        success_failed_over = self.rest.fail_over(node.id, graceful=(self.graceful and graceful_failover))
+                    else:
+                        self.assertTrue(False, msg="graceful failover finished before we could stop graceful failover, please check test scenario")
+                else:
+                    msg = "rebalance failed while removing failover nodes {0}".format(node.id)
+                    self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
             failed_over = failed_over and success_failed_over
 
         # Check for negative cases
@@ -289,7 +302,7 @@ class FailoverTests(FailoverBaseTest):
             self.log.info("unable to failover the node the first time. try again in  60 seconds..")
             # try again in 75 seconds
             self.sleep(75)
-            failed_over = self.rest.fail_over(node.id, graceful=self.graceful)
+            failed_over = self.rest.fail_over(node.id, graceful=(self.graceful and graceful_failover))
         if self.graceful and (failover_reason not in ['stop_server', 'firewall']):
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed for Graceful Failover, stuck or did not completed")
