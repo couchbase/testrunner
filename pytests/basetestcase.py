@@ -524,10 +524,13 @@ class BaseTestCase(unittest.TestCase):
 
      A utility function that waits upr flow with unacked_bytes = 0
     """
-    def verify_unacked_bytes_all_buckets(self, filter_list = [], sleep_time=5):
+    def verify_unacked_bytes_all_buckets(self, filter_list = [], sleep_time=5, master_node = None):
         if self.verify_unacked_bytes:
             self.sleep(sleep_time)
-            servers  = self.get_nodes_in_cluster()
+            if master_node == None:
+                servers  = self.get_nodes_in_cluster()
+            else:
+                servers  = self.get_nodes_in_cluster(master_node)
             map =  self.data_collector.collect_compare_upr_stats(self.buckets,servers, filter_list = filter_list)
             for bucket in map.keys():
                 self.assertTrue(map[bucket], " the bucket {0} has unacked bytes != 0".format(bucket))
@@ -811,8 +814,12 @@ class BaseTestCase(unittest.TestCase):
                     pass
         client.close()
 
-    def get_nodes_in_cluster(self):
-        rest = RestConnection(self.master)
+    def get_nodes_in_cluster(self, master_node = None):
+        rest = None
+        if master_node == None:
+            rest = RestConnection(self.master)
+        else:
+            rest = RestConnection(master_node)
         nodes = rest.node_statuses()
         server_set = []
         for node in nodes:

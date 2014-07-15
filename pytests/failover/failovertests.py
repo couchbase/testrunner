@@ -101,7 +101,7 @@ class FailoverTests(FailoverBaseTest):
                 self.run_rebalance_after_failover_and_verify(self.chosen, prev_vbucket_stats, record_static_data_set, prev_failover_stats)
 
         if self.during_ops == None:
-            self.verify_unacked_bytes_all_buckets(filter_list = self.filter_list)
+            self.verify_unacked_bytes_all_buckets(filter_list = self.filter_list, master_node = self.referenceNode)
 
     def run_rebalance_after_failover_and_verify(self, chosen, prev_vbucket_stats, record_static_data_set, prev_failover_stats):
         """ Method to run rebalance after failover and verify """
