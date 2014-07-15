@@ -102,3 +102,26 @@ class HostnameMgmtTests(HostnameBaseTests):
         shell.start_couchbase()
         shell.disconnect()
         self.verify_referenced_by_names(self.servers[:self.nodes_in + self.nodes_init], hostnames)
+
+    def test_rename_negative(self):
+        if len(self.servers) < 2:
+            self.fail("test require more than 1 node")
+        hostnames = self.rename_nodes(self.servers[:2])
+        self._set_hostames_to_servers_objs(hostnames)
+        self.verify_referenced_by_names(self.servers[:2], hostnames)
+        try:
+            self.rename_nodes(self.servers[:1], names={self.servers[0]: hostnames[self.servers[1]]})
+        except Exception,  ex:
+            if self.error:
+                self.assertTrue(str(ex).find(self.error) != -1, "Unexpected error msg")
+            else:
+                raise ex
+
+    def test_rename_negative_name_with_space(self):
+        try:
+            self.rename_nodes(self.servers[:1], names={self.servers[0]: ' '})
+        except Exception,  ex:
+            if self.error:
+                self.assertTrue(str(ex).find(self.error) != -1, "Unexpected error msg")
+            else:
+                raise ex
