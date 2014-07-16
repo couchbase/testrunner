@@ -98,6 +98,12 @@ class BaseTestCase(unittest.TestCase):
             self.eviction_policy = self.input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
             self.absolute_path = self.input.param("absolute_path", True)
             self.test_timeout = self.input.param("test_timeout", 3600)  # kill hang test and jump to next one.
+            self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
+            self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
+            if self.sasl_bucket_priority != None:
+                self.sasl_bucket_priority = self.sasl_bucket_priority.split(":")
+            if self.standard_bucket_priority != None:
+                self.standard_bucket_priority = self.standard_bucket_priority.split(":")
 
             self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
                           .format(self.case_number, self._testMethodName))
@@ -306,12 +312,16 @@ class BaseTestCase(unittest.TestCase):
         bucket_tasks = []
         for i in range(num_buckets):
             name = 'bucket' + str(i)
+            bucket_priority = None
+            if self.sasl_bucket_priority != None:
+                bucket_priority = self.get_bucket_priority(self.sasl_bucket_priority[i])
             bucket_tasks.append(self.cluster.async_create_sasl_bucket(server, name,
                                                                       password,
                                                                       bucket_size,
                                                                       self.num_replicas,
                                                                       enable_replica_index=self.enable_replica_index,
-                                                                      eviction_policy=self.eviction_policy))
+                                                                      eviction_policy=self.eviction_policy,
+                                                                      bucket_priority = bucket_priority))
             self.buckets.append(Bucket(name=name, authType="sasl", saslPassword=password,
                                        num_replicas=self.num_replicas, bucket_size=bucket_size,
                                        master_id=server_id, eviction_policy=self.eviction_policy));
@@ -328,12 +338,16 @@ class BaseTestCase(unittest.TestCase):
         bucket_tasks = []
         for i in range(num_buckets):
             name = 'standard_bucket' + str(i)
+            bucket_priority = None
+            if self.standard_bucket_priority != None:
+                bucket_priority = self.get_bucket_priority(self.standard_bucket_priority[i])
             bucket_tasks.append(self.cluster.async_create_standard_bucket(server, name,
                                                                     STANDARD_BUCKET_PORT + i,
                                                                     bucket_size,
                                                                     self.num_replicas,
                                                                     enable_replica_index=self.enable_replica_index,
-                                                                    eviction_policy=self.eviction_policy))
+                                                                    eviction_policy=self.eviction_policy,
+                                                                    bucket_priority = bucket_priority))
             self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
                                        num_replicas=self.num_replicas,
                                        bucket_size=bucket_size,
@@ -1272,6 +1286,14 @@ class BaseTestCase(unittest.TestCase):
         self.assertTrue(isNotSame, summary)
         self.log.info(" End Verification for Failovers logs comparison ")
         return new_failovers_stats
+
+    def get_bucket_priority(self,priority):
+        if priority == None:
+            return None
+        if priority == 'low':
+            return None
+        else:
+            return priority
 
     def expire_pager(self, servers, val=10):
         for bucket in self.buckets:
