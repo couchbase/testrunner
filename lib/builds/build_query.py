@@ -70,11 +70,14 @@ class BuildQuery(object):
 
     def find_build(self, builds, product, type, arch, version, toy='', openssl='', direct_build_url=None):
         if direct_build_url is None:
-            for build in builds:
-                if build.product_version.find(version) != -1 and product == build.product\
-                   and build.architecture_type == arch and type == build.deliverable_type\
-                   and build.toy == toy:
-                    return build
+            if not isinstance(builds, list) and builds.url is not None:
+                return builds
+            else:
+                for build in builds:
+                    if build.product_version.find(version) != -1 and product == build.product\
+                       and build.architecture_type == arch and type == build.deliverable_type\
+                       and build.toy == toy:
+                        return build
         elif direct_build_url != "":
             """ direct url only need one build """
             if builds.product_version.find(version) != -1 and product == builds.product\
@@ -167,11 +170,14 @@ class BuildQuery(object):
     def get_sustaining_latest_builds(self):
         return self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds/sustaining')
 
-    def get_all_builds(self, version=None, timeout=None, direct_build_url=None):
+    def get_all_builds(self, version=None, timeout=None, direct_build_url=None, deliverable_type=None, \
+                       architecture_type=None,edition_type=None, repo=None):
         try:
             latestbuilds, latestchanges = \
                 self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds', version=version, \
-                                           timeout=timeout, direct_build_url=direct_build_url)
+                                           timeout=timeout, direct_build_url=direct_build_url, \
+                                           deliverable_type=deliverable_type, architecture_type=architecture_type, \
+                                           edition_type=edition_type,repo=repo)
         except Exception as e:
             latestbuilds, latestchanges = \
                 self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds', \
@@ -181,12 +187,19 @@ class BuildQuery(object):
 
 
     #baseurl = 'http://builds.hq.northscale.net/latestbuilds/'
-    def _get_and_parse_builds(self, build_page, version=None, timeout=None, direct_build_url=None):
+    def _get_and_parse_builds(self, build_page, version=None, timeout=None, direct_build_url=None, \
+                              deliverable_type=None, architecture_type=None, edition_type=None,repo=None ):
         builds = []
         changes = []
         if direct_build_url is not None and direct_build_url != "":
             query = BuildQuery()
             build = query.create_build_info_from_direct_url(direct_build_url)
+            return build, changes
+        elif repo is not None and edition_type is not None and \
+             architecture_type is not None and deliverable_type is not None:
+            query = BuildQuery()
+            build = query.create_build_url(version, deliverable_type, architecture_type, \
+                                           edition_type, repo)
             return build, changes
         else:
             page = None
@@ -287,6 +300,33 @@ class BuildQuery(object):
             else:
                 self.fail("unknown server name")
             return build
+
+    def create_build_url(self,version, deliverable_type, architecture_type, edition_type, repo):
+        build = MembaseBuild()
+        """
+        version: 3.0.0-xx or 3.0.0-xx-rel
+        deliverable_type: deb
+        architecture_type: x86_64
+        edition_type: couchbase-server-enterprise or couchbase-server-community
+        repo: http://builds.hq.northscale.net/latestbuilds/
+        build.name = couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
+        build.url = http://builds.hq.northscale.net/latestbuilds/couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
+        """
+        build.toy = ""
+        build.deliverable_type = deliverable_type
+        build.architecture_type = architecture_type
+        unix_deliverable_type = ["deb", "rpm", "mac"]
+        if deliverable_type in unix_deliverable_type:
+            if "rel" not in version:
+                build.product_version = version + "-rel"
+            else:
+                build.product_version = version
+        if "deb" in deliverable_type and "centos6" in edition_type:
+            edition_type = edition_type.replace("centos6", "ubuntu_1204")
+        build.name = edition_type + "_" + build.architecture_type + "_" + \
+                     build.product_version + "." + build.deliverable_type
+        build.url = repo + build.name
+        return build
 
     def create_build_info(self, build_id, build_decription):
         build = MembaseBuild()

@@ -21,6 +21,7 @@ from membase.api.exception import ServerUnavailableException
 from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
+from testconstants import MV_LATESTBUILD_REPO
 import TestInput
 
 
@@ -196,7 +197,7 @@ class Installer(object):
             if "timeout" in params:
                 timeout = int(params["timeout"])
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
-            cb_releases_version = ["1.8.1", "2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0"]
+            cb_releases_version = ["1.8.1", "2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0", "2.5.0", "2.5.1"]
             for name in names:
                 if version in releases_version:
                     build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
@@ -210,7 +211,9 @@ class Installer(object):
                                                                      product=name)
                 else:
                     builds, changes = BuildQuery().get_all_builds(version=version, timeout=timeout, \
-                                                                  direct_build_url=direct_build_url)
+                                      direct_build_url=direct_build_url, deliverable_type=info.deliverable_type, \
+                                      architecture_type=info.architecture_type, edition_type=name, \
+                                      repo=MV_LATESTBUILD_REPO)
                     build = BuildQuery().find_build(builds, name, info.deliverable_type,
                                                         info.architecture_type, version, toy=toy,
                                                         openssl=openssl, direct_build_url=direct_build_url)
