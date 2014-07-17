@@ -244,9 +244,10 @@ class BuildQuery(object):
                         build.url = '%s/%s' % (build_page, build_id)
                         builds.append(build)
                 except Exception as e:
-                    print "Build_id: %s , Build_Description: %s" % (build_id, build_description)
+                    print "ERROR in creating build/change info for: Build_id: %s , Build_Description: %s" % (build_id, build_description)
                     print traceback.print_exc(file=sys.stderr)
-                    raise e
+                    #raise e : Skipping parsing for this build information,
+                    #Eventually, It will fail with build not found error at install.py:240
             for build in builds:
                 for change in changes:
                     if change.build_number == build.product_version:
