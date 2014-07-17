@@ -319,6 +319,28 @@ class DataAnalyzer(object):
         std  =  (diffSum/len(array))**(.5)
         return {"max":max_val,"min":min_val, "total" : total, "mean" : mean, "std" :  std, "map" : distribution_map}
 
+    def compare_analyze_active_replica_vb_nums(self, active_map, replica_map):
+        active_maps = {}
+        replica_maps = {}
+        for bucket in active_map.keys():
+            active_maps[bucket] = self.analyze_vb_nums(active_map[bucket])
+            replica_maps[bucket] = self.analyze_vb_nums(replica_map[bucket])
+        return active_maps,replica_maps
+
+    def analyze_vb_nums(self, map):
+        array = []
+        for machine in map.keys():
+            array.append(map[machine])
+        total = sum(array)
+        max_val = max(array)
+        min_val = min(array)
+        mean =  total / float(len(array))
+        diffSum = 0
+        for val in array:
+            diffSum += pow((val - mean),2)
+        std  =  (diffSum/len(array))**(.5)
+        return {"max":max_val,"min":min_val, "total" : total, "mean" : mean, "std" :  std}
+
     def compare_data_maps(self,info1,info2,headerInfo,mainKey,comparisonMap=None):
         """ Method to help comparison of datasets """
         updatedItemsMap = {}
@@ -533,6 +555,40 @@ class DataCollector(object):
                     dataMap.update(map_data)
             bucketMap[bucket.name] = dataMap
         return bucketMap
+
+    def collect_vbucket_num_stats(self,servers, buckets):
+        """
+            Method to extract the failovers stats given by cbstats tool
+
+            Paramters:
+
+            buckets: bucket informaiton
+            servers: server information
+
+            Returns:
+
+            Failover stats as follows:
+            if not collecting per node :: {bucket : [{key:value}]}
+            if collecting per node :: {bucket : {node:[{key:value}]}}
+        """
+        active_bucketMap = {}
+        replica_bucketMap = {}
+        for bucket in buckets:
+            active_map_data = {}
+            replica_map_data = {}
+            for server in servers:
+                rest = RestConnection(server)
+                port = rest.get_memcached_port()
+                client = MemcachedClient(host=server.ip, port=port)
+                stats = client.stats('')
+                for key in stats.keys():
+                    if key == 'vb_active_num':
+                        active_map_data[server.ip] = int(stats[key])
+                    if key == 'vb_replica_num':
+                        replica_map_data[server.ip] = int(stats[key])
+            active_bucketMap[bucket.name] = active_map_data
+            replica_bucketMap[bucket.name] = replica_map_data
+        return active_bucketMap,replica_bucketMap
 
     def collect_compare_upr_stats(self,buckets,servers,perNode = True, stat_name = 'unacked_bytes', compare_value = 0,  flow_control_buffer_size = 20971520, filter_list = []):
         """

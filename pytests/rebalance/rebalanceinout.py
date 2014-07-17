@@ -51,6 +51,8 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, result_nodes, self.buckets, path=None)
         self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
         self.verify_unacked_bytes_all_buckets()
+        nodes = self.get_nodes_in_cluster(self.master)
+        self.vb_distribution_analysis(servers = nodes, std = 1.0 , total_vbuckets = self.total_vbuckets)
 
     """Rebalances nodes out and in of the cluster while doing mutations with max
     number of buckets in the cluster.

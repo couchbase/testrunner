@@ -27,8 +27,7 @@ class DataAnalysisTests(BaseTestCase):
 
     def test_data_distribution(self):
         """
-            Test to show disk vs memory comparison using cbtransfer functionality
-            This will be done per node level comparison
+            Test to check for data distribution at vbucket level
         """
         self.std = self.input.param("std", 1.0)
         self.gen_create = BlobGenerator('loadOne', 'loadOne_', self.value_size, end=self.num_items)
@@ -36,6 +35,18 @@ class DataAnalysisTests(BaseTestCase):
                                batch_size=10000, pause_secs=10, timeout_secs=60)
         self._wait_for_stats_all_buckets(self.servers)
         self.data_distribution_analysis(self.num_items,self.std)
+
+    def test_data_vb_num_distribution(self):
+        """
+            Test to check vbucket distribution for active and replica items
+        """
+        self.std = self.input.param("std", 1.0)
+        self.total_vbuckets = self.input.param("total_vbuckets", 1.0)
+        self.gen_create = BlobGenerator('loadOne', 'loadOne_', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, self.gen_create, "create", 0,
+                               batch_size=10000, pause_secs=10, timeout_secs=60)
+        self._wait_for_stats_all_buckets(self.servers)
+        self.vb_distribution_check(self.total_vbuckets,self.std)
 
     def test_data_analysis_disk_memory_comparison_all(self):
         """
@@ -125,6 +136,13 @@ class DataAnalysisTests(BaseTestCase):
             self.log.info(" Verification summary :: {0} ".format(map1))
             self.assertTrue(map1["total"] == total_items, "item do not match")
             self.assertTrue(map1["std"] >= 0.0 and map1["std"] < std, "std test failed, not within [0,1]")
+
+    def vb_distribution_check(self, total_vbuckets = 0, std = 1.0):
+        """
+            Method to check data analysis
+        """
+        self.log.info(" Begin Verification for distribution analysis")
+        self.vb_distribution_analysis(servers = self.servers, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets)
 
     def data_analysis_all(self):
         """

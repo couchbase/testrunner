@@ -155,6 +155,12 @@ class FailoverTests(FailoverBaseTest):
             new_failover_stats = self.compare_failovers_logs(prev_failover_stats, _servers_, self.buckets)
             new_vbucket_stats =  self.compare_vbucket_seqnos(prev_vbucket_stats, _servers_, self.buckets)
             self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
+
+        # Verify Active and Replica Bucket Count
+        if self.num_replicas > 0:
+            nodes = self.get_nodes_in_cluster(self.referenceNode)
+            self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets)
+
         self.log.info("End VERIFICATION for Rebalance after Failover Only")
 
     def run_add_back_operation_and_verify(self, chosen, prev_vbucket_stats, record_static_data_set, prev_failover_stats):
@@ -210,6 +216,12 @@ class FailoverTests(FailoverBaseTest):
             if self.runViewsDuringFailover:
                 self.monitor_view_tasks(self.servers)
             self.verify_query_task()
+
+        # Verify Active and Replica Bucket Count
+        if self.num_replicas > 0:
+            nodes = self.get_nodes_in_cluster(self.referenceNode)
+            self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets)
+
         self.log.info("End VERIFICATION for Add-back and rebalance")
 
     def print_test_params(self, failover_reason):
@@ -306,6 +318,12 @@ class FailoverTests(FailoverBaseTest):
         if self.graceful and (failover_reason not in ['stop_server', 'firewall']):
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed for Graceful Failover, stuck or did not completed")
+
+        # Verify Active and Replica Bucket Count
+        if self.num_replicas > 0:
+            nodes = self.filter_servers(self.servers,chosen)
+            self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets, type = "failover")
+
 
     def run_operation_tasks(self):
         """ Method to run operations Update/Delete/Create """

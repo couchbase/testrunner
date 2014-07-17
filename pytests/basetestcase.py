@@ -1089,6 +1089,12 @@ class BaseTestCase(unittest.TestCase):
         distribution  = self.data_analyzer.analyze_data_distribution(dataset)
         return dataset, distribution
 
+    def get_vb_distribution_active_replica(self, servers = [], buckets = []):
+        """ Method to distribution analysis for active and replica vbuckets """
+        active, replica = self.data_collector.collect_vbucket_num_stats(servers, buckets)
+        active_result, replica_result  = self.data_analyzer.compare_analyze_active_replica_vb_nums(active,replica)
+        return active_result, replica_result
+
     def get_and_compare_active_replica_data_set_all(self, servers, buckets, path=None, mode = "disk"):
         """
            Method to get all data set for buckets and from the servers
@@ -1104,6 +1110,25 @@ class BaseTestCase(unittest.TestCase):
         self.assertTrue(logic, summary)
         self.log.info(" End Verification for Active Vs Replica ")
         return disk_replica_dataset, disk_active_dataset
+
+    def vb_distribution_analysis(self, servers = [], buckets = [], total_vbuckets = 0, std = 1.0, type = "rebalance"):
+        """
+            Method to check vbucket distribution analysis after rebalance
+        """
+        self.log.info(" Begin Verification for vb_distribution_analysis")
+        active,replica=self.get_vb_distribution_active_replica(servers = servers, buckets = buckets)
+        for bucket in active.keys():
+             self.log.info(" Begin Verification for Bucket {0}".format(bucket))
+             active_result = active[bucket]
+             replica_result = replica[bucket]
+             self.assertTrue(active_result["total"] == total_vbuckets, "total vbuckets do not match for active data set, actual {0} expectecd {1}".format(active_result["total"] ,total_vbuckets))
+             if type == "rebalance":
+                self.assertTrue(replica_result["total"] == total_vbuckets, "total vbuckets do not match for replica data set (= criteria), actual {0} expectecd {1}".format(replica_result["total"] ,total_vbuckets))
+             else:
+                self.assertTrue(replica_result["total"] == total_vbuckets, "total vbuckets do not match for replica data set (<= criteria), actual {0} expectecd {1}".format(replica_result["total"] ,total_vbuckets))
+             self.assertTrue(active_result["std"] >= 0.0 and active_result["std"] <= std, "std test failed for active vbuckets")
+             self.assertTrue(replica_result["std"] >= 0.0 and replica_result["std"] <= std, "std test failed for replica vbuckets")
+        self.log.info(" End Verification for vb_distribution_analysis")
 
     def data_analysis_active_replica_all(self, prev_data_set_active, prev_data_set_replica, servers, buckets, path=None, mode = "disk"):
         """

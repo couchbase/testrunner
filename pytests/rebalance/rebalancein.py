@@ -50,7 +50,8 @@ class RebalanceInTests(RebalanceBaseTest):
         self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, self.servers[:self.nodes_in + self.nodes_init], self.buckets, path=None)
         self.verify_unacked_bytes_all_buckets()
-
+        nodes = self.get_nodes_in_cluster(self.master)
+        self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets)
 
     """Rebalances nodes into a cluster while doing docs ops:create, delete, update.
 

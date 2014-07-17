@@ -17,6 +17,7 @@ class FailoverBaseTest(BaseTestCase):
         self.default_view_name = "default_view"
         self.default_view = View(self.default_view_name, self.defaul_map_func, None)
         self.failoverMaster = self.input.param("failoverMaster", False)
+        self.total_vbuckets = self.input.param("total_vbuckets", 1024)
         self.withOps = self.input.param("withOps", False)
         self.runViews = self.input.param("runViews", False)
         self.upr_check = self.input.param("upr_check", True)
