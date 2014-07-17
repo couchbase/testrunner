@@ -113,8 +113,6 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         self.log.info ("Verifying commitopaque/remote failover log ...")
         if seqno != 0:
             self.validate_remote_failover_log(commit_opaque[0], commit_opaque[1])
-            self.log.info ("Verifying last checkpointed seqno ...")
-            self.validate_last_checkpointed_seqno(int(seqno))
             self.log.info ("Verifying local failover uuid ...")
             local_vb_uuid, _ = self.get_failover_log(self.src_master)
             self.assertTrue(int(local_vb_uuid) == int(failover_uuid),
@@ -139,23 +137,6 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         vb0_active_node = self.get_active_vb0_node(master)
         stats = MemcachedClientHelper.direct_client(vb0_active_node, 'default').stats('vbucket-seqno')
         return stats['vb_0:uuid'], stats['vb_0:high_seqno']
-
-    """ Checks if seqno in checkpoint record points to the  """
-    def validate_last_checkpointed_seqno(self, last_seqno=0):
-        shell = RemoteMachineShellConnection(self.src_master)
-        os_type = shell.extract_remote_info().distribution_type
-        if os_type.lower() == 'windows':
-            logs_dir = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/xdcr.*"
-        else:
-            logs_dir = "/opt/couchbase/var/lib/couchbase/logs/xdcr.*"
-        out, error = shell.execute_command("ls -rt  %s | xargs grep \"source start sequence\" | tail -10" % (logs_dir))
-        for replicated_seqnum in out:
-            self.log.info(replicated_seqnum)
-        out, error = shell.execute_command("ls -rt  %s | xargs grep \"source start sequence\" | tail -1" % (logs_dir))
-        self.log.info(out)
-        seqno = int(out[0][-1])
-        self.assertTrue(last_seqno == seqno,"The last checkpointed_seqno from record is %s, while log says %s"
-                                            %(last_seqno, seqno))
 
     """ Gets _commit_for_checkpoint call history recorded so far on a node """
     def get_checkpoint_call_history(self, node):
