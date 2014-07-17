@@ -16,6 +16,7 @@ from couchbase.documentgenerator import BlobGenerator
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from pprint import pprint
+from testconstants import MV_LATESTBUILD_REPO
 
 class NewUpgradeBaseTest(BaseTestCase):
     def setUp(self):
@@ -164,7 +165,9 @@ class NewUpgradeBaseTest(BaseTestCase):
     def _get_build(self, server, version, remote, is_amazon=False, info=None):
         if info is None:
             info = remote.extract_remote_info()
-        builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5)
+        builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5, \
+                    deliverable_type=info.deliverable_type, architecture_type=info.architecture_type, \
+                    edition_type="couchbase-server-enterprise", repo=MV_LATESTBUILD_REPO)
         self.log.info("finding build %s for machine %s" % (version, server))
 
         if re.match(r'[1-9].[0-9].[0-9]-[0-9]+$', version):
@@ -174,9 +177,10 @@ class NewUpgradeBaseTest(BaseTestCase):
                 find_membase_release_build('%s-enterprise' % (self.product), info.deliverable_type,
                                            info.architecture_type, version.strip(), is_amazon=is_amazon)
         else:
-            appropriate_build = BuildQuery().\
-                find_membase_build(builds, '%s-enterprise' % (self.product), info.deliverable_type,
-                                   info.architecture_type, version.strip(), is_amazon=is_amazon)
+             appropriate_build = BuildQuery().\
+                find_build(builds, '%s-enterprise' % (self.product), info.deliverable_type,
+                                   info.architecture_type, version.strip())
+
         if appropriate_build is None:
             self.log.info("builds are: %s \n. Remote is %s, %s. Result is: %s" % (builds, remote.ip, remote.username, version))
             raise Exception("Build %s for machine %s is not found" % (version, server))
