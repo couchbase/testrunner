@@ -187,7 +187,10 @@ class Installer(object):
                 names = ['couchbase-server-enterprise_centos6', 'couchbase-server-community_centos6', \
                          'couchbase-server-enterprise_ubuntu_1204', 'couchbase-server-community_ubuntu_1204']
             if "toy" in params:
-                names = ['couchbase-server-community']
+                if "1" in openssl:
+                    names = ['couchbase-server-community_cent64']
+                else:
+                    names = ['couchbase-server-community_cent58']
 
         remote_client = RemoteMachineShellConnection(server)
         info = remote_client.extract_remote_info()
@@ -213,7 +216,7 @@ class Installer(object):
                     builds, changes = BuildQuery().get_all_builds(version=version, timeout=timeout, \
                                       direct_build_url=direct_build_url, deliverable_type=info.deliverable_type, \
                                       architecture_type=info.architecture_type, edition_type=name, \
-                                      repo=MV_LATESTBUILD_REPO)
+                                      repo=MV_LATESTBUILD_REPO, toy=toy)
                     build = BuildQuery().find_build(builds, name, info.deliverable_type,
                                                         info.architecture_type, version, toy=toy,
                                                         openssl=openssl, direct_build_url=direct_build_url)

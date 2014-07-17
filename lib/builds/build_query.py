@@ -171,13 +171,13 @@ class BuildQuery(object):
         return self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds/sustaining')
 
     def get_all_builds(self, version=None, timeout=None, direct_build_url=None, deliverable_type=None, \
-                       architecture_type=None,edition_type=None, repo=None):
+                       architecture_type=None,edition_type=None, repo=None, toy=""):
         try:
             latestbuilds, latestchanges = \
                 self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds', version=version, \
                                            timeout=timeout, direct_build_url=direct_build_url, \
                                            deliverable_type=deliverable_type, architecture_type=architecture_type, \
-                                           edition_type=edition_type,repo=repo)
+                                           edition_type=edition_type,repo=repo, toy=toy)
         except Exception as e:
             latestbuilds, latestchanges = \
                 self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds', \
@@ -188,7 +188,8 @@ class BuildQuery(object):
 
     #baseurl = 'http://builds.hq.northscale.net/latestbuilds/'
     def _get_and_parse_builds(self, build_page, version=None, timeout=None, direct_build_url=None, \
-                              deliverable_type=None, architecture_type=None, edition_type=None,repo=None ):
+                              deliverable_type=None, architecture_type=None, edition_type=None, \
+                              repo=None, toy=""):
         builds = []
         changes = []
         if direct_build_url is not None and direct_build_url != "":
@@ -199,7 +200,7 @@ class BuildQuery(object):
              architecture_type is not None and deliverable_type is not None:
             query = BuildQuery()
             build = query.create_build_url(version, deliverable_type, architecture_type, \
-                                           edition_type, repo)
+                                           edition_type, repo, toy)
             return build, changes
         else:
             page = None
@@ -301,7 +302,7 @@ class BuildQuery(object):
                 self.fail("unknown server name")
             return build
 
-    def create_build_url(self,version, deliverable_type, architecture_type, edition_type, repo):
+    def create_build_url(self,version, deliverable_type, architecture_type, edition_type, repo, toy):
         build = MembaseBuild()
         """
         version: 3.0.0-xx or 3.0.0-xx-rel
@@ -309,21 +310,28 @@ class BuildQuery(object):
         architecture_type: x86_64
         edition_type: couchbase-server-enterprise or couchbase-server-community
         repo: http://builds.hq.northscale.net/latestbuilds/
+        toy=Ce
         build.name = couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
         build.url = http://builds.hq.northscale.net/latestbuilds/couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
+        For toy build: name  =  couchbase-server-community_cent58-3.0.0-toy-toyName-x86_64_3.0.0-xx-toy.rpm
         """
-        build.toy = ""
+        build.toy = toy
         build.deliverable_type = deliverable_type
         build.architecture_type = architecture_type
         unix_deliverable_type = ["deb", "rpm", "mac"]
         if deliverable_type in unix_deliverable_type:
-            if "rel" not in version:
+            if "rel" not in version and toy == "":
                 build.product_version = version + "-rel"
             else:
                 build.product_version = version
+        if "toy" in version and toy != "":
+            edition_type += "-" + version[:5] + "-toy-" + toy
         if "deb" in deliverable_type and "centos6" in edition_type:
             edition_type = edition_type.replace("centos6", "ubuntu_1204")
-        build.name = edition_type + "_" + build.architecture_type + "_" + \
+        joint_char = "_"
+        if toy is not "":
+            joint_char = "-"
+        build.name = edition_type + joint_char + build.architecture_type + "_" + \
                      build.product_version + "." + build.deliverable_type
         build.url = repo + build.name
         return build
