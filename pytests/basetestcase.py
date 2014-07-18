@@ -1337,10 +1337,10 @@ class BaseTestCase(unittest.TestCase):
 
     def set_auto_compaction(self, rest, parallelDBAndVC="false", dbFragmentThreshold=None, viewFragmntThreshold=None, dbFragmentThresholdPercentage=None,
                             viewFragmntThresholdPercentage=None, allowedTimePeriodFromHour=None, allowedTimePeriodFromMin=None, allowedTimePeriodToHour=None,
-                            allowedTimePeriodToMin=None, allowedTimePeriodAbort=None):
+                            allowedTimePeriodToMin=None, allowedTimePeriodAbort=None, bucket=None):
         output, rq_content, header = rest.set_auto_compaction(parallelDBAndVC, dbFragmentThreshold, viewFragmntThreshold, dbFragmentThresholdPercentage,
                                                               viewFragmntThresholdPercentage, allowedTimePeriodFromHour, allowedTimePeriodFromMin, allowedTimePeriodToHour,
-                                                              allowedTimePeriodToMin, allowedTimePeriodAbort)
+                                                              allowedTimePeriodToMin, allowedTimePeriodAbort, bucket)
 
         if not output and (dbFragmentThresholdPercentage, dbFragmentThreshold, viewFragmntThresholdPercentage, viewFragmntThreshold <= MIN_COMPACTION_THRESHOLD
                            or dbFragmentThresholdPercentage, viewFragmntThresholdPercentage >= MAX_COMPACTION_THRESHOLD):

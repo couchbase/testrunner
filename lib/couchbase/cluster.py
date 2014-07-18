@@ -820,7 +820,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_compact_bucket(self, server, bucket = "default"):
+    def async_compact_bucket(self, server, bucket="default"):
         """Asynchronously starts bucket compaction
 
         Parameters:
@@ -834,7 +834,7 @@ class Cluster(object):
         return _task
 
 
-    def compact_bucket(self, server, bucket = "default"):
+    def compact_bucket(self, server, bucket="default"):
         """Synchronously runs bucket compaction and monitors progress
 
         Parameters:
@@ -886,3 +886,29 @@ class Cluster(object):
 
         _task = self.async_monitor_compact_view(server, design_doc_name, bucket, with_rebalance, frag_value)
         return _task.result(timeout)
+
+    def async_cancel_bucket_compaction(self, server, bucket="default"):
+        """Asynchronously starts cancelling bucket compaction
+
+        Parameters:
+            server - source couchbase server
+            bucket - bucket on which compaction is running
+
+        Returns:
+            boolean - Whether or not the compaction cancelled successfully"""
+        _task = CancelBucketCompactionTask(server, bucket)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def cancel_bucket_compaction(self, server, bucket="default"):
+        """Synchronously starts cancelling bucket compaction and monitors progress
+
+        Parameters:
+            server - source couchbase server
+            bucket - bucket on which compaction is running
+
+        Returns:
+            boolean - Whether or not the compaction cancelled successfully"""
+        _task = self.async_cancel_bucket_compaction(server, bucket)
+        status = _task.result()
+        return status

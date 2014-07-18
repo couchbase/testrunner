@@ -3173,3 +3173,63 @@ class MonitorDiskSizeFragmentationTask(Task):
             self.state = FINISHED
             self.set_result(False)
             self.set_exception(ex)
+
+class CancelBucketCompactionTask(Task):
+
+    def __init__(self, server, bucket="default"):
+        Task.__init__(self, "cancel_bucket_compaction_task")
+        self.server = server
+        self.bucket = bucket
+        self.retries = 20
+        self.statuses = {}
+        try:
+            self.rest = RestConnection(server)
+        except ServerUnavailableException, e:
+            self.log.error(e)
+            self.state = FINISHED
+            self.set_exception(e)
+
+    def execute(self, task_manager):
+        try:
+            status = self.rest.cancel_bucket_compaction(self.bucket)
+            self.state = CHECKING
+        except BucketCompactionException as e:
+            self.log.error("Cancel Bucket compaction failed for unknown reason")
+            self.set_exception(e)
+            self.state = FINISHED
+            self.set_result(False)
+        task_manager.schedule(self)
+
+    def check(self, task_manager):
+        # check cancel bucket compaction status across all nodes
+        nodes = self.rest.get_nodes()
+        for node in nodes:
+            last_status = self.statuses.get(node.id)
+            try:
+                rest = RestConnection(node)
+            except ServerUnavailableException, e:
+                self.log.error(e)
+                self.state = FINISHED
+                self.set_exception(e)
+            running, progress = rest.check_compaction_status(self.bucket)
+            if progress is None and last_status is False:
+                # finished if previously detected running but not == 100%
+                self.statuses[node.id] = True
+            if running:
+                self.log.info("Progress is {0}".format(progress))
+                self.statuses[node.id] = (progress == 100)
+        done = all(self.statuses.values())
+        if done:
+            self.log.info("Bucket Compaction Cancelled successfully")
+            # task was completed sucessfully
+            self.set_result(True)
+            self.state = FINISHED
+        else:
+            if self.retries > 0:
+                self.retries = self.retries - 1
+                task_manager.schedule(self, 10)
+            else:
+                # never detected a compaction task running
+                self.log.error("Bucket Compaction Cancellation not started")
+                self.set_result(False)
+                self.state = FINISHED

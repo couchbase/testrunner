@@ -116,7 +116,7 @@ class AutoCompactionTests(BaseTestCase):
             try:
                 insert_thread.start()
                 compact_run = remote_client.wait_till_compaction_end(rest, bucket_name,
-                                                                     timeout_in_seconds=(self.wait_timeout * 50))
+                                                                     timeout_in_seconds=(self.wait_timeout * 10))
                 if not compact_run:
                     self.fail("auto compaction does not run")
                 elif compact_run:
@@ -156,23 +156,14 @@ class AutoCompactionTests(BaseTestCase):
     def rebalance_in_with_DB_compaction(self):
         self.disable_compaction()
         self._load_all_buckets(self.master, self.gen_load, "create", 0, 1)
-        monitor_fragm = self.cluster.async_monitor_db_fragmentation(self.master, self.autocompaction_value, self.default_bucket_name)
-        end_time = time.time() + self.wait_timeout * 50
-        while monitor_fragm.state != "FINISHED":
-            if end_time < time.time():
-                self.fail("Fragmentation level is not reached in %s sec" % self.wait_timeout * 50)
-            try:
-                self._load_all_buckets(self.servers[0], self.gen_update, "update", 0)
-            except Exception, ex:
-                self.log.error("Load cannot be performed: %s" % str(ex))
-                self.fail(ex)
-        monitor_fragm.result()
+        self._montior_DB_fragmentation()
         servs_in = self.servers[self.nodes_init:self.nodes_in + 1]
         rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
+        self.sleep(5)
         compaction_task = self.cluster.async_compact_bucket(self.master, self.default_bucket_name)
-        result = compaction_task.result(self.wait_timeout * 10)
+        result = compaction_task.result(self.wait_timeout * 5)
         self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
-        rebalance.result()
+        rebalance.result(self.wait_timeout * 3)
         self.verify_cluster_stats(self.servers[:self.nodes_in + 1])
 
     def rebalance_in_with_auto_DB_compaction(self):
@@ -180,84 +171,120 @@ class AutoCompactionTests(BaseTestCase):
         rest = RestConnection(self.master)
         self.set_auto_compaction(rest, dbFragmentThresholdPercentage=self.autocompaction_value)
         self._load_all_buckets(self.master, self.gen_load, "create", 0, 1)
-        monitor_fragm = self.cluster.async_monitor_db_fragmentation(self.master, self.autocompaction_value, self.default_bucket_name)
-        end_time = time.time() + self.wait_timeout * 50
-        while monitor_fragm.state != "FINISHED":
-            if end_time < time.time():
-                self.fail("Fragmentation level is not reached in %s sec" % self.wait_timeout * 50)
-            try:
-                self._load_all_buckets(self.servers[0], self.gen_update, "update", 0)
-            except Exception, ex:
-                self.log.error("Load cannot be performed: %s" % str(ex))
-                self.fail(ex)
-        monitor_fragm.result()
+        self._montior_DB_fragmentation()
         servs_in = self.servers[1:self.nodes_in + 1]
         rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
         compact_run = remote_client.wait_till_compaction_end(rest, self.default_bucket_name,
-                                                                     timeout_in_seconds=(self.wait_timeout * 50))
-        rebalance.result()
-        if not compact_run:
-            self.fail("auto compaction does not run")
-        elif compact_run:
+                                                                     timeout_in_seconds=(self.wait_timeout * 5))
+        rebalance.result(self.wait_timeout * 3)
+        monitor_fragm = self.cluster.async_monitor_db_fragmentation(self.master, 0, self.default_bucket_name)
+        result = monitor_fragm.result()
+        if compact_run:
             self.log.info("auto compaction run successfully")
+        elif result:
+            self.log.info("Compaction is already completed")
+        else:
+            self.fail("auto compaction does not run")
         self.verify_cluster_stats(self.servers[:self.nodes_in + 1])
+        remote_client.disconnect()
 
-    def test_database_time_fragmentation(self):
+    def rebalance_out_with_DB_compaction(self):
+        self.log.info("create a cluster of all the available servers")
+        self.cluster.rebalance(self.servers[:self.num_servers],
+                               self.servers[1:self.num_servers], [])
+        self.disable_compaction()
+        self._load_all_buckets(self.master, self.gen_load, "create", 0, 1)
+        self._montior_DB_fragmentation()
+        servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
+        rebalance = self.cluster.async_rebalance([self.master], [], servs_out)
+        compaction_task = self.cluster.async_compact_bucket(self.master, self.default_bucket_name)
+        result = compaction_task.result(self.wait_timeout * 5)
+        self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
+        rebalance.result(self.wait_timeout * 3)
+        self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
+
+    def rebalance_out_with_auto_DB_compaction(self):
         remote_client = RemoteMachineShellConnection(self.master)
         rest = RestConnection(self.master)
-        currTime = datetime.datetime.now()
-        newTime = currTime + datetime.timedelta(hours=24)
-        self.set_auto_compaction(rest, dbFragmentThresholdPercentage=self.autocompaction_value, allowedTimePeriodFromHour=currTime.hour,
-                                 allowedTimePeriodFromMin=currTime.minute, allowedTimePeriodToHour=newTime.hour, allowedTimePeriodToMin=newTime.minute)
+        self.log.info("create a cluster of all the available servers")
+        self.cluster.rebalance(self.servers[:self.num_servers],
+                               self.servers[1:self.num_servers], [])
+        self.set_auto_compaction(rest, dbFragmentThresholdPercentage=self.autocompaction_value)
         self._load_all_buckets(self.master, self.gen_load, "create", 0, 1)
-        monitor_fragm = self.cluster.async_monitor_db_fragmentation(self.master, self.autocompaction_value, self.default_bucket_name)
-        end_time = time.time() + self.wait_timeout * 50
-        while monitor_fragm.state != "FINISHED":
-            if end_time < time.time():
-                self.fail("Fragmentation level is not reached in %s sec" % self.wait_timeout * 50)
-            try:
-                self._load_all_buckets(self.master, self.gen_update, "update", 0)
-            except Exception, ex:
-                self.log.error("Load cannot be performed: %s" % str(ex))
-                self.fail(ex)
-        monitor_fragm.result()
-        for i in xrange(10):
-            active_tasks = self.cluster.async_monitor_active_task(self.master, "bucket_compaction", "bucket", wait_task=False)
-            for active_task in active_tasks:
-                result = active_task.result()
-                self.assertTrue(result)
-                self.sleep(2)
-        currTime = datetime.datetime.now()
-        newTime = currTime + datetime.timedelta(minutes=5)
-        self.set_auto_compaction(rest, dbFragmentThresholdPercentage=self.autocompaction_value, allowedTimePeriodFromHour=currTime.hour, allowedTimePeriodFromMin=currTime.minute, allowedTimePeriodToHour=newTime.hour,
-                                                              allowedTimePeriodToMin=newTime.minute)
+        self._montior_DB_fragmentation()
+        servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
+        rebalance = self.cluster.async_rebalance([self.master], [], servs_out)
         compact_run = remote_client.wait_till_compaction_end(rest, self.default_bucket_name,
                                                                      timeout_in_seconds=(self.wait_timeout * 5))
-        if not compact_run:
-            self.fail("auto compaction does not run")
-        elif compact_run:
+        rebalance.result(self.wait_timeout * 3)
+        monitor_fragm = self.cluster.async_monitor_db_fragmentation(self.master, 0, self.default_bucket_name)
+        result = monitor_fragm.result()
+        if compact_run:
             self.log.info("auto compaction run successfully")
+        elif result:
+            self.log.info("Compaction is already completed")
+        else:
+            self.fail("auto compaction does not run")
+        self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
+        remote_client.disconnect()
 
-    def rebalance_with_DB_time_fragmentation(self):
+    def rebalance_in_out_with_DB_compaction(self):
+        self.assertTrue(self.num_servers > self.nodes_in + self.nodes_out,
+                            "ERROR: Not enough nodes to do rebalance in and out")
+        servs_init = self.servers[:self.nodes_init]
+        servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
+        servs_out = [self.servers[self.nodes_init - i - 1] for i in range(self.nodes_out)]
+        result_nodes = set(servs_init + servs_in) - set(servs_out)
+        self.disable_compaction()
+        self._load_all_buckets(self.master, self.gen_load, "create", 0, 1)
+        rebalance = self.cluster.async_rebalance(servs_init, servs_in, servs_out)
+        while rebalance.state != "FINISHED":
+            self._montior_DB_fragmentation()
+            compaction_task = self.cluster.async_compact_bucket(self.master, self.default_bucket_name)
+            result = compaction_task.result(self.wait_timeout * 5)
+            self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
+        rebalance.result(self.wait_timeout * 5)
+        self.verify_cluster_stats(result_nodes)
+
+    def rebalance_in_out_with_auto_DB_compaction(self):
+        remote_client = RemoteMachineShellConnection(self.master)
+        rest = RestConnection(self.master)
+        self.assertTrue(self.num_servers > self.nodes_in + self.nodes_out,
+                            "ERROR: Not enough nodes to do rebalance in and out")
+        servs_init = self.servers[:self.nodes_init]
+        servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
+        servs_out = [self.servers[self.nodes_init - i - 1] for i in range(self.nodes_out)]
+        result_nodes = set(servs_init + servs_in) - set(servs_out)
+        self.set_auto_compaction(rest, dbFragmentThresholdPercentage=self.autocompaction_value)
+        self._load_all_buckets(self.master, self.gen_load, "create", 0, 1)
+        rebalance = self.cluster.async_rebalance(servs_init, servs_in, servs_out)
+        while rebalance.state != "FINISHED":
+            self._montior_DB_fragmentation()
+            compact_run = remote_client.wait_till_compaction_end(rest, self.default_bucket_name,
+                                                                 timeout_in_seconds=(self.wait_timeout * 5))
+        rebalance.result(self.wait_timeout * 5)
+        monitor_fragm = self.cluster.async_monitor_db_fragmentation(self.master, 0, self.default_bucket_name)
+        result = monitor_fragm.result()
+        if compact_run:
+            self.log.info("auto compaction run successfully")
+        elif result:
+            self.log.info("Compaction is already completed")
+        else:
+            self.fail("auto compaction does not run")
+        self.verify_cluster_stats(result_nodes)
+        remote_client.disconnect()
+
+    def test_database_time_compaction(self):
         remote_client = RemoteMachineShellConnection(self.master)
         rest = RestConnection(self.master)
         currTime = datetime.datetime.now()
-        newTime = currTime + datetime.timedelta(hours=24)
-        self.set_auto_compaction(rest, dbFragmentThresholdPercentage=self.autocompaction_value, allowedTimePeriodFromHour=currTime.hour, allowedTimePeriodFromMin=currTime.minute, allowedTimePeriodToHour=newTime.hour,
-                                                              allowedTimePeriodToMin=newTime.minute)
-
+        fromTime = currTime + datetime.timedelta(hours=1)
+        toTime = currTime + datetime.timedelta(hours=10)
+        self.set_auto_compaction(rest, dbFragmentThresholdPercentage=self.autocompaction_value, allowedTimePeriodFromHour=fromTime.hour,
+                                 allowedTimePeriodFromMin=fromTime.minute, allowedTimePeriodToHour=toTime.hour, allowedTimePeriodToMin=toTime.minute,
+                                 allowedTimePeriodAbort="false")
         self._load_all_buckets(self.master, self.gen_load, "create", 0, 1)
-        monitor_fragm = self.cluster.async_monitor_db_fragmentation(self.master, self.autocompaction_value, self.default_bucket_name)
-        end_time = time.time() + self.wait_timeout * 50
-        while monitor_fragm.state != "FINISHED":
-            if end_time < time.time():
-                self.fail("Fragmentation level is not reached in %s sec" % self.wait_timeout * 50)
-            try:
-                self._load_all_buckets(self.servers[0], self.gen_update, "update", 0)
-            except Exception, ex:
-                self.log.error("Load cannot be performed: %s" % str(ex))
-                self.fail(ex)
-        monitor_fragm.result()
+        self._montior_DB_fragmentation()
         for i in xrange(10):
             active_tasks = self.cluster.async_monitor_active_task(self.master, "bucket_compaction", "bucket", wait_task=False)
             for active_task in active_tasks:
@@ -265,32 +292,66 @@ class AutoCompactionTests(BaseTestCase):
                 self.assertTrue(result)
                 self.sleep(2)
         currTime = datetime.datetime.now()
+        #Need to make it configurable
         newTime = currTime + datetime.timedelta(minutes=5)
-        self.set_auto_compaction(rest, dbFragmentThresholdPercentage=self.autocompaction_value, allowedTimePeriodFromHour=currTime.hour, allowedTimePeriodFromMin=currTime.minute, allowedTimePeriodToHour=newTime.hour,
-                                                              allowedTimePeriodToMin=newTime.minute)
+        self.set_auto_compaction(rest, dbFragmentThresholdPercentage=self.autocompaction_value, allowedTimePeriodFromHour=currTime.hour,
+                                 allowedTimePeriodFromMin=currTime.minute, allowedTimePeriodToHour=newTime.hour, allowedTimePeriodToMin=newTime.minute,
+                                 allowedTimePeriodAbort="false")
+        compact_run = remote_client.wait_till_compaction_end(rest, self.default_bucket_name,
+                                                                     timeout_in_seconds=(self.wait_timeout * 5))
+        if compact_run:
+            self.log.info("auto compaction run successfully")
+        else:
+            self.fail("auto compaction does not run")
+        remote_client.disconnect()
+
+    def rebalance_in_with_DB_time_compaction(self):
+        remote_client = RemoteMachineShellConnection(self.master)
+        rest = RestConnection(self.master)
+        currTime = datetime.datetime.now()
+        fromTime = currTime + datetime.timedelta(hours=1)
+        toTime = currTime + datetime.timedelta(hours=24)
+        self.set_auto_compaction(rest, dbFragmentThresholdPercentage=self.autocompaction_value, allowedTimePeriodFromHour=fromTime.hour,
+                                 allowedTimePeriodFromMin=fromTime.minute, allowedTimePeriodToHour=toTime.hour, allowedTimePeriodToMin=toTime.minute,
+                                 allowedTimePeriodAbort="false")
+        self._load_all_buckets(self.master, self.gen_load, "create", 0, 1)
+        self._montior_DB_fragmentation()
+        for i in xrange(10):
+            active_tasks = self.cluster.async_monitor_active_task(self.master, "bucket_compaction", "bucket", wait_task=False)
+            for active_task in active_tasks:
+                result = active_task.result()
+                self.assertTrue(result)
+                self.sleep(2)
+        currTime = datetime.datetime.now()
+        #Need to make it configurable
+        newTime = currTime + datetime.timedelta(minutes=5)
+        self.set_auto_compaction(rest, dbFragmentThresholdPercentage=self.autocompaction_value, allowedTimePeriodFromHour=currTime.hour,
+                                 allowedTimePeriodFromMin=currTime.minute, allowedTimePeriodToHour=newTime.hour, allowedTimePeriodToMin=newTime.minute,
+                                 allowedTimePeriodAbort="false")
         servs_in = self.servers[self.nodes_init:self.nodes_in + 1]
         rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
         compact_run = remote_client.wait_till_compaction_end(rest, self.default_bucket_name,
                                                                      timeout_in_seconds=(self.wait_timeout * 5))
-        rebalance.result()
-        if not compact_run:
-            self.fail("auto compaction does not run")
-        elif compact_run:
+        rebalance.result(self.wait_timeout * 3)
+        if compact_run:
             self.log.info("auto compaction run successfully")
+        else:
+            self.fail("auto compaction does not run")
+        remote_client.disconnect()
 
-    def test_database_size_fragmentation(self):
+    def test_database_size_compaction(self):
         rest = RestConnection(self.master)
         percent_threshold = self.autocompaction_value * 1048576
         self.set_auto_compaction(rest, dbFragmentThreshold=percent_threshold)
         self._load_all_buckets(self.master, self.gen_load, "create", 0, 1)
         end_time = time.time() + self.wait_timeout * 50
-        monitor_fragm = self.cluster.async_monitor_disk_size_fragmentation(self.servers[0], percent_threshold, self.default_bucket_name)
+        monitor_fragm = self.cluster.async_monitor_disk_size_fragmentation(self.master, percent_threshold, self.default_bucket_name)
         while monitor_fragm.state != "FINISHED":
             if end_time < time.time():
                 self.fail("Fragmentation level is not reached in %s sec" % self.wait_timeout * 50)
             try:
-                monitor_fragm = self.cluster.async_monitor_disk_size_fragmentation(self.servers[0], percent_threshold, self.default_bucket_name)
-                self._load_all_buckets(self.servers[0], self.gen_update, "update", 0)
+                monitor_fragm = self.cluster.async_monitor_disk_size_fragmentation(self.master, percent_threshold, self.default_bucket_name)
+                self._load_all_buckets(self.master, self.gen_update, "update", 0)
                 active_tasks = self.cluster.async_monitor_active_task(self.master, "bucket_compaction", "bucket", wait_task=False)
                 for active_task in active_tasks:
                     result = active_task.result()
@@ -300,3 +361,89 @@ class AutoCompactionTests(BaseTestCase):
                 self.log.error("Load cannot be performed: %s" % str(ex))
                 self.fail(ex)
         monitor_fragm.result()
+
+    def test_start_stop_DB_compaction(self):
+        rest = RestConnection(self.master)
+        remote_client = RemoteMachineShellConnection(self.master)
+        self._load_all_buckets(self.master, self.gen_load, "create", 0, 1)
+        self.disable_compaction()
+        self._montior_DB_fragmentation()
+        compaction_task = self.cluster.async_compact_bucket(self.master, self.default_bucket_name)
+        self._cancel_bucket_compaction(rest, self.default_bucket_name)
+        compaction_task.result(self.wait_timeout)
+        self.cluster.async_compact_bucket(self.master, self.default_bucket_name)
+        compact_run = remote_client.wait_till_compaction_end(rest, self.default_bucket_name, timeout_in_seconds=self.wait_timeout)
+        compaction_task.result(self.wait_timeout)
+        if compact_run:
+            self.log.info("auto compaction run successfully")
+        else:
+            self.fail("auto compaction does not run")
+        remote_client.disconnect()
+
+    def test_start_stop_auto_DB_compaction(self):
+        rest = RestConnection(self.master)
+        self.set_auto_compaction(rest, dbFragmentThresholdPercentage=self.autocompaction_value)
+        self._load_all_buckets(self.master, self.gen_load, "create", 0, 1)
+        self._montior_DB_fragmentation()
+        self._cancel_bucket_compaction(rest, self.default_bucket_name)
+
+    def _cancel_bucket_compaction(self, rest, bucket):
+        remote_client = RemoteMachineShellConnection(self.master)
+        compaction_running = True
+        end_time = time.time() + self.wait_timeout * 3
+        while compaction_running:
+            if end_time < time.time():
+                self.fail("Compaction is not started in %s sec" % end_time)
+            tasks = rest.active_tasks()
+            for task in tasks:
+                if task["type"] == "bucket_compaction":
+                    try:
+                        result = self.cluster.cancel_bucket_compaction(self.master, bucket)
+                        self.assertTrue(result)
+                        remote_client.wait_till_compaction_end(rest, self.default_bucket_name, self.wait_timeout)
+                        compaction_running = False
+                    except Exception, ex:
+                        self.log.error("Compaction cannot be cancelled: %s" % str(ex))
+                        self.fail(ex)
+            remote_client.disconnect()
+
+    def test_auto_compaction_with_multiple_buckets(self):
+        remote_client = RemoteMachineShellConnection(self.master)
+        rest = RestConnection(self.master)
+        for bucket in self.buckets:
+            if bucket.name == "default":
+                self.disable_compaction()
+            else:
+                self.set_auto_compaction(rest, dbFragmentThresholdPercentage=self.autocompaction_value, bucket=bucket.name)
+        self._load_all_buckets(self.master, self.gen_load, "create", 0, 1)
+        end_time = time.time() + self.wait_timeout * 30
+        for bucket in self.buckets:
+            monitor_fragm = self.cluster.async_monitor_db_fragmentation(self.master, self.autocompaction_value, bucket.name)
+            while monitor_fragm.state != "FINISHED":
+                if end_time < time.time():
+                    self.fail("Fragmentation level is not reached in %s sec" % self.wait_timeout * 10)
+                try:
+                    self._load_all_buckets(self.servers[0], self.gen_update, "update", 0)
+                except Exception, ex:
+                    self.log.error("Load cannot be performed: %s" % str(ex))
+                    self.fail(ex)
+            monitor_fragm.result()
+            compact_run = remote_client.wait_till_compaction_end(rest, bucket.name,
+                                                                     timeout_in_seconds=(self.wait_timeout * 5))
+            if compact_run:
+                self.log.info("auto compaction run successfully")
+        remote_client.disconnect()
+
+    def _montior_DB_fragmentation(self):
+        monitor_fragm = self.cluster.async_monitor_db_fragmentation(self.master, self.autocompaction_value, self.default_bucket_name)
+        end_time = time.time() + self.wait_timeout * 30
+        while monitor_fragm.state != "FINISHED":
+            if end_time < time.time():
+                self.fail("Fragmentation level is not reached in %s sec" % self.wait_timeout * 30)
+            try:
+                self._load_all_buckets(self.master, self.gen_update, "update", 0)
+            except Exception, ex:
+                self.log.error("Load cannot be performed: %s" % str(ex))
+                self.fail(ex)
+        result = monitor_fragm.result()
+        self.assertTrue(result, "Fragmentation level is not reached")

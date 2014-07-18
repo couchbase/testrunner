@@ -109,7 +109,7 @@ class CompactionViewTests(BaseTestCase):
         compaction_tasks = []
         for ddoc in self.ddocs:
             compaction_tasks.append(self.cluster.async_compact_view(self.master, ddoc.name))
-        
+
         remote = RemoteMachineShellConnection(self.master)
         cli_command = "cluster-init"
         options = "--cluster-init-ramsize=%s" % (self.quota + 10)
@@ -120,7 +120,7 @@ class CompactionViewTests(BaseTestCase):
         for task in compaction_tasks:
             task.result()
 
-    def test_views_fragmentation(self):
+    def test_views_compaction(self):
         rest = RestConnection(self.master)
         self.set_auto_compaction(rest, viewFragmntThresholdPercentage=self.fragmentation_value)
         self.make_ddocs(self.ddocs_num, self.view_per_ddoc)
@@ -134,64 +134,148 @@ class CompactionViewTests(BaseTestCase):
                     for view in ddoc.views:
                         self.cluster.query_view(self.master, ddoc.name, view.name, {})
                 fragmentation_monitor.result()
-                result = self.cluster.async.monitor_compact_view(self.master, ddoc.name, frag_value=self.fragmentation_value)
-                self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
+                compaction_task = self.cluster.async_monitor_compact_view(self.master, ddoc.name, frag_value=self.fragmentation_value)
+                compaction_task.result()
 
     def rebalance_in_with_auto_ddoc_compaction(self):
         rest = RestConnection(self.master)
         self.set_auto_compaction(rest, viewFragmntThresholdPercentage=self.fragmentation_value)
         self.make_ddocs(self.ddocs_num, self.view_per_ddoc)
         self.create_ddocs()
-        query = {"connectionTimeout" : "60000", "full_set" : "true", "stale" : "false"}
         self._load_all_buckets(self.master, self.gen_load, "create", 0)
-        end_time = time.time() + self.wait_timeout * 30
+        servs_in = self.servers[self.nodes_init:self.nodes_in + 1]
+        compaction_tasks = []
+        self._monitor_view_fragmentation()
+        rebalance_task = self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])
         for ddoc in self.ddocs:
-            fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.master,
-                                                                                  ddoc.name, self.fragmentation_value, self.default_bucket_name)
-            while fragmentation_monitor.state != "FINISHED" and end_time > time.time():
-                self._load_all_buckets(self.master, self.gen_load, "update", 0)
-                for view in ddoc.views:
-                    self.cluster.query_view(self.master, ddoc.name, view.name, query)
-            if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
-                self.fail("impossible to reach compaction value {0} after {1} sec".
-                          format(self.fragmentation_value, (self.wait_timeout * 30)))
-            fragmentation_monitor.result()
-        servs_in = self.servers[1:self.nodes_in + 1]
-        rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
-        for ddoc in self.ddocs:
-            compaction_task = self.cluster.async.monitor_compact_view(self.master, ddoc.name, with_rebalance=True, frag_value=self.fragmentation_value)
-            self.sleep(5)
-        rebalance.result()
-        self.assertTrue(compaction_task, "Compaction didn't finished correctly. Please check diags")
+            compaction_tasks.append(self.cluster.async_monitor_compact_view(self.master, ddoc.name, with_rebalance=True, frag_value=self.fragmentation_value))
+        for task in compaction_tasks:
+            task.result()
+        rebalance_task.result(self.wait_timeout * 3)
         self.verify_cluster_stats(self.servers[:self.nodes_in + 1])
 
-    def test_time_views_fragmentation(self):
-        rest = RestConnection(self.master)
-        currTime = datetime.datetime.now()
-        newTime = currTime + datetime.timedelta(hours=24)
-        self.set_auto_compaction(rest, viewFragmntThresholdPercentage=self.fragmentation_value, allowedTimePeriodFromHour=currTime.hour,
-                                  allowedTimePeriodFromMin=currTime.minute, allowedTimePeriodToHour=newTime.hour, allowedTimePeriodToMin=newTime.minute)
+    def rebalance_in_with_ddoc_compaction(self):
+        self.disable_compaction()
         self.make_ddocs(self.ddocs_num, self.view_per_ddoc)
         self.create_ddocs()
         self._load_all_buckets(self.master, self.gen_load, "create", 0)
+        servs_in = self.servers[self.nodes_init:self.nodes_in + 1]
+        self._monitor_view_fragmentation()
+        rebalance_task = self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])
+        self.sleep(5)
         for ddoc in self.ddocs:
-                fragmentation_monitor = \
-                    self.cluster.async_monitor_db_fragmentation(self.master, self.fragmentation_value, self.default_bucket_name, True)
-                while fragmentation_monitor.state != "FINISHED":
-                    self._load_all_buckets(self.master, self.gen_load, "update", 0)
-                    for view in ddoc.views:
-                        self.cluster.query_view(self.master, ddoc.name, view.name, {})
-                fragmentation_monitor.result()
+            result = self.cluster.compact_view(self.master, ddoc.name)
+            self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
+        rebalance_task.result(self.wait_timeout * 3)
+        self.verify_cluster_stats(self.servers[:self.nodes_in + 1])
+
+    def rebalance_out_with_auto_ddoc_compaction(self):
+        rest = RestConnection(self.master)
+        self.log.info("create a cluster of all the available servers")
+        self.cluster.rebalance(self.servers[:self.num_servers],
+                               self.servers[1:self.num_servers], [])
+        self.set_auto_compaction(rest, viewFragmntThresholdPercentage=self.fragmentation_value)
+        self.make_ddocs(self.ddocs_num, self.view_per_ddoc)
+        self.create_ddocs()
+        self._load_all_buckets(self.master, self.gen_load, "create", 0)
+        servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
+        compaction_tasks = []
+        self._monitor_view_fragmentation()
+        rebalance_task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], servs_out)
+        for ddoc in self.ddocs:
+            compaction_tasks.append(self.cluster.async_monitor_compact_view(self.master, ddoc.name, with_rebalance=True, frag_value=self.fragmentation_value))
+        for task in compaction_tasks:
+            task.result()
+        rebalance_task.result(self.wait_timeout * 3)
+        self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
+
+    def rebalance_out_with_ddoc_compaction(self):
+        self.log.info("create a cluster of all the available servers")
+        self.cluster.rebalance(self.servers[:self.num_servers],
+                               self.servers[1:self.num_servers], [])
+        self.disable_compaction()
+        self.make_ddocs(self.ddocs_num, self.view_per_ddoc)
+        self.create_ddocs()
+        self._load_all_buckets(self.master, self.gen_load, "create", 0)
+        servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
+        self._monitor_view_fragmentation()
+        rebalance_task = self.cluster.async_rebalance([self.master], [], servs_out)
+        self.sleep(5)
+        for ddoc in self.ddocs:
+            result = self.cluster.compact_view(self.master, ddoc.name)
+            self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
+        rebalance_task.result(self.wait_timeout * 3)
+        self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
+
+    def rebalance_in_out_with_auto_ddoc_compaction(self):
+        rest = RestConnection(self.master)
+        self.assertTrue(self.num_servers > self.nodes_in + self.nodes_out,
+                            "ERROR: Not enough nodes to do rebalance in and out")
+        servs_init = self.servers[:self.nodes_init]
+        servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
+        servs_out = [self.servers[self.nodes_init - i - 1] for i in range(self.nodes_out)]
+        result_nodes = set(servs_init + servs_in) - set(servs_out)
+        self.set_auto_compaction(rest, viewFragmntThresholdPercentage=self.fragmentation_value)
+        self.make_ddocs(self.ddocs_num, self.view_per_ddoc)
+        self.create_ddocs()
+        self._load_all_buckets(self.master, self.gen_load, "create", 0)
+        compaction_tasks = []
+        self._monitor_view_fragmentation()
+        rebalance_task = self.cluster.async_rebalance(servs_init, servs_in, servs_out)
+        for ddoc in self.ddocs:
+            compaction_tasks.append(self.cluster.async_monitor_compact_view(self.master, ddoc.name, with_rebalance=True, frag_value=self.fragmentation_value))
+        for task in compaction_tasks:
+            task.result()
+        rebalance_task.result(self.wait_timeout * 3)
+        self.verify_cluster_stats(result_nodes)
+
+    def rebalance_in_out_with_ddoc_compaction(self):
+        self.assertTrue(self.num_servers > self.nodes_in + self.nodes_out,
+                            "ERROR: Not enough nodes to do rebalance in and out")
+        servs_init = self.servers[:self.nodes_init]
+        servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
+        servs_out = [self.servers[self.nodes_init - i - 1] for i in range(self.nodes_out)]
+        result_nodes = set(servs_init + servs_in) - set(servs_out)
+        self.disable_compaction()
+        self.make_ddocs(self.ddocs_num, self.view_per_ddoc)
+        self.create_ddocs()
+        self._load_all_buckets(self.master, self.gen_load, "create", 0)
+        self._monitor_view_fragmentation()
+        rebalance_task = self.cluster.async_rebalance(servs_init, servs_in, servs_out)
+        self.sleep(5)
+        for ddoc in self.ddocs:
+            result = self.cluster.compact_view(self.master, ddoc.name)
+            self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
+        rebalance_task.result(self.wait_timeout * 3)
+        self.verify_cluster_stats(result_nodes)
+
+    def test_views_time_compaction(self):
+        rest = RestConnection(self.master)
         currTime = datetime.datetime.now()
+        fromTime = currTime + datetime.timedelta(hours=1)
+        toTime = currTime + datetime.timedelta(hours=12)
+        self.set_auto_compaction(rest, viewFragmntThresholdPercentage=self.fragmentation_value, allowedTimePeriodFromHour=fromTime.hour,
+                                 allowedTimePeriodFromMin=fromTime.minute, allowedTimePeriodToHour=toTime.hour, allowedTimePeriodToMin=toTime.minute,
+                                 allowedTimePeriodAbort="false")
+        self.make_ddocs(self.ddocs_num, self.view_per_ddoc)
+        self.create_ddocs()
+        self._load_all_buckets(self.master, self.gen_load, "create", 0)
+        self._monitor_view_fragmentation()
+        currTime = datetime.datetime.now()
+        #Need to make it configurable
         newTime = currTime + datetime.timedelta(minutes=5)
         self.set_auto_compaction(rest, viewFragmntThresholdPercentage=self.fragmentation_value, allowedTimePeriodFromHour=currTime.hour,
-                                  allowedTimePeriodFromMin=currTime.minute, allowedTimePeriodToHour=newTime.hour, allowedTimePeriodToMin=newTime.minute)
-        status, content = rest.set_view_info(self.default_bucket_name, ddoc.name)
-        curr_no_of_compactions = content["stats"]["compactions"]
-        self.log.info("Current number of compactions is {0)".format(curr_no_of_compactions))
+                                  allowedTimePeriodFromMin=currTime.minute, allowedTimePeriodToHour=newTime.hour, allowedTimePeriodToMin=newTime.minute,
+                                  allowedTimePeriodAbort="false")
         for ddoc in self.ddocs:
-            result = self.cluster.async_monitor_compact_view(self.master, ddoc.name, frag_value=self.fragmentation_value)
-            self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
+            status, content = rest.set_view_info(self.default_bucket_name, ddoc.name)
+            curr_no_of_compactions = content["stats"]["compactions"]
+            self.log.info("Current number of compactions is {0}".format(curr_no_of_compactions))
+        compaction_tasks = []
+        for ddoc in self.ddocs:
+            compaction_tasks.append(self.cluster.async_monitor_compact_view(self.master, ddoc.name, frag_value=self.fragmentation_value))
+        for task in compaction_tasks:
+            task.result()
 
     def load_DB_fragmentation(self, percent_threshold, rest, remote_client):
         monitor_fragm = self.cluster.async_monitor_db_fragmentation(self.servers[0], percent_threshold, self.default_bucket_name)
@@ -228,8 +312,8 @@ class CompactionViewTests(BaseTestCase):
                         self.cluster.query_view(self.master, ddoc.name, view.name, query)
                 fragmentation_monitor.result()
                 try:
-                    result = self.cluster.async_monitor_compact_view(self.master, ddoc.name, frag_value=self.fragmentation_value)
-                    self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
+                    compaction_task = self.cluster.async_monitor_compact_view(self.master, ddoc.name, frag_value=self.fragmentation_value)
+                    compaction_task.result()
                 except Exception, ex:
                     self.thread_crashed.set()
                     self.log.error("****ERROR***** \n At least one of threads is crashed: %s" % (ex))
@@ -278,7 +362,7 @@ class CompactionViewTests(BaseTestCase):
         for thread in threads:
             thread.join()
         if self.thread_crashed.is_set():
-            self.fail("Error occurred during run")
+            self.log.info("DB Compaction is not started as expected")
 
     def test_parallel_enable_DB_compaction(self):
         threads = []
@@ -299,9 +383,9 @@ class CompactionViewTests(BaseTestCase):
         for thread in threads:
             thread.join()
         if self.thread_crashed.is_set():
-            self.fail("Error occurred during run")
+            self.log.info("View Compaction is not started as expected")
 
-    def test_views_size_fragmentation(self):
+    def test_views_size_compaction(self):
         percent_threshold = self.fragmentation_value * 1048576
         rest = RestConnection(self.master)
         self.set_auto_compaction(rest, viewFragmntThreshold=percent_threshold)
@@ -311,8 +395,7 @@ class CompactionViewTests(BaseTestCase):
         for ddoc in self.ddocs:
             comp_rev, fragmentation = self._get_compaction_details(rest, self.default_bucket_name, ddoc.name)
             self.log.info("Stats Compaction Rev and Fragmentation before Compaction is ({0}), ({1})".format(comp_rev, fragmentation))
-            fragmentation_monitor = \
-                monitor_fragm = self.cluster.async_monitor_disk_size_fragmentation(self.servers[0], percent_threshold, self.default_bucket_name, True)
+            fragmentation_monitor = self.cluster.async_monitor_disk_size_fragmentation(self.servers[0], percent_threshold, self.default_bucket_name, True)
             while fragmentation_monitor.state != "FINISHED":
                 self._load_all_buckets(self.master, self.gen_load, "update", 0)
                 for view in ddoc.views:
@@ -325,8 +408,8 @@ class CompactionViewTests(BaseTestCase):
                 self.log.info("Compaction triggered successfully")
             else:
                 try:
-                    result = self.cluster.async_monitor_compact_view(self.master, ddoc.name, frag_value=percent_threshold)
-                    self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
+                    compaction_task = self.cluster.async_monitor_compact_view(self.master, ddoc.name, frag_value=percent_threshold)
+                    compaction_task.result()
                 except Exception, ex:
                     self.fail(ex)
 
@@ -341,3 +424,17 @@ class CompactionViewTests(BaseTestCase):
                 (total_disk_size - total_data_size) / float(total_disk_size) * 100
         return (curr_no_of_compactions, total_fragmentation)
 
+    def _monitor_view_fragmentation(self):
+        query = {"connectionTimeout" : "60000", "full_set" : "true", "stale" : "false"}
+        end_time = time.time() + self.wait_timeout * 30
+        for ddoc in self.ddocs:
+            fragmentation_monitor = self.cluster.async_monitor_db_fragmentation(self.master,
+                                                                                self.fragmentation_value, self.default_bucket_name, True)
+            while fragmentation_monitor.state != "FINISHED" and end_time > time.time():
+                self._load_all_buckets(self.master, self.gen_load, "update", 0)
+                for view in ddoc.views:
+                    self.cluster.query_view(self.master, ddoc.name, view.name, query)
+            if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
+                self.fail("impossible to reach compaction value {0} after {1} sec".
+                          format(self.fragmentation_value, (self.wait_timeout * 30)))
+            fragmentation_monitor.result()

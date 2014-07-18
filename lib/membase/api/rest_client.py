@@ -19,7 +19,7 @@ from exception import ServerAlreadyJoinedException, ServerUnavailableException, 
 from membase.api.exception import BucketCreationException, ServerSelfJoinException, ClusterRemoteException, \
     RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
     ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, AddNodeException, \
-    BucketFlushFailed, CBRecoveryFailedException, XDCRException, SetRecoveryTypeFailed
+    BucketFlushFailed, CBRecoveryFailedException, XDCRException, SetRecoveryTypeFailed, BucketCompactionException
 log = logger.Logger.get_logger()
 
 #helper library methods built on top of RestConnection interface
@@ -1688,7 +1688,7 @@ class RestConnection(object):
         if "error" in tasks:
             raise Exception(tasks)
         for task in tasks:
-            print task
+            log.info("Task is {0}".format(task))
             if task["type"] == "bucket_compaction":
                 if task["bucket"] == bucket_name:
                     return True, task["progress"]
@@ -1901,7 +1901,7 @@ class RestConnection(object):
             bucket_info = self.get_bucket_json(bucket)
             quota = self.get_bucket_json(bucket)["quota"]["ram"] / (1048576 * num_nodes)
             params["ramQuotaMB"] = quota
-            if bucket_info["authType"] == "sasl":
+            if bucket_info["authType"] == "sasl" and bucket_info["name"] != "default":
                 params["authType"] = self.get_bucket_json(bucket)["authType"]
                 params["saslPassword"] = self.get_bucket_json(bucket)["saslPassword"]
 
@@ -2294,6 +2294,18 @@ class RestConnection(object):
         else:
             raise BucketCompactionException(bucket)
 
+        return True
+
+    def cancel_bucket_compaction(self, bucket="default"):
+        api = self.baseUrl + 'pools/default/buckets/{0}/controller/cancelBucketCompaction'.format(bucket)
+        if isinstance(bucket, Bucket):
+            api = self.baseUrl + 'pools/default/buckets/{0}/controller/cancelBucketCompaction'.format(bucket.name)
+        status, content, header = self._http_request(api, 'POST')
+        log.info("Status is {0}".format(status))
+        if status:
+            log.info('Cancel bucket compaction successful')
+        else:
+            raise BucketCompactionException(bucket)
         return True
 
 class MembaseServerVersion:
