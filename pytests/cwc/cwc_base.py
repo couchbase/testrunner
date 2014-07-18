@@ -17,8 +17,8 @@ class CWCBaseTest(BaseTestCase):
         self.doc_ops = self.input.param("doc_ops", None)
         self.upload = self.input.param("upload", False)
         self.uploadHost = self.input.param("uploadHost", None)
-        self.customer_id = self.input.param("customer_id", None)
-        self.ticket = self.input.param("ticket", None)
+        self.customer = self.input.param("customer", "")
+        self.ticket = self.input.param("ticket", "")
         self.collect_nodes = self.input.param("collect_nodes", "*")
         self.shutdown_nodes = self.input.param("shutdown_nodes", None)
         if self.doc_ops is not None:

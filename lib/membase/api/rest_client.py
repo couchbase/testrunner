@@ -2219,7 +2219,7 @@ class RestConnection(object):
             return False
 
     def start_cluster_logs_collection(self, nodes="*", upload=False,\
-                                      uploadHost=None, customer=None, ticket=None):
+                                      uploadHost=None, customer="", ticket=""):
         if not upload:
             params = urllib.urlencode({"nodes":nodes})
         else:

@@ -1,5 +1,6 @@
 import time
 import unittest
+import urllib
 import random
 import testconstants
 from TestInput import TestInputSingleton
@@ -24,21 +25,29 @@ class CWCTests(CWCBaseTest):
     def tearDown(self):
         super(CWCTests, self).tearDown()
 
-    def test_start_collect_log_without_upload(self):
+    def test_start_collect_log(self):
         rest = RestConnection(self.master)
         shell = RemoteMachineShellConnection(self.master)
         if "*" not in str(self.collect_nodes) and self.nodes_init > 1:
             self.collect_nodes = self._generate_random_collecting_node(rest)
-        status, content = rest.start_cluster_logs_collection(nodes=self.collect_nodes)
+        status, content = rest.start_cluster_logs_collection(nodes=self.collect_nodes, \
+                                upload=self.upload, uploadHost=self.uploadHost, \
+                                customer=self.customer, ticket=self.ticket)
         if status:
-            collected = self._monitor_collecting_log(rest, timeout=1200)
+            collected, uploaded = self._monitor_collecting_log(rest, timeout=1200)
             if collected:
                 self._verify_log_file(rest)
-        shell.disconnect()
+            if self.upload and uploaded:
+                self._verify_log_uploaded(rest)
+            shell.disconnect()
+        else:
+            self.fail("ERROR:  {0}".format(content))
 
     def _monitor_collecting_log(self, rest, timeout):
         start_time = time.time()
         end_time = start_time + timeout
+        collected = False
+        uploaded = False
         progress = 0
         progress, stt, perNode = rest.get_cluster_logs_collection_status()
         while (progress != 100 or stt == "running") and time.time() <= end_time :
@@ -48,14 +57,18 @@ class CWCTests(CWCBaseTest):
                 for node in perNode:
                     self.log.info("Node: {0} **** Collect status: {1}" \
                                   .format(node, perNode[node]["status"]))
+                    if "collected" in perNode[node]["status"]:
+                        collected = True
+                    elif "uploaded" in perNode[node]["status"]:
+                        uploaded = True
             self.sleep(10)
         if time.time() > end_time:
             self.log.error("log could not collect after {0} seconds ".format(timeout))
-            return False
+            return collected, uploaded
         else:
             duration = time.time() - start_time
             self.log.info("log collection took {0} seconds ".format(duration))
-            return True
+            return collected, uploaded
 
 
     def _verify_log_file(self, rest):
@@ -88,6 +101,24 @@ class CWCTests(CWCBaseTest):
         else:
             self.fail("Cluster-wide collectinfo failed to collect log at {0}" \
                            .format(node_failed_to_collect))
+
+    def _verify_log_uploaded(self, rest):
+        node_failed_to_uploaded = []
+        progress, status, perNode = rest.get_cluster_logs_collection_status()
+        for node in perNode:
+            self.log.info("Verify log of node {0} uploaded to host: {1}" \
+                          .format(node, self.uploadHost))
+            uploaded = urllib.urlopen(perNode[node]["url"]).getcode()
+            if uploaded == 200 and self.uploadHost in perNode[node]["url"]:
+                self.log.info("Log of node {0} was uploaded to {1}" \
+                              .format(node, perNode[node]["url"]))
+            else:
+                node_failed_to_uploaded.append(node)
+        if not node_failed_to_uploaded:
+            return True
+        else:
+            self.fail("Cluster-wide collectinfo failed to upload log at node(s) {0}" \
+                           .format(node_failed_to_uploaded))
 
     def _generate_random_collecting_node(self, rest):
         random_nodes = []
