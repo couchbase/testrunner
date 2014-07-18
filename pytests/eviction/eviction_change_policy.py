@@ -27,3 +27,21 @@ class EvictionChangePolicy(EvictionBase):
         self._load_all_buckets(self.master, gen_create2, "create", 0)
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_init], timeout=self.wait_timeout * 5)
         self._verify_stats_all_buckets(self.servers[:self.nodes_init])
+
+    def test_warm_up_with_eviction(self):
+        gen_create = BlobGenerator('eviction', 'eviction-', self.value_size, end=self.num_items)
+        gen_create2 = BlobGenerator('eviction2', 'eviction2-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen_create, "create", 0)
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
+        self._verify_stats_all_buckets(self.servers[:self.nodes_init])
+        self.timeout = self.wait_timeout
+        self.without_access_log = False
+        self._stats_befor_warmup(self.buckets[0])
+        self._restart_memcache(self.buckets[0])
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(
+                                            self.servers[:self.nodes_init], self,
+                                            wait_time=self.wait_timeout, wait_if_warmup=True)
+        self.sleep(10, 'Wait some time before next load')
+        self._load_all_buckets(self.master, gen_create2, "create", 0)
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_init], timeout=self.wait_timeout * 5)
+        self._verify_stats_all_buckets(self.servers[:self.nodes_init])
