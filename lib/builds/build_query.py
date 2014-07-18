@@ -302,7 +302,7 @@ class BuildQuery(object):
                 self.fail("unknown server name")
             return build
 
-    def create_build_url(self,version, deliverable_type, architecture_type, edition_type, repo, toy):
+    def create_build_url(self, version, deliverable_type, architecture_type, edition_type, repo, toy):
         build = MembaseBuild()
         """
         version: 3.0.0-xx or 3.0.0-xx-rel
@@ -318,7 +318,7 @@ class BuildQuery(object):
         build.toy = toy
         build.deliverable_type = deliverable_type
         build.architecture_type = architecture_type
-        unix_deliverable_type = ["deb", "rpm", "mac"]
+        unix_deliverable_type = ["deb", "rpm", "zip"]
         if deliverable_type in unix_deliverable_type:
             if "rel" not in version and toy == "":
                 build.product_version = version + "-rel"

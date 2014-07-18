@@ -479,7 +479,7 @@ class RemoteMachineShellConnection:
         elif self.info.distribution_type.lower() == 'mac':
             output, error = self.execute_command('cd ~/Downloads ; rm -rf couchbase-server* ; rm -rf Couchbase\ Server.app ; curl -O {0}'.format(url))
             self.log_command_output(output, error)
-            output, error = self.execute_command('ls ~/Downloads/%s' % filename)
+            output, error = self.execute_command('ls -lh  ~/Downloads/%s' % filename)
             self.log_command_output(output, error)
             for line in output:
                 if line.find('No such file or directory') == -1:
