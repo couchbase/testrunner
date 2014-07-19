@@ -627,7 +627,7 @@ class BaseTestCase(unittest.TestCase):
         return gen_load
 
     def verify_cluster_stats(self, servers=None, master=None, max_verify=None, timeout=None, check_items=True,
-                             only_store_hash=True, replica_to_read=None, batch_size=1000):
+                             only_store_hash=True, replica_to_read=None, batch_size=1000, check_bucket_stats = True):
         if servers is None:
             servers = self.servers
         if master is None:
@@ -645,7 +645,8 @@ class BaseTestCase(unittest.TestCase):
                 # get/verify stats if 'ValueError: Not able to get values for following keys' was gotten
                 self._verify_stats_all_buckets(servers, timeout=(timeout or 120))
                 raise e
-            self._verify_stats_all_buckets(servers, timeout=(timeout or 120))
+            if check_bucket_stats:
+                self._verify_stats_all_buckets(servers, timeout=(timeout or 120))
             # verify that curr_items_tot corresponds to sum of curr_items from all nodes
             verified = True
             for bucket in self.buckets:
@@ -653,6 +654,7 @@ class BaseTestCase(unittest.TestCase):
             self.assertTrue(verified, "Lost items!!! Replication was completed but sum(curr_items) don't match the curr_items_total")
         else:
             self.log.warn("verification of items was omitted")
+
 
     def _stats_befor_warmup(self, bucket_name):
         self.pre_warmup_stats[bucket_name] = {}

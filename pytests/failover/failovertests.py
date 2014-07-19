@@ -69,16 +69,17 @@ class FailoverTests(FailoverBaseTest):
         self.chosen = RebalanceHelper.pick_nodes(self.referenceNode, howmany=self.num_failed_nodes)
 
         # Perform operations - Create/Update/Delete
-        # self.withOps = True => Run Operations in parallel to failover
-        # self.withOps = False => Run Operations Before failover
-        self.ops_tasks = self.run_operation_tasks()
+        # self.withMutationOps = True => Run Operations in parallel to failover
+        # self.withMutationOps = False => Run Operations Before failover
+        self.load_initial_data()
+        if not self.withMutationOps:
+            self.run_mutation_operations()
 
         # Perform View Creation Tasks and check for completion if required before failover
-        if self.runViews:
+        if self.withViewsOps:
             self.run_view_creation_operations(self.servers)
-            if not self.runViewsDuringFailover:
-                self.run_view_creation_operations(self.servers)
-                self.monitor_view_tasks(self.servers)
+            if not self.createIndexesDuringFailover:
+                self.query_and_monitor_view_tasks(self.servers)
 
         # Take snap-shot of data set used for validaiton
         record_static_data_set = self.get_data_set_all(self.servers, self.buckets, path = None)
@@ -91,7 +92,10 @@ class FailoverTests(FailoverBaseTest):
             prev_failover_stats = self.get_failovers_logs(self.servers, self.buckets)
 
         # Perform Operations relalted to failover
-        self.run_failover_operations(self.chosen, failover_reason)
+        if self.withMutationOps or self.withViewsOps:
+            self.run_failover_operations_with_ops(self.chosen, failover_reason)
+        else:
+            self.run_failover_operations(self.chosen, failover_reason)
 
         # Perform Add Back Operation with Rebalance Or only Rebalance with Verificaitons
         if not self.gracefulFailoverFail and self.runRebalanceAfterFailover:
@@ -123,12 +127,19 @@ class FailoverTests(FailoverBaseTest):
                 self.change_port(new_port=self.input.param("new_port", "9090"))
                 self.rest = RestConnection(self.referenceNode)
 
+        # Peform View Validation if Supported
+        if self.withViewsOps:
+            self.query_and_monitor_view_tasks(self.servers)
+
         # Run operations if required during rebalance after failover
-        if self.withOps:
-            for task in self.ops_tasks:
-                task.result()
+        if self.withMutationOps:
+            self.run_mutation_operations_after_failover()
+
+        # Rebalance Monitoring
         msg = "rebalance failed while removing failover nodes {0}".format([node.id for node in chosen])
         self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
+
+        # Reset password or port
         if self.during_ops:
             if self.during_ops == "change_password":
                 self.change_password(new_password=old_pass)
@@ -136,33 +147,27 @@ class FailoverTests(FailoverBaseTest):
                 self.change_port(new_port='8091',
                 current_port=self.input.param("new_port", "9090"))
             return
+
         #  Drain Queue and make sure intra-cluster replication is complete
-        self._verify_stats_all_buckets(_servers_,timeout = 120)
         self._wait_for_stats_all_buckets(_servers_)
 
         self.log.info("Begin VERIFICATION for Rebalance after Failover Only")
+
         # Verify all data set with meta data if failover happens after failover
-        if not self.withOps:
+        if not self.withMutationOps:
             self.data_analysis_all(record_static_data_set, _servers_, self.buckets, path = None, addedItems = None)
         # Check Cluster Stats and Data as well if max_verify > 0
-        self.verify_cluster_stats(_servers_, self.referenceNode)
-        # If views were created they can be verified
-        if self.runViews:
-            if self.runViewsDuringFailover:
-                self.monitor_view_tasks(_servers_)
-            self.verify_query_task()
+        self.verify_cluster_stats(_servers_, self.referenceNode, check_bucket_stats = True)
         # Check Failover logs :: Not sure about this logic, currently not checking, will update code once confirmed
         # Currently, only  for checking case where we  have graceful failover
         if self.version_greater_than_2_5 and self.graceful and self.upr_check:
             new_failover_stats = self.compare_failovers_logs(prev_failover_stats, _servers_, self.buckets)
             new_vbucket_stats =  self.compare_vbucket_seqnos(prev_vbucket_stats, _servers_, self.buckets)
             self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
-
         # Verify Active and Replica Bucket Count
         if self.num_replicas > 0:
             nodes = self.get_nodes_in_cluster(self.referenceNode)
             self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets)
-
         self.log.info("End VERIFICATION for Rebalance after Failover Only")
 
     def run_add_back_operation_and_verify(self, chosen, prev_vbucket_stats, record_static_data_set, prev_failover_stats):
@@ -183,15 +188,20 @@ class FailoverTests(FailoverBaseTest):
                 index += 1
         self.sleep(20, "After failover before invoking rebalance...")
         self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[],deltaRecoveryBuckets = self.deltaRecoveryBuckets)
-        msg = "rebalance failed while removing failover nodes {0}".format(chosen)
+
+        # Peform View Validation if Supported
+        if self.withViewsOps:
+            self.query_and_monitor_view_tasks(self.servers)
+
         # Run operations if required during rebalance after failover
-        if self.withOps:
-            for task in self.ops_tasks:
-                task.result()
+        if self.withMutationOps:
+            self.run_mutation_operations_after_failover()
+
+        # Monitor Rebalance
+        msg = "rebalance failed while removing failover nodes {0}".format(chosen)
         self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
 
         #  Drain ep_queue and make sure that intra-cluster replication is complete
-        self._verify_stats_all_buckets(self.servers,timeout = 120)
         self._wait_for_stats_all_buckets(self.servers)
 
         self.log.info("Begin VERIFICATION for Add-back and rebalance")
@@ -200,11 +210,11 @@ class FailoverTests(FailoverBaseTest):
         self.verify_for_recovery_type(chosen, serverMap, self.buckets,recoveryTypeMap, fileMapsForVerification, self.deltaRecoveryBuckets)
 
         # Comparison of all data if required
-        if not self.withOps:
+        if not self.withMutationOps:
             self.data_analysis_all(record_static_data_set,self.servers, self.buckets,  path = None, addedItems = None)
 
         # Verify Stats of cluster and Data is max_verify > 0
-        self.verify_cluster_stats(self.servers, self.referenceNode)
+        self.verify_cluster_stats(self.servers, self.referenceNode, check_bucket_stats = False)
 
         # Verify if vbucket sequence numbers and failover logs are as expected
         # We will check only for version  > 2.5.* and if the failover is graceful
@@ -212,12 +222,6 @@ class FailoverTests(FailoverBaseTest):
             new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, self.servers, self.buckets,perNode= False)
             new_failover_stats = self.compare_failovers_logs(prev_failover_stats,self.servers,self.buckets)
             self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
-
-        # Peform View Validation if Supported
-        if self.runViews:
-            if self.runViewsDuringFailover:
-                self.monitor_view_tasks(self.servers)
-            self.verify_query_task()
 
         # Verify Active and Replica Bucket Count
         if self.num_replicas > 0:
@@ -326,31 +330,96 @@ class FailoverTests(FailoverBaseTest):
             nodes = self.filter_servers(self.servers,chosen)
             self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets, type = "failover")
 
+    def run_failover_operations_with_ops(self, chosen, failover_reason):
+        """ Method to run fail over operations used in the test scenario based on failover reason """
+        # Perform Operations relalted to failover
+        failed_over = True
+        for node in chosen:
+            unreachable = False
+            if failover_reason == 'stop_server':
+                unreachable=True
+                self.stop_server(node)
+                self.log.info("10 seconds delay to wait for membase-server to shutdown")
+                # wait for 5 minutes until node is down
+                self.assertTrue(RestHelper(self.rest).wait_for_node_status(node, "unhealthy", 300),
+                                    msg="node status is not unhealthy even after waiting for 5 minutes")
+            elif failover_reason == "firewall":
+                unreachable=True
+                self.filter_list.append (node.ip)
+                server = [srv for srv in self.servers if node.ip == srv.ip][0]
+                RemoteUtilHelper.enable_firewall(server, bidirectional=self.bidirectional)
+                status = RestHelper(self.rest).wait_for_node_status(node, "unhealthy", 300)
+                if status:
+                    self.log.info("node {0}:{1} is 'unhealthy' as expected".format(node.ip, node.port))
+                else:
+                    # verify iptables on the node if something wrong
+                    for server in self.servers:
+                        if server.ip == node.ip:
+                            shell = RemoteMachineShellConnection(server)
+                            info = shell.extract_remote_info()
+                            if info.type.lower() == "windows":
+                                o, r = shell.execute_command("netsh advfirewall show allprofiles")
+                                shell.log_command_output(o, r)
+                            else:
+                                o, r = shell.execute_command("/sbin/iptables --list")
+                                shell.log_command_output(o, r)
+                            shell.disconnect()
+                    self.rest.print_UI_logs()
+                    api = self.rest.baseUrl + 'nodeStatuses'
+                    status, content, header = self.rest._http_request(api)
+                    json_parsed = json.loads(content)
+                    self.log.info("nodeStatuses: {0}".format(json_parsed))
+                    self.fail("node status is not unhealthy even after waiting for 5 minutes")
+        nodes = self.filter_servers(self.servers,chosen)
+        failed_over = self.cluster.async_failover([self.referenceNode], failover_nodes = chosen, graceful=self.graceful)
+        # Run View Operations
+        if self.withViewsOps:
+            self.query_and_monitor_view_tasks(nodes)
+        # Run mutation operations
+        if self.withMutationOps:
+            self.run_mutation_operations()
+        failed_over.result()
+        msg = "rebalance failed while removing failover nodes {0}".format(node.id)
+        self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
+        self.verify_unacked_bytes_all_buckets()
 
-    def run_operation_tasks(self):
+    def load_initial_data(self):
         """ Method to run operations Update/Delete/Create """
         # Load All Buckets if num_items > 0
-        tasks =  []
+        tasks = []
         tasks += self._async_load_all_buckets(self.referenceNode, self.gen_initial_create, "create", 0)
         for task in tasks:
             task.result()
-        self._verify_stats_all_buckets(self.servers,timeout = 120)
         self._wait_for_stats_all_buckets(self.servers)
-        # Update or Delete buckets if items > 0 and options are passed in tests
-        # These can run in parallel (withOps = True), or before (withOps = True)
-        ops_tasks = []
+        self._verify_stats_all_buckets(self.servers,timeout = 120)
+
+    def run_mutation_operations(self):
+        mutation_ops_tasks = []
         if("create" in self.doc_ops):
-            ops_tasks += self._async_load_all_buckets(self.referenceNode, self.gen_update, "create", 0)
+            mutation_ops_tasks += self._async_load_all_buckets(self.referenceNode, self.gen_create, "create", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
         if("update" in self.doc_ops):
-            ops_tasks += self._async_load_all_buckets(self.referenceNode, self.gen_update, "update", 0)
+            mutation_ops_tasks += self._async_load_all_buckets(self.referenceNode, self.gen_update, "update", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
         if("delete" in self.doc_ops):
-            ops_tasks += self._async_load_all_buckets(self.referenceNode, self.gen_delete, "delete", 0)
-        if not self.withOps:
-            for task in ops_tasks:
+            mutation_ops_tasks += self._async_load_all_buckets(self.referenceNode, self.gen_delete, "delete", 0,  batch_size=20000, pause_secs=5, timeout_secs=180)
+        try:
+            for task in mutation_ops_tasks:
+                    task.result()
+        except Exception, ex:
+            self.log.info(ex)
+
+    def run_mutation_operations_after_failover(self):
+        mutation_ops_tasks = []
+        if("create" in self.doc_ops):
+            mutation_ops_tasks += self._async_load_all_buckets(self.referenceNode, self.afterfailover_gen_create, "create", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
+        if("update" in self.doc_ops):
+            mutation_ops_tasks += self._async_load_all_buckets(self.referenceNode, self.afterfailover_gen_update, "update", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
+        if("delete" in self.doc_ops):
+            mutation_ops_tasks += self._async_load_all_buckets(self.referenceNode, self.afterfailover_gen_delete, "delete", 0,  batch_size=20000, pause_secs=5, timeout_secs=180)
+        try:
+            for task in mutation_ops_tasks:
                 task.result()
-            self._wait_for_stats_all_buckets(self.servers)
-            self._verify_stats_all_buckets(self.servers,timeout = 120)
-        return ops_tasks
+        except Exception, ex:
+            self.log.info(ex)
 
     def define_maps_during_failover(self, recoveryType = []):
         """ Method to define nope ip, recovery type map """
@@ -424,23 +493,13 @@ class FailoverTests(FailoverBaseTest):
         for task in tasks:
             task.result(self.wait_timeout * 20)
 
-        for bucket in self.buckets:
-                for view in views:
-                    # run queries to create indexes
-                    self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
-        self.verify_query_task()
-        active_tasks = self.cluster.async_monitor_active_task(servers, "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
-        for active_task in active_tasks:
-            result = active_task.result()
-            self.assertTrue(result)
-
-    def monitor_view_tasks(self, servers):
+    def query_and_monitor_view_tasks(self, servers):
         """ Monitor Query Tasks for their completion """
         num_views = self.input.param("num_views", 5)
         is_dev_ddoc = self.input.param("is_dev_ddoc", True)
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
-
+        self.verify_query_task()
         active_tasks = self.cluster.async_monitor_active_task(servers, "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
         for active_task in active_tasks:
             result = active_task.result()

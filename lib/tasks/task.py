@@ -2219,10 +2219,11 @@ class ViewCompactionTask(Task):
 '''task class for failover. This task will only failover nodes but doesn't
  rebalance as there is already a task to do that'''
 class FailoverTask(Task):
-    def __init__(self, servers, to_failover=[], wait_for_pending=20):
+    def __init__(self, servers, to_failover=[], wait_for_pending=0,graceful = True):
         Task.__init__(self, "failover_task")
         self.servers = servers
         self.to_failover = to_failover
+        self.graceful = graceful
         self.wait_for_pending = wait_for_pending
 
     def execute(self, task_manager):
@@ -2249,7 +2250,7 @@ class FailoverTask(Task):
             for node in rest.node_statuses():
                 if server.ip == node.ip and int(server.port) == int(node.port):
                     self.log.info("Failing over {0}:{1}".format(node.ip, node.port))
-                    rest.fail_over(node.id)
+                    rest.fail_over(node.id,self.graceful)
 
 class GenerateExpectedViewResultsTask(Task):
 

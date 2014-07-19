@@ -52,6 +52,20 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
+    def async_failover(self, servers = [], failover_nodes =[], graceful = True):
+        """Asynchronously failover a set of nodes
+
+        Parameters:
+            servers - servers used for connection. (TestInputServer)
+            failover_nodes - The set of servers that will under go failover .(TestInputServer)
+            graceful = True/False. True - graceful, False - hard. (Boolean)
+
+        Returns:
+            FailOverTask - A task future that is a handle to the scheduled task."""
+        _task = FailoverTask(servers, to_failover = failover_nodes, graceful = graceful)
+        self.task_manager.schedule(_task)
+        return _task
+
     def async_create_standard_bucket(self, server, name, port, size, replicas, enable_replica_index=1,
                                      eviction_policy='valueOnly', bucket_priority=None):
         """Asynchronously creates a standard bucket
@@ -691,30 +705,18 @@ class Cluster(object):
         _task = self.async_compact_view(server, design_doc_name, bucket, with_rebalance)
         return _task.result(timeout)
 
-    def async_failover(self, servers, to_failover):
-        """Asyncronously fails over nodes
+    def failover(self, servers = [], failover_nodes =[], graceful = True):
+        """Synchronously flushes a bucket
 
         Parameters:
-            servers - All servers participating in the failover ([TestInputServers])
-            to_failover - All servers being failed over ([TestInputServers])
+            servers - node used for connection (TestInputServer)
+            failover_nodes - servers to be failover. (TestInputServer)
+            bucket - The name of the bucket to be flushed. (String)
 
         Returns:
-            FailoverTask - A task future that is a handle to the scheduled task"""
-        _task = FailoverTask(servers, to_failover)
-        self.task_manager.schedule(_task)
-        return _task
-
-    def failover(self, servers, to_failover, timeout=None):
-        """Syncronously fails over nodes
-
-        Parameters:
-            servers - All servers participating in the failover ([TestInputServers])
-            to_failover - All servers being failed over ([TestInputServers])
-
-        Returns:
-            boolean - Whether or not the failover was successful"""
-        _task = self.async_failover(servers, to_failover)
-        return _task.result(timeout)
+            boolean - Whether or not the bucket was flushed."""
+        _task = self.async_failover(servers, failover_nodes, graceful)
+        return _task.result()
 
     def async_bucket_flush(self, server, bucket='default'):
         """Asynchronously flushes a bucket
@@ -740,6 +742,8 @@ class Cluster(object):
             boolean - Whether or not the bucket was flushed."""
         _task = self.async_bucket_flush(server, bucket)
         return _task.result(timeout)
+
+
 
     def async_monitor_db_fragmentation(self, server, fragmentation, bucket, get_view_frag=False):
         """Asyncronously monitor db fragmentation

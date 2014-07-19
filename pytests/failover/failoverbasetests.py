@@ -19,8 +19,9 @@ class FailoverBaseTest(BaseTestCase):
         self.failoverMaster = self.input.param("failoverMaster", False)
         self.total_vbuckets = self.input.param("total_vbuckets", 1024)
         self.std_vbucket_dist = self.input.param("std_vbucket_dist", None)
-        self.withOps = self.input.param("withOps", False)
-        self.runViews = self.input.param("runViews", False)
+        self.withMutationOps = self.input.param("withMutationOps", False)
+        self.withViewsOps = self.input.param("withViewsOps", False)
+        self.createIndexesDuringFailover = self.input.param("createIndexesDuringFailover", False)
         self.upr_check = self.input.param("upr_check", True)
         self.withQueries = self.input.param("withQueries", False)
         self.numberViews = self.input.param("numberViews", False)
@@ -34,7 +35,6 @@ class FailoverBaseTest(BaseTestCase):
         self._value_size = self.input.param("value_size", 256)
         self.doc_ops = self.input.param("doc_ops", [])
         self.deltaRecoveryBuckets = self.input.param("deltaRecoveryBuckets", None)
-        self.runViewsDuringFailover = self.input.param("runViewsDuringFailover", False)
         if self.doc_ops:
             self.doc_ops = self.doc_ops.split(":")
         self.num_failed_nodes = self.input.param("num_failed_nodes", 0)
@@ -52,6 +52,9 @@ class FailoverBaseTest(BaseTestCase):
         self.gen_create = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items + 1 , end=self.num_items * 1.5)
         self.gen_update = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items / 2, end=self.num_items)
         self.gen_delete = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items / 4, end=self.num_items / 2 - 1)
+        self.afterfailover_gen_create = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items * 1.6 , end=self.num_items * 2)
+        self.afterfailover_gen_update = BlobGenerator('failover', 'failover', self.value_size, start=1 , end=self.num_items/4)
+        self.afterfailover_gen_delete = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items * .5 , end=self.num_items* 0.75)
 
         self.log.info("==============  FailoverBaseTest setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
