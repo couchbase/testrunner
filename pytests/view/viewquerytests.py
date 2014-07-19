@@ -1845,7 +1845,8 @@ class ViewQueryTests(BaseTestCase):
             2. start querying for views with reduce
         '''
         params = self.input.param('query_params', {})
-        data_set = SalesDataSet(self.master, self.cluster, self.docs_per_day)
+        use_custom_reduce = self.input.param('use_custom_reduce', False)
+        data_set = SalesDataSet(self.master, self.cluster, self.docs_per_day, custom_reduce=use_custom_reduce)
         data_set.add_reduce_queries(params, limit=self.limit)
         self._query_test_init(data_set)
 
@@ -1873,6 +1874,31 @@ class ViewQueryTests(BaseTestCase):
         if self.wait_persistence:
             for server in self.servers:
                 RebalanceHelper.wait_for_persistence(server, data_set.bucket)
+        self._query_all_views(data_set.views, generator_load)
+
+    def test_sales_dataset_start_end_key_query_datatypes(self):
+        '''
+        Test uses sales data set:
+            -documents are structured as {
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "sales" : sales <int>
+                                       "delivery_date" : string for date),
+                                        "is_support_included" : boolean,
+                                        "client_name" : string,
+                                        "client_reclaims_rate" : float}}
+        Steps to repro:
+            1. Start load data
+            2. start querying for views
+        '''
+        data_set = SalesDataSet(self.master, self.cluster, self.docs_per_day, test_datatype=True)
+        data_set.add_startkey_endkey_queries(limit=self.limit)
+        generator_load = data_set.generate_docs(data_set.views[0])
+        self.load(data_set, generator_load)
+        if self.wait_persistence:
+            for server in self.servers:
+                RebalanceHelper.wait_for_persistence(server, data_set.bucket.name)
         self._query_all_views(data_set.views, generator_load)
 
     def test_sales_dataset_multiply_items(self):
@@ -2972,7 +2998,7 @@ class SimpleDataSet:
 
 class SalesDataSet:
     def __init__(self, server, cluster, docs_per_day=200, bucket="default", test_datatype=False, template_items_num=None,
-                 custom_reduce=True):
+                 custom_reduce=False):
         self.server = server
         self.cluster = cluster
         self.docs_per_day = docs_per_day
@@ -3039,8 +3065,8 @@ class SalesDataSet:
             template += ' "client_name" : "{8}", "client_reclaims_rate" : {9}}}'
             sales = [200000, 400000, 600000, 800000]
 
-            is_support = [True, False]
-            is_priority = [True, False]
+            is_support = ['true', 'false']
+            is_priority = ['true', 'false']
             contact = str(uuid.uuid4())[:10]
             name = str(uuid.uuid4())[:10]
             rate = [x * 0.1 for x in range(0, 10)]
@@ -3204,6 +3230,40 @@ class SalesDataSet:
                 continue
             view.queries += [QueryHelper({"group" : "true"})]
             if limit:
+                for q in view.queries:
+                    q.params["limit"] = limit
+
+    def add_startkey_endkey_queries(self, views=None, limit=None):
+        if views is None:
+            views = self.views
+
+        for view in views:
+            if view.reduce_fn:
+                continue
+            view.queries += [QueryHelper({"startkey" : "[2008,7,null]"}),
+                             QueryHelper({"startkey" : "[2008,0,1]",
+                                          "endkey"   : "[2008,7,1]",
+                                          "inclusive_end" : "false"}),
+                             QueryHelper({"startkey" : "[2008,0,1]",
+                                          "endkey"   : "[2008,7,1]",
+                                          "inclusive_end" : "true"}),
+                             QueryHelper({"startkey" : "[2008,7,1]",
+                                          "endkey"   : "[2008,1,1]",
+                                          "descending"   : "true",
+                                          "inclusive_end" : "false"}),
+                             QueryHelper({"startkey" : "[2008,7,1]",
+                                          "endkey"   : "[2008,1,1]",
+                                          "descending"   : "true",
+                                          "inclusive_end" : "true"}),
+                             QueryHelper({"startkey" : "[2008,1,1]",
+                                          "endkey"   : "[2008,7,1]",
+                                          "descending"   : "false",
+                                          "inclusive_end" : "false"}),
+                             QueryHelper({"startkey" : "[2008,1,1]",
+                                          "endkey"   : "[2008,7,1]",
+                                          "descending"   : "false",
+                                          "inclusive_end" : "true"})]
+            if limit is not None:
                 for q in view.queries:
                     q.params['limit'] = limit
 
