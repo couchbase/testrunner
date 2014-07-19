@@ -15,7 +15,7 @@ class RebalanceBaseTest(BaseTestCase):
         self.defaul_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
         self.default_view_name = "default_view"
         self.default_view = View(self.default_view_name, self.defaul_map_func, None)
-
+        self.std_vbucket_dist = self.input.param("std_vbucket_dist", None)
         #define the data that will be used to test
         self.blob_generator = self.input.param("blob_generator", True)
         if self.blob_generator:

@@ -1116,6 +1116,10 @@ class BaseTestCase(unittest.TestCase):
             Method to check vbucket distribution analysis after rebalance
         """
         self.log.info(" Begin Verification for vb_distribution_analysis")
+        if self.std_vbucket_dist != None:
+            std = self.std_vbucket_dist
+        if self.vbuckets != None and self.vbuckets != self.total_vbuckets:
+            self.total_vbuckets = self.vbuckets
         active,replica=self.get_vb_distribution_active_replica(servers = servers, buckets = buckets)
         for bucket in active.keys():
              self.log.info(" Begin Verification for Bucket {0}".format(bucket))
@@ -1123,9 +1127,9 @@ class BaseTestCase(unittest.TestCase):
              replica_result = replica[bucket]
              self.assertTrue(active_result["total"] == total_vbuckets, "total vbuckets do not match for active data set, actual {0} expectecd {1}".format(active_result["total"] ,total_vbuckets))
              if type == "rebalance":
-                self.assertTrue(replica_result["total"] == total_vbuckets, "total vbuckets do not match for replica data set (= criteria), actual {0} expectecd {1}".format(replica_result["total"] ,total_vbuckets))
+                self.assertTrue(replica_result["total"] == self.num_replicas*total_vbuckets, "total vbuckets do not match for replica data set (= criteria), actual {0} expectecd {1}".format(replica_result["total"] ,total_vbuckets))
              else:
-                self.assertTrue(replica_result["total"] <= total_vbuckets, "total vbuckets do not match for replica data set (<= criteria), actual {0} expectecd {1}".format(replica_result["total"] ,total_vbuckets))
+                self.assertTrue(replica_result["total"] <= self.num_replicas*total_vbuckets, "total vbuckets do not match for replica data set (<= criteria), actual {0} expectecd {1}".format(replica_result["total"] ,total_vbuckets))
              self.assertTrue(active_result["std"] >= 0.0 and active_result["std"] <= std, "std test failed for active vbuckets")
              self.assertTrue(replica_result["std"] >= 0.0 and replica_result["std"] <= std, "std test failed for replica vbuckets")
         self.log.info(" End Verification for vb_distribution_analysis")
