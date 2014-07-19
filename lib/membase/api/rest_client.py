@@ -1694,6 +1694,12 @@ class RestConnection(object):
                     return True, task["progress"]
         return False, None
 
+    def change_memcached_t_option(self, value):
+        cmd = '[ns_config:update_key({node, N, memcached}, fun (PList)' +\
+              ' -> lists:keystore(verbosity, 1, PList, {verbosity, \'-t ' + str(value) + '\'}) end)' +\
+              ' || N <- ns_node_disco:nodes_wanted()].'
+        return self.diag_eval(cmd)
+
     def set_ensure_full_commit(self, value):
         """Dynamic settings changes"""
         # the boolean paramter is used to turn on/off ensure_full_commit(). In XDCR,

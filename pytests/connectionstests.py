@@ -151,3 +151,15 @@ class ConnectionTests(BaseTestCase):
                                 "Memcached wasn't recover during %s seconds" % timeout)
         finally:
             shell.disconnect()
+
+    def test_memcahed_t_option(self):
+        rest = RestConnection(self.master)
+        rest.change_memcached_t_option(8)
+        self.sleep(5, 'wait some time before restart')
+        remote = RemoteMachineShellConnection(self.master)
+        o, _ = remote.execute_command('ls /tmp | grep dump')
+        remote.stop_server()
+        remote.start_couchbase()
+        o_new, _ = remote.execute_command('ls /tmp | grep dump')
+        self.assertTrue(len(o) == len(o_new), 'new core dump appeared: %s' % (set(o_new) - set(o)))
+        
