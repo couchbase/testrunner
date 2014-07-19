@@ -20,6 +20,7 @@ class CWCBaseTest(BaseTestCase):
         self.customer = self.input.param("customer", "")
         self.ticket = self.input.param("ticket", "")
         self.collect_nodes = self.input.param("collect_nodes", "*")
+        self.cancel_collect = self.input.param("cancel_collect", False)
         self.shutdown_nodes = self.input.param("shutdown_nodes", None)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")

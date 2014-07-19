@@ -34,11 +34,17 @@ class CWCTests(CWCBaseTest):
                                 upload=self.upload, uploadHost=self.uploadHost, \
                                 customer=self.customer, ticket=self.ticket)
         if status:
-            collected, uploaded = self._monitor_collecting_log(rest, timeout=1200)
+            collected, uploaded, cancel_collect  = \
+                       self._monitor_collecting_log(rest, timeout=1200)
             if collected:
                 self._verify_log_file(rest)
             if self.upload and uploaded:
                 self._verify_log_uploaded(rest)
+            if self.cancel_collect:
+                if cancel_collect:
+                    self.log.info("Logs collection were cancelled")
+                else:
+                    self.fail("Failed to cancel log collection")
             shell.disconnect()
         else:
             self.fail("ERROR:  {0}".format(content))
@@ -48,10 +54,22 @@ class CWCTests(CWCBaseTest):
         end_time = start_time + timeout
         collected = False
         uploaded = False
+        cancel_collect = False
         progress = 0
         progress, stt, perNode = rest.get_cluster_logs_collection_status()
         while (progress != 100 or stt == "running") and time.time() <= end_time :
             progress, stt, perNode = rest.get_cluster_logs_collection_status()
+            if stt is not None and self.cancel_collect:
+                count = 0
+                if "running" in stt and count == 0:
+                    self.log.info("Start to cancel collect logs ")
+                    status, content = rest.cancel_cluster_logs_collection()
+                    count += 1
+                if "cancelled" in stt:
+                    cancel_collect = True
+                    break
+                elif count == 2:
+                    self.fail("Failed to cancel log collection")
             self.log.info("Cluster-wide collectinfo progress: {0}".format(progress))
             if perNode is not None:
                 for node in perNode:
@@ -63,12 +81,17 @@ class CWCTests(CWCBaseTest):
                         uploaded = True
             self.sleep(10)
         if time.time() > end_time:
-            self.log.error("log could not collect after {0} seconds ".format(timeout))
-            return collected, uploaded
+            if self.cancel_collect:
+                self.log.error("Could not cancel log collection after {0} seconds ".format(timeout))
+            elif self.upload:
+                self.log.error("Log could not upload after {0} seconds ".format(timeout))
+            else:
+                self.log.error("Log could not collect after {0} seconds ".format(timeout))
+            return collected, uploaded, cancel_collect
         else:
             duration = time.time() - start_time
             self.log.info("log collection took {0} seconds ".format(duration))
-            return collected, uploaded
+            return collected, uploaded, cancel_collect
 
 
     def _verify_log_file(self, rest):
