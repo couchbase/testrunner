@@ -246,6 +246,41 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
             count += 1
         return True
 
+    """ Verify checkpoint 404 error thrown when the dest node containing vb0 is no more a part of cluster """
+    def mutate_and_check_error404(self, n=1):
+        # get vb0 active source node
+        active_src_node = self.get_active_vb0_node(self.src_master)
+        shell = RemoteMachineShellConnection(active_src_node)
+        os_type = shell.extract_remote_info().distribution_type
+        if os_type.lower() == 'windows':
+            trace_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/xdcr_trace.*"
+        else:
+            trace_log = "/opt/couchbase/var/lib/couchbase/logs/xdcr_trace.*"
+        num_404_errors_before_load, error = shell.execute_command("grep \"error,404\" {} | wc -l"
+                                                                     .format(trace_log))
+        num_get_remote_bkt_failed_before_load, error = shell.execute_command("grep \"get_remote_bucket_failed\" {} | wc -l"
+                                                                     .format(trace_log))
+        self.log.info("404 errors: {}, get_remote_bucket_failed errors : {}".
+                      format(num_404_errors_before_load, num_get_remote_bkt_failed_before_load))
+        self.log.info("################ New mutation:{} ##################".format(self.key_counter+1))
+        self.load_one_mutation_into_source_vb0(active_src_node)
+        self.sleep(5)
+        num_404_errors_after_load, error = shell.execute_command("grep \"error,404\" {} | wc -l"
+                                                                     .format(trace_log))
+        num_get_remote_bkt_failed_after_load, error = shell.execute_command("grep \"get_remote_bucket_failed\" {} | wc -l"
+                                                                     .format(trace_log))
+        self.log.info("404 errors: {}, get_remote_bucket_failed errors : {}".
+                      format(num_404_errors_after_load, num_get_remote_bkt_failed_after_load))
+        shell.disconnect()
+        if int(num_404_errors_after_load[0]) > int(num_404_errors_before_load[0]) or \
+            int(num_get_remote_bkt_failed_before_load[0]) > int(num_get_remote_bkt_failed_after_load[0]):
+            self.log.info("Checkpointing error-404 verified after dest failover/rebalance out")
+            return True
+        else:
+            self.log.info("404 errors on source node before last load : {}, after last node: {}".
+                          format(int(num_404_errors_after_load[0]), int(num_404_errors_before_load[0])))
+            self.log.error("Checkpoint 404 error NOT recorded at source following dest failover or rebalance!")
+
     """ Rebalance-out active vb0 node from a cluster """
     def rebalance_out_activevb0_node(self, master):
         pre_rebalance_uuid, _ =self.get_failover_log(master)
@@ -291,6 +326,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
                 self.log.info("Current internal replication = UPR,hence destination vb_uuid did not change," \
                           "Subsequent _commit_for_checkpoints are expected to pass")
                 self.read_chkpt_history_new_vb0node()
+                self.mutate_and_check_error404()
                 self.verify_next_checkpoint_passes()
 
     """ Failover active vb0 node from a cluster """
@@ -414,12 +450,12 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         if "destination" in self._failover:
             self.failover_activevb0_node(self.dest_master)
             self.read_chkpt_history_new_vb0node()
-            self.verify_next_checkpoint_fails_after_dest_uuid_change()
+            self.mutate_and_check_error404()
+            self.verify_next_checkpoint_passes()
         elif "source" in self._failover:
             self.failover_activevb0_node(self.src_master)
             self.verify_next_checkpoint_passes()
         self.verify_revid()
-
 
     """ Checks if the subsequent _commit_for_checkpoint and _pre_replicate
         fail after a dest vb_uuid change. Also checks if the next checkpoint
@@ -432,9 +468,9 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
                 self.log.info("_pre_replicate following the failed checkpoint was unsuccessful, but this is expected")
                 self.verify_next_checkpoint_passes()
             else:
-                self.fail("ERROR :_pre_replicate following the failed checkpoint was successful")
+                self.log.info("_pre_replicate following the failed checkpoint was successful")
         else:
-            self.fail("Checkpointing passed unexpectedly, despite remote_uuid change following most recent crash/topology change ")
+            self.log.info("Checkpointing passed, after remote_uuid change following most recent crash/topology change ")
 
     """ Checks if the subsequent _commit_for_checkpoint and _pre_replicate pass
         happens if dest vb_uuid did not change or only source uuid changed
