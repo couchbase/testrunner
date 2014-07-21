@@ -18,6 +18,7 @@ class FailoverBaseTest(BaseTestCase):
         self.default_view = View(self.default_view_name, self.defaul_map_func, None)
         self.failoverMaster = self.input.param("failoverMaster", False)
         self.total_vbuckets = self.input.param("total_vbuckets", 1024)
+        self.compact = self.input.param("compact", False)
         self.std_vbucket_dist = self.input.param("std_vbucket_dist", None)
         self.withMutationOps = self.input.param("withMutationOps", False)
         self.withViewsOps = self.input.param("withViewsOps", False)

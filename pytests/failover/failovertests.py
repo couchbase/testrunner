@@ -92,7 +92,7 @@ class FailoverTests(FailoverBaseTest):
             prev_failover_stats = self.get_failovers_logs(self.servers, self.buckets)
 
         # Perform Operations relalted to failover
-        if self.withMutationOps or self.withViewsOps:
+        if self.withMutationOps or self.withViewsOps or self.compact:
             self.run_failover_operations_with_ops(self.chosen, failover_reason)
         else:
             self.run_failover_operations(self.chosen, failover_reason)
@@ -126,7 +126,10 @@ class FailoverTests(FailoverBaseTest):
             elif self.during_ops == "change_port":
                 self.change_port(new_port=self.input.param("new_port", "9090"))
                 self.rest = RestConnection(self.referenceNode)
-
+        # Perform Compaction
+        if self.compact:
+            for bucket in self.buckets:
+                self.cluster.compact_bucket(self.referenceNode,bucket)
         # Peform View Validation if Supported
         if self.withViewsOps:
             self.query_and_monitor_view_tasks(self.servers)
@@ -189,6 +192,10 @@ class FailoverTests(FailoverBaseTest):
         self.sleep(20, "After failover before invoking rebalance...")
         self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[],deltaRecoveryBuckets = self.deltaRecoveryBuckets)
 
+        # Perform Compaction
+        if self.compact:
+            for bucket in self.buckets:
+                self.cluster.compact_bucket(self.referenceNode,bucket)
         # Peform View Validation if Supported
         if self.withViewsOps:
             self.query_and_monitor_view_tasks(self.servers)
@@ -372,6 +379,10 @@ class FailoverTests(FailoverBaseTest):
                     self.fail("node status is not unhealthy even after waiting for 5 minutes")
         nodes = self.filter_servers(self.servers,chosen)
         failed_over = self.cluster.async_failover([self.referenceNode], failover_nodes = chosen, graceful=self.graceful)
+        # Perform Compaction
+        if self.compact:
+            for bucket in self.buckets:
+                self.cluster.compact_bucket(self.referenceNode,bucket)
         # Run View Operations
         if self.withViewsOps:
             self.query_and_monitor_view_tasks(nodes)

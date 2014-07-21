@@ -82,6 +82,35 @@ class RebalanceInTests(RebalanceBaseTest):
         self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
         self.verify_unacked_bytes_all_buckets()
 
+    """Rebalances nodes into a cluster while doing docs ops:create, delete, update.
+
+    This test begins by loading a given number of items into the cluster.
+    We later run compaction on all buckets and do ops as well
+    """
+    def rebalance_in_with_compaction_and_ops(self):
+        self.withOps = True
+        servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
+        tasks = [self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])]
+        for bucket in self.buckets:
+            tasks += self.cluster.async_compact_bucket(self.master,bucket)
+        if(self.doc_ops is not None):
+            if("update" in self.doc_ops):
+                # 1/2th of data will be updated in each iteration
+                tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
+            elif("create" in self.doc_ops):
+                # 1/2th of initial data will be added in each iteration
+                gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items * (1 + i) / 2.0 , end=self.num_items * (1 + i / 2.0))
+                tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
+            elif("delete" in self.doc_ops):
+                 # 1/(num_servers) of initial data will be removed after each iteration
+                # at the end we should get empty base( or couple items)
+                gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=int(self.num_items * (1 - i / (self.num_servers - 1.0))) + 1, end=int(self.num_items * (1 - (i - 1) / (self.num_servers - 1.0))))
+                tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
+        for task in tasks:
+            task.result()
+        self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
+        self.verify_unacked_bytes_all_buckets()
+
     def rebalance_in_with_ops_batch(self):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=(self.num_items / 2 - 1), end=self.num_items)
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)

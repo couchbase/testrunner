@@ -89,6 +89,36 @@ class RebalanceOutTests(RebalanceBaseTest):
         self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
         self.verify_unacked_bytes_all_buckets()
 
+    """Rebalances nodes out of a cluster while doing docs ops:create, delete, update along with compaction.
+
+    This test begins with all servers clustered together and  loads a user defined
+    number of items into the cluster. It then remove nodes_out from the cluster at a time
+    and rebalances. During the rebalance we perform docs ops(add/remove/update/read)
+    in the cluster( operate with a half of items that were loaded before).
+    Once the cluster has been rebalanced we wait for the disk queues to drain,
+    and then verify that there has been no data loss, sum(curr_items) match the curr_items_total.
+    Once all nodes have been rebalanced the test is finished."""
+    def rebalance_out_with_compaction_and_ops(self):
+        gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
+        gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
+        servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
+        tasks = [self.cluster.async_rebalance(self.servers[:1], [], servs_out)]
+        for bucket in self.buckets:
+            self.cluster.compact_bucket(self.master,bucket)
+        # define which doc's ops will be performed during rebalancing
+        # allows multiple of them but one by one
+        if(self.doc_ops is not None):
+            if("update" in self.doc_ops):
+                tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
+            if("create" in self.doc_ops):
+                tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0)
+            if("delete" in self.doc_ops):
+                tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
+        for task in tasks:
+            task.result()
+        self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
+        self.verify_unacked_bytes_all_buckets()
+
     """Rebalances nodes from a cluster during getting random keys.
 
     This test begins with all servers clustered together and loads a user defined

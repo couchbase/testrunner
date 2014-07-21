@@ -163,6 +163,38 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self.verify_cluster_stats(self.servers[:self.num_servers])
         self.verify_unacked_bytes_all_buckets()
 
+    """Rebalances nodes out and in of the cluster while doing mutations and compaction.
+
+    This test begins by loading a given number of items into the cluster. It then
+    removes one node, rebalances that node out the cluster, and then rebalances it back
+    in. During the rebalancing we update all of the items in the cluster. Once the
+    node has been removed and added back we  wait for the disk queues to drain, and
+    then verify that there has been no data loss, sum(curr_items) match the curr_items_total.
+    We then remove and add back two nodes at a time and so on until we have reached the point
+    where we are adding back and removing at least half of the nodes."""
+    def incremental_rebalance_in_out_with_mutation_and_compaction(self):
+        self.cluster.rebalance(self.servers[:self.num_servers],
+                               self.servers[1:self.num_servers], [])
+        gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        batch_size = 50
+        for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
+            tasks = self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=batch_size, timeout_secs=60)
+            for bucket in self.buckets:
+                self.cluster.compact_bucket(self.master,bucket)
+            self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
+            self.sleep(10)
+
+            for task in tasks:
+                task.result(self.wait_timeout * 20)
+            tasks = self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=batch_size, timeout_secs=60)
+            self.cluster.rebalance(self.servers[:self.num_servers],
+                                   self.servers[i:self.num_servers], [])
+            for task in tasks:
+                task.result(self.wait_timeout * 20)
+            self.verify_cluster_stats(self.servers[:self.num_servers])
+        self.verify_unacked_bytes_all_buckets()
+
     """Start-stop rebalance in/out with adding/removing aditional after stopping rebalance.
 
     This test begins by loading a given number of items into the cluster. It then
