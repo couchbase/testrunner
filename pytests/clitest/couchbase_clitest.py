@@ -1125,6 +1125,7 @@ class XdcrCLITest(CliBaseTest):
 
         options = "--list"
         output, _ = self.__execute_cli(cli_command, options)
+        self.sleep(8)
         for value in output:
             if value.startswith("stream id"):
                 replicator = value.split(":")[1].strip()
@@ -1141,6 +1142,7 @@ class XdcrCLITest(CliBaseTest):
                     for value in output:
                         if value.startswith("status"):
                             self.assertEqual(value.split(":")[1].strip(), "paused")
+                    self.sleep(10)
                     # resume replication
                     options = "--resume"
                     options += (" --xdcr-replicator={0}".format(replicator))
