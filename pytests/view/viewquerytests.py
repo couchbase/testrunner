@@ -58,6 +58,7 @@ class ViewQueryTests(BaseTestCase):
             self.wait_persistence = self.input.param("wait_persistence", False)
             self.docs_per_day = self.input.param('docs-per-day', 200)
             self.retries = self.input.param('retries', 100)
+            self.timeout = self.input.param('timeout', None)
             self.error = None
             self.master = self.servers[0]
             self.thread_crashed = Event()
@@ -1985,7 +1986,7 @@ class ViewQueryTests(BaseTestCase):
     ##
     def _query_all_views(self, views, generators, kv_store=None,
                          verify_expected_keys=False, threads=[], retries=100,
-                         server_to_query=0, timeout=1200):
+                         server_to_query=0):
 
         query_threads = []
         for view in views:
@@ -1996,8 +1997,14 @@ class ViewQueryTests(BaseTestCase):
             query_threads.append(t)
             t.start()
 
-        end_time = time.time() + float(timeout)
-        while True and time.time() < end_time:
+        if self.timeout:
+            end_time = time.time() + float(self.timeout)
+
+        while True:
+            if self.timeout:
+                if time.time() > end_time:
+                    raise Exception("Test failed to finish in %s seconds" % self.timeout)
+
             if not query_threads:
                 return
             self.thread_stopped.wait(60)
@@ -2015,8 +2022,6 @@ class ViewQueryTests(BaseTestCase):
                 query_threads = [d for d in query_threads if d.is_alive()]
                 self.log.info("Current amount of threads %s" % len(query_threads))
                 self.thread_stopped.clear()
-        if time.time() > end_time:
-            raise Exception("Test failed to finish in %s seconds" % timeout)
 
         self._check_view_intergrity(views)
 
