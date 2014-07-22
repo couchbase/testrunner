@@ -104,7 +104,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
         tasks = [self.cluster.async_rebalance(self.servers[:1], [], servs_out)]
         for bucket in self.buckets:
-            self.cluster.compact_bucket(self.master,bucket)
+            tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
         # define which doc's ops will be performed during rebalancing
         # allows multiple of them but one by one
         if(self.doc_ops is not None):

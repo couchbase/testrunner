@@ -380,9 +380,10 @@ class FailoverTests(FailoverBaseTest):
         nodes = self.filter_servers(self.servers,chosen)
         failed_over = self.cluster.async_failover([self.referenceNode], failover_nodes = chosen, graceful=self.graceful)
         # Perform Compaction
+        compact_tasks = []
         if self.compact:
             for bucket in self.buckets:
-                self.cluster.compact_bucket(self.referenceNode,bucket)
+                compact_tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
         # Run View Operations
         if self.withViewsOps:
             self.query_and_monitor_view_tasks(nodes)
@@ -390,6 +391,8 @@ class FailoverTests(FailoverBaseTest):
         if self.withMutationOps:
             self.run_mutation_operations()
         failed_over.result()
+        for task in compact_tasks:
+            task.result()
         msg = "rebalance failed while removing failover nodes {0}".format(node.id)
         self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
 

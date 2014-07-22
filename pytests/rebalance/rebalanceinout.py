@@ -181,7 +181,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=batch_size, timeout_secs=60)
             for bucket in self.buckets:
-                self.cluster.compact_bucket(self.master,bucket)
+                tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
             self.sleep(10)
 
