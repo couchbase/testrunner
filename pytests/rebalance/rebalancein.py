@@ -92,7 +92,7 @@ class RebalanceInTests(RebalanceBaseTest):
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
         tasks = [self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])]
         for bucket in self.buckets:
-            self.cluster.compact_bucket(self.master,bucket)
+            tasks += self.cluster.async_compact_bucket(self.master,bucket)
         if(self.doc_ops is not None):
             if("update" in self.doc_ops):
                 # 1/2th of data will be updated in each iteration
