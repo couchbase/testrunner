@@ -1007,7 +1007,7 @@ class BaseTestCase(unittest.TestCase):
             Method to compare vbucket information to a previously stored value
         """
         compare = "=="
-        if  self.withOps:
+        if  self.withMutationOps:
             compare = "<="
         comp_map = {}
         comp_map["uuid"] = { 'type' : "string", 'operation': "=="}
@@ -1305,7 +1305,7 @@ class BaseTestCase(unittest.TestCase):
         """
         comp_map = {}
         compare = "=="
-        if self.withOps:
+        if self.withMutationOps:
             compare = "<="
         comp_map["id"] = { 'type' : "string", 'operation': "=="}
         comp_map["seq"] = { 'type' : "long", 'operation' : compare}

@@ -392,7 +392,7 @@ class FailoverTests(FailoverBaseTest):
         failed_over.result()
         msg = "rebalance failed while removing failover nodes {0}".format(node.id)
         self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
-        self.verify_unacked_bytes_all_buckets()
+
 
     def load_initial_data(self):
         """ Method to run operations Update/Delete/Create """
