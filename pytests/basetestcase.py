@@ -1113,7 +1113,7 @@ class BaseTestCase(unittest.TestCase):
         self.log.info(" End Verification for Active Vs Replica ")
         return disk_replica_dataset, disk_active_dataset
 
-    def vb_distribution_analysis(self, servers = [], buckets = [], total_vbuckets = 0, std = 1.0, type = "rebalance"):
+    def vb_distribution_analysis(self, servers = [], buckets = [], total_vbuckets = 0, std = 1.0, type = "rebalance", graceful = True):
         """
             Method to check vbucket distribution analysis after rebalance
         """
@@ -1127,7 +1127,10 @@ class BaseTestCase(unittest.TestCase):
              self.log.info(" Begin Verification for Bucket {0}".format(bucket))
              active_result = active[bucket]
              replica_result = replica[bucket]
-             self.assertTrue(active_result["total"] == total_vbuckets, "total vbuckets do not match for active data set, actual {0} expectecd {1}".format(active_result["total"] ,total_vbuckets))
+             if graceful or type == "rebalance":
+                self.assertTrue(active_result["total"] == total_vbuckets, "total vbuckets do not match for active data set (= criteria), actual {0} expectecd {1}".format(active_result["total"] ,total_vbuckets))
+             else:
+                self.assertTrue(active_result["total"] <= total_vbuckets, "total vbuckets do not match for active data set  (<= criteria), actual {0} expectecd {1}".format(active_result["total"] ,total_vbuckets))
              if type == "rebalance":
                 self.assertTrue(replica_result["total"] == self.num_replicas*total_vbuckets, "total vbuckets do not match for replica data set (= criteria), actual {0} expectecd {1}".format(replica_result["total"] ,total_vbuckets))
              else:
