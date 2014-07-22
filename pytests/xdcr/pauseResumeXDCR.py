@@ -311,7 +311,6 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
                 # reboot nodes?
                 if self.reboot == "dest_node":
                     self.reboot_node(self.dest_nodes[len(self.dest_nodes) - 1])
-                    self.__update_deletes()
                 elif self.reboot == "dest_cluster":
                     threads = []
                     for node in self.dest_nodes:
@@ -320,7 +319,6 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
                         thread.start()
                     for thread in threads:
                         thread.join()
-                    self.__update_deletes()
 
             self.sleep(self.pause_wait)
 
