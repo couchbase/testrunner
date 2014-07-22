@@ -315,26 +315,49 @@ class BuildQuery(object):
         build.name = couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
         build.url = http://builds.hq.northscale.net/latestbuilds/couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
         For toy build: name  =  couchbase-server-community_cent58-3.0.0-toy-toyName-x86_64_3.0.0-xx-toy.rpm
+        For windows build diff - and _ compare to unix build
+                       name = couchbase_server-enterprise-windows-amd64-3.0.0-998.exe
         """
         build.toy = toy
         build.deliverable_type = deliverable_type
         build.architecture_type = architecture_type
+
+        os_name = ""
         unix_deliverable_type = ["deb", "rpm", "zip"]
         if deliverable_type in unix_deliverable_type:
             if "rel" not in version and toy == "":
                 build.product_version = version + "-rel"
             else:
                 build.product_version = version
+        if "exe" in deliverable_type:
+            os_name= "windows-"
+            if "rel" in version:
+                build.product_version = version.replace("-rel", "")
+            else:
+                build.product_version = version
+            if "couchbase-server" in edition_type:
+                edition_type = edition_type.replace("couchbase-", "couchbase_")
+            if "x86_64" in architecture_type:
+                build.architecture_type = "amd64"
+
         if "toy" in version and toy != "":
             edition_type += "-" + version[:5] + "-toy-" + toy
         if "deb" in deliverable_type and "centos6" in edition_type:
             edition_type = edition_type.replace("centos6", "ubuntu_1204")
         joint_char = "_"
+        version_join_char = "_"
         if toy is not "":
             joint_char = "-"
-        build.name = edition_type + joint_char + build.architecture_type + "_" + \
-                     build.product_version + "." + build.deliverable_type
+        if "exe" in deliverable_type:
+            joint_char = "-"
+            version_join_char = "-"
+
+        build.name = edition_type + joint_char + os_name + build.architecture_type + \
+                     version_join_char + build.product_version + "." + build.deliverable_type
         build.url = repo + build.name
+
+        """ reset build.architecture back to x86_64 in windows """
+        build.architecture_type = architecture_type
         return build
 
     def create_build_info(self, build_id, build_decription):

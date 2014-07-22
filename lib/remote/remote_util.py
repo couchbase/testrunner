@@ -473,7 +473,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("rm -rf /cygdrive/c/automation/setup.exe")
             self.log_command_output(output, error)
             output, error = self.execute_command(
-                 "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O setup.exe';ls -l;".format(url))
+                 "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O setup.exe';ls -lh;".format(url))
             self.log_command_output(output, error)
             return self.file_exists('/cygdrive/c/tmp/', 'setup.exe')
         elif self.info.distribution_type.lower() == 'mac':
@@ -494,7 +494,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command_raw('cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ; rm -f * ; mv $D/* . ; rmdir $D'.format(filename))
             self.log_command_output(output, error)
             if skip_md5_check:
-                output, error = self.execute_command_raw('cd /tmp;wget -q -O {0} {1};cd /tmp'.format(filename, url))
+                output, error = self.execute_command_raw('cd /tmp;wget -q -O {0} {1};cd /tmp;ls -lh'.format(filename, url))
                 self.log_command_output(output, error)
             else:
                 log.info('get md5 sum for local and remote')
@@ -614,7 +614,7 @@ class RemoteMachineShellConnection:
         if not exist:
             output, error = self.execute_command(
                  "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q \
-                                                     {0} -O {1}.exe';ls -l;".format(url, version))
+                                                     {0} -O {1}.exe';ls -lh;".format(url, version))
             self.log_command_output(output, error)
         else:
             log.info('File {0}.exe exist in tmp directory'.format(version))
