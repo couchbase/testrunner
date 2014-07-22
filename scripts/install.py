@@ -104,7 +104,7 @@ class Installer(object):
 
     def uninstall(self, params):
         remote_client = RemoteMachineShellConnection(params["server"])
-        remote_client.membase_uninstall()
+        #remote_client.membase_uninstall()
         remote_client.couchbase_uninstall()
         remote_client.disconnect()
 
