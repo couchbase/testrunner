@@ -52,7 +52,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_failover(self, servers = [], failover_nodes =[], graceful = True):
+    def async_failover(self, servers=[], failover_nodes=[], graceful=False):
         """Asynchronously failover a set of nodes
 
         Parameters:
@@ -705,7 +705,7 @@ class Cluster(object):
         _task = self.async_compact_view(server, design_doc_name, bucket, with_rebalance)
         return _task.result(timeout)
 
-    def failover(self, servers = [], failover_nodes =[], graceful = True):
+    def failover(self, servers=[], failover_nodes=[], graceful=False):
         """Synchronously flushes a bucket
 
         Parameters:

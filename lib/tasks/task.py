@@ -2219,7 +2219,7 @@ class ViewCompactionTask(Task):
 '''task class for failover. This task will only failover nodes but doesn't
  rebalance as there is already a task to do that'''
 class FailoverTask(Task):
-    def __init__(self, servers, to_failover=[], wait_for_pending=0,graceful = True):
+    def __init__(self, servers, to_failover=[], wait_for_pending=0, graceful=False):
         Task.__init__(self, "failover_task")
         self.servers = servers
         self.to_failover = to_failover
