@@ -1789,24 +1789,17 @@ class RestConnection(object):
     def enable_xdcr_trace_logging(self):
         self.diag_eval('ale:set_loglevel(xdcr_trace, debug).')
 
-    def get_recent_xdcr_vb_ckpt(self, src_bucket_name, dest_bucket_name, vbucket_id):
-        replication = self.get_replication_for_buckets(src_bucket_name, dest_bucket_name)
-
-        sub_url1 = "default/master"
-        sub_url1 = urllib.quote(sub_url1, '')
-
-        sub_url2 = "%s/%s" % (replication['id'], vbucket_id)
-        # Double encoding
-        sub_url2 = urllib.quote(sub_url2, '')
-        sub_url2 = urllib.quote(sub_url2, '')
-
-        api = self.capiBaseUrl + "%s/_local/30-ck-%s" % (sub_url1, sub_url2)
-        status, content, _ = self._http_request(api, headers=self._create_capi_headers())
-        json_parsed = json.loads(content)
+    def get_recent_xdcr_vb_ckpt(self, src_bucket_name):
+        command = 'ns_server_testrunner_api:grab_all_xdcr_checkpoints("%s", 10).' % src_bucket_name
+        status, content = self.diag_eval(command)
         if not status:
-            raise Exception("Unable to get recent checkpoint information")
-        return json_parsed
-
+            raise Exception("Unable to get recent XDCR checkpoint information")
+        json_parsed = json.loads(content)
+        # a single decoding will only return checkpoint record as string
+        # convert string to dict using json
+        chkpt_doc_string = json_parsed.values()[0].replace('"', '\"')
+        chkpt_dict = json.loads(chkpt_doc_string)
+        return chkpt_dict
 
     def set_reb_cons_view(self, disable):
         """Enable/disable consistent view for rebalance tasks"""

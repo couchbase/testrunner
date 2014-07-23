@@ -93,7 +93,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
     def get_and_validate_latest_checkpoint(self):
         rest_con = RestConnection(self.src_master)
         try:
-            checkpoint_record = rest_con.get_recent_xdcr_vb_ckpt('default', 'default', '0')
+            checkpoint_record = rest_con.get_recent_xdcr_vb_ckpt('default')
             self.log.info("Checkpoint record : {}".format(checkpoint_record))
             self.chkpt_records.append(checkpoint_record)
         except Exception as e:
