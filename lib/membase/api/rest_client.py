@@ -283,7 +283,7 @@ class RestConnection(object):
             self.port = serverInfo.port
             self.hostname = ''
             if hasattr(serverInfo, 'hostname') and serverInfo.hostname and\
-               serverInfo.hostname.find(self.ip)== -1:
+               serverInfo.hostname.find(self.ip) == -1:
                 self.hostname = serverInfo.hostname
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
@@ -1077,16 +1077,16 @@ class RestConnection(object):
                                            parameters=params)
         return status
 
-    def rebalance(self, otpNodes = [], ejectedNodes = [], deltaRecoveryBuckets = None):
+    def rebalance(self, otpNodes=[], ejectedNodes=[], deltaRecoveryBuckets=None):
         knownNodes = ','.join(otpNodes)
         ejectedNodesString = ','.join(ejectedNodes)
-        if deltaRecoveryBuckets  == None:
+        if deltaRecoveryBuckets == None:
             params = urllib.urlencode({'knownNodes': knownNodes,
                                     'ejectedNodes': ejectedNodesString,
                                     'user': self.username,
                                     'password': self.password})
         else:
-            deltaRecoveryBuckets=",".join(deltaRecoveryBuckets)
+            deltaRecoveryBuckets = ",".join(deltaRecoveryBuckets)
             params = urllib.urlencode({'knownNodes': knownNodes,
                                     'ejectedNodes': ejectedNodesString,
                                     'deltaRecoveryBuckets': deltaRecoveryBuckets,
@@ -1111,19 +1111,19 @@ class RestConnection(object):
                  format(self.ip, self.port, status, content, code))
         return status, content
 
-    def set_chk_max_items(self,max_items):
-        status, content = self.diag_eval("ns_config:set(chk_max_items, "+max_items+")")
+    def set_chk_max_items(self, max_items):
+        status, content = self.diag_eval("ns_config:set(chk_max_items, " + max_items + ")")
         return status, content
 
-    def set_chk_period(self,period):
-        status, content = self.diag_eval("ns_config:set(chk_period, "+period+")")
+    def set_chk_period(self, period):
+        status, content = self.diag_eval("ns_config:set(chk_period, " + period + ")")
         return status, content
 
-    def set_enable_flow_control(self,flow=True,bucket='default'):
-        flow_control="false"
+    def set_enable_flow_control(self, flow=True, bucket='default'):
+        flow_control = "false"
         if flow:
            flow_control = "true"
-        code = "ns_bucket:update_bucket_props(\""+bucket+"\", [{extra_config_string, \"upr_enable_flow_control="+flow_control+"\"}])"
+        code = "ns_bucket:update_bucket_props(\"" + bucket + "\", [{extra_config_string, \"upr_enable_flow_control=" + flow_control + "\"}])"
         status, content = self.diag_eval(code)
         return status, content
 
@@ -1256,7 +1256,7 @@ class RestConnection(object):
                 if 'gracefulFailoverPossible' in value.keys():
                     node.gracefulFailoverPossible = value['gracefulFailoverPossible']
                 else:
-                    node.gracefulFailoverPossible =  False
+                    node.gracefulFailoverPossible = False
                 nodes.append(node)
         return nodes
 
@@ -1332,8 +1332,8 @@ class RestConnection(object):
         api = "{0}{1}{2}{3}{4}:{5}{6}".format(self.baseUrl, 'pools/default/buckets/',
                                      bucket, "/nodes/", node.ip, node.port, "/stats")
         status, content, header = self._http_request(api)
-        json_parsed = json.loads(content)
         if status:
+            json_parsed = json.loads(content)
             op = json_parsed["op"]
             samples = op["samples"]
             for stat_name in samples:
@@ -2211,7 +2211,7 @@ class RestConnection(object):
             log.error("There is not zone with name: {0} in cluster.".format(zone_name))
             return False
 
-    def start_cluster_logs_collection(self, nodes="*", upload=False,\
+    def start_cluster_logs_collection(self, nodes="*", upload=False, \
                                       uploadHost=None, customer="", ticket=""):
         if not upload:
             params = urllib.urlencode({"nodes":nodes})
