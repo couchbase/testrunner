@@ -11,6 +11,7 @@ from testconstants import WIN_REGISTER_ID
 from testconstants import MEMBASE_VERSIONS
 from testconstants import COUCHBASE_VERSIONS
 from testconstants import MISSING_UBUNTU_LIB
+from testconstants import MV_LATESTBUILD_REPO
 
 from membase.api.rest_client import RestConnection, RestHelper
 
@@ -1192,7 +1193,6 @@ class RemoteMachineShellConnection:
         if type == 'windows':
             product = "cb"
             query = BuildQuery()
-            builds, changes = query.get_all_builds()
             os_type = "exe"
             task = "uninstall"
             bat_file = "uninstall.bat"
@@ -1210,6 +1210,11 @@ class RemoteMachineShellConnection:
                 log.info('Check if {0} is in tmp directory on {1} server'.format(build_name, self.ip))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
                 if not exist:  # if not exist in tmp dir, start to download that version build
+                    builds, changes = query.get_all_builds(version=full_version, \
+                                      deliverable_type=self.info.deliverable_type, \
+                                      architecture_type=self.info.architecture_type, \
+                                      edition_type=product_name, \
+                                      repo=MV_LATESTBUILD_REPO)
                     build = query.find_build(builds, product_name, os_type, self.info.architecture_type, full_version)
                     downloaded = self.download_binary_in_win(build.url, short_version)
                     if downloaded:
