@@ -63,7 +63,6 @@ class RebalanceInTests(RebalanceBaseTest):
     then verify that there has been no data loss and sum(curr_items) match the curr_items_total.
     Once all nodes have been rebalanced in the test is finished."""
     def rebalance_in_with_ops(self):
-        self.withOps = True
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
@@ -88,7 +87,6 @@ class RebalanceInTests(RebalanceBaseTest):
     We later run compaction on all buckets and do ops as well
     """
     def rebalance_in_with_compaction_and_ops(self):
-        self.withOps = True
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
         tasks = [self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])]
         for bucket in self.buckets:
