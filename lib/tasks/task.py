@@ -131,7 +131,7 @@ class NodeInitializeTask(Task):
 
 
 class BucketCreateTask(Task):
-    def __init__(self, server, bucket='default', replicas=1, size=0, port=11211,password=None, bucket_type='membase',
+    def __init__(self, server, bucket='default', replicas=1, size=0, port=11211, password=None, bucket_type='membase',
                  enable_replica_index=1, eviction_policy='valueOnly', bucket_priority=None):
         Task.__init__(self, "bucket_create_task")
         self.server = server
@@ -409,6 +409,8 @@ class RebalanceTask(Task):
 
             self.log.info("rebalancing was completed with progress: {0}% in {1} sec".
                           format(progress, time.time() - self.start_time))
+            if(not RestHelper(self.rest).is_cluster_rebalanced()):
+                 self.set_exception(RebalanceFailedException("seems like rebalance showed 100% but rebalance is still required!"))
             self.state = FINISHED
             self.set_result(result)
 
@@ -2250,7 +2252,7 @@ class FailoverTask(Task):
             for node in rest.node_statuses():
                 if server.ip == node.ip and int(server.port) == int(node.port):
                     self.log.info("Failing over {0}:{1}".format(node.ip, node.port))
-                    rest.fail_over(node.id,self.graceful)
+                    rest.fail_over(node.id, self.graceful)
 
 class GenerateExpectedViewResultsTask(Task):
 
@@ -3005,7 +3007,7 @@ class CompactBucketTask(Task):
                 # never detected a compaction task running
                 self.set_result(False)
                 self.state = FINISHED
- 
+
     def _get_disk_size(self):
         stats = self.rest.fetch_bucket_stats(bucket=self.bucket)
         total_disk_size = stats["op"]["samples"]["couch_total_disk_size"][-1]
@@ -3030,7 +3032,7 @@ class MonitorViewCompactionTask(ViewCompactionTask):
             self.disk_size = self._get_disk_size()
             self.log.info("Disk Size Before Compaction {0}".format(self.disk_size))
             if self.precompacted_fragmentation == 0:
-                self.log.warn("%s: There is nothing to compact, fragmentation is 0" %self.design_doc_name)
+                self.log.warn("%s: There is nothing to compact, fragmentation is 0" % self.design_doc_name)
                 self.set_result(False)
                 self.state = FINISHED
             elif self.precompacted_fragmentation < self.fragmentation_value:
