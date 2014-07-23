@@ -894,6 +894,217 @@ class ViewQueryTests(BaseTestCase):
         self._query_all_views(data_set.views, gen_load)
         rebalance.result()
 
+    def test_employee_dataset_startkey_endkey_queries_failover_queries(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. wait until is persisted
+            3. failover some nodes and start rebalance
+            4. Start querying
+        '''
+        self.retries += 50
+        failover_factor = self.input.param("failover-factor", 1)
+        failover_nodes = self.servers[1 : failover_factor + 1]
+        data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day)
+        data_set.add_startkey_endkey_queries(limit=self.limit)
+        gen_load = data_set.generate_docs(data_set.views[0])
+        self.load(data_set, gen_load)
+        self._query_all_views(data_set.views, gen_load)
+        try:
+            # failover and verify loaded data
+            self.cluster.failover(self.servers, failover_nodes)
+            self.sleep(10, "10 seconds sleep after failover before invoking rebalance...")
+            rebalance = self.cluster.async_rebalance(self.servers,
+                                                     [], failover_nodes)
+
+            self._query_all_views(data_set.views, gen_load)
+
+            msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
+            self.assertTrue(rebalance.result(), msg=msg)
+
+            #verify queries after failover
+            self._query_all_views(data_set.views, gen_load)
+        finally:
+            for server in failover_nodes:
+                shell = RemoteMachineShellConnection(server)
+                shell.start_couchbase()
+                time.sleep(10)
+                shell.disconnect()
+
+    def test_employee_dataset_startkey_endkey_queries_incremental_failover_queries(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. wait until is persisted
+            3. failover nodes incrementaly in a loop and start rebalance in
+            4. Start querying
+        '''
+        failover_nodes = []
+        failover_factor = self.input.param("failover-factor", 1)
+        data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day)
+        data_set.add_startkey_endkey_queries(limit=self.limit)
+        gen_load = data_set.generate_docs(data_set.views[0])
+        self.load(data_set, gen_load)
+        self._query_all_views(data_set.views, gen_load)
+        servers = self.servers
+        try:
+            # incrementaly failover nodes and verify loaded data
+            for i in xrange(failover_factor):
+                failover_node = self.servers[i : i + 1]
+                self.cluster.failover(self.servers, failover_nodes)
+                failover_nodes.add(failover_nodes)
+                self.log.info("10 seconds sleep after failover before invoking rebalance...")
+                time.sleep(10)
+
+                rebalance = self.cluster.async_rebalance(servers,
+                                                         [], failover_nodes)
+
+                self._query_all_views(data_set.views, gen_load)
+
+                del(servers[1])
+
+                msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
+                self.assertTrue(rebalance.result(), msg=msg)
+
+        finally:
+            for server in failover_nodes:
+                shell = RemoteMachineShellConnection(server)
+                shell.start_couchbase()
+                self.sleep(10, "10 seconds for couchbase server to startup...")
+                shell.disconnect()
+
+    def test_employee_dataset_startkey_endkey_queries_start_stop_rebalance_in_incremental(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. wait data for persistence
+            3. start rebalance in
+            4. stop rebalance
+            5. Start querying
+        '''
+        data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day)
+
+        data_set.add_startkey_endkey_queries(limit=self.limit)
+        gen_load = data_set.generate_docs(data_set.views[0])
+        self.load(data_set, gen_load)
+        self._query_all_views(data_set.views, gen_load)
+
+        rest = self._rconn()
+
+        for server in self.servers[1:]:
+            nodes = rest.node_statuses()
+            self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
+            self.log.info("adding node {0}:{1} to cluster".format(server.ip, server.port))
+            otpNode = rest.add_node(self.master.rest_username, self.master.rest_password, server.ip, server.port)
+            msg = "unable to add node {0}:{1} to the cluster"
+            self.assertTrue(otpNode, msg.format(server.ip, server.port))
+
+            # Just doing 2 iterations
+            for expected_progress in [30, 60]:
+                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+                reached = RestHelper(rest).rebalance_reached(expected_progress)
+                self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
+                stopped = rest.stop_rebalance(wait_timeout=100)
+                self.assertTrue(stopped, msg="unable to stop rebalance")
+                self._query_all_views(data_set.views, gen_load)
+
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+            self.assertTrue(rest.monitorRebalance(), msg="rebalance operation failed restarting")
+            self._query_all_views(data_set.views, gen_load)
+
+            self.assertTrue(len(rest.node_statuses()) - len(nodes) == 1, msg="number of cluster's nodes is not correct")
+
+    def test_employee_dataset_startkey_endkey_queries_start_stop_rebalance_out_incremental(self):
+        '''
+        Test uses employee data set:
+            -documents are structured as {"name": name<string>,
+                                       "join_yr" : year<int>,
+                                       "join_mo" : month<int>,
+                                       "join_day" : day<int>,
+                                       "email": email<string>,
+                                       "job_title" : title<string>,
+                                       "type" : type<string>,
+                                       "desc" : desc<tring>}
+        Steps to repro:
+            1. Start load data
+            2. wait data for persistence
+            3. start rebalance out
+            4. stop rebalance
+            5. Start querying
+        '''
+        data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day)
+
+        data_set.add_startkey_endkey_queries(limit=self.limit)
+        gen_load = data_set.generate_docs(data_set.views[0])
+        self.load(data_set, gen_load)
+        self._query_all_views(data_set.views, gen_load)
+
+        rest = self._rconn()
+
+        for server in self.servers[1:]:
+            nodes = rest.node_statuses()
+            ejectedNodes = []
+            self.log.info("removing node {0}:{1} from cluster".format(server.ip, server.port))
+            for node in nodes:
+                if "{0}:{1}".format(node.ip, node.port) == "{0}:{1}".format(server.ip, server.port):
+                    ejectedNodes.append(node.id)
+                    break
+
+            # Just doing 2 iterations
+            for expected_progress in [30, 60]:
+                rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
+                reached = RestHelper(rest).rebalance_reached(expected_progress)
+                self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
+                stopped = rest.stop_rebalance()
+                self.assertTrue(stopped, msg="unable to stop rebalance")
+
+                #for cases if rebalance ran fast
+                if RestHelper(rest).is_cluster_rebalanced():
+                    self.log.info("Rebalance is finished already.")
+                    break
+
+                self._query_all_views(data_set.views, gen_load)
+
+            #for cases if rebalance ran fast
+            if RestHelper(rest).is_cluster_rebalanced():
+                self.log.info("Rebalance is finished already.")
+                nodes = rest.node_statuses()
+                continue
+            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
+
+            self.assertTrue(rest.monitorRebalance(), msg="rebalance operation failed restarting")
+            self._query_all_views(data_set.views, gen_load)
+
+            self.assertTrue(len(nodes) - len(rest.node_statuses()) == 1, msg="number of cluster's nodes is not correct")
+
+
     def test_employee_dataset_stale_queries(self):
         '''
         Test uses employee data set:
