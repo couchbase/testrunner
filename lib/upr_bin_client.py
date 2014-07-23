@@ -1,16 +1,17 @@
 import random
 from mc_bin_client import MemcachedClient
 from memcacheConstants import *
-import threading
 import Queue
 import time
+
+MAX_SEQNO = 0xFFFFFFFFFFFFFFFF
 
 
 class UprClient(MemcachedClient):
     """ UprClient implements upr protocol using mc_bin_client as base
         for sending and receiving commands """
 
-    def __init__(self, host='127.0.0.1', port=11210, timeout=5):
+    def __init__(self, host='127.0.0.1', port=11210, timeout=1):
         super(UprClient, self).__init__(host, port, timeout)
 
         # recv timeout
@@ -22,25 +23,9 @@ class UprClient(MemcachedClient):
         # inflight ops.  key = opaque, val = Operation
         self.ops = {}
 
-        # start reader thread
-        self.conn = UprClient.Reader(self)
-        self.conn.start()
-
         self.dead = False
 
-    def _restart_reader(self):
-        """ restart reader thread """
-        self.conn = UprClient.Reader(self)
-        self.conn.start()
-
-
     def _open(self, op):
-
-        if not self.conn.isAlive():
-            self.reconnect()
-            self._restart_reader()
-            self.dead = False
-
         return self._handle_op(op)
 
     def close(self):
@@ -82,7 +67,7 @@ class UprClient(MemcachedClient):
         """ sent to notify producer number of bytes client has received"""
 
         op = Ack(nbytes)
-        return self._handle_op(op)
+        return self._handle_op(op, 1)
 
     def quit(self):
         """ send quit command to mc - when response is recieved quit reader """
@@ -133,57 +118,50 @@ class UprClient(MemcachedClient):
 
         response = self._handle_op(op)
 
-        stream = UprStream(op, response)
+        def __generator(response):
 
-        if stream.status  == 0:
-            # upon successful stream request associate stream object
-            # with vbucket
-            self.streams[vbucket] = stream
+            yield response
+            last_by_seqno = 0
 
-        return stream
+            while True:
+
+                if not op.queue.empty():
+                    response = op.queue.get()
+                else:
+                    response = self.recv_op(op)
+                yield response
+
+                if response and response['opcode'] == CMD_STREAM_END:
+                    break
+
+        # start generator and pass to uprStream class
+        generator = __generator(response)
+        return UprStream(generator, vbucket)
+
 
     def get_stream(self, vbucket):
         """ for use by external clients to get stream
             associated with a particular vbucket """
         return self.streams.get(vbucket)
 
-    def _handle_op(self, op):
+    def _handle_op(self, op, retries = 5):
         """ sends op to mcd. Then it recvs response
 
             if the received response is for another op then it will
             attempt to get the next response and retry 5 times."""
 
-        if not self.conn.isAlive():
-            self._restart_reader()
-
         self.ops[op.opaque] = op
         self.send_op(op)
 
-
-        # poll op queue for a response
-        wait = 30
-        resp = None
-        while wait > 0 and resp is None:
-            try:
-                resp = op.queue.get(timeout=1)
-            except Queue.Empty:
-                pass
-
-            wait -= 1
-
-            if not self.conn.isAlive():
-                # op caused ClientError
-
-                if resp is None:
-                    # client died without sending response
-                    resp = {'opcode'  : op.opcode,
-                            'status'  : 0xff}
+        response = None
+        while retries > 0:
+            response = self.recv_op(op)
+            if response:
                 break
+            retries -= 1
+            time.sleep(1)
 
-        assert resp is not None,\
-            "ERROR: Never received response for op: %s" % op.opcode
-
-        return resp
+        return response
 
     def send_op(self, op):
         """ sends op details to mcd client for lowlevel packet assembly """
@@ -196,122 +174,131 @@ class UprClient(MemcachedClient):
                       op.extras)
 
 
-    class Reader(threading.Thread):
-        """ Reader class receievs upr response and pairs op with opaque.
-            the op is used to created a formated response
-            which is then put on the op queue to be consumed
-            by the caller """
+    def recv_op(self, op):
 
-        def __init__(self, client):
-            threading.Thread.__init__(self)
-            self.client = client
+        while True:
+            try:
 
-        def run(self):
+                opcode, status, opaque, cas, keylen, extlen, body =\
+                     self._recvMsg()
 
-            while True:
-                try:
-                    opcode, status, opaque, cas, keylen, extlen, body =\
-                         self.client._recvMsg()
+                if opaque == op.opaque:
+                    response = op.formated_response(opcode, keylen,
+                                                    extlen, status,
+                                                    cas, body, opaque)
+                    return response
 
-                    op = self.client.ops.get(opaque)
-                    if op:
-                        response = op.formated_response(opcode, keylen,
-                                                        extlen, status,
-                                                        cas, body, opaque)
-                        op.queue.put(response)
+                # check if response is for different request
+                cached_op = self.ops.get(opaque)
+                if cached_op:
+                    response = cached_op.formated_response(opcode, keylen,
+                                                           extlen, status,
+                                                           cas, body, opaque)
+                    # save for later
+                    cached_op.queue.put(response)
 
-                    elif opcode == CMD_STREAM_REQ:
-                        # stream_req ops received during add_stream request
-                        self.ack_stream_req(opaque)
+                elif opcode == CMD_FLOW_CONTROL:
+                    # TODO: handle
+                    continue
 
-                except Exception as ex:
-                    break
+                elif opcode == CMD_STREAM_REQ:
+                    # stream_req ops received during add_stream request
+                    self.ack_stream_req(opaque)
 
-        def ack_stream_req(self, opaque):
-            body   = struct.pack("<QQ", 123456, 0)
-            header = struct.pack(REQ_PKT_FMT,
-                                 RES_MAGIC_BYTE,
-                                 CMD_STREAM_REQ,
-                                 0, 0, 0, 0,
-                                 len(body), opaque, 0)
-            self.client.s.send(header + body)
+            except Exception as ex:
+                if 'died' in str(ex):
+                    return  {'opcode'  : op.opcode,
+                             'status'  : 0xff}
+                else:
+                    return None
+
+
+    def ack_stream_req(self, opaque):
+        body   = struct.pack("<QQ", 123456, 0)
+        header = struct.pack(REQ_PKT_FMT,
+                             RES_MAGIC_BYTE,
+                             CMD_STREAM_REQ,
+                             0, 0, 0, 0,
+                             len(body), opaque, 0)
+        self.s.send(header + body)
+
 
 class UprStream(object):
-    """ UprStream class manages the responses received from producers
-       during active stream requests """
+    """ UprStream class manages a stream generator that yields mutations """
 
-    def __init__(self, op, response):
+    def __init__(self, generator, vbucket):
 
-        self.op = op
-        self.opcode = op.opcode
-        self.vbucket = op.vbucket
-        self.last_by_seqno = 0
+        self.__generator = generator
+        self.vbucket = vbucket
+        response = self.__generator.next()
+        assert response is not None
 
         self.failover_log = response.get('failover_log')
         self.err_msg = response.get('err_msg')
         self.status = response.get('status')
         self.rollback = response.get('rollback')
         self.rollback_seqno = response.get('seqno')
-
+        self.opcode = response.get('opcode')
+        self.last_by_seqno = 0
         self._ended = False
-        if self.status != 0:
-            self._ended = True
 
-    @property
-    def ended(self):
-        return self._ended
+    def next_response(self):
 
-    def has_response(self):
-        """ true if END has not been received or timeout waiting for items in recv q """
-        return not self._ended
+        if self._ended: return None
 
-    def next_response(self, timeout = 5):
-        """ Fetch next message from op queue. verify that mutations
-            are recieved in expected order.
-            Deactivate if end_stream command received """
+        response = self.__generator.next()
 
-        msg = None
+        if response:
 
-        if self.has_response():
+            if response['opcode'] in (CMD_MUTATION, CMD_DELETION):
 
-            try:
-                msg = self.op.queue.get(timeout = timeout)
-            except Queue.Empty:
-                return None
+                assert int(response['vbucket']) == self.vbucket
 
-            # mutation response verification
-            if msg['opcode'] in (CMD_MUTATION, CMD_DELETION):
-
-                assert 'by_seqno' in msg,\
+                assert 'by_seqno' in response,\
                      "ERROR: vbucket(%s) received mutation without seqno: %s"\
-                         % (self.vbucket, msg)
-                assert msg['by_seqno'] > self.last_by_seqno,\
+                         % (response['vbucket'], response)
+                assert response['by_seqno'] > self.last_by_seqno,\
                      "ERROR: Out of order response on vbucket %s: %s"\
-                         % (self.vbucket, msg)
-                self.last_by_seqno = msg['by_seqno']
+                         % (response['vbucket'], response)
+                self.last_by_seqno = response['by_seqno']
 
-            if msg['opcode'] == CMD_STREAM_END:
+            if response['opcode'] == CMD_STREAM_END:
                 self._ended = True
 
-        return msg
+        return response
 
-    def run(self, end=None):
-        """ return the responses from the stream up to seqno = end
 
-            Note: all this data has already been sent over the wire
-            and this method is merely reading what's been received
-            off the queue. """
+    def has_response(self):
+        return not self._ended
 
-        mutations = []
-        while self.has_response():
-            response = self.next_response()
-            if response is None:
-                break
-            mutations.append(response)
-            if end and self.last_by_seqno >= end:
-                break
+    def run(self, to_seqno = MAX_SEQNO, retries = 5):
 
-        return mutations
+        responses = []
+
+        try:
+            while self.has_response():
+
+                r = self.next_response()
+
+                if r is None:
+                    retries -= 1
+                    assert retries > 0,\
+                        "ERROR: vbucket (%s) stream stopped receiving mutations "\
+                        % self.vbucket
+                    continue
+                responses.append(r)
+
+                if 'status' in r and r['status'] == 0xff:
+                    break
+
+                if self.last_by_seqno >= to_seqno:
+                    break
+
+        except StopIteration:
+            self._ended = True
+            del self.__generator
+
+        return responses
 
 class Operation(object):
     """ Operation Class generically represents any upr operation providing
@@ -482,10 +469,13 @@ class StreamRequest(Operation):
             assert len(body) == 20
             snap_start, snap_end, flag =\
                 struct.unpack(">QQI", body)
-            assert flag in (0,1) , "Invalid snapshot flag: %s" % flag
+            assert flag in (1,2,5,6) , "Invalid snapshot flag: %s" % flag
             assert snap_start <= snap_end, "Snapshot start: %s > end: %s" %\
                                                 (snap_start, snap_end)
-            flag = ('memory','disk')[flag]
+            flag = { 1 : 'memory',
+                     2 : 'disk',
+                     5 : 'memory-checkpoint',
+                     6 : 'disk-checkpoint'}[flag]
 
             response = { 'opcode'     : opcode,
                          'vbucket'    : status,
@@ -547,14 +537,14 @@ class Ack(Operation):
     def __init__(self, nbytes):
         opcode = CMD_UPR_ACK
         self.nbytes = nbytes
-        acked = struct.pack(">L", self.nbytes)
+        extras = struct.pack(">L", self.nbytes)
         Operation.__init__(self, opcode,
-                           value = acked)
+                           extras = extras)
 
     def formated_response(self, opcode, keylen, extlen, status, cas, body, opaque):
         response = { 'opcode'        : opcode,
                      'status'        : status,
-                     'body'          : body}
+                     'error'          : body}
         return response
 
 class Quit(Operation):
