@@ -101,14 +101,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
 
         commit_opaque = checkpoint_record["commitopaque"]
         failover_uuid = checkpoint_record["failover_uuid"]
-
-        upr_snap_seqno = checkpoint_record["upr_snapshot_seqno"]
         seqno = checkpoint_record["seqno"]
-        start_time = checkpoint_record["start_time"]
-        total_docs_checked = checkpoint_record["total_docs_checked"]
-        total_docs_written = checkpoint_record["total_docs_written"]
-        total_data_repl = checkpoint_record["total_data_replicated"]
-        end_time = checkpoint_record["end_time"]
 
         self.log.info ("Verifying commitopaque/remote failover log ...")
         if seqno != 0:
