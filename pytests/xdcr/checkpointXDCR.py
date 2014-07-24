@@ -262,6 +262,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
                                                                      .format(trace_log))
         self.log.info("404 errors: {}, get_remote_bucket_failed errors : {}".
                       format(num_404_errors_before_load, num_get_remote_bkt_failed_before_load))
+        self.sleep(60)
         self.log.info("################ New mutation:{} ##################".format(self.key_counter+1))
         self.load_one_mutation_into_source_vb0(active_src_node)
         self.sleep(5)
@@ -272,8 +273,8 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         self.log.info("404 errors: {}, get_remote_bucket_failed errors : {}".
                       format(num_404_errors_after_load, num_get_remote_bkt_failed_after_load))
         shell.disconnect()
-        if int(num_404_errors_after_load[0]) > int(num_404_errors_before_load[0]) or \
-            int(num_get_remote_bkt_failed_before_load[0]) > int(num_get_remote_bkt_failed_after_load[0]):
+        if (int(num_404_errors_after_load[0]) > int(num_404_errors_before_load[0])) or \
+           (int(num_get_remote_bkt_failed_after_load[0]) > int(num_get_remote_bkt_failed_before_load[0])):
             self.log.info("Checkpointing error-404 verified after dest failover/rebalance out")
             return True
         else:
