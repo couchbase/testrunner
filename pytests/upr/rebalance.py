@@ -122,7 +122,7 @@ class UPRRebalanceTests(UPRBase):
 
         while stream.has_response():
 
-            response = stream.next_response(5)
+            response = stream.next_response()
 
             assert response is not None,\
                  "Timeout reading stream after failover"
