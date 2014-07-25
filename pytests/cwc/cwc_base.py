@@ -5,6 +5,8 @@ from remote.remote_util import RemoteMachineShellConnection
 from testconstants import LINUX_CW_LOG_PATH
 from testconstants import MAC_CW_LOG_PATH
 from testconstants import WINDOWS_CW_LOG_PATH
+from testconstants import LINUX_COUCHBASE_BIN_PATH
+from testconstants import WIN_COUCHBASE_BIN_PATH
 
 
 class CWCBaseTest(BaseTestCase):
@@ -43,12 +45,16 @@ class CWCBaseTest(BaseTestCase):
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
         self.log_path = ""
+        self.bin_path = ""
         if type.lower() == 'windows':
             self.log_path = WINDOWS_CW_LOG_PATH
+            self.bin_path = WIN_COUCHBASE_BIN_PATH
         elif type.lower() in ["ubuntu", "centos", "red hat"]:
             self.log_path = LINUX_CW_LOG_PATH
+            self.bin_path = LINUX_COUCHBASE_BIN_PATH
         elif type.lower() == "mac":
             self.log_path = MAC_CW_LOG_PATH
+            self.bin_path = MAC_COUCHBASE_BIN_PATH
 
     def tearDown(self):
         super(CWCBaseTest, self).tearDown()
