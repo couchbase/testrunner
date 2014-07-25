@@ -25,6 +25,12 @@ from perf_engines import mcsoda
 from Queue import Queue
 from threading import Thread
 
+log = logger.Logger.get_logger()
+try:
+    import concurrent.futures
+except ImportError:
+    log.warn("{0} {1}".format("Can not import concurrent module.",
+                              "Data for each server will be loaded/retrieved sequentially"))
 
 class MemcachedClientHelperExcetion(Exception):
     def __init__(self, errorcode, message):
@@ -1002,7 +1008,6 @@ class VBucketAwareMemcached(object):
                 import concurrent.futures
                 self._setMulti_parallel(exp, flags, key_val_dic, pause_sec, timeout_sec)
             except ImportError:
-                self.log.info("Can not import concurrent module. Data for each server will be loaded sequentially")
                 self._setMulti_seq(exp, flags, key_val_dic, pause_sec, timeout_sec)
         else:
             self._setMulti_seq(exp, flags, key_val_dic, pause_sec, timeout_sec)
@@ -1095,7 +1100,6 @@ class VBucketAwareMemcached(object):
                 import concurrent.futures
                 return self._getMulti_parallel(keys_lst, pause_sec, timeout_sec)
             except ImportError:
-                self.log.info("Can not import concurrent module. Data for each server will be got sequentially")
                 return self._getMulti_seq(keys_lst, pause_sec, timeout_sec)
         else:
             return self._getMulti_seq(keys_lst, pause_sec, timeout_sec)
