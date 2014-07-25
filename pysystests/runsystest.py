@@ -277,7 +277,7 @@ def install_couchbase():
         os.system("curl -d memoryQuota={0} \"http://{1}:{2}@{3}:8091/pools/default\"".
                   format(cfg.CLUSTER_RAM_QUOTA, cfg.COUCHBASE_USER,cfg.COUCHBASE_PWD,cfg.CLUSTER_IPS[0]))
     for ip in cfg.CLUSTER_IPS:
-        os.system("curl -X POST -d \'ale:set_loglevel(xdcr_trace, debug).\' \"http://{1}:{2}@{3}:8091/diag/eval\"".
+        os.system("curl -X POST -d \'ale:set_loglevel(xdcr_trace, debug).\' \"http://{0}:{1}@{2}:8091/diag/eval\"".
                   format(cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD, ip))
 
 def warn_skip(task):
