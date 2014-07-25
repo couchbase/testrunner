@@ -321,6 +321,8 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
                           "Subsequent _commit_for_checkpoints are expected to pass")
                 self.read_chkpt_history_new_vb0node()
                 self.mutate_and_check_error404()
+                # the replicator might still be awake, ensure adequate time gap
+                self.sleep(self.wait_timeout * 2)
                 self.verify_next_checkpoint_passes()
 
     """ Failover active vb0 node from a cluster """
@@ -386,6 +388,8 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         if self.was_pre_rep_successful():
             self.log.info("_pre_replicate following the source crash was successful: {}".
                           format(self.num_successful_prereps_so_far))
+            # the replicator might still be awake, ensure adequate time gap
+            self.sleep(self.wait_timeout * 2)
             if self.mutate_and_checkpoint(n=1):
                 self.log.info("Checkpointing resumed normally after source crash")
             else:
@@ -445,6 +449,8 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
             self.failover_activevb0_node(self.dest_master)
             self.read_chkpt_history_new_vb0node()
             self.mutate_and_check_error404()
+            # the replicator might still be awake, ensure adequate time gap
+            self.sleep(self.wait_timeout*2)
             self.verify_next_checkpoint_passes()
         elif "source" in self._failover:
             self.failover_activevb0_node(self.src_master)
