@@ -1100,7 +1100,7 @@ class RestConnection(object):
         else:
             log.error('rebalance operation failed: {0}'.format(content))
             #extract the error
-            raise InvalidArgumentException('controller/rebalance',
+            raise InvalidArgumentException('controller/rebalance with error message {0}'.format(content),
                                            parameters=params)
         return status
 
