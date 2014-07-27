@@ -409,8 +409,6 @@ class RebalanceTask(Task):
 
             self.log.info("rebalancing was completed with progress: {0}% in {1} sec".
                           format(progress, time.time() - self.start_time))
-            if(not RestHelper(self.rest).is_cluster_rebalanced()):
-                 self.set_exception(RebalanceFailedException("seems like rebalance showed 100% but rebalance is still required!"))
             self.state = FINISHED
             self.set_result(result)
 
