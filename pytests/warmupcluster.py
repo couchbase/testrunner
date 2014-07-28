@@ -83,10 +83,14 @@ class WarmUpClusterTest(unittest.TestCase):
     def _insert_data(self, howmany):
         self.onenodemc = MemcachedClientHelper.proxy_client(self.master, "default")
         items = ["{0}-{1}".format(str(uuid.uuid4()), i) for i in range(0, howmany)]
-        for item in items:
-            self.onenodemc.set(item, 0, 0, item)
-        self.log.info("inserted {0} items".format(howmany))
-        self.onenodemc.close()
+        try:
+            for item in items:
+                self.onenodemc.set(item, 0, 0, item)
+            self.log.info("inserted {0} items".format(howmany))
+            self.onenodemc.close()
+        except Exception as e:
+            print e
+            self.fail("could not set item to bucket")
 
     def do_warmup(self):
         howmany = self.num_of_docs
