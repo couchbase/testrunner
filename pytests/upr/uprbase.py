@@ -25,6 +25,7 @@ class UPRBase(BaseTestCase):
             num_nodes = self.input.param('num_nodes', 4)
             self.crm = CRManager(num_nodes, 0)
 
+
     def setUp(self):
 
         if self.test:
@@ -52,7 +53,7 @@ class UPRBase(BaseTestCase):
         else:
             super(UPRBase, self).tearDown()
 
-    def load_docs(self, node, vbucket, num_docs, exp = 0, flags = 0, update = False):
+    def load_docs(self, node, vbucket, num_docs, bucket, password, exp = 0, flags = 0, update = False):
         """ using direct mcd client to control vbucket seqnos.
             keeps track of vbucket and keys stored """
 
@@ -64,12 +65,15 @@ class UPRBase(BaseTestCase):
                 self.doc_num += 1
 
 
-    def upr_client(self, node, connection_type = PRODUCER, vbucket = None, name = None):
-
+    def upr_client(
+        self, node, connection_type = PRODUCER, vbucket = None, name = None,
+        auth_user = None, auth_password = ''):
         """ create an upr client from Node spec and opens connnection of specified type"""
         client = self.client_helper(node, UPR, vbucket)
-        assert connection_type in (PRODUCER, CONSUMER, NOTIFIER)
+        if auth_user:
+            client.sasl_auth_plain(auth_user, auth_password)
 
+        assert connection_type in (PRODUCER, CONSUMER, NOTIFIER)
         name = name or DEFAULT_CONN_NAME
         if connection_type == PRODUCER:
             response = client.open_producer(name)
@@ -81,9 +85,15 @@ class UPRBase(BaseTestCase):
         assert response['status'] == SUCCESS
         return client
 
-    def mcd_client(self, node, vbucket = None):
+    def mcd_client(
+        self, node, vbucket = None,
+        auth_user = None, auth_password = None):
         """ create a mcd client from Node spec """
-        return self.client_helper(node, MCD, vbucket)
+
+        client = self.client_helper(node, MCD, vbucket)
+        if auth_user:
+            client.sasl_auth_plain(auth_user, auth_password)
+        return client
 
     def client_helper(self, node, type_, vbucket):
         assert type_ in (MCD, UPR)
@@ -119,7 +129,7 @@ class UPRBase(BaseTestCase):
         info = rest.get_bucket_json()
         host = self.vbucket_host(rest, vbucket)
         return info['vBucketServerMap']['serverList'].index(host)
-        
+
     def flow_control_info(self, node, connection = None):
 
         connection = connection or DEFAULT_CONN_NAME
@@ -131,22 +141,53 @@ class UPRBase(BaseTestCase):
         sent = 'eq_uprq:{0}:total_bytes_sent'.format(connection)
         return int(stats[acked]), int(stats[sent]), int(stats[unacked])
 
-    def vb_info(self, node, vbucket, table_entry = 0):
-        vb_uuid, seqno = self.vb_failover_entry(node, vbucket, table_entry)
-        high_seqno = self.vb_seqno(node, vbucket)
+    def all_vb_info(self, node, table_entry = 0, bucket = 'default', password = ''):
+
+        vbInfoMap = {}
+        clientVbMap = {}
+        rest = RestConnection(node)
+        vbuckets = rest.get_vbuckets()
+
+        mcd_client = self.mcd_client(
+            node, auth_user = bucket, auth_password = password)
+        failoverStats = mcd_client.stats(FAILOVER_STAT)
+        seqnoStats = mcd_client.stats(VBSEQNO_STAT)
+
+        for vb in vbuckets:
+            vbucket = vb.id
+            id_key = 'vb_{0}:{1}:id'.format(vbucket, table_entry)
+            seq_key = 'vb_{0}:{1}:seq'.format(vbucket, table_entry)
+            hi_key = 'vb_{0}:high_seqno'.format(vbucket)
+            vb_uuid, seqno, high_seqno =\
+                (long(failoverStats[id_key]),
+                 long(failoverStats[seq_key]),
+                 long(seqnoStats[hi_key]))
+            vbInfoMap[vbucket] =  (vb_uuid, seqno, high_seqno)
+
+        return vbInfoMap
+
+    def vb_info(self, node, vbucket, table_entry = 0, bucket = 'default', password = ''):
+        vb_uuid, seqno = self.vb_failover_entry(
+            node, vbucket, table_entry, bucket, password)
+        high_seqno = self.vb_seqno(
+            node, vbucket, bucket, password)
 
         return vb_uuid, seqno, high_seqno
 
-    def vb_failover_entry(self, node, vbucket, table_entry = 0):
-        mcd_client = self.mcd_client(node, vbucket)
+    def vb_failover_entry(self, node, vbucket, table_entry = 0,
+                          bucket = 'default', password = ''):
+
+        mcd_client = self.mcd_client(
+            node, vbucket, auth_user = bucket, auth_password = password)
         stats = mcd_client.stats(FAILOVER_STAT)
         assert len(stats) > vbucket,  ENO_STAT
         id_key = 'vb_{0}:{1}:id'.format(vbucket, table_entry)
         seq_key = 'vb_{0}:{1}:seq'.format(vbucket, table_entry)
         return long(stats[id_key]), long(stats[seq_key])
 
-    def vb_seqno(self, node, vbucket):
-        mcd_client = self.mcd_client(node, vbucket)
+    def vb_seqno(self, node, vbucket, bucket = 'default', password = ''):
+        mcd_client = self.mcd_client(
+            node, vbucket, auth_user = bucket, auth_password = password)
         stats = mcd_client.stats(VBSEQNO_STAT)
         assert len(stats) > vbucket, ENO_STAT
         id_key = 'vb_{0}:high_seqno'.format(vbucket)
