@@ -1685,6 +1685,70 @@ class ViewQueryTests(BaseTestCase):
         self.load(data_set, generator_load)
         self._query_all_views(data_set.views, generator_load)
 
+    def test_sales_dataset_group_queries(self):
+        '''
+        Steps to repro:
+            1. Start load data
+            2. simultaneously start queries with group and group_level params
+        '''
+        data_set = SalesDataSet(self.master, self.cluster, self.docs_per_day)
+
+        data_set.add_group_count_queries(limit=self.limit)
+        self._query_test_init(data_set)
+
+    def test_sales_dataset_startkey_endkey_docid_queries(self):
+        '''
+        Steps to repro:
+            1. Start load data
+            2. simultaneously run queries (staartkey endkey startkey_docid endkey_docid
+            inclusive_end, descending combinations)
+            '''
+        data_set = SalesDataSet(self.master, self.cluster, self.docs_per_day)
+
+        data_set.add_startkey_endkey_docid_queries(limit=self.limit)
+        self._query_test_init(data_set)
+
+    def test_sales_dataset_stale_queries(self):
+        '''
+        Steps to repro:
+            1. Start load data
+            2. start stale queries(ok, update_after, false)
+        '''
+        data_set = SalesDataSet(self.master, self.cluster, self.docs_per_day)
+
+        data_set.add_stale_queries()
+        self._query_test_init(data_set)
+
+    def test_sales_dataset_all_queries(self):
+        '''
+        Steps to repro:
+            1. Start load data
+            2. start queries: stale, group, starkey/endkey, stratkey_docid
+        '''
+        data_set = SalesDataSet(self.master, self.cluster, self.docs_per_day)
+        data_set.add_all_query_sets()
+        if self.wait_persistence:
+            gen_load = data_set.generate_docs(data_set.views[0])
+            self.load(data_set, gen_load)
+            for server in self.servers:
+                RebalanceHelper.wait_for_persistence(server, data_set.bucket)
+            self._query_all_views(data_set.views, gen_load)
+        else:
+            self._query_test_init(data_set)
+
+    def test_sales_dataset_skip_queries(self):
+        '''
+        Steps to repro:
+            1. Start load data
+            2. start queries with skip
+        '''
+        skip = self.input.param('skip', 200)
+        data_set = SalesDataSet(self.master, self.cluster, self.docs_per_day)
+
+        data_set.add_skip_queries(skip)
+        self._query_test_init(data_set)
+
+
     def test_expiration_docs_queries(self):
         data_set = ExpirationDataSet(self.master, self.cluster, self.num_docs)
         generator_load = data_set.generate_docs(data_set.views[0])
