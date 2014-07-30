@@ -210,7 +210,6 @@ class RebalanceInOutTests(RebalanceBaseTest):
         extra_nodes_in = self.input.param("extra_nodes_in", 0)
         extra_nodes_out = self.input.param("extra_nodes_out", 0)
         servs_init = self.servers[:self.nodes_init]
-        self.nodes_in = len(self.servers) - self.nodes_init
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
         servs_out = [self.servers[self.nodes_init - i - 1] for i in range(self.nodes_out)]
         extra_servs_in = [self.servers[i + self.nodes_init + self.nodes_in] for i in range(extra_nodes_in)]
