@@ -188,16 +188,21 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
 
         if self.is_cluster_replicating(master, src_bucket_name):
             # check active_vbreps on all source nodes
-            task = self.cluster.async_wait_for_xdcr_stat(src_nodes,
+            try:
+                task = self.cluster.async_wait_for_xdcr_stat(src_nodes,
                                                          src_bucket_name, '',
                                                          'replication_active_vbreps', '>=', 0)
-            task.result(self.wait_timeout)
-            # check incoming xdc_ops on remote nodes
-            if self.is_cluster_replicating(master, src_bucket_name):
-                task = self.cluster.async_wait_for_xdcr_stat(dest_nodes,
+                task.result(self.wait_timeout)
+                # check incoming xdc_ops on remote nodes
+                if self.is_cluster_replicating(master, src_bucket_name):
+                    task = self.cluster.async_wait_for_xdcr_stat(dest_nodes,
                                                          dest_bucket_name, '',
                                                          'xdc_ops', '>=', 0)
-                task.result(self.wait_timeout)
+                    task.result(self.wait_timeout)
+            except KeyError as ex:
+                # thrown when the server is rebalancing-in and some nodes aren't
+                # yet replicating or accepting mutations
+                self.log.info(ex)
         else:
             self.log.info("Replication is complete on {0}, resume validations have been skipped".
                           format(src_nodes[0].ip))
