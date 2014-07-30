@@ -45,9 +45,9 @@ class Rebalance(XDCRReplicationBaseTest):
 
     def __async_load_data(self):
         self.log.info("Loading data Asynchronously")
-        load_tasks = self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        load_tasks = self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0, batch_size=1000)
         if self._replication_direction_str in "bidirection":
-            load_tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_create2, "create", 0))
+            load_tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_create2, "create", 0, batch_size=1000))
         return load_tasks
 
     def __load_data(self):
@@ -90,15 +90,11 @@ class Rebalance(XDCRReplicationBaseTest):
     def async_rebalance_out(self):
         try:
             #MB-9497 to load data during rebalance-out/replication
-            load_tasks = self.__load_data()
+            tasks = self.__load_data()
 
             # rebalance-out
-            tasks = self._async_rebalance_out()
+            tasks += self._async_rebalance_out()
             [task.result() for task in tasks]
-
-            # Wait for load data to finish if asynchronous
-            for load_task in load_tasks:
-                load_task.result()
 
             self.__update_delete()
 
