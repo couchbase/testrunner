@@ -910,6 +910,8 @@ class RemoteMachineShellConnection:
         task = "upgrade"
         bat_file = "upgrade.bat"
         version_file = "VERSION.txt"
+        if "3.0.0" in version:
+            version_file = "README.txt"
         deleted = False
         self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb', version, task)
         self.stop_schedule_tasks()
@@ -976,7 +978,10 @@ class RemoteMachineShellConnection:
             self.remove_win_collect_tmp()
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             success &= self.log_command_output(output, error, track_words)
-            self.wait_till_file_added("/cygdrive/c/Program Files/{0}/Server/".format(server_type.title()), 'VERSION.txt',
+            file_check = 'VERSION.txt'
+            if "3.0.0" in build.product_version:
+                file_check = "README.txt"
+            self.wait_till_file_added("/cygdrive/c/Program Files/{0}/Server/".format(server_type.title()), file_check,
                                           timeout_in_seconds=600)
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
             self.log_command_output(output, error)
@@ -1094,8 +1099,11 @@ class RemoteMachineShellConnection:
             # run task schedule to install Membase server
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             success &= self.log_command_output(output, error, track_words)
-            self.wait_till_file_added(remote_path, "VERSION.txt", timeout_in_seconds=600)
-            self.sleep(30, "wait for server to start up completely")
+            file_check = 'VERSION.txt'
+            if "3.0.0" in build.product_version:
+                file_check = "README.txt"
+            self.wait_till_file_added(remote_path, file_check, timeout_in_seconds=600)
+            self.sleep(60, "wait for server to start up completely")
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
             self.log_command_output(output, error)
             output, error = self.execute_command("rm -f *-diag.zip")
@@ -1240,6 +1248,8 @@ class RemoteMachineShellConnection:
                 # run schedule task uninstall couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
+                if "3.0.0" in full_version:
+                    version_file = "README.txt"
                 deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
@@ -1329,6 +1339,8 @@ class RemoteMachineShellConnection:
             # run schedule task uninstall couchbase server
             output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
             self.log_command_output(output, error)
+            if "3.0.0" in build_name:
+                version_file = "README.txt"
             deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
             if not deleted:
                 log.error("Uninstall was failed at node {0}".format(self.ip))
@@ -1396,6 +1408,8 @@ class RemoteMachineShellConnection:
                 # run schedule task uninstall Couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
+                if "3.0.0" in build_name:
+                    version_file = "README.txt"
                 deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
