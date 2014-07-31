@@ -1254,7 +1254,7 @@ class RemoteMachineShellConnection:
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
-                self.sleep(30, "next step is to install")
+                self.sleep(60, "next step is to install")
                 output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
                 self.log_command_output(output, error)
                 # delete binary after uninstall
@@ -1414,7 +1414,7 @@ class RemoteMachineShellConnection:
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
-                self.sleep(30, "nex step is to install")
+                self.sleep(60, "nex step is to install")
                 output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
                 self.log_command_output(output, error)
             else:
