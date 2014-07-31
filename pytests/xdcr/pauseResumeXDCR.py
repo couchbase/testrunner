@@ -153,11 +153,6 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
         tasks.append(self.cluster.async_wait_for_xdcr_stat(dest_nodes,
                                                        dest_bucket_name, '',
                                                        'xdc_ops', '==', 0))
-        # Docs in replication queue at source = 0
-        tasks.append(self.cluster.async_wait_for_xdcr_stat(src_nodes,
-                                                       src_bucket_name, '',
-                                                       'replication_docs_rep_queue',
-                                                       '==', 0))
         # active_vbreps falls to 0
         tasks.append(self.cluster.async_wait_for_xdcr_stat(src_nodes,
                                                        src_bucket_name, '',
