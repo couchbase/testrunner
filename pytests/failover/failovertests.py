@@ -131,8 +131,9 @@ class FailoverTests(FailoverBaseTest):
             for bucket in self.buckets:
                 self.cluster.compact_bucket(self.referenceNode,bucket)
         # Peform View Validation if Supported
+        nodes = self.filter_servers(self.servers,chosen)
         if self.withViewsOps:
-            self.query_and_monitor_view_tasks(self.servers)
+            self.query_and_monitor_view_tasks(nodes)
 
         # Run operations if required during rebalance after failover
         if self.withMutationOps:
@@ -196,9 +197,11 @@ class FailoverTests(FailoverBaseTest):
         if self.compact:
             for bucket in self.buckets:
                 self.cluster.compact_bucket(self.referenceNode,bucket)
+
         # Peform View Validation if Supported
+        nodes = self.filter_servers(self.servers,chosen)
         if self.withViewsOps:
-            self.query_and_monitor_view_tasks(self.servers)
+            self.query_and_monitor_view_tasks(nodes)
 
         # Run operations if required during rebalance after failover
         if self.withMutationOps:
