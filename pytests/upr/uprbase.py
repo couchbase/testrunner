@@ -53,11 +53,15 @@ class UPRBase(BaseTestCase):
         else:
             super(UPRBase, self).tearDown()
 
-    def load_docs(self, node, vbucket, num_docs, bucket, password, exp = 0, flags = 0, update = False):
+    def load_docs(self, node, vbucket, num_docs,
+                  bucket = 'default', password = '',
+                  exp = 0, flags = 0, update = False):
         """ using direct mcd client to control vbucket seqnos.
             keeps track of vbucket and keys stored """
 
-        mcd_client = self.mcd_client(node, vbucket)
+        mcd_client = self.mcd_client(
+            node, vbucket, auth_user = bucket, auth_password = password)
+
         for i in range(num_docs):
             key = "key%s"%self.doc_num
             rc = mcd_client.set(key, exp, flags, "val", vbucket)
