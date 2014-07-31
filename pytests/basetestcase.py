@@ -212,7 +212,7 @@ class BaseTestCase(unittest.TestCase):
                         stopped = rest.stop_rebalance()
                         self.assertTrue(stopped, msg="unable to stop rebalance")
                     BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-                    ClusterOperationHelper.cleanup_cluster(self.servers)
+                    ClusterOperationHelper.cleanup_cluster(self.servers, master = self.master)
                     self.sleep(10)
                     ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
                     self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\

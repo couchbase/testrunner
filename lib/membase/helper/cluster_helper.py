@@ -242,9 +242,11 @@ class ClusterOperationHelper(object):
                 shell.stop_membase()
 
     @staticmethod
-    def cleanup_cluster(servers, wait_for_rebalance=True):
+    def cleanup_cluster(servers, wait_for_rebalance=True, master = None):
         log = logger.Logger.get_logger()
-        rest = RestConnection(servers[0])
+        if master == None:
+            master = servers[0]
+        rest = RestConnection(master)
         helper = RestHelper(rest)
         helper.is_ns_server_running(timeout_in_seconds=testconstants.NS_SERVER_TIMEOUT)
         nodes = rest.node_statuses()
