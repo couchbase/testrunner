@@ -545,7 +545,7 @@ class BaseTestCase(unittest.TestCase):
                 servers  = self.get_nodes_in_cluster()
             else:
                 servers  = self.get_nodes_in_cluster(master_node)
-            map =  self.data_collector.collect_compare_upr_stats(self.buckets,servers, filter_list = filter_list)
+            map =  self.data_collector.collect_compare_dcp_stats(self.buckets,servers, filter_list = filter_list)
             for bucket in map.keys():
                 self.assertTrue(map[bucket], " the bucket {0} has unacked bytes != 0".format(bucket))
 

@@ -590,7 +590,7 @@ class DataCollector(object):
             replica_bucketMap[bucket.name] = replica_map_data
         return active_bucketMap,replica_bucketMap
 
-    def collect_compare_upr_stats(self,buckets,servers,perNode = True, stat_name = 'unacked_bytes', compare_value = 0,  flow_control_buffer_size = 20971520, filter_list = []):
+    def collect_compare_dcp_stats(self,buckets,servers,perNode = True, stat_name = 'unacked_bytes', compare_value = 0,  flow_control_buffer_size = 20971520, filter_list = []):
         """
             Method to extract the failovers stats given by cbstats tool
 
@@ -605,7 +605,7 @@ class DataCollector(object):
 
             map of bucket informing if stat matching was satisfied/not satisfied
 
-            example:: unacked_bytes in upr
+            example:: unacked_bytes in dcp
         """
         bucketMap = {}
         for bucket in buckets:
@@ -616,7 +616,7 @@ class DataCollector(object):
                 rest = RestConnection(server)
                 port = rest.get_memcached_port()
                 client = MemcachedClient(host=server.ip, port=port)
-                stats = client.stats('upr')
+                stats = client.stats('dcp')
                 map_data = {}
                 for key in stats.keys():
                     filter = False
@@ -627,7 +627,7 @@ class DataCollector(object):
                         value = int(stats[key])
                         if not filter:
                             if value != compare_value:
-                                if "eq_uprq:mapreduce_view" in key:
+                                if "eq_dcpq:mapreduce_view" in key:
                                     if value >= flow_control_buffer_size:
                                         bucketMap[bucket] = False
                                 else:
