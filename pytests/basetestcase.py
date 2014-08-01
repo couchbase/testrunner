@@ -851,9 +851,9 @@ class BaseTestCase(unittest.TestCase):
             for server in self.servers:
                 rest = RestConnection(server)
                 if self.chk_max_items:
-                    rest.set_chk_max_items(chk_max_items)
+                    rest.set_chk_max_items(self.chk_max_items)
                 if self.chk_period:
-                    rest.set_chk_period(chk_period)
+                    rest.set_chk_period(self.chk_period)
 
     def change_password(self, new_password="new_password"):
         nodes = RestConnection(self.master).node_statuses()

@@ -1112,11 +1112,11 @@ class RestConnection(object):
         return status, content
 
     def set_chk_max_items(self, max_items):
-        status, content = self.diag_eval("ns_config:set(chk_max_items, " + max_items + ")")
+        status, content = self.diag_eval("ns_config:set(chk_max_items, " + str(max_items) + ")")
         return status, content
 
     def set_chk_period(self, period):
-        status, content = self.diag_eval("ns_config:set(chk_period, " + period + ")")
+        status, content = self.diag_eval("ns_config:set(chk_period, " + str(period) + ")")
         return status, content
 
     def set_enable_flow_control(self, flow=True, bucket='default'):
