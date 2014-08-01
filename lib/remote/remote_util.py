@@ -471,6 +471,7 @@ class RemoteMachineShellConnection:
             self.execute_command('taskkill /F /T /IM iexplore.*')
             self.execute_command('taskkill /F /T /IM WerFault.*')
             self.execute_command('taskkill /F /T /IM memcached.exe')
+            self.execute_command('taskkill /F /T /IM bash.exe')
             output, error = self.execute_command("rm -rf /cygdrive/c/automation/setup.exe")
             self.log_command_output(output, error)
             output, error = self.execute_command(
@@ -609,6 +610,7 @@ class RemoteMachineShellConnection:
         self.execute_command('taskkill /F /T /IM iexplore.*')
         self.execute_command('taskkill /F /T /IM WerFault.*')
         self.execute_command('taskkill /F /T /IM Firefox.*')
+        self.execute_command('taskkill /F /T /IM bash.exe')
         self.disable_firewall()
         version = version.replace("-rel", "")
         exist = self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
