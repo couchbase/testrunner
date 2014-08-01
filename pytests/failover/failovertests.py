@@ -40,7 +40,6 @@ class FailoverTests(FailoverBaseTest):
         """
         # Pick the reference node for communication
         # We pick a node in the cluster which will NOT be failed over
-        self.master = self.master
         self.filter_list = []
         if self.failoverMaster:
             self.master = self.servers[1]
