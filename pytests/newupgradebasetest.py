@@ -45,6 +45,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.rest_settings = self.input.membase_settings
         self.rest = None
         self.rest_helper = None
+        self.is_ubuntu = False
         self.sleep_time = 15
         self.ddocs = []
         self.item_flag = self.input.param('item_flag', 0)
@@ -70,6 +71,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.is_linux = False
         else:
             self.is_linux = True
+        if type.lower() == "ubuntu":
+            self.is_ubuntu = True
 
     def tearDown(self):
         test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
@@ -194,6 +197,10 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.assertTrue(remote.download_build(appropriate_build), "Build wasn't downloaded!")
             o, e = remote.membase_upgrade(appropriate_build, save_upgrade_config=False, forcefully=self.is_downgrade)
             self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
+            """ remove this line when bug MB-11807 fixed """
+            if self.is_ubuntu:
+                remote.start_server()
+            """ remove end here """
             remote.disconnect()
             self.sleep(10)
             if self.is_linux:
