@@ -65,7 +65,10 @@ class FailoverTests(FailoverBaseTest):
             return
 
         # Find nodes that will under go failover
-        self.chosen = RebalanceHelper.pick_nodes(self.master, howmany=self.num_failed_nodes)
+        if self.failoverMaster:
+            self.chosen = RebalanceHelper.pick_nodes(self.master, howmany=1, target_node = self.servers[0])
+        else:
+            self.chosen = RebalanceHelper.pick_nodes(self.master, howmany=self.num_failed_nodes)
 
         # Perform operations - Create/Update/Delete
         # self.withMutationOps = True => Run Operations in parallel to failover
