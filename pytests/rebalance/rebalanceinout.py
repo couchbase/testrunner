@@ -332,19 +332,8 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self.sleep(20)
             tasks.append(self.cluster.async_rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], []))
-            try:
-                for task in tasks:
-                    task.result(min(self.wait_timeout * 30, 36000))
-            except:
-                for task in tasks:
-<<<<<<< Updated upstream
-                    task._Thread__stop()
-=======
-                    #cancel task won't fix the issue (load tasks are popped from queue and there is nothing to cancel, but still there is a thread running)
-                    if hasattr(task, '_Thread__stop'):
-                        task._Thread__stop()
->>>>>>> Stashed changes
-                raise
+            for task in tasks:
+                task.result(min(self.wait_timeout * 30, 36000))
             self._load_all_buckets(self.master, gen_expire, "create", 0)
             self.verify_cluster_stats(self.servers[:self.num_servers])
         self.verify_unacked_bytes_all_buckets()
