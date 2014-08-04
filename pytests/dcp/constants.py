@@ -4,9 +4,9 @@ NOTIFIER = "notifier"
 PRODUCER = "producer"
 DEFAULT  = "default"
 MCD      = "mcd"
-UPR      = "upr"
+DCP      = "dcp"
 SUCCESS  = 0
-DEFAULT_CONN_NAME = "default_upr_connection"
+DEFAULT_CONN_NAME = "default_dcp_connection"
 
 FAILOVER_STAT = "failovers"
 VBSEQNO_STAT  = "vbucket-seqno"

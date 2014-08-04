@@ -1,7 +1,7 @@
 import time
 import logger
-from upr.constants import *
-from uprbase import UPRBase
+from dcp.constants import *
+from dcpbase import DCPBase
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
@@ -9,7 +9,7 @@ from lib.cluster_run_manager  import CRManager
 
 log = logger.Logger.get_logger()
 
-class UPRRebalanceTests(UPRBase):
+class DCPRebalanceTests(DCPBase):
 
     def test_mutations_during_rebalance(self):
 
@@ -29,8 +29,8 @@ class UPRRebalanceTests(UPRBase):
         log.info("streaming vb {0} to seqno {1}".format(
             vbucket, high_seqno))
 
-        upr_client = self.upr_client(self.master, PRODUCER, vbucket)
-        stream = upr_client.stream_req(
+        dcp_client = self.dcp_client(self.master, PRODUCER, vbucket)
+        stream = dcp_client.stream_req(
             vbucket, 0, 0,
             high_seqno, vb_uuid)
 
@@ -49,7 +49,7 @@ class UPRRebalanceTests(UPRBase):
         nodeB = self.servers[1]
         nodeC = self.servers[2]
 
-        gen_create = BlobGenerator('upr', 'upr-', 64, start=0, end=self.num_items)
+        gen_create = BlobGenerator('dcp', 'dcp-', 64, start=0, end=self.num_items)
         self._load_all_buckets(nodeA, gen_create, "create", 0)
 
         vbucket = 0
@@ -117,8 +117,8 @@ class UPRRebalanceTests(UPRBase):
         mcd_client.set('key2', 0, 0, 'value', vbucket)
 
         # stream mutation
-        upr_client = self.upr_client(new_master, PRODUCER, vbucket)
-        stream = upr_client.stream_req(vbucket, 0, 0, 2, 0)
+        dcp_client = self.dcp_client(new_master, PRODUCER, vbucket)
+        stream = dcp_client.stream_req(vbucket, 0, 0, 2, 0)
 
         while stream.has_response():
 
@@ -207,8 +207,8 @@ class UPRRebalanceTests(UPRBase):
 
             vb_uuid, _, _= self.vb_info(nodeA,
                                                       vb)
-            upr_client = self.upr_client(nodeA, PRODUCER)
-            stream = upr_client.stream_req(
+            dcp_client = self.dcp_client(nodeA, PRODUCER)
+            stream = dcp_client.stream_req(
                 vb, 0, 0,
                 self.num_items*3, vb_uuid)
 

@@ -1,13 +1,13 @@
 import time
 import logger
-from upr.constants import *
-from uprbase import UPRBase
+from dcp.constants import *
+from dcpbase import DCPBase
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase.documentgenerator import BlobGenerator
 
 log = logger.Logger.get_logger()
 
-class UPRMultiBucket(UPRBase):
+class DCPMultiBucket(DCPBase):
 
     def test_stream_all_buckets(self):
         doc_gen = BlobGenerator(
@@ -25,11 +25,11 @@ class UPRMultiBucket(UPRBase):
 
         for bucket in buckets:
 
-            upr_client = self.upr_client(nodeA, PRODUCER, auth_user = bucket)
+            dcp_client = self.dcp_client(nodeA, PRODUCER, auth_user = bucket)
             for vb in vbuckets[0:16]:
                 vbucket = vb.id
                 vb_uuid, _, high_seqno = self.vb_info(nodeA, vbucket, bucket = bucket)
-                stream = upr_client.stream_req(vbucket, 0, 0, high_seqno, vb_uuid)
+                stream = dcp_client.stream_req(vbucket, 0, 0, high_seqno, vb_uuid)
                 responses = stream.run()
                 assert high_seqno == stream.last_by_seqno
 
@@ -59,10 +59,10 @@ class UPRMultiBucket(UPRBase):
         time.sleep(2)
 
         # verify original vbInfo can be streamed
-        upr_client = self.upr_client(nodeA, PRODUCER, auth_user = bucket)
+        dcp_client = self.dcp_client(nodeA, PRODUCER, auth_user = bucket)
         for vbucket in originalVbInfo:
             vb_uuid, _, high_seqno = originalVbInfo[vbucket]
-            stream = upr_client.stream_req(vbucket, 0, 0, high_seqno, vb_uuid)
+            stream = dcp_client.stream_req(vbucket, 0, 0, high_seqno, vb_uuid)
             responses = stream.run()
             assert high_seqno == stream.last_by_seqno
 

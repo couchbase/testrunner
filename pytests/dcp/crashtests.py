@@ -1,7 +1,7 @@
 import time
 import logger
-from upr.constants import *
-from uprbase import UPRBase
+from dcp.constants import *
+from dcpbase import DCPBase
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
@@ -9,7 +9,7 @@ from lib.cluster_run_manager  import CRManager
 
 log = logger.Logger.get_logger()
 
-class UPRCrashTests(UPRBase):
+class DCPCrashTests(DCPBase):
 
     def test_stream_after_n_crashes(self):
 
@@ -28,8 +28,8 @@ class UPRCrashTests(UPRBase):
             time.sleep(2)
 
             vb_uuid, _, high_seqno = self.vb_info(nodeA, vbucket)
-            upr_client = self.upr_client(nodeA, PRODUCER)
-            stream = upr_client.stream_req(
+            dcp_client = self.dcp_client(nodeA, PRODUCER)
+            stream = dcp_client.stream_req(
                 vbucket, 0, 0,
                 high_seqno, vb_uuid)
             stream.run()
@@ -44,8 +44,8 @@ class UPRCrashTests(UPRBase):
         n = 10000
         self.load_docs(nodeA, vbucket, n)
 
-        upr_client = self.upr_client(nodeA, PRODUCER)
-        stream = upr_client.stream_req(vbucket, 0, 0, 2*n, 0)
+        dcp_client = self.dcp_client(nodeA, PRODUCER)
+        stream = dcp_client.stream_req(vbucket, 0, 0, 2*n, 0)
         self.load_docs(nodeA, vbucket, n)
         assert self.stop_node(0)
         time.sleep(2)
@@ -55,8 +55,8 @@ class UPRCrashTests(UPRBase):
         time.sleep(2)
 
         _, _, high_seqno = self.vb_info(nodeA, vbucket)
-        upr_client = self.upr_client(nodeA, PRODUCER)
-        stream = upr_client.stream_req(vbucket, 0, 0, high_seqno, 0)
+        dcp_client = self.dcp_client(nodeA, PRODUCER)
+        stream = dcp_client.stream_req(vbucket, 0, 0, high_seqno, 0)
         stream.run()
         assert stream.last_by_seqno == high_seqno
 
@@ -73,8 +73,8 @@ class UPRCrashTests(UPRBase):
         n = 10000
         self.load_docs(nodeA, vbucket, n)
 
-        upr_client = self.upr_client(nodeA, PRODUCER)
-        stream = upr_client.stream_req(vbucket, 0, 0, 2*n, 0)
+        dcp_client = self.dcp_client(nodeA, PRODUCER)
+        stream = dcp_client.stream_req(vbucket, 0, 0, 2*n, 0)
         self.load_docs(nodeA, vbucket, n)
 
         # stop all nodes
@@ -92,7 +92,7 @@ class UPRCrashTests(UPRBase):
         assert rest.is_ns_server_running()
 
         _, _, high_seqno = self.vb_info(nodeA, vbucket)
-        upr_client = self.upr_client(nodeA, PRODUCER)
-        stream = upr_client.stream_req(vbucket, 0, 0, high_seqno, 0)
+        dcp_client = self.dcp_client(nodeA, PRODUCER)
+        stream = dcp_client.stream_req(vbucket, 0, 0, high_seqno, 0)
         stream.run()
         assert stream.last_by_seqno == high_seqno

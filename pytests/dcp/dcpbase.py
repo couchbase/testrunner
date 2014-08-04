@@ -1,6 +1,6 @@
 import time
-from upr.constants import *
-from upr_bin_client import UprClient
+from dcp.constants import *
+from dcp_bin_client import DcpClient
 from basetestcase import BaseTestCase
 from mc_bin_client import MemcachedClient
 from lib.cluster_run_manager  import CRManager
@@ -8,11 +8,11 @@ from membase.api.rest_client import RestConnection
 from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection
 
-class UPRBase(BaseTestCase):
+class DCPBase(BaseTestCase):
 
 
     def __init__(self, args):
-        super(UPRBase, self).__init__(args)
+        super(DCPBase, self).__init__(args)
         self.is_setup = False
         self.crm = None
         self.input = TestInputSingleton.input
@@ -39,7 +39,7 @@ class UPRBase(BaseTestCase):
             assert self.crm.start_nodes()
             time.sleep(5)
 
-        super(UPRBase, self).setUp()
+        super(DCPBase, self).setUp()
         self.is_setup = False
 
     def tearDown(self):
@@ -51,7 +51,7 @@ class UPRBase(BaseTestCase):
             assert self.crm.stop_nodes()
             self.cluster.shutdown(force=True)
         else:
-            super(UPRBase, self).tearDown()
+            super(DCPBase, self).tearDown()
 
     def load_docs(self, node, vbucket, num_docs,
                   bucket = 'default', password = '',
@@ -69,11 +69,11 @@ class UPRBase(BaseTestCase):
                 self.doc_num += 1
 
 
-    def upr_client(
+    def dcp_client(
         self, node, connection_type = PRODUCER, vbucket = None, name = None,
         auth_user = None, auth_password = ''):
-        """ create an upr client from Node spec and opens connnection of specified type"""
-        client = self.client_helper(node, UPR, vbucket)
+        """ create an dcp client from Node spec and opens connnection of specified type"""
+        client = self.client_helper(node, DCP, vbucket)
         if auth_user:
             client.sasl_auth_plain(auth_user, auth_password)
 
@@ -100,7 +100,7 @@ class UPRBase(BaseTestCase):
         return client
 
     def client_helper(self, node, type_, vbucket):
-        assert type_ in (MCD, UPR)
+        assert type_ in (MCD, DCP)
 
         client = None
         ip = None
@@ -120,7 +120,7 @@ class UPRBase(BaseTestCase):
         if type_ == MCD:
             client = MemcachedClient(ip, port)
         else:
-            client = UprClient(ip, port)
+            client = DcpClient(ip, port)
 
         return client
 
@@ -138,11 +138,11 @@ class UPRBase(BaseTestCase):
 
         connection = connection or DEFAULT_CONN_NAME
         mcd_client = self.mcd_client(node)
-        stats = mcd_client.stats(UPR)
+        stats = mcd_client.stats(DCP)
 
-        acked = 'eq_uprq:{0}:total_acked_bytes'.format(connection)
-        unacked = 'eq_uprq:{0}:unacked_bytes'.format(connection)
-        sent = 'eq_uprq:{0}:total_bytes_sent'.format(connection)
+        acked = 'eq_dcpq:{0}:total_acked_bytes'.format(connection)
+        unacked = 'eq_dcpq:{0}:unacked_bytes'.format(connection)
+        sent = 'eq_dcpq:{0}:total_bytes_sent'.format(connection)
         return int(stats[acked]), int(stats[sent]), int(stats[unacked])
 
     def all_vb_info(self, node, table_entry = 0, bucket = 'default', password = ''):

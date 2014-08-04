@@ -7,17 +7,17 @@ import time
 MAX_SEQNO = 0xFFFFFFFFFFFFFFFF
 
 
-class UprClient(MemcachedClient):
-    """ UprClient implements upr protocol using mc_bin_client as base
+class DcpClient(MemcachedClient):
+    """ DcpClient implements dcp protocol using mc_bin_client as base
         for sending and receiving commands """
 
     def __init__(self, host='127.0.0.1', port=11210, timeout=1):
-        super(UprClient, self).__init__(host, port, timeout)
+        super(DcpClient, self).__init__(host, port, timeout)
 
         # recv timeout
         self.timeout = timeout
 
-        # map of uprstreams.  key = vbucket, val = UprStream
+        # map of dcpstreams.  key = vbucket, val = DcpStream
         self.streams = {}
 
         # inflight ops.  key = opaque, val = Operation
@@ -29,29 +29,29 @@ class UprClient(MemcachedClient):
         return self._handle_op(op)
 
     def close(self):
-        super(UprClient, self).close()
+        super(DcpClient, self).close()
         self.dead = True
 
     def open_consumer(self, name):
-        """ opens an upr consumer connection """
+        """ opens an dcp consumer connection """
 
         op = OpenConsumer(name)
         return self._open(op)
 
     def open_producer(self, name):
-        """ opens an upr producer connection """
+        """ opens an dcp producer connection """
 
         op = OpenProducer(name)
         return self._open(op)
 
     def open_notifier(self, name):
-        """ opens an upr notifier connection """
+        """ opens an dcp notifier connection """
 
         op = OpenNotifier(name)
         return self._open(op)
 
     def get_failover_log(self, vbucket):
-        """ get upr failover log """
+        """ get dcp failover log """
 
         op = GetFailoverLog(vbucket)
         return self._handle_op(op)
@@ -83,7 +83,7 @@ class UprClient(MemcachedClient):
         return r
 
     def add_stream(self, vbucket, takeover = 0):
-        """ sent to upr-consumer to add stream on a particular vbucket.
+        """ sent to dcp-consumer to add stream on a particular vbucket.
             the takeover flag is there for completeness and is used by
             ns_server during vbucket move """
 
@@ -99,10 +99,10 @@ class UprClient(MemcachedClient):
 
     def stream_req(self, vbucket, takeover, start_seqno, end_seqno,
                        vb_uuid, snap_start = None, snap_end = None):
-        """" sent to upr-producer to stream mutations from
+        """" sent to dcp-producer to stream mutations from
              a particular vbucket.
 
-             upon sucessful stream request an UprStream object is created
+             upon sucessful stream request an DcpStream object is created
              that can be used by the client to receive mutations.
 
              vbucket = vbucket number to strem mutations from
@@ -134,9 +134,9 @@ class UprClient(MemcachedClient):
                 if response and response['opcode'] == CMD_STREAM_END:
                     break
 
-        # start generator and pass to uprStream class
+        # start generator and pass to dcpStream class
         generator = __generator(response)
-        return UprStream(generator, vbucket)
+        return DcpStream(generator, vbucket)
 
 
     def get_stream(self, vbucket):
@@ -223,8 +223,8 @@ class UprClient(MemcachedClient):
         self.s.send(header + body)
 
 
-class UprStream(object):
-    """ UprStream class manages a stream generator that yields mutations """
+class DcpStream(object):
+    """ DcpStream class manages a stream generator that yields mutations """
 
     def __init__(self, generator, vbucket):
 
@@ -271,7 +271,7 @@ class UprStream(object):
     def has_response(self):
         return not self._ended
 
-    def run(self, to_seqno = MAX_SEQNO, retries = 5):
+    def run(self, to_seqno = MAX_SEQNO, retries = 10):
 
         responses = []
 
@@ -301,7 +301,7 @@ class UprStream(object):
         return responses
 
 class Operation(object):
-    """ Operation Class generically represents any upr operation providing
+    """ Operation Class generically represents any dcp operation providing
         default values for attributes common to each operation """
 
     def __init__(self, opcode, key='', value='',
