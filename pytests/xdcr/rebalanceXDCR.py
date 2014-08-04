@@ -45,9 +45,9 @@ class Rebalance(XDCRReplicationBaseTest):
 
     def __async_load_data(self):
         self.log.info("Loading data Asynchronously")
-        load_tasks = self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        load_tasks = self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0, batch_size=1000)
         if self._replication_direction_str in "bidirection":
-            load_tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_create2, "create", 0))
+            load_tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_create2, "create", 0, batch_size=1000))
         return load_tasks
 
     def __load_data(self):
