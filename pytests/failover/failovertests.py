@@ -306,6 +306,7 @@ class FailoverTests(FailoverBaseTest):
                         self.log.info(" Stopping Graceful failover")
                         stopped = self.rest.stop_rebalance(wait_timeout=self.wait_timeout / 3)
                         self.assertTrue(stopped, msg="unable to stop rebalance")
+                        self.sleep(60)
                         # Start Graceful Again
                         success_failed_over = self.rest.fail_over(node.id, graceful=(self.graceful and graceful_failover))
                     else:
