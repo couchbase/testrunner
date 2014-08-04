@@ -765,7 +765,9 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
         has = self.batch_generator.has_next()
         if math.fmod(self.batch_generator._doc_gen.itr, 50000) == 0.0 or not has:
             self.log.info("Batch {0} documents done #: {1} with exp:{2}".\
-                          format(self.op_type, self.batch_generator._doc_gen.itr, self.exp))
+                          format(self.op_type,
+                                 (self.batch_generator._doc_gen.itr - self.batch_generator._doc_gen.start),
+                                 self.exp))
         return has
 
     def next(self):
@@ -844,7 +846,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
 
     def _process_values_for_update(self, partition_keys_dic, key_val):
         for partition, keys in partition_keys_dic.items():
-            for key  in keys:
+            for key in keys:
                 value = partition.get_valid(key)
                 if value is None:
                     del key_val[key]

@@ -71,6 +71,10 @@ class bidirectional(XDCRReplicationBaseTest):
             self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
 
         self.sleep(self.wait_timeout * 2)
+
+        # Merging the keys as keys are actually replicated.
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+
         tasks = []
         if "update" in self._doc_ops:
             tasks += self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires)
@@ -86,8 +90,6 @@ class bidirectional(XDCRReplicationBaseTest):
 
         if self._wait_for_expiration and ("update" in self._doc_ops or "update" in self._doc_ops_dest):
             self.sleep(self._expires)
-
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
         self.verify_results(verify_src=True)
 
