@@ -1904,7 +1904,7 @@ class ViewQueryTests(BaseTestCase):
         '''
         data_set = SalesDataSet(self.master, self.cluster, self.docs_per_day)
 
-        data_set.add_group_count_queries(limit=self.limit)
+        data_set.add_group_queries(limit=self.limit)
         self._query_test_init(data_set)
 
     def test_sales_dataset_startkey_endkey_docid_queries(self):
@@ -3097,6 +3097,115 @@ class SalesDataSet:
                 view.queries += [QueryHelper({"skip" : skip, "limit" : limit})]
             else:
                 view.queries += [QueryHelper({"skip" : skip})]
+
+    def add_stale_queries(self, views=None, limit=None, stale_param=None):
+        if views is None:
+            views = self.views
+
+        for view in views:
+            if stale_param:
+                view.queries += [QueryHelper({"stale" :  stale_param})]
+            else:
+                view.queries += [QueryHelper({"stale" : "false"}),
+                                 QueryHelper({"stale" : "ok"}),
+                                 QueryHelper({"stale" : "update_after"})]
+            if limit:
+                for q in view.queries:
+                    q.params['limit'] = limit
+
+    """
+        Create queries for testing docids on duplicate start_key result ids.
+        Only pass in view that indexes all employee types as they are
+        expected in the query params...i.e (ui,admin,arch)
+    """
+    def add_startkey_endkey_docid_queries(self, views=None, limit=None):
+        if views is None:
+            views = []
+
+        for view in views:
+            view.queries += [QueryHelper({"startkey" : "[2008,7,1]",
+                                          "startkey_docid" : '"%s%s"' % (
+                                              self.views[0].prefix,
+                                              str(uuid.uuid4())[:1])}),
+                             QueryHelper({"startkey" : "[2008,7,1]",
+                                          "startkey_docid" : '"%s%s"' % (
+                                              self.views[0].prefix,
+                                              str(uuid.uuid4())[:1]),
+                                          "descending" : "false"},),
+                             QueryHelper({"startkey" : "[2008,7,1]",
+                                          "startkey_docid" : '"%s%s"' % (
+                                              self.views[0].prefix,
+                                              str(uuid.uuid4())[:1]),
+                                          "descending" : "true"}),
+                             QueryHelper({"startkey" : "[2008,7,1]",
+                                          "startkey_docid" : '"%s%s"' % (
+                                              self.views[0].prefix,
+                                              str(uuid.uuid4())[:1])}),
+                             QueryHelper({"startkey" : "[2008,7,1]",
+                                          "startkey_docid" : "ui0000-2008_07_01",
+                                          "descending" : "false"}),
+                             QueryHelper({"startkey" : "[2008,7,1]",
+                                          "startkey_docid" : '"%s%s"' % (
+                                              self.views[0].prefix,
+                                              str(uuid.uuid4())[:1]),
+                                          "descending" : "true"}),
+                             # +endkey_docid
+                             QueryHelper({"startkey" : "[2008,0,1]",
+                                          "endkey"   : "[2008,7,1]",
+                                          "endkey_docid" : '"%s%s"' % (
+                                              self.views[0].prefix,
+                                              str(uuid.uuid4())[:1]),
+                                          "inclusive_end" : "false"}),
+                             QueryHelper({"endkey"   : "[2008,7,1]",
+                                          "endkey_docid" : '"%s%s"' % (
+                                              self.views[0].prefix,
+                                              str(uuid.uuid4())[:1]),
+                                          "inclusive_end" : "false"}),
+                             # + inclusive_end
+                             QueryHelper({"endkey"   : "[2008,7,1]",
+                                          "endkey_docid" : '"%s%s"' % (
+                                              self.views[0].prefix,
+                                              str(uuid.uuid4())[:1]),
+                                          "inclusive_end" : "true"}),
+                             # + single bounded and descending
+                             QueryHelper({"startkey" : "[2008,7,1]",
+                                          "endkey"   : "[2008,2,20]",
+                                          "endkey_docid"   : '"%s%s"' % (
+                                              self.views[0].prefix,
+                                              str(uuid.uuid4())[:1]),
+                                          "descending"   : "true",
+                                          "inclusive_end" : "true"}),
+                             QueryHelper({"startkey" : "[2008,7,1]",
+                                          "endkey"   : "[2008,2,20]",
+                                          "endkey_docid"   : '"%s%s"' % (
+                                              self.views[0].prefix,
+                                              str(uuid.uuid4())[:1]),
+                                          "descending"   : "true",
+                                          "inclusive_end" : "false"}),
+                             # + double bounded and descending
+                             QueryHelper({"startkey" : "[2008,7,1]",
+                                          "startkey_docid" : '"%s%s"' % (
+                                              self.views[0].prefix,
+                                              str(uuid.uuid4())[:1]),
+                                          "endkey"   : "[2008,2,20]",
+                                          "endkey_docid"   : '"%s%s"' % (
+                                              self.views[0].prefix,
+                                              str(uuid.uuid4())[:1]),
+                                          "descending"   : "true",
+                                          "inclusive_end" : "false"})]
+            if limit:
+                for q in view.queries:
+                    q.params["limit"] = limit
+
+    def add_group_queries(self, views=None, limit=None):
+
+        for view in self.views:
+            if view.reduce_fn is None:
+                continue
+            view.queries += [QueryHelper({"group" : "true"})]
+            if limit:
+                for q in view.queries:
+                    q.params['limit'] = limit
 
 class ExpirationDataSet:
     def __init__(self, server, cluster, num_docs=10000, bucket="default", expire=60):
