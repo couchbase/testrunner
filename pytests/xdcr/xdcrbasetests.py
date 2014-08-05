@@ -846,7 +846,7 @@ class XDCRBaseTest(unittest.TestCase):
                                                 batch_size, pause_secs, timeout_secs)
         return task
 
-    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30):
+    def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30, ignore_errors=[]):
         tasks = []
         buckets = self._get_cluster_buckets(server)
         for bucket in buckets:
@@ -854,7 +854,7 @@ class XDCRBaseTest(unittest.TestCase):
             tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
                                                           bucket.kvs[kv_store],
                                                           op_type, exp, flag, only_store_hash,
-                                                          batch_size, pause_secs, timeout_secs))
+                                                          batch_size, pause_secs, timeout_secs, ignore_errors=ignore_errors))
         return tasks
 
     def _load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30):
