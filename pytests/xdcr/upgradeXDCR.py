@@ -368,7 +368,7 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
                     bucket_server = self._get_bucket(self, bucket, server)
                     tasks = self.async_create_views(server, ddoc.name, views, bucket=bucket_server)
                     for task in tasks:
-                        task.result(timeout=60)
+                        task.result(timeout=90)
                     ddocs.append(ddoc)
         return ddocs
 
