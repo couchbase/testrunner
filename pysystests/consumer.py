@@ -65,6 +65,7 @@ class SDKClient(threading.Thread):
         self.batch_size = 5000
         self.memq = queue.Queue()
         self.consume_queue = task['consume_queue']
+        self.standalone = task['standalone']
         self.ccq = None
         self.hotkey_batches = []
 
@@ -141,6 +142,9 @@ class SDKClient(threading.Thread):
 
 
     def flushq(self, flush_hotkeys = False):
+
+        if self.standalone:
+            return
 
         mq = RabbitHelper()
 
@@ -532,8 +536,9 @@ def kill_nprocs(id_, kill_num = None):
             procs[i].terminate()
 
 
-def start_client_processes(task):
+def start_client_processes(task, standalone = False):
 
+    task['standalone'] = standalone
     workload_id = task['id']
     PROCSSES[workload_id] = []
 

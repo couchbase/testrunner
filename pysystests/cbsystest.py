@@ -191,7 +191,7 @@ def run_workload(args):
     if args.standalone:
         from consumer import start_client_processes
         task = argsToTask(args)
-        start_client_processes(task)
+        start_client_processes(task, standalone = True)
     else:
         rabbitHelper = RabbitHelper(args.broker, cluster)
         workload['rcq'] = getResponseQueue(rabbitHelper)
