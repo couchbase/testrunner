@@ -149,14 +149,10 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
                            format(src_bucket_name, dest_bucket_name))
 
         tasks = []
-        # incoming ops on remote cluster = 0
-        tasks.append(self.cluster.async_wait_for_xdcr_stat(dest_nodes,
-                                                       dest_bucket_name, '',
-                                                       'xdc_ops', '==', 0))
         # active_vbreps falls to 0
         tasks.append(self.cluster.async_wait_for_xdcr_stat(src_nodes,
                                                        src_bucket_name, '',
-                                                       'replication_active_vbreps',
+                                                       'active_vbreps',
                                                        '==', 0))
         for task in tasks:
             task.result()
@@ -186,14 +182,8 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
             try:
                 task = self.cluster.async_wait_for_xdcr_stat(src_nodes,
                                                          src_bucket_name, '',
-                                                         'replication_active_vbreps', '>=', 0)
+                                                         'active_vbreps', '>=', 0)
                 task.result(self.wait_timeout)
-                # check incoming xdc_ops on remote nodes
-                if self.is_cluster_replicating(master, src_bucket_name):
-                    task = self.cluster.async_wait_for_xdcr_stat(dest_nodes,
-                                                         dest_bucket_name, '',
-                                                         'xdc_ops', '>=', 0)
-                    task.result(self.wait_timeout)
             except KeyError as ex:
                 # thrown when the server is rebalancing-in and some nodes aren't
                 # yet replicating or accepting mutations
@@ -384,19 +374,19 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
         self.sleep(10)
         # check if remote cluster is still replicating
         if self.is_cluster_replicating(self.dest_master, pause_bucket_name):
-            task = self.cluster.async_wait_for_xdcr_stat(self.src_nodes,
+            task = self.cluster.async_wait_for_xdcr_stat(self.dest_nodes,
                                                          pause_bucket_name, '',
-                                                         'xdc_ops', '>', 0)
+                                                         'active_vbreps', '>', 0)
             task.result()
-            self.log.info("Inbound mutations for {0} are not affected".format(pause_bucket_name))
+            self.log.info("Active replicators at destination for bucket {0} are not affected".format(pause_bucket_name))
         # check if pause on one bucket does not affect other replications
         src_buckets = self._get_cluster_buckets(self.src_master)
         for bucket in src_buckets:
             if bucket.name != pause_bucket_name:
                 if self.is_cluster_replicating(self.src_master, bucket.name):
-                    task = self.cluster.async_wait_for_xdcr_stat(self.dest_nodes,
+                    task = self.cluster.async_wait_for_xdcr_stat(self.src_nodes,
                                                          bucket.name, '',
-                                                         'xdc_ops', '>', 0)
+                                                         'active_vbreps', '>', 0)
                     task.result()
                     self.log.info("Pausing one replication does not affect other replications")
                 else:
