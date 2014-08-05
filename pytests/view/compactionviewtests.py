@@ -164,7 +164,7 @@ class CompactionViewTests(BaseTestCase):
         rebalance_task = self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])
         self.sleep(5)
         for ddoc in self.ddocs:
-            result = self.cluster.compact_view(self.master, ddoc.name)
+            result = self.cluster.compact_view(self.master, ddoc.name, with_rebalance=True)
             self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
         rebalance_task.result(self.wait_timeout * 3)
         self.verify_cluster_stats(self.servers[:self.nodes_in + 1])
@@ -202,7 +202,7 @@ class CompactionViewTests(BaseTestCase):
         rebalance_task = self.cluster.async_rebalance([self.master], [], servs_out)
         self.sleep(5)
         for ddoc in self.ddocs:
-            result = self.cluster.compact_view(self.master, ddoc.name)
+            result = self.cluster.compact_view(self.master, ddoc.name, with_rebalance=True)
             self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
         rebalance_task.result(self.wait_timeout * 3)
         self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
@@ -244,7 +244,7 @@ class CompactionViewTests(BaseTestCase):
         rebalance_task = self.cluster.async_rebalance(servs_init, servs_in, servs_out)
         self.sleep(5)
         for ddoc in self.ddocs:
-            result = self.cluster.compact_view(self.master, ddoc.name)
+            result = self.cluster.compact_view(self.master, ddoc.name, with_rebalance=True)
             self.assertTrue(result, "Compaction didn't finished correctly. Please check diags")
         rebalance_task.result(self.wait_timeout * 3)
         self.verify_cluster_stats(result_nodes)
@@ -278,11 +278,11 @@ class CompactionViewTests(BaseTestCase):
             task.result()
 
     def load_DB_fragmentation(self, percent_threshold, rest, remote_client):
-        monitor_fragm = self.cluster.async_monitor_db_fragmentation(self.servers[0], percent_threshold, self.default_bucket_name)
-        end_time = time.time() + self.wait_timeout * 50
+        monitor_fragm = self.cluster.async_monitor_db_fragmentation(self.master, percent_threshold - 10, self.default_bucket_name)
+        end_time = time.time() + self.wait_timeout * 3
         while monitor_fragm.state != "FINISHED":
             if end_time < time.time():
-                self.fail("Fragmentation level is not reached in %s sec" % self.wait_timeout * 50)
+                self.fail("Fragmentation level is not reached in %s sec" % self.wait_timeout * 3)
             try:
                 self._load_all_buckets(self.master, self.gen_load, "update", 0)
             except Exception, ex:
@@ -295,32 +295,34 @@ class CompactionViewTests(BaseTestCase):
         except Exception, ex:
             self.thread_crashed.set()
             self.log.error("****ERROR***** \n At least one of threads is crashed: %s" % (ex))
-            raise ex
         finally:
             if not self.thread_stopped.is_set():
                 self.thread_stopped.set()
 
     def load_view_fragmentation(self, percent_threshold):
         query = {"stale" : "false", "full_set" : "true", "connection_timeout" : 60000}
+        end_time = time.time() + self.wait_timeout * 3
         for ddoc in self.ddocs:
-                fragmentation_monitor = \
-                    self.cluster.async_monitor_db_fragmentation(self.master, percent_threshold , self.default_bucket_name, True)
-                while fragmentation_monitor.state != "FINISHED":
-                    self._load_all_buckets(self.master, self.gen_load, "update", 0)
-                    for view in ddoc.views:
-                        # run queries to create indexes
-                        self.cluster.query_view(self.master, ddoc.name, view.name, query)
-                fragmentation_monitor.result()
-                try:
-                    compaction_task = self.cluster.async_monitor_compact_view(self.master, ddoc.name, frag_value=self.fragmentation_value)
-                    compaction_task.result()
-                except Exception, ex:
-                    self.thread_crashed.set()
-                    self.log.error("****ERROR***** \n At least one of threads is crashed: %s" % (ex))
-                    raise ex
-                finally:
-                    if not self.thread_stopped.is_set():
-                        self.thread_stopped.set()
+            fragmentation_monitor = \
+               self.cluster.async_monitor_db_fragmentation(self.master, percent_threshold , self.default_bucket_name, True)
+            while fragmentation_monitor.state != "FINISHED":
+                self._load_all_buckets(self.master, self.gen_load, "update", 0)
+                for view in ddoc.views:
+                    # run queries to create indexes
+                    self.cluster.query_view(self.master, ddoc.name, view.name, query)
+            if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
+                self.fail("impossible to reach compaction value {0} after {1} sec".
+                          format(self.fragmentation_value, (self.wait_timeout * 3)))
+            fragmentation_monitor.result()
+            try:
+                compaction_task = self.cluster.async_monitor_compact_view(self.master, ddoc.name, frag_value=self.fragmentation_value)
+                compaction_task.result(self.wait_timeout * 3)
+            except Exception, ex:
+                self.thread_crashed.set()
+                self.log.error("****ERROR***** \n At least one of threads is crashed: %s" % (ex))
+            finally:
+                if not self.thread_stopped.is_set():
+                    self.thread_stopped.set()
 
     def test_parallel_DB_views_compaction(self):
         threads = []
@@ -332,12 +334,11 @@ class CompactionViewTests(BaseTestCase):
         self.create_ddocs()
         self._load_all_buckets(self.master, self.gen_load, "create", 0)
         RebalanceHelper.wait_for_persistence(self.master, self.default_bucket_name)
-        rebalance = self.cluster.async_rebalance([self.master], self.servers[1:self.nodes_in + 1], [])
-        rebalance.result()
-        threads.append(Thread(target=self.load_view_fragmentation, name="view_Thread", args=(percent_threshold,)))
         threads.append(Thread(target=self.load_DB_fragmentation, name="DB_Thread", args=(percent_threshold, rest, remote_client)))
+        threads.append(Thread(target=self.load_view_fragmentation, name="view_Thread", args=(percent_threshold,)))
         for thread in threads:
             thread.start()
+            self.sleep(2)
         for thread in threads:
             thread.join()
         if self.thread_crashed.is_set():
@@ -353,12 +354,11 @@ class CompactionViewTests(BaseTestCase):
         self.create_ddocs()
         self._load_all_buckets(self.master, self.gen_load, "create", 0)
         RebalanceHelper.wait_for_persistence(self.master, self.default_bucket_name)
-        rebalance = self.cluster.async_rebalance([self.master], self.servers[1:self.nodes_in + 1], [])
-        rebalance.result()
         threads.append(Thread(target=self.load_view_fragmentation, name="view_Thread", args=(percent_threshold,)))
         threads.append(Thread(target=self.load_DB_fragmentation, name="DB_Thread", args=(percent_threshold, rest, remote_client)))
         for thread in threads:
             thread.start()
+            self.sleep(2)
         for thread in threads:
             thread.join()
         if self.thread_crashed.is_set():
@@ -374,12 +374,11 @@ class CompactionViewTests(BaseTestCase):
         self.create_ddocs()
         self._load_all_buckets(self.master, self.gen_load, "create", 0)
         RebalanceHelper.wait_for_persistence(self.master, self.default_bucket_name)
-        rebalance = self.cluster.async_rebalance([self.master], self.servers[1:self.nodes_in + 1], [])
-        rebalance.result()
-        threads.append(Thread(target=self.load_view_fragmentation, name="view_Thread", args=(percent_threshold,)))
         threads.append(Thread(target=self.load_DB_fragmentation, name="DB_Thread", args=(percent_threshold, rest, remote_client)))
+        threads.append(Thread(target=self.load_view_fragmentation, name="view_Thread", args=(percent_threshold,)))
         for thread in threads:
             thread.start()
+            self.sleep(2)
         for thread in threads:
             thread.join()
         if self.thread_crashed.is_set():
