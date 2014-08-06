@@ -1164,10 +1164,11 @@ class VerifyRevIdTask(GenericLoadingTask):
 
     def has_next(self):
         if self.itr < (self.num_valid_keys + self.num_deleted_keys) and self.err_count < self.max_err_count:
-            if self.itr == self.num_valid_keys:
-                self.log.info("RevId Verification : {0} existing items have been verified".format(self.itr))
             return True
-        self.log.info("RevId Verification : {0} deleted items have been verified".format(self.itr - self.num_valid_keys))
+        if self.itr <= self.num_valid_keys:
+            self.log.info("RevId Verification : {0} existing items have been verified".format(self.itr))
+        if self.itr > self.num_valid_keys:
+            self.log.info("RevId Verification : {0} deleted items have been verified".format(self.itr - self.num_valid_keys))
         return False
 
     def next(self):
