@@ -250,7 +250,7 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
         else:
             logger.error("Error during multi set")
 
-task_postrun.connect(task_postrun_handler)
+task_postrun.connect(task_postrun_handler, weak=False)
 
 """
 Generates list of tasks to run based on params passed in to workload
