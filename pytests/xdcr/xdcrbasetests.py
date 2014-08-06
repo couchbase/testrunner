@@ -325,6 +325,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._failover = self._input.param("failover", None)
         self._demand_encryption = self._input.param("demand_encryption", 0)
         self._rebalance = self._input.param("rebalance", None)
+        self._use_hostanames = self._input.param("use_hostnames", False)
         self.print_stats = self._input.param("print_stats", False)
         self._wait_for_expiration = self._input.param("wait_for_expiration", False)
         self.collect_data_files = False
@@ -508,7 +509,7 @@ class XDCRBaseTest(unittest.TestCase):
 
     def _setup_cluster(self, nodes, disabled_consistent_view=None):
         self._init_nodes(nodes, disabled_consistent_view)
-        self.cluster.async_rebalance(nodes, nodes[1:], []).result()
+        self.cluster.async_rebalance(nodes, nodes[1:], [], use_hostnames=self._use_hostanames).result()
         if str(self.__class__).find('upgradeXDCR') != -1:
             self._create_buckets(self, nodes)
         else:
@@ -524,6 +525,30 @@ class XDCRBaseTest(unittest.TestCase):
             mem_quota_node = task.result()
             if mem_quota_node < self._mem_quota_int or self._mem_quota_int == 0:
                 self._mem_quota_int = mem_quota_node
+        if self._use_hostanames:
+            if not hasattr(self, 'hostnames'):
+                self.hostnames = {}
+            self.hostnames.update(self._rename_nodes(nodes))
+
+    def _rename_nodes(self, servers):
+        hostnames={}
+        for server in servers:
+            shell = RemoteMachineShellConnection(server)
+            try:
+                hostname = shell.get_full_hostname()
+                rest = RestConnection(server)
+                renamed, content = rest.rename_node(hostname, username=server.rest_username, password=server.rest_password)
+                self.assertTrue(renamed, "Server %s is not renamed!Hostname %s. Error %s" %(
+                                        server, hostname, content))
+                hostnames[server] = hostname
+            finally:
+                shell.disconnect()
+        for i in xrange(len(servers)):
+            if servers[i] in hostnames:
+                if server and server.ip != servers[i].ip:
+                    continue
+                servers[i].hostname = hostnames[servers[i]]
+        return hostnames
 
     def _create_sasl_buckets(self, server, num_buckets, server_id, bucket_size):
         bucket_tasks = []
@@ -720,7 +745,7 @@ class XDCRBaseTest(unittest.TestCase):
         cluster_run = len(set([server.ip for server in self._servers])) == 1
         for server in self._servers:
             for node in nodes:
-                if (server.ip == str(node.ip) or cluster_run)\
+                if ((server.hostname if server.hostname else server.ip) == str(node.ip) or cluster_run)\
                  and server.port == str(node.port):
                     servers.append(server)
         return servers
