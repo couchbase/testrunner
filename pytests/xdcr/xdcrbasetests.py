@@ -1161,8 +1161,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             partition2 = kv_store_second[kvs_num].acquire_partition(key)
             key_add = partition2.get_key(key)
             partition1.set(key, key_add["value"], key_add["expires"], key_add["flag"])
-            kv_store_first[1].release_partition(key)
-            kv_store_second[1].release_partition(key)
+            kv_store_first[kvs_num].release_partition(key)
+            kv_store_second[kvs_num].release_partition(key)
 
         for key in deleted_keys_second:
             # add deleted keys to first kvs if the where deleted only in second kvs
