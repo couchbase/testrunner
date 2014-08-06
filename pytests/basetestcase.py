@@ -1132,9 +1132,14 @@ class BaseTestCase(unittest.TestCase):
              else:
                 self.assertTrue(active_result["total"] <= total_vbuckets, "total vbuckets do not match for active data set  (<= criteria), actual {0} expectecd {1}".format(active_result["total"] ,total_vbuckets))
              if type == "rebalance":
-                self.assertTrue(replica_result["total"] == self.num_replicas*total_vbuckets, "total vbuckets do not match for replica data set (= criteria), actual {0} expectecd {1}".format(replica_result["total"] ,total_vbuckets))
+                rest = RestConnection(self.master)
+                nodes = rest.node_statuses()
+                if (len(nodes) - self.num_replicas) >= 1:
+                    self.assertTrue(replica_result["total"] == self.num_replicas*total_vbuckets, "total vbuckets do not match for replica data set (= criteria), actual {0} expected {1}".format(replica_result["total"] ,self.num_replicas**total_vbuckets))
+                else:
+                    self.assertTrue(replica_result["total"] < self.num_replicas*total_vbuckets, "total vbuckets do not match for replica data set (<= criteria), actual {0} expected {1}".format(replica_result["total"] ,self.num_replicas**total_vbuckets))
              else:
-                self.assertTrue(replica_result["total"] <= self.num_replicas*total_vbuckets, "total vbuckets do not match for replica data set (<= criteria), actual {0} expectecd {1}".format(replica_result["total"] ,total_vbuckets))
+                self.assertTrue(replica_result["total"] <= self.num_replicas*total_vbuckets, "total vbuckets do not match for replica data set (<= criteria), actual {0} expected {1}".format(replica_result["total"] ,self.num_replicas**total_vbuckets))
              self.assertTrue(active_result["std"] >= 0.0 and active_result["std"] <= std, "std test failed for active vbuckets")
              self.assertTrue(replica_result["std"] >= 0.0 and replica_result["std"] <= std, "std test failed for replica vbuckets")
         self.log.info(" End Verification for vb_distribution_analysis")
