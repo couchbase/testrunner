@@ -133,6 +133,10 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
                     return bucket
             return None
 
+    def _enable_xdcr_trace_logging(self, nodes):
+        for node in nodes:
+            RestConnection(node).enable_xdcr_trace_logging()
+
     def _online_upgrade(self, update_servers, extra_servers, check_newmaster=True):
         RestConnection(update_servers[0]).get_nodes_versions()
         added_versions = RestConnection(extra_servers[0]).get_nodes_versions()
@@ -155,6 +159,8 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
                 raise Exception("After rebalance in {0} Nodes, one of them doesn't become the master".format(added_versions[0]))
         self.log.info("Rebalanced out all old version nodes")
         self.cluster.rebalance(update_servers + extra_servers, [], update_servers)
+        if self.upgrade_versions[0] >= "3.0.0":
+            self._enable_xdcr_trace_logging(extra_servers)
 
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.src_init + self.dest_init ])
@@ -223,7 +229,7 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_dest, self.dest_master)
 
     def online_cluster_upgrade(self):
-        self._install(self.servers[:self.src_init + self.dest_init ])
+        self._install(self.servers[:self.src_init + self.dest_init])
         prev_initial_version = self.initial_version
         self.initial_version = self.upgrade_versions[0]
         self._install(self.servers[self.src_init + self.dest_init:])
@@ -443,3 +449,5 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed!")
             self.sleep(self.expire_time)
+        if self.upgrade_versions[0] >= "3.0.0":
+            self._enable_xdcr_trace_logging(servers)
