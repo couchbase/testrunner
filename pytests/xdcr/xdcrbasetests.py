@@ -270,7 +270,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._num_replicas = self._input.param("replicas", 1)
         self._mem_quota_int = 0  # will be set in subsequent methods
         self.eviction_policy = self._input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
-        self.mixed_priority = self._input.param("mixed_priority",None)
+        self.mixed_priority = self._input.param("mixed_priority", None)
         # if mixed priority is set by user, set high priority for sasl and standard buckets
         if self.mixed_priority:
             self.bucket_priority = 'high'
@@ -1156,35 +1156,20 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         valid_keys_second, deleted_keys_second = kv_store_second[kvs_num].key_set()
 
         for key in valid_keys_second:
-            # replace the values for each key in first kvs if the keys are presented in second one
-            if key in valid_keys_first:
-                partition1 = kv_store_first[kvs_num].acquire_partition(key)
-                partition2 = kv_store_second[kvs_num].acquire_partition(key)
-                key_add = partition2.get_key(key)
-                partition1.set(key, key_add["value"], key_add["expires"], key_add["flag"])
-                kv_store_first[1].release_partition(key)
-                kv_store_second[1].release_partition(key)
-            # add keys/values in first kvs if the keys are presented only in second one
-            else:
-                partition1, num_part = kv_store_first[kvs_num].acquire_random_partition()
-                partition2 = kv_store_second[kvs_num].acquire_partition(key)
-                key_add = partition2.get_key(key)
-                partition1.set(key, key_add["value"], key_add["expires"], key_add["flag"])
-                kv_store_first[kvs_num].release_partition(num_part)
-                kv_store_second[kvs_num].release_partition(key)
-            # add condition when key was deleted in first, but added in second
+            # replace/add the values for each key in first kvs
+            partition1 = kv_store_first[kvs_num].acquire_partition(key)
+            partition2 = kv_store_second[kvs_num].acquire_partition(key)
+            key_add = partition2.get_key(key)
+            partition1.set(key, key_add["value"], key_add["expires"], key_add["flag"])
+            kv_store_first[1].release_partition(key)
+            kv_store_second[1].release_partition(key)
 
         for key in deleted_keys_second:
-            # the same keys were deleted in both kvs
-            if key in deleted_keys_first:
-                pass
             # add deleted keys to first kvs if the where deleted only in second kvs
-            else:
+            if key not in deleted_keys_first:
                 partition1 = kv_store_first[kvs_num].acquire_partition(key)
                 partition1.delete(key)
                 kv_store_first[kvs_num].release_partition(key)
-            # return merged kvs, that we expect to get on both clusters
-        return kv_store_first[kvs_num]
 
     def __do_merge_buckets(self, src_master, dest_master, bidirection):
         src_buckets = self._get_cluster_buckets(src_master)
@@ -1193,7 +1178,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             for dest_bucket in dest_buckets:
                 if src_bucket.name == dest_bucket.name:
                     if bidirection:
-                        src_bucket.kvs[1] = self.__merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                        self.__merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
                     dest_bucket.kvs[1] = src_bucket.kvs[1]
 
     def merge_buckets(self, src_master, dest_master, bidirection=True):
