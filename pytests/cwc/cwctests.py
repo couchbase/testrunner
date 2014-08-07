@@ -116,7 +116,7 @@ class CWCTests(CWCBaseTest):
                     retry += 1
                     self.sleep(5)
                 if retry == 5:
-                    self.log.error("failed to collect log after {0} at node {1}"
+                    self.log.error("failed to collect log after {0} try at node {1}"
                                    .format(retry, node.replace("ns_1@", "")))
                     node_failed_to_collect.append(node)
         if not node_failed_to_collect:
@@ -142,6 +142,41 @@ class CWCTests(CWCBaseTest):
         else:
             self.fail("Cluster-wide collectinfo failed to upload log at node(s) {0}" \
                            .format(node_failed_to_uploaded))
+
+    def test_cli_start_collect_log(self):
+        command = "couchbase-cli collect-logs-start"
+        rest = RestConnection(self.master)
+        shell = RemoteMachineShellConnection(self.master)
+        num_node_collect = self.cli_collect_nodes
+        if "--all-nodes" not in str(self.cli_collect_nodes) and self.nodes_init > 1:
+            self.cli_collect_nodes = self._cli_generate_random_collecting_node(rest)
+            num_node_collect = '--nodes="{0}"'.format(self.cli_collect_nodes)
+        o, e = shell.execute_command("{0}{1} -c {2}:8091 -u Administrator -p password {3} " \
+                                     .format(self.bin_path, command, self.master.ip, num_node_collect))
+        shell.log_command_output(o, e)
+        """ output when --nodes is used
+                ['NODES: ns_1@12,ns_1@11,ns_1@10', 'SUCCESS: Log collection started']
+            output when --all-nodes is used
+                'SUCCESS: Log collection started' """
+        status_check = o
+        if "--all-nodes" not in str(self.cli_collect_nodes):
+            status_check = o[1]
+        if "SUCCESS" in status_check:
+            self.log.info("start monitoring cluster-wide collectinfo using CLI ...")
+            collected, uploaded, cancel_collect = \
+                   self._cli_monitor_collecting_log(shell, timeout=1200)
+            if collected:
+                self._cli_verify_log_file(shell)
+            if self.upload and uploaded:
+                self._cli_verify_log_uploaded(shell)
+            if self.cli_cancel_collect:
+                if cancel_collect:
+                    self.log.info("Logs collection were cancelled by CLI")
+                else:
+                    self.fail("Failed to cancel log collection by CLI")
+            shell.disconnect()
+        elif o and "ERROR" in o[0]:
+            self.fail("ERROR:  {0}".format(o[0]))
 
     def _generate_random_collecting_node(self, rest):
         random_nodes = []
