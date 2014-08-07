@@ -323,6 +323,7 @@ class BuildQuery(object):
         build.architecture_type = architecture_type
 
         os_name = ""
+        setup = ""
         unix_deliverable_type = ["deb", "rpm", "zip"]
         if deliverable_type in unix_deliverable_type:
             if "rel" not in version and toy == "":
@@ -330,14 +331,19 @@ class BuildQuery(object):
             else:
                 build.product_version = version
         if "exe" in deliverable_type:
-            os_name= "windows-"
-            if "rel" in version:
+            if "3.0.0" not in version:
+                setup = "setup."
+            else:
+                os_name= "windows-"
+            if "rel" in version and "3.0.0" in version:
                 build.product_version = version.replace("-rel", "")
+            elif "rel" not in version and "3.0.0" not in version:
+                build.product_version = version + "-rel"
             else:
                 build.product_version = version
-            if "couchbase-server" in edition_type:
+            if "couchbase-server" in edition_type and "3.0.0" in version:
                 edition_type = edition_type.replace("couchbase-", "couchbase_")
-            if "x86_64" in architecture_type:
+            if "x86_64" in architecture_type and "3.0.0" in version:
                 build.architecture_type = "amd64"
 
         if "toy" in version and toy != "":
@@ -348,12 +354,12 @@ class BuildQuery(object):
         version_join_char = "_"
         if toy is not "":
             joint_char = "-"
-        if "exe" in deliverable_type:
+        if "exe" in deliverable_type and "3.0.0" in version:
             joint_char = "-"
             version_join_char = "-"
 
         build.name = edition_type + joint_char + os_name + build.architecture_type + \
-                     version_join_char + build.product_version + "." + build.deliverable_type
+                     version_join_char + build.product_version + "." + setup + build.deliverable_type
         build.url = repo + build.name
 
         """ reset build.architecture back to x86_64 in windows """
