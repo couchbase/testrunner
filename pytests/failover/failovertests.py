@@ -416,11 +416,11 @@ class FailoverTests(FailoverBaseTest):
     def run_mutation_operations(self):
         mutation_ops_tasks = []
         if("create" in self.doc_ops):
-            mutation_ops_tasks += self._async_load_all_buckets(self.master, self.gen_create, "create", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
+            mutation_ops_tasks += self._async_load_all_buckets(self.master, self.gen_create, "create", 0)
         if("update" in self.doc_ops):
-            mutation_ops_tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
+            mutation_ops_tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
         if("delete" in self.doc_ops):
-            mutation_ops_tasks += self._async_load_all_buckets(self.master, self.gen_delete, "delete", 0,  batch_size=20000, pause_secs=5, timeout_secs=180)
+            mutation_ops_tasks += self._async_load_all_buckets(self.master, self.gen_delete, "delete", 0)
         try:
             for task in mutation_ops_tasks:
                     task.result()
@@ -430,11 +430,11 @@ class FailoverTests(FailoverBaseTest):
     def run_mutation_operations_after_failover(self):
         mutation_ops_tasks = []
         if("create" in self.doc_ops):
-            mutation_ops_tasks += self._async_load_all_buckets(self.master, self.afterfailover_gen_create, "create", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
+            mutation_ops_tasks += self._async_load_all_buckets(self.master, self.afterfailover_gen_create, "create", 0)
         if("update" in self.doc_ops):
-            mutation_ops_tasks += self._async_load_all_buckets(self.master, self.afterfailover_gen_update, "update", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
+            mutation_ops_tasks += self._async_load_all_buckets(self.master, self.afterfailover_gen_update, "update", 0)
         if("delete" in self.doc_ops):
-            mutation_ops_tasks += self._async_load_all_buckets(self.master, self.afterfailover_gen_delete, "delete", 0,  batch_size=20000, pause_secs=5, timeout_secs=180)
+            mutation_ops_tasks += self._async_load_all_buckets(self.master, self.afterfailover_gen_delete, "delete", 0)
         try:
             for task in mutation_ops_tasks:
                 task.result()
