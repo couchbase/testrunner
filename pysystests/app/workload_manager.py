@@ -1033,7 +1033,8 @@ class Template(object):
         self.flags = params["flags"]
         self.cc_queues = params["cc_queues"]
         self.kv = params["kv"]
-        self.size = params["size"]
+        self.size = params.get("size") or ['128']
+        self.size = map(int, self.size)
         self.indexed_keys = []
 
         # cache

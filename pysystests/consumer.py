@@ -1,3 +1,5 @@
+import re
+import sys
 import datetime
 import time
 import json
@@ -54,6 +56,7 @@ class SDKClient(threading.Thread):
         self.bucket = task['bucket']
         self.password  = task['password']
         self.template = task['template']
+        self.default_tsizes = [128, 256]
         self.create_count = task['create_count']/self.op_factor
         self.update_count = task['update_count']/self.op_factor
         self.get_count = task['get_count']/self.op_factor
@@ -181,22 +184,25 @@ class SDKClient(threading.Thread):
 
     def do_cycle(self):
 
+        sizes = self.template.get('size') or self.default_tsizes
+        t_size = sizes[random.randint(0,len(sizes)-1)]
+        self.template['t_size'] = t_size
+
         if self.create_count > 0:
 
             count = self.create_count
             docs_to_expire = self.exp_count
-
             # check if we need to expire some docs
             if docs_to_expire > 0:
 
                 # create an expire batch
-                self.mset(self.template['kv'], docs_to_expire, ttl = self.ttl)
+                self.mset(self.template, docs_to_expire, ttl = self.ttl)
                 count = count - docs_to_expire
 
-            self.mset(self.template['kv'], count)
+            self.mset(self.template, count)
 
         if self.update_count > 0:
-            self.mset_update(self.template['kv'], self.update_count)
+            self.mset_update(self.template, self.update_count)
 
         if self.get_count > 0:
             self.mget(self.get_count)
@@ -211,6 +217,7 @@ class SDKClient(threading.Thread):
         cursor = 0
         j = 0
 
+        template = resolveTemplate(template)
         for j in xrange(count):
             self.i = self.i+1
             msg[self.name+str(self.i)] = template
@@ -249,6 +256,7 @@ class SDKClient(threading.Thread):
 
         msg = {}
         batches = self.getKeys(count)
+        template = resolveTemplate(template)
         if len(batches) > 0:
 
             for batch in batches:
@@ -523,6 +531,12 @@ class SDKProcess(Process):
 def _random_string(length):
     return (("%%0%dX" % (length * 2)) % random.getrandbits(length * 8)).encode("ascii")
 
+def _random_int(length):
+    return random.randint(10**(length-1), (10**length) -1)
+
+def _random_float(length):
+    return _random_int(length)/(10.0**(length/2))
+
 def kill_nprocs(id_, kill_num = None):
 
     if id_ in PROCSSES:
@@ -588,6 +602,60 @@ def init(message):
 
 
 
+
+def resolveTemplate(template):
+
+    conversionFuncMap = {
+        'str' : lambda n : _random_string(n),
+        'int' : lambda n : _random_int(n),
+        'flo' : lambda n : _random_float(n),
+        'boo' : lambda n : (True, False)[random.randint(0,1)],
+    }
+
+    def convToType(val):
+        mObj = re.search(r"(.*)(\$)([A-Za-z]+)(\d+)?(.*)", val)
+        if mObj:
+            prefix, magic, type_, len_, suffix = mObj.groups()
+            len_ = len_ or 5
+            if type_ in conversionFuncMap.keys():
+                val = conversionFuncMap[type_](int(len_))
+                val = "{}{}{}".format(prefix, val, suffix)
+
+        return val
+
+    def resolveList(li):
+        rc = []
+        for item in li:
+            val = item
+            if type(item) == list:
+                val = resolveList(item)
+            elif item and '$' in item:
+                val = convToType(item)
+            rc.append(val)
+
+        return rc
+    def resolveDict(di):
+        rc = {}
+        for k,v in di.iteritems():
+            val = v
+            if type(v) == dict:
+                val = resolveDict(v)
+            elif type(v) == list:
+                val = resolveList(v)
+            elif v and '$' in v:
+                val = convToType(v)
+
+            rc[k] = val
+        return rc
+
+    t_size = template['t_size']
+    kv_template = resolveDict(template['kv'])
+    kv_size = sys.getsizeof(kv_template)/8
+    if  kv_size < t_size:
+        padding = _random_string(t_size - kv_size)
+        kv_template.update({"padding" : padding})
+
+    return kv_template
 
 def main():
     args = parser.parse_args()
