@@ -151,14 +151,20 @@ class CWCTests(CWCBaseTest):
         if "--all-nodes" not in str(self.cli_collect_nodes) and self.nodes_init > 1:
             self.cli_collect_nodes = self._cli_generate_random_collecting_node(rest)
             num_node_collect = '--nodes="{0}"'.format(self.cli_collect_nodes)
-        o, e = shell.execute_command("{0}{1} -c {2}:8091 -u Administrator -p password {3} " \
-                                     .format(self.bin_path, command, self.master.ip, num_node_collect))
+        if not self.cli_upload:
+            o, e = shell.execute_command("{0}{1} -c {2}:8091 -u Administrator -p password {3} " \
+                             .format(self.bin_path, command, self.master.ip, num_node_collect))
+        else:
+            o, e = shell.execute_command("{0}{1} -c {2}:8091 -u Administrator -p password {3} --upload \
+                           --upload-host='{4}' --customer='{5}' --ticket='{6}' " .format(self.bin_path, \
+                           command, self.master.ip, num_node_collect, self.uploadHost, self.customer, \
+                           self.ticket))
         shell.log_command_output(o, e)
         """ output when --nodes is used
                 ['NODES: ns_1@12,ns_1@11,ns_1@10', 'SUCCESS: Log collection started']
             output when --all-nodes is used
                 'SUCCESS: Log collection started' """
-        status_check = o
+        status_check = o[0]
         if "--all-nodes" not in str(self.cli_collect_nodes):
             status_check = o[1]
         if "SUCCESS" in status_check:
@@ -167,7 +173,7 @@ class CWCTests(CWCBaseTest):
                    self._cli_monitor_collecting_log(shell, timeout=1200)
             if collected:
                 self._cli_verify_log_file(shell)
-            if self.upload and uploaded:
+            if self.cli_upload and uploaded:
                 self._cli_verify_log_uploaded(shell)
             if self.cli_cancel_collect:
                 if cancel_collect:

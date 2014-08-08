@@ -30,6 +30,7 @@ class CWCBaseTest(BaseTestCase):
         self.cancel_collect = self.input.param("cancel_collect", False)
         self.cli_collect_nodes = self.input.param("cli_collect_nodes", "--all-nodes")
         self.cli_cancel_collect = self.input.param("cli_cancel_collect", False)
+        self.cli_upload = self.input.param("cli_upload", False)
         self.shutdown_nodes = self.input.param("shutdown_nodes", None)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
