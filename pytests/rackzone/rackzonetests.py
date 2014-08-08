@@ -126,8 +126,14 @@ class RackzoneTests(RackzoneBaseTest):
             self.log.info("create zone {0}".format(zone_name))
             rest.add_zone(zone_name)
             if rest.is_zone_exist(zone_name):
-                rest.shuffle_nodes_in_zones(moved_node, default_zone, zone_name)
-                rest.delete_zone(default_zone)
+                self.log.info("Move node {0} from zone {1} to zone {2}" \
+                              .format(moved_node, default_zone, zone_name))
+                status = rest.shuffle_nodes_in_zones(moved_node, default_zone, zone_name)
+                if status:
+                    rest.delete_zone(default_zone)
+                else:
+                    self.fail("Failed to move node {0} from zone {1} to zone {2}" \
+                              .format(moved_node, default_zone, zone_name))
                 if not rest.is_zone_exist(default_zone):
                     self.log.info("successful delete default zone")
                 else:
