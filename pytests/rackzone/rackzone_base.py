@@ -50,6 +50,7 @@ class RackzoneBaseTest(BaseTestCase):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             shell.start_couchbase()
+            self.sleep(7, "Time needed for couchbase server starts completely.")
         super(RackzoneBaseTest, self).tearDown()
         serverInfo = self.servers[0]
         rest = RestConnection(serverInfo)
