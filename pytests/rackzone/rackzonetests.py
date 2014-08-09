@@ -322,6 +322,8 @@ class RackzoneTests(RackzoneBaseTest):
         InstallerJob().parallel_install([self.servers[0]], params)
 
         """ reset master node to new node to teardown cluster """
+        self.log.info("Start to clean up cluster")
+        self.master = self.servers[1]
         self.servers = self.servers[1:]
 
     def _verify_zone(self, name):
