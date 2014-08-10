@@ -76,7 +76,6 @@ class FailoverTests(FailoverBaseTest):
         self.load_initial_data()
         if not self.withMutationOps:
             self.run_mutation_operations()
-
         # Perform View Creation Tasks and check for completion if required before failover
         if self.withViewsOps:
             self.run_view_creation_operations(self.servers)
@@ -84,9 +83,11 @@ class FailoverTests(FailoverBaseTest):
                 self.query_and_monitor_view_tasks(self.servers)
 
         # Take snap-shot of data set used for validaiton
-        record_static_data_set = self.get_data_set_all(self.servers, self.buckets, path = None)
+        record_static_data_set ={}
         prev_vbucket_stats = {}
         prev_failover_stats = {}
+        if not self.withMutationOps:
+            record_static_data_set = self.get_data_set_all(self.servers, self.buckets, path = None)
 
         # Capture  vbucket and failover stats if test version >= 2.5.*
         if self.version_greater_than_2_5 and self.upr_check:

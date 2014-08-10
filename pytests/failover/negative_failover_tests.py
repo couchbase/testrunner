@@ -115,6 +115,92 @@ class NegativeFailoverTests(FailoverBaseTest):
         except Exception, ex:
             self.assertTrue(("recoveryType" in str(ex)),"unexpected exception {0}".format(ex))
 
+    def failure_recovery_delta_node_with_failover_node(self):
+        try:
+            self.rest = RestConnection(self.master)
+            chosen = RebalanceHelper.pick_nodes(self.master, howmany=2)
+            # Mark Node(s) for failover
+            success_failed_over = self.rest.fail_over(chosen[0].id, graceful=False)
+            success_failed_over = self.rest.fail_over(chosen[1].id, graceful=False)
+            # Mark Node for full recovery
+            if success_failed_over:
+                self.rest.set_recovery_type(otpNode=chosen[0].id, recoveryType="delta")
+            servers_out = self.add_remove_servers(self.servers,[],[],[chosen[1]])
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],servers_out)
+            rebalance.result()
+        except Exception, ex:
+            self.assertTrue(("deltaRecoveryNotPossible" in str(ex)),"unexpected exception {0}".format(ex))
+
+    def failure_recovery_delta_node_before_rebalance_in(self):
+        try:
+            self.rest = RestConnection(self.master)
+            chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
+            # Mark Node for failover
+            success_failed_over = self.rest.fail_over(chosen[0].id, graceful=False)
+            # Mark Node for full recovery
+            if success_failed_over:
+                self.rest.set_recovery_type(otpNode=chosen[0].id, recoveryType="delta")
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [])
+            rebalance.result()
+        except Exception, ex:
+            self.assertTrue(("deltaRecoveryNotPossible" in str(ex)),"unexpected exception {0}".format(ex))
+
+    def failure_recovery_delta_node_after_add_node(self):
+        try:
+            self.rest = RestConnection(self.master)
+            chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
+            self.rest.add_node(self.master.rest_username, self.master.rest_password,self.servers[self.nodes_init].ip,self.servers[self.nodes_init].port)
+            # Mark Node for failover
+            success_failed_over = self.rest.fail_over(chosen[0].id, graceful=False)
+            # Mark Node for full recovery
+            if success_failed_over:
+                self.rest.set_recovery_type(otpNode=chosen[0].id, recoveryType="delta")
+            self.nodes = self.rest.node_statuses()
+            self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[])
+            self.assertFalse(self.rest.monitorRebalance(stop_if_loop=True), msg="Rebalance did not fail as expected")
+        except Exception, ex:
+            self.assertTrue(("deltaRecoveryNotPossible" in str(ex)),"unexpected exception {0}".format(ex))
+
+    def failure_recovery_delta_node_after_eject_node(self):
+        try:
+            self.rest = RestConnection(self.master)
+            eject_out_node = self.find_node_info(self.master,self.servers[self.nodes_init-1])
+            chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
+            self.rest.eject_node(self.master.rest_username, self.master.rest_password,self.servers[self.nodes_init-1])
+            # Mark Node for failover
+            success_failed_over = self.rest.fail_over(chosen[0].id, graceful=False)
+            # Mark Node for full recovery
+            if success_failed_over:
+                self.rest.set_recovery_type(otpNode=chosen[0].id, recoveryType="delta")
+            self.nodes = self.rest.node_statuses()
+            self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[chosen[0].id,eject_out_node.id])
+            self.assertFalse(self.rest.monitorRebalance(stop_if_loop=True), msg="Rebalance did not fail as expected")
+        except Exception, ex:
+            self.assertTrue(("deltaRecoveryNotPossible" in str(ex)),"unexpected exception {0}".format(ex))
+
+    def failure_recovery_delta_node_before_rebalance_in_out(self):
+        try:
+            self.rest = RestConnection(self.master)
+            chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
+            # Mark Node for failover
+            success_failed_over = self.rest.fail_over(chosen[0].id, graceful=False)
+            # Mark Node for full recovery
+            if success_failed_over:
+                self.rest.set_recovery_type(otpNode=chosen[0].id, recoveryType="delta")
+            ejectedNodes  = []
+            self.rest.add_node(self.master.rest_username, self.master.rest_password,
+                self.servers[self.nodes_init].ip,self.servers[self.nodes_init].port)
+            self.rest.add_node(self.master.rest_username, self.master.rest_password,
+                self.servers[self.nodes_init+1].ip,self.servers[self.nodes_init+1].port)
+            self.nodes = self.rest.node_statuses()
+            for server in self.nodes:
+                if server.ip == self.servers[self.nodes_init].ip:
+                   ejectedNodes.append(server.id)
+            self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=ejectedNodes)
+            self.assertFalse(self.rest.monitorRebalance(stop_if_loop=True), msg="Rebalance did not fail as expected")
+        except Exception, ex:
+            self.assertTrue(("deltaRecoveryNotPossible" in str(ex)),"unexpected exception {0}".format(ex))
+
     def graceful_failover_unhealthy_node_not_allowed(self):
         try:
             self.rest = RestConnection(self.master)
@@ -126,12 +212,6 @@ class NegativeFailoverTests(FailoverBaseTest):
             self.assertFalse(success_failed_over," Graceful failover allowed for unhealthy node")
         finally:
             self.start_server(self.servers[1])
-
-    def get_nodes(self,server):
-        self.rest = RestConnection(self.master)
-        nodes = self.rest.node_statuses()
-        nodes = [node.id for node in nodes]
-        return nodes
 
     def stop_server(self, node):
         """ Method to stop a server which is subject to failover """
@@ -159,3 +239,4 @@ class NegativeFailoverTests(FailoverBaseTest):
                     self.log.info("Membase started")
                 shell.disconnect()
                 break
+

@@ -535,20 +535,27 @@ class DataCollector(object):
                 client = MemcachedClient(host=server.ip, port=port)
                 stats = client.stats('failovers')
                 map_data = {}
+                num_map ={}
                 for o in stats.keys():
                     tokens = o.split(":")
                     vb = tokens[0]
                     key = tokens[1]
                     value = stats[o].split()
+                    num = -1
                     if len(tokens)  ==  3:
                         vb = tokens[0]
+                        num = int(tokens[1])
                         key = tokens[2]
-                    if vb in map_data.keys():
+                    if vb in map_data.keys() and (num == num_map[vb] or num > num_map[vb]):
                         map_data[vb][key] = value[0]
-                    else:
+                        num_map[vb] = num
+                    elif vb in map_data.keys() and key == "num_entries":
+                        map_data[vb][key] = value[0]
+                    elif vb not in map_data.keys():
                         m = {}
                         m[key] = value[0]
                         map_data[vb] = m
+                        num_map[vb] = num
                 if perNode:
                     dataMap[server.ip] = map_data
                 else:

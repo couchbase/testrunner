@@ -1354,3 +1354,32 @@ class BaseTestCase(unittest.TestCase):
             self.assertTrue(str(json.loads(rq_content)["errors"]).find("Allowed range is 2 - 100") > -1, \
                             "Error 'Allowed range is 2 - 100' expected, but was '{0}'".format(str(json.loads(rq_content)["errors"])))
             self.log.info("Response contains error = '%(errors)s' as expected" % json.loads(rq_content))
+
+    def add_remove_servers(self, servers = [], initial_list = [], remove_list = [], add_list = []):
+        """ Add or Remove servers from server list """
+        initial_list = copy.deepcopy(initial_list)
+        for server in self.servers:
+            for add_server in add_list:
+                if server.ip == add_server.ip:
+                    initial_list.append(add_server)
+        for server in initial_list:
+            for remove_server in remove_list:
+                if server.ip == remove_server.ip:
+                    initial_list.remove(server)
+        return initial_list
+
+    def get_nodes(self,server):
+        """ Get Nodes from list of server """
+        rest = RestConnection(self.master)
+        nodes = rest.get_nodes()
+        return nodes
+
+    def find_node_info(self,master,node):
+        """ Get Nodes from list of server """
+        target_node = None
+        rest = RestConnection(master)
+        nodes = rest.get_nodes()
+        for server in nodes:
+            if server.ip == node.ip:
+                target_node = server
+        return target_node
