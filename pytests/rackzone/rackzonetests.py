@@ -290,6 +290,7 @@ class RackzoneTests(RackzoneBaseTest):
             else:
                 InstallerJob().parallel_install([self.servers[int(self.nodes_init) - (i - 1)]], params)
                 self.cluster.rebalance([ini_servers[0]], [self.servers[int(self.nodes_init) - (i -1)]], [self.servers[int(self.nodes_init) - i]])
+                self.sleep(12, "wait 12 seconds after rebalance")
                 if i < int(self.nodes_init):
                     try:
                         self.log.info("try to create zone {0} when cluster is not completely EE".format(zone_name))
