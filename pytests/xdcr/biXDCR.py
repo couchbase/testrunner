@@ -73,6 +73,8 @@ class bidirectional(XDCRReplicationBaseTest):
         self.sleep(self.wait_timeout * 2)
 
         # Merging the keys as keys are actually replicated.
+        temp_expires = self._expires
+        self._expires = 0   # Assigning it to 0, so that merge_buckets don't wait for expiration here.
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
         tasks = []
@@ -88,8 +90,12 @@ class bidirectional(XDCRReplicationBaseTest):
         for task in tasks:
             task.result()
 
+        self._expires = temp_expires
         if self._wait_for_expiration and ("update" in self._doc_ops or "update" in self._doc_ops_dest):
             self.sleep(self._expires)
+
+        # Merging the keys for updated/deleted keys.
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
         self.verify_results(verify_src=True)
 

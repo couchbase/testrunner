@@ -1157,12 +1157,13 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
         for key in valid_keys_second:
             # replace/add the values for each key in first kvs
-            partition1 = kv_store_first[kvs_num].acquire_partition(key)
-            partition2 = kv_store_second[kvs_num].acquire_partition(key)
-            key_add = partition2.get_key(key)
-            partition1.set(key, key_add["value"], key_add["expires"], key_add["flag"])
-            kv_store_first[kvs_num].release_partition(key)
-            kv_store_second[kvs_num].release_partition(key)
+            if key not in valid_keys_first:
+                partition1 = kv_store_first[kvs_num].acquire_partition(key)
+                partition2 = kv_store_second[kvs_num].acquire_partition(key)
+                key_add = partition2.get_key(key)
+                partition1.set(key, key_add["value"], key_add["expires"], key_add["flag"])
+                kv_store_first[kvs_num].release_partition(key)
+                kv_store_second[kvs_num].release_partition(key)
 
         for key in deleted_keys_second:
             # add deleted keys to first kvs if the where deleted only in second kvs
@@ -1290,7 +1291,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                 for task in tasks:
                     task.result(timeout)
                 return True
-            except  MemcachedError as e:
+            except MemcachedError as e:
                 self.log.info("verifying ...")
                 self.log.info("Not able to fetch data. Error is %s", (e.message))
                 return False
