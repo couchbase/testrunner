@@ -4,7 +4,6 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.api.exception import ServerUnavailableException, XDCRException
-from memcacheConstants import ERR_NOT_FOUND
 from random import randrange
 from threading import Thread
 
@@ -82,9 +81,9 @@ class bidirectional(XDCRReplicationBaseTest):
         if "update" in self._doc_ops_dest:
             tasks += self._async_load_all_buckets(self.dest_master, self.gen_update, "update", self._expires)
         if "delete" in self._doc_ops:
-            tasks += self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0, ignore_errors=[ERR_NOT_FOUND])
+            tasks += self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
         if "delete" in self._doc_ops_dest:
-            tasks += self._async_load_all_buckets(self.dest_master, self.gen_delete, "delete", 0, ignore_errors=[ERR_NOT_FOUND])
+            tasks += self._async_load_all_buckets(self.dest_master, self.gen_delete, "delete", 0)
 
         for task in tasks:
             task.result()

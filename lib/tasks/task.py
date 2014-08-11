@@ -528,11 +528,10 @@ class XdcrStatsWaitTask(StatsWaitTask):
         self.set_result(True)
 
 class GenericLoadingTask(Thread, Task):
-    def __init__(self, server, bucket, kv_store, ignore_errors=[]):
+    def __init__(self, server, bucket, kv_store):
         Thread.__init__(self)
         Task.__init__(self, "load_gen_task")
         self.kv_store = kv_store
-        self.ignore_errors = ignore_errors
         self.client = VBucketAwareMemcached(RestConnection(server), bucket)
 
     def execute(self, task_manager):
@@ -634,9 +633,7 @@ class GenericLoadingTask(Thread, Task):
             self.client.delete(key)
             partition.delete(key)
         except MemcachedError as error:
-            if error.status in self.ignore_errors:
-                partition.delete(key)
-            elif error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+            if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
                 pass
             else:
                 self.state = FINISHED
@@ -685,8 +682,8 @@ class GenericLoadingTask(Thread, Task):
 
 class LoadDocumentsTask(GenericLoadingTask):
     def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0,
-                 only_store_hash=True, proxy_client=None, ignore_errors=[]):
-        GenericLoadingTask.__init__(self, server, bucket, kv_store, ignore_errors)
+                 only_store_hash=True, proxy_client=None):
+        GenericLoadingTask.__init__(self, server, bucket, kv_store)
         self.generator = generator
         self.op_type = op_type
         self.exp = exp
@@ -755,7 +752,7 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
         self.set_result(True)
 
 class BatchedLoadDocumentsTask(GenericLoadingTask):
-    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=True, batch_size=100, pause_secs=1, timeout_secs=30, ignore_errors=[]):
+    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=True, batch_size=100, pause_secs=1, timeout_secs=30):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
         self.batch_generator = BatchedDocumentGenerator(generator, batch_size)
         self.op_type = op_type
@@ -765,7 +762,6 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
         self.batch_size = batch_size
         self.pause = pause_secs
         self.timeout = timeout_secs
-        self.ignore_errors = ignore_errors
 
     def has_next(self):
         has = self.batch_generator.has_next()
@@ -820,9 +816,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
                     self.client.delete(key)
                     partition.delete(key)
                 except MemcachedError as error:
-                    if error.status in self.ignore_errors:
-                        partition.delete(key)
-                    elif error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+                    if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
                         pass
                     else:
                         self.state = FINISHED
