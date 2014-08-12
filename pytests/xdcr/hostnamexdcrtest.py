@@ -25,3 +25,35 @@ class HostnameXdcrTest(XDCRReplicationBaseTest, HostnameBaseTests):
         for i in xrange(len(self.dest_nodes)):
             self.dest_nodes[i].hostname = self.hostnames[self.dest_nodes[i]]
         self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, False)
+
+    def test_replication_with_view_queries(self):
+        self.verify_referenced_by_names(self.src_nodes, self.hostnames)
+        self.verify_referenced_by_names(self.dest_nodes, self.hostnames)
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.sleep(self.wait_timeout)
+        src_buckets = self._get_cluster_buckets(self.src_master)
+        dest_buckets = self._get_cluster_buckets(self.dest_master)
+        for bucket in src_buckets:
+            views = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
+        for bucket in dest_buckets:
+            views = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
+        ddoc_name = "ddoc1"
+        prefix = ("", "dev_")[self._is_dev_ddoc]
+        query = {"full_set" : "true", "stale" : "false"}
+
+        tasks = self.async_create_views(self.src_master, ddoc_name, views, self.default_bucket_name)
+        tasks += self.async_create_views(self.dest_master, ddoc_name, views, self.default_bucket_name)
+        for task in tasks:
+            task.result(self._poll_timeout)
+        tasks = []
+        for view in views:
+            tasks.append(self.cluster.async_query_view(self.src_master, prefix + ddoc_name, view.name, query, self.num_items))
+            tasks.append(self.cluster.async_query_view(self.dest_master, prefix + ddoc_name, view.name, query, self.num_items))
+        for task in tasks:
+            task.result(self._poll_timeout)
+
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+
+        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, False)
+        self.verify_referenced_by_names(self.src_nodes, self.hostnames)
+        self.verify_referenced_by_names(self.dest_nodes, self.hostnames)
