@@ -127,7 +127,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.compare_vbucketseq_failoverlogs(prev_vbucket_stats, prev_failover_stats)
         self.rest = RestConnection(self.master)
         chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
-        result_nodes = self.add_remove_servers(self.servers,self.servers[:self.nodes_init],[self.servers[self.nodes_init-1],chosen[0]],[self.servers[self.nodes_init])
+        result_nodes = self.add_remove_servers(self.servers,self.servers[:self.nodes_init],[self.servers[self.nodes_init-1],chosen[0]],[self.servers[self.nodes_init]])
         self.rest.add_node(self.master.rest_username, self.master.rest_password,self.servers[self.nodes_init].ip,self.servers[self.nodes_init].port)
         # Mark Node for failover
         success_failed_over = self.rest.fail_over(chosen[0].id, graceful=fail_over)
