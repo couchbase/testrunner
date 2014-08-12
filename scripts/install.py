@@ -214,12 +214,16 @@ class Installer(object):
                                                                      product=name)
                 else:
                     builds, changes = BuildQuery().get_all_builds(version=version, timeout=timeout, \
-                                      direct_build_url=direct_build_url, deliverable_type=info.deliverable_type, \
-                                      architecture_type=info.architecture_type, edition_type=name, \
-                                      repo=MV_LATESTBUILD_REPO, toy=toy)
-                    build = BuildQuery().find_build(builds, name, info.deliverable_type,
-                                                        info.architecture_type, version, toy=toy,
-                                                        openssl=openssl, direct_build_url=direct_build_url)
+                                      direct_build_url=direct_build_url, \
+                                      deliverable_type=info.deliverable_type, \
+                                      architecture_type=info.architecture_type, \
+                                      edition_type=name, \
+                                      repo=MV_LATESTBUILD_REPO, toy=toy, \
+                                      distribution_version=info.distribution_version.lower())
+                    build = BuildQuery().find_build(builds, name, info.deliverable_type, \
+                                                    info.architecture_type, version, toy=toy, \
+                                                    openssl=openssl, direct_build_url=direct_build_url, \
+                                                    distribution_version=info.distribution_version.lower())
 
                 if build:
                     if 'amazon' in params:

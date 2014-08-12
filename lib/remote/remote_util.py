@@ -1673,7 +1673,8 @@ class RemoteMachineShellConnection:
                 os_arch += line
                 # at this point we should know if its a linux or windows ditro
             ext = {'Ubuntu': 'deb', 'CentOS': 'rpm',
-                   'Red Hat': 'rpm', "Mac": "zip"}.get(os_distro, '')
+                   'Red Hat': 'rpm', "Mac": "zip",
+                   "Debian": "deb"}.get(os_distro, '')
             arch = {'i686': 'x86', 'i386': 'x86'}.get(os_arch, os_arch)
             info = RemoteMachineInfo()
             info.type = "Linux"

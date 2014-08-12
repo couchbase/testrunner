@@ -68,7 +68,8 @@ class BuildQuery(object):
         #parse build page and create build object
         pass
 
-    def find_build(self, builds, product, type, arch, version, toy='', openssl='', direct_build_url=None):
+    def find_build(self, builds, product, type, arch, version, toy='', openssl='', \
+                   direct_build_url=None, distribution_version=None):
         if direct_build_url is None:
             if not isinstance(builds, list) and builds.url is not None:
                 return builds
@@ -171,13 +172,15 @@ class BuildQuery(object):
         return self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds/sustaining')
 
     def get_all_builds(self, version=None, timeout=None, direct_build_url=None, deliverable_type=None, \
-                       architecture_type=None,edition_type=None, repo=None, toy=""):
+                       architecture_type=None,edition_type=None, repo=None, toy="", \
+                       distribution_version=None):
         try:
             latestbuilds, latestchanges = \
                 self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds', version=version, \
                                            timeout=timeout, direct_build_url=direct_build_url, \
                                            deliverable_type=deliverable_type, architecture_type=architecture_type, \
-                                           edition_type=edition_type,repo=repo, toy=toy)
+                                           edition_type=edition_type,repo=repo, toy=toy, \
+                                           distribution_version=distribution_version)
         except Exception as e:
             latestbuilds, latestchanges = \
                 self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds', \
@@ -189,7 +192,7 @@ class BuildQuery(object):
     #baseurl = 'http://builds.hq.northscale.net/latestbuilds/'
     def _get_and_parse_builds(self, build_page, version=None, timeout=None, direct_build_url=None, \
                               deliverable_type=None, architecture_type=None, edition_type=None, \
-                              repo=None, toy=""):
+                              repo=None, toy="", distribution_version=None):
         builds = []
         changes = []
         if direct_build_url is not None and direct_build_url != "":
@@ -200,7 +203,7 @@ class BuildQuery(object):
              architecture_type is not None and deliverable_type is not None:
             query = BuildQuery()
             build = query.create_build_url(version, deliverable_type, architecture_type, \
-                                           edition_type, repo, toy)
+                                           edition_type, repo, toy, distribution_version)
             return build, changes
         else:
             page = None
@@ -303,11 +306,13 @@ class BuildQuery(object):
                 self.fail("unknown server name")
             return build
 
-    def create_build_url(self, version, deliverable_type, architecture_type, edition_type, repo, toy):
+    def create_build_url(self, version, deliverable_type, architecture_type, edition_type, \
+                         repo, toy, distribution_version):
         build = MembaseBuild()
         """
         version: 3.0.0-xx or 3.0.0-xx-rel
         deliverable_type: deb
+        distribution_version: ubuntu12 or debian7
         architecture_type: x86_64
         edition_type: couchbase-server-enterprise or couchbase-server-community
         repo: http://builds.hq.northscale.net/latestbuilds/
@@ -321,6 +326,7 @@ class BuildQuery(object):
         build.toy = toy
         build.deliverable_type = deliverable_type
         build.architecture_type = architecture_type
+        build.distribution_version = distribution_version
 
         os_name = ""
         setup = ""
@@ -350,6 +356,9 @@ class BuildQuery(object):
             edition_type += "-" + version[:5] + "-toy-" + toy
         if "deb" in deliverable_type and "centos6" in edition_type:
             edition_type = edition_type.replace("centos6", "ubuntu_1204")
+        if "debian" in distribution_version:
+            os_name = "debian7_"
+
         joint_char = "_"
         version_join_char = "_"
         if toy is not "":
