@@ -1204,7 +1204,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             for dest_bucket in dest_buckets:
                 if src_bucket.name == dest_bucket.name and bucket.name == src_bucket.name:
                     if bidirection:
-                        src_bucket.kvs[1] = self.__merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
+                        self.__merge_keys(src_bucket.kvs, dest_bucket.kvs, kvs_num=1)
                     dest_bucket.kvs[1] = src_bucket.kvs[1]
 
     def _wait_for_replication_to_catchup(self, timeout=1200):
