@@ -283,8 +283,8 @@ class BucketOperationHelper():
                         if "Not my vbucket" in log_msg:
                             log_msg = log_msg[:log_msg.find("vBucketMap") + 12] + "..."
                         if "Not my vbucket" in ex_msg:
-                            #reduce output
-                            ex_msg = str(e)[:str(e).find('Not my vbucket') + 14] + "..."
+                            # May receive this while waiting for vbuckets, continue and retry...S
+                            continue
                         log.error("%s: %s" % (log_msg, ex_msg))
                         continue
                     if c.find("\x01") > 0 or c.find("\x02") > 0:
