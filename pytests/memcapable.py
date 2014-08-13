@@ -1110,7 +1110,7 @@ class WarmUpMemcachedTest(unittest.TestCase):
         self.log.info("ep curr_items : {0}, inserted_items {1} directly after kill_memcached ".format(present_count, curr_items))
         self.log.info("ep_warmup_thread directly after kill_memcached: {0}".format(ep_warmup_thread))
         start = time.time()
-        while present_count < curr_items or ep_warmup_thread != "complete":
+        while present_count < curr_items and ep_warmup_thread != "complete":
             if (time.time() - start) <= timeout_in_seconds:
                 stats = self.onenodemc.stats()
                 present_count = int(stats["curr_items"])
@@ -1122,6 +1122,11 @@ class WarmUpMemcachedTest(unittest.TestCase):
                 self.fail("Timed out waiting for warmup")
 
         stats = self.onenodemc.stats()
+        present_count = int(stats["curr_items"])
+        if present_count < curr_items:
+            self.log.error("Warmup failed. Got {0} and expected {1} items".format(present_count, curr_items))
+            self.fail("Warmup failed. Incomplete number of messages after killing memcached")
+
         if "ep_warmup_time" not in stats:
             self.log.error("'ep_warmup_time' was not found in stats:{0}".format(stats))
         warmup_time = int(stats["ep_warmup_time"])
