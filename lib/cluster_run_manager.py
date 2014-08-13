@@ -44,6 +44,7 @@ import threading
 import logging as log
 log.basicConfig(level=log.INFO)
 import subprocess
+import platform
 
 os.environ.copy()
 CTXDIR = os.path.dirname(os.path.abspath(__file__))
@@ -211,9 +212,19 @@ class Node:
         log.info("stopping node {0}".format(self.index))
 
         self.ready.wait()
+
+        if platform.system() == "Windows":
+            log.info("Stopping cluster_run with all sub processes")
+            pid = str(self.instance.pid)
+            args = ["taskkill", "/F", "/T", "/PID", pid]
+            if subprocess.call(args):
+                log.error("taskkill returned with non-null value")
+            else:
+                self.instance.wait()
+            return True
+
         self.instance.kill()
         self.instance.wait()
-
         rc = self.instance.returncode
         expected_rc = signal.SIGKILL*-1
         return (rc == expected_rc)
