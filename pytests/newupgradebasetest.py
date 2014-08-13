@@ -170,7 +170,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             info = remote.extract_remote_info()
         builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5, \
                     deliverable_type=info.deliverable_type, architecture_type=info.architecture_type, \
-                    edition_type="couchbase-server-enterprise", repo=MV_LATESTBUILD_REPO)
+                    edition_type="couchbase-server-enterprise", repo=MV_LATESTBUILD_REPO, \
+                    distribution_version=info.distribution_version.lower())
         self.log.info("finding build %s for machine %s" % (version, server))
 
         if re.match(r'[1-9].[0-9].[0-9]-[0-9]+$', version):
