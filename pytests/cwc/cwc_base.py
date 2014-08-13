@@ -78,6 +78,7 @@ class CWCBaseTest(BaseTestCase):
         command = "couchbase-cli collect-logs-status"
         output, e = shell.execute_command("{0}{1} -c {2}:8091 -u Administrator -p password " \
                                      .format(self.bin_path, command, self.master.ip))
+        shell.log_command_output(output, e)
         result = {}
         if "Status" in output[0]:
             tmp = output[0].split(":")
