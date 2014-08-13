@@ -678,3 +678,37 @@ class unidirectional(XDCRReplicationBaseTest):
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.verify_results(verify_src=True)
+
+    """ Test if replication restarts 60s after idle xdcr following dest bucket flush """
+    def test_idle_xdcr_dest_flush(self):
+        self._load_all_buckets(self.src_master,self.gen_create ,'create', 0)
+        self._wait_for_replication_to_catchup()
+        self.cluster.async_bucket_flush(self.dest_master, 'default')
+        self.sleep(self.wait_timeout)
+        self._wait_for_replication_to_catchup()
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.verify_results(True)
+
+    """ Test if replication restarts 60s after idle xdcr following dest bucket recreate """
+    def test_idle_xdcr_dest_recreate(self):
+        self._load_all_buckets(self.src_master,self.gen_create ,'create', 0)
+        self._wait_for_replication_to_catchup()
+        self.cluster.bucket_delete(self.dest_master, 'default')
+        self._create_buckets(self.dest_nodes)
+        self.sleep(self.wait_timeout)
+        self._wait_for_replication_to_catchup()
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.verify_results(True)
+
+    """ Test if replication restarts 60s after idle xdcr following dest failover """
+    def test_idle_xdcr_dest_failover(self):
+        self._load_all_buckets(self.src_master,self.gen_create ,'create', 0)
+        self._wait_for_replication_to_catchup()
+        tasks = self._async_failover(self.dest_nodes, [self.dest_nodes[-1]])
+        tasks = self._async_rebalance(self.dest_nodes, [], [])
+        for task in tasks:
+            task.result()
+        self.sleep(self.wait_timeout)
+        self._wait_for_replication_to_catchup()
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.verify_results(True)
