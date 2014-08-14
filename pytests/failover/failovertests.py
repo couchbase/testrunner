@@ -219,15 +219,17 @@ class FailoverTests(FailoverBaseTest):
 
         self.log.info("Begin VERIFICATION for Add-back and rebalance")
 
+        self.sleep(60)
+
+        # Verify Stats of cluster and Data is max_verify > 0
+        self.verify_cluster_stats(self.servers, self.master, check_bucket_stats = True)
+
         # Verify recovery Type succeeded if we added-back nodes
         self.verify_for_recovery_type(chosen, serverMap, self.buckets,recoveryTypeMap, fileMapsForVerification, self.deltaRecoveryBuckets)
 
         # Comparison of all data if required
         if not self.withMutationOps:
             self.data_analysis_all(record_static_data_set,self.servers, self.buckets,  path = None, addedItems = None)
-
-        # Verify Stats of cluster and Data is max_verify > 0
-        self.verify_cluster_stats(self.servers, self.master, check_bucket_stats = False)
 
         # Verify if vbucket sequence numbers and failover logs are as expected
         # We will check only for version  > 2.5.* and if the failover is graceful
