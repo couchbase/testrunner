@@ -70,7 +70,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
         servs_in = self.servers[self.nodes_init:self.nodes_init + 1]
         servs_out = self.servers[self.nodes_init - 1:self.nodes_init]
-        result_nodes = list(set(self.servers[:self.nodes_init] + servs_in) - set(servs_out))
+        ejectedNode = self.find_node_info(self.master,self.servers[self.nodes_init-1])
         for task in tasks:
             task.result(self.wait_timeout * 20)
         self._verify_stats_all_buckets(self.servers[:self.nodes_init], timeout=120)
@@ -82,13 +82,18 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.compare_vbucketseq_failoverlogs(prev_vbucket_stats, prev_failover_stats)
         self.rest = RestConnection(self.master)
         self.nodes = self.get_nodes(self.master)
+        result_nodes = self.add_remove_servers(self.servers,self.servers[:self.nodes_init],[self.servers[self.nodes_init-1]],[self.servers[self.nodes_init]])
+        self.rest.add_node(self.master.rest_username, self.master.rest_password,self.servers[self.nodes_init].ip,self.servers[self.nodes_init].port)
         chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
         # Mark Node for failover
         success_failed_over = self.rest.fail_over(chosen[0].id, graceful=False)
         # Mark Node for full recovery
         if success_failed_over:
             self.rest.set_recovery_type(otpNode=chosen[0].id, recoveryType=recoveryType)
-        self.cluster.rebalance(self.servers[:self.nodes_init - 1], servs_in, servs_out)
+        self.nodes = self.rest.node_statuses()
+        self.rest.rebalance(otpNodes=[node.id for node in self.nodes],
+                               ejectedNodes=[ejectedNode.id])
+        self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg="Rebalance failed")
         self._verify_stats_all_buckets(result_nodes, timeout=120)
         self._wait_for_stats_all_buckets(result_nodes)
         self.sleep(10)
