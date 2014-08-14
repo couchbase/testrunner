@@ -1355,15 +1355,15 @@ class BaseTestCase(unittest.TestCase):
                             "Error 'Allowed range is 2 - 100' expected, but was '{0}'".format(str(json.loads(rq_content)["errors"])))
             self.log.info("Response contains error = '%(errors)s' as expected" % json.loads(rq_content))
 
-    def add_remove_servers(self, servers = [], initial_list = [], remove_list = [], add_list = []):
+    def add_remove_servers(self, servers = [], list = [], remove_list = [], add_list = []):
         """ Add or Remove servers from server list """
-        initial_list = copy.deepcopy(initial_list)
-        for server in self.servers:
-            for add_server in add_list:
+        initial_list = copy.deepcopy(list)
+        for add_server in add_list:
+            for server in self.servers:
                 if server.ip == add_server.ip:
                     initial_list.append(add_server)
-        for server in initial_list:
-            for remove_server in remove_list:
+        for remove_server in remove_list:
+            for server in initial_list:
                 if server.ip == remove_server.ip:
                     initial_list.remove(server)
         return initial_list
