@@ -189,12 +189,12 @@ class QueryTests(BaseTestCase):
         self.negative_common_body(queries_errors)
 
     def test_alias_from_clause(self):
-        queries_templates = ['SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ORDER BY points' ,
-                   'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test WHERE test.$int0 >0'
+        queries_templates = ['SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ORDER BY points'  % (bucket.name),
+                   'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test WHERE test.$int0 >0'  % (bucket.name) +\
                    ' ORDER BY points',
-                   'SELECT tasks_points.task1 AS points FROM %s AS test '
+                   'SELECT tasks_points.task1 AS points FROM %s AS test ' % (bucket.name) +\
                        'WHERE FLOOR(test.test_rate) >0 ORDER BY points',
-                   'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test '
+                   'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ' % (bucket.name) +\
                    'GROUP BY test.$obj0.$_obj0_int0 ORDER BY points']
         for bucket in self.buckets:
             for query_template in queries_templates:

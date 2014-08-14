@@ -1671,7 +1671,7 @@ class QueryTests(BaseTestCase):
         except AttributeError, ex:
             raise Exception("Test requires python 2.7 : SKIPPING TEST")
         now_time_str = "%s-%02d-%02d" % (now_time.year, now_time.month, now_time.day)
-        self.query = "select str_to_millis(%s) as now" % now_time_str
+        self.query = "select str_to_millis('%s') as now" % now_time_str
         res = self.run_cbq_query()
         self.assertTrue((res["resultset"][0]["now"] < (now_millis)) and\
                         (res["resultset"][0]["now"] > (now_millis - 5184000000)),
