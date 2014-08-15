@@ -21,6 +21,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from mc_bin_client import MemcachedError
 from remote.remote_util import RemoteUtilHelper
 from couchbase.stats_tools import StatsCommon
+from scripts.collect_server_info import cbcollectRunner
 
 from couchbase.documentgenerator import BlobGenerator
 from membase.api.exception import ServerUnavailableException, XDCRException
@@ -150,8 +151,17 @@ class XDCRBaseTest(unittest.TestCase):
                 self._do_cleanup()
                 return
 
+            # Grab cbcollect before we cleanup
+            if test_failed and TestInputSingleton.input.param("get-cbcollect-info", True):
+                try:
+                    self.__get_cbcollect_info()
+                    # do not collect again after teardown
+                    TestInputSingleton.input.test_params["get-cbcollect-info"] = False
+                except:
+                    pass # let's try again after clean up
+
             cluster_run = len(set([server.ip for server in self._servers])) == 1
-            if not cluster_run and self.collect_data_files:
+            if test_failed and not cluster_run and self.collect_data_files:
                 self.__collect_data_files()
 
             if test_failed and (str(self.__class__).find('upgradeXDCR') != -1 or TestInputSingleton.input.param("stop-on-failure", False)):
@@ -184,6 +194,16 @@ class XDCRBaseTest(unittest.TestCase):
         finally:
             self.cluster.shutdown(force=True)
             self._log_finish(self)
+
+    def __get_cbcollect_info(self):
+        path = self._input.param("logs_folder", "/tmp")
+        for server in self.src_nodes+self.dest_nodes:
+            print "grabbing cbcollect from {0}".format(server.ip)
+            path = path or "."
+            try:
+                cbcollectRunner(server, path).run()
+            except:
+                print "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}".format(server.ip)
 
     def __collect_data_files(self):
         logs_folder = self._input.param("logs_folder", "/tmp")
