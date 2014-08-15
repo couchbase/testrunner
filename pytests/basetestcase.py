@@ -1011,7 +1011,7 @@ class BaseTestCase(unittest.TestCase):
             compare = "<="
         comp_map = {}
         comp_map["uuid"] = { 'type' : "string", 'operation': "=="}
-        comp_map["high_seqno"] = { 'type' : "long", 'operation' :compare}
+        comp_map["abs_high_seqno"] = { 'type' : "long", 'operation' :compare}
         comp_map["purge_seqno"] = { 'type' : "string", 'operation' : compare}
 
         new_vbucket_stats = {}
@@ -1033,7 +1033,7 @@ class BaseTestCase(unittest.TestCase):
         self.log.info(" End Verification for vbucket sequence numbers comparison ")
         return new_vbucket_stats
 
-    def compare_per_node_for_vbucket_consistency(self, map1, check_high_seqno=False, check_purge_seqno=False):
+    def compare_per_node_for_vbucket_consistency(self, map1, check_abs_high_seqno=False, check_purge_seqno=False):
         """
             Method to check uuid is consistent on active and replica new_vbucket_stats
         """
@@ -1046,22 +1046,22 @@ class BaseTestCase(unittest.TestCase):
             for node in map1[bucket].keys():
                 for vbucket in map1[bucket][node].keys():
                     uuid = map1[bucket][node][vbucket]['uuid']
-                    high_seqno = map1[bucket][node][vbucket]['high_seqno']
+                    abs_high_seqno = map1[bucket][node][vbucket]['abs_high_seqno']
                     purge_seqno = map1[bucket][node][vbucket]['purge_seqno']
                     if vbucket in map.keys():
                         if  map[vbucket]['uuid'] != uuid:
                             logic = False
                             output += "\n bucket {0}, vbucket {1} :: Original in node {2}. UUID {3}, Change in node {4}. UUID {5}".format(bucket, vbucket, nodeMap[vbucket], map[vbucket]['uuid'], node, uuid)
-                        if  check_high_seqno and int(map[vbucket]['high_seqno']) != int(high_seqno):
+                        if  check_abs_high_seqno and int(map[vbucket]['abs_high_seqno']) != int(abs_high_seqno):
                             logic = False
-                            output += "\n bucket {0}, vbucket {1} :: Original in node {2}. UUID {3}, Change in node {4}. UUID {5}".format(bucket, vbucket, nodeMap[vbucket], map[vbucket]['high_seqno'], node, high_seqno)
+                            output += "\n bucket {0}, vbucket {1} :: Original in node {2}. UUID {3}, Change in node {4}. UUID {5}".format(bucket, vbucket, nodeMap[vbucket], map[vbucket]['abs_high_seqno'], node, abs_high_seqno)
                         if  check_purge_seqno and int(map[vbucket]['purge_seqno']) != int(purge_seqno):
                             logic = False
-                            output += "\n bucket {0}, vbucket {1} :: Original in node {2}. UUID {3}, Change in node {4}. UUID {5}".format(bucket, vbucket, nodeMap[vbucket], map[vbucket]['high_seqno'], node, high_seqno)
+                            output += "\n bucket {0}, vbucket {1} :: Original in node {2}. UUID {3}, Change in node {4}. UUID {5}".format(bucket, vbucket, nodeMap[vbucket], map[vbucket]['abs_high_seqno'], node, abs_high_seqno)
                     else:
                         map[vbucket] = {}
                         map[vbucket]['uuid'] = uuid
-                        map[vbucket]['high_seqno'] = high_seqno
+                        map[vbucket]['abs_high_seqno'] = abs_high_seqno
                         map[vbucket]['purge_seqno'] = purge_seqno
                         nodeMap[vbucket] = node
             bucketMap[bucket] = map
@@ -1285,7 +1285,7 @@ class BaseTestCase(unittest.TestCase):
         output = ""
         for bucket in  vbucketseq.keys():
             for  vbucket in vbucketseq[bucket].keys():
-                 seq = vbucketseq[bucket][vbucket]['high_seqno']
+                 seq = vbucketseq[bucket][vbucket]['abs_high_seqno']
                  uuid = vbucketseq[bucket][vbucket]['uuid']
                  fseq = failoverlog[bucket][vbucket]['seq']
                  fuuid = failoverlog[bucket][vbucket]['id']
