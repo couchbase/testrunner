@@ -56,7 +56,8 @@ class FailoverBaseTest(BaseTestCase):
         self.afterfailover_gen_create = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items * 1.6 , end=self.num_items * 2)
         self.afterfailover_gen_update = BlobGenerator('failover', 'failover', self.value_size, start=1 , end=self.num_items/4)
         self.afterfailover_gen_delete = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items * .5 , end=self.num_items* 0.75)
-
+        if self.vbuckets != None and self.vbuckets != self.total_vbuckets:
+            self.total_vbuckets  = self.vbuckets
         self.log.info("==============  FailoverBaseTest setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
 

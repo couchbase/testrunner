@@ -359,7 +359,6 @@ class RebalanceOutTests(RebalanceBaseTest):
             query["limit"] = expected_rows
         query["stale"] = "false"
 
-
         for bucket in self.buckets:
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
 

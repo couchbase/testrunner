@@ -1544,7 +1544,6 @@ class RestConnection(object):
         params = urllib.urlencode({})
         params_dict = {}
         existing_bucket = self.get_bucket_json(bucket)
-        params_dict["ramQuotaMB"] = existing_bucket["quota"]["ram"] / (1024 * 1024)
         if ramQuotaMB:
             params_dict["ramQuotaMB"] = ramQuotaMB
         if authType:
