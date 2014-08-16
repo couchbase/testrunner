@@ -12,7 +12,9 @@ class ConversionUseTransfer(TransferBaseTest):
         self.times_teardown_called = 1
         super(ConversionUseTransfer, self).setUp()
         self.command_options = self.input.param("command_options", '-x rehash=1')
-        self.latest_version = self.input.param('latest_version', '2.1.0-718-rel')
+        self.latest_version = self.input.param('latest_version', None)
+        if self.latest_version is None:
+            self.fail("for the test you need to specify 'latest_version'")
         self.openssl = self.input.param('openssl', '')
 
     def tearDown(self):
