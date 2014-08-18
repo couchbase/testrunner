@@ -9,6 +9,7 @@ from couchbase.cluster import Cluster
 from membase.api.rest_client import Bucket
 import TestInput
 import logger
+import json
 import logging.config
 import os
 import uuid
@@ -61,22 +62,20 @@ Available keys:
  bucket_name= bucket to load (default by default)
  bucket_port=dedicated bucket port if any
  bucket_sasl_pass=sasl password of bucket
- docs_per_day=documents to load per <one day>. 49 by default
+ doc_per_day=documents to load per <one day>. 49 by default
  years=number of years. 2 by default
  flags=flags of items
+ to_dir=a directory to create json docs
 
 Example:
- doc_loader.py -i cluster.ini -p bucket_name=default,docs_per_day=1
- doc_loader.py -i cluster.ini -p docs_per_day=1,bucket_name=sasl,bucket_sasl_pass=pass
+ doc_loader.py -i cluster.ini -p bucket_name=default,doc_per_day=1
+ doc_loader.py -i cluster.ini -p doc_per_day=1,bucket_name=sasl,bucket_sasl_pass=pass
+ doc_loader.py -i cluster.ini -p doc_per_day=1,to_dir=/tmp/my_bucket
 """
     sys.exit(error)
 
-
-class DocLoader():
-    def __init__(self, servers, cluster):
-        self.servers = servers
-        self.master = self.servers[0]
-        self.cluster = cluster
+class DocLoader(object):
+    def __init__(self):
         self.log = logger.Logger.get_logger()
 
     def generate_docs(self, docs_per_day, years):
@@ -110,6 +109,14 @@ class DocLoader():
         self.log.info("Docs are generated.")
         return generators
 
+
+class DocLoaderCouchbase(DocLoader):
+    def __init__(self, servers, cluster):
+        super(DocLoaderCouchbase, self).__init__()
+        self.servers = servers
+        self.master = self.servers[0]
+        self.cluster = cluster
+
     def load(self, generators_load, bucket, exp=0, flag=0,
              kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
              timeout_secs=30, op_type='create'):
@@ -139,6 +146,36 @@ def initialize_bucket(name, port=None, saslPassword=None):
     else:
        return Bucket(name=name, authType="sasl", saslPassword=None)
 
+class DocLoaderDirectory(DocLoader):
+    def __init__(self, server, directory, bucket_name):
+        super(DocLoaderDirectory, self).__init__()
+        self.directory = directory
+        self.server = server
+        self.bucket_name = bucket_name
+
+    def load(self, generators_load):
+        gens_load = []
+        for generator_load in generators_load:
+            gens_load.append(copy.deepcopy(generator_load))
+        items = 0
+        for gen_load in gens_load:
+            items += (gen_load.end - gen_load.start)
+        shell = RemoteMachineShellConnection(self.server)
+        try:
+            self.log.info("Delete directory's content %s/data/default/%s ..." % (self.directory, self.bucket_name))
+            shell.execute_command('rm -rf %s/data/default/*' % self.directory)
+            self.log.info("Create directory %s/data/default/%s..." % (self.directory, self.bucket_name))
+            shell.execute_command('mkdir -p %s/data/default/%s' % (self.directory, self.bucket_name))
+            self.log.info("Load %s documents to %s/data/default/%s..." % (items, self.directory, self.bucket_name))
+            for gen_load in gens_load:
+                for i in xrange(gen_load.end):
+                    key, value = gen_load.next()
+                    out = shell.execute_command("echo '%s' > %s/data/default/%s/%s.json" % (value, self.directory,
+                                                                                            self.bucket_name, key))
+            self.log.info("LOAD IS FINISHED")
+        finally:
+            shell.disconnect()
+
 def main():
     try:
         (opts, args) = getopt.getopt(sys.argv[1:], 'hi:p', [])
@@ -160,15 +197,21 @@ def main():
     bucket_port = input.param("bucket_port", None)
     bucket_sasl_pass = input.param("bucket_sasl_pass", None)
     flag = input.param("flags", 0)
+    to_directory = input.param("to_dir", '')
 
-    cluster = Cluster()
-    try:
-        bucket = initialize_bucket(bucket_name, bucket_port, bucket_sasl_pass)
-        loader = DocLoader(input.servers, cluster)
+    if to_directory:
+        loader = DocLoaderDirectory(input.servers[0], to_directory, bucket_name)
         generators_load = loader.generate_docs(docs_per_day, years)
-        loader.load(generators_load, bucket, flag=flag)
-    finally:
-        cluster.shutdown()
+        loader.load(generators_load)
+    else:
+        cluster = Cluster()
+        try:
+            bucket = initialize_bucket(bucket_name, bucket_port, bucket_sasl_pass)
+            loader = DocLoaderCouchbase(input.servers, cluster)
+            generators_load = loader.generate_docs(docs_per_day, years)
+            loader.load(generators_load, bucket, flag=flag)
+        finally:
+            cluster.shutdown()
 
 if __name__ == "__main__":
     main()
