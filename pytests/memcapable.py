@@ -1110,13 +1110,12 @@ class WarmUpMemcachedTest(unittest.TestCase):
         self.log.info("ep curr_items : {0}, inserted_items {1} directly after kill_memcached ".format(present_count, curr_items))
         self.log.info("ep_warmup_thread directly after kill_memcached: {0}".format(ep_warmup_thread))
         start = time.time()
-        while present_count < curr_items or ep_warmup_thread != "complete":
+        while ep_warmup_thread != "complete":
             if (time.time() - start) <= timeout_in_seconds:
                 stats = self.onenodemc.stats()
                 present_count = int(stats["curr_items"])
                 ep_warmup_thread = stats["ep_warmup_thread"]
-                self.log.warn("curr_items : {0}".format(present_count))
-                self.log.warn("ep_warmup_thread : {0}".format(ep_warmup_thread))
+                self.log.warn("curr_items {0}, ep_warmup_thread {1}".format(present_count, ep_warmup_thread))
                 time.sleep(1)
             else:
                 self.fail("Timed out waiting for warmup")
