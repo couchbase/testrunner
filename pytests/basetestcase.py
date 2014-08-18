@@ -756,9 +756,6 @@ class BaseTestCase(unittest.TestCase):
     def perform_verify_queries(self, num_views, prefix, ddoc_name, query, wait_time=120,
                                bucket="default", expected_rows=None, retry_time=2, server=None):
         tasks = []
-        if self.active_resident_threshold != None and self.active_resident_threshold < 100:
-            expected_rows = self.get_item_count(self.master,bucket)
-            wait_time = 3600
         if server is None:
             server = self.master
         if expected_rows is None:
