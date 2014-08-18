@@ -1213,7 +1213,8 @@ class RestConnection(object):
                         avg_percentage = (total_percentage / count)
                     else:
                         avg_percentage = 0
-                    log.info('rebalance percentage : {0} %' .format(avg_percentage))
+                    log.info('rebalance percentage : {0:.02f} %'.
+                             format(round(avg_percentage, 2)))
                 else:
                     avg_percentage = 100
         else:
