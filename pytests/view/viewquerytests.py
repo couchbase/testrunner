@@ -968,8 +968,8 @@ class ViewQueryTests(BaseTestCase):
         try:
             # incrementaly failover nodes and verify loaded data
             for i in xrange(failover_factor):
-                failover_node = self.servers[i : i + 1]
-                self.cluster.failover(self.servers, failover_node)
+                failover_node = self.servers[i]
+                self.cluster.failover(self.servers, [failover_node])
                 failover_nodes.append(failover_node)
                 self.log.info("10 seconds sleep after failover before invoking rebalance...")
                 time.sleep(10)
