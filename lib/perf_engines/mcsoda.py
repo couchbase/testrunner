@@ -452,9 +452,15 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
             xfer_sent_delta = xfer_sent_curr - xfer_sent_last
             xfer_recv_delta = xfer_recv_curr - xfer_recv_last
 
-            ops_per_sec = o_delta / t_delta
-            xfer_sent_per_sec = xfer_sent_delta / t_delta
-            xfer_recv_per_sec = xfer_recv_delta / t_delta
+            try:
+                ops_per_sec = o_delta / t_delta
+                xfer_sent_per_sec = xfer_sent_delta / t_delta
+                xfer_recv_per_sec = xfer_recv_delta / t_delta
+            except ZeroDivisionError:
+                ops_per_sec = o_delta
+                xfer_sent_per_sec = xfer_sent_delta
+                xfer_recv_per_sec = xfer_recv_delta
+
 
             log.debug(prefix + dict_to_s(cur))
             log.info("%s ops: %s secs: %s ops/sec: %s tx-bytes/sec: %s rx-bytes/sec: %s" %
