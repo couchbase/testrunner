@@ -34,6 +34,10 @@ class FailoverBaseTest(BaseTestCase):
         self.bidirectional = self.input.param("bidirectional", False)
         self.stopGracefulFailover = self.input.param("stopGracefulFailover", False)
         self._value_size = self.input.param("value_size", 256)
+        self.victim_type = self.input.param("victim_type", "other")
+        self.victim_count = self.input.param("victim_count", 1)
+        self.stopNodes = self.input.param("stopNodes", False)
+        self.killNodes = self.input.param("killNodes", False)
         self.doc_ops = self.input.param("doc_ops", [])
         self.deltaRecoveryBuckets = self.input.param("deltaRecoveryBuckets", None)
         if self.doc_ops:

@@ -1360,11 +1360,11 @@ class BaseTestCase(unittest.TestCase):
         initial_list = copy.deepcopy(list)
         for add_server in add_list:
             for server in self.servers:
-                if server.ip == add_server.ip:
+                if add_server != None and server.ip == add_server.ip:
                     initial_list.append(add_server)
         for remove_server in remove_list:
             for server in initial_list:
-                if server.ip == remove_server.ip:
+                if remove_server != None and server.ip == remove_server.ip:
                     initial_list.remove(server)
         return initial_list
 
@@ -1387,3 +1387,48 @@ class BaseTestCase(unittest.TestCase):
     def get_item_count(self, server, bucket):
         client = MemcachedClientHelper.direct_client(server, bucket)
         return int(client.stats()["curr_items"])
+
+    def stop_server(self, node):
+        """ Method to stop a server which is subject to failover """
+        for server in self.servers:
+            if server.ip == node.ip:
+                shell = RemoteMachineShellConnection(server)
+                if shell.is_couchbase_installed():
+                    shell.stop_couchbase()
+                    self.log.info("Couchbase stopped")
+                else:
+                    shell.stop_membase()
+                    self.log.info("Membase stopped")
+                shell.disconnect()
+                break
+
+    def start_server(self, node):
+        """ Method to start a server which is subject to failover """
+        for server in self.servers:
+            if server.ip == node.ip:
+                shell = RemoteMachineShellConnection(server)
+                if shell.is_couchbase_installed():
+                    shell.start_couchbase()
+                    self.log.info("Couchbase started")
+                else:
+                    shell.start_membase()
+                    self.log.info("Membase started")
+                shell.disconnect()
+                break
+
+    def kill_server_memcached(self, node):
+        """ Method to start a server which is subject to failover """
+        for server in self.servers:
+            if server.ip == node.ip:
+                remote_client = RemoteMachineShellConnection(server)
+                remote_client.kill_memcached()
+                remote_client.disconnect()
+
+    def get_victim_nodes(self, nodes, master = None, chosen = None, victim_type = "master", victim_count = 1):
+        victim_nodes = [master]
+        if victim_type == "graceful_failover_node":
+            victim_nodes = [chosen]
+        elif victim_type == "other":
+            victim_nodes = self.add_remove_servers(nodes, nodes, [chosen,self.master],[])
+            victim_nodes = victim_nodes[:victim_count]
+        return victim_nodes

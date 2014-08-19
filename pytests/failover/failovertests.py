@@ -118,8 +118,7 @@ class FailoverTests(FailoverBaseTest):
         self.sleep(60, "after failover before invoking rebalance...")
         _servers_ = self.filter_servers(self.servers, chosen)
         # Rebalance after Failover operation
-        self.rest.rebalance(otpNodes=[node.id for node in self.nodes],
-                               ejectedNodes=[node.id for node in chosen])
+        self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[node.id for node in chosen])
         if self.during_ops:
             self.sleep(5, "Wait for some progress in rebalance")
             if self.during_ops == "change_password":
@@ -141,6 +140,12 @@ class FailoverTests(FailoverBaseTest):
         # Run operations if required during rebalance after failover
         if self.withMutationOps:
             self.run_mutation_operations_after_failover()
+
+        # Kill or restart operations
+        if self.killNodes or self.stopNodes:
+            self.victim_node_operations(node = None)
+            self.log.info(" Start Rebalance Again !")
+            self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[node.id for node in chosen])
 
         # Rebalance Monitoring
         msg = "rebalance failed while removing failover nodes {0}".format([node.id for node in chosen])
@@ -209,6 +214,13 @@ class FailoverTests(FailoverBaseTest):
         if self.withMutationOps:
             self.run_mutation_operations_after_failover()
 
+        # Kill or restart operations
+        if self.killNodes or self.stopNodes:
+            self.victim_node_operations(node = None)
+            self.log.info(" Start Rebalance Again !")
+            self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[],deltaRecoveryBuckets = self.deltaRecoveryBuckets)
+
+        # Check if node has to be killed or restarted during rebalance
         # Monitor Rebalance
         msg = "rebalance failed while removing failover nodes {0}".format(chosen)
         self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
@@ -300,19 +312,13 @@ class FailoverTests(FailoverBaseTest):
             # define precondition check for failover
             success_failed_over = self.rest.fail_over(node.id, graceful=(self.graceful and graceful_failover))
             if self.graceful and graceful_failover:
-                if self.stopGracefulFailover:
-                    # Logic to stop graceful and start it again
-                    # Stop  Graceful
-                    reached = RestHelper(self.rest).rebalance_reached(20)
-                    if reached:
-                        self.log.info(" Stopping Graceful failover")
-                        stopped = self.rest.stop_rebalance(wait_timeout=self.wait_timeout / 3)
-                        self.assertTrue(stopped, msg="unable to stop rebalance")
-                        self.sleep(60)
-                        # Start Graceful Again
-                        success_failed_over = self.rest.fail_over(node.id, graceful=(self.graceful and graceful_failover))
-                    else:
-                        self.assertTrue(False, msg="graceful failover finished before we could stop graceful failover, please check test scenario")
+                if self.stopGracefulFailover or self.killNodes or self.stopNodes:
+                    self.victim_node_operations(node)
+                    # Start Graceful Again
+                    self.log.info(" Start Graceful Failover Again !")
+                    success_failed_over = self.rest.fail_over(node.id, graceful=(self.graceful and graceful_failover))
+                    msg = "graceful failover failed for nodes {0}".format(node.id)
+                    self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
                 else:
                     msg = "rebalance failed while removing failover nodes {0}".format(node.id)
                     self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
@@ -604,16 +610,24 @@ class FailoverTests(FailoverBaseTest):
             map[server.ip] = server
         return map
 
-    def stop_server(self, node):
-        """ Method to stop a server which is subject to failover """
-        for server in self.servers:
-            if server.ip == node.ip:
-                shell = RemoteMachineShellConnection(server)
-                if shell.is_couchbase_installed():
-                    shell.stop_couchbase()
-                    self.log.info("Couchbase stopped")
-                else:
-                    shell.stop_membase()
-                    self.log.info("Membase stopped")
-                shell.disconnect()
-                break
+    def victim_node_operations(self, node = None):
+        if self.stopGracefulFailover:
+            self.log.info(" Stopping Graceful Failover ")
+            stopped = self.rest.stop_rebalance(wait_timeout=self.wait_timeout / 3)
+            self.assertTrue(stopped, msg="unable to stop rebalance")
+        if self.killNodes:
+            self.log.info(" Killing Memcached ")
+            kill_nodes = self.get_victim_nodes(self.servers, self.master, node, self.victim_type, self.victim_count)
+            for kill_node in kill_nodes:
+                self.kill_server_memcached(kill_node)
+        if self.stopNodes:
+            self.log.info(" Stopping Node")
+            stop_nodes = self.get_victim_nodes(self.servers, self.master, node, self.victim_type, self.victim_count)
+            for stop_node in stop_nodes:
+                self.stop_server(stop_node)
+            self.sleep(10)
+            for start_node in stop_nodes:
+                self.start_server(start_node)
+        self.sleep(30)
+
+
