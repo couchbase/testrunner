@@ -101,6 +101,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.cluster.shutdown(force=True)
                 self.fail(e)
             super(NewUpgradeBaseTest, self).tearDown()
+        self.sleep(20, "sleep 20 seconds before run next test")
 
     def _install(self, servers):
         params = {}
