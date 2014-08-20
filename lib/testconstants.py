@@ -59,4 +59,5 @@ CLI_COMMANDS = ["cbbackup", "cbbrowse_logs", "cbcollect_info", "cbcompact", "cbd
                 "ct_run", "curl", "curl-config", "derb", "dialyzer", "dump-guts", "epmd", "erl", "erlc", "escript", "genbrk", \
                 "gencfu", "gencnval", "genctd", "generate_cert", "genrb", "icu-config", "install", "makeconv", "mctimings", \
                 "memcached", "moxi", "reports", "sigar_port", "sqlite3", "to_erl", "tools", "typer", "uconv", "vbmap"]
-MV_LATESTBUILD_REPO = "http://builds.hq.northscale.net/latestbuilds/"
+# old url MV_LATESTBUILD_REPO = "http://builds.hq.northscale.net/latestbuilds/"
+MV_LATESTBUILD_REPO = "http://latestbuilds.hq.couchbase.com/"
