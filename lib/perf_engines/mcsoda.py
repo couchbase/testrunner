@@ -1219,7 +1219,9 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                                 errcode == ERR_ETMPFAIL:
                             backoff = True
                             self.save_error("errorcode = %s" % errcode)
-                            log.error("errorcode = %s" % errcode)
+                            if errcode == ERR_ENOMEM:
+                                log.error("errorcode = ENOMEM")
+                            # Don't log backoffs due to ETMPFAIL/EBUSY
                     except Exception, error:
                         self.save_error(error)
                         log.error(error)
