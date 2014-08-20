@@ -136,12 +136,12 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         shell = RemoteMachineShellConnection(node)
         os_type = shell.extract_remote_info().distribution_type
         if os_type.lower() == 'windows':
-            couchdb_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/couchdb.*"
+            couchdb_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/couchdb.log"
         else:
             couchdb_log = "/opt/couchbase/var/lib/couchbase/logs/couchdb.*"
-        total_chkpt_calls, error = shell.execute_command("grep \"POST /_commit_for_checkpoint\" {} | wc -l"
+        total_chkpt_calls, error = shell.execute_command("grep \"POST /_commit_for_checkpoint\" \"{}\" | wc -l"
                                                                      .format(couchdb_log))
-        total_successful_chkpts, error = shell.execute_command("grep \"POST /_commit_for_checkpoint 200\" {} | wc -l"
+        total_successful_chkpts, error = shell.execute_command("grep \"POST /_commit_for_checkpoint 200\" \"{}\" | wc -l"
                                                                      .format(couchdb_log))
         self.log.info(int(total_successful_chkpts[0]))
         if self.num_successful_chkpts_so_far != 0:
@@ -157,12 +157,12 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         shell = RemoteMachineShellConnection(node)
         os_type = shell.extract_remote_info().distribution_type
         if os_type.lower() == 'windows':
-            couchdb_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/couchdb.*"
+            couchdb_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/couchdb.log"
         else:
             couchdb_log = "/opt/couchbase/var/lib/couchbase/logs/couchdb.*"
-        total_prerep_calls, error = shell.execute_command("grep \"POST /_pre_replicate\" {} | wc -l"
+        total_prerep_calls, error = shell.execute_command("grep \"POST /_pre_replicate\" \"{}\" | wc -l"
                                                                      .format(couchdb_log))
-        total_successful_prereps, error = shell.execute_command("grep \"POST /_pre_replicate 200\" {} | wc -l"
+        total_successful_prereps, error = shell.execute_command("grep \"POST /_pre_replicate 200\" \"{}\" | wc -l"
                                                                      .format(couchdb_log))
         shell.disconnect()
         total_prerep_failures = int(total_prerep_calls[0]) - int(total_successful_prereps[0])
@@ -246,12 +246,12 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         shell = RemoteMachineShellConnection(active_src_node)
         os_type = shell.extract_remote_info().distribution_type
         if os_type.lower() == 'windows':
-            trace_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/xdcr_trace.*"
+            trace_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/xdcr_trace.log"
         else:
             trace_log = "/opt/couchbase/var/lib/couchbase/logs/xdcr_trace.*"
         num_404_errors_before_load, error = shell.execute_command("grep \"error,404\" {} | wc -l"
                                                                      .format(trace_log))
-        num_get_remote_bkt_failed_before_load, error = shell.execute_command("grep \"get_remote_bucket_failed\" {} | wc -l"
+        num_get_remote_bkt_failed_before_load, error = shell.execute_command("grep \"get_remote_bucket_failed\" \"{}\" | wc -l"
                                                                      .format(trace_log))
         self.log.info("404 errors: {}, get_remote_bucket_failed errors : {}".
                       format(num_404_errors_before_load, num_get_remote_bkt_failed_before_load))
@@ -261,7 +261,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         self.sleep(5)
         num_404_errors_after_load, error = shell.execute_command("grep \"error,404\" {} | wc -l"
                                                                      .format(trace_log))
-        num_get_remote_bkt_failed_after_load, error = shell.execute_command("grep \"get_remote_bucket_failed\" {} | wc -l"
+        num_get_remote_bkt_failed_after_load, error = shell.execute_command("grep \"get_remote_bucket_failed\" \"{}\" | wc -l"
                                                                      .format(trace_log))
         self.log.info("404 errors: {}, get_remote_bucket_failed errors : {}".
                       format(num_404_errors_after_load, num_get_remote_bkt_failed_after_load))
