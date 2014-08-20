@@ -63,423 +63,22 @@ class QueryTests(BaseTestCase):
 #
 #   SIMPLE CHECKS
 ##############################################################################################
-    def test_simple_check(self):
-        for bucket in self.buckets:
-            self.query = 'FROM %s SELECT name, email ORDER BY name,email ASC' % (bucket.name)
-            actual_result = self.run_cbq_query()
-
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_list = [{"name" : doc["name"], "email" : doc["email"]} for doc in full_list]
-            expected_list_sorted = sorted(expected_list, key=lambda doc: (doc['name'], doc['email']))
-            self._verify_results(actual_result['resultset'], expected_list_sorted)
-
-    def test_simple_negative_check(self):
-        queries_errors = {'SELECT name FROM {0} WHERE COUNT({0}.name)>3' :
-                          'Aggregate function not allowed here',
-                          'SELECT *.name FROM {0}' : 'Parse Error - syntax error',
-                          'SELECT *.* FROM {0} ... ERROR' : 'Parse Error - syntax error',
-                          'FROM %s SELECT name WHERE id=null' : 'Parse Error - syntax error',}
-        self.negative_common_body(queries_errors)
-
     def test_escaped_identifiers(self):
         queries_errors = {'SELECT name FROM {0} as bucket' :
                           'Parse Error - syntax error'}
         self.negative_common_body(queries_errors)
         for bucket in self.buckets:
-            self.query = 'SELECT name FROM %s as `bucket`ORDER BY name' % (bucket.name)
+            self.query = 'SELECT name FROM %s as `bucket` ORDER BY name' % (bucket.name)
             actual_result = self.run_cbq_query()
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_list = [{"name" : doc["name"]} for doc in full_list]
             expected_list_sorted = sorted(expected_list, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['resultset'], expected_list_sorted)
 
-    def test_consistent_simple_check(self):
-        queries = ['SELECT name, join_day, join_mo FROM %s '
-                    'WHERE name IS NOT NULL AND join_day<10 '
-                    'OR join_mo = 6 ORDER BY join_day, join_mo',
-                   'SELECT name, join_day, join_mo FROM %s '
-                    'WHERE join_mo = 6 OR name IS NOT NULL AND '
-                    'join_day<10 ORDER BY join_day, join_mo']
-        for bucket in self.buckets:
-            actual_result1 = self.run_cbq_query(queries[0] % bucket.name)
-            actual_result2 = self.run_cbq_query(queries[1] % bucket.name)
-            self.assertTrue(actual_result1['resultset'] == actual_result2['resultset'],
-                              "Results are inconsistent.Difference: %s %s %s %s" %(
-                                    len(actual_result1['resultset']), len(actual_result2['resultset']),
-                                    actual_result1['resultset'][100], actual_result2['resultset'][100]))
-
-    def test_simple_nulls(self):
-        queries = ['SELECT id FROM %s WHERE id=NULL or id="null"']
-        for bucket in self.buckets:
-            for query in queries:
-                actual_result = self.run_cbq_query(query % (bucket.name))
-                self._verify_results(actual_result['resultset'], [])
-
 ##############################################################################################
 #
-#   LIMIT OFFSET CHECKS
+#   ALL
 ##############################################################################################
-
-    def test_limit_offset(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT DISTINCT name FROM %s ORDER BY name LIMIT 10' % (bucket.name)
-            actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_result = [ {"name" : doc["name"]} for doc in full_list ]
-            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
-            expected_result = sorted(expected_result, key=lambda doc: doc['name'])
-            self.assertEquals(actual_result['resultset'], expected_result[:10],
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
-            self.query = 'SELECT DISTINCT name FROM %s ORDER BY name LIMIT 10 OFFSET 10' % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertEquals(actual_result['resultset'], expected_result[10:20],
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
-
-    def test_limit_offset_zero(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT DISTINCT name FROM %s ORDER BY name LIMIT 0' % (bucket.name)
-            actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_result = [ {"name" : doc["name"]} for doc in full_list ]
-            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
-            expected_result = sorted(expected_result, key=lambda doc: doc['name'])
-            self.assertEquals(actual_result['resultset'], [],
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
-            self.query = 'SELECT DISTINCT name FROM %s ORDER BY name LIMIT 10 OFFSET 0' % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertEquals(actual_result['resultset'], expected_result[:10],
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
-
-    def test_limit_offset_negative_check(self):
-        queries_errors = {'SELECT DISTINCT name FROM {0} LIMIT -1' :
-                          'Parse Error - syntax error',
-                          'SELECT DISTINCT name FROM {0} LIMIT 1.1' :
-                          'Parse Error - syntax error',
-                          'SELECT DISTINCT name FROM {0} OFFSET -1' :
-                          'Parse Error - syntax error',
-                          'SELECT DISTINCT name FROM {0} OFFSET 1.1' :
-                          'Parse Error - syntax error'}
-        self.negative_common_body(queries_errors)
-
-##############################################################################################
-#
-#   ALIAS CHECKS
-##############################################################################################
-
-    def test_simple_alias(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT COUNT(name) AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
-            actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_result = [ { "COUNT_EMPLOYEE": len(full_list)  } ]
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
-
-            self.query = 'SELECT COUNT(*) + 1 AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
-            actual_result = self.run_cbq_query()
-            expected_result = [ { "COUNT_EMPLOYEE": len(full_list) + 1 } ]
-            self.assertEquals(actual_result['resultset'], expected_result,
-                              "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
-
-    def test_simple_negative_alias(self):
-        queries_errors = {'SELECT name._last_name as *' : 'Parse Error - syntax error',
-                          'SELECT name._last_name as DATABASE ?' : 'Parse Error - syntax error',
-                          'SELECT nodes AS NULL FROM {0}' : 'Parse Error - syntax error',
-                          'SELECT email as name, name FROM {0}' :
-                                'alias name is defined more than once',
-                          'SELECT tasks_points AS points, points.task1 FROM {0}' :
-                                'Alias points cannot be referenced',
-                          'SELECT tasks_points.task1 AS points_new FROM {0} AS test ' +
-                           'WHERE points_new >0' : "Alias points_new cannot be referenced",
-                          'SELECT DISTINCT tasks_points AS points_new FROM {0} AS test ' +
-                           'ORDER BY points_new':
-                                'Expression points_new is not in the list',
-                          'SELECT tasks_points AS points FROM {0} AS test GROUP BY points':
-                                'Alias points cannot be referenced',
-                          'SELECT test.tasks_points as points FROM {0} AS TEST ' +
-                           'GROUP BY TEST.points' :
-                                'The expression TEST is not satisfied by these dependencies',
-                          'SELECT test.tasks_points as points FROM {0} AS TEST ' +
-                           'GROUP BY tasks_points AS GROUP_POINT' :
-                                'parse_error',
-                          'SELECT COUNT(tasks_points) as COUNT_NEW_POINT, COUNT(name) ' +
-                           'as COUNT_EMP  FROM {0} AS TEST GROUP BY name ' +
-                           'HAVING COUNT_NEW_POINT >0' :
-                                'Alias COUNT_NEW_POINT cannot be referenced',
-                          'SELECT * FROM {0} emp UNNEST {0}.VMs' : 'Invalid Bucket in UNNEST clause'}
-        self.negative_common_body(queries_errors)
-
-    def test_alias_from_clause(self):
-        queries = ['SELECT tasks_points.task1 AS points FROM %s AS test ORDER BY points' ,
-                   'SELECT tasks_points.task1 AS points FROM %s AS test WHERE test.join_day >0'
-                   ' ORDER BY points',
-                   'SELECT tasks_points.task1 AS points FROM %s AS test '
-                       'WHERE FLOOR(test.test_rate) >0 ORDER BY points',
-                   'SELECT tasks_points.task1 AS points FROM %s AS test '
-                   'GROUP BY test.tasks_points.task1 ORDER BY points']
-        for bucket in self.buckets:
-            for query in queries:
-                full_list = self._generate_full_docs_list(self.gens_load)
-                expected_result = [{"points" : doc["tasks_points"]["task1"]} for doc in full_list]
-                if query.find('GROUP BY') != -1:
-                    expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
-                expected_result = sorted(expected_result, key=lambda doc: doc['points'])
-                actual_result = self.run_cbq_query(query % (bucket.name))
-                self._verify_results(actual_result['resultset'], expected_result)
-
-    def test_alias_from_clause_group(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT tasks_points.task1 AS points FROM %s AS test ' %(bucket.name) +\
-                         'GROUP BY test.tasks_points.task1 ORDER BY points'
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_result = [{"points" : doc["tasks_points"]["task1"]} for doc in full_list]
-            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
-            expected_result = sorted(expected_result, key=lambda doc: doc['points'])
-            actual_result = self.run_cbq_query()
-            self._verify_results(actual_result['resultset'], expected_result)
-
-    def test_alias_order_desc(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT name AS name_new FROM %s AS test ORDER BY name_new DESC' %(
-                                                                                bucket.name)
-            actual_result = self.run_cbq_query()
-
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_list = [{"name_new" : doc["name"]} for doc in full_list]
-            expected_result = sorted(expected_list, key=lambda doc: doc['name_new'],
-                                     reverse=True)
-            self._verify_results(actual_result['resultset'], expected_result)
-
-    def test_alias_order_asc(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT name AS name_new FROM %s AS test ORDER BY name_new DESC' %(
-                                                                                bucket.name)
-            actual_result = self.run_cbq_query()
-
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_list = [{"name_new" : doc["name"]} for doc in full_list]
-            expected_result = sorted(expected_list, key=lambda doc: doc['name_new'],
-                                     reverse=True)
-            self._verify_results(actual_result['resultset'], expected_result)
-
-    def test_alias_aggr_fn(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT COUNT(TEST.name) from %s AS TEST' %(bucket.name)
-            actual_result = self.run_cbq_query()
-
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_result = [{"$1" : len(full_list)}]
-            self._verify_results(actual_result['resultset'], expected_result)
-
-    def test_alias_unnest(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT count(skill) FROM %s AS emp UNNEST emp.skills AS skill' %(
-                                                                            bucket.name)
-            actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_result = [{"$1" : len(full_list) * len(full_list[0]["skills"])}]
-            self._verify_results(actual_result['resultset'], expected_result)
-
-            self.query = 'SELECT count(skill) FROM %s AS emp UNNEST emp.skills skill' %(
-                                                                            bucket.name)
-            actual_result = self.run_cbq_query()
-            expected_result = [{"$1" : len(full_list) * len(full_list[0]["skills"])}]
-            self._verify_results(actual_result['resultset'], expected_result)
-
-##############################################################################################
-#
-#   ORDER BY CHECKS
-##############################################################################################
-
-    def test_order_by_check(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT name, job_title, tasks_points.task1 FROM %s'  % (bucket.name) +\
-            ' ORDER BY job_title, name, tasks_points.task1'
-            actual_result = self.run_cbq_query()
-
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_list = [{"name" : doc["name"], "job_title" : doc["job_title"],
-                              "task1" : doc["tasks_points"]["task1"]}
-                             for doc in full_list]
-            expected_result = sorted(expected_list, key=lambda doc: (doc['job_title'],
-                                                                     doc["name"],
-                                                                     doc["task1"]))
-            self._verify_results(actual_result['resultset'], expected_result)
-            self.query = 'SELECT name, job_title FROM %s'  % (bucket.name) +\
-            ' ORDER BY tasks_points.task1, job_title, name'
-            actual_result = self.run_cbq_query()
-            result_sorted = sorted(expected_list, key=lambda doc: (doc["task1"],
-                                                                     doc['job_title'],
-                                                                     doc["name"]))
-            expected_result = [{"name" : doc["name"], "job_title" : doc["job_title"]}
-                               for doc in result_sorted]
-            self._verify_results(actual_result['resultset'], expected_result)
-
-    def test_order_by_alias(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT job_title, tasks_points AS points FROM %s'  % (bucket.name) +\
-            ' AS test ORDER BY job_title DESC, points DESC'
-            actual_result = self.run_cbq_query()
-
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_list = [{"job_title" : doc["job_title"],
-                              "points" : doc["tasks_points"]}
-                             for doc in full_list]
-            expected_result = sorted(expected_list, key=lambda doc: (doc['job_title'],
-                                                                     doc["points"]),
-                                     reverse=True)
-            self._verify_results(actual_result['resultset'], expected_result)
-
-    def test_order_by_alias_arrays(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT job_title, tasks_points, skills[0] AS SKILL FROM %s'  % (
-                                                                            bucket.name) +\
-            ' AS TEST ORDER BY SKILL, job_title, TEST.tasks_points'
-            actual_result = self.run_cbq_query()
-
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_list = [{"job_title" : doc["job_title"],
-                              "tasks_points" : doc["tasks_points"],
-                              "SKILL" : doc["skills"][0]}
-                             for doc in full_list]
-            expected_result = sorted(expected_list, key=lambda doc: (doc["SKILL"],
-                                                                     doc['job_title'],
-                                                                     doc["tasks_points"]))
-            self._verify_results(actual_result['resultset'], expected_result)
-
-    def test_order_by_alias_aggr_fn(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT join_yr, join_mo, count(*) AS emp_per_month from %s'% (
-                                                                            bucket.name) +\
-            ' WHERE join_mo>7 GROUP BY join_yr, join_mo ORDER BY emp_per_month, join_mo, join_yr'  
-            actual_result = self.run_cbq_query()
-
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_result = [{"join_yr" : doc["join_yr"],
-                              "join_mo" : doc["join_mo"],
-                              "emp_per_month" : len([x for x in full_list if
-                                                     x['join_yr'] == doc["join_yr"] and\
-                                                     x["join_mo"] == doc["join_mo"]])}
-                             for doc in full_list
-                             if doc["join_mo"] > 7]
-            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
-            expected_result = sorted(expected_result, key=lambda doc: (doc["emp_per_month"],
-                                                                     doc['join_mo'],
-                                                                     doc["join_yr"]))
-            self._verify_results(actual_result['resultset'], expected_result)
-
-    def test_order_by_aggr_fn(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT job_title AS TITLE FROM %s GROUP'  % (bucket.name) +\
-            ' BY job_title ORDER BY MIN(join_mo), job_title'
-            actual_result = self.run_cbq_query()
-
-            full_list = self._generate_full_docs_list(self.gens_load)
-            tmp_titles = set([doc['job_title'] for doc in full_list])
-            expected_list = [{"job_title" : title,
-                              "min_value" :
-                              min([doc["join_mo"] for doc in full_list
-                                   if doc["job_title"]==title])}
-                             for title in tmp_titles]
-
-            expected_result = sorted(expected_list, key=lambda doc: (doc['min_value'],
-                                                                     doc['job_title']))
-            expected_result = [{"TITLE" : doc["job_title"]} for doc in expected_result]
-            self._verify_results(actual_result['resultset'], expected_result)
-
-    def test_order_by_precedence(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT job_title, join_yr FROM %s'  % (bucket.name) +\
-            ' ORDER BY job_title, join_yr'
-            actual_result = self.run_cbq_query()
-
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_list = [{"job_title" : doc["job_title"],
-                              "join_yr" : doc["join_yr"]}
-                             for doc in full_list]
-            expected_result = sorted(expected_list, key=lambda doc: (doc['job_title'],
-                                                                     doc["join_yr"]))
-            self._verify_results(actual_result['resultset'], expected_result)
-
-            self.query = 'SELECT job_title, join_yr FROM %s'  % (bucket.name) +\
-            ' ORDER BY join_yr, job_title'
-            actual_result = self.run_cbq_query()
-
-            expected_list = [{"job_title" : doc["job_title"],
-                              "join_yr" : doc["join_yr"]}
-                             for doc in full_list]
-            expected_result = sorted(expected_list, key=lambda doc: (doc['join_yr'],
-                                                                     doc["job_title"]))
-            self._verify_results(actual_result['resultset'], expected_result)
-
-    def test_order_by_satisfy(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT name, VMs FROM %s AS employee ' % (bucket.name) +\
-                        'WHERE ANY vm IN employee.VMs SATISFIES vm.RAM > 5 AND' +\
-                        ' vm.os = "ubuntu" END ORDER BY name, VMs[0].RAM'
-            actual_result = self.run_cbq_query()
-
-            full_list = self._generate_full_docs_list(self.gens_load)
-            expected_list = [{"name" : doc["name"], "VMs" : doc["VMs"]}
-                              for doc in full_list
-                              if len([vm for vm in doc["VMs"]
-                                      if vm["RAM"] > 5 and vm["os"] == 'ubuntu']) > 0]
-            expected_result = sorted(expected_list, key=lambda doc: (doc['name'],
-                                                                     doc["VMs"][0]["RAM"]))
-            self._verify_results(actual_result['resultset'], expected_result)
-
-##############################################################################################
-#
-#   DISTINCT
-##############################################################################################
-
-    def test_distinct(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT DISTINCT job_title FROM %s ORDER BY job_title'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-
-            full_list = self._generate_full_docs_list(self.gens_load)
-            tmp_titles = set([doc['job_title'] for doc in full_list])
-            expected_result = [{"job_title" : title}
-                             for title in tmp_titles]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self._verify_results(actual_result['resultset'], expected_result)
-
-    def test_distinct_nested(self):
-        for bucket in self.buckets:
-            self.query = 'SELECT DISTINCT tasks_points.task1 FROM %s '  % (bucket.name) +\
-                         'ORDER BY tasks_points.task1'
-            full_list = self._generate_full_docs_list(self.gens_load)
-            actual_result = self.run_cbq_query()
-            tmp = set([doc['tasks_points']['task1'] for doc in full_list])
-            expected_result = [{"task1" : point} for point in tmp]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['task1']))
-            self._verify_results(actual_result['resultset'], expected_result)
-
-            self.query = 'SELECT DISTINCT skills[0] as skill' +\
-                         ' FROM %s ORDER BY skills[0]'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            tmp = set([doc['skills'][0] for doc in full_list])
-            expected_result = [{"skill" : point} for point in tmp]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['skill']))
-            self._verify_results(actual_result['resultset'], expected_result)
-
-            self.query = 'SELECT DISTINCT tasks_points.* ' +\
-                         'FROM %s'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            expected_result = [doc['tasks_points'] for doc in full_list]
-            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
-            expected_result = sorted(expected_result, key=lambda doc:
-                                     (doc['task1'], doc['task2']))
-            actual_result = sorted(actual_result['resultset'], key=lambda doc:
-                                     (doc['task1'], doc['task2']))
-            self._verify_results(actual_result, expected_result)
 
     def test_all(self):
         for bucket in self.buckets:
@@ -1893,6 +1492,88 @@ class QueryTests(BaseTestCase):
                                if doc["email"].split[0] == doc["name"].split[1]]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+
+##############################################################################################
+#
+#   UNION
+##############################################################################################
+
+    def test_union(self):
+        for bucket in self.buckets:
+            self.query = "select name from %s union select email from %s" % (bucket.name, bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"name" : doc["name"]}
+                               for doc in full_list]
+            expected_result.extend([{"email" : doc["email"]}
+                                   for doc in full_list])
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_union_multiply_buckets(self):
+        self.assertTrue(len(self.buckets) > 1, 'This test needs more than one bucket')
+        self.query = "select name from %s union select email from %s" % (self.buckets[0].name, self.buckets[1].name)
+        full_list = self._generate_full_docs_list(self.gens_load)
+        actual_list = self.run_cbq_query()
+        actual_result = sorted(actual_list['resultset'])
+        expected_result = [{"name" : doc["name"]}
+                            for doc in full_list]
+        expected_result.extend([{"email" : doc["email"]}
+                                for doc in full_list])
+        expected_result = sorted(set(expected_result))
+        self._verify_results(actual_result, expected_result)
+
+    def test_union_all(self):
+        for bucket in self.buckets:
+            self.query = "select name from %s union all select email from %s" % (bucket.name, bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"name" : doc["name"]}
+                               for doc in full_list]
+            expected_result.extend([{"email" : doc["email"]}
+                                   for doc in full_list])
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_union_all_multiply_buckets(self):
+        self.assertTrue(len(self.buckets) > 1, 'This test needs more than one bucket')
+        self.query = "select name from %s union select email from %s" % (self.buckets[0].name, self.buckets[1].name)
+        full_list = self._generate_full_docs_list(self.gens_load)
+        actual_list = self.run_cbq_query()
+        actual_result = sorted(actual_list['resultset'])
+        expected_result = [{"name" : doc["name"]}
+                            for doc in full_list]
+        expected_result.extend([{"email" : doc["email"]}
+                                for doc in full_list])
+        expected_result = sorted(expected_result)
+        self._verify_results(actual_result, expected_result)
+
+    def test_union_where(self):
+        for bucket in self.buckets:
+            self.query = "select name from %s union select email from %s where join_mo > 2" % (bucket.name, bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"name" : doc["name"]}
+                               for doc in full_list]
+            expected_result.extend([{"email" : doc["email"]}
+                                   for doc in full_list if doc["join_mo"] > 2])
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_union_aggr_fns(self):
+        for bucket in self.buckets:
+            self.query = "select count(name) as names from %s union select count(email) as emails from %s" % (bucket.name, bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"names" : len(full_list)}]
+            expected_result.extend([{"emails" : len(full_list)}])
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
 ##############################################################################################
 #
 #   COMMON FUNCTIONS
