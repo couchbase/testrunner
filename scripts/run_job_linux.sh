@@ -67,7 +67,8 @@ FAIL_CONNECTIONS=`$python_exe scripts/ssh.py -i ${ini_file} 'ls' 2>&1| grep 'No 
 
 if [ ${FAIL_CONNECTIONS} -ge 1 ]
     then
-    echo '---------------------------- SOME VMS ARE UNAVAILABLE -----------------------'
+    $python_exe scripts/ssh.py -i ${ini_file} 'pwd'
+    echo '---------------------------- !!!SOME VMS ARE UNAVAILABLE!!! -----------------------'
     exit ${FAIL_CONNECTIONS}
 fi
 
