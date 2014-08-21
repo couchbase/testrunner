@@ -384,6 +384,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 bucket.kvs[1] = KVStore()
         self.online_upgrade()
         self.sleep(self.sleep_time)
+
+        """ verify DCP upgrade in 3.0.0 version """
+        if "3.0.0" in self.upgrade_versions[0]:
+            self.monitor_dcp_rebalance()
         if self.input.param('reboot_cluster', False):
             self.warm_up_node(self.servers[self.nodes_init : self.num_servers])
         self.verification(self.servers[self.nodes_init : self.num_servers])
@@ -411,6 +415,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.cluster.rebalance(self.servers, [], [self.servers[0]])
         self.log.info("Rebalanced out all old version nodes")
         self.sleep(self.sleep_time)
+
+        """ verify DCP upgrade in 3.0.0 version """
+        if "3.0.0" in self.upgrade_versions[0]:
+            self.monitor_dcp_rebalance()
         self.verification(self.servers[1:])
 
     def online_consequentially_upgrade(self):
@@ -444,6 +452,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 success_upgrade &= self.queue.get()
             if not success_upgrade:
                 self.fail("Upgrade failed!")
+
+            """ verify DCP upgrade in 3.0.0 version """
+            if "3.0.0" in self.upgrade_versions[0]:
+                self.monitor_dcp_rebalance()
             self.cluster.rebalance(self.servers[half_node:], self.servers[:half_node], [])
             self.log.info("Rebalanced in all new version nodes")
             self.sleep(self.sleep_time)
@@ -468,6 +480,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.cluster.rebalance(self.servers, upgrade_servers, self.servers[self.num_servers:])
         self.log.info("Rebalance completed")
         self.sleep(self.sleep_time)
+        """ verify DCP upgrade in 3.0.0 version """
+        if "3.0.0" in self.upgrade_versions[0]:
+            self.monitor_dcp_rebalance()
         self.verification(self.servers[: self.num_servers])
 
     def online_upgrade(self):
@@ -486,7 +501,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.log.info("2.0 Node %s becomes the master" % (new_server.ip))
                 break
         if not FIND_MASTER and not self.is_downgrade:
-            raise Exception("After rebalance in 2.0 Nodes, 2.0 doesn't become the master")
+            raise Exception("After rebalance in 3.0 Nodes, 3.0 doesn't become the master")
 
         servers_out = self.servers[:self.nodes_init]
         self.log.info("Rebalanced out all old version nodes")
@@ -528,7 +543,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 if content.find(new_server.ip) >= 0:
                     self._new_master(new_server)
                     FIND_MASTER = True
-                    self.log.info("2.0 Node %s becomes the master" % (new_server.ip))
+                    self.log.info("3.0 Node %s becomes the master" % (new_server.ip))
             if not FIND_MASTER:
-                raise Exception("After rebalance in 2.0 nodes, 2.0 doesn't become the master ")
+                raise Exception("After rebalance in 3.0 nodes, 3.0 doesn't become the master ")
+        """ verify DCP upgrade in 3.0.0 version """
+        if "3.0.0" in self.upgrade_versions[0]:
+            self.monitor_dcp_rebalance()
         self.verification(new_servers)

@@ -453,3 +453,21 @@ class NewUpgradeBaseTest(BaseTestCase):
                     vbs_servs_in.extend(stat[vb_type])
             self.assertTrue(sorted(vbs_servs_out) == sorted(vbs_servs_in),
                             "%s vbuckets seem to be suffled" % vb_type)
+
+    def monitor_dcp_rebalance(self):
+        if self.master.ip != self.rest.ip or \
+           self.master.ip == self.rest.ip and str(self.master.port) != str(self.rest.port):
+            if self.port:
+                self.master.port = self.port
+            self.rest = RestConnection(self.master)
+            self.rest_helper = RestHelper(self.rest)
+        if self.rest._rebalance_progress_status() == 'running':
+            self.info("Start monitoring DCP upgrade from 2.x.x to 3.0.0")
+            status = self.rest.monitorRebalance()
+        else:
+            self.fail("DCP reabalance upgrade is not running")
+
+        if status:
+            self.log.info("Done DCP upgrade!")
+        else:
+            self.fail("Fail DCP upgrade")
