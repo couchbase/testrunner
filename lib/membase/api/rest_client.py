@@ -1469,6 +1469,13 @@ class RestConnection(object):
         if isinstance(bucket, Bucket):
             api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket.name)
         status, content, header = self._http_request(api, 'DELETE')
+
+        if int(header['status']) == 500:
+            # According to http://docs.couchbase.com/couchbase-manual-2.5/cb-rest-api/#deleting-buckets
+            # the cluster will return with 500 if it failed to nuke
+            # the bucket on all of the nodes within 30 secs
+            log.warn("Bucket deletion timed out waiting for all nodes")
+
         return status
 
     # figure out the proxy port
@@ -1524,9 +1531,24 @@ class RestConnection(object):
                                        'evictionPolicy': evictionPolicy})
         log.info("{0} with param: {1}".format(api, params))
         create_start_time = time.time()
-        status, content, header = self._http_request(api, 'POST', params)
-        if not status:
+
+        maxwait = 60
+        for numsleep in range(maxwait):
+            status, content, header = self._http_request(api, 'POST', params)
+            if status:
+                break
+            elif (int(header['status']) == 503 and
+                    '{"_":"Bucket with given name still exists"}' in content):
+                log.info("The bucket still exists, sleep 1 sec and retry")
+                time.sleep(1)
+            else:
+                raise BucketCreationException(ip=self.ip, bucket_name=bucket)
+
+        if (numsleep + 1) == maxwait:
+            log.error("Tried to create the bucket for {0} secs.. giving up".
+                      format(maxwait))
             raise BucketCreationException(ip=self.ip, bucket_name=bucket)
+
         create_time = time.time() - create_start_time
         log.info("{0} seconds to create bucket {1}".format(create_time, bucket))
         return status
