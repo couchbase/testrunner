@@ -43,6 +43,7 @@ class MemorySanity(BaseTestCase):
         rest = RestConnection(self.servers[0])
         max_data_sizes = {}
         initial_memory_usage = {}
+        self.sleep(15)
         for bucket in self.buckets:
             max_data_sizes[bucket.name] = rest.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["ep_max_size"][-1]
             self.log.info("Initial max_data_size of bucket '{0}': {1}".format(bucket.name, max_data_sizes[bucket.name]))
@@ -58,6 +59,7 @@ class MemorySanity(BaseTestCase):
             self._load_all_buckets(self.master, self.gen_create, "create", 0,
                                batch_size=10000, pause_secs=5, timeout_secs=100)
             self._wait_for_stats_all_buckets(self.servers)
+            self.sleep(15)
             for bucket in self.buckets:
                 mem_usage[bucket.name] = rest.fetch_bucket_stats(bucket.name)["op"]["samples"]["mem_used"][-1]
                 self.log.info("Memory used after attempt {0} = {1}, Difference from initial snapshot: {2}"\
