@@ -205,6 +205,9 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         bucket = self._get_bucket(self, 'bucket0', self.src_master)
         gen_create3 = BlobGenerator('loadThree', 'loadThree', self._value_size, end=self.num_items)
         self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
+        bucket = self._get_bucket(self, 'bucket0', self.dest_master)
+        gen_create4 = BlobGenerator('loadFour', 'loadFour', self._value_size, end=self.num_items)
+        self._load_bucket(bucket, self.dest_master, gen_create4, 'create', exp=0)
         if self.pause_xdcr_cluster != "":
             self.resume_xdcr()
         self.do_merge_bucket(self.src_master, self.dest_master, True, bucket)
