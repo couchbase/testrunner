@@ -143,7 +143,7 @@ class FailoverTests(FailoverBaseTest):
 
         # Kill or restart operations
         if self.killNodes or self.stopNodes:
-            self.victim_node_operations(node = None)
+            self.victim_node_operations(node = chosen[0])
             self.log.info(" Start Rebalance Again !")
             self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[node.id for node in chosen])
 
@@ -216,7 +216,7 @@ class FailoverTests(FailoverBaseTest):
 
         # Kill or restart operations
         if self.killNodes or self.stopNodes:
-            self.victim_node_operations(node = None)
+            self.victim_node_operations(node = chosen[0])
             self.log.info(" Start Rebalance Again !")
             self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[],deltaRecoveryBuckets = self.deltaRecoveryBuckets)
 
