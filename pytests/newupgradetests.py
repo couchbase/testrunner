@@ -433,8 +433,15 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.product = 'couchbase-server'
         self._install(self.servers[half_node:])
         self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
-        self.cluster.rebalance(self.servers, self.servers[half_node:], self.servers[:half_node])
         self.log.info("Rebalanced in upgraded nodes and rebalanced out nodes with old version")
+        self.cluster.rebalance(self.servers, self.servers[half_node:], self.servers[:half_node])
+        self.sleep(10)
+
+        """ verify DCP upgrade in 3.0.0 version """
+        if "3.0.0" in self.upgrade_versions[0] and \
+            int(self.initial_vbuckets) >= 256:
+            self.master = self.servers[half_node]
+            self.monitor_dcp_rebalance()
         self.sleep(self.sleep_time)
         try:
             for server in self.servers[half_node:]:
@@ -452,10 +459,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 success_upgrade &= self.queue.get()
             if not success_upgrade:
                 self.fail("Upgrade failed!")
-
-            """ verify DCP upgrade in 3.0.0 version """
-            if "3.0.0" in self.upgrade_versions[0]:
-                self.monitor_dcp_rebalance()
             self.cluster.rebalance(self.servers[half_node:], self.servers[:half_node], [])
             self.log.info("Rebalanced in all new version nodes")
             self.sleep(self.sleep_time)

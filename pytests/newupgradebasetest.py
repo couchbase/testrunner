@@ -462,7 +462,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.rest = RestConnection(self.master)
             self.rest_helper = RestHelper(self.rest)
         if self.rest._rebalance_progress_status() == 'running':
-            self.info("Start monitoring DCP upgrade from 2.x.x to 3.0.0")
+            self.log.info("Start monitoring DCP upgrade from 2.x.x to 3.0.0")
             status = self.rest.monitorRebalance()
         else:
             self.fail("DCP reabalance upgrade is not running")
