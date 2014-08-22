@@ -1794,6 +1794,84 @@ class QueryTests(BaseTestCase):
 
 ##############################################################################################
 #
+#   WITHIN
+##############################################################################################
+
+    def test_within_list_object(self):
+        for bucket in self.buckets:
+            self.query = "select name, VMs from %s WHERE 5 WITHIN VMs" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"name" : doc["name"], "VMs" : doc["VMs"]}
+                               for doc in full_list
+                               if len([vm for vm in doc["VMs"] if vm["RAM"] == 5])]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_within_list_of_lists(self):
+        for bucket in self.buckets:
+            self.query = "select name, VMs from %s where name within [['employee-2', 'employee-4'], ['employee-5']] " % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"name" : doc["name"], "VMs" : doc["VMs"]}
+                               for doc in full_list
+                               if len([vm for vm in doc["VMs"] if vm["RAM"] == 5])]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_within_object(self):
+        for bucket in self.buckets:
+            self.query = "select name, tasks_points from %s WHERE 1 WITHIN tasks_points" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"name" : doc["name"], "tasks_points" : doc["tasks_points"]}
+                               for doc in full_list
+                               if doc["tasks_points"]["task1"] == 1]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_within_array(self):
+        for bucket in self.buckets:
+            self.query = " select name, skills from %s where 'skill2010' within skills" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"name" : doc["name"], "skills" : doc["skills"]}
+                               for doc in full_list
+                               if 'skill2010' in doc["skills"]]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+##############################################################################################
+#
+#   RAW
+##############################################################################################
+
+    def test_raw(self):
+        for bucket in self.buckets:
+            self.query = "select raw name from %s " % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [doc["name"] for doc in full_list]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_raw_limit(self):
+        for bucket in self.buckets:
+            self.query = "select raw skills[0] from %s limit 5" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [doc["skills"][0] for doc in full_list][:5]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+##############################################################################################
+#    
 #   COMMON FUNCTIONS
 ##############################################################################################
 
