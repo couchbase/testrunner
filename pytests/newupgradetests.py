@@ -383,12 +383,14 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             for bucket in self.buckets:
                 bucket.kvs[1] = KVStore()
         self.online_upgrade()
-        self.sleep(self.sleep_time)
+        self.sleep(10)
 
         """ verify DCP upgrade in 3.0.0 version """
-        if "3.0.0" in self.upgrade_versions[0]:
+        if "3.0.0" in self.upgrade_versions[0] and \
+            int(self.initial_vbuckets) >= 256:
             self.monitor_dcp_rebalance()
         if self.input.param('reboot_cluster', False):
+            print "hello"
             self.warm_up_node(self.servers[self.nodes_init : self.num_servers])
         self.verification(self.servers[self.nodes_init : self.num_servers])
         if self.input.param('check_seqno', True):
@@ -414,10 +416,11 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self._new_master(self.servers[1])
         self.cluster.rebalance(self.servers, [], [self.servers[0]])
         self.log.info("Rebalanced out all old version nodes")
-        self.sleep(self.sleep_time)
+        self.sleep(10)
 
         """ verify DCP upgrade in 3.0.0 version """
-        if "3.0.0" in self.upgrade_versions[0]:
+        if "3.0.0" in self.upgrade_versions[0] and \
+            int(self.initial_vbuckets) >= 256:
             self.monitor_dcp_rebalance()
         self.verification(self.servers[1:])
 
