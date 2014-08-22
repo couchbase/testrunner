@@ -386,11 +386,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.sleep(10)
 
         """ verify DCP upgrade in 3.0.0 version """
-        if "3.0.0" in self.upgrade_versions[0] and \
-            int(self.initial_vbuckets) >= 256:
-            self.monitor_dcp_rebalance()
+        self.monitor_dcp_rebalance()
+
         if self.input.param('reboot_cluster', False):
-            print "hello"
             self.warm_up_node(self.servers[self.nodes_init : self.num_servers])
         self.verification(self.servers[self.nodes_init : self.num_servers])
         if self.input.param('check_seqno', True):
@@ -419,9 +417,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.sleep(10)
 
         """ verify DCP upgrade in 3.0.0 version """
-        if "3.0.0" in self.upgrade_versions[0] and \
-            int(self.initial_vbuckets) >= 256:
-            self.monitor_dcp_rebalance()
+        self.monitor_dcp_rebalance()
+
         self.verification(self.servers[1:])
 
     def online_consequentially_upgrade(self):
@@ -441,8 +438,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.sleep(10)
 
         """ verify DCP upgrade in 3.0.0 version """
-        if "3.0.0" in self.upgrade_versions[0] and \
-            int(self.initial_vbuckets) >= 256:
+        if "3.0.0" in self.upgrade_versions[0]:
             self.master = self.servers[half_node]
             self.monitor_dcp_rebalance()
         self.sleep(self.sleep_time)
@@ -487,8 +483,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.log.info("Rebalance completed")
         self.sleep(self.sleep_time)
         """ verify DCP upgrade in 3.0.0 version """
-        if "3.0.0" in self.upgrade_versions[0]:
-            self.monitor_dcp_rebalance()
+        self.monitor_dcp_rebalance()
+
         self.verification(self.servers[: self.num_servers])
 
     def online_upgrade(self):
@@ -553,6 +549,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if not FIND_MASTER:
                 raise Exception("After rebalance in 3.0 nodes, 3.0 doesn't become the master ")
         """ verify DCP upgrade in 3.0.0 version """
-        if "3.0.0" in self.upgrade_versions[0]:
-            self.monitor_dcp_rebalance()
+        self.monitor_dcp_rebalance()
+
         self.verification(new_servers)
