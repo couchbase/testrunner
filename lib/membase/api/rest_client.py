@@ -1550,7 +1550,8 @@ class RestConnection(object):
             raise BucketCreationException(ip=self.ip, bucket_name=bucket)
 
         create_time = time.time() - create_start_time
-        log.info("{0} seconds to create bucket {1}".format(create_time, bucket))
+        log.info("{0:.02f} seconds to create bucket {1}".
+                 format(round(create_time, 2), bucket))
         return status
 
     def change_bucket_props(self, bucket,
