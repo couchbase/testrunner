@@ -337,8 +337,9 @@ class RebalanceOutTests(RebalanceBaseTest):
             temp_tasks = self.async_create_views(self.master, ddoc_name, temp, bucket)
             views += temp
             tasks += temp_tasks
-
-        timeout = max(self.wait_timeout * 4, len(self.buckets) * self.wait_timeout * self.num_items / 50000)
+        timeout = None
+        if self.active_resident_threshold == 0:
+            timeout = max(self.wait_timeout * 4, len(self.buckets) * self.wait_timeout * self.num_items / 50000)
 
         for task in tasks:
             task.result(self.wait_timeout * 20)
@@ -392,7 +393,9 @@ class RebalanceOutTests(RebalanceBaseTest):
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
         # increase timeout for big data
-        timeout = max(self.wait_timeout * 5, self.wait_timeout * self.num_items / 25000)
+        timeout = None
+        if self.active_resident_threshold == 0:
+            timeout = max(self.wait_timeout * 5, self.wait_timeout * self.num_items / 25000)
         query = {}
         query["connectionTimeout"] = 60000;
         query["full_set"] = "true"

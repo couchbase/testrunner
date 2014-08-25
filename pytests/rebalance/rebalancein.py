@@ -342,7 +342,9 @@ class RebalanceInTests(RebalanceBaseTest):
             views += temp
             tasks += temp_tasks
 
-        timeout = max(self.wait_timeout * 4, len(self.buckets) * self.wait_timeout * self.num_items / 50000)
+        timeout = None
+        if self.active_resident_threshold == 0:
+            timeout = max(self.wait_timeout * 4, len(self.buckets) * self.wait_timeout * self.num_items / 50000)
 
         for task in tasks:
             task.result(self.wait_timeout * 20)

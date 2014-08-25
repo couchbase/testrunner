@@ -543,12 +543,15 @@ class FailoverTests(FailoverBaseTest):
         query["connectionTimeout"] = 60000;
         query["full_set"] = "true"
         expected_rows = None
+        timeout = None
+        if self.active_resident_threshold == 0:
+            timeout = 2400
         if self.max_verify:
             expected_rows = self.max_verify
             query["limit"] = expected_rows
         query["stale"] = "false"
         for bucket in self.buckets:
-            self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=2400, expected_rows=expected_rows)
+            self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
 
     def create_file(self,chosen,buckets,serverMap):
         """ Created files in data paths for checking if delta/full recovery occured """
