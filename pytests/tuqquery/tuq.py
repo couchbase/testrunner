@@ -6,7 +6,7 @@ import math
 import re
 
 import testconstants
-from datetime import date
+from datetime import date, timedelta
 import datetime
 import time
 from remote.remote_util import RemoteMachineShellConnection
@@ -1498,6 +1498,54 @@ class QueryTests(BaseTestCase):
 #
 #   DATETIME
 ##############################################################################################
+
+    def test_clock_millis(self):
+        self.query = "select clock_millis() as now"
+        now = time.time()
+        res = self.run_cbq_query()
+        self.assertTrue((res["resultset"][0]["now"] > now * 1000),
+                        "Result expected to be in: [%s ... %s]. Actual %s" % (
+                                        now * 1000, (now + 10) * 1000, res["resultset"]))
+
+    def test_clock_str(self):
+        self.query = "select clock_str() as now"
+        now = datetime.datetime.now()
+        res = self.run_cbq_query()
+        expected = "%s-%02d-%02dT%02d:" % (now.year, now.month, now.day, now.hour)
+        self.assertTrue(res["resultset"][0]["now"].startswith(expected),
+                        "Result expected: %s. Actual %s" % (expected, res["resultset"]))
+
+    def test_date_add_millis(self):
+        self.query = "select date_add_millis(clock_millis(), 100, 'day') as now"
+        now = time.time()
+        res = self.run_cbq_query()
+        self.assertTrue((res["resultset"][0]["now"] > now * 1000 + 100*24*60*60),
+                        "Result expected to be in: [%s ... %s]. Actual %s" % (
+                                        now * 1000 + 100*24*60*60, (now + 10) * 1000+ 100*24*60*60, res["resultset"]))
+
+    def test_date_add_str(self):
+        self.query = "select test_date_add_str(clock_str(), 10, 'day') as now"
+        now = datetime.datetime.now() + datetime.timedelta(days=10)
+        res = self.run_cbq_query()
+        expected = "%s-%02d-%02dT%02d:" % (now.year, now.month, now.day, now.hour)
+        self.assertTrue(res["resultset"][0]["now"].startswith(expected),
+                        "Result expected: %s. Actual %s" % (expected, res["resultset"]))
+
+    def test_date_diff_millis(self):
+        self.query = "select date_diff_millis(clock_millis(), date_add_millis(clock_millis(), 100, 'day'), 'day') as now"
+        res = self.run_cbq_query()
+        self.assertTrue(res["resultset"][0]["now"] == -100,
+                        "Result expected: %s. Actual %s" % (-100, res["resultset"]))
+
+    def test_date_diff_str(self):
+        self.query = 'select date_diff_str("2014-08-24T01:33:59", "2014-08-24T07:33:59", "minute") as now'
+        res = self.run_cbq_query()
+        self.assertTrue(res["resultset"][0]["now"] == -3600,
+                        "Result expected: %s. Actual %s" % (-3600, res["resultset"]))
+        self.query = 'select date_diff_str("2014-08-24T01:33:59", "2014-08-24T07:33:59", "hour") as now'
+        res = self.run_cbq_query()
+        self.assertTrue(res["resultset"][0]["now"] == -60,
+                        "Result expected: %s. Actual %s" % (-60, res["resultset"]))
 
     def test_now(self):
         self.query = "select now_str() as now"
