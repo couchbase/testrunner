@@ -100,9 +100,9 @@ class MemorySanity(BaseTestCase):
             self._load_all_buckets(self.master, gen, 'create', 0)
             self.num_items += delta_items
             self.log.info("Resident ratio is %s" % mc.stats()["vb_active_perc_mem_resident"])
-        memory_mb = int(mc.stats("memory")["total_allocated_bytes"]) / (1024 * 1024)
-        self.log.info("total_allocated_bytes is %s" % memory_mb)
-        self.assertTrue(memory_mb <= self.quota, "total_allocated_bytes %s should be within %s" % (
+        memory_mb = int(mc.stats("memory")["mem_used"]) / (1024 * 1024)
+        self.log.info("Memory Used is %s" % memory_mb)
+        self.assertTrue(memory_mb <= self.quota, "Memory Used %s should be within %s" % (
                                                   memory_mb, self.quota))
 
 
