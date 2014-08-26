@@ -339,7 +339,6 @@ class RebalanceInOutTests(RebalanceBaseTest):
                 break
             else:
                 self.log.info("rebalance is still required")
-                self._wait_for_stats_all_buckets(servs_init)
                 self._verify_all_buckets(self.master, timeout=None, max_verify=self.max_verify, batch_size=1)
         self.verify_unacked_bytes_all_buckets()
 
