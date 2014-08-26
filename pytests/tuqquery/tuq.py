@@ -987,6 +987,224 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
+    def test_array_avg(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, array_avg(array_agg(test_rate))" +\
+            " as rates FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "rates" : sum([x["test_rate"] for x in full_list
+                                           if x["job_title"] == group]) / float(len([x["test_rate"]
+                                                                                     for x in full_list
+                                           if x["job_title"] == group]))}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_contains(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, array_contains(array_agg(name), 'employee-1')" +\
+            " as emp_job FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "emp_job" : 'employee-1' in [x["name"] for x in full_list
+                                                           if x["job_title"] == group] }
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_count(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, array_count(array_agg(name)) as names" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "names" : len([x["name"] for x in full_list
+                                           if x["job_title"] == group])}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_distinct(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, array_distinct(array_agg(name)) as names" +\
+            " FROM my_bucket GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = self.sort_nested_list(actual_list['resultset'])
+            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "names" : sorted(set([x["name"] for x in full_list
+                                               if x["job_title"] == group]))}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_max(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, array_max(array_agg(test_rate)) as rates" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "rates" : max([x["test_rate"] for x in full_list
+                                           if x["job_title"] == group])}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_sum(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, array_sum(array_agg(test_rate)) as rates" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "rates" : sum([x["test_rate"] for x in full_list
+                                           if x["job_title"] == group])}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_min(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, array_max(array_agg(test_rate)) as rates" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "rates" : min([x["test_rate"] for x in full_list
+                                           if x["job_title"] == group])}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_position(self):
+        self.query = "select array_position(['support', 'qa'], 'dev') as index_num"
+        actual_result = self.run_cbq_query()
+        expected_result = [{"index_num" : -1}]
+        self._verify_results(actual_result['resultset'], expected_result)
+
+        self.query = "select array_position(['support', 'qa'], 'qa') as index_num"
+        actual_result = self.run_cbq_query()
+        expected_result = [{"index_num" : 1}]
+        self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_array_put(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title, array_put(array_agg(distinct name), 'employee-1') as emp_job" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = self.sort_nested_list(actual_list['resultset'])
+            actual_result = sorted(actual_result,
+                                   key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "emp_job" : set([x["name"] for x in full_list
+                                           if x["job_title"] == group])}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+            self.query = "SELECT job_title, array_put(array_agg(distinct name), 'employee-47') as emp_job" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = self.sort_nested_list(actual_list['resultset'])
+            actual_result = sorted(actual_result,
+                                   key=lambda doc: (doc['job_title']))
+
+            expected_result = [{"job_title" : group,
+                                "emp_job" : set([x["name"] for x in full_list
+                                           if x["job_title"] == group] + ['employee-47'])}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_range(self):
+        self.query = "select array_range(0,10) as num"
+        actual_result = self.run_cbq_query()
+        expected_result = [{"num" : list(xrange(10))}]
+        self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_array_replace(self):
+        for bucket in self.buckets:
+            full_list = self._generate_full_docs_list(self.gens_load)
+            self.query = "SELECT job_title, array_replace(array_agg(name), 'employee-1', 'employee-47') as emp_job" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = self.sort_nested_list(actual_list['resultset'])
+            actual_result = sorted(actual_result,
+                                   key=lambda doc: (doc['job_title']))
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "emp_job" : ["employee-47" if x["name"] == 'employee-1' else x["name"]
+                                             for x in full_list
+                                             if x["job_title"] == group]}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_repeat(self):
+        self.query = "select ARRAY_REPEAT(2, 2) as num"
+        actual_result = self.run_cbq_query()
+        expected_result = [{"num" : [2] * 2}]
+        self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_array_reverse(self):
+        self.query = "select array_reverse([1,2,3]) as num"
+        actual_result = self.run_cbq_query()
+        expected_result = [{"num" : [3,2,1]}]
+        self._verify_results(actual_result['resultset'], expected_result)
+
+    def test_array_sort(self):
+        for bucket in self.buckets:
+            full_list = self._generate_full_docs_list(self.gens_load)
+            self.query = "SELECT job_title, array_sort(array_agg(test_rate)) as emp_job" +\
+            " FROM %s GROUP BY job_title" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['job_title']))
+            tmp_groups = set([doc['job_title'] for doc in full_list])
+            expected_result = [{"job_title" : group,
+                                "emp_job" : sorted([x["test_rate"] for x in full_list
+                                             if x["job_title"] == group])}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
     def test_poly_length(self):
         for bucket in self.buckets:
             full_list = self._generate_full_docs_list(self.gens_load)
