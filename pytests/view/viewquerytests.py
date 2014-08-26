@@ -973,13 +973,15 @@ class ViewQueryTests(BaseTestCase):
                 failover_nodes.append(failover_node)
                 self.log.info("10 seconds sleep after failover before invoking rebalance...")
                 time.sleep(10)
+                servers = self.servers[i:]
+                self.master = self.servers[i+1]
 
                 rebalance = self.cluster.async_rebalance(servers,
                                                          [], failover_nodes)
 
-                self._query_all_views(data_set.views, gen_load)
+                self._query_all_views(data_set.views, gen_load, server_to_query=i+1)
 
-                del(servers[1])
+                del(servers[i])
 
                 msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
                 self.assertTrue(rebalance.result(), msg=msg)
