@@ -80,6 +80,9 @@ class BuildQuery(object):
                        and build.toy == toy:
                         return build
         elif direct_build_url != "":
+            if "exe" in builds.deliverable_type:
+                if "rel" in version and version[:5] in WIN_CB_VERSION_3:
+                    version = version.replace("-rel", "")
             """ direct url only need one build """
             if builds.product_version.find(version) != -1 and product == builds.product\
                and builds.architecture_type == arch and type == builds.deliverable_type:
