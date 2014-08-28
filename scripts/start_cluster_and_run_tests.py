@@ -59,25 +59,30 @@ def ns_clean(make, verbose = 1):
 def run_test(ini, conf, verbose):
     """ run testrunner process """
 
-    done = False
+    rc = -1
     try:
         os.chdir(TR_DIR)
 
         args = ["python", "testrunner.py", "-i", ini, "-c", conf]
         params = "makefile=True"
+
         if verbose == 0:
             params += ",log_level=CRITICAL"
         args.extend(["-p", params])
 
-        subprocess.check_call(args)
-
-        done = True
-    except subprocess.CalledProcessError as cpex:
-        print "Error: while running {0}".format(cpex.cmd)
+        r, w = os.pipe()
+        proc = subprocess.Popen(args, stdout = subprocess.PIPE)
+        with open("make_test.log","w") as log:
+            while proc.poll() is None:
+                line = proc.stdout.readline()
+                if line:
+                    print line[:-1]
+                    log.write(line)
+        rc = proc.returncode
     except OSError as ex:
         print "Error: unable to write to stdout\n{0}".format(ex)
 
-    done or sys.exit(-1)
+    return rc
 
 def get_verbosity():
     """ 1 = display, 0 = quiet """
@@ -108,11 +113,12 @@ def main():
     assert crm.start_nodes()
 
     # run test
-    run_test(ini, conf, verbose)
+    rc = run_test(ini, conf, verbose)
 
     # done
     crm.stop_nodes()
 
+    sys.exit(rc)
 
 if __name__ == '__main__':
     main()
