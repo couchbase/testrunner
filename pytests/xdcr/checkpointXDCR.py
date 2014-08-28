@@ -138,7 +138,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         if os_type.lower() == 'windows':
             couchdb_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/couchdb.log"
         else:
-            couchdb_log = "/opt/couchbase/var/lib/couchbase/logs/couchdb.*"
+            couchdb_log = "/opt/couchbase/var/lib/couchbase/logs/couchdb.log"
         total_chkpt_calls, error = shell.execute_command("grep \"POST /_commit_for_checkpoint\" \"{}\" | wc -l"
                                                                      .format(couchdb_log))
         total_successful_chkpts, error = shell.execute_command("grep \"POST /_commit_for_checkpoint 200\" \"{}\" | wc -l"
@@ -159,7 +159,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         if os_type.lower() == 'windows':
             couchdb_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/couchdb.log"
         else:
-            couchdb_log = "/opt/couchbase/var/lib/couchbase/logs/couchdb.*"
+            couchdb_log = "/opt/couchbase/var/lib/couchbase/logs/couchdb.log"
         total_prerep_calls, error = shell.execute_command("grep \"POST /_pre_replicate\" \"{}\" | wc -l"
                                                                      .format(couchdb_log))
         total_successful_prereps, error = shell.execute_command("grep \"POST /_pre_replicate 200\" \"{}\" | wc -l"
