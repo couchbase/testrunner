@@ -52,7 +52,7 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
             task.result()
 
         # Step-8 Compare the source and destination cluster items - item count, meta data, data content.
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
         # Verify if no deletion performed at source node:
         src_master_buckets = self._get_cluster_buckets(self.src_master)
@@ -109,4 +109,4 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
 
         # Step-5 verify data
         self.sleep(120)
-        self.verify_results(verify_src=True)
+        self.verify_results()

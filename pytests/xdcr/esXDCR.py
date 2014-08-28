@@ -68,8 +68,8 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
 
     #overriding xdcr verify results method for specific es verification
-    def verify_results(self, verify_src=False):
-        self.verify_es_results(verify_src)
+    def verify_results(self):
+        self.verify_es_results()
 
     """Testing Unidirectional load( Loading only at source) Verifying whether ES/XDCR replication is successful on
     subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified by the user. """

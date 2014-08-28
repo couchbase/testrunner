@@ -197,7 +197,7 @@ class XDCRBaseTest(unittest.TestCase):
 
     def __get_cbcollect_info(self):
         path = self._input.param("logs_folder", "/tmp")
-        for server in self.src_nodes+self.dest_nodes:
+        for server in self.src_nodes + self.dest_nodes:
             print "grabbing cbcollect from {0}".format(server.ip)
             path = path or "."
             try:
@@ -531,14 +531,14 @@ class XDCRBaseTest(unittest.TestCase):
             self.hostnames.update(self._rename_nodes(nodes))
 
     def _rename_nodes(self, servers):
-        hostnames={}
+        hostnames = {}
         for server in servers:
             shell = RemoteMachineShellConnection(server)
             try:
                 hostname = shell.get_full_hostname()
                 rest = RestConnection(server)
                 renamed, content = rest.rename_node(hostname, username=server.rest_username, password=server.rest_password)
-                self.assertTrue(renamed, "Server %s is not renamed!Hostname %s. Error %s" %(
+                self.assertTrue(renamed, "Server %s is not renamed!Hostname %s. Error %s" % (
                                         server, hostname, content))
                 hostnames[server] = hostname
             finally:
@@ -664,7 +664,7 @@ class XDCRBaseTest(unittest.TestCase):
             if master:
                 self.src_master = self.src_nodes[0]
                 self.__change_masterid_buckets(self.src_master, src_buckets)
-            self.verify_src = True
+
         if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
             dest_buckets = self._get_cluster_buckets(self.dest_master)
             tasks += self.__async_rebalance_out_cluster(self.dest_nodes, self.dest_master, master=master, cluster_type="source")
@@ -693,7 +693,7 @@ class XDCRBaseTest(unittest.TestCase):
         tasks = []
         if "source" in self._rebalance:
             tasks += self.__async_rebalance_in_cluster(self.src_nodes, self.src_master)
-            self.verify_src = True
+
         if "destination" in self._rebalance:
             tasks += self.__async_rebalance_in_cluster(self.dest_nodes, self.dest_master, cluster_type="destination")
         return tasks
@@ -717,7 +717,7 @@ class XDCRBaseTest(unittest.TestCase):
             if master:
                 self.src_master = self.src_nodes[0]
                 self.__change_masterid_buckets(self.src_master, src_buckets)
-            self.verify_src = True
+
         if "destination" in self._rebalance and self._num_rebalance < len(self.dest_nodes):
             dest_buckets = self._get_cluster_buckets(self.dest_master)
             tasks += self.__async_swap_rebalance_cluster(self.dest_nodes, self.dest_master, master=master, cluster_type="destination")
@@ -1352,7 +1352,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
     2. Item count check on source versus destination
     3. For deleted and updated items, check the CAS/SeqNo/Expiry/Flags for same key on source/destination
     * Make sure to call expiry_pager function to flush out temp items(deleted/expired items)"""
-    def verify_xdcr_stats(self, src_nodes, dest_nodes, verify_src=True, timeout=200):
+    def verify_xdcr_stats(self, src_nodes, dest_nodes, timeout=200):
         self.collect_data_files = True
         self._expiry_pager(self.src_nodes[0], val=10)
         self._expiry_pager(self.dest_nodes[0], val=10)
@@ -1400,16 +1400,16 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             else:
                 self.fail("Test is failed as Outbound mutations has not become zero, check the test logs above.")
 
-    def verify_results(self, verify_src=False):
+    def verify_results(self):
         dest_key_index = 1
         if len(self.ord_keys) == 2:
             src_nodes = self.get_servers_in_cluster(self.src_master)
             dest_nodes = self.get_servers_in_cluster(self.dest_master)
-            self.verify_xdcr_stats(src_nodes, dest_nodes, verify_src)
+            self.verify_xdcr_stats(src_nodes, dest_nodes)
         else:
             # Checking replication at destination clusters when more then 2 clusters defined
             for cluster_num in self.ord_keys[1:]:
                 if dest_key_index == self.ord_keys_len:
                     break
                 self.dest_nodes = self._clusters_dic[cluster_num]
-                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, verify_src)
+                self.verify_xdcr_stats(self.src_nodes, self.dest_nodes)

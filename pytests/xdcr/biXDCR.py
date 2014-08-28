@@ -43,7 +43,7 @@ class bidirectional(XDCRReplicationBaseTest):
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
     """Bidirectional replication between two clusters(currently), create-updates-deletes on DISJOINT sets on same bucket.
     Here running incremental load on both cluster1 and cluster2 as specified by the user/conf file"""
@@ -59,7 +59,7 @@ class bidirectional(XDCRReplicationBaseTest):
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
     """Testing Bidirectional load( Loading at source/destination). Failover node at Source/Destination while
     Create/Update/Delete are performed in parallel based on doc-ops specified by the user.
@@ -97,7 +97,7 @@ class bidirectional(XDCRReplicationBaseTest):
         # Merging the keys for updated/deleted keys.
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
     def load_with_async_ops_with_warmup(self):
         if "create" in self._doc_ops:
@@ -125,7 +125,7 @@ class bidirectional(XDCRReplicationBaseTest):
 
         self.wait_warmup_completed(warmupnodes)
 
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
     def load_with_async_ops_with_warmup_master(self):
         if "create" in self._doc_ops:
@@ -153,7 +153,7 @@ class bidirectional(XDCRReplicationBaseTest):
 
         self.wait_warmup_completed(warmupnodes)
 
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
     def load_with_async_ops_and_joint_sets_with_warmup(self):
         if "create" in self._doc_ops:
@@ -181,7 +181,7 @@ class bidirectional(XDCRReplicationBaseTest):
 
         self.wait_warmup_completed(warmupnodes)
 
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
     def load_with_async_ops_and_joint_sets_with_warmup_master(self):
         if "create" in self._doc_ops:
@@ -209,7 +209,7 @@ class bidirectional(XDCRReplicationBaseTest):
 
         self.wait_warmup_completed(warmupnodes)
 
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
     def load_with_failover(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
@@ -247,7 +247,7 @@ class bidirectional(XDCRReplicationBaseTest):
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
 
 
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
     def load_with_failover_then_add_back(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
@@ -290,7 +290,7 @@ class bidirectional(XDCRReplicationBaseTest):
 
         self.sleep(self.wait_timeout)
 
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
     def load_with_failover_master(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
@@ -338,7 +338,7 @@ class bidirectional(XDCRReplicationBaseTest):
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
         self.sleep(self.wait_timeout * 5)
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
     """Replication with compaction ddocs and view queries on both clusters.
 
@@ -388,7 +388,7 @@ class bidirectional(XDCRReplicationBaseTest):
         self.assertTrue(result)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
     def replication_with_view_queries_and_ops(self):
         tasks = []
@@ -458,7 +458,7 @@ class bidirectional(XDCRReplicationBaseTest):
             for task in tasks:
                 task.result(self._poll_timeout)
 
-            self.verify_results(verify_src=True)
+            self.verify_results()
         finally:
             # For timeout error, all tasks to be cancelled
             # Before proceeding to next test
@@ -503,7 +503,7 @@ class bidirectional(XDCRReplicationBaseTest):
                 task.result()
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
     def replication_while_rebooting_a_non_master_src_dest_node(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
@@ -530,4 +530,4 @@ class bidirectional(XDCRReplicationBaseTest):
         ClusterOperationHelper.wait_for_ns_servers_or_assert([reboot_node_dest], self, wait_if_warmup=True)
         ClusterOperationHelper.wait_for_ns_servers_or_assert([reboot_node_src], self, wait_if_warmup=True)
         self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-        self.verify_results(verify_src=True)
+        self.verify_results()

@@ -224,7 +224,7 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
         self._num_rebalance = self._input.param("num_rebalance", 1)
         self._failover = self._input.param("failover", "")
         self.encrypt_after_pause = self._input.param("encrypt_after_pause", "")
-        self.verify_src = False
+
 
     def tearDown(self):
         super(PauseResumeTest, self).tearDown()
@@ -257,7 +257,7 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
         elif self._replication_direction_str in "bidirection" and \
              self.delete_bucket != "destination":
             self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-            self.verify_src = True
+
 
     # Test with pause and resume
     def replication_with_pause_and_resume(self):

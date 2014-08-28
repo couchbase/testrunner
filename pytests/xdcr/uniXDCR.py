@@ -643,7 +643,7 @@ class unidirectional(XDCRReplicationBaseTest):
 
         self._async_modify_data()
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
     # Disaster at site.
     # 1. Crash Source Cluster., Sleep n second
@@ -677,7 +677,7 @@ class unidirectional(XDCRReplicationBaseTest):
             self.wait_warmup_completed(self.dest_nodes)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
     """ Test if replication restarts 60s after idle xdcr following dest bucket flush """
     def test_idle_xdcr_dest_flush(self):

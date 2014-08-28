@@ -11,7 +11,6 @@ from xdcrbasetests import XDCRReplicationBaseTest
 class Rebalance(XDCRReplicationBaseTest):
     def setUp(self):
         super(Rebalance, self).setUp()
-        self.verify_src = False
         if self._replication_direction_str in "bidirection":
             self.gen_create2 = BlobGenerator('LoadTwo', 'LoadTwo', self._value_size, end=self.num_items)
             self.gen_delete2 = BlobGenerator('LoadTwo', 'LoadTwo-', self._value_size,
@@ -34,7 +33,6 @@ class Rebalance(XDCRReplicationBaseTest):
             self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         elif self._replication_direction_str in "bidirection":
             self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-            self.verify_src = True
 
     def __sync_load_data(self):
         self.log.info("Loading data Synchronously")
@@ -77,7 +75,7 @@ class Rebalance(XDCRReplicationBaseTest):
 
             # Merge Items
             self.__merge_buckets()
-            self.verify_results(verify_src=self.verify_src)
+            self.verify_results()
         finally:
             pass
 
@@ -99,7 +97,7 @@ class Rebalance(XDCRReplicationBaseTest):
             self.__update_delete()
 
             self.__merge_buckets()
-            self.verify_results(verify_src=self.verify_src)
+            self.verify_results()
         finally:
             pass
 
@@ -119,7 +117,7 @@ class Rebalance(XDCRReplicationBaseTest):
 
             self.__merge_buckets()
 
-            self.verify_results(verify_src=self.verify_src)
+            self.verify_results()
         finally:
             pass
 
@@ -139,7 +137,7 @@ class Rebalance(XDCRReplicationBaseTest):
                 self.__update_delete()
 
             self.__merge_buckets()
-            self.verify_results(verify_src=self.verify_src)
+            self.verify_results()
         finally:
             pass
 
@@ -158,7 +156,7 @@ class Rebalance(XDCRReplicationBaseTest):
 
             self.__update_delete()
             self.__merge_buckets()
-            self.verify_results(verify_src=self.verify_src)
+            self.verify_results()
         finally:
             pass
 
@@ -207,7 +205,7 @@ class Rebalance(XDCRReplicationBaseTest):
                 self.assertTrue(result)
 
             self.__merge_buckets()
-            self.verify_results(verify_src=self.verify_src)
+            self.verify_results()
         finally:
             pass
 
@@ -281,7 +279,7 @@ class Rebalance(XDCRReplicationBaseTest):
                             dest_buckets[0].kvs[1].__len__()))
 
                 [task.result(self._poll_timeout) for task in tasks]
-            self.verify_results(verify_src=self.verify_src)
+            self.verify_results()
         finally:
             # Some query tasks not finished after timeout and keep on running,
             # it should be cancelled before proceeding to next test.

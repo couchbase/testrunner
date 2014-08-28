@@ -26,7 +26,7 @@ class ESReplicationBaseTest(object):
         self._log = logger.Logger.get_logger()
 
 
-    def verify_es_results(self, verify_src=False, verification_count=10000):
+    def verify_es_results(self, verification_count=10000):
 
         xd_ref = self.xd_ref
         rest = RestConnection(self.src_nodes[0])
@@ -42,12 +42,11 @@ class ESReplicationBaseTest(object):
             src_nodes = rest.get_nodes()
             self.verify_es_stats(src_nodes,
                                  dest_nodes,
-                                 verify_src,
                                  verification_count)
             dest_key_index += 1
 
 
-    def verify_es_stats(self, src_nodes, dest_nodes, verify_src=False, verification_count=10000):
+    def verify_es_stats(self, src_nodes, dest_nodes, verification_count=10000):
         xd_ref = self.xd_ref
 
         src_master = self.xd_ref.src_master
@@ -58,8 +57,8 @@ class ESReplicationBaseTest(object):
 
         xd_ref._expiry_pager(src_master)
         self.sleep(30)
-        if verify_src:
-            xd_ref._verify_item_count(src_master, src_nodes)
+
+        xd_ref._verify_item_count(src_master, src_nodes)
 
         self._log.info("Verifing couchbase to elasticsearch replication")
         self.verify_es_num_docs(src_master, dest_master, verification_count=verification_count)
