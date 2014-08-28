@@ -7,6 +7,7 @@ COUCHBASE_DATA_PATH = "/opt/couchbase/var/lib/couchbase/data/"
 # remember update WIN_REGISTER_ID also when update COUCHBASE_VERSION
 COUCHBASE_VERSIONS = ["1.8.0r", "1.8.0", "1.8.1", "2.0.0", "2.0.1", "2.0.2", "2.1.0", "2.1.1", "2.2.0",
                       "2.2.1", "2.5.0", "2.5.1", "3.0.0", "3.0.1"]
+WIN_CB_VERSION_3 = ["3.0.0", "3.0.1"]
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
 WIN_CB_PATH = "/cygdrive/c/Program Files/Couchbase/Server/"

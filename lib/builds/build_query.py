@@ -11,7 +11,7 @@ import testconstants
 import logger
 import traceback
 import sys
-
+from testconstants import WIN_CB_VERSION_3
 
 class MembaseBuild(object):
     def __init__(self):
@@ -337,19 +337,19 @@ class BuildQuery(object):
             else:
                 build.product_version = version
         if "exe" in deliverable_type:
-            if "3.0.0" not in version:
+            if version[:5] not in WIN_CB_VERSION_3:
                 setup = "setup."
             else:
                 os_name= "windows-"
-            if "rel" in version and "3.0.0" in version:
+            if "rel" in version and version[:5] in WIN_CB_VERSION_3:
                 build.product_version = version.replace("-rel", "")
-            elif "rel" not in version and "3.0.0" not in version:
+            elif "rel" not in version and version[:5] not in WIN_CB_VERSION_3:
                 build.product_version = version + "-rel"
             else:
                 build.product_version = version
-            if "couchbase-server" in edition_type and "3.0.0" in version:
+            if "couchbase-server" in edition_type and version[:5] in WIN_CB_VERSION_3:
                 edition_type = edition_type.replace("couchbase-", "couchbase_")
-            if "x86_64" in architecture_type and "3.0.0" in version:
+            if "x86_64" in architecture_type and version[:5] in WIN_CB_VERSION_3:
                 build.architecture_type = "amd64"
 
         if "toy" in version and toy != "":
@@ -363,7 +363,7 @@ class BuildQuery(object):
         version_join_char = "_"
         if toy is not "":
             joint_char = "-"
-        if "exe" in deliverable_type and "3.0.0" in version:
+        if "exe" in deliverable_type and version[:5] in WIN_CB_VERSION_3:
             joint_char = "-"
             version_join_char = "-"
 

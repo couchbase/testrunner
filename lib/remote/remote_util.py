@@ -12,6 +12,8 @@ from testconstants import MEMBASE_VERSIONS
 from testconstants import COUCHBASE_VERSIONS
 from testconstants import MISSING_UBUNTU_LIB
 from testconstants import MV_LATESTBUILD_REPO
+from testconstants import WIN_CB_VERSION_3
+
 
 from membase.api.rest_client import RestConnection, RestHelper
 
@@ -693,7 +695,6 @@ class RemoteMachineShellConnection:
             if full_version == "1.6.5.4-win64":
                 full_version = "1.6.5.4"
             build_name = short_version = full_version
-            print build_name, short_version, full_version
             return build_name, short_version, full_version
         except IOError:
             log.error('Can not read version file')
@@ -912,7 +913,7 @@ class RemoteMachineShellConnection:
         task = "upgrade"
         bat_file = "upgrade.bat"
         version_file = "VERSION.txt"
-        if "3.0.0" in version:
+        if version[:5] in WIN_CB_VERSION_3:
             version_file = "README.txt"
         deleted = False
         self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb', version, task)
@@ -981,7 +982,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             success &= self.log_command_output(output, error, track_words)
             file_check = 'VERSION.txt'
-            if "3.0.0" in build.product_version:
+            if build.product_version[:5] in WIN_CB_VERSION_3:
                 file_check = "README.txt"
             self.wait_till_file_added("/cygdrive/c/Program Files/{0}/Server/".format(server_type.title()), file_check,
                                           timeout_in_seconds=600)
@@ -1102,7 +1103,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             success &= self.log_command_output(output, error, track_words)
             file_check = 'VERSION.txt'
-            if "3.0.0" in build.product_version:
+            if build.product_version[:5] in WIN_CB_VERSION_3:
                 file_check = "README.txt"
             self.wait_till_file_added(remote_path, file_check, timeout_in_seconds=600)
             self.sleep(60, "wait for server to start up completely")
@@ -1250,7 +1251,7 @@ class RemoteMachineShellConnection:
                 # run schedule task uninstall couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
-                if "3.0.0" in full_version:
+                if full_version[:5] in WIN_CB_VERSION_3:
                     version_file = "README.txt"
                 deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
                 if not deleted:
@@ -1341,7 +1342,7 @@ class RemoteMachineShellConnection:
             # run schedule task uninstall couchbase server
             output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
             self.log_command_output(output, error)
-            if "3.0.0" in build_name:
+            if build_name[:5] in WIN_CB_VERSION_3:
                 version_file = "README.txt"
             deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
             if not deleted:
@@ -1410,7 +1411,7 @@ class RemoteMachineShellConnection:
                 # run schedule task uninstall Couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
-                if "3.0.0" in build_name:
+                if build_name[:5] in WIN_CB_VERSION_3:
                     version_file = "README.txt"
                 deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
                 if not deleted:
