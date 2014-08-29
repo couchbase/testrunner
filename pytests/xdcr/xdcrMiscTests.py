@@ -1,6 +1,10 @@
 from couchbase.stats_tools import StatsCommon
-from xdcrbasetests import XDCRReplicationBaseTest
+from membase.api.rest_client import RestConnection
 from couchbase.documentgenerator import BlobGenerator
+
+from xdcrbasetests import XDCRReplicationBaseTest
+from xdcrbasetests import XDCRConstants
+
 
 class XdcrMiscTests(XDCRReplicationBaseTest):
     def setUp(self):
@@ -110,3 +114,24 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
         # Step-5 verify data
         self.sleep(120)
         self.verify_results()
+
+    def test_xdcr_within_same_cluster(self):
+        remote_cluster_name = "same-cluster"
+        self._link_clusters(self.src_master, remote_cluster_name, self.src_master)
+
+        buckets = self._get_cluster_buckets(self.src_master)
+        self.assertTrue(len(buckets) >= 2, "Number of buckets required for this is greater than 1 on source cluster")
+        src_bucket, dest_bucket = buckets[0], buckets[1]
+
+        self._load_bucket(src_bucket, self.src_master, self.gen_create, "create", 0)
+
+        # Step-4 XDCR Source -> Remote
+        rest_conn_src = RestConnection(self.src_master)
+        rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
+                                        src_bucket.name, remote_cluster_name,
+                                        self.rep_type, toBucket=dest_bucket.name)
+
+        dest_bucket.kvs[1] = src_bucket.kvs[1]
+
+        self._verify_item_count(self.src_master, self.src_nodes)
+        self._verify_data_all_buckets(self.src_master)
