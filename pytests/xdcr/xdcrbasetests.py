@@ -986,22 +986,6 @@ class XDCRBaseTest(unittest.TestCase):
         if self._wait_for_expiration and self._expires:
             self.sleep(self._expires, "Waiting for expiration of updated items")
 
-    def _poll_for_condition(self, condition):
-        timeout = self._poll_timeout
-        interval = self._poll_interval
-        num_itr = timeout / interval
-        return self._poll_for_condition_rec(condition, interval, num_itr)
-
-    def _poll_for_condition_rec(self, condition, sleep, num_itr):
-        if num_itr == 0:
-            return False
-        else:
-            if condition():
-                return True
-            else:
-                self.sleep(sleep)
-                return self._poll_for_condition_rec(condition, sleep, (num_itr - 1))
-
 
 #===============================================================================
 # class: XDCRReplicationBaseTest
@@ -1305,73 +1289,38 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             self.log.info("wait for expiry pager to run on all these nodes")
 
     def _wait_flusher_empty(self, master, servers, timeout=120):
-        try:
-            tasks = []
-            buckets = self._get_cluster_buckets(master)
-            self.assertTrue(buckets, "No buckets recieved from the server {0} for verification".format(master.ip))
-            for server in servers:
-                for bucket in buckets:
-                    tasks.append(self.cluster.async_wait_for_stats([server], bucket, '', 'ep_queue_size', '==', 0))
-            for task in tasks:
-                task.result(timeout)
-            return True
-        except MemcachedError as e:
-            self.log.info("verifying ...")
-            self.log.debug("Not able to fetch data. Error is %s", (e.message))
-            return False
-        except TimeoutError:
-            for task in tasks:
-                task.cancel()
-            self.log.warning("Flusher queue was not emptied in {0} seconds!".format(timeout))
-            return False
+        tasks = []
+        buckets = self._get_cluster_buckets(master)
+        self.assertTrue(buckets, "No buckets recieved from the server {0} for verification".format(master.ip))
+        for server in servers:
+            for bucket in buckets:
+                tasks.append(self.cluster.async_wait_for_stats([server], bucket, '', 'ep_queue_size', '==', 0))
+        for task in tasks:
+            task.result(timeout)
 
     def _verify_data_all_buckets(self, server, kv_store=1, timeout=None, max_verify=None, only_store_hash=True, batch_size=1000):
-        def verify():
-            try:
-                tasks = []
-                buckets = self._get_cluster_buckets(server)
-                self.assertTrue(buckets, "No buckets recieved from the server {0} for verification".format(server.ip))
-                for bucket in buckets:
-                    tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size, timeout_sec=60))
-                for task in tasks:
-                    task.result(timeout)
-                return True
-            except MemcachedError as e:
-                self.log.info("verifying ...")
-                self.log.info("Not able to fetch data. Error is %s", (e.message))
-                return False
-
-        is_verified = self._poll_for_condition(verify)
-        if not is_verified:
-            raise ValueError(
-                "Verification process not completed after waiting for {0} seconds. Please check logs".format(
-                    self._poll_timeout))
+        tasks = []
+        buckets = self._get_cluster_buckets(server)
+        self.assertTrue(buckets, "No buckets recieved from the server {0} for verification".format(server.ip))
+        for bucket in buckets:
+            tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify, only_store_hash, batch_size, timeout_sec=60))
+        for task in tasks:
+            task.result(timeout)
 
     def _verify_item_count(self, master, servers, timeout=120):
-        try:
-            stats_tasks = []
-            buckets = self._get_cluster_buckets(master)
-            self.assertTrue(buckets, "No buckets recieved from the server {0} for verification".format(master.ip))
-            for bucket in buckets:
-                items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+        stats_tasks = []
+        buckets = self._get_cluster_buckets(master)
+        self.assertTrue(buckets, "No buckets recieved from the server {0} for verification".format(master.ip))
+        for bucket in buckets:
+            items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+            for stat in ['curr_items', 'vb_active_curr_items']:
                 stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
-                   'curr_items', '==', items))
+                    stat, '==', items))
+            if self._num_replicas >= 1 and len(servers) > 1:
                 stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
-                    'vb_active_curr_items', '==', items))
-                if self._num_replicas >= 1 and len(servers) > 1:
-                    stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
-                        'vb_replica_curr_items', '==', items * self._num_replicas))
-            for task in stats_tasks:
-                task.result(timeout)
-            return True
-        except MemcachedError as e:
-            self.log.info("verifying ...")
-            self.log.debug("Not able to fetch data. Error is %s", (e.message))
-        except TimeoutError:
-            for task in stats_tasks:
-                task.cancel()
-            raise XDCRException("Item count verification was not completed in {0} seconds".format(timeout))
-        return False
+                    'vb_replica_curr_items', '==', items * self._num_replicas))
+        for task in stats_tasks:
+            task.result(timeout)
 
     # CBQE-1695 Wait for replication_changes_left (outbound mutations) to be 0.
     def __wait_for_outbound_mutations_zero(self, master_node, timeout=180):
@@ -1385,7 +1334,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             for bucket in buckets:
                 mutations = int(rest.get_xdc_queue_size(bucket.name))
                 self.log.info("Current outbound mutations on cluster node: %s for bucket %s is %s" % (master_node.ip, bucket.name, mutations))
-                if  mutations == 0:
+                if mutations == 0:
                     found = found + 1
             if found == len(buckets):
                 break
