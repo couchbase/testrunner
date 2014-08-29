@@ -9,7 +9,6 @@ import string
 import random
 from threading import Thread
 
-from tasks.future import TimeoutError
 from membase.api.rest_client import RestConnection, Bucket
 from couchbase.cluster import Cluster
 from couchbase.document import View
@@ -18,7 +17,6 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
-from mc_bin_client import MemcachedError
 from remote.remote_util import RemoteUtilHelper
 from couchbase.stats_tools import StatsCommon
 from scripts.collect_server_info import cbcollectRunner
@@ -114,28 +112,20 @@ class XDCRBaseTest(unittest.TestCase):
             self.log.info("==============  XDCRbasetests setup is finished for test #{0} {1} =============="\
                 .format(self.case_number, self._testMethodName))
             # # THREADS FOR STATS KEEPING
+            self.__stats_threads = []
             if str(self.__class__).find('upgradeXDCR') == -1  and \
                str(self.__class__).find('tuq_xdcr') == -1 and self.print_stats:
-                self._stats_thread1 = Thread(target=self._replication_stat_keeper, args=["replication_data_replicated", self.src_master])
-                self._stats_thread2 = Thread(target=self._replication_stat_keeper, args=["xdc_ops", self.dest_master])
-                self._stats_thread3 = Thread(target=self._replication_stat_keeper, args=["data_replicated", self.src_master])
-                self._stats_thread1.setDaemon(True)
-                self._stats_thread2.setDaemon(True)
-                self._stats_thread3.setDaemon(True)
-                self._stats_thread1.start()
-                self._stats_thread2.start()
-                self._stats_thread3.start()
+                self.__stats_threads.append(Thread(target=self._replication_stat_keeper, args=["replication_data_replicated", self.src_master]))
+                self.__stats_threads.append(Thread(target=self._replication_stat_keeper, args=["xdc_ops", self.dest_master]))
+                self.__stats_threads.append(Thread(target=self._replication_stat_keeper, args=["data_replicated", self.src_master]))
                 if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
-                    self._stats_thread4 = Thread(target=self._replication_stat_keeper, args=["replication_data_replicated", self.dest_master])
-                    self._stats_thread5 = Thread(target=self._replication_stat_keeper, args=["xdc_ops", self.src_master])
-                    self._stats_thread6 = Thread(target=self._replication_stat_keeper, args=["data_replicated", self.dest_master])
-                    self._stats_thread4.setDaemon(True)
-                    self._stats_thread5.setDaemon(True)
-                    self._stats_thread6.setDaemon(True)
-                    self._stats_thread4.start()
-                    self._stats_thread5.start()
-                    self._stats_thread6.start()
-                    self._log_start(self)
+                    self.__stats_threads.append(Thread(target=self._replication_stat_keeper, args=["replication_data_replicated", self.dest_master]))
+                    self.__stats_threads.append(Thread(target=self._replication_stat_keeper, args=["xdc_ops", self.src_master]))
+                    self.__stats_threads.append(Thread(target=self._replication_stat_keeper, args=["data_replicated", self.dest_master]))
+
+                [st_thread.setDaemon(True) for st_thread in self.__stats_threads]
+                [st_thread.start() for st_thread in self.__stats_threads]
+                self._log_start(self)
         except Exception as e:
             self.log.error(e.message)
             self.log.error("Error while setting up clusters: %s", sys.exc_info())
@@ -152,13 +142,8 @@ class XDCRBaseTest(unittest.TestCase):
                 return
 
             # Grab cbcollect before we cleanup
-            if test_failed and TestInputSingleton.input.param("get-cbcollect-info", True):
-                try:
-                    self.__get_cbcollect_info()
-                    # do not collect again after teardown
-                    TestInputSingleton.input.test_params["get-cbcollect-info"] = False
-                except:
-                    pass # let's try again after clean up
+            if test_failed and TestInputSingleton.input.param("get-cbcollect-info", False):
+                self.__get_cbcollect_info()
 
             cluster_run = len(set([server.ip for server in self._servers])) == 1
             if test_failed and not cluster_run and self.collect_data_files:
@@ -170,20 +155,12 @@ class XDCRBaseTest(unittest.TestCase):
             if self.print_stats:
                 self.log.info("==============  XDCRbasetests stats for test #{0} {1} =============="\
                               .format(self.case_number, self._testMethodName))
-                self._stats_thread1.join()
-                self._stats_thread2.join()
-                self._stats_thread3.join()
-                if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
-                    self._stats_thread4.join()
-                    self._stats_thread5.join()
-                    self._stats_thread6.join()
-                if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
-                    self.log.info("Type of run: BIDIRECTIONAL XDCR")
-                else:
-                    self.log.info("Type of run: UNIDIRECTIONAL XDCR")
+                [st_thread.join() for st_thread in self.__stats_threads]
+                self.log.info("Type of run: %s XDCR" % XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION.upper())
                 self._print_stats(self.src_master)
                 if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
                     self._print_stats(self.dest_master)
+
                 self.log.info("============== = = = = = = = = END = = = = = = = = = = ==============")
             self.log.info("==============  XDCRbasetests cleanup is started for test #{0} {1} =============="\
                 .format(self.case_number, self._testMethodName))
@@ -196,16 +173,21 @@ class XDCRBaseTest(unittest.TestCase):
             self._log_finish(self)
 
     def __get_cbcollect_info(self):
+        self.cluster.shutdown(force=True)
+        self._log_finish(self)
         path = self._input.param("logs_folder", "/tmp")
         for server in self.src_nodes + self.dest_nodes:
             print "grabbing cbcollect from {0}".format(server.ip)
             path = path or "."
             try:
                 cbcollectRunner(server, path).run()
+                TestInputSingleton.input.test_params["get-cbcollect-info"] = False
             except:
                 print "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}".format(server.ip)
 
     def __collect_data_files(self):
+        self.cluster.shutdown(force=True)
+        self._log_finish(self)
         logs_folder = self._input.param("logs_folder", "/tmp")
         from scripts import collect_data_files
         nodes = self.src_nodes + self.dest_nodes
