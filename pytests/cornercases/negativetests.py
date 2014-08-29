@@ -111,7 +111,7 @@ class NegativeTests2(XDCRReplicationBaseTest):
                     start=int((self.num_items) * (float)(100 - self._percent_delete) / 100),
                     end=self.num_items)
             self._load_all_buckets(self.src_master, gen_delete, "delete", 0)
-        self._wait_for_stats_all_buckets(self.src_nodes)
+        self._verify_item_count(self.src_master, self.src_nodes, timeout=120)
 
         if self._replication_direction_str == "bidirection":
             gen_create = UTF_16_Generator('loadTwo', 'loadTwo_', self._value_size, end=self.num_items)
@@ -125,14 +125,9 @@ class NegativeTests2(XDCRReplicationBaseTest):
                         start=int((self.num_items) * (float)(100 - self._percent_delete) / 100),
                         end=self.num_items)
                 self._load_all_buckets(self.dest_master, gen_delete, "delete", 0)
-            self._wait_for_stats_all_buckets(self.dest_nodes)
+            self._verify_item_count(self.dest_master, self.dest_nodes, timeout=120)
 
-            self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-            self.sleep(self.wait_timeout)
-            self.verify_results(verify_src=True)
-
-        else:
-            self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-            self.sleep(self.wait_timeout)
-            self.verify_results()
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
+        self.sleep(self.wait_timeout)
+        self.verify_results()
 
