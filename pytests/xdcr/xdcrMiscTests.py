@@ -13,8 +13,8 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
         pass
 
     def __setup_replication_clusters(self, src_master, dest_master, src_cluster_name, dest_cluster_name):
-        self._link_clusters(src_cluster_name, src_master, dest_cluster_name, dest_master)
-        self._link_clusters(dest_cluster_name, dest_master, src_cluster_name, src_master)
+        self._link_clusters(src_master, dest_cluster_name, dest_master)
+        self._link_clusters(dest_master, src_cluster_name, src_master)
 
     def test_verify_mb8825(self):
         # Setting up replication clusters.

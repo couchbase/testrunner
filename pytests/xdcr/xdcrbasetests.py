@@ -1104,14 +1104,14 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             RestConnection(self.dest_master).set_internalSetting(param, value)
 
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
-        self._link_clusters(src_cluster_name, src_master, dest_cluster_name, dest_master)
+        self._link_clusters(src_master, dest_cluster_name, dest_master)
         self._replicate_clusters(src_master, dest_cluster_name)
         if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
-            self._link_clusters(dest_cluster_name, dest_master, src_cluster_name, src_master)
+            self._link_clusters(dest_master, src_cluster_name, src_master)
             self._replicate_clusters(dest_master, src_cluster_name)
 
     # Set up cluster reference
-    def _link_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
+    def _link_clusters(self, src_master, remote_cluster_name, dest_master):
         rest_conn_src = RestConnection(src_master)
         certificate = ""
         if self._demand_encryption:
@@ -1119,7 +1119,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             certificate = rest_conn_dest.get_cluster_ceritificate()
         rest_conn_src.add_remote_cluster(dest_master.ip, dest_master.port,
             dest_master.rest_username,
-            dest_master.rest_password, dest_cluster_name,
+            dest_master.rest_password, remote_cluster_name,
             demandEncryption=self._demand_encryption, certificate=certificate)
 
     def _modify_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master, require_encryption=None):
