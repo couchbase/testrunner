@@ -24,7 +24,7 @@ class HostnameXdcrTest(XDCRReplicationBaseTest, HostnameBaseTests):
             self.src_nodes[i].hostname = self.hostnames[self.src_nodes[i]]
         for i in xrange(len(self.dest_nodes)):
             self.dest_nodes[i].hostname = self.hostnames[self.dest_nodes[i]]
-        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, False)
+        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes)
 
     def test_replication_with_view_queries(self):
         self.verify_referenced_by_names(self.src_nodes, self.hostnames)
@@ -54,6 +54,6 @@ class HostnameXdcrTest(XDCRReplicationBaseTest, HostnameBaseTests):
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
 
-        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, False)
+        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes)
         self.verify_referenced_by_names(self.src_nodes, self.hostnames)
         self.verify_referenced_by_names(self.dest_nodes, self.hostnames)

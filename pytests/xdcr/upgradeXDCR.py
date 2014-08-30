@@ -217,7 +217,7 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         self.sleep(60)
         self._post_upgrade_ops()
         self.sleep(60)
-        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
+        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes)
         self.max_verify = None
         if self.ddocs_src:
             for bucket_name in self.buckets_on_src:
@@ -283,7 +283,7 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         self.sleep(120)
         self._post_upgrade_ops()
         self.sleep(120)
-        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
+        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes)
         self.max_verify = None
         if self.ddocs_src:
             for bucket_name in self.buckets_on_src:
@@ -344,7 +344,7 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         self.do_merge_bucket(self.src_master, self.dest_master, True, bucket)
         bucket = self._get_bucket(self, 'default', self.src_master)
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
-        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes, True)
+        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes)
         self.sleep(self.wait_timeout * 5, "Let clusters work for some time")
 
     def _operations(self):
