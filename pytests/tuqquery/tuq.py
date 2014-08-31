@@ -1348,6 +1348,77 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
             self._verify_results(actual_result, expected_result)
 
+    def test_comparition_equal_int(self):
+        for bucket in self.buckets:
+            self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
+            "tasks_points.task1 = 4"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['task']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"task" : doc['tasks_points']['task1']}
+                               for doc in full_list
+                               if doc['tasks_points']['task1'] == 4]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
+            self._verify_results(actual_result, expected_result)
+
+            self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
+            "tasks_points.task1 == 4"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['task']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_comparition_equal_str(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM %s WHERE " % (bucket.name)+\
+            "name = 'employee-4'"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['name']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name']}
+                               for doc in full_list
+                               if doc['name'] == 'employee-4']
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result, expected_result)
+            
+            self.query = "SELECT name FROM %s WHERE " % (bucket.name)+\
+            "name == 'employee-4'"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['name']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_comparition_not_equal(self):
+        for bucket in self.buckets:
+            self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
+            "tasks_points.task1 != 1"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['task']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"task" : doc['tasks_points']['task1']}
+                               for doc in full_list
+                               if doc['tasks_points']['task1'] != 1]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_comparition_more_less_equal(self):
+        for bucket in self.buckets:
+            self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
+            "tasks_points.task1 >= 1 AND tasks_points.task1 <= 4"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+                                                                       doc['task']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"task" : doc['tasks_points']['task1']}
+                               for doc in full_list
+                               if doc['tasks_points']['task1'] >= 1 and
+                               doc['tasks_points']['task1'] <= 4]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
+            self._verify_results(actual_result, expected_result)
+
     def test_comparition_expr(self):
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
