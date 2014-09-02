@@ -1531,8 +1531,8 @@ class ViewQueryTask(Task):
             content = \
                 rest.query_view(self.design_doc_name, self.view_name, self.bucket, self.query, self.timeout)
 
-            self.log.info("(%d rows) expected, (%d rows) returned" % \
-                          (self.expected_rows, len(content['rows'])))
+            self.log.info("Server: %s, Design Doc: %s, View: %s, (%d rows) expected, (%d rows) returned" % \
+                          (self.server.ip, self.design_doc_name, self.view_name, self.expected_rows, len(content['rows'])))
 
             raised_error = content.get(u'error', '') or ''.join([str(item) for item in content.get(u'errors', [])])
             if raised_error:
@@ -1545,8 +1545,8 @@ class ViewQueryTask(Task):
                 self.set_result(True)
             else:
                 if len(content['rows']) > self.expected_rows:
-                    raise QueryViewException(self.view_name, "expected number of rows: '{0}' is greater than expected {1}"
-                                             .format(self.expected_rows, len(content['rows'])))
+                    raise QueryViewException(self.view_name, "Server: {0}, Design Doc: {1}, actual returned rows: '{2}' are greater than expected {3}"
+                                             .format(self.server.ip, self.design_doc_name, len(content['rows']), self.expected_rows,))
                 if "stale" in self.query:
                     if self.query["stale"].lower() == "false":
                         self.state = FINISHED
