@@ -687,7 +687,7 @@ class unidirectional(XDCRReplicationBaseTest):
         self.sleep(self.wait_timeout)
         self._wait_for_replication_to_catchup()
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.verify_results(True)
+        self.verify_results()
 
     """ Test if replication restarts 60s after idle xdcr following dest bucket recreate """
     def test_idle_xdcr_dest_recreate(self):
@@ -698,7 +698,7 @@ class unidirectional(XDCRReplicationBaseTest):
         self.sleep(self.wait_timeout)
         self._wait_for_replication_to_catchup()
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.verify_results(True)
+        self.verify_results()
 
     """ Test if replication restarts 60s after idle xdcr following dest failover """
     def test_idle_xdcr_dest_failover(self):
@@ -711,4 +711,4 @@ class unidirectional(XDCRReplicationBaseTest):
         self.sleep(self.wait_timeout)
         self._wait_for_replication_to_catchup()
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.verify_results(True)
+        self.verify_results()
