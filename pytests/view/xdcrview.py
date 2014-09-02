@@ -105,7 +105,7 @@ class XDCRViewTests(XDCRReplicationBaseTest, CreateDeleteViewTests):
             self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
             verify_src = True
 
-        self.verify_results(verify_src=verify_src)
+        self.verify_results()
         self.sleep(self.wait_timeout / 2)
         for bucket in buckets:
             self.num_items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
