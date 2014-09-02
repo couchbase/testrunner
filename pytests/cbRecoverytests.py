@@ -248,7 +248,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
 
         self.sleep(self.wait_timeout / 2)
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.verify_results(verify_src=True)
+        self.verify_results()
 
 
     def restart_cbrecover_multiple_failover_swapout_reb_routine(self):
