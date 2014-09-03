@@ -179,14 +179,18 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self._load_all_buckets(self.master, gen, "create", 0)
 
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
-            self._async_load_all_buckets(self.master, gen, "update", 0)
+            tasks = self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=1000)
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
+            for task in tasks:
+                task.result()
             self.sleep(5)
-            self._async_load_all_buckets(self.master, gen, "update", 0)
+            tasks =  self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=1000)
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], [])
-            self.verify_cluster_stats(self.servers[:self.num_servers])
+            for task in tasks:
+                task.result()
+            self.verify_cluster_stats(self.servers[:self.num_servers], timeout = 2400)
         self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes in/out at once while doing mutations with max
