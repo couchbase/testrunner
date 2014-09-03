@@ -1,5 +1,6 @@
 import json
-import base64
+import string
+import random
 
 class KVGenerator(object):
     def __init__(self, name, start, end):
@@ -93,10 +94,13 @@ class BlobGenerator(KVGenerator):
             raise StopIteration
 
         key = self.name + str(self.itr)
-        value = self.seed + str(self.itr)
-        extra = self.value_size - len(value)
-        if extra > 0:
-            value += 'a' * extra
+        if self.value_size == 1:
+            value = random.choice(string.letters)
+        else:
+            value = self.seed + str(self.itr)
+            extra = self.value_size - len(value)
+            if extra > 0:
+                value += 'a' * extra
         self.itr += 1
         return key, value
 

@@ -10,7 +10,7 @@ from memcached.helper.data_helper import LoadWithMcsoda
 from xdcrbasetests import XDCRReplicationBaseTest
 
 
-#Assumption that at least 2 nodes on every cluster
+# Assumption that at least 2 nodes on every cluster
 class unidirectional(XDCRReplicationBaseTest):
     def setUp(self):
         super(unidirectional, self).setUp()
@@ -42,6 +42,24 @@ class unidirectional(XDCRReplicationBaseTest):
 
         self._wait_flusher_empty(self.src_master, self.src_nodes)
         self.sleep(self.wait_timeout / 2)
+        self.verify_results()
+
+    def load_with_async_ops_diff_data_size(self):
+        # Load 1 item with size 1
+        # 52 alphabets (small and capital letter)
+        gen_create = BlobGenerator('loadOne', 'loadOne', 1, start=0, end=52)
+        self._load_all_buckets(self.src_master, gen_create, "create", 0)
+
+        # Load 100 items with below sizes of 1M
+        gen_create = BlobGenerator('loadOne', 'loadOne', 1000000, start=52, end=152)
+        self._load_all_buckets(self.src_master, gen_create, "create", 0)
+
+        # Load 5 item with size 10MB
+        # Getting memory issue with 20MB data on VMs.
+        gen_create = BlobGenerator('loadOne', 'loadOne', 10000000, start=152, end=155)
+        self._load_all_buckets(self.src_master, gen_create, "create", 0)
+
+        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.verify_results()
 
     """Testing Unidirectional load( Loading only at source). Failover node at Source/Destination while
