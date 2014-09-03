@@ -1942,6 +1942,72 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
+#
+#  Number fns
+##############################################################################################
+
+    def test_abs(self):
+        for bucket in self.buckets:
+            self.query = "select join_day from %s where join_day > abs(-10)" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [doc["join_day"] for doc in full_list
+                               if doc["join_day"] > abs(-10)]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_acos(self):
+        self.query = "select degrees(acos(0.5))"
+        actual_list = self.run_cbq_query()
+        expected_result = [{'$1': 60}]
+        self._verify_results(actual_list['resultset'], expected_result)
+        
+    def test_asin(self):
+        self.query = "select degrees(asin(0.5))"
+        actual_list = self.run_cbq_query()
+        expected_result = [{'$1': 30}]
+        self._verify_results(actual_list['resultset'], expected_result)
+
+    def test_tan(self):
+        self.query = "select tan(radians(45))"
+        actual_list = self.run_cbq_query()
+        expected_result = [{'$1': 1}]
+        self._verify_results(actual_list['resultset'], expected_result)
+
+    def test_ln(self):
+        self.query = "select ln(10) = ln(2) + ln(5)"
+        actual_list = self.run_cbq_query()
+        expected_result = [{'$1': True}]
+        self._verify_results(actual_list['resultset'], expected_result)
+
+    def test_power(self):
+        self.query = "select power(sin(radians(33)), 2) + power(cos(radians(33)), 2)"
+        actual_list = self.run_cbq_query()
+        expected_result = [{'$1': 1}]
+        self._verify_results(actual_list['resultset'], expected_result)
+
+    def test_sqrt(self):
+        self.query = "select sqrt(9)"
+        actual_list = self.run_cbq_query()
+        expected_result = [{'$1': 3}]
+        self._verify_results(actual_list['resultset'], expected_result)
+
+    def test_sign(self):
+        self.query = "select sign(-5)"
+        actual_list = self.run_cbq_query()
+        expected_result = [{'$1': -1}]
+        self._verify_results(actual_list['resultset'], expected_result)
+        self.query = "select sign(5)"
+        actual_list = self.run_cbq_query()
+        expected_result = [{'$1': 1}]
+        self._verify_results(actual_list['resultset'], expected_result)
+        self.query = "select sign(0)"
+        actual_list = self.run_cbq_query()
+        expected_result = [{'$1': 0}]
+        self._verify_results(actual_list['resultset'], expected_result)
+
+##############################################################################################
 #    
 #   COMMON FUNCTIONS
 ##############################################################################################
@@ -2046,12 +2112,12 @@ class QueryTests(BaseTestCase):
             if self.input.tuq_client and "gopath" in self.input.tuq_client:
                 gopath = self.input.tuq_client["gopath"]
             if os == 'windows':
-                cmd = "cd %s/src/github.com/couchbaselabs/tuqtng/; " % (gopath) +\
-                "./tuqtng.exe -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
+                cmd = "cd %s/src/github.com/couchbaselabs/query/; " % (gopath) +\
+                "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
                                                                 server.ip, server.port)
             else:
-                cmd = "cd %s/src/github.com/couchbaselabs/tuqtng/; " % (gopath) +\
-                "./tuqtng -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
+                cmd = "cd %s/src/github.com/couchbaselabs/query/; " % (gopath) +\
+                "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
                                                                 server.ip, server.port)
             self.shell.execute_command(cmd)
         else:
