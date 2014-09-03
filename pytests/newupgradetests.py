@@ -481,11 +481,16 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.log.info("Rebalance in new version nodes and rebalance out some nodes")
         self.cluster.rebalance(self.servers, upgrade_servers, self.servers[self.num_servers:])
         self.log.info("Rebalance completed")
-        self.sleep(self.sleep_time)
+        self.log.info("Remove the second old version node")
+        self._new_master(self.servers[1])
+        self.cluster.rebalance(self.servers, [], [self.servers[0]])
+        self.log.info("Rebalance completed")
+        self.sleep(10)
         """ verify DCP upgrade in 3.0.0 version """
+        self.master = self.servers[self.nodes_init]
         self.monitor_dcp_rebalance()
 
-        self.verification(self.servers[: self.num_servers])
+        self.verification(self.servers[self.nodes_init: -self.nodes_init])
 
     def online_upgrade(self):
         servers_in = self.servers[self.nodes_init:self.num_servers]
