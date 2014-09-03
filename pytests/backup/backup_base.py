@@ -16,6 +16,8 @@ class BackupBaseTest(BaseTestCase):
         self.os = info.type.lower()
         self.value_size = self.input.param("value_size", 256)
         self.expire_time = self.input.param("expire_time", 60)
+        self.number_of_backups = self.input.param("number_of_backups", 1)
+        self.backup_type = self.input.param("backup_type", None)
         self.item_flag = self.input.param("item_flag", 0)
         self.couchbase_login_info = "%s:%s" % (self.input.membase_settings.rest_username,
                                                self.input.membase_settings.rest_password)
@@ -26,6 +28,23 @@ class BackupBaseTest(BaseTestCase):
         self.doc_ops = self.input.param("doc_ops", None)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
+        self.backup_x_options = self.input.param("backup_x_options", None)
+        if self.backup_x_options is not None:
+            temp = self.backup_x_options.split(";")
+            temp_x_options = {}
+            for element in temp:
+                temp_array = element.split()
+                temp_x_options[temp_array[0]] = temp_array[1]
+            self.backup_x_options = temp_x_options
+
+        self.restore_x_options = self.input.param("restore_x_options", None)
+        if self.restore_x_options is not None:
+            temp = self.restore_x_options.split(";")
+            temp_x_options = {}
+            for element in temp:
+                temp_array = element.split()
+                temp_x_options[temp_array[0]] = temp_array[1]
+            self.restore_x_options = temp_x_options
         servers_in = [self.servers[i + 1] for i in range(self.num_servers - 1)]
         for bucket in self.buckets:
             bucket.kvs[2] = KVStore()

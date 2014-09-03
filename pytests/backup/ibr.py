@@ -5,8 +5,11 @@ import gc
 from backup.backup_base import BackupBaseTest
 from couchbase.documentgenerator import BlobGenerator
 from couchbase.documentgenerator import DocumentGenerator
+from memcached.helper.kvstore import KVStore
 from membase.api.rest_client import RestConnection, Bucket
 from couchbase.data_analysis_helper import *
+from memcached.helper.data_helper import VBucketAwareMemcached
+import copy
 
 
 class IBRTests(BackupBaseTest):
@@ -270,7 +273,7 @@ class IBRTests(BackupBaseTest):
             raise Exception('Backup Directory Verification Failed for Differential Backup')
 
     def testIncrementalBackup(self):
-        gen_extra = BlobGenerator('testdata', 'testdata-', self.value_size, end=self.num_items)
+        gen_extra = BlobGenerator('zoom', 'zoom-', self.value_size, end=self.num_items)
         self.log.info("Starting Incremental backup")
 
         extra_items_deleted_flag = 0
@@ -303,12 +306,13 @@ class IBRTests(BackupBaseTest):
         gc.collect()
 
         self._bucket_creation()
+        self.sleep(20)
         self.restoreAndVerify(bucket_names, kvs_before)
 
 
     def testDifferentialBackup(self):
 
-        gen_extra = BlobGenerator('testdata', 'testdata-', self.value_size, end=self.num_items)
+        gen_extra = BlobGenerator('zoom', 'zoom-', self.value_size, end=self.num_items)
         self.log.info("Starting Differential backup")
 
         extra_items_deleted_flag = 0
@@ -343,6 +347,7 @@ class IBRTests(BackupBaseTest):
         gc.collect()
 
         self._bucket_creation()
+        self.sleep(20)
 
         self.restoreAndVerify(bucket_names, kvs_before)
 
@@ -359,5 +364,105 @@ class IBRTests(BackupBaseTest):
         gc.collect()
 
         self._bucket_creation()
+        self.sleep(20)
+        self.restoreAndVerify(bucket_names, kvs_before)
+
+class IBRJsonTests(BackupBaseTest):
+    def setUp(self):
+        super(IBRJsonTests, self).setUp()
+        self.num_mutate_items = self.input.param("mutate_items", 1000)
+        template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
+        gen_load = DocumentGenerator('load_by_id_test', template, range(5), ['james', 'john'], start=0, end=self.num_items)
+        self._load_all_buckets(self.master, gen_load, "create", 0, 1, self.item_flag, True, batch_size=20000,pause_secs=5, timeout_secs=180)
+        self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+
+        #Take a full backup
+        if not self.command_options:
+            self.command_options = []
+        options = self.command_options + [' -m full']
+        self.total_backups = 1
+        self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, options)
+        self.sleep(2)
+
+    def testFullBackup(self):
+        # Save copy of data
+        kvs_before = {}
+        for bucket in self.buckets:
+            kvs_before[bucket.name] = bucket.kvs[1]
+        bucket_names = [bucket.name for bucket in self.buckets]
+
+        # Delete all buckets
+        self._all_buckets_delete(self.master)
+        gc.collect()
+
+        self._bucket_creation()
+        self.sleep(20)
+        self.restoreAndVerify(bucket_names, kvs_before)
+
+
+    def restoreAndVerify(self,bucket_names,kvs_before):
+        for bucket in self.buckets:
+            bucket.kvs[1] = kvs_before[bucket.name]
+        del kvs_before
+        gc.collect()
+
+        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
+        self.sleep(10)
+        self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+        self.verify_results(self.master)
+        self._verify_stats_all_buckets(self.servers[:self.num_servers])
+
+    def tearDown(self):
+        super(IBRJsonTests, self).tearDown()
+
+    def testMultipleBackups(self):
+        if not self.command_options:
+            self.command_options = []
+
+        options = self.command_options
+
+        if self.backup_type is not None:
+            if "accu" in self.backup_type:
+                options = self.command_options + [' -m accu']
+            if "diff" in self.backup_type:
+                options = self.command_options + [' -m diff']
+
+        diff_backup = [" -m diff"]
+        accu_backup = [" -m accu"]
+        current_backup = [" -m diff"]
+
+        for count in range(self.number_of_backups):
+            if "mix" in self.backup_type:
+                if current_backup == diff_backup:
+                    current_backup = accu_backup
+                    options = self.command_options + accu_backup
+                elif current_backup == accu_backup:
+                    current_backup = diff_backup
+                    options = self.command_options + diff_backup
+
+
+            # Update data
+            template = '{{ "mutated" : {0}, "age": {0}, "first_name": "{1}" }}'
+            gen_update = DocumentGenerator('load_by_id_test', template, range(5), ['james', 'john'], start=0, end=self.num_items)
+            self._load_all_buckets(self.master, gen_update, "update", 0, 1, self.item_flag, True, batch_size=20000,pause_secs=5, timeout_secs=180)
+            self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+
+            #Take a backup
+            self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, options)
+
+        # Save copy of data
+        kvs_before = {}
+        for bucket in self.buckets:
+            kvs_before[bucket.name] = bucket.kvs[1]
+        bucket_names = [bucket.name for bucket in self.buckets]
+
+        # Delete all buckets
+        self._all_buckets_delete(self.master)
+        gc.collect()
+
+        self._bucket_creation()
+        self.sleep(20)
 
         self.restoreAndVerify(bucket_names, kvs_before)
+
+
