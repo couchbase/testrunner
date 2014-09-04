@@ -1268,6 +1268,14 @@ class RemoteMachineShellConnection:
                 output, error = self.kill_erlang(os="windows")
                 self.log_command_output(output, error)
                 """ end remove code """
+
+                """ the code below need to remove when bug MB-11985 is fixed in 3.0.1 """
+                if full_version[:5] in COUCHBASE_VERSION_3:
+                    log.info("due to bug MB-11985, we need to delete below registry")
+                    output, error = self.execute_command("reg delete \
+                               'HKLM\Software\Wow6432Node\Ericsson\Erlang\ErlSrv' /f ")
+                    self.log_command_output(output, error)
+                """ end remove code """
             else:
                 log.info("No couchbase server on {0} server. Free to install".format(self.ip))
         elif type in ["ubuntu", "centos", "red hat"]:
