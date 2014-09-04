@@ -13,6 +13,8 @@ from couchbase.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from scripts.install import InstallerJob
+from testconstants import COUCHBASE_VERSION_2
+from testconstants import COUCHBASE_VERSION_3
 
 
 
@@ -335,7 +337,7 @@ class RackzoneTests(RackzoneBaseTest):
         else:
             raise Exception("There is not zone with name: %s in cluster" % name)
 
-    def _verify_replica_distribution_in_zones(self, nodes, commmand, saslPassword = "" ):
+    def _verify_replica_distribution_in_zones(self, nodes, commmand, saslPassword = ""):
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info()
         if info.type.lower() == 'linux':
@@ -346,26 +348,40 @@ class RackzoneTests(RackzoneBaseTest):
             cbstat_command = "%scbstats" % (testconstants.MAC_COUCHBASE_BIN_PATH)
         else:
             raise Exception("Not support OS")
-        command = "tap"
         saslPassword = ''
         for group in nodes:
             for node in nodes[group]:
-                if not info.type.lower() == 'windows':
-                    commands = "%s %s:11210 %s -b %s -p \"%s\" |grep :vb_filter: |  awk '{print $1}' \
+                if self.version[:5] in COUCHBASE_VERSION_2:
+                    command = "tap"
+                    if not info.type.lower() == 'windows':
+                        commands = "%s %s:11210 %s -b %s -p \"%s\" |grep :vb_filter: |  awk '{print $1}' \
                             | xargs | sed 's/eq_tapq:replication_ns_1@//g'  | sed 's/:vb_filter://g' \
                             " % (cbstat_command, node, command,"default", saslPassword)
-                elif info.type.lower() == 'windows':
-                    """ standalone gawk.exe should be copy to ../ICW/bin for command below to work.
-                        Ask IT to do this if you don't know how """
-                    commands = "%s %s:11210 %s -b %s -p \"%s\" | grep.exe :vb_filter: | gawk.exe '{print $1}' \
+                    elif info.type.lower() == 'windows':
+                        """ standalone gawk.exe should be copy to ../ICW/bin for command below to work.
+                            Ask IT to do this if you don't know how """
+                        commands = "%s %s:11210 %s -b %s -p \"%s\" | grep.exe :vb_filter: | gawk.exe '{print $1}' \
                                | sed.exe 's/eq_tapq:replication_ns_1@//g'  | sed.exe 's/:vb_filter://g' \
                                " % (cbstat_command, node, command,"default", saslPassword)
+                elif self.version[:5] in COUCHBASE_VERSION_3:
+                    command = "dcp"
+                    if not info.type.lower() == 'windows':
+                        commands = "%s %s:11210 %s -b %s -p \"%s\" | grep :replication:ns_1@%s |  grep vb_uuid | \
+                                    awk '{print $1}' | sed 's/eq_dcpq:replication:ns_1@%s->ns_1@//g' | \
+                                    sed 's/:.*//g' | sort -u | xargs \
+                                   " % (cbstat_command, node, command,"default", saslPassword, node, node)
+                    elif info.type.lower() == 'windows':
+                        commands = "%s %s:11210 %s -b %s -p \"%s\" | grep.exe :replication:ns_1@%s |  grep vb_uuid | \
+                                    gawk.exe '{print $1}' | sed.exe 's/eq_dcpq:replication:ns_1@%s->ns_1@//g' | \
+                                    sed.exe 's/:.*//g' | sort -u \
+                                   " % (cbstat_command, node, command,"default", saslPassword, node, node)
                 output, error = shell.execute_command(commands)
                 shell.log_command_output(output, error)
                 output = output[0].split(" ")
                 if node not in output:
                     self.log.info("{0}".format(nodes))
-                    self.log.info("replica of node {0} are not in its zone {1}".format(node, group))
+                    self.log.info("replicas of node {0} are in nodes {1}".format(node, output))
+                    self.log.info("replicas of node {0} are not in its zone {1}".format(node, group))
                 else:
                     raise Exception("replica of node {0} are on its own zone {1}".format(node, group))
         shell.disconnect()
