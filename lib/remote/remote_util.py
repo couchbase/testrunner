@@ -13,6 +13,7 @@ from testconstants import COUCHBASE_VERSIONS
 from testconstants import MISSING_UBUNTU_LIB
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import WIN_CB_VERSION_3
+from testconstants import COUCHBASE_VERSION_3
 
 
 from membase.api.rest_client import RestConnection, RestHelper
