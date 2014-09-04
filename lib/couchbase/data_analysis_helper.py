@@ -337,8 +337,8 @@ class DataAnalyzer(object):
                 snap_start_seqno = int(stat_map[vb_id]["snap_start_seqno"])
                 start_seqno =  int(stat_map[vb_id]["start_seqno"])
                 snap_end_seqno = int(stat_map[vb_id]["snap_end_seqno"])
-                if not (snap_start_seqno <= start_seqno and start_seqno <= snap_end_seqno):
-                    message += "\n bucket {0} :: vbucket {1} :: Failed Conditon snap_start_seqno :: {2} <= start_seqno :: {3} <= snap_end_seqno :: {4}".format(bucket,vb_id,snap_start_seqno,start_seqno,snap_end_seqno)
+                if not (snap_end_seqno <= start_seqno and start_seqno <= snap_end_seqno):
+                    message += " bucket {0} :: vbucket {1} :: Failed Conditon snap_end_seqno :: {2} <= start_seqno :: {3} <= snap_start_seqno :: {4}".format(bucket,vb_id,snap_end_seqno,start_seqno,snap_end_seqno)
                     logic = False
         return logic, message
 
