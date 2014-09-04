@@ -349,9 +349,10 @@ class RackzoneTests(RackzoneBaseTest):
         else:
             raise Exception("Not support OS")
         saslPassword = ''
+        versions = RestConnection(self.master).get_nodes_versions()
         for group in nodes:
             for node in nodes[group]:
-                if self.version[:5] in COUCHBASE_VERSION_2:
+                if versions[0][:5] in COUCHBASE_VERSION_2:
                     command = "tap"
                     if not info.type.lower() == 'windows':
                         commands = "%s %s:11210 %s -b %s -p \"%s\" |grep :vb_filter: |  awk '{print $1}' \
@@ -363,7 +364,7 @@ class RackzoneTests(RackzoneBaseTest):
                         commands = "%s %s:11210 %s -b %s -p \"%s\" | grep.exe :vb_filter: | gawk.exe '{print $1}' \
                                | sed.exe 's/eq_tapq:replication_ns_1@//g'  | sed.exe 's/:vb_filter://g' \
                                " % (cbstat_command, node, command,"default", saslPassword)
-                elif self.version[:5] in COUCHBASE_VERSION_3:
+                elif versions[0][:5] in COUCHBASE_VERSION_3:
                     command = "dcp"
                     if not info.type.lower() == 'windows':
                         commands = "%s %s:11210 %s -b %s -p \"%s\" | grep :replication:ns_1@%s |  grep vb_uuid | \
