@@ -57,6 +57,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, self.servers[:self.num_servers - self.nodes_out], self.buckets, perNode=False)
         self.data_analysis_all(record_data_set, self.servers[:self.num_servers - self.nodes_out], self.buckets)
         self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
+        self.bad_replicas_condition_check(self.servers[:self.num_servers - self.nodes_out],self.buckets)
         self.verify_unacked_bytes_all_buckets()
         nodes = self.get_nodes_in_cluster(self.master)
         self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets)
@@ -106,6 +107,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         self.compare_failovers_logs(prev_failover_stats, self.servers[:self.num_servers - self.nodes_out], self.buckets)
         self.data_analysis_all(record_data_set, self.servers[:self.num_servers - self.nodes_out], self.buckets)
         self.verify_unacked_bytes_all_buckets()
+        self.bad_replicas_condition_check(self.servers[:self.num_servers - self.nodes_out],self.buckets)
         nodes = self.get_nodes_in_cluster(self.master)
         self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets)
 
@@ -155,6 +157,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         self.verify_cluster_stats(new_server_list)
         self.data_analysis_all(record_data_set, new_server_list, self.buckets)
         self.verify_unacked_bytes_all_buckets()
+        self.bad_replicas_condition_check(new_server_list,self.buckets)
         nodes = self.get_nodes_in_cluster(self.master)
         self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets)
 
@@ -184,6 +187,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         for task in tasks:
             task.result()
         self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
+        self.bad_replicas_condition_check(self.servers[:self.num_servers - self.nodes_out],self.buckets)
         self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes out of a cluster while doing docs ops:create, delete, update along with compaction.
@@ -214,6 +218,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         for task in tasks:
             task.result()
         self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out])
+        self.bad_replicas_condition_check(self.servers[:self.num_servers - self.nodes_out],self.buckets)
         self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes from a cluster during getting random keys.
@@ -308,6 +313,7 @@ class RebalanceOutTests(RebalanceBaseTest):
                     task.cancel()
                 raise ex
             self.verify_cluster_stats(self.servers[:i])
+            self.bad_replicas_condition_check(self.servers[:i],self.buckets)
         self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes out of a cluster during view queries.
@@ -466,6 +472,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers, [], servs_out)
             rebalance.result()
         self.verify_cluster_stats(self.servers[:len(self.servers) - self.nodes_out])
+        self.bad_replicas_condition_check(self.servers[:len(self.servers) - self.nodes_out],self.buckets)
         self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes out of cluster  during ddoc compaction.
@@ -576,6 +583,7 @@ class RebalanceOutTests(RebalanceBaseTest):
                 task.result()
             self.sleep(5)
             self._load_all_buckets(self.master, gen_2, "create", 0)
+            self.bad_replicas_condition_check(self.servers[:i],self.buckets)
             self.verify_cluster_stats(self.servers[:i])
         self.verify_unacked_bytes_all_buckets()
 
@@ -603,4 +611,5 @@ class RebalanceOutTests(RebalanceBaseTest):
             self.sleep(5)
             self._load_all_buckets(self.master, gen_2, "create", 0)
             self.verify_cluster_stats(self.servers[:i])
+            self.bad_replicas_condition_check(self.servers[:i],self.buckets)
         self.verify_unacked_bytes_all_buckets()
