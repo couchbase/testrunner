@@ -3,6 +3,7 @@ import os.path
 import uuid
 from remote.remote_util import RemoteMachineShellConnection
 from lib.mc_bin_client import MemcachedClient
+from memcached.helper.data_helper import MemcachedClientHelper
 from membase.api.rest_client import RestConnection
 # constants used in this file only
 DELETED_ITEMS_FAILURE_ANALYSIS_FORMAT="\n1) Failure :: Deleted Items :: Expected {0}, Actual {1}"
@@ -489,9 +490,7 @@ class DataCollector(object):
             dataMap = {}
             for server in servers:
                 map_data = {}
-                rest = RestConnection(server)
-                port = rest.get_memcached_port()
-                client = MemcachedClient(host=server.ip, port=port)
+                client = MemcachedClientHelper.direct_client(server, bucket)
                 if collect_vbucket:
                     vbucket=client.stats('vbucket')
                     self.createMapVbucket(vbucket,map_data)
@@ -530,9 +529,7 @@ class DataCollector(object):
         for bucket in buckets:
             dataMap = {}
             for server in servers:
-                rest = RestConnection(server)
-                port = rest.get_memcached_port()
-                client = MemcachedClient(host=server.ip, port=port)
+                client = MemcachedClientHelper.direct_client(server, bucket)
                 stats = client.stats('failovers')
                 map_data = {}
                 num_map ={}
@@ -584,9 +581,7 @@ class DataCollector(object):
             active_map_data = {}
             replica_map_data = {}
             for server in servers:
-                rest = RestConnection(server)
-                port = rest.get_memcached_port()
-                client = MemcachedClient(host=server.ip, port=port)
+                client = MemcachedClientHelper.direct_client(server, bucket)
                 stats = client.stats('')
                 for key in stats.keys():
                     if key == 'vb_active_num':
@@ -620,9 +615,7 @@ class DataCollector(object):
         for bucket in buckets:
             dataMap = {}
             for server in servers:
-                rest = RestConnection(server)
-                port = rest.get_memcached_port()
-                client = MemcachedClient(host=server.ip, port=port)
+                client = MemcachedClientHelper.direct_client(server, bucket)
                 stats = client.stats('dcp')
                 map_data = {}
                 for key in stats.keys():
@@ -639,6 +632,41 @@ class DataCollector(object):
                                         bucketMap[bucket] = False
                                 else:
                                     bucketMap[bucket] = False
+        return bucketMap
+
+    def collect_dcp_stats(self, buckets, servers, stat_names = [], extra_key_condition = "replication"):
+        """
+            Method to extract the failovers stats given by cbstats tool
+
+            Paramters:
+
+            buckets: bucket informaiton
+            servers: server information
+            stat_names: stats we are searching to compare
+
+            Returns:
+
+            map of bucket informing map[bucket][vbucket id][stat name]
+
+            example:: unacked_bytes in dcp
+        """
+        bucketMap = {}
+        for bucket in buckets:
+            bucketMap[bucket.name] = {}
+        for bucket in buckets:
+            dataMap = {}
+            for server in servers:
+                stats = MemcachedClientHelper.direct_client(server, bucket).stats('dcp')
+                for key in stats.keys():
+                    for stat_name in stat_names:
+                        if stat_name in key and extra_key_condition in key:
+                            value = int(stats[key])
+                            tokens = key.split(":")
+                            vb_no = int(tokens[len(tokens) - 1].split("_")[1])
+                            if vb_no not in dataMap:
+                                dataMap[vb_no] = {}
+                            dataMap[vb_no][stat_name] = value
+            bucketMap[bucket.name] = dataMap
         return bucketMap
 
     def createMapVbucket(self,details,map_data):
