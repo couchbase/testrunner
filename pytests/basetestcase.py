@@ -1326,16 +1326,6 @@ class BaseTestCase(unittest.TestCase):
         self.log.info(" End Verification for Failovers logs comparison ")
         return new_failovers_stats
 
-    def bad_replicas_condition_check(self, servers = [], buckets = []):
-        stat_list = ["snap_start_seqno","start_seqno","snap_end_seqno"]
-        self.log.info(" Start bad_replicas_condition_check")
-        # Collect Information
-        map = self.data_collector.collect_dcp_stats( buckets, servers, stat_list)
-        # Analyze information and print result
-        logic, message = self.data_analyzer.analyze_bad_replicas_condition(map)
-        self.assertTrue(logic, message)
-        self.log.info(" End bad_replicas_condition_check")
-
     def get_bucket_priority(self,priority):
         if priority == None:
             return None

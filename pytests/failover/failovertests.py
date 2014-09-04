@@ -178,7 +178,6 @@ class FailoverTests(FailoverBaseTest):
         # Verify Active and Replica Bucket Count
         if self.num_replicas > 0:
             nodes = self.get_nodes_in_cluster(self.master)
-            self.bad_replicas_condition_check(_servers_,self.buckets)
             self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 5.0 , total_vbuckets = self.total_vbuckets)
         self.log.info("End VERIFICATION for Rebalance after Failover Only")
 
@@ -253,7 +252,6 @@ class FailoverTests(FailoverBaseTest):
         # Verify Active and Replica Bucket Count
         if self.num_replicas > 0:
             nodes = self.get_nodes_in_cluster(self.master)
-            self.bad_replicas_condition_check(self.servers,self.buckets)
             self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 5.0 , total_vbuckets = self.total_vbuckets)
 
         self.log.info("End VERIFICATION for Add-back and rebalance")
@@ -351,7 +349,6 @@ class FailoverTests(FailoverBaseTest):
         # Verify Active and Replica Bucket Count
         if self.num_replicas > 0:
             nodes = self.filter_servers(self.servers,chosen)
-            self.bad_replicas_condition_check(nodes,self.buckets)
             self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 5.0 , total_vbuckets = self.total_vbuckets, type = "failover", graceful = (self.graceful and graceful_failover) )
 
     def run_failover_operations_with_ops(self, chosen, failover_reason):

@@ -36,17 +36,6 @@ class DataAnalysisTests(BaseTestCase):
         self._wait_for_stats_all_buckets(self.servers)
         self.data_distribution_analysis(self.num_items,self.std)
 
-    def test_bad_replica_condition(self):
-        """
-            Test for bad replica checks
-        """
-        self.std = self.input.param("std", 1.0)
-        self.gen_create = BlobGenerator('loadOne', 'loadOne_', self.value_size, end=self.num_items)
-        self._load_all_buckets(self.master, self.gen_create, "create", 0,
-                               batch_size=10000, pause_secs=10, timeout_secs=60)
-        self._wait_for_stats_all_buckets(self.servers)
-        self.bad_replicas_condition_check(self.servers,self.buckets)
-
     def test_data_vb_num_distribution(self):
         """
             Test to check vbucket distribution for active and replica items

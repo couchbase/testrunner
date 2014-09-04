@@ -51,7 +51,6 @@ class RebalanceInTests(RebalanceBaseTest):
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, self.servers[:self.nodes_in + self.nodes_init], self.buckets, path=None)
         self.verify_unacked_bytes_all_buckets()
         nodes = self.get_nodes_in_cluster(self.master)
-        self.bad_replicas_condition_check(self.servers[:self.nodes_in + self.nodes_init],self.buckets)
         self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets)
 
     """Rebalances nodes in with failover and full recovery add back of a node
@@ -93,7 +92,6 @@ class RebalanceInTests(RebalanceBaseTest):
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, self.servers[:self.nodes_in + self.nodes_init], self.buckets, path=None)
         self.verify_unacked_bytes_all_buckets()
         nodes = self.get_nodes_in_cluster(self.master)
-        self.bad_replicas_condition_check(self.servers[:self.nodes_in + self.nodes_init],self.buckets)
         self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets)
 
     """Rebalances  after we do add node and graceful failover
@@ -140,7 +138,6 @@ class RebalanceInTests(RebalanceBaseTest):
         self.verify_cluster_stats(new_server_list)
         self.compare_failovers_logs(prev_failover_stats, new_server_list, self.buckets)
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, new_server_list, self.buckets, path=None)
-        self.bad_replicas_condition_check(new_server_list,self.buckets)
         self.verify_unacked_bytes_all_buckets()
         nodes = self.get_nodes_in_cluster(self.master)
         self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets)
@@ -171,7 +168,6 @@ class RebalanceInTests(RebalanceBaseTest):
         for task in tasks:
             task.result()
         self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
-        self.bad_replicas_condition_check(self.servers[:self.nodes_in + self.nodes_init],self.buckets)
         self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes into a cluster while doing docs ops:create, delete, update.
@@ -200,7 +196,6 @@ class RebalanceInTests(RebalanceBaseTest):
         for task in tasks:
             task.result()
         self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
-        self.bad_replicas_condition_check(self.servers[:self.nodes_in + self.nodes_init],self.buckets)
         self.verify_unacked_bytes_all_buckets()
 
     def rebalance_in_with_ops_batch(self):
@@ -221,7 +216,6 @@ class RebalanceInTests(RebalanceBaseTest):
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + 1])
         self._verify_all_buckets(self.master, 1, 1000, None, only_store_hash=True, batch_size=5000)
         self._verify_stats_all_buckets(self.servers[:self.nodes_in + 1])
-        self.bad_replicas_condition_check(self.servers[:self.nodes_in + 1],self.buckets)
         self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes into a cluster during getting random keys.
@@ -307,7 +301,6 @@ class RebalanceInTests(RebalanceBaseTest):
             for task in tasks:
                 task.result()
             self.verify_cluster_stats(self.servers[:i + 2])
-            self.bad_replicas_condition_check(self.servers[:i + 2],self.buckets)
         self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes into a cluster  during view queries.
@@ -482,7 +475,6 @@ class RebalanceInTests(RebalanceBaseTest):
             rebalance = self.cluster.async_rebalance(servs_init + servs_in, [], [])
             rebalance.result()
         self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
-        self.bad_replicas_condition_check(self.servers[:self.nodes_in + self.nodes_init],self.buckets)
         self.verify_unacked_bytes_all_buckets()
 
 
@@ -576,7 +568,6 @@ class RebalanceInTests(RebalanceBaseTest):
             rebalance.result()
             self._load_all_buckets(self.master, gen_delete, "create", 0)
             self.verify_cluster_stats(self.servers[:i + 1])
-            self.bad_replicas_condition_check(self.servers[:i + 1],self.buckets)
         self.verify_unacked_bytes_all_buckets()
 
     """Rebalances nodes into a cluster while doing mutations and expirations.
@@ -599,7 +590,6 @@ class RebalanceInTests(RebalanceBaseTest):
             rebalance.result()
             self._load_all_buckets(self.master, gen_2, "create", 0)
             self.verify_cluster_stats(self.servers[:i + 1])
-            self.bad_replicas_condition_check(self.servers[:i + 1],self.buckets)
         self.verify_unacked_bytes_all_buckets()
 
     '''
