@@ -876,38 +876,81 @@ class CouchbaseCliTest(CliBaseTest):
         cluster_status = rest.cluster_status()
         remote_client.disconnect()
 
-# tests for the group-manage option. group creation, renaming and deletion are tested . These tests require a cluster of four or more nodes.
+    """ tests for the group-manage option. group creation, renaming and deletion are tested .
+        These tests require a cluster of four or more nodes. """
     def testCreateRenameDeleteGroup(self):
         remote_client = RemoteMachineShellConnection(self.master)
         cli_command = "group-manage"
 
-# create group
-        options = " --create --group-name=group2"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-        self.assertEqual(output, ["SUCCESS: group created group2"])
-# create existing group. operation should fail
-        options = " --create --group-name=group2"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-        self.assertEqual(output[0], "ERROR: unable to create group group2 (400) Bad Request")
-        self.assertEqual(output[1], "{u'name': u'already exists'}")
-# rename group test
-        options = " --rename=group3 --group-name=group2"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-        self.assertEqual(output, ["SUCCESS: group renamed group2"])
-# delete group test
-        options = " --delete --group-name=group3"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-        self.assertEqual(output, ["SUCCESS: group deleted group3"])
-# delete non-empty group test
-        options = " --delete --group-name=\"Group 1\""
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-        self.assertEqual(output[0], "ERROR: unable to delete group Group 1 (400) Bad Request")
-        self.assertEqual(output[1], "{u'_': u'group is not empty'}")
-# delete non-existing group
-        options = " --delete --group-name=groupn"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-        self.assertEqual(output, ["ERROR: invalid group name:groupn"])
-        remote_client.disconnect()
+        if self.os == "linux":
+            # create group
+            options = " --create --group-name=group2"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["SUCCESS: group created group2"])
+            # create existing group. operation should fail
+            options = " --create --group-name=group2"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output[0], "ERROR: unable to create group group2 (400) Bad Request")
+            self.assertEqual(output[1], "{u'name': u'already exists'}")
+            # rename group test
+            options = " --rename=group3 --group-name=group2"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["SUCCESS: group renamed group2"])
+            # delete group test
+            options = " --delete --group-name=group3"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["SUCCESS: group deleted group3"])
+            # delete non-empty group test
+            options = " --delete --group-name=\"Group 1\""
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output[0], "ERROR: unable to delete group Group 1 (400) Bad Request")
+            self.assertEqual(output[1], "{u'_': u'group is not empty'}")
+            # delete non-existing group
+            options = " --delete --group-name=groupn"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["ERROR: invalid group name:groupn"])
+            remote_client.disconnect()
+
+        if self.os == "windows":
+            # create group
+            options = " --create --group-name=group2"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output[0], "SUCCESS: group created group2")
+            # create existing group. operation should fail
+            options = " --create --group-name=group2"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output[0], "ERROR: unable to create group group2 (400) Bad Request")
+            self.assertEqual(output[2], "{u'name': u'already exists'}")
+            # rename group test
+            options = " --rename=group3 --group-name=group2"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output[0], "SUCCESS: group renamed group2")
+            # delete group test
+            options = " --delete --group-name=group3"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output[0], "SUCCESS: group deleted group3")
+            # delete non-empty group test
+            options = " --delete --group-name=\"Group 1\""
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output[0], "ERROR: unable to delete group Group 1 (400) Bad Request")
+            self.assertEqual(output[2], "{u'_': u'group is not empty'}")
+            # delete non-existing group
+            options = " --delete --group-name=groupn"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output[0], "ERROR: invalid group name:groupn")
+            remote_client.disconnect()
 
 # tests for the group-manage option. adding and moving servers between groups are tested. These tests require a cluster of four or more nodes.
     def testAddMoveServerListGroup(self):
