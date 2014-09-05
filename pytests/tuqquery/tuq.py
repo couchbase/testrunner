@@ -2008,6 +2008,36 @@ class QueryTests(BaseTestCase):
         self._verify_results(actual_list['resultset'], expected_result)
 
 ##############################################################################################
+#
+#   CONDITIONAL FNS
+##############################################################################################
+
+    def test_nanif(self):
+        for bucket in self.buckets:
+            self.query = "select join_day, join_mo, NANIF(join_day, join_mo) as equality" +\
+                         " from %s" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"join_day" : doc["join_day"], "join_mo" : doc["join_mo"],
+                                "equality" : doc["join_day"] if doc["join_day"]!=doc["join_mo"] else 'NaN'}
+                               for doc in full_list]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_posinf(self):
+        for bucket in self.buckets:
+            self.query = "select join_day, join_mo, POSINF(join_day, join_mo) as equality" +\
+                         " from %s" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"join_day" : doc["join_day"], "join_mo" : doc["join_mo"],
+                                "equality" : doc["join_day"] if doc["join_day"]!=doc["join_mo"] else '+Infinity'}
+                               for doc in full_list]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+##############################################################################################
 #    
 #   COMMON FUNCTIONS
 ##############################################################################################
