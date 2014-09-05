@@ -2113,21 +2113,21 @@ class RemoteMachineShellConnection:
         return output
 
     def execute_cbdocloader(self, username, password, bucket, memory_quota, file):
-        cbdocloader_command = "%stools/cbdocloader" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        cbdocloader_command = "%scbdocloader" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
                                                                             username, password, self.ip,
                                                                             self.port, bucket, memory_quota,
                                                                             testconstants.LINUX_CB_PATH, file)
         if self.info.distribution_type.lower() == 'mac':
-            cbdocloader_command = "%stools/cbdocloader" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+            cbdocloader_command = "%scbdocloader" % (testconstants.MAC_COUCHBASE_BIN_PATH)
             command = "%s -u %s -p %s -n %s:%s -b %s -s %s %ssamples/%s.zip" % (cbdocloader_command,
                                                                             username, password, self.ip,
                                                                             self.port, bucket, memory_quota,
                                                                             testconstants.MAC_CB_PATH, file)
 
         if self.info.type.lower() == 'windows':
-            cbdocloader_command = "%stools/cbdocloader.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+            cbdocloader_command = "%scbdocloader.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
             WIN_COUCHBASE_SAMPLES_PATH = "C:/Program\ Files/Couchbase/Server/samples/"
             command = "%s -u %s -p %s -n %s:%s -b %s -s %s %s%s.zip" % (cbdocloader_command,
                                                                         username, password, self.ip,
