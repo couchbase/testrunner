@@ -364,6 +364,7 @@ class RackzoneTests(RackzoneBaseTest):
                         commands = "%s %s:11210 %s -b %s -p \"%s\" | grep.exe :vb_filter: | gawk.exe '{print $1}' \
                                | sed.exe 's/eq_tapq:replication_ns_1@//g'  | sed.exe 's/:vb_filter://g' \
                                " % (cbstat_command, node, command,"default", saslPassword)
+                    output, error = shell.execute_command(commands)
                 elif versions[0][:5] in COUCHBASE_VERSION_3:
                     command = "dcp"
                     if not info.type.lower() == 'windows':
@@ -371,12 +372,14 @@ class RackzoneTests(RackzoneBaseTest):
                                     awk '{print $1}' | sed 's/eq_dcpq:replication:ns_1@%s->ns_1@//g' | \
                                     sed 's/:.*//g' | sort -u | xargs \
                                    " % (cbstat_command, node, command,"default", saslPassword, node, node)
+                        output, error = shell.execute_command(commands)
                     elif info.type.lower() == 'windows':
                         commands = "%s %s:11210 %s -b %s -p \"%s\" | grep.exe :replication:ns_1@%s |  grep vb_uuid | \
                                     gawk.exe '{print $1}' | sed.exe 's/eq_dcpq:replication:ns_1@%s->ns_1@//g' | \
-                                    sed.exe 's/:.*//g' | sort -u \
+                                    sed.exe 's/:.*//g' \
                                    " % (cbstat_command, node, command,"default", saslPassword, node, node)
-                output, error = shell.execute_command(commands)
+                        output, error = shell.execute_command(commands)
+                        output = sorted(set(output))
                 shell.log_command_output(output, error)
                 output = output[0].split(" ")
                 if node not in output:
