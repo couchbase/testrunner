@@ -389,7 +389,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
     def incremental_rebalance_in_out_with_mutation_and_deletion(self):
         self.cluster.rebalance(self.servers[:self.num_servers],
                                self.servers[1:self.num_servers], [])
-        gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
+        gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2 + 2000,
                               end=self.num_items)
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
             tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0,
@@ -420,12 +420,12 @@ class RebalanceInOutTests(RebalanceBaseTest):
     def incremental_rebalance_in_out_with_mutation_and_expiration(self):
         self.cluster.rebalance(self.servers[:self.num_servers],
                                self.servers[1:self.num_servers], [])
-        gen_expire = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
+        gen_expire = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2 + 2000,
                               end=self.num_items)
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
             self.log.info("iteration #{0}".format(i))
-            tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=50)
-            tasks.extend(self._async_load_all_buckets(self.master, gen_expire, "update", 10, batch_size=50))
+            tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=1000)
+            tasks.extend(self._async_load_all_buckets(self.master, gen_expire, "update", 10, batch_size=1000))
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
             self.sleep(20)

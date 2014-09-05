@@ -562,13 +562,11 @@ class RebalanceOutTests(RebalanceBaseTest):
     verifies that there has been no data loss, sum(curr_items) match the curr_items_total.
     Once all nodes have been rebalanced out of the cluster the test finishes."""
     def incremental_rebalance_out_with_mutation_and_deletion(self):
-        gen_2 = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
+        gen_2 = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2 + 2000,
                               end=self.num_items)
-        batch_size = 50
+        batch_size = 1000
         for i in reversed(range(self.num_servers)[1:]):
             # don't use batch for rebalance out 2-1 nodes
-            if i == 1:
-                batch_size = 1
             tasks = [self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])]
             tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=batch_size, timeout_secs=60)
             tasks += self._async_load_all_buckets(self.master, gen_2, "delete", 0, batch_size=batch_size, timeout_secs=60)
@@ -589,13 +587,11 @@ class RebalanceOutTests(RebalanceBaseTest):
     verifies that there has been no data loss, sum(curr_items) match the curr_items_total.
     Once all nodes have been rebalanced out of the cluster the test finishes."""
     def incremental_rebalance_out_with_mutation_and_expiration(self):
-        gen_2 = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
+        gen_2 = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2 + 2000,
                               end=self.num_items)
-        batch_size = 50
+        batch_size = 1000
         for i in reversed(range(self.num_servers)[2:]):
             # don't use batch for rebalance out 2-1 nodes
-            if i == 1:
-                batch_size = 1
             rebalance = self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])
             self._load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=batch_size, timeout_secs=60)
             self._load_all_buckets(self.master, gen_2, "update", 5, batch_size=batch_size, timeout_secs=60)
