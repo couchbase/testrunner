@@ -344,7 +344,7 @@ class CouchbaseCliTest(CliBaseTest):
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
         server_info = self._get_cluster_info(remote_client)
         result = server_info["otpNode"] + " " + server_info["hostname"] + " " + server_info["status"] + " " + server_info["clusterMembership"]
-        self.assertEqual(result, "ns_1@{0} {0}:8091 healthy active".format("127.0.0.1"))
+        self.assertEqual(result, "ns_1@{0} {0}:8091 healthy active".format(remote_client.ip))
 
         cli_command = "bucket-list"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
@@ -1171,6 +1171,9 @@ class XdcrCLITest(CliBaseTest):
             for element in output:
                 self.log.info("element {0}".format(element))
                 if "ERROR: unable to set up xdcr remote site remote (400) Bad Request" in element:
+                    self.log.info("match {0}".format(element))
+                    return True
+                elif "Error: hostname (ip) is missing" in element:
                     self.log.info("match {0}".format(element))
                     return True
             self.assertFalse("output string did not match")
