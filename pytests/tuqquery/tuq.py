@@ -2037,6 +2037,142 @@ class QueryTests(BaseTestCase):
                                for doc in full_list]
             expected_result = sorted(set(expected_result))
             self._verify_results(actual_result, expected_result)
+
+##############################################################################################
+#
+#   String FUNCTIONS
+##############################################################################################
+
+    def test_contains(self):
+        for bucket in self.buckets:
+            self.query = "select name from %s when contains(job_title, 'Sale')" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"name" : doc["name"]}
+                               for doc in full_list
+                               if doc['job_title'].find('Sale') != -1]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_initcap(self):
+        for bucket in self.buckets:
+            self.query = "select INITCAP(VMs[0].os) as OS from %s" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"OS" : (doc["VMs"][0]["os"][0].upper() + doc["VMs"][0]["os"][1:])}
+                               for doc in full_list]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_title(self):
+        for bucket in self.buckets:
+            self.query = "select TITLE(VMs[0].os) as OS from %s" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"OS" : (doc["VMs"][0]["os"][0].upper() + doc["VMs"][0]["os"][1:])}
+                               for doc in full_list]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_position(self):
+        for bucket in self.buckets:
+            self.query = "select POSITION(VMs[1].name, 'vm') pos from %s" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"pos" : (doc["VMs"][1]["name"].find('vm'))}
+                               for doc in full_list]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+            self.query = "select POSITION(VMs[1].name, 'server') pos from %s" % (bucket.name)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"pos" : (doc["VMs"][1]["name"].find('server'))}
+                               for doc in full_list]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_regex_contains(self):
+        for bucket in self.buckets:
+            self.query = "select email from %s where REGEXP_CONTAINS(email, '-m..l')" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"email" : doc["email"]}
+                               for doc in full_list
+                               if len(re.compile('-m..l').findall(doc['email'])) > 0]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_regex_like(self):
+        for bucket in self.buckets:
+            self.query = "select email from %s where REGEXP_LIKE(email, '.*-mail.*')" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"email" : doc["email"]}
+                               for doc in full_list
+                               if re.compile('.*-mail.*').search(doc['email'])]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_regex_position(self):
+        for bucket in self.buckets:
+            self.query = "select email from %s where REGEXP_POSITION(email, '-m..l*') = 10" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"email" : doc["email"]}
+                               for doc in full_list
+                               if doc['email'].find('-m') == 10]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_regex_replace(self):
+        for bucket in self.buckets:
+            self.query = "select name, REGEXP_REPLACE(email, '-mail', 'domain') as mail from %s" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"name" : doc["name"],
+                                "email" : doc["email"].replace('-mail', 'domain')}
+                               for doc in full_list]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+            self.query = "select name, REGEXP_REPLACE(email, 'e', 'a', 2) as mail from %s" % (bucket.name)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"name" : doc["name"],
+                                "email" : doc["email"].replace('e', 'a', 2)}
+                               for doc in full_list]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_replace(self):
+        for bucket in self.buckets:
+            self.query = "select name, REPLACE(email, 'e', 'a', 2) as mail from %s" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"name" : doc["name"],
+                                "email" : doc["email"].replace('e', 'a', 2)}
+                               for doc in full_list]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
+
+    def test_repeat(self):
+        for bucket in self.buckets:
+            self.query = "select REPEAT(name, 2) as name from %s" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['resultset'])
+            expected_result = [{"name" : doc["name"] * 2}
+                               for doc in full_list]
+            expected_result = sorted(set(expected_result))
+            self._verify_results(actual_result, expected_result)
 ##############################################################################################
 #    
 #   COMMON FUNCTIONS
