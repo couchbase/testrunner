@@ -1057,36 +1057,83 @@ class CouchbaseCliTest(CliBaseTest):
                     options=options, cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output[0], "SUCCESS: group deleted group2")
 
-# tests for the server-add option with group manage rider.  These tests require a cluster of four or more nodes.
-
+    """ tests for the server-add option with group manage rider.
+        These tests require a cluster of four or more nodes. """
     def testServerAddRebalancewithGroupManage(self):
         nodes_add = self.input.param("nodes_add", 1)
         remote_client = RemoteMachineShellConnection(self.master)
 
+        if self.os == "linux":
+            # test server-add command with group manage option
+            cli_command = "server-add"
+            for num in xrange(nodes_add):
+                options = "--server-add={0}:8091 --server-add-username=Administrator \
+                           --server-add-password=password --group-name=\"Group 1\"" \
+                           .format(self.servers[num + 1].ip)
+                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                        options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'Group 1'" \
+                                                            .format(self.servers[num + 1].ip)])
 
-# test server-add command with group manage option
-        cli_command = "server-add"
-        for num in xrange(nodes_add):
-            options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password --group-name=\"Group 1\"".format(self.servers[num + 1].ip)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'Group 1'".format(self.servers[num + 1].ip)])
+            # test rebalance command with add server and group manage option
+            cli_command = "rebalance"
+            for num in xrange(nodes_add):
+                options = "--server-add={0}:8091 --server-add-username=Administrator \
+                           --server-add-password=password --group-name=\"Group 1\"" \
+                                                    .format(self.servers[num + 2].ip)
+                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                        options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
+                                                               .format(self.servers[num + 2].ip))
+                self.assertTrue("INFO: rebalancing" in output[1])
+                self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+
+            for num in xrange(nodes_add):
+                options = "--server-remove={0}:8091 --server-add={1}:8091 \
+                           --server-add-username=Administrator --server-add-password=password \
+                           --group-name=\"Group 1\"".format(self.servers[num + 2].ip, self.servers[num + 3].ip)
+                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                        options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
+                                                               .format(self.servers[num + 3].ip))
+                self.assertTrue("INFO: rebalancing" in output[1])
+                self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
 
 
-# test rebalance command with add server and group manage option
-        cli_command = "rebalance"
-        for num in xrange(nodes_add):
-            options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password --group-name=\"Group 1\"".format(self.servers[num + 2].ip)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'".format(self.servers[num + 2].ip))
-            self.assertTrue("INFO: rebalancing" in output[1])
-            self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+        if self.os == "windows":
+            # test server-add command with group manage option
+            cli_command = "server-add"
+            for num in xrange(nodes_add):
+                options = "--server-add={0}:8091 --server-add-username=Administrator \
+                           --server-add-password=password --group-name=\"Group 1\""  \
+                                                     .format(self.servers[num + 1].ip)
+                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                        options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
+                                                            .format(self.servers[num + 1].ip))
+            # test rebalance command with add server and group manage option
+            cli_command = "rebalance"
+            for num in xrange(nodes_add):
+                options = "--server-add={0}:8091 --server-add-username=Administrator \
+                           --server-add-password=password --group-name=\"Group 1\"" \
+                                                    .format(self.servers[num + 2].ip)
+                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                        options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.assertEqual(output[4], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
+                                                               .format(self.servers[num + 2].ip))
+                self.assertTrue("INFO: rebalancing" in output[0])
+                self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
 
-        for num in xrange(nodes_add):
-            options = "--server-remove={0}:8091 --server-add={1}:8091 --server-add-username=Administrator --server-add-password=password --group-name=\"Group 1\"".format(self.servers[num + 2].ip, self.servers[num + 3].ip)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'".format(self.servers[num + 3].ip))
-            self.assertTrue("INFO: rebalancing" in output[1])
-            self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+            for num in xrange(nodes_add):
+                options = "--server-remove={0}:8091 --server-add={1}:8091 \
+                           --server-add-username=Administrator --server-add-password=password \
+                           --group-name=\"Group 1\"".format(self.servers[num + 2].ip, self.servers[num + 3].ip)
+                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                        options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
+                                                               .format(self.servers[num + 3].ip))
+                self.assertTrue("INFO: rebalancing" in output[1])
+                self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
 
 class XdcrCLITest(CliBaseTest):
     XDCR_SETUP_SUCCESS = {
