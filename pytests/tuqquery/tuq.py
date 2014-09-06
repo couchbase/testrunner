@@ -31,7 +31,7 @@ class QueryTests(BaseTestCase):
         self.use_rest = self.input.param("use_rest", True)
         self.max_verify = self.input.param("max_verify", None)
         self.buckets = RestConnection(self.master).get_buckets()
-        docs_per_day = self.input.param("doc-per-day", 49)
+        self.docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.gens_load = self.generate_docs(docs_per_day)
         if self.input.param("gomaxprocs", None):

@@ -135,6 +135,61 @@ class JoinTests(QueryTests):
                 expected_result.extend([{}] * self.gens_tasks[-1].end)
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+
+    def test_subquery_from(self):
+        for bucket in self.buckets:
+            self.query = "select count(*) as num from (select task_name from %s keys %s" % (bucket.name, str(['test_task-%s' % i for i in xrange(0, 29)]))
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'])
+            expected_result = [{"num" : 28}]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_subquery_select(self):
+        for bucket in self.buckets:
+            self.query = "select task_name, (select count(task_name) cn from %s keys %s) as names from %s" % (bucket.name, str(['test_task-%s' % i for i in xrange(0, 29)]))
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'])
+            expected_result_subquery = {"cn" : 28}
+            expected_result = [{'names' : expected_result_subquery}] * self.gen_load.end
+            expected_result.extend([{'task_name': doc['task_name'],
+                                     'names' : expected_result_subquery}
+                                    for doc in self.gens_tasks])
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_subquery_where_aggr(self):
+        for bucket in self.buckets:
+            self.query = "select name, join_day from %s where join_day =" +\
+            " (select AVG(join_day) as average from %s keys %s)[0].average" % (bucket.name, bucket.name,
+                                                                               str(['query-test-Sales-%s' % i
+                                                                                    for i in xrange(0, self.docs_per_day)]))
+            all_docs_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'])
+            expected_result = [{'name' : doc['name'],
+                                'join_day' : doc['join_day']}
+                               for doc in all_docs_list
+                               if doc['job_title'] == 'Sales' and doc['join_day'] == 1]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_subquery_where_in(self):
+        for bucket in self.buckets:
+            self.query = "select name, join_day from %s where join_day IN " +\
+            " (select ARRAY_AGG(join_day) as average from %s keys %s)[0].average" % (bucket.name, bucket.name,
+                                                                               str(['query-test-Sales-%s' % i
+                                                                                    for i in xrange(0, self.docs_per_day)]))
+            all_docs_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'])
+            expected_result = [{'name' : doc['name'],
+                                'join_day' : doc['join_day']}
+                               for doc in all_docs_list
+                               if doc['job_title'] == 'Sales' and doc['join_day'] == 1]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
 ##############################################################################################
 #
 #   KEY
@@ -317,10 +372,9 @@ class JoinTests(QueryTests):
             for year in join_yr:
                 for month in join_mo:
                     for day in join_day:
-                        prefix = str(uuid.uuid4())[:7]
                         name = ["employee-%s" % (str(day))]
                         tasks_ids = ["test_task-%s" % day, "test_task-%s" % (day + 1)]
-                        generators.append(DocumentGenerator("query-test" + prefix,
+                        generators.append(DocumentGenerator("query-test-%s" % info,
                                                template,
                                                name, [year], [month], [day],
                                                [info], [tasks_ids],
