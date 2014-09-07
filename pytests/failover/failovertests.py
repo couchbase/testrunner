@@ -167,7 +167,9 @@ class FailoverTests(FailoverBaseTest):
         self.verify_cluster_stats(_servers_, self.master, check_bucket_stats = True)
         # Verify all data set with meta data if failover happens after failover
         if not self.withMutationOps:
+            self.sleep(30)
             self.data_analysis_all(record_static_data_set, _servers_, self.buckets, path = None, addedItems = None)
+
         # Check Cluster Stats and Data as well if max_verify > 0
         # Check Failover logs :: Not sure about this logic, currently not checking, will update code once confirmed
         # Currently, only  for checking case where we  have graceful failover
@@ -230,8 +232,6 @@ class FailoverTests(FailoverBaseTest):
 
         self.log.info("Begin VERIFICATION for Add-back and rebalance")
 
-        self.sleep(60)
-
         # Verify Stats of cluster and Data is max_verify > 0
         self.verify_cluster_stats(self.servers, self.master, check_bucket_stats = True)
 
@@ -240,6 +240,7 @@ class FailoverTests(FailoverBaseTest):
 
         # Comparison of all data if required
         if not self.withMutationOps:
+            self.sleep(30)
             self.data_analysis_all(record_static_data_set,self.servers, self.buckets,  path = None, addedItems = None)
 
         # Verify if vbucket sequence numbers and failover logs are as expected
