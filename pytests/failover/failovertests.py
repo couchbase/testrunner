@@ -167,7 +167,7 @@ class FailoverTests(FailoverBaseTest):
         self.verify_cluster_stats(_servers_, self.master, check_bucket_stats = True)
         # Verify all data set with meta data if failover happens after failover
         if not self.withMutationOps:
-            self.sleep(30)
+            self.sleep(60)
             self.data_analysis_all(record_static_data_set, _servers_, self.buckets, path = None, addedItems = None)
 
         # Check Cluster Stats and Data as well if max_verify > 0
@@ -240,7 +240,7 @@ class FailoverTests(FailoverBaseTest):
 
         # Comparison of all data if required
         if not self.withMutationOps:
-            self.sleep(30)
+            self.sleep(60)
             self.data_analysis_all(record_static_data_set,self.servers, self.buckets,  path = None, addedItems = None)
 
         # Verify if vbucket sequence numbers and failover logs are as expected
