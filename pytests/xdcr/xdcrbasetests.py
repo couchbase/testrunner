@@ -305,6 +305,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._percent_delete = self._input.param("del", 30)
         self._warmup = self._input.param("warm", None)
         self._failover = self._input.param("failover", None)
+        self._graceful = self._input.param("graceful", False)
         self._demand_encryption = self._input.param("demand_encryption", 0)
         self._rebalance = self._input.param("rebalance", None)
         self._use_hostanames = self._input.param("use_hostnames", False)
@@ -663,7 +664,7 @@ class XDCRBaseTest(unittest.TestCase):
         else:
             remove_nodes = cluster_nodes[len(cluster_nodes) - self._num_rebalance:]
         if self._failover and cluster_type in self._failover:
-            self.cluster.failover(cluster_nodes, remove_nodes)
+            self.cluster.failover(cluster_nodes, remove_nodes, self._graceful)
         tasks = self._async_rebalance(cluster_nodes, [], remove_nodes)
         remove_node_ips = [remove_node.ip for remove_node in remove_nodes]
         self.log.info(" Starting rebalance-out nodes:{0} at {1} cluster {2}".
