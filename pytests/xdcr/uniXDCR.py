@@ -48,16 +48,16 @@ class unidirectional(XDCRReplicationBaseTest):
         # Load 1 item with size 1
         # 52 alphabets (small and capital letter)
         gen_create = BlobGenerator('loadOne', 'loadOne', 1, start=0, end=52)
-        self._load_all_buckets(self.src_master, gen_create, "create", 0)
+        self._load_all_buckets(self.src_master, gen_create, "create", 0, batch_size=1)
 
-        # Load 100 items with below sizes of 1M
-        gen_create = BlobGenerator('loadOne', 'loadOne', 1000000, start=52, end=152)
-        self._load_all_buckets(self.src_master, gen_create, "create", 0)
+        # Load items with below sizes of 1M
+        gen_create = BlobGenerator('loadOne', 'loadOne', 1000000, start=52, end=99)
+        self._load_all_buckets(self.src_master, gen_create, "create", 0, batch_size=1)
 
-        # Load 5 item with size 10MB
+        # Load items with size 10MB
         # Getting memory issue with 20MB data on VMs.
-        gen_create = BlobGenerator('loadOne', 'loadOne', 10000000, start=152, end=155)
-        self._load_all_buckets(self.src_master, gen_create, "create", 0)
+        gen_create = BlobGenerator('loadOne', 'loadOne', 10000000, start=99, end=100)
+        self._load_all_buckets(self.src_master, gen_create, "create", 0, batch_size=1)
 
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.verify_results()
