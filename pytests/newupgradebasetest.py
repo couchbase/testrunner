@@ -17,6 +17,8 @@ from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from pprint import pprint
 from testconstants import MV_LATESTBUILD_REPO
+from testconstants import COUCHBASE_VERSION_2
+from testconstants import COUCHBASE_VERSION_3
 
 class NewUpgradeBaseTest(BaseTestCase):
     def setUp(self):
@@ -475,3 +477,17 @@ class NewUpgradeBaseTest(BaseTestCase):
                     self.fail("Fail DCP upgrade")
             else:
                 self.fail("Need vbuckets setting >= 256 for upgrade from 2.x.x to 3.0.0")
+
+    def dcp_rebalance_in_offline_upgrade_from_version2_to_version3(self):
+        if self.initial_version[:5] in COUCHBASE_VERSION_2 and \
+            self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3:
+            otpNodes = []
+            nodes = self.rest.node_statuses()
+            for node in nodes:
+                otpNodes.append(node.id)
+            self.log.info("Start DCP rebalance after complete offline upgrade from {0} to {1}"\
+                           .format(self.initial_version[:5], \
+                                   self.input.param('upgrade_version', '')[:5]))
+            self.rest.rebalance(otpNodes, [])
+            """ verify DCP upgrade in 3.0.0 version """
+            self.monitor_dcp_rebalance()
