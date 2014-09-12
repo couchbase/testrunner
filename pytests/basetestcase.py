@@ -520,10 +520,11 @@ class BaseTestCase(unittest.TestCase):
         servers - A list of all of the servers in the cluster. ([TestInputServer])
         ep_queue_size - expected ep_queue_size (int)
         ep_queue_size_cond - condition for comparing (str)
+        check_ep_dcp_items_remaining - to check if replication is complete
         timeout - Waiting the end of the thread. (str)
     """
     def _wait_for_stats_all_buckets(self, servers, ep_queue_size=0, \
-                                     ep_queue_size_cond='==', timeout=360):
+                                     ep_queue_size_cond='==', check_ep_items_remaining = False, protocol = "dcp", timeout=360):
         tasks = []
         for server in servers:
             for bucket in self.buckets:
@@ -531,8 +532,16 @@ class BaseTestCase(unittest.TestCase):
                     continue
                 tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
                                    'ep_queue_size', ep_queue_size_cond, ep_queue_size))
+                if check_ep_items_remaining:
+                    if protocol == "dcp":
+                        tasks.append(self.cluster.async_wait_for_stats([server], bucket, 'dcp',
+                                   'ep_dcp_items_remaining', "==", 0))
+                    else:
+                        tasks.append(self.cluster.async_wait_for_stats([server], bucket, 'tap',
+                                   'ep_tap_items_remaining', "==", 0))
         for task in tasks:
             task.result(timeout)
+
 
     """Waits for max_unacked_bytes = 0 on all servers and buckets in a cluster.
 
