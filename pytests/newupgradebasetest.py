@@ -457,7 +457,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                             "%s vbuckets seem to be suffled" % vb_type)
 
     def monitor_dcp_rebalance(self):
-        if self.initial_version[:5] in COUCHBASE_VERSION_2 and \
+        if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
            self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3:
             if int(self.initial_vbuckets) >= 256:
                 if self.master.ip != self.rest.ip or \
@@ -469,30 +469,30 @@ class NewUpgradeBaseTest(BaseTestCase):
                     self.rest_helper = RestHelper(self.rest)
                 if self.rest._rebalance_progress_status() == 'running':
                     self.log.info("Start monitoring DCP rebalance upgrade from {0} to {1}"\
-                                  .format(self.initial_version[:5], \
+                                  .format(self.input.param('initial_version', '')[:5], \
                                    self.input.param('upgrade_version', '')[:5]))
                     status = self.rest.monitorRebalance()
                 else:
                     self.fail("DCP reabalance upgrade is not running")
 
                 if status:
-                    self.log.info("Done DCP upgrade!")
+                    self.log.info("Done DCP rebalance upgrade!")
                 else:
-                    self.fail("Fail DCP upgrade")
+                    self.fail("Failed DCP rebalance upgrade")
             else:
                 self.fail("Need vbuckets setting >= 256 for upgrade from 2.x.x to 3.x.x")
         else:
             self.log.info("No need to do DCP rebalance upgrade")
 
     def dcp_rebalance_in_offline_upgrade_from_version2_to_version3(self):
-        if self.initial_version[:5] in COUCHBASE_VERSION_2 and \
-            self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3:
+        if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
+           self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3:
             otpNodes = []
             nodes = self.rest.node_statuses()
             for node in nodes:
                 otpNodes.append(node.id)
             self.log.info("Start DCP rebalance after complete offline upgrade from {0} to {1}"\
-                           .format(self.initial_version[:5], \
+                           .format(self.input.param('initial_version', '')[:5], \
                                    self.input.param('upgrade_version', '')[:5]))
             self.rest.rebalance(otpNodes, [])
             """ verify DCP upgrade in 3.0.0 version """
