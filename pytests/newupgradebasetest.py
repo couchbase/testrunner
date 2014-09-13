@@ -457,16 +457,20 @@ class NewUpgradeBaseTest(BaseTestCase):
                             "%s vbuckets seem to be suffled" % vb_type)
 
     def monitor_dcp_rebalance(self):
-        if "3.0.0" in self.upgrade_versions[0]:
+        if self.initial_version[:5] in COUCHBASE_VERSION_2 and \
+           self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3:
             if int(self.initial_vbuckets) >= 256:
                 if self.master.ip != self.rest.ip or \
-                   self.master.ip == self.rest.ip and str(self.master.port) != str(self.rest.port):
+                   self.master.ip == self.rest.ip and \
+                   str(self.master.port) != str(self.rest.port):
                     if self.port:
                         self.master.port = self.port
                     self.rest = RestConnection(self.master)
                     self.rest_helper = RestHelper(self.rest)
                 if self.rest._rebalance_progress_status() == 'running':
-                    self.log.info("Start monitoring DCP upgrade from 2.x.x to 3.0.0")
+                    self.log.info("Start monitoring DCP rebalance upgrade from {0} to {1}"\
+                                  .format(self.initial_version[:5], \
+                                   self.input.param('upgrade_version', '')[:5]))
                     status = self.rest.monitorRebalance()
                 else:
                     self.fail("DCP reabalance upgrade is not running")
@@ -476,7 +480,9 @@ class NewUpgradeBaseTest(BaseTestCase):
                 else:
                     self.fail("Fail DCP upgrade")
             else:
-                self.fail("Need vbuckets setting >= 256 for upgrade from 2.x.x to 3.0.0")
+                self.fail("Need vbuckets setting >= 256 for upgrade from 2.x.x to 3.x.x")
+        else:
+            self.log.info("No need to do DCP rebalance upgrade")
 
     def dcp_rebalance_in_offline_upgrade_from_version2_to_version3(self):
         if self.initial_version[:5] in COUCHBASE_VERSION_2 and \
@@ -491,3 +497,5 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.rest.rebalance(otpNodes, [])
             """ verify DCP upgrade in 3.0.0 version """
             self.monitor_dcp_rebalance()
+        else:
+            self.log.info("No need to do DCP rebalance upgrade")
