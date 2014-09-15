@@ -614,7 +614,7 @@ class BucketTestsControls():
         return self
 
     def type(self, type):
-        return self.helper.find_control('bucket','type', parent_locator='create_bucket_pop_up', text=type)
+        return self.helper.find_control('bucket','type', parent_locator='create_bucket_pop_up')
 
     def warning_pop_up(self, text):
         return self.helper.find_control('errors', 'warning_pop_up', text=text)

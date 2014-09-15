@@ -5,6 +5,7 @@ import os
 import urllib2
 import commands
 import types
+import datetime
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
@@ -153,6 +154,8 @@ class BaseUITestCase(unittest.TestCase):
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
             if self.driver:
                 self.driver.close()
+        except Exception as e:
+            raise e
         finally:
             if self.driver:
                 self.shell.disconnect()
