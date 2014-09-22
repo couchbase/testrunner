@@ -446,6 +446,19 @@ class  GracefullFailoverTests(BaseUITestCase):
 
     def test_delta_recovery_failover(self):
         confirm = self.input.param("confirm_recovery", True)
+        option = self.input.param("option", 'delta')
+        NavigationHelper(self).navigate('Server Nodes')
+        if len(self.servers) < 2:
+            self.fail("There is no enough VMs. Need at least 2")
+        ServerHelper(self).failover(self.servers[1], confirm=True, graceful=False)
+        ServerHelper(self).set_recovery(self.servers[1], option=option, confirm=confirm)
+        if confirm:
+            ServerHelper(self).start_rebalancing()
+            RestConnection(self.servers[0]).monitorRebalance()
+        self.log.info("Recovery checked")
+
+    def test_delta_recovery_failover_251(self):
+        confirm = self.input.param("confirm_recovery", True)
         # delta or full
         option = self.input.param("option", 'delta')
         NavigationHelper(self).navigate('Server Nodes')
@@ -549,6 +562,8 @@ class ServerTestControls():
                                                                  parent_locator='dialog')
         self.failover_conf_gracefull_option = self.helper.find_control('failover_dialog', 'graceful_option',
                                                                        parent_locator='dialog')
+        self.failover_conf_hard_failover = self.helper.find_control('failover_dialog', 'hard_failover',
+                                                                       parent_locator='dialog')
         return self
 
     def failover_warning(self):
@@ -560,6 +575,12 @@ class ServerTestControls():
     def recovery_btn(self, server_ip):
         return self.helper.find_control('server_info', 'recovery_btn', parent_locator='server_row',
                                         text=server_ip)
+
+    def select_recovery(self, server_ip):
+        self.conf_dialog = self.helper.find_control('pending_server_list', 'server_row', parent_locator='pending_server_container', text=server_ip)
+        self.delta_option = self.helper.find_control('pending_server_list', 'delta_recv_option', parent_locator='pending_server_container')
+        self.full_option = self.helper.find_control('pending_server_list', 'full_recv_option', parent_locator='pending_server_container')
+        return self
 
     def recovery_dialog(self):
         self.conf_dialog = self.helper.find_control('recovery_dialog', 'dialog')
@@ -934,7 +955,6 @@ class ServerHelper():
         if not self.is_server_stats_opened(server):
             self.open_server_stats(server)
         src = self.controls.server_info_rebalance_progress(server.ip, direction).get_inner_html()
-        print src
         src = src.split("Data being transferred %s" % direction)[1]
         stats = {}
         stats["bucket"] = "Bucket:%s" % src.split("<span>Bucket:</span>")[1].split("</p>")[0].replace('\n',' ')
@@ -956,8 +976,7 @@ class ServerHelper():
                 self.tc.assertTrue(actual_error.contains(error),
                                "Error '%s' is expected. But actual is %s" % (error, actual_error))
             else:
-                if graceful:
-                    RestConnection(self.tc.servers[0]).monitorRebalance()
+                RestConnection(self.tc.servers[0]).monitorRebalance()
                 self.tc.assertTrue(self.is_node_failed_over(server), "Node %s wasn't failed over" % server.ip)
         else:
             self.tc.assertFalse(self.is_node_failed_over(server), "Node %s was failed over" % server.ip) 
@@ -979,13 +998,15 @@ class ServerHelper():
 
     def is_confirmation_failover_opened(self):
         opened = self.controls.failover_confirmation().failover_conf_dialog.is_displayed()
-        opened &= self.controls.failover_confirmation().failover_conf_gracefull_option.is_displayed()
+        opened &= self.controls.failover_confirmation().failover_conf_hard_failover.is_displayed()
         opened &= self.controls.failover_confirmation().failover_conf_submit_btn.is_displayed()
         return opened
 
     def confirm_failover(self, confirm=True, is_graceful=None):
         if is_graceful:
             self.controls.failover_confirmation().failover_conf_gracefull_option.check()
+        else:
+            self.controls.failover_confirmation().failover_conf_hard_failover.check()
         if confirm:
             self.controls.failover_confirmation().failover_conf_submit_btn.click()
             self.wait.until(lambda fn: not self.is_confirmation_failover_opened() or\
@@ -1029,6 +1050,15 @@ class ServerHelper():
         self.tc.log.info("Dialog is opened")
 
     def set_recovery(self, server, option='full', confirm=True):
+        self.controls.pending_rebalance_tab().click()
+        self.tc.log.info("Try to set %s option in recovery %s" % (option, server.ip))
+        if option == 'delta':
+            self.controls.select_recovery(server.ip).delta_option.click()
+        if option == 'full':
+            self.controls.select_recovery(server.ip).full_option.click()
+        self.tc.log.info("%s option in recovery %s is set" % (option, server.ip))
+
+    def set_recovery_251(self, server, option='full', confirm=True):
         self.tc.log.info("Try to set %s option in recovery %s" % (option, server.ip))
         self.open_recovery(server)
         if option == 'delta':
@@ -1574,7 +1604,7 @@ class SettingsHelper():
 Objects
 '''
 class Bucket():
-    def __init__(self, name='default', type=None, ram_quota=None, sasl_pwd=None,
+    def __init__(self, name='default', type='Couchbase', ram_quota=None, sasl_pwd=None,
                  port=None, replica=None, index_replica=None, parse_bucket=None):
         self.name = name or 'default'
         self.type = type
@@ -1586,10 +1616,10 @@ class Bucket():
         if parse_bucket:
             for param in parse_bucket.test_params:
                 if hasattr(self, str(param)):
-                   setattr(self, str(param),parse_bucket.test_params[param])
+                    setattr(self, str(param),parse_bucket.test_params[param])
     def __str__(self):
-        return '<Bucket: name={0}, type={1}, ram_quota={2}>'.format(self.name,
-                                                                    self.type, self.ram_quota)
+        return '<Bucket: name={0}, type={1}, ram_quota={2}, sasl_pwd={3} >'.format(self.name,
+                                                                    self.type, self.ram_quota, self.sasl_password)
 
 class Document():
     def __init__(self, name, content=None, bucket='default'):
