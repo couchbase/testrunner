@@ -299,8 +299,9 @@ class WarmUpTests(BaseTestCase):
             old_task = [o_task for o_task in old_stats
                         if task["bucket"] == o_task["bucket"] and task["node"] == o_task["node"]][0]
             self.assertEqual(task["status"], 'running', "Status is not expected")
-            self.assertTrue(task["stats"]["ep_warmup_state"] in ["starting ep-engine","creating vbuckets", "loading data", "loading keys",
-                                                                 "estimating database item count", "determine access log availability"],
+            #https://github.com/membase/ep-engine/blob/master/docs/stats.json#L69
+            self.assertTrue(task["stats"]["ep_warmup_state"] in ["done", "estimating database item count",
+                "initialize", "loading access log", "loading data", "loading k/v pairs", "loading keys", "loading mutation log"],
                             "State is not expected: %s" % task["stats"]["ep_warmup_state"])
             if task["stats"]["ep_warmup_state"] == "loading data":
                 self.assertEqual(task["stats"]["ep_warmup_thread"], 'running', "ep_warmup_thread is not expected")
