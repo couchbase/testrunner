@@ -33,7 +33,7 @@ class QueryTests(BaseTestCase):
         self.buckets = RestConnection(self.master).get_buckets()
         self.docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
-        self.gens_load = self.generate_docs(docs_per_day)
+        self.gens_load = self.generate_docs(self.docs_per_day)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
 
@@ -2204,12 +2204,11 @@ class QueryTests(BaseTestCase):
             result = RestConnection(server).query_tool(query)
         else:
             if self.version == "git_repo":
-                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/" +\
-                                                            "tuq_client/tuq_client " +\
-                                                            "-engine=http://%s:8093/" % server.ip,
+                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/query/" +\
+                                                            "shell/cbq ",
                                                        subcommands=[query,],
                                                        min_output_size=20,
-                                                       end_msg='tuq_client>')
+                                                       end_msg='cbq>')
             else:
                 output = self.shell.execute_commands_inside("/tmp/tuq/cbq -engine=http://%s:8093/" % server.ip,
                                                            subcommands=[query,],
