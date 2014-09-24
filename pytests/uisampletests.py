@@ -971,7 +971,7 @@ class ServerHelper():
         self.close_server_stats(server)
         return stats
 
-    def failover(self, server, confirm=True, error=None, graceful=True, confirm_failover=False):
+    def failover(self, server, confirm=True, error=None, graceful=True, confirm_failover=True):
         self.open_failover_confirmation_dialog(server)
         self.confirm_failover(confirm=confirm, is_graceful=graceful, confirm_failover_check=confirm_failover)
         if confirm:
