@@ -107,4 +107,5 @@ export
 $python_exe scripts/ssh.py -i ${ini_file} "ls -la /tmp/"
 bash -c "$python_exe scripts/getchanges.py ${version_number};exit 0;"
 bash -c "$python_exe scripts/getcoredumps.py	 -i ${ini_file};exit 0;"
-find ./logs/* -mtime +7 -exec rm -rf {} \;
+##  Find the way to delete logs
+# find ./logs/* -mtime +7 -exec rm -rf {} \;
