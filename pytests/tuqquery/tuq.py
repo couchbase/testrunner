@@ -212,7 +212,7 @@ class QueryTests(BaseTestCase):
 
     def test_slicing(self):
         for bucket in self.buckets:
-            self.query = "SELECT job_title, array_agg(name)[:5] as names" +\
+            self.query = "SELECT job_title, array_agg(name)[0:5] as names" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
