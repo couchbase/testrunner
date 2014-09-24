@@ -396,29 +396,28 @@ class  RebalanceProgressTests(BaseUITestCase):
             if bucket_presence:
                 break
         self.assertTrue(bucket_presence, "Bucket in stats %s has incorrect format" % stats)
-        self.assertTrue(int(stats["total_transfer"].split(':')[1].strip()) >
-                        int(stats["estimated_transfer"].split(':')[1].strip()),
+        self.assertTrue(int(stats["total_transfer"].split(':')[1].strip()) >= int(stats["estimated_transfer"].split(':')[1].strip()),
                         "total_transfer should be greater than estimated  in stats %s" % stats)
         self.assertTrue(re.match(r'.*Number of Active# vBuckets and Replica# vBuckets to transfer:.*Active#-.*Replica#-.*',
-                                 stats["vbuckets"]) is not None,
-                        "VBuckets in stats %s has incorrect format" % stats)
+                                 stats["vbuckets"]) is not None, "VBuckets in stats %s has incorrect format" % stats)
 
 class  GracefullFailoverTests(BaseUITestCase):
     def setUp(self):
         super(GracefullFailoverTests, self).setUp()
         try:
             self.nodes_init = self.input.param("nodes_init", 2)
+            self.rebalance = self.input.param("rebalance", False)
             self.cluster = Cluster()
             if self.nodes_init > 1:
                 self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
             BaseHelper(self).login()
             num_buckets = self.input.param("num_buckets", 1)
-            num_replica = self.input.param("replica", 1)
+            self.num_replica = self.input.param("replica", 1)
             self.buckets = []
             NavigationHelper(self).navigate('Data Buckets')
             for i in xrange(num_buckets):
                 bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password',
-                                replica=num_replica)
+                                replica=self.num_replica)
                 BucketHelper(self).create(bucket)
                 self.buckets.append(bucket)
         except:
@@ -441,8 +440,11 @@ class  GracefullFailoverTests(BaseUITestCase):
         if len(self.servers) < (len(is_graceful) + 1):
             self.fail("There is no enough VMs. Need at least %s" % len(is_graceful))
         NavigationHelper(self).navigate('Server Nodes')
+        confirm_failover_check = True
         for iter in xrange(len(is_graceful)):
-            ServerHelper(self).failover(self.servers[iter + 1], confirm=True, graceful=is_graceful[iter])
+            if self.num_replica < self.nodes_init -1 and self.rebalance:
+                confirm_failover_check = False
+            ServerHelper(self).failover(self.servers[iter + 1], confirm=True, graceful=is_graceful[iter], confirm_failover=confirm_failover_check)
 
     def test_delta_recovery_failover(self):
         confirm = self.input.param("confirm_recovery", True)
@@ -563,6 +565,8 @@ class ServerTestControls():
         self.failover_conf_gracefull_option = self.helper.find_control('failover_dialog', 'graceful_option',
                                                                        parent_locator='dialog')
         self.failover_conf_hard_failover = self.helper.find_control('failover_dialog', 'hard_failover',
+                                                                       parent_locator='dialog')
+        self.confirm_failover_option = self.helper.find_control('failover_dialog', 'confirm_failover',
                                                                        parent_locator='dialog')
         return self
 
@@ -967,19 +971,22 @@ class ServerHelper():
         self.close_server_stats(server)
         return stats
 
-    def failover(self, server, confirm=True, error=None, graceful=True):
+    def failover(self, server, confirm=True, error=None, graceful=True, confirm_failover=False):
         self.open_failover_confirmation_dialog(server)
-        self.confirm_failover(confirm=confirm, is_graceful=graceful)
+        self.confirm_failover(confirm=confirm, is_graceful=graceful, confirm_failover_check=confirm_failover)
         if confirm:
             if error:
                 actual_error = self.get_error_failover()
                 self.tc.assertTrue(actual_error.contains(error),
                                "Error '%s' is expected. But actual is %s" % (error, actual_error))
             else:
-                RestConnection(self.tc.servers[0]).monitorRebalance()
-                self.tc.assertTrue(self.is_node_failed_over(server), "Node %s wasn't failed over" % server.ip)
+                if not confirm_failover:
+                    self.start_rebalancing()
+                    RestConnection(self.tc.servers[0]).monitorRebalance()
+                else:
+                    self.tc.assertTrue(self.is_node_failed_over(server), "Node %s wasn't failed over" % server.ip)
         else:
-            self.tc.assertFalse(self.is_node_failed_over(server), "Node %s was failed over" % server.ip) 
+            self.tc.assertFalse(self.is_node_failed_over(server), "Node %s was failed over" % server.ip)
 
     def open_failover_confirmation_dialog(self, server):
         self.tc.log.info("Try to open Confirmation failover dialog for server %s" % server.ip)
@@ -1002,17 +1009,23 @@ class ServerHelper():
         opened &= self.controls.failover_confirmation().failover_conf_submit_btn.is_displayed()
         return opened
 
-    def confirm_failover(self, confirm=True, is_graceful=None):
+    def confirm_failover(self, confirm=True, is_graceful=None, confirm_failover_check=False):
         if is_graceful:
             self.controls.failover_confirmation().failover_conf_gracefull_option.check()
+            self.tc.log.info("Graceful Failover Enabled")
         else:
             self.controls.failover_confirmation().failover_conf_hard_failover.check()
+            self.tc.log.info("Hard Failover Enabled")
+        if confirm_failover_check and self.controls.failover_confirmation().failover_conf_gracefull_option.get_attribute('disabled') == 'true':
+                self.controls.failover_confirmation().confirm_failover_option.check()
+                self.tc.log.info("Hard Failover Enabled with warnings")
         if confirm:
             self.controls.failover_confirmation().failover_conf_submit_btn.click()
             self.wait.until(lambda fn: not self.is_confirmation_failover_opened() or\
                                        self.is_error_present_failover(),
                         "No reaction for failover btn click in %d sec" % (self.wait._timeout))
             self.tc.log.info("Failover confirmed")
+            RestConnection(self.tc.servers[0]).monitorRebalance()
         else:
             self.controls.failover_confirmation().failover_conf_cancel_btn.click()
             self.tc.log.info("Failover cancelled")
