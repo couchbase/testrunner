@@ -2430,6 +2430,7 @@ class QueryTests(BaseTestCase):
             shell_connection.execute_command(cmd)
 
     def create_primary_index_for_3_0_and_greater(self):
+        self.log.info("CHECK FOR PRIMARY INDEXES")
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
         ddoc_name = 'ddl_#primary'
