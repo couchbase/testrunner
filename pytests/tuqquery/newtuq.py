@@ -13,7 +13,7 @@ from tuq_generators import TuqGenerators
 from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
 from couchbase.documentgenerator import DocumentGenerator
-from membase.api.exception import CBQError
+from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 
@@ -42,7 +42,7 @@ class QueryTests(BaseTestCase):
 
     def suite_setUp(self):
         try:
-            self.load(self.gens_load, flag=self.item_flag)
+            #self.load(self.gens_load, flag=self.item_flag)
             self.create_primary_index_for_3_0_and_greater()
             if not self.input.param("skip_build_tuq", False):
                 self._build_tuq(self.master)
@@ -190,16 +190,16 @@ class QueryTests(BaseTestCase):
         self.negative_common_body(queries_errors)
 
     def test_alias_from_clause(self):
-        queries_templates = ['SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ORDER BY points'  % (bucket.name),
-                   'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test WHERE test.$int0 >0'  % (bucket.name) +\
+        queries_templates = ['SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ORDER BY points',
+                   'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test WHERE test.$int0 >0'  +\
                    ' ORDER BY points',
-                   'SELECT tasks_points.task1 AS points FROM %s AS test ' % (bucket.name) +\
+                   'SELECT tasks_points.task1 AS points FROM %s AS test ' +\
                        'WHERE FLOOR(test.test_rate) >0 ORDER BY points',
-                   'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ' % (bucket.name) +\
+                   'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ' +\
                    'GROUP BY test.$obj0.$_obj0_int0 ORDER BY points']
         for bucket in self.buckets:
             for query_template in queries_templates:
-                actual_result, expected_result = self.run_query_from_template(query_template)
+                actual_result, expected_result = self.run_query_from_template(query_template  % (bucket.name))
                 self._verify_results(actual_result['resultset'], expected_result)
 
     def test_alias_from_clause_group(self):
@@ -744,3 +744,18 @@ class QueryTests(BaseTestCase):
         for server in self.servers:
             shell_connection = RemoteMachineShellConnection(self.master)
             shell_connection.execute_command(cmd)
+
+    def create_primary_index_for_3_0_and_greater(self):
+        self.log.info("CHECK FOR PRIMARY INDEXES")
+        rest = RestConnection(self.master)
+        versions = rest.get_nodes_versions()
+        ddoc_name = 'ddl_#primary'
+        if versions[0].startswith("3"):
+            try:
+                rest.get_ddoc(self.buckets[0], ddoc_name)
+            except ReadDocumentException:
+                for bucket in self.buckets:
+                    self.log.info("Creating primary index for %s ..." % bucket.name)
+                    self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['resultset'], [])
