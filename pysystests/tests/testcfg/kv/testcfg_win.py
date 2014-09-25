@@ -31,9 +31,11 @@ COUCHBASE_PORT = '8091'
 COUCHBASE_USER = "Administrator"
 COUCHBASE_PWD = "password"
 COUCHBASE_OS = "windows" # linux|windows|unix
+COUCHBASE_SSH_USER = "Administrator"
+COUCHBASE_SSH_PASSWORD = "Membase123"
 
-SSH_USER = "Administrator"
-SSH_PASSWORD = "Membase123"
+SSH_USER = "root"
+SSH_PASSWORD = "couchbase"
 WORKERS = ['172.23.105.173']
 # valid configs ["kv","query","admin"] or ["all"]
 WORKER_CONFIGS = ["all"]
