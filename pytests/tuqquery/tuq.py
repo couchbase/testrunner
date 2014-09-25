@@ -12,9 +12,10 @@ import time
 from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
 from couchbase.documentgenerator import DocumentGenerator
-from membase.api.exception import CBQError
+from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
+
 
 class QueryTests(BaseTestCase):
     def setUp(self):
@@ -40,6 +41,7 @@ class QueryTests(BaseTestCase):
     def suite_setUp(self):
         try:
             self.load(self.gens_load, flag=self.item_flag)
+            self.create_primary_index_for_3_0_and_greater()
             if not self.input.param("skip_build_tuq", False):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
@@ -2426,3 +2428,17 @@ class QueryTests(BaseTestCase):
         for server in self.servers:
             shell_connection = RemoteMachineShellConnection(self.master)
             shell_connection.execute_command(cmd)
+
+    def create_primary_index_for_3_0_and_greater(self):
+        rest = RestConnection(self.master)
+        versions = rest.get_nodes_versions()
+        ddoc_name = 'ddl_#primary'
+        if versions[0].startswith("3"):
+            try:
+                rest.get_ddoc(self.buckets[0], ddoc_name)
+            except ReadDocumentException:
+                for bucket in self.buckets:
+                    self.log.info("Creating primary index for %s ..." % bucket.name)
+                    self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['resultset'], [])
