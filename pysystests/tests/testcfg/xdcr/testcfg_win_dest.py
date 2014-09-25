@@ -1,6 +1,6 @@
 #TODO: allow workers to pull this from cache
 
-RABBITMQ_IP = '172.23.107.13'
+RABBITMQ_IP = '172.23.105.139'
 RABBITMQ_LOG_LOCATION = ""
 CB_CLUSTER_TAG = "default"
 
@@ -26,11 +26,11 @@ TEST_TEMPLATES = [r"""--name "default" --kvpair '"email":"$str10@couchbase.com" 
  '"map":{"sample" : "$str3", "complex" : "$flo1", "val" : "$int2"}' '"num":"$int"' '"flo":"$flo"' '"st":"$str"' \
   '"li":"$lis"' '"di":"$dic"' '"b":"$boo"' --size 512"""]
 
-OBJECT_CACHE_IP = "172.23.106.6"
+OBJECT_CACHE_IP = "172.23.105.138"
 OBJECT_CACHE_PORT = "11911"
 
 # Add CBMonitor IP, absolute dir path and log location
-SERIESLY_IP = '172.23.107.17'
+SERIESLY_IP = '172.23.105.136'
 SERIESLY_DB_LOCATION = "/root/db"
 CBMONITOR_HOME_DIR = "/root/cbmonitor"
 SERIESLY_LOCATION = "/opt/gocode/bin"
@@ -45,7 +45,7 @@ COUCHBASE_SSH_PASSWORD = "Membase123"
 
 SSH_USER = "root"
 SSH_PASSWORD = "couchbase"
-WORKERS = ['172.23.106.6']
+WORKERS = ['172.23.105.138']
 # valid configs ["kv","query","admin"] or ["all"]
 WORKER_CONFIGS = ["all"]
 WORKER_PYSYSTESTS_PATH = "/root/systest-worker/testrunner/pysystests"
@@ -69,7 +69,7 @@ CLUSTER_IPS = ['172.23.107.75', '172.23.107.76', '172.23.107.77', '172.23.107.78
 "                             "COUCHBASE_IP" : "10.0.0.10",
 "                             "COUCHBASE_PORT" : "9000"}}
 """
-REMOTE_SITES = {"remote" : {"RABBITMQ_IP" : "172.23.106.224",
+REMOTE_SITES = {"remote" : {"RABBITMQ_IP" : "172.23.105.184",
                              "CB_CLUSTER_TAG" : "default",
                              "COUCHBASE_IP" : "172.23.107.67",
                              "COUCHBASE_PORT" : "8091"}}

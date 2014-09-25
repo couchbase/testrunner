@@ -10,6 +10,7 @@ python_exe = "python"
 if os.system("grep \'centos\' /etc/issue -i -q") == 0:
     python_exe = "python2.7"
 
+
 def get_ssh_client(ip, username=None, password=None, timeout=10):
     client = None
     try:
@@ -26,6 +27,7 @@ def get_ssh_client(ip, username=None, password=None, timeout=10):
         sys.exit(1)
     return client
 
+
 def get_sftp_client(ip, username=None, password=None,):
     try:
         ip = ip.split(':')[0]
@@ -40,11 +42,28 @@ def get_sftp_client(ip, username=None, password=None,):
         print ex
         sys.exit(1)
 
+
+def kill_process(ssh_client, process_name):
+    print "Killing {0}".format(process_name)
+    _, stdout, _ = ssh_client.exec_command("pgrep -f {0}".format(process_name))
+    for pid in stdout.readlines():
+        ssh_client.exec_command("kill -9 {0}".format(pid.split()[0]))
+
+
+def start_process(ssh_client, process_name, cmd):
+    print ("Starting {0}...".format(process_name))
+    ssh_client.exec_command(cmd)
+    time.sleep(5)
+    _, stdout, _ = ssh_client.exec_command("pgrep {0}".format(process_name))
+    print ("{0} is running with pid {1}".format(process_name, stdout.readlines()[0]))
+
+
 def start_rabbitmq():
     vhost_present = False
     tries = 1
     print("\n##### Setting up RabbitMQ @ {0} #####".format(cfg.RABBITMQ_IP))
     rabbitmq_client = get_ssh_client(cfg.RABBITMQ_IP)
+
     _, stdout, _ = rabbitmq_client.exec_command("ps aux|grep rabbitmq|grep -v grep|awk \'{print $2}\'")
     print ("Killing existing RabbitMQ process ...")
     for pid in stdout:
@@ -93,6 +112,7 @@ def start_rabbitmq():
             sys.exit(1)
     rabbitmq_client.close()
 
+
 def start_worker(worker_ip):
     print("##### Setting up Celery Worker @ {0} #####".format(worker_ip))
     worker_client = get_ssh_client(worker_ip)
@@ -101,23 +121,16 @@ def start_worker(worker_ip):
     worker_client.open_sftp().put("./testcfg.py", os.path.join(cfg.WORKER_PYSYSTESTS_PATH, "testcfg.py"))
 
     # kill celery,remove screenlog
-    _, stdout, _ = worker_client.exec_command("ps aux|grep celery|grep -v grep|awk \'{print $2}\'")
-    for pid in stdout:
-        if pid == "":
-            continue
-        print ("Killing existing Celery process ...pid {0}".format(pid))
-        worker_client.exec_command("sudo kill -9 {0}".format(pid))
+    kill_process(worker_client, "celery")
     worker_client.exec_command("screen -ls | grep \'celery\' | awk '{print $1}' | xargs -i screen -X -S {} quit")
     worker_client.exec_command("screen -wipe")
     worker_client.exec_command("rm -rf {0}/screenlog.0".format(cfg.WORKER_PYSYSTESTS_PATH))
-    _, stdout, _ = worker_client.exec_command("ps aux|grep memc|grep -v grep|awk \'{print $2}\'")
-    for pid in stdout.readlines():
-        print("Killing memcached process with pid {0}".format(pid))
-        worker_client.exec_command("kill -9 {0}".format(pid))
-    worker_client.exec_command("memcached -u couchbase -d -l {0} -p 11911".format(worker_ip))
-    _, stdout, _ = worker_client.exec_command("ps aux|grep memc|grep -v grep|awk \'{print $2}\'")
-    for pid in stdout.readlines():
-        print("Memcached is now running with pid {0}".format(pid))
+
+    # memcached
+    kill_process(worker_client, "memcached")
+    cmd = "memcached -u couchbase -d -l {0} -p 11911".format(worker_ip)
+    start_process(worker_client, "memcached", cmd)
+
     print("Starting celery worker...")
     if worker_ip == cfg.WORKERS[0]:
         _, stdout, _ = worker_client.exec_command("cd {0}; pwd; screen -dmS celery -L sh -c  \ "
@@ -129,11 +142,12 @@ def start_worker(worker_ip):
     #read_screenlog(worker_ip, cfg.WORKER_PYSYSTESTS_PATH, stop_if_EOF=True)
     worker_client.close()
 
+
 def start_seriesly():
     print("##### Setting up Seriesly @ {0} #####".format(cfg.SERIESLY_IP))
     cbmonitor_client = get_ssh_client(cfg.SERIESLY_IP)
-    print("Killing seriesly ...")
-    cbmonitor_client.exec_command("killall -9 seriesly")
+
+    kill_process(cbmonitor_client, "seriesly")
     if cfg.SERIESLY_DB_LOCATION is not "":
         print("Deleting old Seriesly db files from {0}".format(cfg.SERIESLY_DB_LOCATION))
         cbmonitor_client.exec_command("rm -rf {0}/*.*".format(cfg.SERIESLY_DB_LOCATION))
@@ -144,41 +158,44 @@ def start_seriesly():
     cbmonitor_client.exec_command("screen -ls | grep \'atop_collector\' | awk \'{print $1}\' | xargs -i screen -X -S {} quit")
     cbmonitor_client.exec_command("rm -rf {0}/screenlog.0".format(cfg.CBMONITOR_HOME_DIR))
     # screen 1 - start seriesly
-    print ("Starting seriesly...")
-    cbmonitor_client.exec_command("screen -dmS seriesly -L sh -c \'cd {0}; ./seriesly; exec bash;\'".
-                                  format(cfg.SERIESLY_LOCATION))
-    _, stdout, _ = cbmonitor_client.exec_command("pgrep seriesly")
-    print ("Seriesly is running with pid {0}".format(stdout.readlines()[0]))
+    start_cmd = "screen -dmS seriesly -L sh -c \'cd {0}; ./seriesly; exec bash;\'".format(cfg.SERIESLY_LOCATION)
+    start_process(cbmonitor_client, "seriesly", start_cmd)
+
+
+def fix_sample_cfg(ssh_client):
+    # fix sample.cfg file
+    cfg_file_path = os.path.join(cfg.CBMONITOR_HOME_DIR, "sample.cfg")
+    ssh_client.exec_command("sed -i 's/.*host_port.*/host_port = {0}:8000/' {1}".format(cfg.SERIESLY_IP, cfg_file_path))
+    ssh_client.exec_command("sed -i 's/.*host .*/host = {0}/' {1}".format(cfg.SERIESLY_IP, cfg_file_path))
+    ssh_client.exec_command("sed -i 's/.*master_node.*/master_node = {0}/' {1}".format(cfg.COUCHBASE_IP, cfg_file_path))
+
+    if cfg.COUCHBASE_OS == "windows":
+        ssh_client.exec_command("sed -i 's/.*ssh_username.*/ssh_username = {0}/' {1}".format(cfg.COUCHBASE_SSH_USER, cfg_file_path))
+        ssh_client.exec_command("sed -i 's/.*ssh_password.*/ssh_password = {0}/' {1}".format(cfg.COUCHBASE_SSH_PASSWORD, cfg_file_path))
+
 
 def start_cbmonitor():
     print("\n##### Setting up CBMonitor @ {0} #####".format(cfg.SERIESLY_IP))
     cbmonitor_client = get_ssh_client(cfg.SERIESLY_IP)
     # screen 2 - start webserver
-    print ("Starting Django webserver...")
-    _, stdout, _ = cbmonitor_client.exec_command("pgrep webapp")
-    for pid in stdout.readlines():
-        cbmonitor_client.exec_command("kill -9 {0}".format(pid))
-    cbmonitor_client.exec_command("cd {0}; screen -dmS webapp -L sh -c \'./bin/webapp add-user -S;./bin/webapp syncdb; \
-     ./bin/webapp runserver {1}:8000; exec bash;\'".format(cfg.CBMONITOR_HOME_DIR, cfg.SERIESLY_IP))
-    time.sleep(5)
-    _, stdout, _ = cbmonitor_client.exec_command("pgrep webapp")
-    print ("Webserver is running with pid {0}".format(stdout.readlines()[0]))
+    kill_process(cbmonitor_client, "webapp")
+    start_cmd = "cd {0}; screen -dmS webapp -L sh -c \'./bin/webapp add-user -S;./bin/webapp syncdb; \
+     ./bin/webapp runserver {1}:8000; exec bash;\'".format(cfg.CBMONITOR_HOME_DIR, cfg.SERIESLY_IP)
+    start_process(cbmonitor_client, "webapp", start_cmd)
+
     # screen 3 - start ns_collector
-    print ("Starting ns_collector...")
-    cbmonitor_client.exec_command("cd {0}; screen -dmS ns_collector -L sh -c \'./bin/ns_collector sample.cfg; exec bash;\'".
-                                  format(cfg.CBMONITOR_HOME_DIR))
-    time.sleep(5)
-    _, stdout, _ = cbmonitor_client.exec_command("pgrep ns_collector")
-    print ("ns_collector is running with pid {0}".format(stdout.readlines()[0]))
+    fix_sample_cfg(cbmonitor_client)
+    kill_process(cbmonitor_client, "ns_collector")
+    start_cmd = "cd {0}; screen -dmS ns_collector -L sh -c \'./bin/ns_collector sample.cfg; exec bash;\'".format(cfg.CBMONITOR_HOME_DIR)
+    start_process(cbmonitor_client, "ns_collector", start_cmd)
+
     # screen 4 - start atop_collector
-    print ("Starting atop_collector...")
-    cbmonitor_client.exec_command("cd {0}; screen -dmS atop_collector -L sh -c \'./bin/atop_collector sample.cfg; exec bash;\'".
-                                  format(cfg.CBMONITOR_HOME_DIR))
-    time.sleep(5)
-    _, stdout, _ = cbmonitor_client.exec_command("pgrep atop_collector")
-    print ("atop_collector is running with pid {0}".format(stdout.readlines()[0]))
+    kill_process(cbmonitor_client, "atop_collector")
+    start_cmd = "cd {0}; screen -dmS atop_collector -L sh -c \'./bin/atop_collector sample.cfg; exec bash;\'".format(cfg.CBMONITOR_HOME_DIR)
+    start_process(cbmonitor_client, "atop_collector", start_cmd)
     read_screenlog(cfg.SERIESLY_IP, cfg.CBMONITOR_HOME_DIR, stop_if_EOF=True, lines_to_read=100)
     cbmonitor_client.close()
+
 
 def read_screenlog(ip, screenlog_dir, retry=10, stop_if_EOF=False, lines_to_read=20000):
     line = ""
@@ -201,6 +218,7 @@ def read_screenlog(ip, screenlog_dir, retry=10, stop_if_EOF=False, lines_to_read
             time.sleep(retry)
     op_file.close()
     transport_client.close()
+
 
 def run_setup():
     # kick off the setup test
