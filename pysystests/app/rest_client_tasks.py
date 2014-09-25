@@ -616,8 +616,9 @@ def create_rest(server_ip=cfg.COUCHBASE_IP, port=cfg.COUCHBASE_PORT,
                 username=cfg.COUCHBASE_USER, password=cfg.COUCHBASE_PWD):
     return RestConnection(create_server_obj(server_ip, port, username, password))
 
-def create_ssh_conn(server_ip = '', port=22, username = cfg.SSH_USER,
-               password = cfg.SSH_PASSWORD, os=cfg.COUCHBASE_OS):
+def create_ssh_conn(server_ip='', port=22, username=cfg.COUCHBASE_SSH_USER,
+               password=cfg.COUCHBASE_SSH_PASSWORD, os=cfg.COUCHBASE_OS):
+
     if isinstance(server_ip, unicode):
         server_ip = str(server_ip)
 
@@ -685,8 +686,8 @@ def teardown_xdcr(xdcrClusters, rest = None):
 def perform_cli_task(ssh_command, rest = None):
 
     hosts = ssh_command.get('hosts') or ['127.0.0.1']
-    username = ssh_command.get('username') or cfg.SSH_USER
-    password = ssh_command.get('password') or cfg.SSH_PASSWORD
+    username = ssh_command.get('username') or cfg.COUCHBASE_SSH_USER
+    password = ssh_command.get('password') or cfg.COUCHBASE_SSH_PASSWORD
     command = ssh_command.get('command')
     if command is not None:
         for host in hosts:
