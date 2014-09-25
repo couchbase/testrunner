@@ -42,7 +42,7 @@ class QueryTests(BaseTestCase):
 
     def suite_setUp(self):
         try:
-            #self.load(self.gens_load, flag=self.item_flag)
+            self.load(self.gens_load, flag=self.item_flag)
             self.create_primary_index_for_3_0_and_greater()
             if not self.input.param("skip_build_tuq", False):
                 self._build_tuq(self.master)
