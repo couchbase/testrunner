@@ -40,6 +40,8 @@ COUCHBASE_PORT = '8091'
 COUCHBASE_USER = "Administrator"
 COUCHBASE_PWD = "password"
 COUCHBASE_OS = "linux" # linux|windows|unix
+COUCHBASE_SSH_USER = "root"
+COUCHBASE_SSH_PASSWORD = "couchbase"
 
 SSH_USER = "root"
 SSH_PASSWORD = "couchbase"
