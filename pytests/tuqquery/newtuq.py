@@ -47,7 +47,7 @@ class QueryTests(BaseTestCase):
             if not self.input.param("skip_build_tuq", False):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
-        except:
+        except Exception, ex:
             self.tearDown()
 
     def tearDown(self):
@@ -757,5 +757,10 @@ class QueryTests(BaseTestCase):
                 for bucket in self.buckets:
                     self.log.info("Creating primary index for %s ..." % bucket.name)
                     self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
-                    actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['resultset'], [])
+                    actual_result = {}
+                    try:
+                        actual_result = self.run_cbq_query()
+                        self.assertTrue(actual_result['resultset'] == [])
+                    except CBQError, ex:
+                        if str(ex).find('Primary index already exists') == -1:
+                            raise ex

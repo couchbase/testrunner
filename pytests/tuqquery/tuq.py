@@ -2441,5 +2441,11 @@ class QueryTests(BaseTestCase):
                 for bucket in self.buckets:
                     self.log.info("Creating primary index for %s ..." % bucket.name)
                     self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
-                    actual_result = self.run_cbq_query()
-                    self._verify_results(actual_result['resultset'], [])
+                    actual_result = {}
+                    try:
+                        actual_result = self.run_cbq_query()
+                        self.assertTrue(actual_result['resultset'] == [])
+                    except CBQError, ex:
+                        if str(ex).find('Primary index already exists') == -1:
+                            raise ex
+
