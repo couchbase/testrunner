@@ -117,6 +117,10 @@ def start_worker(worker_ip):
     print("##### Setting up Celery Worker @ {0} #####".format(worker_ip))
     worker_client = get_ssh_client(worker_ip)
 
+    # Update Worker's testrunner repository
+    worker_client.exec_command("rm -rf {0}; mkdir -p {0}".format(os.path.dirname(cfg.WORKER_PYSYSTESTS_PATH)))
+    worker_client.exec_command("cd {0}; git clone https://github.com/couchbase/testrunner.git".format(os.path.dirname(cfg.WORKER_PYSYSTESTS_PATH)))
+
     # Copy testcfg.py file to all workers
     worker_client.open_sftp().put("./testcfg.py", os.path.join(cfg.WORKER_PYSYSTESTS_PATH, "testcfg.py"))
 
