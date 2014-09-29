@@ -244,7 +244,7 @@ class Control():
 class ControlsHelper():
     def __init__(self, driver):
         self.driver = driver
-        file = "pytests/uilocators.conf"
+        file = "pytests/ui/uilocators.conf"
         config = ConfigParser.ConfigParser()
         config.read(file)
         self.locators = config
