@@ -394,7 +394,7 @@ class RebalanceTask(Task):
                 start = time.time()
                 while time.time() - start < 30:
                     try:
-                        if len(rest.get_pools_info()["pools"]) == 0:
+                        if 'pools' in rest.get_pools_info() and (len(rest.get_pools_info()["pools"]) == 0):
                             success_cleaned.append(removed)
                             break
                         else:
