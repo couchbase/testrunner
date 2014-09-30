@@ -554,8 +554,8 @@ class QueryTests(BaseTestCase):
 
     def test_meta(self):
         for bucket in self.buckets:
-            self.query = 'SELECT distinct name FROM %s WHERE META().type = "json"'  % (
-                                                                            bucket.name)
+            self.query = 'SELECT distinct name FROM %s WHERE META(%s).type = "json"'  % (
+                                                                            bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['resultset'],
                                    key=lambda doc: (doc['name']))
@@ -565,23 +565,23 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result, expected_result)
 
-            self.query = "SELECT distinct name FROM %s WHERE META().id IS NOT NULL"  % (
-                                                                                   bucket.name)
+            self.query = "SELECT distinct name FROM %s WHERE META(%s).id IS NOT NULL"  % (
+                                                                                   bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['name']))
             self._verify_results(actual_result, expected_result)
 
     def test_meta_flags(self):
         for bucket in self.buckets:
-            self.query = 'SELECT DISTINCT META().flags as flags FROM %s'  % (
-                                                                bucket.name)
+            self.query = 'SELECT DISTINCT META(%s).flags as flags FROM %s'  % (
+                                                                bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
             expected_result = [{"flags" : self.item_flag}]
             self._verify_results(actual_result['resultset'], expected_result)
 
     def test_meta_cas(self):
         for bucket in self.buckets:
-            self.query = 'SELECT META().cas as cas, META().id as id FROM %s'  % (bucket.name)
+            self.query = 'SELECT META(%s).cas as cas, META(%s).id as id FROM %s'  % (bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
             keys = [doc['id'] for doc in actual_result['resultset']]
             actual_result = [{"cas": int(doc['cas'])} for doc in actual_result['resultset']]
