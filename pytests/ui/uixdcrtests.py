@@ -71,11 +71,17 @@ class XDCRTests(BaseUITestCase):
         dest_bucket = self.input.param('dest_bucket', self.bucket)
         dest_cluster = self.input.param('dest_cluster', name)
         error = self.input.param('error', None)
+        advanced_settings = self.input.param('advanced_settings', {})
+        if advanced_settings:
+            adv_s = advanced_settings.split('~')
+            advanced_settings = {}
+            for setng in adv_s:
+                advanced_settings[setng.split(':')[0]] = setng.split(':')[1]
         helper = XDCRHelper(self)
         NavigationHelper(self).navigate('XDCR')
         helper.create_cluster_reference(name, ip, user, passwd)
         try:
-            helper.create_replication(dest_cluster, src_bucket, dest_bucket)
+            helper.create_replication(dest_cluster, src_bucket, dest_bucket, advanced_settings=advanced_settings)
         except Exception, ex:
             self.log.error(str(ex))
             if error:
@@ -152,6 +158,7 @@ class XDCRControls():
         self.remote_bucket = self.helper.find_control('xdcr_create_repl', 'remote_bucket', parent_locator='popup')
         self.replicate_btn = self.helper.find_control('xdcr_create_repl', 'replicate_btn', parent_locator='popup')
         self.cancel_btn = self.helper.find_control('xdcr_create_repl', 'cancel_btn', parent_locator='popup')
+        self.advanced_settings_link = self.helper.find_control('xdcr_create_repl', 'advanced_settings_link', parent_locator='popup')
         return self
 
     def error_reference(self):
@@ -159,6 +166,19 @@ class XDCRControls():
 
     def error_replica(self):
         return self.helper.find_control('xdcr_create_repl', 'error')
+
+    def advanced_settings(self):
+        self.max_replication = self.helper.find_control('xdcr_advanced_settings', 'max_replication')
+        self.version = self.helper.find_control('xdcr_advanced_settings', 'version')
+        self.checkpoint_interval = self.helper.find_control('xdcr_advanced_settings', 'checkpoint_interval')
+        self.batch_count = self.helper.find_control('xdcr_advanced_settings', 'batch_count')
+        self.batch_size = self.helper.find_control('xdcr_advanced_settings', 'batch_size')
+        self.retry_interval = self.helper.find_control('xdcr_advanced_settings', 'retry_interval')
+        self.replication_threshold = self.helper.find_control('xdcr_advanced_settings', 'replication_threshold')
+        return self
+
+    def errors_advanced_settings(self):
+        return self.helper.find_controls('xdcr_advanced_settings', 'error')
 
 
 class XDCRHelper():
@@ -198,7 +218,7 @@ class XDCRHelper():
     def _get_error(self):
         return self.controls.error().get_text()
 
-    def create_replication(self, remote_cluster, bucket, remote_bucket, cancel=False):
+    def create_replication(self, remote_cluster, bucket, remote_bucket, cancel=False, advanced_settings={}):
         self.wait.until(lambda fn: self.controls.create_ongoing_replication_btn.is_displayed(),
                         "create_cluster_reference_btn is not displayed in %d sec" % (self.wait._timeout))
         self.tc.log.info("try to create cluster replication with cluster=%s, bucket=%s, remote_bucket=%s" % (remote_cluster, bucket, remote_bucket))
@@ -211,6 +231,25 @@ class XDCRHelper():
             self.controls.create_replication_pop_up().remote_bucket.type(remote_bucket if isinstance(remote_bucket, str) else remote_bucket.name)
         if bucket:
             self.controls.create_replication_pop_up().bucket.select(bucket if isinstance(bucket, str) else bucket.name)
+        if advanced_settings:
+            self.controls.create_replication_pop_up().advanced_settings_link.click()
+            if 'version' in advanced_settings:
+                self.controls.advanced_settings().version.select(advanced_settings['version'])
+            if 'max_replication' in advanced_settings:
+                self.controls.advanced_settings().max_replication.type(advanced_settings['max_replication'])
+            if 'checkpoint_interval' in advanced_settings:
+                self.controls.advanced_settings().checkpoint_interval.type(advanced_settings['checkpoint_interval'])
+            if 'batch_count' in advanced_settings:
+                self.controls.advanced_settings().batch_count.type(advanced_settings['batch_count'])
+            if 'batch_size' in advanced_settings:
+                self.controls.advanced_settings().batch_size.type(advanced_settings['batch_size'])
+            if 'retry_interval' in advanced_settings:
+                self.controls.advanced_settings().retry_interval.type(advanced_settings['retry_interval'])
+            if 'replication_threshold' in advanced_settings:
+                self.controls.advanced_settings().replication_threshold.type(advanced_settings['replication_threshold'])
+            if len([el for el in self.controls.errors_advanced_settings() if el.is_displayed() and el.get_text() != '']) > 0:
+                raise Exception('Advanced setting error: %s' % str([el.get_text() for el in self.controls.errors_advanced_settings()
+                                                                    if el.is_displayed() and el.get_text() != '']))
         if not cancel:
             self.controls.create_replication_pop_up().replicate_btn.click()
         else:
