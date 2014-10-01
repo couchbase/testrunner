@@ -3,7 +3,7 @@ import logger
 import time
 import unittest
 
-from uibasetest import *
+from uibasetest import * 
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support.ui import WebDriverWait
@@ -215,11 +215,7 @@ class DocumentsTest(BaseUITestCase):
         view_name = 'test_view_ui'
         DdocViewHelper(self).create_view(view_name, view_name)
         DdocViewHelper(self).open_view(view_name)
-        self.assertEquals(DdocViewHelper(self).get_random_doc_name(), old_doc.name,
-                          "There is only one document %s, but views screen shows %s" %\
-                          (old_doc, DdocViewHelper(self).get_random_doc_name()))
         DdocViewHelper(self).click_edit_doc()
-
         DocsHelper(self).fill_edit_doc_screen(new_doc)
         DocsHelper(self).verify_doc_in_documents_screen(new_doc)
 
@@ -253,7 +249,7 @@ class DocumentsTest(BaseUITestCase):
             self.assertTrue(items_per_page >= DocsHelper(self).get_rows_count(),
                             "Items number per page is incorrect %s, expected %s" %\
                             (DocsHelper(self).get_rows_count(), items_per_page))
-            self.log.info("Page has correct number of itemes: %s" %\
+            self.log.info("Page has correct number of items: %s" %\
                           DocsHelper(self).get_rows_count())
             if page != num_pages:
                 DocsHelper(self).go_to_next_page()
@@ -496,6 +492,123 @@ class  GracefullFailoverTests(BaseUITestCase):
             helper.start_rebalancing()
             RestConnection(self.servers[0]).monitorRebalance()
         self.log.info("Recovery checked")
+
+class ViewsTests(BaseUITestCase):
+    def setUp(self):
+        super(ViewsTests, self).setUp()
+        self._initialize_nodes()
+        #RestConnection(self.servers[0]).create_bucket(bucket='default', ramQuotaMB=500)
+        num_buckets = self.input.param("num_buckets", 1)
+        self.ddoc_name = self.input.param("ddoc_name", "ddoc1")
+        self.view_name = self.input.param("view_name", "view1")
+        self.ddoc_num = self.input.param("ddoc_num", 1)
+        self.view_num = self.input.param("view_num", 1)
+        self.buckets = []
+        helper = BaseHelper(self)
+        helper.login()
+        NavigationHelper(self).navigate('Data Buckets')
+        for i in xrange(num_buckets):
+            bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password')
+            BucketHelper(self).create(bucket)
+            self.buckets.append(bucket)
+        self.driver.refresh()
+
+    def tearDown(self):
+        super(ViewsTests, self).tearDown()
+
+    def _initialize_nodes(self):
+        for server in self.servers:
+            RestConnection(server).init_cluster(self.input.membase_settings.rest_username,self.input.membase_settings.rest_password, '8091')
+
+    def test_add_dev_view(self):
+        try:
+            NavigationHelper(self).navigate('Views')
+            DdocViewHelper(self).create_view(self.ddoc_name, self.view_name)
+        except Exception, ex:
+            self.log.error(str(ex))
+            raise ex
+
+    def test_add_prod_view(self):
+        try:
+            NavigationHelper(self).navigate('Views')
+            DdocViewHelper(self).create_view(self.ddoc_name, self.view_name, dev_view=False)
+        except Exception, ex:
+            self.log.error(str(ex))
+            raise ex
+
+    def test_delete_view(self):
+        try:
+            NavigationHelper(self).navigate('Views')
+            for i in self.view_num:
+                DdocViewHelper(self).create_view(self.ddoc_name, self.view_name + str(i))
+            DdocViewHelper(self).delete_view(self.view_name)
+        except Exception, ex:
+            self.log.error(str(ex))
+            raise ex
+
+    def test_edit_view(self):
+        try:
+            for bucket in self.buckets:
+                BucketHelper(self).open_documents(bucket)
+            doc_name = self.input.param('doc_name', 'test')
+            action = self.input.param('action', 'save')
+            doc_content = self.input.param('content', '{"test" : "test"}')
+            doc = Document(doc_name, doc_content)
+            DocsHelper(self).create_doc(doc)
+            self.assertTrue(DocsHelper(self).get_error() is None, "error appears: %s" \
+                            % DocsHelper(self).get_error())
+            NavigationHelper(self).navigate('Views')
+            DdocViewHelper(self).create_view(self.ddoc_name, self.view_name)
+            DdocViewHelper(self).edit_view(self.view_name)
+            DdocViewHelper(self).fill_edit_view_screen(self.view_name, action)
+        except Exception, ex:
+            self.log.error(str(ex))
+            raise ex
+
+    def test_show_view_results(self):
+        for bucket in self.buckets:
+            BucketHelper(self).open_documents(bucket)
+        num_docs = self.input.param('num-docs', 5)
+        view_set = self.input.param('view_set', 'dev')
+        doc_name = self.input.param('doc_name', 'test')
+        doc_content = self.input.param('content', '{"test" : "test"}')
+        for i in xrange(num_docs):
+            doc = Document(doc_name + str(i), doc_content)
+            DocsHelper(self).create_doc(doc)
+            self.assertTrue(DocsHelper(self).get_error() is None, "error appears: %s" \
+                            % DocsHelper(self).get_error())
+        NavigationHelper(self).navigate('Views')
+        DdocViewHelper(self).create_view(self.ddoc_name, self.view_name)
+        DdocViewHelper(self).open_view(self.view_name)
+        DdocViewHelper(self).verify_view_results(view_set)
+
+    def test_show_view_results_with_reduce(self):
+        for bucket in self.buckets:
+            BucketHelper(self).open_documents(bucket)
+        num_docs = self.input.param('num-docs', 5)
+        action = self.input.param('action', 'save')
+        reduce_fn = self.input.param('reduce_fn', '_count')
+        view_set = self.input.param('view_set', 'dev')
+        doc_name = self.input.param('doc_name', 'test')
+        doc_content = self.input.param('content', '{{ "age": {0}, "first_name": "{1}" }}')
+        age_sum = 0
+        for i in xrange(num_docs):
+            doc = Document(doc_name + str(i), doc_content.format(i, doc_name + str(i)))
+            DocsHelper(self).create_doc(doc)
+            self.assertTrue(DocsHelper(self).get_error() is None, "error appears: %s" \
+                            % DocsHelper(self).get_error())
+            age_sum = age_sum + i
+        NavigationHelper(self).navigate('Views')
+        DdocViewHelper(self).create_view(self.ddoc_name, self.view_name)
+        DdocViewHelper(self).edit_view(self.view_name)
+        DdocViewHelper(self).fill_edit_view_screen(self.view_name, action, reduce_fn)
+        if reduce_fn == '_count':
+            value = num_docs
+        elif reduce_fn == '_sum':
+            value = age_sum
+        else:
+            value = age_sum
+        DdocViewHelper(self).verify_view_results(view_set, reduce_fn, value)
 
 '''
 Controls classes for tests
@@ -772,6 +885,9 @@ class DdocViewControls():
     def views_screen(self, text=''):
         return self.helper.find_controls('views_screen', 'views_tab', text=text)
 
+    def error(self):
+        return self.helper.find_first_visible('edit_view_screen', 'error')
+
     def create_pop_up(self):
         self.pop_up = self.helper.find_control('create_pop_up', 'pop_up')
         self.ddoc_name = self.helper.find_control('create_pop_up', 'ddoc_name',
@@ -782,29 +898,63 @@ class DdocViewControls():
                                                   parent_locator='pop_up')
         return self
 
+    def prod_view(self, view_count=1):
+        self.prod_view_tab = self.helper.find_control('prod_view', 'prod_view_tab')
+        self.prod_view_count = self.helper.find_control('prod_view', 'prod_view_count', text=view_count)
+        return self
+
     def view_row(self, view=''):
         self.row = self.helper.find_control('view_row', 'row', text=view)
-        self.name = self.helper.find_control('view_row', 'name', text=view,
-                                             parent_locator='row')
+        self.name = self.helper.find_control('view_row', 'name', text=view)
+        self.row_name = self.helper.find_control('view_row', 'row_name', text=view)
+        self.edit_btn = self.helper.find_control('view_row', 'edit_btn', text=view, parent_locator='row_name')
+        self.delete_btn = self.helper.find_control('view_row', 'delete_btn', text=view, parent_locator='row_name')
+        return self
+
+    def del_view_dialog(self):
+        self.dialog = self.helper.find_control('delete_view', 'dialog')
+        self.ok_btn = self.helper.find_control('delete_view', 'ok_btn', parent_locator='dialog')
+        self.cancel_btn = self.helper.find_control('delete_view', 'cancel_btn', parent_locator='dialog')
+        return self
+
+    def ddoc_row(self, ddoc=''):
+        self.row = self.helper.find_control('ddoc_row', 'row', text=ddoc)
+        self.name = self.helper.find_control('ddoc_row', 'name', parent_locator='row')
+        self.publish_btn = self.helper.find_control('ddoc_row', 'publish_btn')
         return self
 
     def view_screen(self):
-        self.random_document = self.helper.find_control('view_screen', 'random_doc')
-        self.random_doc_name = self.helper.find_control('view_screen', 'random_doc_name',
+        self.screen = self.helper.find_control('edit_view_screen', 'screen')
+        self.random_document = self.helper.find_control('edit_view_screen', 'random_doc')
+        self.random_doc_name = self.helper.find_control('edit_view_screen', 'random_doc_name',
                                                         parent_locator='random_doc')
-        self.random_doc_btn = self.helper.find_control('view_screen', 'random_doc_btn',
+        self.random_doc_btn = self.helper.find_control('edit_view_screen', 'random_doc_btn',
                                                         parent_locator='random_doc')
-        self.random_doc_content = self.helper.find_control('view_screen', 'random_doc_content',
+        self.random_doc_content = self.helper.find_control('edit_view_screen', 'random_doc_content',
                                                         parent_locator='random_doc')
-        self.random_doc_meta = self.helper.find_control('view_screen', 'random_doc_meta',
+        self.random_doc_meta = self.helper.find_control('edit_view_screen', 'random_doc_meta',
                                                         parent_locator='random_doc')
-        self.random_doc_edit_btn = self.helper.find_control('view_screen', 'random_doc_edit_btn',
+        self.random_doc_edit_btn = self.helper.find_control('edit_view_screen', 'random_doc_edit_btn',
                                                         parent_locator='random_doc')
         return self
 
     def view_map_reduce_fn(self):
-        self.map_fn = self.helper.find_control('view_screen', 'map_fn')
-        self.reduce_fn = self.helper.find_control('view_screen', 'reduce_fn')
+        self.map_fn = self.helper.find_control('edit_view_screen', 'map_fn')
+        self.reduce_fn = self.helper.find_control('edit_view_screen', 'reduce_fn')
+        self.save_btn = self.helper.find_control('edit_view_screen', 'save_btn')
+        self.save_as_btn = self.helper.find_control('edit_view_screen', 'saveas_btn')
+        return self
+
+    def view_results_container(self, value=0):
+        self.results_block = self.helper.find_control('view_results', 'results_block')
+        self.show_results_btn = self.helper.find_control('view_results', 'show_results_btn')
+        self.dev_subset = self.helper.find_control('view_results', 'dev_subset', parent_locator='results_block')
+        self.full_subset = self.helper.find_control('view_results', 'full_subset', parent_locator='results_block')
+        self.results_container = self.helper.find_control('view_results', 'results_container')
+        self.table_id = self.helper.find_control('view_results', 'table_id')
+        self.doc_count = self.helper.find_control('view_results', 'doc_count', text=str(value))
+        self.doc_arrow = self.helper.find_control('view_results', 'doc_arrow')
+        self.view_arrow = self.helper.find_control('view_results', 'view_arrow')
         return self
 
 class DocumentsControls():
@@ -1436,7 +1586,7 @@ class DdocViewHelper():
         self.wait = WebDriverWait(tc.driver, timeout=60)
         self.controls = DdocViewControls(tc.driver)
 
-    def create_view(self, ddoc_name, view_name):
+    def create_view(self, ddoc_name, view_name, dev_view=True):
         self.tc.log.info('trying create a view %s' % view_name)
         self.controls.create_view_btn.click()
         self.wait.until(lambda fn:
@@ -1448,9 +1598,17 @@ class DdocViewHelper():
         self.wait.until(lambda fn:
                         self.is_view_present(view_name),
                         "view %s is not appeared" % view_name)
+        if not dev_view:
+            self.controls.ddoc_row(ddoc_name).publish_btn.click()
+            self.wait.until(lambda fn:
+                        self.controls.prod_view().prod_view_tab.is_displayed(),
+                        "Production View tab is not displayed")
+            self.wait.until(lambda fn:
+                        self.controls.prod_view().prod_view_count.is_displayed(),
+                        "View is not published successfully")
 
     def is_view_present(self, view_name):
-        return self.controls.create_pop_up().view_row(view_name).row.is_displayed()
+        return self.controls.view_row(view_name).row.is_displayed()
 
     def open_view(self, view_name):
         self.tc.log.info('trying open view %s' % view_name)
@@ -1471,6 +1629,84 @@ class DdocViewHelper():
 
     def click_edit_doc(self):
         self.controls.view_screen().random_doc_edit_btn.click()
+        self.wait.until(lambda fn:
+                        self.controls.view_screen().screen.is_displayed(),
+                        "edit screen wasn't opened")
+
+    def edit_view(self, view_name):
+        self.tc.log.info('trying edit view %s' % view_name)
+        self.controls.view_row(view_name).edit_btn.click()
+        self.wait.until(lambda fn:
+                        self.controls.view_map_reduce_fn().map_fn.is_displayed(),
+                        "Edit view screen is not opened")
+
+    def delete_view(self, view_name):
+        self.wait.until(lambda fn:
+                       self.controls.view_row(view_name).row_name.is_displayed(),
+                      "View row %s is not displayed" % view_name)
+        self.controls.view_row(view_name).delete_btn.click()
+        self.wait.until(lambda fn:
+                        self.controls.del_view_dialog().ok_btn.is_displayed(),
+                        "Delete view dialog is not opened")
+        self.controls.del_view_dialog().ok_btn.click()
+
+    def fill_edit_view_screen(self, view_name, action = 'save', reduce_fn='_count'):
+        self.tc.log.info('Fill edit view %s screen' % view_name)
+        new_view_name = "test1"
+        updated_map_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.id, doc.age);}}'
+        if updated_map_fn:
+            self.controls.view_map_reduce_fn().map_fn.type_native(updated_map_fn)
+            if self.get_error():
+                raise Exception("Error '%s' appeared" % self.get_error())
+        if reduce_fn:
+            self.controls.view_map_reduce_fn().reduce_fn.type_native(reduce_fn)
+            if self.get_error():
+                raise Exception("Error '%s' appeared" % self.get_error())
+        if action == 'save':
+            self.controls.view_map_reduce_fn().save_btn.click()
+        if action == 'save_as':
+            self.controls.view_map_reduce_fn().save_as_btn.click()
+            self.controls.create_pop_up().view_name.type(new_view_name)
+            self.controls.create_pop_up().save_btn.click()
+            self.wait.until(lambda fn:
+                            self.is_view_present(new_view_name),
+                            "view %s is not appeared" % new_view_name)
+            time.sleep(1)
+        self.tc.log.info('View is successfully edited')
+
+    def verify_view_results(self, view_set, reduce_fn, value=0):
+        self.tc.log.info('Verify View Results')
+        if view_set == 'dev':
+            self.controls.view_results_container().dev_subset.click()
+        else:
+            self.controls.view_results_container().full_subset.click()
+        self.controls.view_results_container().doc_arrow.click()
+        self.controls.view_results_container().view_arrow.click()
+        self.controls.view_results_container().show_results_btn.click()
+        self.wait.until(lambda fn:
+                        self.controls.view_results_container().table_id.is_displayed(),
+                        "View Results Table is not displayed")
+        if reduce_fn == '_count':
+            self.wait.until(lambda fn:
+                        self.controls.view_results_container(value).doc_count.is_displayed(),
+                        "Correct Document count is not displayed")
+        elif reduce_fn == '_sum':
+            self.wait.until(lambda fn:
+                        self.controls.view_results_container(value).doc_count.is_displayed(),
+                        "Correct Age Sume is not displayed")
+        elif reduce_fn == '_stats':
+            self.wait.until(lambda fn:
+                        self.controls.view_results_container(value).doc_count.is_displayed(),
+                        "Correct Stats are displayed")
+        else:
+            self.log.info("No Reduce fn specified")
+        self.tc.log.info('View Results are successfully verified')
+
+    def get_error(self):
+        if self.controls.error() and self.controls.error().get_text() != '':
+            return self.controls.error().get_text()
+        else:
+            return None
 
 class DocsHelper():
     def __init__(self, tc):
