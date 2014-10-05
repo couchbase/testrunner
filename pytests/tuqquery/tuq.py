@@ -35,13 +35,15 @@ class QueryTests(BaseTestCase):
         self.docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.gens_load = self.generate_docs(self.docs_per_day)
+        self.skip_load = self.input.param("skip_load", False)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
 
     def suite_setUp(self):
         try:
-            self.load(self.gens_load, flag=self.item_flag)
-            self.create_primary_index_for_3_0_and_greater()
+            if not self.skip_load:
+                self.load(self.gens_load, flag=self.item_flag)
+                self.create_primary_index_for_3_0_and_greater()
             if not self.input.param("skip_build_tuq", False):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
