@@ -89,7 +89,7 @@ class XDCRTests(BaseUITestCase):
                          'Reference should %s appear' % (('', 'not')[error is None]))
         self.log.info('Test finished as expected')
 
-    def test_cancel_create_replication(self):
+    def test_cancel_create_reference(self):
         self.assertTrue(len(self.servers) > 1, 'This test requires at least 2 nodes')
         ip = self.input.param('ip_to_replicate', self.servers[1].ip)
         name = self.input.param('name', 'ui_auto')
@@ -102,7 +102,7 @@ class XDCRTests(BaseUITestCase):
                          'Reference should not appear')
         self.log.info('Test finished as expected')
 
-    def test_cancel_create_reference(self):
+    def test_cancel_create_replication(self):
         self.assertTrue(len(self.servers) > 1, 'This test requires at least 2 nodes')
         ip = self.input.param('ip_to_replicate', self.servers[1].ip)
         name = self.input.param('name', 'ui_auto')
@@ -112,8 +112,8 @@ class XDCRTests(BaseUITestCase):
         NavigationHelper(self).navigate('XDCR')
         helper.create_cluster_reference(name, ip, user, passwd)
         helper.create_replication(name, self.bucket.name, self.bucket.name, cancel=True)
-        self.assertEqual(helper.is_replication_created(self.bucket.name, ip, self.bucket.name),
-                         'Reference should not appear')
+        self.assertFalse(helper.is_replication_created(self.bucket.name, ip, self.bucket.name),
+                         'Replication should not appear')
         self.log.info('Test finished as expected')
 
 '''
@@ -208,13 +208,13 @@ class XDCRHelper():
         if remote_cluster:
             self.controls.create_replication_pop_up().remote_cluster.select(remote_cluster)
         if remote_bucket:
-            self.controls.create_replication_pop_up().remote_bucket.type(remote_bucket.name)
+            self.controls.create_replication_pop_up().remote_bucket.type(remote_bucket if isinstance(remote_bucket, str) else remote_bucket.name)
         if bucket:
-            self.controls.create_replication_pop_up().bucket.select(bucket.name)
+            self.controls.create_replication_pop_up().bucket.select(bucket if isinstance(bucket, str) else bucket.name)
         if not cancel:
             self.controls.create_replication_pop_up().replicate_btn.click()
         else:
-            self.controls.create_replication_pop_up.cancel_btn.click()
+            self.controls.create_replication_pop_up().cancel_btn.click()
         self.wait.until(lambda fn: self._cluster_replication_pop_up_reaction(),
                         "there is no reaction in %d sec" % (self.wait._timeout))
         if self.controls.error_replica().is_displayed():
