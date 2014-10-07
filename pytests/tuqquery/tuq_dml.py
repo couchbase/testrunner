@@ -5,6 +5,7 @@ from tuqquery.tuq import QueryTests
 from couchbase.documentgenerator import DocumentGenerator
 
 
+TIMEOUT_DELETED = 300
 
 class DMLQueryTests(QueryTests):
     def setUp(self):
@@ -58,32 +59,19 @@ class DMLQueryTests(QueryTests):
 
     def test_insert_with_select(self):
         num_docs = self.input.param('num_docs', 10)
-        keys = values = []
-        for gen_load in self.gens_load:
-            gen = copy.deepcopy(gen_load)
-            if len(keys) == num_docs:
-                    break
-            for i in xrange(gen.end):
-                if len(keys) == num_docs:
-                    break
-                key, value = gen.next()
-                for bucket in self.buckets:
-                    self.query = 'INSERT into %s key "%s" VALUES %s' % (bucket.name, key, value)
-                    actual_result = self.run_cbq_query()
-                    self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
-                keys.append(key)
-                values.append(value)
-
-        for i in xrange(num_docs):
-            self.query = 'insert into %s key "insert_%s" select name from %s keys ["%s"]'  % (bucket.name, str(i),
-                                                                                              bucket.name, keys[i])
+        keys, values = self._insert_gen_keys(num_docs)
+        for bucket in self.buckets:
+            for i in xrange(num_docs):
+                self.query = 'insert into %s key "insert_%s" select name from %s keys ["%s"]'  % (bucket.name, str(i),
+                                                                                                  bucket.name, keys[i])
+                actual_result = self.run_cbq_query()
+                self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        for bucket in self.buckets:
+            self.query = 'select * from %s keys %s'  % (bucket.name, ','.join(["insert_%s" % i for i in xrange(num_docs)]))
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
-        self.query = 'select * from %s keys %s'  % (bucket.name, ','.join(["insert_%s" % i for i in xrange(num_docs)]))
-        actual_result = self.run_cbq_query()
-        expected_result = values[:num_docs]
-        self.assertEqual(sorted(actual_result['results']), sorted(expected_result),
-                         'Item did not appear')
+            expected_result = values[:num_docs]
+            self.assertEqual(sorted(actual_result['results']), sorted(expected_result),
+                             'Item did not appear')
 
 ############################################################################################################################
 #
@@ -168,8 +156,129 @@ class DMLQueryTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
         items_check('insert_', values[num_docs:num_docs + num_docs])
+############################################################################################################################
+#
+# DELETE
+#
+############################################################################################################################
+
+    def test_delete_keys_clause(self):
+        num_docs = self.input.param('docs_to_delete', 3)
+        key_prefix = 'automation'
+        value = 'n1ql automation'
+        self._common_insert(['%s%s' % (key_prefix, i) for i in xrange(self.num_items)],
+                            [value] * len(self.num_items))
+        keys_to_delete = ['%s%s' % (key_prefix, i) for i in xrange(num_docs)]
+        for bucket in self.buckets:
+            self.query = 'delete from %s  keys [%s]'  % (bucket.name,
+                                                         map(lambda x: '"%s"' % x, keys_to_delete))
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self._keys_are_deleted(keys_to_delete)
+
+    def test_delete_where_clause_non_doc(self):
+        num_docs = self.input.param('docs_to_delete', 3)
+        key_prefix = 'automation'
+        value = 'n1ql automation'
+        value_to_delete = 'n1ql deletion'
+        self._common_insert(['%s%s' % (key_prefix, i) for i in xrange(self.num_items - num_docs)],
+                            [value] * len(self.num_items - num_docs))
+        self._common_insert(['%s%s' % (key_prefix, i) for i in xrange(self.num_items - num_docs, self.num_items)],
+                            [value_to_delete] * len(num_docs))
+        keys_to_delete = ['%s%s' % (key_prefix, i) for i in xrange(self.num_items - num_docs, self.num_items)]
+        for bucket in self.buckets:
+            self.query = 'delete from %s where value()=%s'  % (bucket.name, value_to_delete)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self._keys_are_deleted(keys_to_delete)
+
+    def test_delete_where_clause_json(self):
+        keys, values = self._insert_gen_keys(self.num_items)
+        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_title"] == 'Sales']
+        for bucket in self.buckets:
+            self.query = 'delete from %s where job_title="Sales"'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self._keys_are_deleted(keys_to_delete)
+
+    def test_delete_where_satisfy_clause_json(self):
+        keys, values = self._insert_gen_keys(self.num_items)
+        keys_to_delete = [keys[i] for i in xrange(len(keys))
+                          if len([vm for vm in values[i]["VMs"] if vm["RAM"] == 5]) > 0 ]
+        for bucket in self.buckets:
+            self.query = 'delete from %s where ANY vm IN %s.VMs SATISFIES vm.RAM = 5 END'  % (bucket.name, bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self._keys_are_deleted(keys_to_delete)
+
+    def test_delete_limit_keys(self):
+        keys, values = self._insert_gen_keys(self.num_items)
+        for bucket in self.buckets:
+            self.query = 'select count(*) as actual from %s where job_title="Sales"'  % (bucket.name, bucket.name)
+            actual_result = self.run_cbq_query()
+            current_docs = actual_result['resultset']['actual']
+            self.query = 'delete from %s where job_title="Sales" LIMIT 1'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.query = 'select count(*) as actual from %s where job_title="Sales"'  % (bucket.name, bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['resultset']['actual'], current_docs - 1, 'Item was not deleted')
+
+    def test_delete_limit_where(self):
+        keys, values = self._insert_gen_keys(self.num_items)
+        for bucket in self.buckets:
+            self.query = 'select count(*) as actual from %s where job_title="Sales"'  % (bucket.name, bucket.name)
+            actual_result = self.run_cbq_query()
+            current_docs = actual_result['resultset']['actual']
+            self.query = 'delete from %s where job_title="Sales" LIMIT 1'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.query = 'select count(*) as actual from %s where job_title="Sales"'  % (bucket.name, bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['resultset']['actual'], current_docs - 1, 'Item was not deleted')
 
 ############################################################################################################################
+
+    def _insert_gen_keys(self, num_docs):
+        keys = values = []
+        for gen_load in self.gens_load:
+            gen = copy.deepcopy(gen_load)
+            if len(keys) == num_docs:
+                    break
+            for i in xrange(gen.end):
+                if len(keys) == num_docs:
+                    break
+                key, value = gen.next()
+                for bucket in self.buckets:
+                    self.query = 'INSERT into %s key "%s" VALUES %s' % (bucket.name, key, value)
+                    actual_result = self.run_cbq_query()
+                    self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+                keys.append(key)
+                values.append(value)
+        return keys, values
+
+    def _keys_are_deleted(self, keys):
+        end_time = time.time() + TIMEOUT_DELETED
+        while time.time() < end_time:
+            for bucket in self.buckets:
+                self.query = 'select meta(%s).id from %s'  % (bucket.name, bucket.name)
+                actual_result = self.run_cbq_query()
+                found = False
+                for key in keys:
+                    if actual_result['results'].count({'id' : key}) != 0:
+                        found = True
+                        break
+                if not found:
+                    return
+            self.sleep(3)
+        self.fail('Keys %s are still present' % keys)
+
+    def _common_insert(self, keys, values):
+        for bucket in self.buckets:
+            for i in xrange(len(keys)):
+                self.query = 'INSERT into %s key "%s" VALUES %s' % (bucket.name, keys[i], values[i])
+                actual_result = self.run_cbq_query()
+                self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
 
     def _common_check(self, key, expected_item_value, upsert=False):
         clause = 'UPSERT' if upsert else 'INSERT'
