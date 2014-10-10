@@ -85,8 +85,8 @@ ulimit -a
 if [ ${run_install} = true ]
        then
        echo '---------------------------- INSTALLATION -----------------------'
-       echo "python_exe scripts/install.py -i ${ini_file} -p version=${version_number},vbuckets=${vbuckets},upr=${upr},${install_params}  2>&1 | tee install.log"
-       $python_exe scripts/install.py -i ${ini_file} -p version=${version_number},vbuckets=${vbuckets},upr=${upr},${install_params}  2>&1 | tee install.log
+       echo "python_exe scripts/install.py -i ${ini_file} -p version=${version_number},vbuckets=${vbuckets},${install_params}  2>&1 | tee install.log"
+       $python_exe scripts/install.py -i ${ini_file} -p version=${version_number},vbuckets=${vbuckets},${install_params}  2>&1 | tee install.log
        INSTALL_FAILED=`cat install.log 2>&1| grep "some nodes were not install successfully!"| wc -l`
 
        if [ ${INSTALL_FAILED} -ge 1 ]
