@@ -45,6 +45,25 @@ class BucketTests(BaseUITestCase):
         NavigationHelper(self).navigate('Data Buckets')
         BucketHelper(self).create(bucket)
 
+    def test_add_bucket_with_ops(self):
+        error = self.input.param('error', None)
+        bucket_helper = BucketHelper(self)
+        bucket = Bucket(parse_bucket=self.input)
+        bucket.num_replica = '0'
+        NavigationHelper(self).navigate('Data Buckets')
+        try:
+            bucket_helper.create(bucket)
+        except Exception, ex:
+            if error and str(ex).find('create new bucket pop up is not closed') != -1:
+                actual_err = bucket_helper.get_error()
+                self.assertTrue(actual_err.find(error) != -1, 'Expected error %s. Actual %s' % (error, actual_err))
+                self.log.info('Error verified')
+            else:
+                raise ex
+        else:
+            if error:
+                self.fail('Error was expected')
+
     def test_bucket_stats_mb_8538(self):
         self.bucket = Bucket()
         NavigationHelper(self).navigate('Data Buckets')
@@ -616,9 +635,51 @@ class BucketTestsControls():
         self.replica_num = self.helper.find_control('bucket','replica_num', parent_locator=self.parent)
         self.index_replica_cb = self.helper.find_control('bucket','index_replica_cb',
                                                          parent_locator=self.parent)
+        self.override_comp_cb = self.helper.find_control('bucket','auto_comp_settings_override',
+                                                         parent_locator=self.parent)
         self.create_btn = self.helper.find_control('bucket','create_btn',
                                                    parent_locator='create_bucket_pop_up')
         return self
+
+    def bucket_meta_data(self, text='valueOnly', parent='create_bucket_pop_up'):
+        return self.helper.find_control('bucket', 'cache_meta_data', parent_locator=parent, text=text)
+
+    def bucket_io_priority(self, text='hight', parent='create_bucket_pop_up'):
+        return self.helper.find_control('bucket', 'io_priority', parent_locator=parent, text=text)
+
+    def bucket_compaction(self, parent='create_bucket_pop_up'):
+        self.frag_percent_cb = self.helper.find_control('bucket','frag_percent_cb',
+                                                      parent_locator=parent)
+        self.frag_percent = self.helper.find_control('bucket','frag_percent', parent_locator=parent)
+        self.frag_mb_cb = self.helper.find_control('bucket','frag_mb_cb',
+                                                          parent_locator=parent)
+        self.frag_mb = self.helper.find_control('bucket','frag_mb', parent_locator=parent)
+        self.view_frag_percent_cb = self.helper.find_control('bucket','view_frag_percent_cb',
+                                                         parent_locator=parent)
+        self.view_frag_percent = self.helper.find_control('bucket','view_frag_percent',
+                                                   parent_locator=parent)
+        self.view_frag_mb = self.helper.find_control('bucket','view_frag_mb',
+                                                      parent_locator=parent)
+        self.view_frag_mb_cb = self.helper.find_control('bucket','view_frag_mb_cb', parent_locator=parent)
+        self.comp_allowed_period_cb = self.helper.find_control('bucket','comp_allowed_period_cb',
+                                                          parent_locator=parent)
+        self.comp_allowed_period_start_h = self.helper.find_control('bucket','comp_allowed_period_start_h', parent_locator=parent)
+        self.comp_allowed_period_start_min = self.helper.find_control('bucket','comp_allowed_period_start_min',
+                                                         parent_locator=parent)
+        self.comp_allowed_period_end_h = self.helper.find_control('bucket','comp_allowed_period_end_h',
+                                                   parent_locator=parent)
+        self.comp_allowed_period_end_min = self.helper.find_control('bucket','comp_allowed_period_end_min',
+                                                         parent_locator=parent)
+        self.abort_comp_cb = self.helper.find_control('bucket','abort_comp_cb',
+                                                   parent_locator=parent)
+        self.comp_in_parallel_cb = self.helper.find_control('bucket','comp_in_parallel_cb',
+                                                         parent_locator=parent)
+        self.purge_interval = self.helper.find_control('bucket','purge_interval',
+                                                   parent_locator=parent)
+        return self
+
+    def bucket_create_error(self):
+        return self.helper.find_controls('bucket', 'error', parent_locator='create_bucket_pop_up')
 
     def bucket_info(self, bucket_name):
         self.arrow = self.helper.find_control('bucket_row','arrow', parent_locator='bucket_row',
@@ -1147,6 +1208,51 @@ class BucketHelper():
                 self.controls.bucket_pop_up(parent).replica_num.select(str(bucket.num_replica))
         if bucket.index_replica is not None:
             self.controls.bucket_pop_up(parent).index_replica_cb.check(setTrue=bucket.index_replica)
+        if bucket.meta_data is not None:
+            self.controls.bucket_meta_data(parent=parent, text=bucket.meta_data).click()
+        if bucket.io_priority is not None:
+            self.controls.bucket_io_priority(parent=parent, text=bucket.io_priority).click()
+        if bucket.frag_percent_cb or bucket.frag_percent or bucket.frag_mb_cb or\
+          bucket.frag_mb or bucket.view_frag_percent_cb or bucket.view_frag_percent or\
+          bucket.view_frag_mb or bucket.view_frag_mb_cb or bucket.comp_allowed_period_cb or\
+          bucket.comp_allowed_period_start_h or bucket.comp_allowed_period_start_min or\
+          bucket.comp_allowed_period_end_h or bucket.comp_allowed_period_end_min or\
+          bucket.abort_comp_cb or bucket.comp_in_parallel_cb or bucket.purge_interval:
+            self.controls.bucket_pop_up(parent).override_comp_cb.check(setTrue=True)
+            if bucket.frag_percent_cb is not None or bucket.frag_percent is not None:
+                self.controls.bucket_compaction(parent).frag_percent_cb.check(setTrue=True)
+            if bucket.frag_percent is not None:
+                self.controls.bucket_compaction(parent).frag_percent.type(bucket.frag_percent)
+            if bucket.frag_mb_cb is not None or bucket.frag_mb is not None:
+                self.controls.bucket_compaction(parent).frag_mb_cb.check(setTrue=True)
+            if bucket.frag_mb is not None:
+                self.controls.bucket_compaction(parent).frag_mb.type(bucket.frag_mb)
+            if bucket.view_frag_percent_cb is not None or bucket.view_frag_percent is not None:
+                self.controls.bucket_compaction(parent).view_frag_percent_cb.check(setTrue=True)
+            if bucket.view_frag_percent is not None:
+                self.controls.bucket_compaction(parent).view_frag_percent.type(bucket.view_frag_percent)
+            if bucket.view_frag_mb_cb is not None or bucket.view_frag_mb is not None:
+                self.controls.bucket_compaction(parent).view_frag_mb_cb.check(setTrue=True)
+            if bucket.view_frag_mb is not None:
+                self.controls.bucket_compaction(parent).view_frag_mb.type(bucket.frag_percent)
+            if bucket.comp_allowed_period_cb is not None or bucket.comp_allowed_period_start_h is not None or\
+             bucket.comp_allowed_period_start_min is not None or bucket.comp_allowed_period_end_h is not None or\
+             bucket.comp_allowed_period_end_min is not None:
+                self.controls.bucket_compaction(parent).comp_allowed_period_cb.check(setTrue=True)
+            if bucket.comp_allowed_period_start_h is not None:
+                self.controls.bucket_compaction(parent).comp_allowed_period_start_h.type(bucket.comp_allowed_period_start_h)
+            if bucket.comp_allowed_period_start_min is not None:
+                self.controls.bucket_compaction(parent).comp_allowed_period_start_min.type(bucket.comp_allowed_period_start_min)
+            if bucket.comp_allowed_period_end_h is not None:
+                self.controls.bucket_compaction(parent).comp_allowed_period_end_h.type(bucket.comp_allowed_period_end_h)
+            if bucket.comp_allowed_period_end_min is not None:
+                self.controls.bucket_compaction(parent).comp_allowed_period_end_min.type(bucket.comp_allowed_period_end_min)
+            if bucket.abort_comp_cb is not None:
+                self.controls.bucket_compaction(parent).abort_comp_cb.check(setTrue=bucket.abort_comp_cb)
+            if bucket.comp_in_parallel_cb is not None:
+                self.controls.bucket_compaction(parent).comp_in_parallel_cb.check(setTrue=bucket.comp_in_parallel_cb)
+            if bucket.purge_interval is not None:
+                self.controls.bucket_compaction(parent).purge_interval.type(bucket.purge_interval)
 
     def is_bucket_present(self, bucket):
         try:
@@ -1161,6 +1267,11 @@ class BucketHelper():
         except:
             time.sleep(1)
             return False
+
+    def get_error(self):
+        for err in self.controls.bucket_create_error():
+            if err.is_displayed() and err.get_text() != '':
+                return err.get_text()
 
     def is_bucket_helthy(self, bucket):
         try:
@@ -1618,7 +1729,13 @@ Objects
 '''
 class Bucket():
     def __init__(self, name='default', type='Couchbase', ram_quota=None, sasl_pwd=None,
-                 port=None, replica=None, index_replica=None, parse_bucket=None):
+                 port=None, replica=None, index_replica=None, parse_bucket=None,
+                 meta_data = None, io_priority = None, frag_percent_cb = None,
+                 frag_percent = None, frag_mb_cb = None, frag_mb = None, view_frag_percent_cb = None, view_frag_percent = None,
+                 view_frag_mb = None, view_frag_mb_cb = None, comp_allowed_period_cb = None, comp_allowed_period_start_h = None,
+                 comp_allowed_period_start_min = None, comp_allowed_period_end_h = None,
+                 comp_allowed_period_end_min = None, abort_comp_cb = None, comp_in_parallel_cb = None,
+                 purge_interval = None):
         self.name = name or 'default'
         self.type = type
         self.ram_quota = ram_quota
@@ -1626,6 +1743,24 @@ class Bucket():
         self.protocol_port = port
         self.num_replica = replica
         self.index_replica = index_replica
+        self.meta_data = meta_data
+        self.io_priority = io_priority
+        self.frag_percent_cb = frag_percent_cb
+        self.frag_percent = frag_percent
+        self.frag_mb_cb = frag_mb_cb
+        self.frag_mb = frag_mb
+        self.view_frag_percent_cb = view_frag_percent_cb
+        self.view_frag_percent = view_frag_percent
+        self.view_frag_mb = view_frag_mb
+        self.view_frag_mb_cb = view_frag_mb_cb
+        self.comp_allowed_period_cb = comp_allowed_period_cb
+        self.comp_allowed_period_start_h = comp_allowed_period_start_h
+        self.comp_allowed_period_start_min = comp_allowed_period_start_min
+        self.comp_allowed_period_end_h = comp_allowed_period_end_h
+        self.comp_allowed_period_end_min = comp_allowed_period_end_min
+        self.abort_comp_cb = abort_comp_cb
+        self.comp_in_parallel_cb = comp_in_parallel_cb
+        self.purge_interval = purge_interval
         if parse_bucket:
             for param in parse_bucket.test_params:
                 if hasattr(self, str(param)):
