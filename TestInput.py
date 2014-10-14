@@ -28,11 +28,20 @@ class TestInput(object):
         self.tuq_client = {}
         #servers , each server can have u,p,port,directory
 
-    def param(self, name, default_value):
+    def param(self, name, *args):
+        """Returns the paramater or a default value
+
+        The first parameter is the name of property, the second
+        parameter is the default value. If not default value is given,
+        an exception will be raised.
+        """
         if name in self.test_params:
             return TestInput._parse_param(self.test_params[name])
+        elif len(args) == 1:
+            return args[0]
         else:
-            return default_value
+            raise Exception("Parameter `{}` must be set "
+                            "in the test configuration".format(name))
 
     @staticmethod
     def _parse_param(value):
