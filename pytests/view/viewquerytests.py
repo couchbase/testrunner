@@ -429,33 +429,6 @@ class ViewQueryTests(BaseTestCase):
             self.log.info("Partition sequence is: %s" % data_set.get_partition_seq(data_set.views[0]))
         return changes_done
 
-    def test_employee_dataset_alldocs_queries(self):
-        '''
-        Test uses employee data set:
-            -documents are structured as {"name": name<string>,
-                                       "join_yr" : year<int>,
-                                       "join_mo" : month<int>,
-                                       "join_day" : day<int>,
-                                       "email": email<string>,
-                                       "job_title" : title<string>,
-                                       "type" : type<string>,
-                                       "desc" : desc<tring>}
-        Steps to repro:
-            1. Start load data
-            2. Simultaneously all_docs queries
-        '''
-        data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day)
-
-        data_set.add_all_docs_queries(limit=self.limit)
-        if self.wait_persistence:
-            gen_load = data_set.generate_docs(data_set.views[0])
-            self.load(data_set, gen_load)
-            for server in self.servers:
-                RebalanceHelper.wait_for_persistence(server, data_set.bucket)
-            self._query_all_views(data_set.views, gen_load)
-        else:
-            self._query_test_init(data_set)
-
     def test_employee_dataset_key_quieres(self):
         '''
         Test uses employee data set:
@@ -535,259 +508,6 @@ class ViewQueryTests(BaseTestCase):
         data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day)
         data_set.add_query_invalid_startkey_endkey_docid(valid_params, invalid_params)
         self._query_test_init(data_set)
-
-    def test_employee_dataset_alldocs_queries_rebalance_in(self):
-        '''
-        Test uses employee data set:
-            -documents are structured as {"name": name<string>,
-                                       "join_yr" : year<int>,
-                                       "join_mo" : month<int>,
-                                       "join_day" : day<int>,
-                                       "email": email<string>,
-                                       "job_title" : title<string>,
-                                       "type" : type<string>,
-                                       "desc" : desc<tring>}
-        Steps to repro:
-            1. Start load data
-            2. Simultaneously start key queries
-            3. Both threads are finished
-            4. Start rebalance in
-            5. Start querying
-        '''
-        num_nodes_to_add = self.input.param('num_nodes_to_add', 0)
-        data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day)
-
-        data_set.add_all_docs_queries(limit=self.limit)
-        gen_load = data_set.generate_docs(data_set.views[0])
-        self.load(data_set, gen_load)
-
-        # rebalance_in and verify loaded data
-        rebalance = self.cluster.async_rebalance(self.servers[:1],
-                                                 self.servers[1:num_nodes_to_add + 1],
-                                                 [])
-        self._query_all_views(data_set.views, gen_load)
-        rebalance.result()
-
-        #verify queries after rebalance
-        self._query_all_views(data_set.views, gen_load)
-
-    def test_employee_dataset_alldocs_failover_queries(self):
-        '''
-        Test uses employee data set:
-            -documents are structured as {"name": name<string>,
-                                       "join_yr" : year<int>,
-                                       "join_mo" : month<int>,
-                                       "join_day" : day<int>,
-                                       "email": email<string>,
-                                       "job_title" : title<string>,
-                                       "type" : type<string>,
-                                       "desc" : desc<tring>}
-        Steps to repro:
-            1. Start load data
-            2. wait until is persisted
-            3. failover some nodes and start rebalance
-            4. Start querying
-        '''
-        self.retries += 50
-        failover_factor = self.input.param("failover-factor", 1)
-        failover_nodes = self.servers[1 : failover_factor + 1]
-        try:
-            data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day)
-
-            data_set.add_all_docs_queries(limit=self.limit)
-            gen_load = data_set.generate_docs(data_set.views[0])
-            self.load(data_set, gen_load)
-            self._query_all_views(data_set.views, gen_load)
-
-            # failover and verify loaded data
-            self.cluster.failover(self.servers, failover_nodes)
-            self.log.info("10 seconds sleep after failover before invoking rebalance...")
-            time.sleep(10)
-            rebalance = self.cluster.async_rebalance(self.servers,
-                                                     [], failover_nodes)
-
-            self._query_all_views(data_set.views, gen_load)
-
-            msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
-            self.assertTrue(rebalance.result(), msg=msg)
-
-            #verify queries after failover
-            self._query_all_views(data_set.views, gen_load)
-        finally:
-            for server in failover_nodes:
-                shell = RemoteMachineShellConnection(server)
-                shell.start_couchbase()
-                time.sleep(10)
-                shell.disconnect()
-
-    def test_employee_dataset_alldocs_incremental_failover_queries(self):
-        '''
-        Test uses employee data set:
-            -documents are structured as {"name": name<string>,
-                                       "join_yr" : year<int>,
-                                       "join_mo" : month<int>,
-                                       "join_day" : day<int>,
-                                       "email": email<string>,
-                                       "job_title" : title<string>,
-                                       "type" : type<string>,
-                                       "desc" : desc<tring>}
-        Steps to repro:
-            1. Start load data
-            2. wait until is persisted
-            3. failover nodes incrementaly in a loop and start rebalance in
-            4. Start querying
-        '''
-        failover_nodes = []
-        failover_factor = self.input.param("failover-factor", 1)
-        try:
-            data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day)
-
-            data_set.add_all_docs_queries(limit=self.limit)
-            gen_load = data_set.generate_docs(data_set.views[0])
-            self.load(data_set, gen_load)
-            self._query_all_views(data_set.views, gen_load)
-
-            servers = self.servers
-            # incrementaly failover nodes and verify loaded data
-            for i in xrange(failover_factor):
-                failover_node = self.servers[i : i + 1]
-                self.cluster.failover(self.servers, failover_node)
-                failover_nodes.append(failover_node)
-                self.log.info("10 seconds sleep after failover before invoking rebalance...")
-                time.sleep(10)
-
-                rebalance = self.cluster.async_rebalance(servers,
-                                                         [], failover_nodes)
-
-                self._query_all_views(data_set.views, gen_load)
-
-                del(servers[1])
-
-                msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
-                self.assertTrue(rebalance.result(), msg=msg)
-
-        finally:
-            for server in failover_nodes:
-                shell = RemoteMachineShellConnection(server)
-                shell.start_couchbase()
-                self.log.info("10 seconds for couchbase server to startup...")
-                time.sleep(10)
-                shell.disconnect()
-
-    def test_employee_dataset_alldocs_queries_start_stop_rebalance_in_incremental(self):
-        '''
-        Test uses employee data set:
-            -documents are structured as {"name": name<string>,
-                                       "join_yr" : year<int>,
-                                       "join_mo" : month<int>,
-                                       "join_day" : day<int>,
-                                       "email": email<string>,
-                                       "job_title" : title<string>,
-                                       "type" : type<string>,
-                                       "desc" : desc<tring>}
-        Steps to repro:
-            1. Start load data
-            2. wait data for persistence
-            3. start rebalance in
-            4. stop rebalance
-            5. Start querying
-        '''
-        data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day)
-
-        data_set.add_all_docs_queries(limit=self.limit)
-        gen_load = data_set.generate_docs(data_set.views[0])
-        self.load(data_set, gen_load)
-        self._query_all_views(data_set.views, gen_load)
-
-        rest = self._rconn()
-        nodes = rest.node_statuses()
-
-        for server in self.servers[1:]:
-            self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
-            self.log.info("adding node {0}:{1} to cluster".format(server.ip, server.port))
-            otpNode = rest.add_node(self.master.rest_username, self.master.rest_password, server.ip, server.port)
-            msg = "unable to add node {0}:{1} to the cluster"
-            self.assertTrue(otpNode, msg.format(server.ip, server.port))
-
-            # Just doing 2 iterations
-            for expected_progress in [30, 60]:
-                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
-                reached = RestHelper(rest).rebalance_reached(expected_progress)
-                self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
-                stopped = rest.stop_rebalance(wait_timeout=100)
-                self.assertTrue(stopped, msg="unable to stop rebalance")
-                self._query_all_views(data_set.views, gen_load)
-
-            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
-            self.assertTrue(rest.monitorRebalance(), msg="rebalance operation failed restarting")
-            self._query_all_views(data_set.views, gen_load)
-
-            self.assertTrue(len(rest.node_statuses()) - len(nodes) == 1, msg="number of cluster's nodes is not correct")
-            nodes = rest.node_statuses()
-
-    def test_employee_dataset_alldocs_queries_start_stop_rebalance_out_incremental(self):
-        '''
-        Test uses employee data set:
-            -documents are structured as {"name": name<string>,
-                                       "join_yr" : year<int>,
-                                       "join_mo" : month<int>,
-                                       "join_day" : day<int>,
-                                       "email": email<string>,
-                                       "job_title" : title<string>,
-                                       "type" : type<string>,
-                                       "desc" : desc<tring>}
-        Steps to repro:
-            1. Start load data
-            2. wait data for persistence
-            3. start rebalance out
-            4. stop rebalance
-            5. Start querying
-        '''
-        data_set = EmployeeDataSet(self.master, self.cluster, self.docs_per_day)
-
-        data_set.add_all_docs_queries(limit=self.limit)
-        gen_load = data_set.generate_docs(data_set.views[0])
-        self.load(data_set, gen_load)
-        self._query_all_views(data_set.views, gen_load)
-
-        rest = self._rconn()
-        nodes = rest.node_statuses()
-
-        for server in self.servers[1:]:
-            ejectedNodes = []
-            self.log.info("removing node {0}:{1} from cluster".format(server.ip, server.port))
-            for node in nodes:
-                if "{0}:{1}".format(node.ip, node.port) == "{0}:{1}".format(server.ip, server.port):
-                    ejectedNodes.append(node.id)
-                    break
-
-            # Just doing 2 iterations
-            for expected_progress in [30, 60]:
-                rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
-                reached = RestHelper(rest).rebalance_reached(expected_progress)
-                self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
-                stopped = rest.stop_rebalance()
-                self.assertTrue(stopped, msg="unable to stop rebalance")
-
-                #for cases if rebalance ran fast
-                if RestHelper(rest).is_cluster_rebalanced():
-                    self.log.info("Rebalance is finished already.")
-                    break
-
-                self._query_all_views(data_set.views, gen_load)
-
-            #for cases if rebalance ran fast
-            if RestHelper(rest).is_cluster_rebalanced():
-                self.log.info("Rebalance is finished already.")
-                nodes = rest.node_statuses()
-                continue
-            rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
-
-            self.assertTrue(rest.monitorRebalance(), msg="rebalance operation failed restarting")
-            self._query_all_views(data_set.views, gen_load)
-
-            self.assertTrue(len(nodes) - len(rest.node_statuses()) == 1, msg="number of cluster's nodes is not correct")
-            nodes = rest.node_statuses()
 
     def test_employee_dataset_startkey_endkey_docid_queries(self):
         '''
@@ -2428,9 +2148,8 @@ class QueryView:
                         params_gen_results = {}
                         for key, value in query.params.iteritems():
                             params_gen_results[key] = value.replace('"', '')
-                    task = tc.cluster.async_generate_expected_view_results(doc_gens, self.view,
-                                                                            params_gen_results,
-                                                                            type_query=query.type_)
+                    task = tc.cluster.async_generate_expected_view_results(
+                        doc_gens, self.view, params_gen_results)
                     if 'stop' in dir(threading.currentThread()) and\
                    isinstance(threading.currentThread(), StoppableThread):
                         threading.currentThread().tasks.append(task)
@@ -2438,10 +2157,12 @@ class QueryView:
                 tc.log.info("%s:%s: Generated results contains %s items" % (
                                                                 self, query, len(expected_results)))
                 prefix = ("", "dev_")[self.is_dev_view]
-                task = tc.cluster.async_monitor_view_query(tc.servers, self.ddoc_name, self.view,
-                                         query.params, expected_docs=expected_results, bucket=self.bucket,
-                                         retries=retries, error=query.error, verify_rows=verify_expected_keys,
-                                         server_to_query=server_to_query, type_query=query.type_)
+                task = tc.cluster.async_monitor_view_query(
+                    tc.servers, self.ddoc_name, self.view,
+                    query.params, expected_docs=expected_results,
+                    bucket=self.bucket, retries=retries,
+                    error=query.error, verify_rows=verify_expected_keys,
+                    server_to_query=server_to_query)
                 if 'stop' in dir(threading.currentThread()) and\
                    isinstance(threading.currentThread(), StoppableThread):
                     if threading.currentThread().tasks:
@@ -2630,36 +2351,6 @@ class EmployeeDataSet:
             if limit:
                 for q in view.queries:
                     q.params['limit'] = limit
-
-    def add_all_docs_queries(self, views=None, limit=None):
-
-        if views is None:
-            views = []
-            # only select views that will index entire dataset
-            # and do not have a reduce function
-            # if user doesn't override
-            for view in self.views:
-                if view.reduce_fn is None:
-                    views.append(view)
-
-        for view in views:
-            #delete all views with not full index
-            if re.match(r'.*new RegExp\("\^.*', view.fn_str) is None and\
-               view.reduce_fn is None:
-                view.queries += [QueryHelper({"startkey": '"%s%s"' % (self.views[0].prefix,
-                                                                      str(uuid.uuid4())[:7])}),
-                                 QueryHelper({"startkey" : '"%s%s"' % (self.views[0].prefix,
-                                                                      str(uuid.uuid4())[:7])}),
-                                 QueryHelper({"startkey" : '"%s%s"' % (self.views[0].prefix,
-                                                                      '0'),
-                                              "endkey"   : '"%s%s"' % (self.views[0].prefix,
-                                                                      'f'),
-                                              "inclusive_end" : "false"})]
-                # set all_docs flag
-                for query in view.queries:
-                    query.type_ = "all_docs"
-                    if limit:
-                        query.params["limit"] = limit
 
 
     """
@@ -3399,12 +3090,9 @@ class BigDataSet:
             view.queries += [QueryHelper({"stale" : "false"}, error=error)]
 
 class QueryHelper:
-    def __init__(self, params,
-                 type_="view",
-                 error=None, non_json=False):
+    def __init__(self, params, error=None, non_json=False):
 
         self.params = params
-        self.type_ = type_   # "view" or "all_docs"
         self.error = error
         self.non_json = non_json
 

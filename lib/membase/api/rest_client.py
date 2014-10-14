@@ -570,13 +570,10 @@ class RestConnection(object):
     # type_ is "view" or "spatial"
     def _index_results(self, bucket, type_, ddoc_name, params, limit, timeout=120,
                        view_name=None):
-        if type_ == 'all_docs':
-            api = self.capiBaseUrl + '/{0}/_all_docs'.format(bucket)
-        else:
-            if view_name is None:
-                view_name = ddoc_name
-            query = '/{0}/_design/{1}/_{2}/{3}'
-            api = self.capiBaseUrl + query.format(bucket, ddoc_name, type_, view_name)
+        if view_name is None:
+            view_name = ddoc_name
+        query = '/{0}/_design/{1}/_{2}/{3}'
+        api = self.capiBaseUrl + query.format(bucket, ddoc_name, type_, view_name)
 
         num_params = 0
         if limit != None:
@@ -598,16 +595,6 @@ class RestConnection(object):
         status, content, header = self._http_request(api, headers=self._create_capi_headers(), timeout=timeout)
         json_parsed = json.loads(content)
         return status, json_parsed
-
-    def all_docs(self, bucket, params={}, limit=None, timeout=120):
-        api = self.capiBaseUrl + '/{0}/_all_docs?{1}'.format(bucket, urllib.urlencode(params))
-        log.info("query all_docs url: {0}".format(api))
-        status, content, header = self._http_request(api, headers=self._create_capi_headers(),
-                                             timeout=timeout)
-        if not status:
-            raise Exception("unable to obtain all docs")
-        return  json.loads(content)
-
 
     def get_couch_doc(self, doc_id, bucket="default", timeout=120):
         """ use couchBase uri to retrieve document from a bucket """

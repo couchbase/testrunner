@@ -1569,7 +1569,7 @@ class MonitorViewQueryResultsTask(Task):
     def __init__(self, servers, design_doc_name, view,
                  query, expected_docs=None, bucket="default",
                  retries=100, error=None, verify_rows=False,
-                 server_to_query=0, type_query="view"):
+                 server_to_query=0):
         Task.__init__(self, "query_view_task")
         self.servers = servers
         self.bucket = bucket
@@ -1586,7 +1586,6 @@ class MonitorViewQueryResultsTask(Task):
         self.rest = RestConnection(self.servers[server_to_query])
         self.results = None
         self.connection_timeout = 60000
-        self.type_query = type_query
         self.query["connection_timeout"] = self.connection_timeout
         if self.design_doc_name.find("dev_") == 0:
             self.query["full_set"] = "true"
@@ -1595,12 +1594,9 @@ class MonitorViewQueryResultsTask(Task):
 
         try:
             self.current_retry += 1
-            if self.type_query == 'all_docs':
-                self.results = self.rest.all_docs(self.bucket, self.query, timeout=self.timeout)
-            else:
-                self.results = \
-                    self.rest.query_view(self.design_doc_name, self.view_name, self.bucket,
-                                         self.query, self.timeout)
+            self.results = self.rest.query_view(
+                self.design_doc_name, self.view_name, self.bucket, self.query,
+                self.timeout)
             raised_error = self.results.get(u'error', '') or ''.join([str(item) for item in self.results.get(u'errors', [])])
             if raised_error:
                 raise QueryViewException(self.view_name, raised_error)
@@ -2271,7 +2267,7 @@ class GenerateExpectedViewResultsTask(Task):
         Also NOTE, this task is to be used with doc_generators that
         produce json like documentgenerator.DocumentGenerator
     """
-    def __init__(self, doc_generators, view, query, type_query="view"):
+    def __init__(self, doc_generators, view, query):
         Task.__init__(self, "generate_view_query_results_task")
         self.doc_generators = doc_generators
         self.view = view
@@ -2281,7 +2277,6 @@ class GenerateExpectedViewResultsTask(Task):
                          (not 'reduce' in query))
         self.custom_red_fn = self.is_reduced and not self.view.red_func in ['_count', '_sum', '_stats']
         self.type_filter = None
-        self.type_query = type_query
 
 
     def execute(self, task_manager):
@@ -2338,10 +2333,7 @@ class GenerateExpectedViewResultsTask(Task):
                 if isinstance(val_emit_key, unicode):
                     val_emit_key = val_emit_key.encode('utf-8')
                 if not self.is_reduced or self.view.red_func == "_count" or self.custom_red_fn:
-                    if self.type_query == 'view':
-                        self.emitted_rows.append({'id' : _id, 'key' : val_emit_key})
-                    else:
-                        self.emitted_rows.append({'id' : _id, 'key' : _id})
+                    self.emitted_rows.append({'id' : _id, 'key' : val_emit_key})
                 else:
                     val_emit_value = val[emit_value]
                     self.emitted_rows.append({'value' : val_emit_value, 'key' : val_emit_key, 'id' : _id, })

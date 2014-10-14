@@ -141,19 +141,9 @@ class SimpleDataSet:
         view_fn = 'function (doc) {if(doc.geometry !== undefined || doc.name !== undefined ) { emit(doc.geometry, doc.name);}}'
         return [View(self.helper, self.num_docs, fn_str = view_fn)]
 
-    def load(self, verify_docs_loaded = True):
+    def load(self):
         prefix = str(uuid.uuid4())[:7]
         inserted_keys = self.helper.insert_docs(self.num_docs, prefix)
-
-        if verify_docs_loaded:
-            all_docs = self.helper.rest.all_docs(self.helper.bucket)
-            all_keys = self.helper.get_keys(all_docs)
-
-            # all_keys also contains the design document, but this doesn't
-            # matter if we compare like this
-            if set(inserted_keys) - set(all_keys):
-                self.helper.testcase.fail("not all docs were loaded")
-
         return inserted_keys
 
     def add_limit_queries(self):

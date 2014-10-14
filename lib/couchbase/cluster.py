@@ -533,23 +533,24 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_generate_expected_view_results(self, doc_generators, view, query, type_query="view"):
+    def async_generate_expected_view_results(self, doc_generators, view,
+                                             query):
         """Asynchronously generate expected view query results
 
         Parameters:
             doc_generators - Generators used for loading docs (DocumentGenerator[])
             view - The view with map function (View)
             query - Query params to filter docs from the generator. (dict)
-            type_query - type of query: "view" or "all_doc" (String)
 
         Returns:
             GenerateExpectedViewResultsTask - A task future that is a handle to the scheduled task."""
 
-        _task = GenerateExpectedViewResultsTask(doc_generators, view, query, type_query)
+        _task = GenerateExpectedViewResultsTask(doc_generators, view, query)
         self.task_manager.schedule(_task)
         return _task
 
-    def generate_expected_view_query_results(self, doc_generators, view, query, timeout=None, type_query='view'):
+    def generate_expected_view_query_results(self, doc_generators, view, query,
+                                             timeout=None):
         """Synchronously generate expected view query results
 
         Parameters:
@@ -560,13 +561,14 @@ class Cluster(object):
         Returns:
             list - A list of rows expected to be returned for given query"""
 
-        _task = self.async_generate_expected_view_results(doc_generators, view, query, type_query)
+        _task = self.async_generate_expected_view_results(doc_generators, view,
+                                                          query)
         return _task.result(timeout)
 
     def async_monitor_view_query(self, servers, design_doc_name, view_name,
                                  query, expected_docs=None, bucket="default",
                                  retries=100, error=None, verify_rows=False,
-                                 server_to_query=0, type_query="view"):
+                                 server_to_query=0):
         """
         Asynchronously monitor view query results:
         waits for expected rows length match with returned rows length
@@ -582,11 +584,10 @@ class Cluster(object):
             error - for negative tests, expected error raised by query results (String)
             verify_rows - verify values of returned results
             server_to_query - index of server to query (int)
-            type_query - "view" or "all_doc" (String)
         """
-        _task = MonitorViewQueryResultsTask(servers, design_doc_name, view_name,
-                 query, expected_docs, bucket, retries, error, verify_rows, server_to_query,
-                 type_query)
+        _task = MonitorViewQueryResultsTask(
+            servers, design_doc_name, view_name, query, expected_docs, bucket,
+            retries, error, verify_rows, server_to_query)
         self.task_manager.schedule(_task)
         return _task
 
