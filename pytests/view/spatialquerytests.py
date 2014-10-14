@@ -1,4 +1,3 @@
-import uuid
 import logger
 import time
 import unittest
@@ -20,7 +19,7 @@ class SpatialQueryTests(unittest.TestCase):
         self.helper.cleanup_cluster()
 
     def test_simple_dataset_limit_queries(self):
-        num_docs = self.helper.input.param("num-docs", 1000)
+        num_docs = self.helper.input.param("num-docs")
         self.log.info("description : Make limit queries on a simple "
                       "dataset with {0} docs".format(num_docs))
 
@@ -29,7 +28,7 @@ class SpatialQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_simple_dataset_skip_queries(self):
-        num_docs = self.helper.input.param("num-docs", 1000)
+        num_docs = self.helper.input.param("num-docs")
         self.log.info("description : Make skip (and limit) queries on a "
                       "simple dataset with {0} docs".format(num_docs))
 
@@ -38,7 +37,7 @@ class SpatialQueryTests(unittest.TestCase):
         self._query_test_init(data_set)
 
     def test_simple_dataset_bbox_queries(self):
-        num_docs = self.helper.input.param("num-docs", 1000)
+        num_docs = self.helper.input.param("num-docs")
         self.log.info("description : Make bounding box queries on a simple "
                       "dataset with {0} docs".format(num_docs))
 
@@ -120,7 +119,7 @@ class View:
         self.queries = queries
 
         if prefix is None:
-            prefix = str(uuid.uuid4())[:7]
+            prefix = ''
 
         self.name = name if name is not None else "dev_test_view-" + prefix
 
@@ -142,7 +141,7 @@ class SimpleDataSet:
         return [View(self.helper, self.num_docs, fn_str = view_fn)]
 
     def load(self):
-        prefix = str(uuid.uuid4())[:7]
+        prefix = 'simple-'
         inserted_keys = self.helper.insert_docs(self.num_docs, prefix)
         return inserted_keys
 

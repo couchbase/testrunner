@@ -88,6 +88,7 @@ class SpatialHelper:
     # only the keys
     def insert_docs(self, num_of_docs, prefix, extra_values={},
                     wait_for_persistence=True, return_docs=False):
+        random.seed(12345)
         rest = RestConnection(self.master)
         smart = VBucketAwareMemcached(rest, self.bucket)
         doc_names = []
