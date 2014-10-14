@@ -172,6 +172,26 @@ class ViewMergingTests(BaseTestCase):
         results = self.merged_query(self.map_view_name, {})
         self.verify_results_dev(results)
 
+    def test_view_startkey_endkey_validation(self):
+        """Regression test for MB-6591
+
+        This tests makes sure that the validation of startkey/endkey works
+        with view, which uses Unicode collation. Return results
+        when startkey is smaller than endkey. When endkey is smaller than
+        the startkey and exception should be raised. With Unicode collation
+        "foo" < "Foo", with raw collation "Foo" < "foo".
+        """
+        startkey = '"foo"'
+        endkey = '"Foo"'
+        params = {"startkey": startkey, "endkey": endkey}
+        results = self.merged_query(self.map_view_name, params)
+        self.assertTrue('rows' in results, "Results were returned")
+
+        # Flip startkey and endkey
+        params = {"startkey": endkey, "endkey": startkey}
+        self.assertRaises(Exception, self.merged_query, self.map_view_name,
+                          params)
+
     def calculate_matching_keys(self, params):
         keys = range(1, self.num_docs + 1)
         if 'descending' in params:
