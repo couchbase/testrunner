@@ -105,12 +105,8 @@ class SpatialRebalanceTests(unittest.TestCase):
                 [self.helper.master, server], False)
             # Docs with the same prefix are overwritten and not newly created
             prefix = str(uuid.uuid4())[:7]
-            inserted_keys.extend(self.helper.insert_docs(
-                    num_docs, prefix, wait_for_persistence=False))
+            inserted_keys.extend(self.helper.insert_docs(num_docs, prefix))
             self._wait_for_rebalance()
-
-        # Make sure data is persisted
-        self.helper.wait_for_persistence()
 
         # Verify that all documents got inserted
         self.helper.query_index_for_verification(design_name, inserted_keys)

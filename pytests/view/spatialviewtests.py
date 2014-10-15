@@ -39,7 +39,6 @@ class SpatialViewsTests(BaseTestCase):
             self.cluster.rebalance(self.servers[:], self.servers[1:], [])
         #load some items to verify
         self.docs = self.helper.insert_docs(self.num_items, 'spatial-doc',
-                                            wait_for_persistence=True,
                                             return_docs=True)
         self.num_ddoc = self.input.param('num-ddoc', 1)
         self.views_per_ddoc = self.input.param('views-per-ddoc', 1)
@@ -249,7 +248,7 @@ class SpatialViewsTests(BaseTestCase):
                              ddoc_to_compact.name, fragmentation_value, self.default_bucket_name)
         end_time = time.time() + self.wait_timeout * 30
         while fragmentation_monitor.state != "FINISHED" and end_time > time.time():
-            self.helper.insert_docs(self.num_items, 'spatial-doc', wait_for_persistence=True)
+            self.helper.insert_docs(self.num_items, 'spatial-doc')
 
         if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
             self.fail("impossible to reach compaction value after %s sec" % (self.wait_timeout * 20))
@@ -338,7 +337,6 @@ class SpatialViewQueriesTests(BaseTestCase):
             self.cluster.rebalance(self.servers[:], self.servers[1:], [])
         #load some items to verify
         self.docs = self.helper.insert_docs(self.num_items, 'spatial-doc',
-                                            wait_for_persistence=True,
                                             return_docs=True)
         self.ddocs = self.helper.create_default_views(
                                         is_one_ddoc=self.all_view_one_ddoc)
@@ -438,7 +436,7 @@ class SpatialViewQueriesTests(BaseTestCase):
         end_time = time.time() + self.wait_timeout * 30
         while fragmentation_monitor.state != "FINISHED" and end_time > time.time():
             self.docs = self.helper.insert_docs(self.num_items, 'spatial-doc',
-                                            wait_for_persistence=True, return_docs=True)
+                                                return_docs=True)
 
         if end_time < time.time() and fragmentation_monitor.state != "FINISHED":
             self.fail("impossible to reach compaction value after %s sec" % (self.wait_timeout * 20))
@@ -762,8 +760,8 @@ class SpatialViewTests(unittest.TestCase):
             fh = FailoverHelper(self.helper.servers, self)
 
             failover_nodes = fh.failover(1)
-            self.helper.query_index_for_verification(design_name, inserted_keys,
-                                                 wait_for_persistence=False)
+            self.helper.query_index_for_verification(design_name,
+                                                     inserted_keys)
 
             # The test cleanup expects all nodes running, hence spin the
             # full cluster up again
@@ -834,7 +832,7 @@ class InsertDataTillStopped(threading.Thread):
             i += 1
             prefix = self._prefix + "-{0}".format(i)
             self._last_inserted = self._helper.insert_docs(
-                self._num_docs, prefix, wait_for_persistence=False)
+                self._num_docs, prefix)
 
     def stop_insertion(self):
         self._stop_insertion = True

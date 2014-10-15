@@ -87,7 +87,7 @@ class SpatialHelper:
     # If `return_docs` is true, it'll return the full docs and not
     # only the keys
     def insert_docs(self, num_of_docs, prefix, extra_values={},
-                    wait_for_persistence=True, return_docs=False):
+                    return_docs=False):
         random.seed(12345)
         rest = RestConnection(self.master)
         smart = VBucketAwareMemcached(rest, self.bucket)
@@ -121,8 +121,6 @@ class SpatialHelper:
                             time.sleep(1)
                     else:
                         raise e
-        if wait_for_persistence:
-            self.wait_for_persistence()
         self.log.info("inserted {0} json documents".format(num_of_docs))
         return doc_names
 
@@ -256,8 +254,6 @@ class SpatialHelper:
                     raise
             doc_names.append(key)
 
-        self.wait_for_persistence(180)
-
         self.log.info("deleted {0} json documents".format(len(doc_names)))
         return doc_names
 
@@ -379,10 +375,7 @@ class SpatialHelper:
     # the keys that should be inserted, were really inserted (i.e. that
     # there might be additional keys returned)
     def query_index_for_verification(self, design_name, inserted,
-                                     full_docs=False,
-                                     wait_for_persistence=True):
-        if wait_for_persistence:
-            self.wait_for_persistence()
+                                     full_docs=False,):
         results = self.get_results(design_name, num_expected=len(inserted))
         result_keys = self.get_keys(results)
 
@@ -440,6 +433,3 @@ class SpatialHelper:
         for i in range(0, how_many):
             self.log.error("did not find key {0} in the spatial view results"
                            .format(keys_not_found[i]))
-
-    def wait_for_persistence(self, timeout=120):
-        RebalanceHelper.wait_for_persistence(self.master, self.bucket, timeout)
