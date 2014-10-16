@@ -573,6 +573,18 @@ class QueryTests(BaseTestCase):
             actual_result = sorted(actual_result['resultset'], key=lambda doc: (doc['name']))
             self._verify_results(actual_result, expected_result)
 
+    def test_meta_like(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT name FROM %s WHERE META(%s).id LIKE "query-test%"'  % (
+                                                                            bucket.name, bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'],
+                                   key=lambda doc: (doc['name']))
+            full_list = self._generate_full_docs_list(self.gens_load)
+            expected_result = [{"name" : doc['name']} for doc in full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result, expected_result)
+
     def test_meta_flags(self):
         for bucket in self.buckets:
             self.query = 'SELECT DISTINCT META(%s).flags as flags FROM %s'  % (
