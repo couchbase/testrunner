@@ -190,6 +190,20 @@ class JoinTests(QueryTests):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
+    def test_where_in_subquery(self):
+        for bucket in self.buckets:
+            self.query = "select name, tasks_ids from %s where tasks_ids[0] IN" % bucket.name +\
+            " (select ARRAY_AGG(DISTINCT task_name) as names from %s " % bucket.name +\
+            "keys %s where project='MB')[0].names" % ('["test_task-1", "test_task-2"]')
+            all_docs_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['resultset'])
+            expected_result = [{'name' : doc['name'],
+                                'tasks_ids' : doc['tasks_ids']}
+                               for doc in all_docs_list
+                               if doc['tasks_ids'] in ['test_task-1', 'test_task-2']]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
 ##############################################################################################
 #
 #   KEY
@@ -386,15 +400,15 @@ class JoinTests(QueryTests):
         start, end = 0, (28 + 1)
         template = '{{ "task_name":"{0}", "project": "{1}"}}'
         generators.append(DocumentGenerator("test_task", template,
-                                            ["test_task_%s" % i for i in xrange(0,10)],
+                                            ["test_task-%s" % i for i in xrange(0,10)],
                                             ["CB"],
                                             start=start, end=10))
         generators.append(DocumentGenerator("test_task", template,
-                                            ["test_task_%s" % i for i in xrange(10,20)],
+                                            ["test_task-%s" % i for i in xrange(10,20)],
                                             ["MB"],
                                             start=10, end=20))
         generators.append(DocumentGenerator("test_task", template,
-                                            ["test_task_%s" % i for i in xrange(20,end)],
+                                            ["test_task-%s" % i for i in xrange(20,end)],
                                             ["IT"],
                                             start=20, end=end))
         return generators
