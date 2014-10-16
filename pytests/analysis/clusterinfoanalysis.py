@@ -25,6 +25,18 @@ class DataAnalysisTests(BaseTestCase):
     def tearDown(self):
         super(DataAnalysisTests, self).tearDown()
 
+    def test_check_http_access_log(self):
+        """
+            Test to check http access log
+        """
+        rest = RestConnection(self.master)
+        log_path = rest.get_data_path().replace("data","logs")
+        remote_client = RemoteMachineShellConnection(self.master)
+        output = remote_client.read_remote_file(log_path, "http_access.log")
+        logic = self.verify_http_acesslog(output,[self.master.ip])
+        self.assertTrue(logic, "search string not present in http_access.log")
+
+
     def test_data_distribution(self):
         """
             Test to check for data distribution at vbucket level
@@ -227,6 +239,16 @@ class DataAnalysisTests(BaseTestCase):
         self.log.info(" Verification summary for comparing vbucket sequence numbers :: {0} ".format(summary))
         self.assertTrue(isNotSame, result)
         self.log.info(" End Verification for vbucket sequence numbers comparison ")
+
+    def verify_http_acesslog(self,logs=[],verification_string = []):
+        logic = True
+        for check_string in verification_string:
+            check_presence= False
+            for val in logs:
+                if check_string in val:
+                    check_presence = True
+            logic = logic and check_presence
+        return logic
 
     def compare_per_node_maps(self,map1):
         map = {}
