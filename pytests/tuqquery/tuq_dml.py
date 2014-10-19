@@ -238,6 +238,74 @@ class DMLQueryTests(QueryTests):
             self.assertEqual(actual_result['resultset']['actual'], current_docs - 1, 'Item was not deleted')
 
 ############################################################################################################################
+#
+# MERGE
+#
+############################################################################################################################
+
+    def test_merge_delete_match(self):
+        self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
+        keys, _ = self._insert_gen_keys(self.num_items)
+        self.query = 'MERGE INTO %s USING %s on key %s when matched then delete'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
+        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['resultset']['rows'], 0, 'Query was not run successfully')
+
+    def test_merge_delete_match_limit(self):
+        self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
+        keys, _ = self._insert_gen_keys(self.num_items)
+        self.query = 'MERGE INTO %s USING %s on key %s when matched then delete limit 1'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
+        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['resultset']['rows'], 0, 'Query was not run successfully')
+
+    def test_merge_delete_where_match(self):
+        self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
+        keys, _ = self._insert_gen_keys(self.num_items)
+        self.query = 'MERGE INTO %s USING %s on key %s when matched then delete where name LIKE "empl%"'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
+        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['resultset']['rows'], 0, 'Query was not run successfully')
+
+    def test_merge_update_match_set(self):
+        self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
+        keys, _ = self._insert_gen_keys(self.num_items)
+        new_name = 'edited'
+        self.query = 'MERGE INTO %s USING %s on key %s when matched then update set name="%s"'  % (self.buckets[0].name, self.buckets[1].name, keys[0], new_name)
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.query = 'SELECT name FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
+        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['resultset']['name'], new_name, 'Name was not updated')
+
+    def test_merge_update_match_unset(self):
+        self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
+        keys, _ = self._insert_gen_keys(self.num_items)
+        self.query = 'MERGE INTO %s USING %s on key %s when matched then update unset name'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.query = 'SELECT * as doc FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
+        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertTrue('name' not in actual_result['resultset']['doc'], 'Name was not unset')
+
+    def test_merge_not_match_insert(self):
+        self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
+        new_key = 'NEW'
+        self.query = 'MERGE INTO %s USING %s on key %s when not matched then insert into %s key "%s" VALUES %s'  % (
+                                                            self.buckets[0].name, self.buckets[1].name, new_key, self.buckets[0].name, new_key, '{"name": "new"}')
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, new_key)
+        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['resultset']['rows'], 1, 'Query was not run successfully')
+
+############################################################################################################################
 
     def _insert_gen_keys(self, num_docs):
         keys = values = []
