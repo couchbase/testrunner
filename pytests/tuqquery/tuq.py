@@ -150,6 +150,20 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['resultset'], expected_result)
 
+    def test_any_within(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, email FROM %s "  % (bucket.name) +\
+                         "WHERE ANY vm within %s.VMs SATISFIES vm.RAM = 5 END" % (
+                                                                      bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
+                               for doc in full_list
+                               if len([vm for vm in doc["VMs"]
+                                       if vm["RAM"] == 5]) > 0]
+            expected_result = sorted(expected_result)
+            self._verify_results(sorted(actual_result['resultset']), expected_result)
+
     def test_any_no_in_clause(self):
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
