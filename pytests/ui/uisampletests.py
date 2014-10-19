@@ -643,6 +643,12 @@ class ServerTestControls():
     def pending_rebalance_tab(self):
         return self.helper.find_control('server_nodes', 'pending_rebalance_tab')
 
+    def stop_rebalance_btn(self):
+        return self.helper.find_control('server_nodes', 'stop_rebalance_btn')
+
+    def common_rebalance_progress_bar(self):
+        return self.helper.find_control('server_nodes', 'common_rebalance_progress_bar')
+
     def add_server_dialog(self, parent='add_server_pop_up'):
         self.parent = parent
         self.add_server_pop_up = self.helper.find_control('server_nodes', 'add_server_pop_up')
@@ -738,6 +744,9 @@ class ServerTestControls():
         self.save_recovery_btn = self.helper.find_control('recovery_dialog', 'save_btn', parent_locator='dialog')
         self.cancel_recovery_btn = self.helper.find_control('recovery_dialog', 'cancel_btn', parent_locator='dialog')
         return self
+
+    def server_rows(self):
+        return self.helper.find_controls('server_info', 'server_rows')
 
 class BucketTestsControls():
     def __init__(self, driver):
@@ -1113,8 +1122,8 @@ class ServerHelper():
     def _is_btn_enabled(self, btn):
         return btn.get_attribute('class').find('disabled') == -1
 
-    def add(self, input):
-        self.tc.log.info("trying add server %s" % (input.param("add_server_ip", self.tc.servers[1].ip)))
+    def add(self, input, index=1):
+        self.tc.log.info("trying add server %s" % (input.param("add_server_ip", self.tc.servers[index].ip)))
         self.wait.until(lambda fn: self.controls.add_server_btn.is_displayed(),
                         "Add Server btn is not displayed in %d sec" % (self.wait._timeout))
         self.controls.add_server_btn.click()
