@@ -10,7 +10,7 @@ if [ -n $BUILD_CAUSE ]
 then
   if [ "$BUILD_CAUSE" = "UPSTREAMTRIGGER" ]
   then
-    echo "!!!!!it's downstream project but will use own parameters for ini_file, config_file, test_params, install_params, run_install, group"
+    echo "!!!!!it's downstream project but will use own parameters for ini_file, config_file, test_params, install_params, run_install, group, url"
     sudo pip install python-jenkins
     export ini_file=`$python_exe -c 'import sys;import jenkins; import os;import json; j = jenkins.Jenkins(os.environ["HUDSON_URL"]); paramDef=filter(None, j.get_job_info(os.environ["JOB_NAME"])["actions"])[0]["parameterDefinitions"]; [sys.stdout.write(p["defaultParameterValue"]["value"]) for p in paramDef if p["name"] == "ini_file"]'`
     export config_file=`$python_exe -c 'import sys;import jenkins; import os;import json; j = jenkins.Jenkins(os.environ["HUDSON_URL"]); paramDef=filter(None, j.get_job_info(os.environ["JOB_NAME"])["actions"])[0]["parameterDefinitions"]; [sys.stdout.write(p["defaultParameterValue"]["value"]) for p in paramDef if p["name"] == "config_file"]'`
@@ -18,6 +18,7 @@ then
     export install_params=`$python_exe -c 'import sys;import jenkins; import os;import json; j = jenkins.Jenkins(os.environ["HUDSON_URL"]); paramDef=filter(None, j.get_job_info(os.environ["JOB_NAME"])["actions"])[0]["parameterDefinitions"]; [sys.stdout.write(p["defaultParameterValue"]["value"]) for p in paramDef if p["name"] == "install_params"]'`
     export run_install=`$python_exe -c 'import sys;import jenkins; import os;import json; j = jenkins.Jenkins(os.environ["HUDSON_URL"]); paramDef=filter(None, j.get_job_info(os.environ["JOB_NAME"])["actions"])[0]["parameterDefinitions"]; [sys.stdout.write(p["defaultParameterValue"]["value"]) for p in paramDef if p["name"] == "run_install"]'`
     export group=`$python_exe -c 'import sys;import jenkins; import os;import json; j = jenkins.Jenkins(os.environ["HUDSON_URL"]); paramDef=filter(None, j.get_job_info(os.environ["JOB_NAME"])["actions"])[0]["parameterDefinitions"]; [sys.stdout.write(p["defaultParameterValue"]["value"]) for p in paramDef if p["name"] == "group"]'`
+    export url=`$python_exe -c 'import sys;import jenkins; import os;import json; j = jenkins.Jenkins(os.environ["HUDSON_URL"]); paramDef=filter(None, j.get_job_info(os.environ["JOB_NAME"])["actions"])[0]["parameterDefinitions"]; [sys.stdout.write(p["defaultParameterValue"]["value"]) for p in paramDef if p["name"] == "url"]'`
   elif [ "$BUILD_CAUSE" = "MANUALTRIGGER" ]
   then
     echo "WILL USE JOB's PARAMETERS:"
@@ -32,6 +33,11 @@ if [ -z "$install_params" ];
 then
 	echo "install_params not set! Will use default value: product=cb,parallel=True";
 	install_params="product=cb,parallel=True";
+fi
+
+if ! [ -z "$url" ];
+then
+    install_params+=",url="$url
 fi
 
 if [ -z "$group" ];
