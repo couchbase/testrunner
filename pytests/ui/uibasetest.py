@@ -162,6 +162,10 @@ class BaseUITestCase(unittest.TestCase):
                 self.shell.disconnect()
             self.cluster.shutdown()
 
+    def sleep(self, timeout=1, message=""):
+        self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
+        time.sleep(timeout)
+
 class Control():
     def __init__(self, selenium, by=None, web_element=None):
         self.selenium = selenium

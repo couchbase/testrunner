@@ -648,6 +648,11 @@ class ServerTestControls():
                                                                parent_locator='confirm_server_addition')
         return self
 
+    def remove_server_dialog(self, parent='remove_server_pop_up'):
+        self.remove_server_pop_up = self.helper.find_control('server_nodes', 'remove_server_pop_up')
+        self.remove_diag_btn = self.helper.find_control('server_nodes', 'remove_btn_diag', parent_locator=parent)
+        return self
+
     def server_row_controls(self):
         self.failover_btns = self.helper.find_controls('server_nodes','failover_btn')
         self.remove_btns = self.helper.find_controls('server_nodes','remove_btn')
@@ -1118,6 +1123,38 @@ class ServerHelper():
                             "Add server pop up is not closed in %d sec" % self.wait._timeout)
         self.tc.log.info("added server %s" % (self.tc.servers[1].ip))
 
+    def remove_node(self, ip=None):
+        if not ip:
+            ip = self.tc.servers[1].ip
+        rows = self.controls.server_rows()
+        ind = row_num = 0
+        for row in rows:
+            row_num += 1
+            for i in xrange(5):
+                try:
+                    rows = self.controls.server_rows()
+                    if row.get_text().find(str(ip)) != -1:
+                        ind = row_num
+                        break
+                    else:
+                        break
+                except:
+                    pass
+            if ind > 0:
+                break
+        self.tc.assertTrue(ind != 0, 'row is not found')
+        self.controls.server_row_controls().remove_btns[ind - 1].click()
+        self.wait.until(lambda fn:
+                            self.controls.remove_server_dialog().remove_server_pop_up.is_displayed(),
+                            "Remove server pop up is closed in %d sec" % self.wait._timeout)
+        self.wait.until(lambda fn:
+                            self.controls.remove_server_dialog().remove_diag_btn.is_displayed(),
+                            "Remove server pop up is closed in %d sec" % self.wait._timeout)
+        self.controls.remove_server_dialog().remove_diag_btn.click()
+        self.wait.until_not(lambda fn:
+                            self.controls.remove_server_dialog().remove_server_pop_up.is_displayed(),
+                            "Remove server pop up is not closed in %d sec" % self.wait._timeout)
+
     def fill_server_info(self, input):
         self.controls.add_server_dialog().ip_address.type(input.param("add_server_ip", self.tc.servers[1].ip))
         self.controls.add_server_dialog().username.type(input.membase_settings.rest_username)
@@ -1130,13 +1167,29 @@ class ServerHelper():
         time.sleep(5)
         self.tc.log.info("Cluster rebalanced")
 
-    def start_rebalancing(self):
-        self.wait.until(lambda fn: self.controls.num_pend_rebalance.is_displayed(),
-                        "Number of pending rebalance servers is not displayed in %d sec" % (self.wait._timeout))
+    def start_rebalancing(self, without_pending=False):
+        if not without_pending:
+            self.wait.until(lambda fn: self.controls.num_pend_rebalance.is_displayed(),
+                            "Number of pending rebalance servers is not displayed in %d sec" % (self.wait._timeout))
         self.wait.until(lambda fn: self._is_btn_enabled(self.controls.rebalance_btn),
                         "Rebalance btn is not enabled in %d sec" % (self.wait._timeout))
         self.controls.rebalance_btn.click()
         self.tc.log.info("Start rebalancing")
+
+    def wait_for_rebalance_stops(self, timeout=None):
+        self.wait._timeout = timeout or self.wait._timeout * 500
+        self.wait.until(lambda fn: not self.controls.common_rebalance_progress_bar().is_displayed(),
+                        "Rebalance progress bar is displayed in %d sec" % (timeout or self.wait._timeout * 500))
+        self.wait._timeout = timeout or self.wait._timeout * 10
+        self.wait.until(lambda fn: not self.controls.stop_rebalance_btn().is_displayed(),
+                        "Stop rebalance is displayed in %d sec" % (timeout or self.wait._timeout * 10))
+        self.tc.log.info("Rebalance is stopped")
+
+    def stop_rebalance(self):
+        self.controls.stop_rebalance_btn().click()
+
+    def get_number_server_rows(self):
+        return len(self.controls.server_rows())
 
     def open_server_stats(self, server):
         self.tc.log.info("Open stats for server % s" % server.ip)
