@@ -180,8 +180,8 @@ class HostnameMgmtTests(HostnameBaseTests):
         nodes = []
         for failover_node in failover_nodes:
             nodes.extend([node for node in nodes_all
-                if node.ip != failover_node.ip or str(node.port) != failover_node.port])
-        self.cluster.failover(self.servers, failover_nodes)
+                if node.ip == failover_node.hostname and str(node.port) == failover_node.port])
+        self.cluster.failover(self.servers, failover_nodes, use_hostnames=True)
         self.verify_referenced_by_names(self.servers[:self.nodes_in + failover_factor + 1], hostnames)
         for node in nodes:
             rest.add_back_node(node.id)

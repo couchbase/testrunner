@@ -52,7 +52,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_failover(self, servers=[], failover_nodes=[], graceful=False):
+    def async_failover(self, servers=[], failover_nodes=[], graceful=False, use_hostnames=False):
         """Asynchronously failover a set of nodes
 
         Parameters:
@@ -62,7 +62,7 @@ class Cluster(object):
 
         Returns:
             FailOverTask - A task future that is a handle to the scheduled task."""
-        _task = FailoverTask(servers, to_failover = failover_nodes, graceful = graceful)
+        _task = FailoverTask(servers, to_failover = failover_nodes, graceful = graceful, use_hostnames=use_hostnames)
         self.task_manager.schedule(_task)
         return _task
 
@@ -706,7 +706,7 @@ class Cluster(object):
         _task = self.async_compact_view(server, design_doc_name, bucket, with_rebalance)
         return _task.result(timeout)
 
-    def failover(self, servers=[], failover_nodes=[], graceful=False):
+    def failover(self, servers=[], failover_nodes=[], graceful=False, use_hostnames=False):
         """Synchronously flushes a bucket
 
         Parameters:
@@ -716,7 +716,7 @@ class Cluster(object):
 
         Returns:
             boolean - Whether or not the bucket was flushed."""
-        _task = self.async_failover(servers, failover_nodes, graceful)
+        _task = self.async_failover(servers, failover_nodes, graceful, use_hostnames)
         return _task.result()
 
     def async_bucket_flush(self, server, bucket='default'):
