@@ -19,7 +19,7 @@ class FailoverBaseTest(BaseTestCase):
         self.failoverMaster = self.input.param("failoverMaster", False)
         self.total_vbuckets = self.input.param("total_vbuckets", 1024)
         self.compact = self.input.param("compact", False)
-        self.std_vbucket_dist = self.input.param("std_vbucket_dist", None)
+        self.std_vbucket_dist = self.input.param("std_vbucket_dist", 20)
         self.withMutationOps = self.input.param("withMutationOps", False)
         self.withViewsOps = self.input.param("withViewsOps", False)
         self.createIndexesDuringFailover = self.input.param("createIndexesDuringFailover", False)

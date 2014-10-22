@@ -182,7 +182,7 @@ class FailoverTests(FailoverBaseTest):
         # Verify Active and Replica Bucket Count
         if self.num_replicas > 0:
             nodes = self.get_nodes_in_cluster(self.master)
-            self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 5.0 , total_vbuckets = self.total_vbuckets)
+            self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 20.0 , total_vbuckets = self.total_vbuckets)
         self.log.info("End VERIFICATION for Rebalance after Failover Only")
 
     def run_add_back_operation_and_verify(self, chosen, prev_vbucket_stats, record_static_data_set, prev_failover_stats):
@@ -257,7 +257,7 @@ class FailoverTests(FailoverBaseTest):
         # Verify Active and Replica Bucket Count
         if self.num_replicas > 0:
             nodes = self.get_nodes_in_cluster(self.master)
-            self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 5.0 , total_vbuckets = self.total_vbuckets)
+            self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 20.0 , total_vbuckets = self.total_vbuckets)
 
         self.log.info("End VERIFICATION for Add-back and rebalance")
 
@@ -354,7 +354,7 @@ class FailoverTests(FailoverBaseTest):
         # Verify Active and Replica Bucket Count
         if self.num_replicas > 0:
             nodes = self.filter_servers(self.servers,chosen)
-            self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 5.0 , total_vbuckets = self.total_vbuckets, type = "failover", graceful = (self.graceful and graceful_failover) )
+            self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 20.0 , total_vbuckets = self.total_vbuckets, type = "failover", graceful = (self.graceful and graceful_failover) )
 
     def run_failover_operations_with_ops(self, chosen, failover_reason):
         """ Method to run fail over operations used in the test scenario based on failover reason """
@@ -480,6 +480,9 @@ class FailoverTests(FailoverBaseTest):
         logic = True
         for server in self.chosen:
             shell = RemoteMachineShellConnection(serverMap[server.ip])
+            os_type = shell.extract_remote_info()
+            if os_type.type.lower() == 'windows':
+                return
             for bucket in buckets:
                 path = fileMap[server.ip][bucket.name]
                 exists = shell.file_exists(path,"check.txt")
