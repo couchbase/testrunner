@@ -420,7 +420,7 @@ class FailoverTests(FailoverBaseTest):
         """ Method to run operations Update/Delete/Create """
         # Load All Buckets if num_items > 0
         tasks = []
-        tasks += self._async_load_all_buckets(self.master, self.gen_initial_create, "create", 0, batch_size=20000)
+        tasks += self._async_load_all_buckets(self.master, self.gen_initial_create, "create", 0, flag = 2, batch_size=20000)
         for task in tasks:
             task.result()
         self._wait_for_stats_all_buckets(self.servers)
