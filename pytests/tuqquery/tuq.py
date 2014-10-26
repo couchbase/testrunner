@@ -125,6 +125,10 @@ class QueryTests(BaseTestCase):
                                      (doc['task1'], doc['task2']))
             self._verify_results(actual_result, expected_result)
 
+    def test_all_negative(self):
+        queries_errors = {'SELECT ALL * FROM %s' : 'Parse Error - syntax error'}
+        self.negative_common_body(queries_errors)
+
     def test_distinct_negative(self):
         queries_errors = {'SELECT name FROM {0} ORDER BY DISTINCT name' : 'syntax error',
                           'SELECT name FROM {0} GROUP BY DISTINCT name' : 'syntax error',
@@ -215,6 +219,13 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['results'], expected_result)
 
+    def test_satisfy_negative(self):
+        queries_errors = {'SELECT name FROM %s WHERE ANY x IN 123 SATISFIES job_title = x END' : 'Parse Error - syntax error',
+                          'SELECT name FROM %s WHERE ANY x IN ["Sales"] SATISFIES job_title = x' : 'Parse Error - syntax error',
+                          'SELECT job_title FROM %s WHERE ANY job_title IN ["Sales"] SATISFIES job_title = job_title END' : 'Parse Error - syntax error',
+                          'SELECT job_title FROM %s WHERE EVERY ANY x IN ["Sales"] SATISFIES x = job_title END' : 'Parse Error - syntax error'}
+        self.negative_common_body(queries_errors)
+
     def test_array(self):
         for bucket in self.buckets:
             self.query = "SELECT ARRAY vm.memory FOR vm IN VMs END AS vm_memories" +\
@@ -226,6 +237,13 @@ class QueryTests(BaseTestCase):
                                for doc in full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['vm_memories']))
             self._verify_results(actual_result, expected_result)
+
+    def test_arrays_negative(self):
+        queries_errors = {'SELECT ARRAY vm.memory FOR vm IN 123 END AS vm_memories FROM %s' : 'Parse Error - syntax error',
+                          'SELECT job_title, array_agg(name)[:5] as names FROM %s' : 'Parse Error - syntax error',
+                          'SELECT job_title, array_agg(name)[-20:-5] as names FROM %s' : 'Parse Error - syntax error',
+                          'SELECT job_title, array_agg(name)[a:-b] as names FROM %s' : 'Parse Error - syntax error'}
+        self.negative_common_body(queries_errors)
 
     def test_slicing(self):
         for bucket in self.buckets:
@@ -389,6 +407,11 @@ class QueryTests(BaseTestCase):
                                if not(doc["join_mo"] >= 1 and doc["join_mo"] <= 6)]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['results'], expected_result)
+
+    def test_between_negative(self):
+        queries_errors = {'SELECT name FROM %s WHERE join_mo BETWEEN 1 AND -10 ORDER BY name' : 'Parse Error - syntax error',
+                          'SELECT name FROM %s WHERE join_mo BETWEEN 1 AND a ORDER BY name' : 'Parse Error - syntax error'}
+        self.negative_common_body(queries_errors)
 
 ##############################################################################################
 #
@@ -624,6 +647,10 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))
             self._verify_results(actual_result, expected_result)
 
+    def test_meta_negative(self):
+        queries_errors = {'SELECT distinct name FROM %s WHERE META().type = "json"' : 'Parse Error - syntax error'}
+        self.negative_common_body(queries_errors)
+
     def test_length(self):
         for bucket in self.buckets:
             self.query = 'Select name, email from %s where LENGTH(job_title) = 5'  % (
@@ -766,6 +793,13 @@ class QueryTests(BaseTestCase):
                                             doc['job_title'] == 'Sales'] ) < 100000]
             expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
             self._verify_results(actual_result, expected_result)
+
+    def test_sum_negative(self):
+        queries_errors = {'SELECT join_mo, SUM(job_title) as rate FROM %s as employees' +\
+                          ' WHERE job_title="Sales" GROUP BY join_mo' : 'Parse Error - syntax error',
+                          'SELECT join_mo, SUM(VMs) as rate FROM %s as employees' +\
+                          ' WHERE job_title="Sales" GROUP BY join_mo' : 'Parse Error - syntax error'}
+        self.negative_common_body(queries_errors)
 
     def test_avg(self):
         for bucket in self.buckets:
@@ -2121,6 +2155,13 @@ class QueryTests(BaseTestCase):
 #
 #   String FUNCTIONS
 ##############################################################################################
+
+    def test_string_fn_negative(self):
+        queries_errors = {'select name from %s when contains(VMs, "Sale")' : 'Parse Error - syntax error',
+                          'select TITLE(test_rate) as OS from %s' : 'Parse Error - syntax error',
+                          'select REPEAT(name, -2) as name from %s' : 'Parse Error - syntax error',
+                          'select REPEAT(name, a) as name from %s' : 'Parse Error - syntax error',}
+        self.negative_common_body(queries_errors)
 
     def test_contains(self):
         for bucket in self.buckets:

@@ -1,7 +1,10 @@
 import copy
 import base64
+import testconstants
 from tuqquery.tuq import QueryTests
+from remote.remote_util import RemoteMachineShellConnection
 from couchbase.documentgenerator import Base64Generator
+from membase.api.exception import CBQError
 
 class Base64Tests(QueryTests):
     def setUp(self):
@@ -28,6 +31,31 @@ class Base64Tests(QueryTests):
             actual_result = [doc["$1"] for doc in actual_result['results']]
             expected_result = self._generate_full_docs_list(self.gens_load)
             self._verify_results(actual_result, expected_result)
+
+    def test_negative_value(self):
+        # tuq should not crash after error
+        for bucket in self.buckets:
+            self.query = "select BASE64_VALUE() from %s" % (bucket.name)
+            try:
+                self.run_cbq_query()
+            except CBQError:
+                shell = RemoteMachineShellConnection(self.master)
+                output = shell.execute_command('ps -aef | grep cbq')
+                if ' '.join(output).find('cbq-engine') == -1:
+                    os = self.shell.extract_remote_info().type.lower()
+                    if os != 'windows':
+                        gopath = testconstants.LINUX_GOPATH
+                    else:
+                        gopath = testconstants.WINDOWS_GOPATH
+                    if self.input.tuq_client and "gopath" in self.input.tuq_client:
+                        gopath = self.input.tuq_client["gopath"]
+                    output = shell.execute_command('tail -10 %s/src/github.com/couchbaselabs/query/n1ql.log' % gopath)
+                    self.log.info('LAST LOG CBQ_ENGINE')
+                    self.log.info(output)
+                    self.fail('Cbq-engine is crashed')
+                self.log.info('Error appeared as expected')
+            else:
+                self.fail('Error expected but not appeared')
 
     def generate_docs(self, name="tuq", start=0, end=0):
         if end==0:
