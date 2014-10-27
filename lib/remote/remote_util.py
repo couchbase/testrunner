@@ -13,6 +13,7 @@ from testconstants import COUCHBASE_VERSIONS
 from testconstants import MISSING_UBUNTU_LIB
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import WIN_CB_VERSION_3
+from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 
 
@@ -86,6 +87,7 @@ class RemoteMachineHelper(object):
             self.remote_shell.info = self.remote_shell.extract_remote_info()
 
         if self.remote_shell.info.type.lower() == 'windows':
+             print "process name in is process running ", process_name
              output, error = self.remote_shell.execute_command('tasklist| grep {0}'.format(process_name), debug=False)
              if error or output == [""] or output == []:
                  return None
@@ -475,12 +477,36 @@ class RemoteMachineShellConnection:
             self.execute_command('taskkill /F /T /IM WerFault.*')
             self.execute_command('taskkill /F /T /IM memcached.exe')
             self.execute_command('taskkill /F /T /IM bash.exe')
-            output, error = self.execute_command("rm -rf /cygdrive/c/automation/setup.exe")
-            self.log_command_output(output, error)
-            output, error = self.execute_command(
-                 "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O setup.exe';ls -lh;".format(url))
-            self.log_command_output(output, error)
-            return self.file_exists('/cygdrive/c/tmp/', 'setup.exe')
+            self.disable_firewall()
+            remove_words = ["-rel", ".exe"]
+            for word in remove_words:
+                filename = filename.replace(word, "")
+            tmp = filename.split("-")
+            print "tmp at split filename", tmp
+            tmp.reverse()
+            print "tmp at reverse", tmp
+            version = tmp[1] + "-" + tmp[0]
+            print version
+            #filename = filename.replace(".exe", "")
+            exist = self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
+            if not exist:
+                output, error = self.execute_command(
+                     "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q \
+                                                     {0} -O {1}.exe';ls -lh;".format(url, version))
+                self.log_command_output(output, error)
+                return self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
+            else:
+                log.info('File {0}.exe exist in tmp directory'.format(version))
+                return True
+
+
+
+#            output, error = self.execute_command("rm -rf /cygdrive/c/automation/setup.exe")
+#            self.log_command_output(output, error)
+#            output, error = self.execute_command(
+#                 "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q {0} -O setup.exe';ls -lh;".format(url))
+#            self.log_command_output(output, error)
+            #return self.file_exists('/cygdrive/c/tmp/', 'setup.exe')
         elif self.info.distribution_type.lower() == 'mac':
             output, error = self.execute_command('cd ~/Downloads ; rm -rf couchbase-server* ; rm -rf Couchbase\ Server.app ; curl -O {0}'.format(url))
             self.log_command_output(output, error)
@@ -835,8 +861,8 @@ class RemoteMachineShellConnection:
             name = name.strip()
             version = version.strip()
             if task == "upgrade":
-                content = 'c:\\tmp\setup.exe /s -f1c:\\automation\{0}_{1}_{2}.iss'.format(name,
-                                                                         product_version, task)
+                content = 'c:\\tmp\{3}.exe /s -f1c:\\automation\{0}_{1}_{2}.iss'.format(name,
+                                                                         product_version, task, version)
             else:
                 content = 'c:\\tmp\{0}.exe /s -f1c:\\automation\{1}.iss'.format(version, task)
             log.info("create {0} task with content:{1}".format(task, content))
@@ -884,7 +910,8 @@ class RemoteMachineShellConnection:
         log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
         command = ''
         if self.info.type.lower() == 'windows':
-                self.membase_upgrade_win(self.info.architecture_type, self.info.windows_name, build.name)
+                print "build name in membase upgrade    ", build.product_version
+                self.membase_upgrade_win(self.info.architecture_type, self.info.windows_name, build.product_version)
                 log.info('********* continue upgrade process **********')
 
         elif self.info.deliverable_type == 'rpm':
@@ -910,18 +937,53 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
+    def couchbase_upgrade(self, build, save_upgrade_config=False, forcefully=False):
+        # upgrade couchbase server
+        self.extract_remote_info()
+        log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
+        log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
+        command = ''
+        if self.info.type.lower() == 'windows':
+                print "build name in couchbase upgrade    ", build.product_version
+                self.couchbase_upgrade_win(self.info.architecture_type, self.info.windows_name, build.product_version)
+                log.info('********* continue upgrade process **********')
+
+        elif self.info.deliverable_type == 'rpm':
+            # run rpm -i to install
+            if save_upgrade_config:
+                self.couchbase_uninstall(save_upgrade_config=save_upgrade_config)
+                install_command = 'rpm -i /tmp/{0}'.format(build.name)
+                command = 'INSTALL_UPGRADE_CONFIG_DIR=/opt/couchbase/var/lib/membase/config {0}'.format(install_command)
+            else:
+                command = 'rpm -U /tmp/{0}'.format(build.name)
+                if forcefully:
+                    command = 'rpm -U --force /tmp/{0}'.format(build.name)
+        elif self.info.deliverable_type == 'deb':
+            if save_upgrade_config:
+                self.couchbase_uninstall(save_upgrade_config=save_upgrade_config)
+                install_command = 'dpkg -i /tmp/{0}'.format(build.name)
+                command = 'INSTALL_UPGRADE_CONFIG_DIR=/opt/couchbase/var/lib/membase/config {0}'.format(install_command)
+            else:
+                command = 'dpkg -i /tmp/{0}'.format(build.name)
+                if forcefully:
+                    command = 'dpkg -i --force /tmp/{0}'.format(build.name)
+        output, error = self.execute_command(command, use_channel=True)
+        self.log_command_output(output, error)
+        return output, error
+
     def membase_upgrade_win(self, architecture, windows_name, version):
         task = "upgrade"
         bat_file = "upgrade.bat"
         version_file = "VERSION.txt"
-        if version[:5] in WIN_CB_VERSION_3:
+        print "version in membase upgrade windows ", version
+        if version[:5] in COUCHBASE_VERSION_3:
             version_file = "README.txt"
         deleted = False
         self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb', version, task)
         self.stop_schedule_tasks()
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
         log.info("version to upgrade: {0}".format(output))
-        self.info('before running task schedule upgrademe')
+        log.info('before running task schedule upgrademe')
         if '1.8.0' in str(output):
             # run installer in second time as workaround for upgrade 1.8.0 only:
             # Installer needs to update registry value in order to upgrade from the previous version.
@@ -942,7 +1004,68 @@ class RemoteMachineShellConnection:
         self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
         log.info("installed version:")
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
-        time.sleep(60, "wait for server to start up completely")
+        """   """
+        windows_process = full_version[:10]
+        self.sleep(60, "wait for server to start up completely")
+        ct = time.time()
+        while time.time() - ct < 10800:
+            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V| findstr Status ")
+            if "Ready" in str(output):
+                log.info("upgrademe task complteted")
+                break
+            elif "Could not start":
+                log.exception("Ugrade failed!!!")
+                break
+            else:
+                log.info("upgrademe task still running:{0}".format(output))
+                self.sleep(30)
+        output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
+        self.log_command_output(output, error)
+
+    def couchbase_upgrade_win(self, architecture, windows_name, version):
+        task = "upgrade"
+        bat_file = "upgrade.bat"
+        version_file = "VERSION.txt"
+        print "version in couchbase upgrade windows ", version
+        if version[:5] in COUCHBASE_VERSION_3:
+            version_file = "README.txt"
+        deleted = False
+        self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb', version, task)
+        self.stop_schedule_tasks()
+        output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
+        log.info("version to upgrade: {0}".format(output))
+        log.info('before running task schedule upgrademe')
+        if '1.8.0' in str(output):
+            # run installer in second time as workaround for upgrade 1.8.0 only:
+            # Installer needs to update registry value in order to upgrade from the previous version.
+            # Please run installer again to continue."""
+            output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
+            self.log_command_output(output, error)
+            self.sleep(200, "because upgrade version is {0}".format(output))
+            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
+            self.log_command_output(output, error)
+            self.stop_schedule_tasks()
+        # run task schedule to upgrade Membase server
+        output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
+        self.log_command_output(output, error)
+        deleted = self.wait_till_file_deleted(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
+        if not deleted:
+            log.error("Uninstall was failed at node {0}".format(self.ip))
+            sys.exit()
+        self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
+        log.info("installed version:")
+        output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
+        """   """
+        windows_process = version[:10]
+
+        print windows_process
+        output, error = self.execute_command("tasklist")
+        self.log_command_output(output, error)
+        self.sleep(5)
+        output, error = self.execute_command("tasklist | grep {0}".format(version[:10]))
+        self.log_command_output(output, error)
+        print "is uninstall running    ", RemoteMachineHelper(self).is_process_running('windows_process')
+        self.sleep(60, "wait for server to start up completely")
         ct = time.time()
         while time.time() - ct < 10800:
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V| findstr Status ")
@@ -989,6 +1112,9 @@ class RemoteMachineShellConnection:
                                           timeout_in_seconds=600)
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
             self.log_command_output(output, error)
+            output, error = self.execute_command("tasklist | grep {0}".format(build.product_version[:5]))
+            self.log_command_output(output, error)
+
             # output, error = self.execute_command("cmd rm /cygdrive/c/tmp/{0}*.exe".format(build_name))
             # self.log_command_output(output, error)
         elif self.info.deliverable_type in ["rpm", "deb"]:
@@ -1107,6 +1233,10 @@ class RemoteMachineShellConnection:
             if build.product_version[:5] in WIN_CB_VERSION_3:
                 file_check = "README.txt"
             self.wait_till_file_added(remote_path, file_check, timeout_in_seconds=600)
+            print version
+            self.sleep(5)
+            output, error = self.execute_command("tasklist | grep {0}".format(version[:10]))
+            self.log_command_output(output, error)
             self.sleep(60, "wait for server to start up completely")
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
             self.log_command_output(output, error)
@@ -1222,12 +1352,14 @@ class RemoteMachineShellConnection:
                 log.info('Check if {0} is in tmp directory on {1} server'.format(build_name, self.ip))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
                 if not exist:  # if not exist in tmp dir, start to download that version build
+                    print "going into hererer  ********"
                     builds, changes = query.get_all_builds(version=full_version, \
                                       deliverable_type=self.info.deliverable_type, \
                                       architecture_type=self.info.architecture_type, \
-                                      edition_type=product_name, \
-                                      repo=MV_LATESTBUILD_REPO)
-                    build = query.find_build(builds, product_name, os_type, self.info.architecture_type, full_version)
+                                      edition_type=product_name, repo=MV_LATESTBUILD_REPO, \
+                                      distribution_version=self.info.distribution_version.lower())
+                    build = query.find_build(builds, product_name, os_type, self.info.architecture_type, \
+                                      full_version, distribution_version=self.info.distribution_version.lower())
                     downloaded = self.download_binary_in_win(build.url, short_version)
                     if downloaded:
                         log.info('Successful download {0}.exe on {1} server'.format(short_version, self.ip))
@@ -1249,6 +1381,11 @@ class RemoteMachineShellConnection:
                 """ end remove code """
 
                 time.sleep(5)
+                print "full version build:   " , full_version
+                print "short version build:   " , short_version
+                print "full version with exe   ", full_version[:10] + ".exe"
+                windows_process = full_version[:10]
+
                 # run schedule task uninstall couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
@@ -1258,6 +1395,13 @@ class RemoteMachineShellConnection:
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
+                output, error = self.execute_command("tasklist")
+                self.log_command_output(output, error)
+                self.sleep(5)
+                output, error = self.execute_command("tasklist | grep {0}".format(full_version[:10]))
+                self.log_command_output(output, error)
+                print windows_process
+                print "is uninstall running    ", RemoteMachineHelper(self).is_process_running('windows_process')
                 self.sleep(60, "next step is to install")
                 output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
                 self.log_command_output(output, error)
@@ -1269,9 +1413,12 @@ class RemoteMachineShellConnection:
                 output, error = self.kill_erlang(os="windows")
                 self.log_command_output(output, error)
                 """ end remove code """
+                print "running uninstall now.....%%%%%"
+
 
                 """ the code below need to remove when bug MB-11985 is fixed in 3.0.1 """
-                if full_version[:5] in COUCHBASE_VERSION_3:
+                if full_version[:5] in COUCHBASE_VERSION_2 or \
+                   full_version[:5] in COUCHBASE_VERSION_3:
                     log.info("due to bug MB-11985, we need to delete below registry")
                     output, error = self.execute_command("reg delete \
                                'HKLM\Software\Wow6432Node\Ericsson\Erlang\ErlSrv' /f ")
@@ -1357,6 +1504,10 @@ class RemoteMachineShellConnection:
             if not deleted:
                 log.error("Uninstall was failed at node {0}".format(self.ip))
                 sys.exit()
+            self.sleep(3)
+            output, error = self.execute_command("tasklist | grep {0}".format(build_name[:5]))
+            self.log_command_output(output, error)
+
             self.sleep(15, "next step is to install")
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
             self.log_command_output(output, error)
