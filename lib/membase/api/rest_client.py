@@ -2037,7 +2037,10 @@ class RestConnection(object):
         log.info('query params : {0}'.format(params))
         api = "http://%s:8093/query?%s" % (self.ip, params)
         status, content, header = self._http_request(api, 'GET', timeout=timeout)
-        return json.loads(content)
+        try:
+            return json.loads(content)
+        except ValueError:
+            return content
 
     # return all rack/zone info
     def get_all_zones_info(self, timeout=120):
