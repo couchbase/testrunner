@@ -18,38 +18,38 @@ class SysCatalogTests(QueryTests):
         super(SysCatalogTests, self).suite_tearDown()
 
     def test_sites(self):
-        self.query = "SELECT * FROM :system.sites"
+        self.query = "SELECT * FROM :system.stores"
         result = self.run_cbq_query()
         host = ('localhost', self.input.tuq_client)[self.input.tuq_client and "client" in self.input.tuq_client]
-        for res in result['results']:
-            self.assertEqual(res['id'], res['url'],
+        for res in result['resultset']:
+            self.assertEqual(res['stores']['id'], res['stores']['url'],
                              "Id and url don't match")
-            self.assertTrue(res['url'].find(host) != -1,
+            self.assertTrue(res['stores']['url'].find(host) != -1,
                             "Expected: %s, actual: %s" % (host, result))
 
     def test_pools(self):
-        self.query = "SELECT * FROM :system.pools"
+        self.query = "SELECT * FROM system:namespaces"
         result = self.run_cbq_query()
 
         host = ('localhost', self.input.tuq_client)[self.input.tuq_client and "client" in self.input.tuq_client]
-        for res in result['results']:
-            self.assertEqual(res['id'], res['name'],
+        for res in result['resultset']:
+            self.assertEqual(res['namespaces']['id'], res['namespaces']['name'],
                         "Id and url don't match")
-            self.assertTrue(res['site_id'].find(host) != -1,
+            self.assertTrue(res['namespaces']['store_id'].find(host) != -1,
                             "Expected: %s, actual: %s" % (host, result))
 
     def test_buckets(self):
-        self.query = "SELECT * FROM :system.buckets"
+        self.query = "SELECT * FROM system:keyspaces"
         result = self.run_cbq_query()
         buckets = [bucket.name for bucket in self.buckets]
-        self.assertFalse(set(buckets) - set([b['id'] for b in result['results']]),
+        self.assertFalse(set(buckets) - set([b['keyspaces']['id'] for b in result['resultset']]),
                         "Expected ids: %s. Actual result: %s" % (buckets, result))
         self.assertFalse(set(buckets) - set([b['name'] for b in result['results']]),
                         "Expected names: %s. Actual result: %s" % (buckets, result))
-        pools = self.run_cbq_query(query='SELECT * FROM :system.pools')
-        self.assertFalse(set([b['pool_id'] for b in result['results']]) -\
-                        set([p['id'] for p in pools['results']]),
+        pools = self.run_cbq_query(query='SELECT * FROM system:namespaces')
+        self.assertFalse(set([b['keyspaces']['namespace_id'] for b in result['resultset']]) -\
+                        set([p['namespaces']['id'] for p in pools['resultset']]),
                         "Expected pools: %s, actual: %s" % (pools, result))
-        self.assertFalse(set([b['site_id'] for b in result['results']]) -\
-                        set([p['site_id'] for p in pools['results']]),
+        self.assertFalse(set([b['keyspaces']['store_id'] for b in result['resultset']]) -\
+                        set([p['keyspaces']['store_id'] for p in pools['resultset']]),
                         "Expected site_ids: %s, actual: %s" % (pools, result))
