@@ -586,7 +586,8 @@ class RestConnection(object):
                 api += "?"
             num_params += 1
 
-            if param in ["key", "startkey", "endkey"] or isinstance(params[param], bool):
+            if param in ["key", "startkey", "endkey", "start_range",
+                         "end_range"] or isinstance(params[param], bool):
                 api += "{0}={1}".format(param,
                                         json.dumps(params[param],
                                                    separators=(',',':')))

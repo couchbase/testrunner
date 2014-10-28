@@ -45,6 +45,15 @@ class SpatialQueryTests(unittest.TestCase):
         data_set.add_bbox_queries()
         self._query_test_init(data_set)
 
+    def test_simple_dataset_range_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Make range queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_range_queries()
+        self._query_test_init(data_set)
+
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
@@ -181,11 +190,31 @@ class SimpleDataSet:
                                     {"bbox": "-117,-5,34,43"}]),
                 ]
 
+    def add_range_queries(self):
+        for view in self.views:
+            view.queries += [
+                QueryHelper(
+                    {"start_range": [-180, -90], "end_range": [180, 90]},
+                    view.index_size),
+                QueryHelper(
+                    {"start_range": [-900, -900], "end_range": [900, 900]},
+                    view.index_size),
+                QueryCompareHelper([{"start_range": [-900, -900],
+                                     "end_range": [900, 900]}],
+                                   [{}]),
+                QueryCompareHelper([{"start_range": [-117, -76],
+                                     "end_range": [34, 43]}],
+                                   [{"start_range": [-117, -76],
+                                     "end_range": [34, -5]},
+                                    {"start_range": [-117, -5],
+                                     "end_range": [34, 43]}])
+                ]
+
     def add_all_query_sets(self):
         self.add_limit_queries()
         self.add_skip_queries()
         self.add_bbox_queries()
-
+        self.add_range_queries()
 
 
 class QueryHelper:
