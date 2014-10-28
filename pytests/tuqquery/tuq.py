@@ -2296,8 +2296,7 @@ class QueryTests(BaseTestCase):
             result = self._parse_query_output(output)
         if 'error' in result:
             raise CBQError(result["error"], server.ip)
-        self.log.info("TOTAL ELAPSED TIME: %s" % [param["message"]
-                        for param in result["info"] if param["key"] == "total_elapsed_time"])
+        self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
         return result
 
     def build_url(self, version):
