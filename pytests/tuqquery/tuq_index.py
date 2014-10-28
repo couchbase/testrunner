@@ -286,7 +286,7 @@ class QueriesViewsTests(QueryTests):
                     self.query = "CREATE INDEX %s ON %s(join_day) " % (index_name, bucket.name)
                     self.run_cbq_query()
                     created_indexes.append(index_name)
-                    self.query = "EXPLAIN select task_name, (select sum(test_rate) cn from %s keys ['query-1'] where join_day>2) as names from %s" % (bucket.name, bucket.name)
+                    self.query = "EXPLAIN select task_name, (select sum(test_rate) cn from %s use keys ['query-1'] where join_day>2) as names from %s" % (bucket.name, bucket.name)
                     res = self.run_cbq_query()
                     self.assertTrue(res["results"][0]["input"]["input"]["input"]["index"] == index_name,
                                     "Index should be %s, but is: %s" % (index_name,res["results"]))
