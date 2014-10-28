@@ -216,26 +216,26 @@ class DMLQueryTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'select count(*) as actual from %s where job_title="Sales"'  % (bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
-            current_docs = actual_result['resultset']['actual']
+            current_docs = actual_result['results']['actual']
             self.query = 'delete from %s where job_title="Sales" LIMIT 1'  % (bucket.name)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
             self.query = 'select count(*) as actual from %s where job_title="Sales"'  % (bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['resultset']['actual'], current_docs - 1, 'Item was not deleted')
+            self.assertEqual(actual_result['results']['actual'], current_docs - 1, 'Item was not deleted')
 
     def test_delete_limit_where(self):
         keys, values = self._insert_gen_keys(self.num_items)
         for bucket in self.buckets:
             self.query = 'select count(*) as actual from %s where job_title="Sales"'  % (bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
-            current_docs = actual_result['resultset']['actual']
+            current_docs = actual_result['results']['actual']
             self.query = 'delete from %s where job_title="Sales" LIMIT 1'  % (bucket.name)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
             self.query = 'select count(*) as actual from %s where job_title="Sales"'  % (bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['resultset']['actual'], current_docs - 1, 'Item was not deleted')
+            self.assertEqual(actual_result['results']['actual'], current_docs - 1, 'Item was not deleted')
 
 ############################################################################################################################
 #
@@ -251,7 +251,7 @@ class DMLQueryTests(QueryTests):
         self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
         self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
-        self.assertEqual(actual_result['resultset']['rows'], 0, 'Query was not run successfully')
+        self.assertEqual(actual_result['results']['rows'], 0, 'Query was not run successfully')
 
     def test_merge_delete_match_limit(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
@@ -261,7 +261,7 @@ class DMLQueryTests(QueryTests):
         self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
         self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
-        self.assertEqual(actual_result['resultset']['rows'], 0, 'Query was not run successfully')
+        self.assertEqual(actual_result['results']['rows'], 0, 'Query was not run successfully')
 
     def test_merge_delete_where_match(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
@@ -271,7 +271,7 @@ class DMLQueryTests(QueryTests):
         self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
         self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
-        self.assertEqual(actual_result['resultset']['rows'], 0, 'Query was not run successfully')
+        self.assertEqual(actual_result['results']['rows'], 0, 'Query was not run successfully')
 
     def test_merge_update_match_set(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
@@ -282,7 +282,7 @@ class DMLQueryTests(QueryTests):
         self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
         self.query = 'SELECT name FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
         self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
-        self.assertEqual(actual_result['resultset']['name'], new_name, 'Name was not updated')
+        self.assertEqual(actual_result['results']['name'], new_name, 'Name was not updated')
 
     def test_merge_update_match_unset(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
@@ -292,7 +292,7 @@ class DMLQueryTests(QueryTests):
         self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
         self.query = 'SELECT * as doc FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
         self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
-        self.assertTrue('name' not in actual_result['resultset']['doc'], 'Name was not unset')
+        self.assertTrue('name' not in actual_result['results']['doc'], 'Name was not unset')
 
     def test_merge_not_match_insert(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
@@ -303,7 +303,7 @@ class DMLQueryTests(QueryTests):
         self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, new_key)
         self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
-        self.assertEqual(actual_result['resultset']['rows'], 1, 'Query was not run successfully')
+        self.assertEqual(actual_result['results']['rows'], 1, 'Query was not run successfully')
 
 ############################################################################################################################
 

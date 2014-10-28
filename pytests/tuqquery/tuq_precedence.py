@@ -22,7 +22,7 @@ class PrecedenceTests(QueryTests):
             " 'winter' ELSE 'other' END AS period FROM %s WHERE CASE WHEN" % (bucket.name) +\
             " join_mo < 3 OR join_mo > 11 THEN 'winter' ELSE 'other' END LIKE 'win%'"
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+            actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                 doc['name'],doc['period']))
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name'],
@@ -41,7 +41,7 @@ class PrecedenceTests(QueryTests):
             " 'winter' ELSE 'other' END AS period FROM %s WHERE CASE WHEN join_mo < 3" %(bucket.name) +\
             " OR join_mo > 11 THEN 1 ELSE 0 END > 0 AND job_title='Sales'"
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+            actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name'],doc['period']))
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name'],
@@ -61,7 +61,7 @@ class PrecedenceTests(QueryTests):
             " 'winter' ELSE 'other' END AS period FROM %s WHERE CASE WHEN join_mo < 3" %(bucket.name) +\
             " OR join_mo > 11 THEN 1 END = 1 AND job_title='Sales'"
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+            actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name'],doc['period']))
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name'],
@@ -79,7 +79,7 @@ class PrecedenceTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT name from %s WHERE join_mo > 3 + 1" % (bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+            actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name']))
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name']}
@@ -90,7 +90,7 @@ class PrecedenceTests(QueryTests):
 
             self.query = "SELECT name from %s WHERE join_mo = 3 + 1" % (bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+            actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name']))
             expected_result = [{"name" : doc['name']}
                                for doc in full_list
@@ -102,7 +102,7 @@ class PrecedenceTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT name from {0} WHERE job_title LIKE 'S%' = TRUE".format(bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+            actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name']))
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name']}
@@ -116,7 +116,7 @@ class PrecedenceTests(QueryTests):
             self.query = "SELECT name, join_mo from %s WHERE NOT join_mo>10 AND" % (bucket.name) +\
             " job_title='Sales' OR join_mo<2"
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+            actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name'], doc['join_mo']))
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name'], "join_mo" : doc['join_mo']}
@@ -128,7 +128,7 @@ class PrecedenceTests(QueryTests):
 
             self.query = "SELECT DISTINCT email from %s WHERE NOT join_mo<10 OR join_mo<2" % (bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+            actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['email']))
             expected_result = [{"email" : doc['email']}
                                for doc in full_list
@@ -141,7 +141,7 @@ class PrecedenceTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT name, join_mo from %s WHERE NOT join_mo IS NULL" % (bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['resultset'], key=lambda doc: (
+            actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name'], doc['join_mo']))
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name'], "join_mo" : doc['join_mo']}

@@ -142,7 +142,7 @@ class QueriesOpsTests(QueryTests):
             expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             expected_result = sorted(expected_result, key=lambda doc: doc['points'])
             actual_result = self.run_cbq_query()
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_failover_with_server_crash(self):
         servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]

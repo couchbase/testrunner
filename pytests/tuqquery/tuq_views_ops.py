@@ -54,7 +54,7 @@ class QueriesViewsTests(QueryTests):
         view_res = RestConnection(self.master).\
                   query_view(self.ddoc_name, self.default_view.name,
                              "default", {"stale" : "false"})
-        self._compare_view_and_tool_result(view_res['rows'], tool_res["resultset"])
+        self._compare_view_and_tool_result(view_res['rows'], tool_res["results"])
 
     def test_view_query_limit_offset(self):
         self.cluster.create_view(self.master, self.ddoc_name, self.default_view)
@@ -67,7 +67,7 @@ class QueriesViewsTests(QueryTests):
                              "default", {"stale" : "false",
                                          "startkey" : "[2011,null]",
                                          "limit" : 10, "skip" : 10})
-        self._compare_view_and_tool_result(view_res['rows'], tool_res["resultset"],
+        self._compare_view_and_tool_result(view_res['rows'], tool_res["results"],
                                            check_values=False)
 
     def test_view_query_start_end(self):
@@ -81,7 +81,7 @@ class QueriesViewsTests(QueryTests):
                              "default", {"stale" : "false",
                                          "startkey" : "[2011,4]",
                                          "endkey" : "[2011,6]"})
-        self._compare_view_and_tool_result(view_res['rows'], tool_res["resultset"])
+        self._compare_view_and_tool_result(view_res['rows'], tool_res["results"])
 
     def test_view_query_order(self):
         self.cluster.create_view(self.master, self.ddoc_name, self.default_view)
@@ -93,7 +93,7 @@ class QueriesViewsTests(QueryTests):
                              "default", {"stale" : "false",
                                          "endkey" : "[2011,1]",
                                          "descending" : "true"})
-        self._compare_view_and_tool_result(view_res['rows'], tool_res["resultset"])
+        self._compare_view_and_tool_result(view_res['rows'], tool_res["results"])
 
     def _compare_view_and_tool_result(self, view_result, tool_result, check_values=True):
         self.log.info("Comparing result ...")

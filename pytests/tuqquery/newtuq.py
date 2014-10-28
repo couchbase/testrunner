@@ -71,7 +71,7 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             query_template = 'FROM %s select $str0, $str1 ORDER BY $str0,$str1 ASC' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_simple_negative_check(self):
         queries_errors = {'SELECT $str0 FROM {0} WHERE COUNT({0}.$str0)>3' :
@@ -91,17 +91,17 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             actual_result1 = self.run_cbq_query(queries[0] % bucket.name)
             actual_result2 = self.run_cbq_query(queries[1] % bucket.name)
-            self.assertTrue(actual_result1['resultset'] == actual_result2['resultset'],
+            self.assertTrue(actual_result1['results'] == actual_result2['results'],
                               "Results are inconsistent.Difference: %s %s %s %s" %(
-                                    len(actual_result1['resultset']), len(actual_result2['resultset']),
-                                    actual_result1['resultset'][100], actual_result2['resultset'][100]))
+                                    len(actual_result1['results']), len(actual_result2['results']),
+                                    actual_result1['results'][100], actual_result2['results'][100]))
 
     def test_simple_nulls(self):
         queries = ['SELECT id FROM %s WHERE id=NULL or id="null"']
         for bucket in self.buckets:
             for query in queries:
                 actual_result = self.run_cbq_query(query % (bucket.name))
-                self._verify_results(actual_result['resultset'], [])
+                self._verify_results(actual_result['results'], [])
 
 ##############################################################################################
 #
@@ -112,7 +112,7 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             query_template = 'SELECT DISTINCT $str0 FROM %s ORDER BY $str0 LIMIT 10' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
             query_template = 'SELECT DISTINCT $str0 FROM %s ORDER BY $str0 LIMIT 10 OFFSET 10' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
 
@@ -121,14 +121,14 @@ class QueryTests(BaseTestCase):
             query_template = 'SELECT DISTINCT $str0 FROM %s ORDER BY $str0 LIMIT 0' % (bucket.name)
             self.query = self.gen_results.generate_query(query_template)
             actual_result = self.run_cbq_query()
-            self.assertEquals(actual_result['resultset'], [],
+            self.assertEquals(actual_result['results'], [],
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], []))
+                                        actual_result['results'], []))
             query_template = 'SELECT DISTINCT $str0 FROM %s ORDER BY $str0 LIMIT 10 OFFSET 0' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self.assertEquals(actual_result['resultset'], expected_result,
+            self.assertEquals(actual_result['results'], expected_result,
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+                                        actual_result['results'], expected_result))
 
     def test_limit_offset_negative_check(self):
         queries_errors = {'SELECT DISTINCT $str0 FROM {0} LIMIT -1' :
@@ -150,16 +150,16 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             query_template = 'SELECT COUNT($str0) AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self.assertEquals(actual_result['resultset'], expected_result,
+            self.assertEquals(actual_result['results'], expected_result,
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+                                        actual_result['results'], expected_result))
 
             query_template = 'SELECT COUNT(*) + 1 AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
             expected_result = [ { "COUNT_EMPLOYEE": expected_result[0]['COUNT_EMPLOYEE'] + 1 } ]
-            self.assertEquals(actual_result['resultset'], expected_result,
+            self.assertEquals(actual_result['results'], expected_result,
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
-                                        actual_result['resultset'], expected_result))
+                                        actual_result['results'], expected_result))
 
     def test_simple_negative_alias(self):
         queries_errors = {'SELECT $str0._last_name as *' : 'Parse Error - syntax error',
@@ -200,46 +200,46 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             for query_template in queries_templates:
                 actual_result, expected_result = self.run_query_from_template(query_template  % (bucket.name))
-                self._verify_results(actual_result['resultset'], expected_result)
+                self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_from_clause_group(self):
         for bucket in self.buckets:
             query_template = 'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ' %(bucket.name) +\
                          'GROUP BY $obj0.$_obj0_int0 ORDER BY points'
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_order_desc(self):
         for bucket in self.buckets:
             query_template = 'SELECT $str0 AS name_new FROM %s AS test ORDER BY name_new DESC' %(
                                                                                 bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_order_asc(self):
         for bucket in self.buckets:
             query_template = 'SELECT $str0 AS name_new FROM %s AS test ORDER BY name_new ASC' %(
                                                                                 bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_aggr_fn(self):
         for bucket in self.buckets:
             query_template = 'SELECT COUNT(TEST.$str0) from %s AS TEST' %(bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_unnest(self):
         for bucket in self.buckets:
             query_template = 'SELECT count(skill) FROM %s AS emp UNNEST emp.$list_str0 AS skill' %(
                                                                             bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
             query_template = 'SELECT count(skill) FROM %s AS emp UNNEST emp.$list_str0 skill' %(
                                                                             bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
 ##############################################################################################
 #
@@ -251,18 +251,18 @@ class QueryTests(BaseTestCase):
             query_template = 'SELECT $str0, $str1, $obj0.$_obj0_int0 points FROM %s'  % (bucket.name) +\
             ' ORDER BY $str1, $str0, $obj0.$_obj0_int0'
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
             query_template = 'SELECT $str0, $str1 FROM %s'  % (bucket.name) +\
             ' ORDER BY $obj0.$_obj0_int0, $str0, $str1'
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_order_by_alias(self):
         for bucket in self.buckets:
             query_template = 'SELECT $str1, $obj0 AS points FROM %s'  % (bucket.name) +\
             ' AS test ORDER BY $str1 DESC, points DESC'
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_order_by_alias_arrays(self):
         for bucket in self.buckets:
@@ -270,7 +270,7 @@ class QueryTests(BaseTestCase):
                                                                             bucket.name) +\
             ' AS TEST ORDER BY SKILL, $str1, TEST.$obj0'
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_order_by_alias_aggr_fn(self):
         for bucket in self.buckets:
@@ -278,26 +278,26 @@ class QueryTests(BaseTestCase):
                                                                             bucket.name) +\
             ' WHERE $int1 >7 GROUP BY $int0, $int1 ORDER BY emp_per_month, $int1, $int0'  
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_order_by_aggr_fn(self):
         for bucket in self.buckets:
             query_template = 'SELECT $str1 AS TITLE FROM %s GROUP'  % (bucket.name) +\
             ' BY $str1 ORDER BY MIN($int1), $str1'
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_order_by_precedence(self):
         for bucket in self.buckets:
             query_template = 'SELECT $str0, $str1 FROM %s'  % (bucket.name) +\
             ' ORDER BY $str0, $str1'
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
             query_template = 'SELECT $str0, $str1 FROM %s'  % (bucket.name) +\
             ' ORDER BY $str1, $str0'
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_order_by_satisfy(self):
         for bucket in self.buckets:
@@ -305,7 +305,7 @@ class QueryTests(BaseTestCase):
                         'WHERE ANY vm IN employee.$list_obj0 SATISFIES vm.$_list_obj0_int0 > 5 AND' +\
                         ' vm.$_list_obj0_str0 = "ubuntu" END ORDER BY $str0, $list_obj0[0].$_list_obj0_int0'
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
 ##############################################################################################
 #
@@ -316,23 +316,23 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             query_template = 'SELECT DISTINCT $str1 FROM %s ORDER BY $str1'  % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_distinct_nested(self):
         for bucket in self.buckets:
             query_template = 'SELECT DISTINCT $obj0.$_obj0_int0 as VAR FROM %s '  % (bucket.name) +\
                          'ORDER BY $obj0.$_obj0_int0'
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
             query_template = 'SELECT DISTINCT $list_str0[0] as skill' +\
                          ' FROM %s ORDER BY $list_str0[0]'  % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
             self.query = 'SELECT DISTINCT $obj0.* FROM %s'  % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
 ##############################################################################################
 #
@@ -343,19 +343,19 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             query_template = 'SELECT $_obj0_int0 FROM %s.$obj0'  % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_complex_paths(self):
         for bucket in self.buckets:
             query_template = 'SELECT $_obj0_int0 as new_attribute FROM %s.$obj0'  % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_where_complex_paths(self):
         for bucket in self.buckets:
             query_template = 'SELECT $_obj0_int0 FROM %s.$obj0 WHERE $_obj0_int0 = 1'  % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
 ##############################################################################################
 #
@@ -760,7 +760,7 @@ class QueryTests(BaseTestCase):
                     actual_result = {}
                     try:
                         actual_result = self.run_cbq_query()
-                        self.assertTrue(actual_result['resultset'] == [])
+                        self.assertTrue(actual_result['results'] == [])
                     except CBQError, ex:
                         if str(ex).find('Primary index already exists') == -1:
                             raise ex

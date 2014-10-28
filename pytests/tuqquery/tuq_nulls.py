@@ -30,7 +30,7 @@ class NULLTests(QueryTests):
                                if "P0" in doc['coverage_tests'] and\
                                 doc['coverage_tests']['P0'] is None]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_not_null_query(self):
         for bucket in self.buckets:
@@ -43,7 +43,7 @@ class NULLTests(QueryTests):
                                if "P0" in doc['coverage_tests'] and\
                                 doc['coverage_tests']['P0'] is not None]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_missing_query(self):
         for bucket in self.buckets:
@@ -55,7 +55,7 @@ class NULLTests(QueryTests):
                                for doc in full_list
                                if not "P0" in doc['coverage_tests']]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_not_missing_query(self):
         for bucket in self.buckets:
@@ -67,7 +67,7 @@ class NULLTests(QueryTests):
                                for doc in full_list
                                if "P1" in doc['coverage_tests']]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_valued(self):
         for bucket in self.buckets:
@@ -80,7 +80,7 @@ class NULLTests(QueryTests):
                                if "P0" in doc['coverage_tests'] and\
                                 doc['coverage_tests']['P0'] is not None]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_not_valued(self):
         for bucket in self.buckets:
@@ -93,7 +93,7 @@ class NULLTests(QueryTests):
                                if "P0" in doc['coverage_tests'] and\
                                 doc['coverage_tests']['P0'] is None]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_precedense(self):
         for bucket in self.buckets:
@@ -106,7 +106,7 @@ class NULLTests(QueryTests):
                                if (not "P0" in doc['coverage_tests']) or\
                                doc['coverage_tests']['P0'] is not None]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
             self.query = "SELECT feature_name FROM %s"  % bucket.name +\
                         " WHERE 2+2=4 AND coverage_tests.P0 IS VALUED "
             actual_result = self.run_cbq_query()
@@ -116,7 +116,7 @@ class NULLTests(QueryTests):
                                if "P0" in doc['coverage_tests'] and\
                                 doc['coverage_tests']['P0'] is not None]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_nulls_over(self):
         for bucket in self.buckets:
@@ -128,7 +128,7 @@ class NULLTests(QueryTests):
                                for doc in full_list
                                if len([point for point in doc['story_point'] if point is None]) > 0]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
             self.query = "SELECT feature_name FROM %s"  % bucket.name +\
                         " WHERE EVERY story_point_n IN story_point SATISFIES story_point_n IS NULL END ORDER BY feature_name"
             actual_result = self.run_cbq_query()
@@ -138,7 +138,7 @@ class NULLTests(QueryTests):
                                if len([point for point in doc['story_point']
                                        if point is None]) == len(doc['story_point'])]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_ifnan(self):
         for bucket in self.buckets:
@@ -154,7 +154,7 @@ class NULLTests(QueryTests):
                     expected_result.append({'feature_name' : doc['feature_name'],
                                             'point' : doc['story_point'][2]})
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_ifnull(self):
         for bucket in self.buckets:
@@ -170,7 +170,7 @@ class NULLTests(QueryTests):
                     expected_result.append({'feature_name' : doc['feature_name'],
                                             'point' : doc['story_point'][2]})
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_firstnum(self):
         for bucket in self.buckets:
@@ -190,7 +190,7 @@ class NULLTests(QueryTests):
                     expected_result.append({'feature_name' : doc['feature_name'],
                                             'point' : doc['story_point'][2]})
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_nanif(self):
         for bucket in self.buckets:
@@ -201,7 +201,7 @@ class NULLTests(QueryTests):
             expected_result = [{'feature_name' : doc['feature_name']}
                                for doc in full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_ifposinf(self):
         for bucket in self.buckets:
@@ -217,11 +217,11 @@ class NULLTests(QueryTests):
                     expected_result.append({'feature_name' : doc['feature_name'],
                                             'point' : doc['story_point'][2]})
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
             self.query = "SELECT feature_name, IFNEGINF(story_point[2],story_point[1]) as point" +\
                         " FROM %s ORDER BY feature_name"  % bucket.name
             actual_result = self.run_cbq_query()
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_ifinf(self):
         queries = ["SELECT feature_name, IFINF(story_point[2],story_point[1]) as point" +\
@@ -244,7 +244,7 @@ class NULLTests(QueryTests):
         for bucket in self.buckets:
             for query in queries:
                 actual_result = self.run_cbq_query(query % bucket)
-                self._verify_results(actual_result['resultset'], expected_result)
+                self._verify_results(actual_result['results'], expected_result)
 
     def test_ifmissing(self):
         queries = ["SELECT feature_name, IFMISSINGORNULL(coverage_tests.P0," +\
@@ -264,7 +264,7 @@ class NULLTests(QueryTests):
         for bucket in self.buckets:
             for query in queries:
                 actual_result = self.run_cbq_query(query % bucket)
-                self._verify_results(actual_result['resultset'], expected_result)
+                self._verify_results(actual_result['results'], expected_result)
 
     def test_missingif(self):
         for bucket in self.buckets:
@@ -280,7 +280,7 @@ class NULLTests(QueryTests):
                     expected_result.append({'feature_name' : doc['feature_name'],
                                             'point' : doc['coverage_tests']['P0']})
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
-            self._verify_results(actual_result['resultset'], expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def generate_docs(self, name="tuq", start=0, end=0):
         if not end:
