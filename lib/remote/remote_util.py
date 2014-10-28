@@ -1352,7 +1352,6 @@ class RemoteMachineShellConnection:
                 log.info('Check if {0} is in tmp directory on {1} server'.format(build_name, self.ip))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
                 if not exist:  # if not exist in tmp dir, start to download that version build
-                    print "going into hererer  ********"
                     builds, changes = query.get_all_builds(version=full_version, \
                                       deliverable_type=self.info.deliverable_type, \
                                       architecture_type=self.info.architecture_type, \
