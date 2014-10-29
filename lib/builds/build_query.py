@@ -86,11 +86,10 @@ class BuildQuery(object):
                     version = version.replace("-rel", "")
             """ direct url only need one build """
 
-            """ in sherlock build, there is not -rel in url """
-            if "3.5.0" in version:
-                version = version.replace("-rel", "")
-            if builds.product_version.find(version) != -1 and product == builds.product\
-               and builds.architecture_type == arch and type == builds.deliverable_type:
+            """ if the job trigger with url, no need to check version.
+                remove builds.product_version.find(version) != -1 """
+            if product == builds.product and builds.architecture_type == arch \
+               and type == builds.deliverable_type:
                 return builds
             else:
                 self.log.info("if build not found, url link may not match...")
