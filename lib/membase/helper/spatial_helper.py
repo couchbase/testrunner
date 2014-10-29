@@ -71,10 +71,9 @@ class SpatialHelper:
                 self.servers, self.testcase)
 
 
-    def create_index_fun(self, name, prefix='', fun=None):
+    def create_index_fun(self, name, fun=None):
         if fun is None:
-            fun = 'function (doc, meta) {if(meta.id.indexOf("' + prefix + \
-                '") != -1) { emit(doc.geometry, doc);}}'
+            fun = 'function (doc, meta) {emit(doc.geometry, doc);}'
         function = self._create_function(name, fun)
         self.rest.create_spatial(self.bucket, name, function)
         self._indexes.add(name)

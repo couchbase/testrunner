@@ -113,10 +113,11 @@ class SpatialQueryTests(unittest.TestCase):
 
 
 class View:
-    def __init__(self, helper, index_size, fn_str, prefix=None, name=None,
+    def __init__(self, helper, index_size, fn_str, name='dev_test_view',
                  queries=list(), create_on_init=True):
         self.helper = helper
         self.index_size = index_size
+        self.name = name
 
         self.log = logger.Logger.get_logger()
 
@@ -127,13 +128,8 @@ class View:
         # queries defined for this view
         self.queries = queries
 
-        if prefix is None:
-            prefix = ''
-
-        self.name = name if name is not None else "dev_test_view-" + prefix
-
         if create_on_init:
-            self.helper.create_index_fun(self.name, prefix, fn_str)
+            self.helper.create_index_fun(name, fn_str)
 
 
 
@@ -150,8 +146,7 @@ class SimpleDataSet:
         return [View(self.helper, self.num_docs, fn_str = view_fn)]
 
     def load(self):
-        prefix = 'simple-'
-        inserted_keys = self.helper.insert_docs(self.num_docs, prefix)
+        inserted_keys = self.helper.insert_docs(self.num_docs, self.name)
         return inserted_keys
 
     def add_limit_queries(self):
