@@ -114,7 +114,7 @@ class SpatialQueryTests(unittest.TestCase):
 
 class View:
     def __init__(self, helper, index_size, fn_str, name='dev_test_view',
-                 queries=list(), create_on_init=True):
+                 create_on_init=True):
         self.helper = helper
         self.index_size = index_size
         self.name = name
@@ -126,7 +126,7 @@ class View:
         self._test_results = unittest.TestResult()
 
         # queries defined for this view
-        self.queries = queries
+        self.queries = []
 
         if create_on_init:
             self.helper.create_index_fun(name, fn_str)
