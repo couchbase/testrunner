@@ -475,15 +475,15 @@ class QueryTests(BaseTestCase):
         queries_errors = {"SELECT tasks_points from {0} WHERE tasks_points.task2>3"
                           " GROUP BY tasks_points.*" :
                            "Parse Error - syntax error",
-                           "SELECT tasks_points from {0} AS TEST "
+                           "SELECT tasks_points from {0} AS TEST " +\
                            "WHERE tasks_points.task2>3 GROUP BY TEST.tasks_points.task1":
                            "The expression TEST is not satisfied by these dependencies",
-                           "SELECT tasks_points.task1 AS task from {0} WHERE join_mo>7"
+                           "SELECT tasks_points.task1 AS task from {0} WHERE join_mo>7" +\
                            " GROUP BY task" : "Alias task cannot be referenced",
-                           "SELECT tasks_points.task1 AS task from {0} WHERE join_mo>7"
+                           "SELECT tasks_points.task1 AS task from {0} WHERE join_mo>7" +\
                            " GROUP BY tasks_points.task1 HAVING COUNT(task) > 0" :
                            "Alias task cannot be referenced",
-                           "from {0} WHERE join_mo>7 GROUP BY tasks_points.task1 "
+                           "from {0} WHERE join_mo>7 GROUP BY tasks_points.task1 " +\
                            "SELECT tasks_points.task1 AS task HAVING COUNT(tasks_points.task1) > 0" :
                            "Parse Error - syntax error"}
         self.negative_common_body(queries_errors)
@@ -2295,7 +2295,7 @@ class QueryTests(BaseTestCase):
                                                            min_output_size=20,
                                                            end_msg='cbq>')
             result = self._parse_query_output(output)
-        if not isinstance(result, str) or 'errors' in result:
+        if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)
         self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
         return result
