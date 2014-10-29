@@ -1073,7 +1073,7 @@ class QueryTests(BaseTestCase):
     def test_array_distinct(self):
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_distinct(array_agg(name)) as names" +\
-            " FROM my_bucket GROUP BY job_title" % (bucket.name)
+            " FROM %s GROUP BY job_title" % (bucket.name)
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_list = self.run_cbq_query()
             actual_result = self.sort_nested_list(actual_list['results'])
@@ -1876,7 +1876,7 @@ class QueryTests(BaseTestCase):
                                for doc in full_list]
             expected_result.extend([{"email" : doc["email"]}
                                    for doc in full_list])
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
 
     def test_union_multiply_buckets(self):
@@ -1889,7 +1889,7 @@ class QueryTests(BaseTestCase):
                             for doc in full_list]
         expected_result.extend([{"email" : doc["email"]}
                                 for doc in full_list])
-        expected_result = sorted(set(expected_result))
+        expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
         self._verify_results(actual_result, expected_result)
 
     def test_union_all(self):
@@ -1907,7 +1907,7 @@ class QueryTests(BaseTestCase):
 
     def test_union_all_multiply_buckets(self):
         self.assertTrue(len(self.buckets) > 1, 'This test needs more than one bucket')
-        self.query = "select name from %s union select email from %s" % (self.buckets[0].name, self.buckets[1].name)
+        self.query = "select name from %s union all select email from %s" % (self.buckets[0].name, self.buckets[1].name)
         full_list = self._generate_full_docs_list(self.gens_load)
         actual_list = self.run_cbq_query()
         actual_result = sorted(actual_list['results'])
@@ -1928,7 +1928,7 @@ class QueryTests(BaseTestCase):
                                for doc in full_list]
             expected_result.extend([{"email" : doc["email"]}
                                    for doc in full_list if doc["join_mo"] > 2])
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
 
     def test_union_aggr_fns(self):
@@ -1939,7 +1939,7 @@ class QueryTests(BaseTestCase):
             actual_result = sorted(actual_list['results'])
             expected_result = [{"names" : len(full_list)}]
             expected_result.extend([{"emails" : len(full_list)}])
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
@@ -1956,7 +1956,7 @@ class QueryTests(BaseTestCase):
             expected_result = [{"name" : doc["name"], "VMs" : doc["VMs"]}
                                for doc in full_list
                                if len([vm for vm in doc["VMs"] if vm["RAM"] == 5])]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_within_list_of_lists(self):
@@ -1968,7 +1968,7 @@ class QueryTests(BaseTestCase):
             expected_result = [{"name" : doc["name"], "VMs" : doc["VMs"]}
                                for doc in full_list
                                if len([vm for vm in doc["VMs"] if vm["RAM"] == 5])]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_within_object(self):
@@ -1980,7 +1980,7 @@ class QueryTests(BaseTestCase):
             expected_result = [{"name" : doc["name"], "tasks_points" : doc["tasks_points"]}
                                for doc in full_list
                                if doc["tasks_points"]["task1"] == 1]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_within_array(self):
@@ -1992,7 +1992,7 @@ class QueryTests(BaseTestCase):
             expected_result = [{"name" : doc["name"], "skills" : doc["skills"]}
                                for doc in full_list
                                if 'skill2010' in doc["skills"]]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
@@ -2007,7 +2007,7 @@ class QueryTests(BaseTestCase):
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [doc["name"] for doc in full_list]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_raw_limit(self):
@@ -2017,7 +2017,7 @@ class QueryTests(BaseTestCase):
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [doc["skills"][0] for doc in full_list][:5]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
@@ -2356,11 +2356,11 @@ class QueryTests(BaseTestCase):
             if self.input.tuq_client and "gopath" in self.input.tuq_client:
                 gopath = self.input.tuq_client["gopath"]
             if os == 'windows':
-                cmd = "cd %s/src/github.com/couchbaselabs/query/; " % (gopath) +\
+                cmd = "cd %s/src/github.com/couchbaselabs/query/server/main; " % (gopath) +\
                 "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
                                                                 server.ip, server.port)
             else:
-                cmd = "cd %s/src/github.com/couchbaselabs/query/; " % (gopath) +\
+                cmd = "cd %s/src/github.com/couchbaselabs/query/server/main; " % (gopath) +\
                 "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
                                                                 server.ip, server.port)
             self.shell.execute_command(cmd)
