@@ -54,6 +54,43 @@ class SpatialQueryTests(unittest.TestCase):
         data_set.add_range_queries()
         self._query_test_init(data_set)
 
+
+    def test_multidim_dataset_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Make limit queries on a multidimensional "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_limit_queries()
+        self._query_test_init(data_set)
+
+    def test_multidim_dataset_skip_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Make skip (and limit) queries on a "
+                      "multidimensional dataset with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_skip_queries()
+        self._query_test_init(data_set)
+
+    def test_multidim_dataset_range_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Make range queries on a "
+                      "multidimensional with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_range_queries()
+        self._query_test_init(data_set)
+
+    def test_multidim_dataset_range_and_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Make range queries with limits on a "
+                      "multidimensional with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_range_and_limit_queries()
+        self._query_test_init(data_set)
+
     ###
     # load the data defined for this dataset.
     # create views and query the data as it loads.
@@ -210,6 +247,134 @@ class SimpleDataSet:
         self.add_skip_queries()
         self.add_bbox_queries()
         self.add_range_queries()
+
+
+class MultidimDataSet:
+    def __init__(self, helper, num_docs):
+        self.helper = helper
+        self.num_docs = num_docs
+        self.views = self._create_views()
+        self.name = "multidim_dataset"
+
+    def _create_views(self):
+        view_fn = '''function (doc) {
+    if (doc.age !== undefined || doc.height !== undefined ||
+            doc.bloom !== undefined || doc.shed_leaves !== undefined) {
+        emit([doc.age, doc.height, [doc.bloom, doc.shed_leaves]], doc.name);
+    }}'''
+        return [View(self.helper, self.num_docs, fn_str = view_fn)]
+
+    def load(self):
+        inserted_keys = self.helper.insert_docs(self.num_docs, self.name)
+        return inserted_keys
+
+    def add_limit_queries(self):
+        for view in self.views:
+            view.queries += [
+                QueryHelper({"limit": 10}, 10),
+                QueryHelper({"limit": 3417}, 3417),
+                QueryHelper({"limit": view.index_size}, view.index_size),
+                QueryHelper({"limit": 5*view.index_size}, view.index_size)]
+
+    def add_skip_queries(self):
+        for view in self.views:
+            view.queries += [
+                QueryHelper({"skip": 10}, view.index_size-10),
+                QueryHelper({"skip": 2985}, view.index_size-2985),
+                QueryHelper({"skip": view.index_size}, 0),
+                QueryHelper({"skip": 5*view.index_size}, 0),
+                QueryHelper({"skip": 2985, "limit": 1539}, 1539),
+                QueryHelper({"skip": view.index_size-120, "limit": 1539}, 120),
+                QueryCompareHelper([{"skip": 6210, "limit": 1592}],
+                                   [{"skip": 6210, "limit": 1086},
+                                    {"skip": 7296, "limit": 506}])
+                ]
+
+    def add_range_queries(self):
+        for view in self.views:
+            view.queries += [
+                QueryHelper(
+                    {"start_range": [0, 0, 0],
+                     "end_range": [1001, 13001, 13]},
+                    view.index_size),
+                QueryHelper(
+                    {"start_range": [None, 0, None],
+                     "end_range": [1001, None, None]},
+                    view.index_size),
+                QueryHelper(
+                    {"start_range": [500, 2000, 3],
+                     "end_range": [800, 11111, 9]},
+                    2066),
+                QueryHelper(
+                    {"start_range": [500, -500, 3],
+                     "end_range": [800, 11111, 9]},
+                    2562),
+                QueryCompareHelper(
+                    [{"start_range": [500, -500, 3],
+                      "end_range": [800, 11111, 9]}],
+                    [{"start_range": [500, None, 3],
+                      "end_range": [800, 11111, 9]}]),
+                QueryCompareHelper(
+                    [{"start_range": [500, -500, 3],
+                      "end_range": [800, 11111, 9]}],
+                    [{"start_range": [500, None, 3],
+                      "end_range": [800, None, 9]}]),
+                QueryCompareHelper(
+                    [{"start_range": [500, 2000, 3],
+                      "end_range": [800, 11111, 9]}],
+                    [{"start_range": [500, 2000, 3],
+                                     "end_range": [600, 8000, 9]},
+                     {"start_range": [500, 8000, 3],
+                      "end_range": [600, 11111, 9]},
+                     {"start_range": [600, 2000, 3],
+                      "end_range": [800, 11111, 9]}])
+                ]
+
+    def add_range_and_limit_queries(self):
+        for view in self.views:
+            view.queries += [
+                QueryHelper(
+                    {"start_range": [0, 0, 0],
+                     "end_range": [1001, 13001, 13],
+                     "limit": self.num_docs / 2},
+                     self.num_docs / 2),
+                QueryHelper(
+                    {"start_range": [None, 0, None],
+                     "end_range": [1001, None, None],
+                     "limit": self.num_docs / 2},
+                    self.num_docs / 2),
+                QueryHelper(
+                    {"start_range": [500, 2000, 3],
+                     "end_range": [800, 11111, 9],
+                     "limit": 1000},
+                   1000),
+                QueryHelper(
+                    {"start_range": [500, -500, 3],
+                     "end_range": [800, 11111, 9],
+                     "limit": 5},
+                    5),
+                QueryCompareHelper(
+                    [{"start_range": [500, 1800, 3],
+                      "end_range": [800, 11111, 9]}],
+                    [{"start_range": [500, 1800, 3],
+                      "end_range": [800, 11111, 9],
+                      "limit": 700},
+                     {"start_range": [500, 1800, 3],
+                      "end_range": [800, 11111, 9],
+                      "skip": 700,
+                      "limit": 100},
+                     {"start_range": [500, 1800, 3],
+                                     "end_range": [800, 11111, 9],
+                      "skip": 800,
+                      "limit": 10000},
+                     ]),
+                ]
+
+    def add_all_query_sets(self):
+        self.add_limit_queries()
+        self.add_skip_queries()
+        self.add_range_queries()
+        self.add_range_and_limit_queries()
 
 
 class QueryHelper:

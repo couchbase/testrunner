@@ -96,7 +96,13 @@ class SpatialHelper:
             geom = {"type": "Point", "coordinates":
                         [random.randrange(-180, 180),
                          random.randrange(-90, 90)]}
-            value = {"name": doc_name, "age": random.randrange(1, 1000), "geometry": geom}
+            value = {
+                "name": doc_name,
+                "age": random.randrange(1, 1000),
+                "geometry": geom,
+                "height": random.randrange(1, 13000),
+                "bloom": random.randrange(1, 6),
+                "shed_leaves": random.randrange(6, 13)}
             value.update(extra_values)
             if not return_docs:
                 doc_names.append(doc_name)
