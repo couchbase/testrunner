@@ -13,6 +13,7 @@ import traceback
 import sys
 from testconstants import WIN_CB_VERSION_3
 
+
 class MembaseBuild(object):
     def __init__(self):
         self.url = ''
@@ -84,6 +85,10 @@ class BuildQuery(object):
                 if "rel" in version and version[:5] in WIN_CB_VERSION_3:
                     version = version.replace("-rel", "")
             """ direct url only need one build """
+
+            """ in sherlock build, there is not -rel in url """
+            if "3.5.0" in version:
+                version = version.replace("-rel", "")
             if builds.product_version.find(version) != -1 and product == builds.product\
                and builds.architecture_type == arch and type == builds.deliverable_type:
                 return builds
@@ -287,6 +292,22 @@ class BuildQuery(object):
                 build_info = build_info.replace("couchbase_server","couchbase-server")
             """ End remove here """
 
+            """ sherlock build name: couchbase-server-enterprise-3.5.0-71-centos6.x86_64  """
+            if "-3.5.0-" in build_info:
+                product_version = build_info.split("-")
+                product_version = product_version[3] + "-" + product_version[4]
+                if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
+                    build.product_version = product_version
+                    build_info = build_info.replace("-" + product_version,"")
+                if "x86_64" in build_info:
+                    build.architecture_type = "x86_64"
+                    build_info = build_info.replace(".x86_64", "")
+                elif "x86" in build_info:
+                    build.architecture_type = "x86"
+                    build_info = build_info.replace(".x86", "")
+                if build_info.startswith("couchbase-server"):
+                    build.product = build_info.replace("-centos6", "")
+                return build
             product_version = build_info.split("_")
             product_version = product_version[len(product_version)-1]
             if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
