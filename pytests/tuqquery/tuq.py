@@ -126,9 +126,9 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result, expected_result)
 
     def test_distinct_negative(self):
-        queries_errors = {'SELECT name FROM {0} ORDER BY DISTINCT name' : 'Parse Error - syntax error',
-                          'SELECT name FROM {0} GROUP BY DISTINCT name' : 'Parse Error - syntax error',
-                          'SELECT ANY tasks_points FROM {0}' : 'Parse Error - syntax error'}
+        queries_errors = {'SELECT name FROM {0} ORDER BY DISTINCT name' : 'syntax error',
+                          'SELECT name FROM {0} GROUP BY DISTINCT name' : 'syntax error',
+                          'SELECT ANY tasks_points FROM {0}' : 'syntax error'}
         self.negative_common_body(queries_errors)
 
     def test_any(self):
@@ -356,7 +356,7 @@ class QueryTests(BaseTestCase):
     def test_like_wildcards(self):
         for bucket in self.buckets:
             self.query = "SELECT email FROM %s WHERE email " % (bucket.name) +\
-                         "LIKE '%\@%\.%' ORDER BY email"
+                         "LIKE '%@%.%' ORDER BY email"
             actual_result = self.run_cbq_query()
             full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"email" : doc['email']} for doc in full_list
