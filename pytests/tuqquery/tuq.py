@@ -48,6 +48,7 @@ class QueryTests(BaseTestCase):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
         except:
+            self.log.error('SUITE SETUP FAILED')
             self.tearDown()
 
     def tearDown(self):

@@ -47,7 +47,8 @@ class QueryTests(BaseTestCase):
             if not self.input.param("skip_build_tuq", False):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
-        except Exception, ex:
+        except:
+            self.log.error('SUITE SETUP FAILED')
             self.tearDown()
 
     def tearDown(self):
@@ -468,12 +469,12 @@ class QueryTests(BaseTestCase):
             if self.input.tuq_client and "gopath" in self.input.tuq_client:
                 gopath = self.input.tuq_client["gopath"]
             if os == 'windows':
-                cmd = "cd %s/src/github.com/couchbaselabs/tuqtng/; " % (gopath) +\
-                "./tuqtng.exe -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
+                cmd = "cd %s/src/github.com/couchbaselabs/query/; " % (gopath) +\
+                "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
                                                                 server.ip, server.port)
             else:
-                cmd = "cd %s/src/github.com/couchbaselabs/tuqtng/; " % (gopath) +\
-                "./tuqtng -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
+                cmd = "cd %s/src/github.com/couchbaselabs/query/; " % (gopath) +\
+                "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
                                                                 server.ip, server.port)
             self.shell.execute_command(cmd)
         else:

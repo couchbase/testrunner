@@ -2036,7 +2036,7 @@ class RestConnection(object):
         params = urllib.urlencode({'statement' : query})
         log.info('query params : {0}'.format(params))
         api = "http://%s:8093/query?%s" % (self.ip, params)
-        status, content, header = self._http_request(api, 'GET', timeout=timeout)
+        status, content, header = self._http_request(api, 'POST', timeout=timeout)
         try:
             return json.loads(content)
         except ValueError:
