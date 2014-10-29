@@ -408,7 +408,7 @@ class QueryTests(BaseTestCase):
                                                            min_output_size=20,
                                                            end_msg='cbq>')
             result = self._parse_query_output(output)
-        if not isinstance(result, str) or 'errors' in result:
+        if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)
         self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
         return result
