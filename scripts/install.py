@@ -242,7 +242,12 @@ class Installer(object):
                             """ test enterprise version """
                             #build.url = build.url.replace("enterprise", "community")
                             #build.name = build.name.replace("enterprise", "community")
-                    return build
+                    """ check if URL is live """
+                    remote_client = RemoteMachineShellConnection(server)
+                    if remote_client.is_url_live(build.url):
+                        return build
+                    else:
+                        sys.exit("ERROR: URL is not good. Check URL again")
             _errors.append(errors["BUILD-NOT-FOUND"])
         msg = "unable to find a build for product {0} version {1} for package_type {2}"
         raise Exception(msg.format(names, version, info.deliverable_type))

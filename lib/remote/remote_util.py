@@ -451,7 +451,7 @@ class RemoteMachineShellConnection:
             log.info("This url {0} is live".format(url))
             live_url = True
         else:
-            log.error("This url {0} is failed to connect")
+            log.error("This url {0} is failed to connect".format(url))
         return live_url
 
     def download_build(self, build):
