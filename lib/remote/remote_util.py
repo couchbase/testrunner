@@ -1,5 +1,6 @@
 import os
 import sys
+import urllib
 import uuid
 import time
 import logging
@@ -442,6 +443,16 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         else:
             raise Exception("stopping standalone moxi is not supported on windows")
+    def is_url_live(self, url):
+        live_url = False
+        log.info("Check if url {0} is ok".format(url))
+        status = urllib.urlopen(url).getcode()
+        if status == 200:
+            log.info("This url {0} is live".format(url))
+            live_url = True
+        else:
+            log.error("This url {0} is failed to connect")
+        return live_url
 
     def download_build(self, build):
         return self.download_binary(build.url, build.deliverable_type, build.name, latest_url=build.url_latest_build)

@@ -2267,17 +2267,6 @@ class RestConnection(object):
         status, content, header = self._http_request(api, "POST")
         return status, content
 
-    def is_url_live(self, url):
-        live_url = False
-        log.info("Check if url {0} is ok".formant(url))
-        status = urllib.urlopen(url).getcode()
-        if status == 200:
-            log.info("This url {0} is live".format(url))
-            live_url = True
-        else:
-            log.error("This url {0} is failed to connect")
-        return live_url
-
     def get_bucket_CCCP(self, bucket):
         log.info("Getting CCCP config ")
         api = '%spools/default/b/%s' % (self.baseUrl, bucket)
