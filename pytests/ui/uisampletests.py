@@ -539,7 +539,7 @@ class ViewsTests(BaseUITestCase):
     def test_delete_view(self):
         try:
             NavigationHelper(self).navigate('Views')
-            for i in self.view_num:
+            for i in xrange(self.view_num):
                 DdocViewHelper(self).create_view(self.ddoc_name, self.view_name + str(i))
             DdocViewHelper(self).delete_view(self.view_name)
         except Exception, ex:
@@ -580,7 +580,7 @@ class ViewsTests(BaseUITestCase):
         NavigationHelper(self).navigate('Views')
         DdocViewHelper(self).create_view(self.ddoc_name, self.view_name)
         DdocViewHelper(self).open_view(self.view_name)
-        DdocViewHelper(self).verify_view_results(view_set)
+        DdocViewHelper(self).verify_view_results(view_set, None)
 
     def test_show_view_results_with_reduce(self):
         for bucket in self.buckets:
@@ -906,9 +906,9 @@ class DdocViewControls():
     def view_row(self, view=''):
         self.row = self.helper.find_control('view_row', 'row', text=view)
         self.name = self.helper.find_control('view_row', 'name', text=view)
-        self.row_name = self.helper.find_control('view_row', 'row_name', text=view)
-        self.edit_btn = self.helper.find_control('view_row', 'edit_btn', text=view, parent_locator='row_name')
-        self.delete_btn = self.helper.find_control('view_row', 'delete_btn', text=view, parent_locator='row_name')
+        #self.row_name = self.helper.find_control('view_row', 'row_name', text=view)
+        self.edit_btn = self.helper.find_control('view_row', 'edit_btn', text=view, parent_locator='row')
+        self.delete_btn = self.helper.find_control('view_row', 'delete_btn', text=view, parent_locator='row')
         return self
 
     def del_view_dialog(self):
@@ -923,7 +923,7 @@ class DdocViewControls():
         self.publish_btn = self.helper.find_control('ddoc_row', 'publish_btn')
         return self
 
-    def view_screen(self):
+    def view_screen(self, view=''):
         self.screen = self.helper.find_control('edit_view_screen', 'screen')
         self.random_document = self.helper.find_control('edit_view_screen', 'random_doc')
         self.random_doc_name = self.helper.find_control('edit_view_screen', 'random_doc_name',
@@ -936,13 +936,14 @@ class DdocViewControls():
                                                         parent_locator='random_doc')
         self.random_doc_edit_btn = self.helper.find_control('edit_view_screen', 'random_doc_edit_btn',
                                                         parent_locator='random_doc')
+        self.view_name_set = self.helper.find_control('edit_view_screen', 'view_name_set', text=view)
         return self
 
     def view_map_reduce_fn(self):
         self.map_fn = self.helper.find_control('edit_view_screen', 'map_fn')
         self.reduce_fn = self.helper.find_control('edit_view_screen', 'reduce_fn')
         self.save_btn = self.helper.find_control('edit_view_screen', 'save_btn')
-        self.save_as_btn = self.helper.find_control('edit_view_screen', 'saveas_btn')
+        self.saveas_btn = self.helper.find_control('edit_view_screen', 'saveas_btn')
         return self
 
     def view_results_container(self, value=0):
@@ -1608,11 +1609,22 @@ class DdocViewHelper():
                         "View is not published successfully")
 
     def is_view_present(self, view_name):
-        return self.controls.view_row(view_name).row.is_displayed()
+        try:
+            return self.controls.view_row(view_name).row.is_displayed()
+        except Exception as ex:
+            print ex
+            return self.controls.view_row(view_name).row.is_displayed()
+
+    def is_new_view_present(self, view_name):
+        try:
+            return self.controls.view_screen(view_name).view_name_set.is_displayed()
+        except Exception as ex:
+            print ex
+            return self.controls.view_screen(view_name).view_name_set.is_displayed()
 
     def open_view(self, view_name):
         self.tc.log.info('trying open view %s' % view_name)
-        self.controls.create_pop_up().view_row(view_name).name.click()
+        self.controls.view_row(view_name).name.click()
         self.wait.until(lambda fn:
                         self.controls.view_map_reduce_fn().map_fn.is_displayed(),
                         "view screen is not opened")
@@ -1642,7 +1654,7 @@ class DdocViewHelper():
 
     def delete_view(self, view_name):
         self.wait.until(lambda fn:
-                       self.controls.view_row(view_name).row_name.is_displayed(),
+                       self.controls.view_row(view_name).row.is_displayed(),
                       "View row %s is not displayed" % view_name)
         self.controls.view_row(view_name).delete_btn.click()
         self.wait.until(lambda fn:
@@ -1665,11 +1677,11 @@ class DdocViewHelper():
         if action == 'save':
             self.controls.view_map_reduce_fn().save_btn.click()
         if action == 'save_as':
-            self.controls.view_map_reduce_fn().save_as_btn.click()
+            self.controls.view_map_reduce_fn().saveas_btn.click()
             self.controls.create_pop_up().view_name.type(new_view_name)
             self.controls.create_pop_up().save_btn.click()
             self.wait.until(lambda fn:
-                            self.is_view_present(new_view_name),
+                            self.is_new_view_present(new_view_name),
                             "view %s is not appeared" % new_view_name)
             time.sleep(1)
         self.tc.log.info('View is successfully edited')
@@ -1699,7 +1711,7 @@ class DdocViewHelper():
                         self.controls.view_results_container(value).doc_count.is_displayed(),
                         "Correct Stats are displayed")
         else:
-            self.log.info("No Reduce fn specified")
+            self.tc.log.info("No Reduce fn specified")
         self.tc.log.info('View Results are successfully verified')
 
     def get_error(self):

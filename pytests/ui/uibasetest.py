@@ -36,6 +36,7 @@ class BaseUITestCase(unittest.TestCase):
     def _kill_old_drivers(self):
         if self.shell.extract_remote_info().type.lower() == 'windows':
             self.shell.execute_command('taskkill /F /IM chromedriver.exe')
+            self.shell.execute_command('taskkill /F /IM chrome.exe')
 
     def _wait_for_selenium_is_started(self, timeout=10):
         if self.machine.ip in ['localhost', '127.0.0.1']:
