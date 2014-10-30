@@ -28,7 +28,7 @@ class JoinTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT employee.name, employee.tasks_ids, new_project " +\
             "FROM %s as employee %s JOIN default.project as new_project " % (bucket.name, self.type_join) +\
-            "USE KEYS employee.tasks_ids"
+            "ON KEYS employee.tasks_ids"
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             full_list = self._generate_full_joined_docs_list(join_type=self.type_join)
@@ -45,7 +45,7 @@ class JoinTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT employee.name, employee.tasks_ids, new_task.project, new_task.task_name " +\
             "FROM %s as employee %s JOIN default as new_task " % (bucket.name, self.type_join) +\
-            "USE KEYS employee.tasks_ids"
+            "ON KEYS employee.tasks_ids"
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             full_list = self._generate_full_joined_docs_list(join_type=self.type_join)
@@ -62,7 +62,7 @@ class JoinTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT employee.name, employee.tasks_ids, new_project " +\
             "FROM %s as employee %s JOIN default.project as new_project " % (bucket.name, self.type_join) +\
-            "KEY employee.tasks_ids[0]"
+            "ON KEY employee.tasks_ids[0]"
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             full_list = self._generate_full_joined_docs_list(particular_key=0,
@@ -80,7 +80,7 @@ class JoinTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT employee.name, employee.tasks_ids, new_task.project, new_task.task_name " +\
             "FROM %s as employee %s JOIN default as new_task " % (bucket.name, self.type_join) +\
-            "KEY employee.tasks_ids[1]"
+            "ON KEY employee.tasks_ids[1]"
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             full_list = self._generate_full_joined_docs_list(particular_key=1,
@@ -98,7 +98,7 @@ class JoinTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT employee.name, employee.tasks_ids, new_project_full.project new_project " +\
             "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
-            "USE KEYS employee.tasks_ids WHERE new_project_full.project == 'IT'"
+            "ON KEYS employee.tasks_ids WHERE new_project_full.project == 'IT'"
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = self._generate_full_joined_docs_list(join_type=self.type_join)
@@ -112,7 +112,7 @@ class JoinTests(QueryTests):
     def test_join_unnest_alias(self):
         for bucket in self.buckets:
             self.query = "SELECT task2 FROM %s emp1 JOIN %s" % (bucket.name, bucket.name) +\
-            " task USE KEYS emp1.tasks_ids UNNEST emp1.tasks_ids as task2"
+            " task ON KEYS emp1.tasks_ids UNNEST emp1.tasks_ids as task2"
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc:(
                                                                doc['task2']))
@@ -332,7 +332,7 @@ class JoinTests(QueryTests):
             self.query = "select emp.name, ARRAY item.project FOR item in items end projects " +\
                          "FROM %s emp %s NEST %s items " % (
                                                     bucket.name, self.type_join, bucket.name) +\
-                         "USE KEYS emp.tasks_ids"
+                         "ON KEYS emp.tasks_ids"
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             full_list = self._generate_full_nested_docs_list(join_type=self.type_join)
@@ -348,7 +348,7 @@ class JoinTests(QueryTests):
             self.query = "select emp.name, ARRAY item.project FOR item in items end projects " +\
                          "FROM %s emp %s NEST %s items " % (
                                                     bucket.name, self.type_join, bucket.name) +\
-                         "USE KEYS emp.tasks_ids where ANY item IN items SATISFIES item.project == 'CB' end"
+                         "ON KEYS emp.tasks_ids where ANY item IN items SATISFIES item.project == 'CB' end"
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc: (doc['name'], doc['projects']))
             full_list = self._generate_full_nested_docs_list(join_type=self.type_join)

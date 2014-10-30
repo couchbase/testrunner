@@ -27,9 +27,9 @@ class JSONNonDocTests(QueryTests):
 
     def test_simple_query(self):
         for bucket in self.buckets:
-            self.query = "select value() from %s" % bucket.name
+            self.query = "select * from %s" % bucket.name
             actual_result = self.run_cbq_query()
-            actual_result = [doc["$1"] for doc in actual_result['results']]
+            actual_result = [doc[bucket.name] for doc in actual_result['results']]
             expected_result = self._generate_full_docs_list(self.gens_load)
             self._verify_results(sorted(actual_result), sorted(expected_result))
 

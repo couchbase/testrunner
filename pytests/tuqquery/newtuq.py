@@ -77,9 +77,9 @@ class QueryTests(BaseTestCase):
     def test_simple_negative_check(self):
         queries_errors = {'SELECT $str0 FROM {0} WHERE COUNT({0}.$str0)>3' :
                           'Aggregate function not allowed here',
-                          'SELECT *.$str0 FROM {0}' : 'Parse Error - syntax error',
-                          'SELECT *.* FROM {0} ... ERROR' : 'Parse Error - syntax error',
-                          'FROM %s SELECT $str0 WHERE id=null' : 'Parse Error - syntax error',}
+                          'SELECT *.$str0 FROM {0}' : 'syntax error',
+                          'SELECT *.* FROM {0} ... ERROR' : 'syntax error',
+                          'FROM %s SELECT $str0 WHERE id=null' : 'syntax error',}
         self.negative_common_body(queries_errors)
 
     def test_consistent_simple_check(self):
@@ -194,8 +194,6 @@ class QueryTests(BaseTestCase):
         queries_templates = ['SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ORDER BY points',
                    'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test WHERE test.$int0 >0'  +\
                    ' ORDER BY points',
-                   'SELECT tasks_points.task1 AS points FROM %s AS test ' +\
-                       'WHERE FLOOR(test.test_rate) >0 ORDER BY points',
                    'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ' +\
                    'GROUP BY test.$obj0.$_obj0_int0 ORDER BY points']
         for bucket in self.buckets:
@@ -759,5 +757,5 @@ class QueryTests(BaseTestCase):
                     self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
                     try:
                         self.run_cbq_query()
-                    except:
-                        pass
+                    except Exception, ex:
+                        self.log.error('ERROR during index creation %s' % str(ex))
