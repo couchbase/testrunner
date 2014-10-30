@@ -70,7 +70,7 @@ class QueryTests(BaseTestCase):
 ##############################################################################################
     def test_escaped_identifiers(self):
         queries_errors = {'SELECT name FROM {0} as bucket' :
-                          'Parse Error - syntax error'}
+                          'syntax error'}
         self.negative_common_body(queries_errors)
         for bucket in self.buckets:
             self.query = 'SELECT name FROM %s as `bucket` ORDER BY name' % (bucket.name)
@@ -1077,14 +1077,14 @@ class QueryTests(BaseTestCase):
             " as emp_job FROM %s GROUP BY job_title" % (bucket.name)
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
+            actual_result = sorted(actual_result)
 
             tmp_groups = set([doc['job_title'] for doc in full_list])
             expected_result = [{"job_title" : group,
                                 "emp_job" : 'employee-1' in [x["name"] for x in full_list
                                                            if x["job_title"] == group] }
                                for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_array_count(self):
@@ -1157,7 +1157,7 @@ class QueryTests(BaseTestCase):
 
     def test_array_min(self):
         for bucket in self.buckets:
-            self.query = "SELECT job_title, array_max(array_agg(test_rate)) as rates" +\
+            self.query = "SELECT job_title, array_min(array_agg(test_rate)) as rates" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
@@ -1587,7 +1587,7 @@ class QueryTests(BaseTestCase):
                                         now * 1000 + 100*24*60*60, (now + 10) * 1000+ 100*24*60*60, res["results"]))
 
     def test_date_add_str(self):
-        self.query = "select test_date_add_str(clock_str(), 10, 'day') as now"
+        self.query = "select date_add_str(clock_str(), 10, 'day') as now"
         now = datetime.datetime.now() + datetime.timedelta(days=10)
         res = self.run_cbq_query()
         expected = "%s-%02d-%02dT%02d:" % (now.year, now.month, now.day, now.hour)
@@ -1603,12 +1603,12 @@ class QueryTests(BaseTestCase):
     def test_date_diff_str(self):
         self.query = 'select date_diff_str("2014-08-24T01:33:59", "2014-08-24T07:33:59", "minute") as now'
         res = self.run_cbq_query()
-        self.assertTrue(res["results"][0]["now"] == -3600,
-                        "Result expected: %s. Actual %s" % (-3600, res["results"]))
+        self.assertTrue(res["results"][0]["now"] == -360,
+                        "Result expected: %s. Actual %s" % (-360, res["results"]))
         self.query = 'select date_diff_str("2014-08-24T01:33:59", "2014-08-24T07:33:59", "hour") as now'
         res = self.run_cbq_query()
-        self.assertTrue(res["results"][0]["now"] == -60,
-                        "Result expected: %s. Actual %s" % (-60, res["results"]))
+        self.assertTrue(res["results"][0]["now"] == -6,
+                        "Result expected: %s. Actual %s" % (-6, res["results"]))
 
     def test_now(self):
         self.query = "select now_str() as now"
@@ -1709,8 +1709,8 @@ class QueryTests(BaseTestCase):
     def test_where_millis(self):
         for bucket in self.buckets:
             self.query = "select join_yr, join_mo, join_day, name from %s" % (bucket.name) +\
-            " where join_mo < 10 and join_day < 10 and str_to_millis(to_str(join_yr) || '-0'" +\
-            " || to_str(join_mo) || '-0' || to_str(join_day)) < now_millis()"
+            " where join_mo < 10 and join_day < 10 and str_to_millis(tostr(join_yr) || '-0'" +\
+            " || tostr(join_mo) || '-0' || tostr(join_day)) < now_millis()"
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result["results"], key=lambda doc: (doc['name'],
                                                                                 doc['join_yr'],
@@ -1731,8 +1731,8 @@ class QueryTests(BaseTestCase):
         orders = ["asc", "desc"]
         for order in orders:
             for bucket in self.buckets:
-                self.query = "select millis_to_str(str_to_millis(to_str(join_yr) || '-0' ||" +\
-                " to_str(join_mo) || '-0' || to_str(join_day))) as date from %s" % (bucket.name) +\
+                self.query = "select millis_to_str(str_to_millis(tostr(join_yr) || '-0' ||" +\
+                " tostr(join_mo) || '-0' || tostr(join_day))) as date from %s" % (bucket.name) +\
                 " where join_mo < 10 and join_day < 10 ORDER BY date %s" % order
                 actual_result = self.run_cbq_query()
                 actual_result = ([{"date" : doc["date"][:10]} for doc in actual_result["results"]])
@@ -1884,14 +1884,14 @@ class QueryTests(BaseTestCase):
 
     def test_split_where(self):
         for bucket in self.buckets:
-            self.query = 'SELECT name' +\
-            ' FROM %s WHERE SPLIT(email, \'-\')[0] = SPLIT(name, \'-\')[1]' % (bucket.name)
+            self.query = 'SELECT name FROM %s' % (bucket.name) +\
+            ' WHERE SPLIT(email, \'-\')[0] = SPLIT(name, \'-\')[1]' 
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"]}
                                for doc in full_list
-                               if doc["email"].split[0] == doc["name"].split[1]]
+                               if doc["email"].split('-')[0] == doc["name"].split('-')[1]]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
