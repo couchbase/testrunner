@@ -125,6 +125,8 @@ class QueryViewException(MembaseHttpException):
     def __init__(self, view_name, reason='', status=0):
         self._message = 'Error occured querying view %s: %s' % (view_name, reason)
         self.status = status
+        self.view_name = view_name
+        self.reason = reason
 
 class ReadDocumentException(MembaseHttpException):
     def __init__(self, doc_id, reason=''):
