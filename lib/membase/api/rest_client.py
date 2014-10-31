@@ -1672,8 +1672,8 @@ class RestConnection(object):
         return False, None
 
     def change_memcached_t_option(self, value):
-        cmd = '[ns_config:update_key({node, N, memcached}, fun (PList)' +\
-              ' -> lists:keystore(verbosity, 1, PList, {verbosity, \'-t ' + str(value) + '\'}) end)' +\
+        cmd = '[ns_config:update_key({node, N, memcached}, fun (PList)' + \
+              ' -> lists:keystore(verbosity, 1, PList, {verbosity, \'-t ' + str(value) + '\'}) end)' + \
               ' || N <- ns_node_disco:nodes_wanted()].'
         return self.diag_eval(cmd)
 
@@ -2348,7 +2348,7 @@ class NodeDiskStorage(object):
 
 class Bucket(object):
     def __init__(self, bucket_size='', name="", authType="sasl", saslPassword="", num_replicas=0, port=11211, master_id=None,
-                 type='', eviction_policy="valueOnly"):
+                 type='', eviction_policy="valueOnly", bucket_priority=None):
         self.name = name
         self.port = port
         self.type = type
@@ -2365,6 +2365,7 @@ class Bucket(object):
         self.authType = authType
         self.master_id = master_id
         self.eviction_policy = eviction_policy
+        self.bucket_priority = bucket_priority
 
     def __str__(self):
         return self.name
