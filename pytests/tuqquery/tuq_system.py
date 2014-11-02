@@ -18,20 +18,22 @@ class SysCatalogTests(QueryTests):
         super(SysCatalogTests, self).suite_tearDown()
 
     def test_sites(self):
-        self.query = "SELECT * FROM :system.stores"
+        self.query = "SELECT * FROM :system.datastores"
         result = self.run_cbq_query()
         host = ('localhost', self.input.tuq_client)[self.input.tuq_client and "client" in self.input.tuq_client]
         for res in result['resultset']:
-            self.assertEqual(res['stores']['id'], res['stores']['url'],
+            self.assertEqual(res['datastores']['id'], res['stores']['url'],
                              "Id and url don't match")
-            self.assertTrue(res['stores']['url'].find(host) != -1,
+            self.assertTrue(res['datastores']['url'].find(host) != -1,
                             "Expected: %s, actual: %s" % (host, result))
 
     def test_pools(self):
         self.query = "SELECT * FROM system:namespaces"
         result = self.run_cbq_query()
 
-        host = ('localhost', self.input.tuq_client)[self.input.tuq_client and "client" in self.input.tuq_client]
+        host = 'localhost'
+        if self.input.tuq_client and "client" in self.input.tuq_client:
+            host = self.input.tuq_client.client
         for res in result['resultset']:
             self.assertEqual(res['namespaces']['id'], res['namespaces']['name'],
                         "Id and url don't match")

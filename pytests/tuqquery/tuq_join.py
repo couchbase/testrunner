@@ -388,7 +388,7 @@ class JoinTests(QueryTests):
                     for day in join_day:
                         name = ["employee-%s" % (str(day))]
                         tasks_ids = ["test_task-%s" % day, "test_task-%s" % (day + 1)]
-                        generators.append(DocumentGenerator("query-test-%s" % info,
+                        generators.append(DocumentGenerator("query-test-%s-%s-%s-%s" % (info, join_yr, join_mo, join_day),
                                                template,
                                                name, [year], [month], [day],
                                                [info], [tasks_ids],

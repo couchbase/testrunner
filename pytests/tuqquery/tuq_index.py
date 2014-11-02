@@ -395,7 +395,7 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_index_date"
             try:
                 self.query = "CREATE INDEX %s ON %s(" % (index_name, bucket.name) +\
-                "str_to_millis(to_str(join_yr) || '-0' || to_str(join_mo) || '-0' || to_str(join_day))) "
+                "str_to_millis(tostr(join_yr) || '-0' || tostr(join_mo) || '-0' || tostr(join_day))) "
                 self.run_cbq_query()
             except Exception, ex:
                 self.assertTrue(str(ex).find("Expression is not supported by indexing currently") != -1,
@@ -456,9 +456,9 @@ class QueriesViewsTests(QueryTests):
         self.assertTrue(view_name in ddoc["views"], "View %s wasn't created" % view_name)
 
     def _is_index_in_list(self, bucket, index_name):
-        query = "SELECT * FROM :system.indexes"
+        query = "SELECT * FROM system:indexes"
         res = self.run_cbq_query(query)
         for item in res['results']:
-            if item['bucket_id'] == bucket.name and item['name'] == index_name:
+            if item['keyspace_id'] == bucket.name and item['name'] == index_name:
                 return True
         return False

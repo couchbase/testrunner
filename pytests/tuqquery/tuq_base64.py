@@ -26,7 +26,7 @@ class Base64Tests(QueryTests):
 
     def test_simple_query(self):
         for bucket in self.buckets:
-            self.query = "select BASE64_VALUE(%s) from %s" % (bucket.name, bucket.name)
+            self.query = "select BASE64(%s) from %s" % (bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
             actual_result = [doc["$1"] for doc in actual_result['results']]
             expected_result = self._generate_full_docs_list(self.gens_load)
@@ -35,7 +35,7 @@ class Base64Tests(QueryTests):
     def test_negative_value(self):
         # tuq should not crash after error
         for bucket in self.buckets:
-            self.query = "select BASE64_VALUE() from %s" % (bucket.name)
+            self.query = "select BASE64() from %s" % (bucket.name)
             try:
                 self.run_cbq_query()
             except CBQError:
