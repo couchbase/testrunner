@@ -2166,7 +2166,7 @@ class QueryTests(BaseTestCase):
 
     def test_contains(self):
         for bucket in self.buckets:
-            self.query = "select name from %s when contains(job_title, 'Sale')" % (bucket.name)
+            self.query = "select name from %s where contains(job_title, 'Sale')" % (bucket.name)
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
@@ -2206,7 +2206,7 @@ class QueryTests(BaseTestCase):
             actual_result = sorted(actual_list['results'])
             expected_result = [{"pos" : (doc["VMs"][1]["name"].find('vm'))}
                                for doc in full_list]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
             self.query = "select POSITION(VMs[1].name, 'server') pos from %s" % (bucket.name)
             actual_list = self.run_cbq_query()
@@ -2259,7 +2259,7 @@ class QueryTests(BaseTestCase):
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"],
-                                "email" : doc["email"].replace('-mail', 'domain')}
+                                "mail" : doc["email"].replace('-mail', 'domain')}
                                for doc in full_list]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
@@ -2267,7 +2267,7 @@ class QueryTests(BaseTestCase):
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"],
-                                "email" : doc["email"].replace('e', 'a', 2)}
+                                "mail" : doc["email"].replace('e', 'a', 2)}
                                for doc in full_list]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
@@ -2279,7 +2279,7 @@ class QueryTests(BaseTestCase):
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"],
-                                "email" : doc["email"].replace('a', 'e', 1)}
+                                "mail" : doc["email"].replace('a', 'e', 1)}
                                for doc in full_list]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
