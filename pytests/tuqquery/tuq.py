@@ -1141,7 +1141,7 @@ class QueryTests(BaseTestCase):
 
     def test_array_sum(self):
         for bucket in self.buckets:
-            self.query = "SELECT job_title, array_sum(array_agg(test_rate)) as rates" +\
+            self.query = "SELECT job_title, round(array_sum(array_agg(test_rate))) as rates" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
             full_list = self._generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
@@ -1150,8 +1150,8 @@ class QueryTests(BaseTestCase):
 
             tmp_groups = set([doc['job_title'] for doc in full_list])
             expected_result = [{"job_title" : group,
-                                "rates" : sum([x["test_rate"] for x in full_list
-                                           if x["job_title"] == group])}
+                                "rates" : round(sum([x["test_rate"] for x in full_list
+                                           if x["job_title"] == group]))}
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
@@ -1196,8 +1196,8 @@ class QueryTests(BaseTestCase):
 
             tmp_groups = set([doc['job_title'] for doc in full_list])
             expected_result = [{"job_title" : group,
-                                "emp_job" : set([x["name"] for x in full_list
-                                           if x["job_title"] == group])}
+                                "emp_job" : sorted(set([x["name"] for x in full_list
+                                           if x["job_title"] == group]))}
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
@@ -1211,8 +1211,8 @@ class QueryTests(BaseTestCase):
                                    key=lambda doc: (doc['job_title']))
 
             expected_result = [{"job_title" : group,
-                                "emp_job" : set([x["name"] for x in full_list
-                                           if x["job_title"] == group] + ['employee-47'])}
+                                "emp_job" : sorted(set([x["name"] for x in full_list
+                                           if x["job_title"] == group] + ['employee-47']))}
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
@@ -1235,9 +1235,9 @@ class QueryTests(BaseTestCase):
                                    key=lambda doc: (doc['job_title']))
             tmp_groups = set([doc['job_title'] for doc in full_list])
             expected_result = [{"job_title" : group,
-                                "emp_job" : ["employee-47" if x["name"] == 'employee-1' else x["name"]
+                                "emp_job" : sorted(["employee-47" if x["name"] == 'employee-1' else x["name"]
                                              for x in full_list
-                                             if x["job_title"] == group]}
+                                             if x["job_title"] == group])}
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
@@ -2136,7 +2136,7 @@ class QueryTests(BaseTestCase):
             expected_result = [{"join_day" : doc["join_day"], "join_mo" : doc["join_mo"],
                                 "equality" : doc["join_day"] if doc["join_day"]!=doc["join_mo"] else 'NaN'}
                                for doc in full_list]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_posinf(self):
@@ -2149,7 +2149,7 @@ class QueryTests(BaseTestCase):
             expected_result = [{"join_day" : doc["join_day"], "join_mo" : doc["join_mo"],
                                 "equality" : doc["join_day"] if doc["join_day"]!=doc["join_mo"] else '+Infinity'}
                                for doc in full_list]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
@@ -2173,7 +2173,7 @@ class QueryTests(BaseTestCase):
             expected_result = [{"name" : doc["name"]}
                                for doc in full_list
                                if doc['job_title'].find('Sale') != -1]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_initcap(self):
@@ -2184,7 +2184,7 @@ class QueryTests(BaseTestCase):
             actual_result = sorted(actual_list['results'])
             expected_result = [{"OS" : (doc["VMs"][0]["os"][0].upper() + doc["VMs"][0]["os"][1:])}
                                for doc in full_list]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_title(self):
@@ -2195,7 +2195,7 @@ class QueryTests(BaseTestCase):
             actual_result = sorted(actual_list['results'])
             expected_result = [{"OS" : (doc["VMs"][0]["os"][0].upper() + doc["VMs"][0]["os"][1:])}
                                for doc in full_list]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_position(self):
@@ -2213,7 +2213,7 @@ class QueryTests(BaseTestCase):
             actual_result = sorted(actual_list['results'])
             expected_result = [{"pos" : (doc["VMs"][1]["name"].find('server'))}
                                for doc in full_list]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_regex_contains(self):
@@ -2225,7 +2225,7 @@ class QueryTests(BaseTestCase):
             expected_result = [{"email" : doc["email"]}
                                for doc in full_list
                                if len(re.compile('-m..l').findall(doc['email'])) > 0]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_regex_like(self):
@@ -2237,7 +2237,7 @@ class QueryTests(BaseTestCase):
             expected_result = [{"email" : doc["email"]}
                                for doc in full_list
                                if re.compile('.*-mail.*').search(doc['email'])]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_regex_position(self):
@@ -2249,7 +2249,7 @@ class QueryTests(BaseTestCase):
             expected_result = [{"email" : doc["email"]}
                                for doc in full_list
                                if doc['email'].find('-m') == 10]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_regex_replace(self):
@@ -2281,7 +2281,7 @@ class QueryTests(BaseTestCase):
             expected_result = [{"name" : doc["name"],
                                 "email" : doc["email"].replace('a', 'e', 1)}
                                for doc in full_list]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_repeat(self):
@@ -2292,7 +2292,7 @@ class QueryTests(BaseTestCase):
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"] * 2}
                                for doc in full_list]
-            expected_result = sorted(set(expected_result))
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 ##############################################################################################
 #    
