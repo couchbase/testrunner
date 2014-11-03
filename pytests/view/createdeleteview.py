@@ -1,6 +1,6 @@
 import json
 import time
-
+from threading import Thread, Event
 from basetestcase import BaseTestCase
 from couchbase.document import DesignDocument, View
 from couchbase.documentgenerator import DocumentGenerator
@@ -25,6 +25,7 @@ class CreateDeleteViewTests(BaseTestCase):
             self.num_views_per_ddoc = self.input.param("num_views_per_ddoc", 1)
             self.num_ddocs = self.input.param("num_ddocs", 1)
             self.gen = None
+            self.is_crashed = Event()
             self.default_design_doc_name = "Doc1"
             self.default_map_func = 'function (doc) { emit(doc.age, doc.first_name);}'
             self.updated_map_func = 'function (doc) { emit(null, doc);}'
@@ -974,3 +975,56 @@ class CreateDeleteViewTests(BaseTestCase):
                                          {"stale" : "ok", "full_set" : "true"}, self.num_items, bucket=self.default_bucket_name)
         if not result:
                 self.fail("View query didn't return expected result")
+
+    """MB-10921 - The leak can be reproduced by using the following steps:
+       1. Create a view with reduce function and build the view with sufficient data
+       2. Send the following http request through netcat and keep the netcat open to simulate reuse of connection.
+          $ nc localhost 8092
+            GET /default/_design/test/_view/test?stale=update_after HTTP/1.1
+       3. Now trigger manual compaction
+       4. $ echo beam | xargs -n1 pgrep | xargs -n1 -r -- lsof -n -p | grep deleted
+          beam.smp 27922 ubuntu 41r REG 202,1 2054213 167136 /home/ubuntu/couchbase-2.5/ns_server/data/n_0/data/.delete/5d79134a257d5866532ddef4d9827780 (deleted)"""
+
+    def test_file_descriptor_leak(self):
+        self._load_doc_data_all_buckets()
+        rest = RestConnection(self.servers[0])
+        port = ''.join(rest.capiBaseUrl.split(':')[2].strip('/'))
+        shell = RemoteMachineShellConnection(self.servers[0])
+        views = [View("view1", self.default_map_func, red_func='_count', dev_view=False)]
+        threads = []
+        for view in views:
+            try:
+                self.cluster.create_view(self.master, self.default_design_doc_name, view, 'default', self.wait_timeout * 2)
+                time.sleep(20)
+                threads.append(Thread(target=self.open_nc_conn, name="nc_thread", args=(view.name, port,)))
+                threads.append(Thread(target=rest.ddoc_compaction, name="comp_thread", args=(self.default_design_doc_name, self.default_bucket_name,)))
+                for thread in threads:
+                    thread.start()
+                    time.sleep(10)
+                for i in xrange(10):
+                    o, r = shell.execute_command("echo beam | xargs -n1 pgrep | xargs -n1 -r -- lsof -n -p | grep deleted")
+                    shell.log_command_output(o, r)
+                    if o:
+                        self.fail("fd leaks found {0}".format(o))
+                for thread in threads:
+                    thread.join()
+                if self.is_crashed.is_set():
+                    self.fail("Error occurred, At least one of the threads is crashed during test run")
+                self.log.info("No fd leak found")
+            except DesignDocCreationException as ex:
+                self.fail("Test Failed, Exception triggered {0}".format(ex))
+            finally:
+                shell.disconnect()
+
+    def open_nc_conn(self, view_name, port):
+        try:
+            shell = RemoteMachineShellConnection(self.servers[0])
+            o, r = shell.execute_command("echo -e \"GET /default/_design/{0}/_view/{1}?stale=update_after HTTP/1.1\r\n\" | nc {2} {3} -q 30".
+                                         format(self.default_design_doc_name, view_name, self.servers[0].ip, port))
+            shell.log_command_output(o, r)
+        except Exception as ex:
+            self.is_crashed.set()
+            self.log.error("Couldn't send http request through netcat %s" % str(ex))
+        finally:
+            self.log.info("Netcat connection closed")
+            shell.disconnect()
