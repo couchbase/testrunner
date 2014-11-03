@@ -230,42 +230,6 @@ class RestConnection(object):
             obj = object.__new__(self, serverInfo)
         return obj
 
-    #port is always 8091
-    # deprecated, should be removed in the future?
-    def __init__(self, ip, username='Administrator', password='password'):
-        #throw some error here if the ip is null ?
-        self.ip = ip
-        self.username = username
-        self.password = password
-        self.port = 8091
-        self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
-        self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
-        for iteration in xrange(3):
-            http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
-            if not success and type(http_res) == unicode and\
-               http_res.find('Node is unknown to this cluster') > -1:
-                log.error("Error 'Node is unknown to this cluster' was gotten,\
-                    5 seconds sleep before retry")
-                time.sleep(5)
-                continue
-            else:
-                break
-        #if node was not initialized we can't get response from 'nodes/self'
-        if not http_res or http_res["version"][0:2] == "1.":\
-            self.capiBaseUrl = self.baseUrl + "/couchBase"
-        else:
-            for iteration in xrange(5):
-                if "couchApiBase" not in http_res.keys():
-                    if self.is_cluster_mixed():
-                        self.capiBaseUrl = self.baseUrl + "/couchBase"
-                        return
-                    time.sleep(0.1)
-                    http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
-                else:
-                    self.capiBaseUrl = http_res["couchApiBase"]
-                    return
-            raise ServerUnavailableException("couchApiBase doesn't exist in nodes/self: %s " % http_res)
-
     def __init__(self, serverInfo):
         #serverInfo can be a json object
         if isinstance(serverInfo, dict):
