@@ -72,10 +72,6 @@ class DesignDocument():
 
         return False
 
-    def set_name(self, name):
-        self.id = '_design/{0}'.format(name)
-        self.name = name
-
     def as_json(self):
         json_object = {'views': {}}
         if self.spatial_views:
