@@ -13,7 +13,6 @@ import Queue
 
 sys.path = [".", "lib"] + sys.path
 import testconstants
-import couchdb
 import time
 from builds.build_query import BuildQuery
 import logging.config
@@ -84,8 +83,6 @@ def installer_factory(params):
         return MembaseServerInstaller()
     elif params["product"] in cb_alias:
         return CouchbaseServerInstaller()
-    elif params["product"] in css_alias:
-        return CouchbaseSingleServerInstaller()
     elif params["product"] in mongo_alias:
         return MongoInstaller()
     elif params["product"] in moxi_alias:
@@ -504,61 +501,6 @@ class CouchbaseServerInstaller(Installer):
         if queue:
             queue.put(success)
         return success
-
-
-class CouchbaseSingleServerInstaller(Installer):
-    def __init__(self):
-        Installer.__init__(self)
-
-    def install(self, params, queue=None):
-        try:
-            build = self.build_url(params)
-        except Exception, e:
-            if queue:
-                queue.put(False)
-            raise e
-        remote_client = RemoteMachineShellConnection(params["server"])
-        downloaded = remote_client.download_build(build)
-        if not downloaded:
-            log.error('unable to download binaries : {0}'.format(build.url))
-            return False
-        success = remote_client.couchbase_single_install(build)
-        remote_client.disconnect()
-        log.info('wait 5 seconds for couchbase-single server to start')
-        time.sleep(5)
-        if queue:
-            queue.put(success)
-        return success
-
-    def initialize(self, params):
-        start_time = time.time()
-        server = params["server"]
-        remote_client = RemoteMachineShellConnection(params["server"])
-        replace_127_0_0_1_cmd = "sed -i 's/127.0.0.1/0.0.0.0/g' {0}".format(
-            testconstants.COUCHBASE_SINGLE_DEFAULT_INI_PATH)
-        o, r = remote_client.execute_command(replace_127_0_0_1_cmd)
-        remote_client.log_command_output(o, r)
-        remote_client.stop_couchbase()
-        remote_client.start_couchbase()
-        remote_client.disconnect()
-        couchdb_ok = False
-
-        while time.time() < (start_time + 60):
-            try:
-                couch_ip = "http://{0}:5984/".format(server.ip)
-                log.info("connecting to couch @ {0}".format(couch_ip))
-                couch = couchdb.Server(couch_ip)
-                couch.config()
-                # TODO: verify version number and other properties
-                couchdb_ok = True
-                break
-            except Exception as ex:
-                msg = "error happened while creating connection to couchbase single server @ {0} , error : {1}"
-                log.error(msg.format(server.ip, ex))
-            log.info('sleep for 5 seconds before trying again ...')
-            time.sleep(5)
-        if not couchdb_ok:
-            raise Exception("unable to initialize couchbase single server")
 
 
 class MongoInstaller(Installer):
