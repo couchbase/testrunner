@@ -283,7 +283,7 @@ class RemoteMachineShellConnection:
         else:
             o, r = self.execute_command("killall -9 beam.smp")
             self.log_command_output(o, r)
-        return o,r
+        return o, r
 
     def kill_memcached(self):
         self.extract_remote_info()
@@ -293,7 +293,7 @@ class RemoteMachineShellConnection:
         else:
             o, r = self.execute_command("killall -9 memcached")
             self.log_command_output(o, r)
-        return o,r
+        return o, r
 
     def change_log_level(self, new_log_level):
         log.info("CHANGE LOG LEVEL TO %s".format(new_log_level))
@@ -1178,7 +1178,8 @@ class RemoteMachineShellConnection:
                 success &= self.log_command_output(output, error, track_words)
 
             # skip output: [WARNING] couchbase-server is already started
-            track_words = ("error", "fail")
+            # dirname error skipping for CentOS-6.6 (MB-12536)
+            track_words = ("error", "fail", "dirname")
             if startserver:
                 output, error = self.execute_command('/etc/init.d/{0}-server start'.format(server_type))
 
@@ -1638,6 +1639,9 @@ class RemoteMachineShellConnection:
                               So we will disable transparent_hugepage in this vm")
                     output, error = self.execute_command("echo never > /sys/kernel/mm/transparent_hugepage/enabled")
                     self.log_command_output(output, error)
+                    success = True
+                elif "dirname" in line:
+                    log.warning("Ignore dirname error message during couchbase startup/stop/restart for CentOS 6.6 (MB-12536)")
                     success = True
                 else:
                     success = False
