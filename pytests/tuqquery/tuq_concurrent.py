@@ -1,5 +1,7 @@
 import threading
 from threading import Event
+from membase.api.rest_client import RestConnection
+from membase.helper.cluster_helper import ClusterOperationHelper
 from tuqquery.tuq import QueryTests
 from view.viewquerytests import StoppableThread
 
@@ -9,14 +11,24 @@ class ConcurrentTests(QueryTests):
         self.thread_crashed = Event()
         self.thread_stopped = Event()
         self.num_threads = self.input.param("num_threads", 4)
-        self.test_to_run = self.input.param("test_to_run", "test_simple_check")
+        self.test_to_run = self.input.param("test_to_run", "test_max")
         self.ops = self.input.param("ops", None)
 
     def suite_setUp(self):
         super(ConcurrentTests, self).suite_setUp()
 
     def tearDown(self):
-        super(ConcurrentTests, self).tearDown()
+        rest = RestConnection(self.master)
+        if rest._rebalance_progress_status() == 'running':
+            self.log.warning("rebalancing is still running, test should be verified")
+            stopped = rest.stop_rebalance()
+            self.assertTrue(stopped, msg="unable to stop rebalance")
+        try:
+            super(ConcurrentTests, self).tearDown()
+        except:
+            pass
+        ClusterOperationHelper.cleanup_cluster(self.servers)
+        self.sleep(10)
 
     def suite_tearDown(self):
         super(ConcurrentTests, self).suite_tearDown()

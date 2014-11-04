@@ -594,7 +594,7 @@ class QueryTests(BaseTestCase):
 
     def test_meta(self):
         for bucket in self.buckets:
-            self.query = 'SELECT distinct name FROM %s WHERE META(%s).type = "json"'  % (
+            self.query = 'SELECT distinct name FROM %s WHERE META(%s).`type` = "json"'  % (
                                                                             bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'],
@@ -648,7 +648,7 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result, expected_result)
 
     def test_meta_negative(self):
-        queries_errors = {'SELECT distinct name FROM %s WHERE META().type = "json"' : 'Parse Error - syntax error'}
+        queries_errors = {'SELECT distinct name FROM %s WHERE META().type = "json"' : 'syntax error'}
         self.negative_common_body(queries_errors)
 
     def test_length(self):

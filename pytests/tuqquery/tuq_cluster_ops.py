@@ -1,6 +1,7 @@
 import math
 import time
-from tuqquery.tuq import QueryTests, JoinTests
+from tuqquery.tuq import QueryTests
+from tuqquery.tuq_join import JoinTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -34,68 +35,68 @@ class QueriesOpsTests(QueryTests):
 
     def test_incr_rebalance_in(self):
         self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
-        self.test_order_by_satisfy()
+        self.test_min()
         for i in xrange(1, self.nodes_in + 1):
             rebalance = self.cluster.async_rebalance(self.servers[:i],
                                                      self.servers[i:i+1], [])
-            self.test_order_by_satisfy()
+            self.test_min()
             rebalance.result()
-            self.test_order_by_satisfy()
+            self.test_min()
 
     def test_incr_rebalance_out(self):
         self.assertTrue(len(self.servers[:self.nodes_init]) > self.nodes_out,
                         "Servers are not enough")
-        self.test_order_by_satisfy()
+        self.test_min()
         for i in xrange(1, self.nodes_out + 1):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i-1)],
                                     [],
                                     self.servers[self.nodes_init - i:self.nodes_init - (i-1)])
-            self.test_order_by_satisfy()
+            self.test_min()
             rebalance.result()
-            self.test_order_by_satisfy()
+            self.test_min()
 
     def test_swap_rebalance(self):
         self.assertTrue(len(self.servers) >= self.nodes_init + self.nodes_in,
                         "Servers are not enough")
-        self.test_order_by_satisfy()
+        self.test_array_append()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                self.servers[self.nodes_init:self.nodes_init + self.nodes_in],
                                self.servers[self.nodes_init - self.nodes_out:self.nodes_init])
-        self.test_order_by_satisfy()
+        self.test_array_append()
         rebalance.result()
-        self.test_order_by_satisfy()
+        self.test_array_append()
 
     def test_rebalance_with_server_crash(self):
         servr_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
         servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
-        self.test_group_by_satisfy()
+        self.test_case()
         for i in xrange(3):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                      servr_in, servr_out)
             self.sleep(5, "Wait some time for rebalance process and then kill memcached")
             remote = RemoteMachineShellConnection(self.servers[self.nodes_init -1])
             remote.terminate_process(process_name='memcached')
-            self.test_group_by_satisfy()
+            self.test_case()
             try:
                 rebalance.result()
             except:
                 pass
         self.cluster.rebalance(self.servers[:self.nodes_init], servr_in, servr_out)
-        self.test_group_by_satisfy()
+        self.test_case()
 
     def test_failover(self):
         servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
-        self.test_group_by_aggr_fn()
+        self.test_union()
         self.cluster.failover(self.servers[:self.nodes_init], servr_out)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                [], servr_out)
-        self.test_group_by_aggr_fn()
+        self.test_union()
         rebalance.result()
-        self.test_group_by_aggr_fn()
+        self.test_union()
 
     def test_failover_add_back(self):
         servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
-        self.test_group_by_aggr_fn()
+        self.test_union()
 
         nodes_all = RestConnection(self.master).node_statuses()
         nodes = []
@@ -106,25 +107,25 @@ class QueriesOpsTests(QueryTests):
         for node in nodes:
             RestConnection(self.master).add_back_node(node.id)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
-        self.test_group_by_aggr_fn()
+        self.test_union()
         rebalance.result()
-        self.test_group_by_aggr_fn()
+        self.test_union()
 
     def test_autofailover(self):
         autofailover_timeout = 30
         status = RestConnection(self.master).update_autofailover_settings(True, autofailover_timeout)
         self.assertTrue(status, 'failed to change autofailover_settings!')
         servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
-        self.test_group_by_aggr_fn()
+        self.test_union()
         remote = RemoteMachineShellConnection(self.servers[self.nodes_init -1])
         try:
             remote.stop_server()
             self.sleep(autofailover_timeout + 10, "Wait for autofailover")
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                    [], servr_out)
-            self.test_group_by_aggr_fn()
+            self.test_union()
             rebalance.result()
-            self.test_group_by_aggr_fn()
+            self.test_union()
         finally:
             remote.start_server()
 
@@ -146,28 +147,28 @@ class QueriesOpsTests(QueryTests):
 
     def test_failover_with_server_crash(self):
         servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
-        self.test_group_by_aggr_fn()
+        self.test_union()
         self.cluster.failover(self.servers[:self.nodes_init], servr_out)
         for i in xrange(3):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                [], servr_out)
             self.sleep(5, "Wait some time for rebalance process and then kill memcached")
             self.shell.terminate_process(process_name='memcached')
-            self.test_group_by_aggr_fn()
+            self.test_union()
             try:
                 rebalance.result()
             except:
                 pass
         rebalance = self.cluster.rebalance(self.servers[:self.nodes_init],
                                [], servr_out)
-        self.test_group_by_aggr_fn()
+        self.test_union()
 
     def test_warmup(self):
         num_srv_warm_up = self.input.param("srv_warm_up", self.nodes_init)
         if self.input.tuq_client is None:
             self.fail("For this test external tuq server is requiered. " +\
                       "Please specify one in conf")
-        self.test_alias_order_desc()
+        self.test_union_all()
         for server in self.servers[self.nodes_init - num_srv_warm_up:self.nodes_init]:
             remote = RemoteMachineShellConnection(server)
             remote.stop_server()
@@ -175,11 +176,11 @@ class QueriesOpsTests(QueryTests):
             remote.disconnect()
         #run query, result may not be as expected, but tuq shouldn't fail
         try:
-            self.test_alias_order_desc()
+            self.test_union_all()
         except:
             pass
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-        self.test_alias_order_desc()
+        self.test_union_all()
 
     def test_with_backup(self):
         tmp_folder = "/tmp/backup"
@@ -188,7 +189,7 @@ class QueriesOpsTests(QueryTests):
             node = RestConnection(self.master).get_nodes_self()
             self.is_membase = False
             BackupHelper(self.master, self).backup('default', node, tmp_folder)
-            self.test_alias_order_desc()
+            self.test_union_all()
         finally:
             self.shell.delete_files(tmp_folder)
 
