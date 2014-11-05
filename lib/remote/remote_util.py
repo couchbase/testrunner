@@ -987,8 +987,6 @@ class RemoteMachineShellConnection:
         bat_file = "upgrade.bat"
         version_file = "VERSION.txt"
         print "version in membase upgrade windows ", version
-        if version[:5] in COUCHBASE_VERSION_3:
-            version_file = "README.txt"
         deleted = False
         self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb', version, task)
         self.stop_schedule_tasks()
@@ -1016,8 +1014,8 @@ class RemoteMachineShellConnection:
         log.info("installed version:")
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
         """   """
-        windows_process = full_version[:10]
-        self.sleep(60, "wait for server to start up completely")
+        self.wait_till_process_ended(full_version[:10])
+        self.sleep(10, "wait for server to start up completely")
         ct = time.time()
         while time.time() - ct < 10800:
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V| findstr Status ")
@@ -1038,8 +1036,6 @@ class RemoteMachineShellConnection:
         bat_file = "upgrade.bat"
         version_file = "VERSION.txt"
         print "version in couchbase upgrade windows ", version
-        if version[:5] in COUCHBASE_VERSION_3:
-            version_file = "README.txt"
         deleted = False
         self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb', version, task)
         self.stop_schedule_tasks()
@@ -1064,19 +1060,10 @@ class RemoteMachineShellConnection:
             log.error("Uninstall was failed at node {0}".format(self.ip))
             sys.exit()
         self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
-        log.info("installed version:")
+        log.info("installed version: {0}".format(version))
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
-        """   """
-        windows_process = version[:10]
-
-        print windows_process
-        output, error = self.execute_command("tasklist")
-        self.log_command_output(output, error)
-        self.sleep(5)
-        output, error = self.execute_command("tasklist | grep {0}".format(version[:10]))
-        self.log_command_output(output, error)
-        print "is uninstall running    ", RemoteMachineHelper(self).is_process_running('windows_process')
-        self.sleep(60, "wait for server to start up completely")
+        self.wait_till_process_ended(version[:10])
+        self.sleep(10, "wait for server to start up completely")
         ct = time.time()
         while time.time() - ct < 10800:
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V| findstr Status ")
@@ -1117,14 +1104,12 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             success &= self.log_command_output(output, error, track_words)
             file_check = 'VERSION.txt'
-            if build.product_version[:5] in WIN_CB_VERSION_3:
-                file_check = "README.txt"
             self.wait_till_file_added("/cygdrive/c/Program Files/{0}/Server/".format(server_type.title()), file_check,
                                           timeout_in_seconds=600)
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
             self.log_command_output(output, error)
-            output, error = self.execute_command("tasklist | grep {0}".format(build.product_version[:5]))
-            self.log_command_output(output, error)
+            self.wait_till_process_ended(build.product_version[:10])
+            self.sleep(10, "wait for server to start up completely")
 
             # output, error = self.execute_command("cmd rm /cygdrive/c/tmp/{0}*.exe".format(build_name))
             # self.log_command_output(output, error)
@@ -1242,14 +1227,9 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             success &= self.log_command_output(output, error, track_words)
             file_check = 'VERSION.txt'
-            if build.product_version[:5] in WIN_CB_VERSION_3:
-                file_check = "README.txt"
             self.wait_till_file_added(remote_path, file_check, timeout_in_seconds=600)
-            print version
-            self.sleep(5)
-            output, error = self.execute_command("tasklist | grep {0}".format(version[:10]))
-            self.log_command_output(output, error)
-            self.sleep(60, "wait for server to start up completely")
+            self.wait_till_process_ended(build.product_version[:10])
+            self.sleep(10, "wait for server to start up completely")
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
             self.log_command_output(output, error)
             output, error = self.execute_command("rm -f *-diag.zip")
@@ -1319,6 +1299,21 @@ class RemoteMachineShellConnection:
                 time.sleep(1)
         log.error("auto compaction is not started in {0} sec.".format(str(timeout_in_seconds)))
         return False
+
+    def wait_till_process_ended(self, process_name, timeout_in_seconds=240):
+        end_time = time.time() + float(timeout_in_seconds)
+        process_ended = False
+        while time.time() < end_time and not process_ended:
+            output, error = self.execute_command("tasklist | grep {0}" \
+                                                 .format(process_name))
+            self.log_command_output(output, error)
+            if output and process_name in output[0]:
+                self.sleep(5, "wait for process ended!")
+            else:
+                log.info("process {0} either not run or ended" \
+                         .format(process_name))
+                process_ended = True
+        return process_ended
 
     def terminate_processes(self, info, list):
         for process in list:
@@ -1392,28 +1387,15 @@ class RemoteMachineShellConnection:
                 """ end remove code """
 
                 time.sleep(5)
-                print "full version build:   " , full_version
-                print "short version build:   " , short_version
-                print "full version with exe   ", full_version[:10] + ".exe"
-                windows_process = full_version[:10]
-
                 # run schedule task uninstall couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
-                if full_version[:5] in WIN_CB_VERSION_3:
-                    version_file = "README.txt"
                 deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
-                output, error = self.execute_command("tasklist")
-                self.log_command_output(output, error)
-                self.sleep(5)
-                output, error = self.execute_command("tasklist | grep {0}".format(full_version[:10]))
-                self.log_command_output(output, error)
-                print windows_process
-                print "is uninstall running    ", RemoteMachineHelper(self).is_process_running('windows_process')
-                self.sleep(60, "next step is to install")
+                self.wait_till_process_ended(full_version[:10])
+                self.sleep(10, "next step is to install")
                 output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
                 self.log_command_output(output, error)
                 # delete binary after uninstall
@@ -1424,7 +1406,6 @@ class RemoteMachineShellConnection:
                 output, error = self.kill_erlang(os="windows")
                 self.log_command_output(output, error)
                 """ end remove code """
-                print "running uninstall now.....%%%%%"
 
 
                 """ the code below need to remove when bug MB-11985 is fixed in 3.0.1 """
@@ -1509,17 +1490,12 @@ class RemoteMachineShellConnection:
             # run schedule task uninstall couchbase server
             output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
             self.log_command_output(output, error)
-            if build_name[:5] in WIN_CB_VERSION_3:
-                version_file = "README.txt"
             deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
             if not deleted:
                 log.error("Uninstall was failed at node {0}".format(self.ip))
                 sys.exit()
-            self.sleep(3)
-            output, error = self.execute_command("tasklist | grep {0}".format(build_name[:5]))
-            self.log_command_output(output, error)
-
-            self.sleep(15, "next step is to install")
+            self.wait_till_process_ended(build_name[:10])
+            self.sleep(10, "next step is to install")
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
             self.log_command_output(output, error)
             output, error = self.execute_command("rm /cygdrive/c/tmp/{0}".format(build_name))
@@ -1582,13 +1558,12 @@ class RemoteMachineShellConnection:
                 # run schedule task uninstall Couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
-                if build_name[:5] in WIN_CB_VERSION_3:
-                    version_file = "README.txt"
                 deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
-                self.sleep(60, "nex step is to install")
+                self.wait_till_process_ended(full_version[:10])
+                self.sleep(10, "next step is to install")
                 output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
                 self.log_command_output(output, error)
             else:
