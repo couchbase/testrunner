@@ -37,7 +37,7 @@ fi
 
 if ! [ -z "$url" ];
 then
-    install_params+=",url=$url"
+    install_params="$install_params,url=$url"
 fi
 
 if [ -z "$group" ];
