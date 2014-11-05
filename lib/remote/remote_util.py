@@ -1303,16 +1303,20 @@ class RemoteMachineShellConnection:
     def wait_till_process_ended(self, process_name, timeout_in_seconds=240):
         end_time = time.time() + float(timeout_in_seconds)
         process_ended = False
+        process_running = False
         while time.time() < end_time and not process_ended:
             output, error = self.execute_command("tasklist | grep {0}" \
                                                  .format(process_name))
             self.log_command_output(output, error)
             if output and process_name in output[0]:
                 self.sleep(5, "wait for process ended!")
+                process_running = True
             else:
-                log.info("process {0} either not run or ended" \
-                         .format(process_name))
-                process_ended = True
+                if process_running:
+                    log.info("process {0} ended".format(process_name))
+                    process_ended = True
+                else:
+                    log.error("process {0} may not run".format(process_name))
         return process_ended
 
     def terminate_processes(self, info, list):
