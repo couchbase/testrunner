@@ -306,6 +306,84 @@ class DMLQueryTests(QueryTests):
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, new_key)
         self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
         self.assertEqual(actual_result['results']['rows'], 1, 'Query was not run successfully')
+        self.assertEqual(actual_result['resultset']['actual'], current_docs - 1, 'Item was not deleted')
+############################################################################################################################
+#
+# UPDATE
+#
+############################################################################################################################
+
+    def test_update_keys_clause(self):
+        num_docs_update = self.input.param('docs_to_update', 3)
+        num_docs = self.input.param('num_docs', 10)
+        keys, _ = self._insert_gen_keys(num_docs)
+        keys_to_update = keys[:-num_docs_update]
+        updated_value = 'new_name'
+        for bucket in self.buckets:
+            self.query = 'update %s  keys [%s] set name="%s"'  % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update), updated_value)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.query = 'select name from %s keys [%s]' % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update))
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['resultset'],[{'name':updated_value}] * num_docs_update, 'Names were not changed')
+
+    def test_update_where(self):
+        num_docs_update = self.input.param('docs_to_update', 3)
+        num_docs = self.input.param('num_docs', 10)
+        _, values = self._insert_gen_keys(num_docs)
+        updated_value = 'new_name'
+        for bucket in self.buckets:
+            self.query = 'update %s set name="%s" where join_day=1'  % (bucket.name, updated_value)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.query = 'select name from %s where join_day=1' % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertFalse([doc for doc in actual_result['resultset'] if doc['name'] != updated_value], 'Names were not changed')
+
+    def test_update_where_limit(self):
+        num_docs_update = self.input.param('docs_to_update', 3)
+        num_docs = self.input.param('num_docs', 10)
+        _, values = self._insert_gen_keys(num_docs)
+        updated_value = 'new_name'
+        for bucket in self.buckets:
+            self.query = 'update %s set name="%s" where join_day=1 limit 1'  % (bucket.name, updated_value)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.query = 'select name from %s where join_day=1' % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(len([doc for doc in actual_result['resultset'] if doc['name'] == updated_value]), 1, 'Names were not changed')
+
+    def test_update_keys_for(self):
+        num_docs_update = self.input.param('docs_to_update', 3)
+        num_docs = self.input.param('num_docs', 10)
+        keys, _ = self._insert_gen_keys(num_docs)
+        keys_to_update = keys[:-num_docs_update]
+        updated_value = 'new_name'
+        for bucket in self.buckets:
+            self.query = 'update %s  keys [%s] set vm.os="%s" for vm in VMs'  % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update), updated_value)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.query = 'select name from %s keys [%s]' % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update))
+            actual_result = self.run_cbq_query()
+            self.assertTrue([row for row in actual_result['resultset']
+                             if len([vm['os'] for vm in row['VMs']
+                                     if vm['os'] == updated_value]) == len(row['VMs'])], 'Os of vms were not changed')
+
+    def test_update_keys_for_where(self):
+        num_docs_update = self.input.param('docs_to_update', 3)
+        num_docs = self.input.param('num_docs', 10)
+        keys, _ = self._insert_gen_keys(num_docs)
+        keys_to_update = keys[:-num_docs_update]
+        updated_value = 'new_name'
+        for bucket in self.buckets:
+            self.query = 'update %s  keys [%s] set vm.os="%s" for vm in VMs where vm.os="ubuntu"'  % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update), updated_value)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.query = 'select name from %s keys [%s]' % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update))
+            actual_result = self.run_cbq_query()
+            self.assertTrue([row for row in actual_result['resultset']
+                             if len([vm['os'] for vm in row['VMs']
+                                     if vm['os'] == updated_value]) == 1], 'Os of vms were not changed')
 
 ############################################################################################################################
 
