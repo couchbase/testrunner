@@ -338,7 +338,8 @@ class MembaseServerInstaller(Installer):
         else:
             downloaded = remote_client.download_build(build)
             if not downloaded:
-                log.error('unable to download binaries : {0}'.format(build.url))
+                log.error('server {1} unable to download binaries : {0}' \
+                          .format(build.url, params["server"].ip))
                 return False
             path = server.data_path or '/tmp'
             success &= remote_client.install_server(build, path=path, vbuckets=vbuckets, \
@@ -482,7 +483,8 @@ class CouchbaseServerInstaller(Installer):
         else:
             downloaded = remote_client.download_build(build)
             if not downloaded:
-                log.error('unable to download binaries : {0}'.format(build.url))
+                log.error('server {1} unable to download binaries : {0}' \
+                          .format(build.url, params["server"].ip))
                 return False
             # TODO: need separate methods in remote_util for couchbase and membase install
             path = server.data_path or '/tmp'
@@ -535,7 +537,8 @@ class MongoInstaller(Installer):
 
         downloaded = remote_client.download_binary(server.product_url, "tgz", server.product_tgz)
         if not downloaded:
-            log.error(downloaded, 'unable to download binaries : {0}'.format(server.product_url))
+            log.error(downloaded, 'server {1} unable to download binaries : {0}' \
+                      .format(server.product_url, server.ip))
 
         remote_client.execute_command("tar -xzvf /tmp/{0}".format(server.product_tgz))
 
@@ -592,7 +595,8 @@ class MoxiInstaller(Installer):
         else:
             downloaded = remote_client.download_build(build)
             if not downloaded:
-                log.error('unable to download binaries : {0}'.format(build.url))
+                log.error('server {1} unable to download binaries : {0}' \
+                          .format(build.url, params["server"].ip))
                 return False
             try:
                 success = remote_client.install_moxi(build)
