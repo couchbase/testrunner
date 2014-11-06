@@ -2406,6 +2406,21 @@ class QueryTests(BaseTestCase):
                 "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
                                                                 server.ip, server.port)
             self.shell.execute_command(cmd)
+        elif self.version == "sherlock":
+            os = self.shell.extract_remote_info().type.lower()
+            if os != 'windows':
+                couchbase_path = testconstants.LINUX_COUCHBASE_BIN_PATH
+            else:
+                couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
+            if os == 'windows':
+                cmd = "cd %s; " % (couchbase_path) +\
+                "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
+                                                                server.ip, server.port)
+            else:
+                cmd = "cd %s; " % (couchbase_path) +\
+                "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
+                                                                server.ip, server.port)
+            self.shell.execute_command(cmd)
         else:
             os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':
