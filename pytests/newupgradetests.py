@@ -7,6 +7,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.kvstore import KVStore
+from testconstants import COUCHBASE_VERSION_2
 
 
 class SingleNodeUpgradeTests(NewUpgradeBaseTest):
@@ -513,8 +514,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 FIND_MASTER = True
                 self.log.info("2.0 Node %s becomes the master" % (new_server.ip))
                 break
-        if not FIND_MASTER and not self.is_downgrade:
-            raise Exception("After rebalance in 3.0 Nodes, 3.0 doesn't become the master")
+        if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 \
+            and not FIND_MASTER and not self.is_downgrade:
+            raise Exception("After rebalance in 3.x.x Nodes, 3.x.x doesn't become the master")
 
         servers_out = self.servers[:self.nodes_init]
         self.log.info("Rebalanced out all old version nodes")
