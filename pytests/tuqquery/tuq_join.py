@@ -58,42 +58,6 @@ class JoinTests(QueryTests):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
-    def test_simple_join_key(self):
-        for bucket in self.buckets:
-            self.query = "SELECT employee.name, employee.tasks_ids, new_project " +\
-            "FROM %s as employee %s JOIN default.project as new_project " % (bucket.name, self.type_join) +\
-            "ON KEY employee.tasks_ids[0]"
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'])
-            full_list = self._generate_full_joined_docs_list(particular_key=0,
-                                                             join_type=self.type_join)
-            expected_result = [doc for doc in full_list if not doc]
-            expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids'],
-                                     "new_project" : doc['project']}
-                                    for doc in full_list if doc and 'project' in doc])
-            expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids']}
-                                    for doc in full_list if doc and not 'project' in doc])
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
-    def test_join_several_key(self):
-        for bucket in self.buckets:
-            self.query = "SELECT employee.name, employee.tasks_ids, new_task.project, new_task.task_name " +\
-            "FROM %s as employee %s JOIN default as new_task " % (bucket.name, self.type_join) +\
-            "ON KEY employee.tasks_ids[1]"
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'])
-            full_list = self._generate_full_joined_docs_list(particular_key=1,
-                                                                   join_type=self.type_join)
-            expected_result = [doc for doc in full_list if not doc]
-            expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids'],
-                                     "project" : doc['project'], "task_name" : doc['task_name']}
-                                    for doc in full_list if doc and 'project' in doc])
-            expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids']}
-                                    for doc in full_list if doc and not 'project' in doc])
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
-
     def test_where_join_keys(self):
         for bucket in self.buckets:
             self.query = "SELECT employee.name, employee.tasks_ids, new_project_full.project new_project " +\
@@ -209,22 +173,6 @@ class JoinTests(QueryTests):
 #   KEY
 ##############################################################################################
 
-    def test_key(self):
-        for bucket in self.buckets:
-            key_select, _ = copy.deepcopy(self.gens_tasks[0]).next()
-            self.query = 'select task_name FROM %s KEY "%s"' % (bucket.name, key_select)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['task_name']))
-            full_list = self._generate_full_docs_list(self.gens_tasks, keys=[key_select])
-            expected_result = [{"task_name" : doc['task_name']} for doc in full_list]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['task_name']))
-            self._verify_results(actual_result, expected_result)
-
-            self.query = 'select task_name FROM %s KEY "wrong_one"' % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertFalse(actual_result['results'], "Having a wrong key query returned some result")
-
     def test_keys(self):
         for bucket in self.buckets:
             keys_select = []
@@ -250,16 +198,6 @@ class JoinTests(QueryTests):
             self.query = 'select task_name FROM %s USE KEYS ["wrong_one","wrong_second"]' % (bucket.name)
             actual_result = self.run_cbq_query()
             self.assertFalse(actual_result['results'], "Having a wrong key query returned some result")
-
-    def test_key_first(self):
-        for bucket in self.buckets:
-            key_select, value_select = copy.deepcopy(self.gens_tasks[0]).next()
-            self.query = 'SELECT * FROM %s KEY FIRST emp._id FOR emp IN [%s] END' % (bucket.name, value_select)
-            actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'])
-            expected_result = self._generate_full_docs_list(self.gens_tasks, keys=[key_select])
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
 
     def test_key_array(self):
         for bucket in self.buckets:
