@@ -1039,6 +1039,8 @@ class RemoteMachineShellConnection:
         deleted = False
         self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb', version, task)
         self.stop_schedule_tasks()
+        self.remove_win_backup_dir()
+        self.remove_win_collect_tmp()
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
         log.info("version to upgrade: {0}".format(output))
         log.info('before running task schedule upgrademe')
