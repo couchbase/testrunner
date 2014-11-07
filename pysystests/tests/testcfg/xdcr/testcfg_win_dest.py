@@ -69,7 +69,7 @@ CLUSTER_IPS = ['172.23.107.75', '172.23.107.76', '172.23.107.77', '172.23.107.78
 "                             "COUCHBASE_IP" : "10.0.0.10",
 "                             "COUCHBASE_PORT" : "9000"}}
 """
-REMOTE_SITES = {"remote" : {"RABBITMQ_IP" : "172.23.105.184",
+REMOTE_SITES = {"source" : {"RABBITMQ_IP" : "172.23.105.184",
                              "CB_CLUSTER_TAG" : "default",
                              "COUCHBASE_IP" : "172.23.107.67",
                              "COUCHBASE_PORT" : "8091"}}
