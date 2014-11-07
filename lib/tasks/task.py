@@ -506,7 +506,7 @@ class XdcrStatsWaitTask(StatsWaitTask):
         for server in self.servers:
             try:
                 rest = RestConnection(server)
-                stat = 'replications/'+ rest.get_replication_for_buckets(self.bucket, self.bucket)['id'] + '/' + self.stat
+                stat = 'replications/' + rest.get_replication_for_buckets(self.bucket, self.bucket)['id'] + '/' + self.stat
                 # just get the required value, don't fetch the big big structure of stats
                 stats_value = rest.fetch_bucket_stats(self.bucket)['op']['samples'][stat][-1]
                 stat_result += long(stats_value)
@@ -1197,6 +1197,11 @@ class VerifyRevIdTask(GenericLoadingTask):
             else:
                 self.state = FINISHED
                 self.set_exception(error)
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught: {0}".format(e))
+            self.set_exception(e)
 
     def _check_key_revId(self, key, ignore_meta_data=[]):
         src_meta_data = self.__get_meta_data(self.client, key)
