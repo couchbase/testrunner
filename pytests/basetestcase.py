@@ -1089,6 +1089,16 @@ class BaseTestCase(unittest.TestCase):
                     for key in map[bucket][node][vbucket].keys():
                         print "            :: for key {0} = {1}".format(key, map[bucket][node][vbucket][key])
 
+    def get_meta_data_set_all(self, dest_server,kv_store = 1):
+        """ Method to get all meta data set for buckets and from the servers """
+        data_map = {}
+        for bucket in self.buckets:
+            self.log.info(" Collect data for bucket {0}".format(bucket.name))
+            task = self.cluster.async_get_meta_data(dest_server, bucket, bucket.kvs[kv_store])
+            task.result()
+            data_map[bucket.name] = task.get_meta_data_store()
+        return data_map
+
     def get_data_set_all(self, servers, buckets, path=None, mode = "disk"):
         """ Method to get all data set for buckets and from the servers """
         info, dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
@@ -1121,6 +1131,16 @@ class BaseTestCase(unittest.TestCase):
         self.assertTrue(logic, summary)
         self.log.info(" End Verification for Active Vs Replica ")
         return disk_replica_dataset, disk_active_dataset
+
+    def data_active_and_replica_analysis(self,server, max_verify=None, only_store_hash=True, kv_store = 1):
+        for bucket in self.buckets:
+            task = self.cluster.async_verify_active_replica_data(server, bucket, bucket.kvs[kv_store], max_verify)
+            task.result()
+
+    def data_meta_data_analysis(self,dest_server, meta_data_store, kv_store =1):
+        for bucket in self.buckets:
+            task = self.cluster.async_verify_meta_data(dest_server, bucket, bucket.kvs[kv_store], meta_data_store[bucket.name])
+            task.result()
 
     def vb_distribution_analysis(self, servers = [], buckets = [], total_vbuckets = 0, std = 1.0, type = "rebalance", graceful = True):
         """

@@ -168,6 +168,21 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
+    def async_verify_active_replica_data(self, server, bucket, kv_store, max_verify=None):
+        _task = ValidateDataWithActiveAndReplicaTask(server, bucket, kv_store, max_verify)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_verify_meta_data(self, dest_server, bucket, kv_store, meta_data_store):
+        _task = VerifyMetaDataTask(dest_server, bucket, kv_store, meta_data_store)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_get_meta_data(self, dest_server, bucket, kv_store):
+        _task = GetMetaDataTask(dest_server, bucket, kv_store)
+        self.task_manager.schedule(_task)
+        return _task
+
     def async_verify_revid(self, src_server, dest_server, bucket, kv_store):
         _task = VerifyRevIdTask(src_server, dest_server, bucket, kv_store)
         self.task_manager.schedule(_task)

@@ -1052,6 +1052,76 @@ class ValidateDataTask(GenericLoadingTask):
                 self.set_exception(error)
         self.kv_store.release_partition(key)
 
+class ValidateDataWithActiveAndReplicaTask(GenericLoadingTask):
+    def __init__(self, server, bucket, kv_store, max_verify=None):
+        GenericLoadingTask.__init__(self, server, bucket, kv_store)
+        self.valid_keys, self.deleted_keys = kv_store.key_set()
+        self.num_valid_keys = len(self.valid_keys)
+        self.num_deleted_keys = len(self.deleted_keys)
+        self.itr = 0
+        self.max_verify = self.num_valid_keys + self.num_deleted_keys
+        if max_verify is not None:
+            self.max_verify = min(max_verify, self.max_verify)
+        self.log.info("%s items will be verified on %s bucket" % (self.max_verify, bucket))
+        self.start_time = time.time()
+
+    def has_next(self):
+        if self.itr < (self.num_valid_keys + self.num_deleted_keys) and\
+            self.itr < self.max_verify:
+            if not self.itr % 50000:
+                self.log.info("{0} items were verified".format(self.itr))
+            return True
+        self.log.info("{0} items were verified in {1} sec.the average number of ops\
+            - {2} per second ".format(self.itr, time.time() - self.start_time,
+                self.itr / (time.time() - self.start_time)).rstrip())
+        return False
+
+    def next(self):
+        if self.itr < self.num_valid_keys:
+            self._check_valid_key(self.valid_keys[self.itr])
+        else:
+            self._check_deleted_key(self.deleted_keys[self.itr - self.num_valid_keys])
+        self.itr += 1
+
+    def _check_valid_key(self, key):
+        try:
+            o, c, d = self.client.get(key)
+            o_r, c_r, d_r = self.client.getr(key, replica_index=0)
+            if o != o_r:
+                self.state = FINISHED
+                self.set_exception(Exception('ACTIVE AND REPLICA FLAG CHECK FAILED :: Key: %s, Bad result for CAS value: REPLICA FLAG %s != ACTIVE FLAG %s' % (key, o_r, o)))
+            if c != c_r:
+                self.state = FINISHED
+                self.set_exception(Exception('ACTIVE AND REPLICA CAS CHECK FAILED :: Key: %s, Bad result for CAS value: REPLICA CAS %s != ACTIVE CAS %s' % (key, c_r, c)))
+            if d != d_r:
+                self.state = FINISHED
+                self.set_exception(Exception('ACTIVE AND REPLICA VALUE CHECK FAILED :: Key: %s, Bad result for Value value: REPLICA VALUE %s != ACTIVE VALUE %s' % (key, d_r, d)))
+
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+                pass
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
+        except Exception as error:
+            self.log.error("Unexpected error: %s" % str(error))
+            self.state = FINISHED
+            self.set_exception(error)
+
+    def _check_deleted_key(self, key):
+        partition = self.kv_store.acquire_partition(key)
+        try:
+            o, c, d = self.client.delete(key)
+            if partition.get_valid(key) is not None:
+                self.state = FINISHED
+                self.set_exception(Exception('ACTIVE CHECK :: Not Deletes: %s' % (key)))
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND:
+                pass
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
+        self.kv_store.release_partition(key)
 
 class BatchedValidateDataTask(GenericLoadingTask):
     def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=True, batch_size=100, timeout_sec=5):
@@ -1236,6 +1306,128 @@ class VerifyRevIdTask(GenericLoadingTask):
             self.log.error("Dest meta data: %s" % dest_meta_data)
             self.state = FINISHED
 
+class VerifyMetaDataTask(GenericLoadingTask):
+    def __init__(self, dest_server, bucket, kv_store, meta_data_store, max_err_count=100):
+        GenericLoadingTask.__init__(self, dest_server, bucket, kv_store)
+        self.client = VBucketAwareMemcached(RestConnection(dest_server), bucket)
+        self.valid_keys, self.deleted_keys = kv_store.key_set()
+        self.num_valid_keys = len(self.valid_keys)
+        self.num_deleted_keys = len(self.deleted_keys)
+        self.keys_not_found = {self.client.rest.ip: [], self.client.rest.ip: []}
+        self.itr = 0
+        self.err_count = 0
+        self.max_err_count = max_err_count
+        self.meta_data_store = meta_data_store
+
+    def has_next(self):
+        if self.itr < (self.num_valid_keys + self.num_deleted_keys) and self.err_count < self.max_err_count:
+            return True
+        self.log.info("Meta Data Verification : {0} existing items have been verified"
+                      .format(self.itr if self.itr < self.num_valid_keys else self.num_valid_keys))
+        self.log.info("Meta Data Verification : {0} deleted items have been verified"
+                      .format(self.itr - self.num_valid_keys if self.itr > self.num_valid_keys else 0))
+        return False
+
+    def next(self):
+        if self.itr < self.num_valid_keys:
+            self._check_key_meta_data(self.valid_keys[self.itr])
+        elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
+            # verify deleted/expired keys
+            self._check_key_meta_data(self.deleted_keys[self.itr - self.num_valid_keys],
+                                  ignore_meta_data=['expiration'])
+        self.itr += 1
+
+        # show progress of verification for every 50k items
+        if math.fmod(self.itr, 50000) == 0.0:
+            self.log.info("{0} items have been verified".format(self.itr))
+
+    def __get_meta_data(self, client, key):
+        try:
+            mc = client.memcached(key)
+            meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (mc.getMeta(key)))
+            return meta_data
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND:
+                if key not in self.deleted_keys:
+                    self.err_count += 1
+                    self.keys_not_found[client.rest.ip].append(("key: %s" % key, "vbucket: %s" % client._get_vBucket_id(key)))
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
+
+    def _check_key_meta_data(self, key, ignore_meta_data=[]):
+        src_meta_data = self.meta_data_store[key]
+        dest_meta_data = self.__get_meta_data(self.client, key)
+        if not src_meta_data or not dest_meta_data:
+            return
+        prev_error_count = self.err_count
+        err_msg = []
+        # seqno number should never be zero
+        if dest_meta_data['seqno'] == 0:
+            self.err_count += 1
+            err_msg.append(
+                "seqno on Destination should not be 0, Error Count:{0}".format(self.err_count))
+
+        # verify all metadata
+        for meta_key in src_meta_data.keys():
+            if src_meta_data[meta_key] != dest_meta_data[meta_key] and meta_key not in ignore_meta_data:
+                self.err_count += 1
+                err_msg.append("{0} mismatch: Source {0}:{1}, Destination {0}:{2}, Error Count:{3}"
+                    .format(meta_key, src_meta_data[meta_key],
+                        dest_meta_data[meta_key], self.err_count))
+
+        if self.err_count - prev_error_count > 0:
+            self.log.error("===== Verifying meta data failed for key: {0} =====".format(key))
+            [self.log.error(err) for err in err_msg]
+            self.log.error("Source meta data: %s" % src_meta_data)
+            self.log.error("Dest meta data: %s" % dest_meta_data)
+            self.state = FINISHED
+
+class GetMetaDataTask(GenericLoadingTask):
+    def __init__(self, dest_server, bucket, kv_store):
+        GenericLoadingTask.__init__(self, dest_server, bucket, kv_store)
+        self.client = VBucketAwareMemcached(RestConnection(dest_server), bucket)
+        self.valid_keys, self.deleted_keys = kv_store.key_set()
+        self.num_valid_keys = len(self.valid_keys)
+        self.num_deleted_keys = len(self.deleted_keys)
+        self.keys_not_found = {self.client.rest.ip: [], self.client.rest.ip: []}
+        self.itr = 0
+        self.err_count = 0
+        self.max_err_count = 100
+        self.meta_data_store = {}
+
+    def has_next(self):
+        if self.itr < (self.num_valid_keys + self.num_deleted_keys) and self.err_count < self.max_err_count:
+            return True
+        self.log.info("Get Meta Data : {0} existing items have been gathered"
+                      .format(self.itr if self.itr < self.num_valid_keys else self.num_valid_keys))
+        self.log.info("Get Meta Data : {0} deleted items have been gathered"
+                      .format(self.itr - self.num_valid_keys if self.itr > self.num_valid_keys else 0))
+        return False
+
+    def next(self):
+        if self.itr < self.num_valid_keys:
+            self.meta_data_store[self.valid_keys[self.itr]] = self.__get_meta_data(self.client,self.valid_keys[self.itr])
+        elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
+            self.meta_data_store[self.deleted_keys[self.itr - self.num_valid_keys]] = self.__get_meta_data(self.client,self.deleted_keys[self.itr - self.num_valid_keys])
+        self.itr += 1
+
+    def __get_meta_data(self, client, key):
+        try:
+            mc = client.memcached(key)
+            meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (mc.getMeta(key)))
+            return meta_data
+        except MemcachedError as error:
+            if error.status == ERR_NOT_FOUND:
+                if key not in self.deleted_keys:
+                    self.err_count += 1
+                    self.keys_not_found[client.rest.ip].append(("key: %s" % key, "vbucket: %s" % client._get_vBucket_id(key)))
+            else:
+                self.state = FINISHED
+                self.set_exception(error)
+
+    def get_meta_data_store(self):
+        return self.meta_data_store
 
 class ViewCreateTask(Task):
     def __init__(self, server, design_doc_name, view, bucket="default", with_query=True,
