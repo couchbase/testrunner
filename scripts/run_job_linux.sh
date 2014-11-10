@@ -106,7 +106,7 @@ fi
 echo '---------------------------- TESTS RUN -----------------------'
 if test X"${upgrade_version}" != X"" ;
 then
-	$python_exe testrunner.py -i ${ini_file} -c ${config_file} -p ${test_params},GROUP=${group},upgrade_version=${version_number}
+	$python_exe testrunner.py -i ${ini_file} -c ${config_file} -p ${test_params},GROUP=${group},upgrade_version=${version_number},initial_vbuckets=${vbuckets}
 else
 	$python_exe testrunner.py -i ${ini_file} -c ${config_file} -p ${test_params},GROUP=${group}
 fi
