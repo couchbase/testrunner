@@ -29,13 +29,17 @@ class JSONNonDocTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select * from %s" % bucket.name
             actual_result = self.run_cbq_query()
+            self.sleep(5, 'wait for index build')
+            actual_result = self.run_cbq_query()
             actual_result = [doc[bucket.name] for doc in actual_result['results']]
             expected_result = self._generate_full_docs_list(self.gens_load)
             self._verify_results(sorted(actual_result), sorted(expected_result))
 
     def test_int_where(self):
         for bucket in self.buckets:
-            self.query = "select value() from %s where value() > 300" % bucket.name
+            self.query = "select v from %s where v > 300" % bucket.name
+            actual_result = self.run_cbq_query()
+            self.sleep(5, 'wait for index build')
             actual_result = self.run_cbq_query()
             actual_result = [doc["$1"] for doc in actual_result['results']]
             expected_result = self._generate_full_docs_list(self.gens_load)
@@ -44,7 +48,9 @@ class JSONNonDocTests(QueryTests):
 
     def test_string_where(self):
         for bucket in self.buckets:
-            self.query = "select value() from %s where value() = 4" % bucket.name
+            self.query = "select v from %s where v = 4" % bucket.name
+            actual_result = self.run_cbq_query()
+            self.sleep(5, 'wait for index build')
             actual_result = self.run_cbq_query()
             actual_result = [doc["$1"] for doc in actual_result['results']]
             expected_result = self._generate_full_docs_list(self.gens_load)
@@ -53,7 +59,9 @@ class JSONNonDocTests(QueryTests):
 
     def test_array_where(self):
         for bucket in self.buckets:
-            self.query = "SELECT value() FROM %s WHERE ANY num IN value() SATISFIES num > 20 end" % bucket.name
+            self.query = "SELECT v FROM %s WHERE ANY num IN v SATISFIES num > 20 end" % bucket.name
+            actual_result = self.run_cbq_query()
+            self.sleep(5, 'wait for index build')
             actual_result = self.run_cbq_query()
             actual_result = [doc["$1"] for doc in actual_result['results']]
             expected_result = self._generate_full_docs_list(self.gens_load)
