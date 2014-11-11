@@ -16,6 +16,7 @@ from testconstants import MV_LATESTBUILD_REPO
 from testconstants import WIN_CB_VERSION_3
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
+from testconstants import WIN_COUCHBASE_BIN_PATH
 
 
 from membase.api.rest_client import RestConnection, RestHelper
@@ -883,6 +884,53 @@ class RemoteMachineShellConnection:
             log.error('Can not write build name file to bat file {0}'.format(found))
         sftp.close()
 
+    def set_vbuckets_win(self, vbuckets):
+        bin_path = WIN_COUCHBASE_BIN_PATH
+        bin_path = bin_path.replace("\\", "")
+        src_file = bin_path + "service_register.bat"
+        des_file = "/tmp/service_register.bat_{0}".format(self.ip)
+        local_file = "/tmp/service_register.bat.tmp_{0}".format(self.ip)
+
+        self.copy_file_remote_to_local(src_file, des_file)
+        f1 = open(des_file, "r")
+        f2 = open(local_file, "w")
+        """ when install new cb server on windows, there is not
+            env COUCHBASE_NUM_VBUCKETS yet.  We need to insert this
+            env to service_register.bat right after  ERL_FULLSWEEP_AFTER 512
+            like -env ERL_FULLSWEEP_AFTER 512 -env COUCHBASE_NUM_VBUCKETS vbuckets
+            where vbucket is params passed to function when run install scripts """
+        for line in f1:
+            if "-env COUCHBASE_NUM_VBUCKETS " in line:
+                tmp1 = line.split("COUCHBASE_NUM_VBUCKETS")
+                tmp2 = tmp1[1].strip().split(" ")
+                log.info("set vbuckets of node {0} to {1}" \
+                                 .format(self.ip, vbuckets))
+                tmp2[0] = vbuckets
+                tmp1[1] = " ".join(tmp2)
+                line = "COUCHBASE_NUM_VBUCKETS ".join(tmp1)
+            elif "-env ERL_FULLSWEEP_AFTER 512" in line:
+                log.info("set vbuckets of node {0} to {1}" \
+                                 .format(self.ip, vbuckets))
+                line = line.replace("-env ERL_FULLSWEEP_AFTER 512", \
+                  "-env ERL_FULLSWEEP_AFTER 512 -env COUCHBASE_NUM_VBUCKETS {0}" \
+                                 .format(vbuckets))
+            f2.write(line)
+        f1.close()
+        f2.close()
+        self.copy_file_local_to_remote(local_file, src_file)
+
+        """ re-register new setup to cb server """
+        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_stop.bat")
+        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_unregister.bat")
+        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_register.bat")
+        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_start.bat")
+        self.sleep(10, "wait for cb server start completely after reset vbuckets!")
+
+        """ remove temporary files on slave """
+        os.remove(local_file)
+        os.remove(des_file)
+
+
     def create_directory(self, remote_path):
         sftp = self._ssh_client.open_sftp()
         try:
@@ -1112,6 +1160,8 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
             self.wait_till_process_ended(build.product_version[:10])
             self.sleep(10, "wait for server to start up completely")
+            if vbuckets:
+                self.set_vbuckets_win(vbuckets)
 
             # output, error = self.execute_command("cmd rm /cygdrive/c/tmp/{0}*.exe".format(build_name))
             # self.log_command_output(output, error)
@@ -1196,7 +1246,7 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error, track_words)
         return success
 
-    def install_server_win(self, build, version, startserver=True):
+    def install_server_win(self, build, version, startserver=True, vbuckets=None):
         remote_path = None
         success = True
         track_words = ("warning", "error", "fail")
@@ -1225,17 +1275,17 @@ class RemoteMachineShellConnection:
             self.remove_win_collect_tmp()
             log.info('sleep for 5 seconds before running task schedule install me')
             time.sleep(5)
-            # run task schedule to install Membase server
+            """ run task schedule to install cb server """
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             success &= self.log_command_output(output, error, track_words)
             file_check = 'VERSION.txt'
             self.wait_till_file_added(remote_path, file_check, timeout_in_seconds=600)
             self.wait_till_process_ended(build.product_version[:10])
             self.sleep(10, "wait for server to start up completely")
-            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
-            self.log_command_output(output, error)
             output, error = self.execute_command("rm -f *-diag.zip")
             self.log_command_output(output, error, track_words)
+            if vbuckets:
+                self.set_vbuckets_win(vbuckets)
             return success
 
 
@@ -1402,9 +1452,7 @@ class RemoteMachineShellConnection:
                     sys.exit()
                 self.wait_till_process_ended(full_version[:10])
                 self.sleep(10, "next step is to install")
-                output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
-                self.log_command_output(output, error)
-                # delete binary after uninstall
+                """ delete binary after uninstall """
                 output, error = self.execute_command("rm /cygdrive/c/tmp/{0}".format(build_name))
                 self.log_command_output(output, error)
 
