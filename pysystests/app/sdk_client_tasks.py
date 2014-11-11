@@ -42,10 +42,7 @@ except ValueError:
     pass
 
 imp.reload(couchbase)
-from couchbase import Couchbase
-from couchbase.experimental import enable as enable_experimental
-enable_experimental()
-from gcouchbase.connection import GConnection
+from couchbase.bucket import Bucket
 
 class PersistedCB(Task):
     clientMap = {}
@@ -61,8 +58,8 @@ class PersistedCB(Task):
             if len(addr) > 1:
                 port = addr[1]
 
-            logger.error("connecting sdk: %s" % host)
-            self._conn = Couchbase.connect(bucket=bucket, password=password, host=host, port=port)
+            logger.error("DEPRECIATED SDK CONNECT METHOD sdk: %s" % host)
+            self._conn = Bucket("%s:%s/%s" % (host, port, bucket), password = password)
             self.clientMap[bucket] = self._conn
             self._stale_count = 0
         #self._stale_count = self._stale_count + 1
@@ -140,20 +137,20 @@ def mdelete(keys, bucket = "default", password = "", hosts = None):
 @celery.task
 def set(key, value, bucket = "default", password = ""):
 
-    cb = Couchbase.connect(bucket = self._bucket, host=cfg.COUCHBASE_IP)
+    cb = Bucket(host=cfg.COUCHBASE_IP + "/" + self.bucket)
     cb.set({key : value})
 
 @celery.task
 def get(key, bucket = "default", password = ""):
 
-    cb = Couchbase.connect(bucket = self._bucket, host=cfg.COUCHBASE_IP)
+    cb = Bucket(host=cfg.COUCHBASE_IP + "/" + self.bucket)
     rc = cb.get(key)
     return rc
 
 @celery.task
 def delete(key, bucket = "default", password = ""):
 
-    cb = Couchbase.connect(bucket = self._bucket, host=cfg.COUCHBASE_IP)
+    cb = Bucket(host=cfg.COUCHBASE_IP + "/" + self.bucket)
     rc = cb.delete(key)
 
 """

@@ -12,7 +12,7 @@ import argparse
 from couchbase.experimental import enable as enable_experimental
 from couchbase.exceptions import NotFoundError, TemporaryFailError, TimeoutError, NetworkError
 enable_experimental()
-from gcouchbase.connection import GConnection
+from gcouchbase.bucket import Bucket
 import testcfg as cfg
 
 # rabbit
@@ -98,10 +98,11 @@ class SDKClient(threading.Thread):
         self.done = False
 
         try:
-            self.cb = GConnection(bucket=self.bucket, password = self.password, host = host, port = port)
+            endpoint = "%s:%s/%s" % (host, port, self.bucket)
+            self.cb = Bucket(endpoint, password = self.password)
         except Exception as ex:
-            logging.error("[Thread %s] cannot reach %s:%s/%s" %
-                          (self.name, host, port, self.bucket))
+            logging.error("[Thread %s] cannot reach %s" %
+                          (self.name, endpoint))
             logging.error(ex)
             self.isterminal = True
 
@@ -629,7 +630,7 @@ def resolveTemplate(template):
             val = item
             if type(item) == list:
                 val = resolveList(item)
-            elif item and '$' in item:
+            elif item and type(item) == str and '$' in item:
                 val = convToType(item)
             rc.append(val)
 
@@ -642,9 +643,8 @@ def resolveTemplate(template):
                 val = resolveDict(v)
             elif type(v) == list:
                 val = resolveList(v)
-            elif v and '$' in v:
+            elif v and type(v) == str and '$' in v:
                 val = convToType(v)
-
             rc[k] = val
         return rc
 
