@@ -138,7 +138,7 @@ def start_worker(worker_ip):
 
     print("Starting celery worker...")
     if worker_ip == cfg.WORKERS[0]:
-        _, stdout, _ = worker_client.exec_command("cd {0}; pwd; screen -dmS celery -L sh -c  \ "
+        _, stdout, _ = worker_client.exec_command("cd {0}; pwd; export C_FORCE_ROOT=1;screen -dmS celery -L sh -c  \ "
         "\'celery worker -c 8 -A app -B -l ERROR --purge -I app.init; exec bash;\'".format(cfg.WORKER_PYSYSTESTS_PATH))
     else:
         _, stdout, _ = worker_client.exec_command("cd {0}; pwd; screen -dmS celery -L sh -c \
