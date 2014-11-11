@@ -27,8 +27,7 @@ class QueryTests(BaseTestCase):
             self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
         else:
             self.shell = RemoteMachineShellConnection(self.master)
-        if not self._testMethodName == 'suite_setUp':
-            self._start_command_line_query(self.master)
+        self._start_command_line_query(self.master)
         self.use_rest = self.input.param("use_rest", True)
         self.max_verify = self.input.param("max_verify", None)
         self.buckets = RestConnection(self.master).get_buckets()
@@ -59,7 +58,6 @@ class QueryTests(BaseTestCase):
     def suite_tearDown(self):
         if not self.input.param("skip_build_tuq", False):
             if hasattr(self, 'shell'):
-                self.shell.execute_command("killall /tmp/tuq/cbq-engine")
                 self.shell.execute_command("killall cbq-engine")
                 self.shell.disconnect()
 
@@ -2420,7 +2418,8 @@ class QueryTests(BaseTestCase):
                 cmd = "cd %s; " % (couchbase_path) +\
                 "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
                                                                 server.ip, server.port)
-            self.shell.execute_command(cmd)
+            out = self.shell.execute_command(cmd)
+            self.log.info(out)
         else:
             os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':
@@ -2577,5 +2576,5 @@ class QueryTests(BaseTestCase):
                     self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
                     try:
                         self.run_cbq_query()
-                    except:
-                        pass
+                    except Exception, ex:
+                        self.log.info(str(ex))

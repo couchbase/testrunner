@@ -11,6 +11,7 @@ class DMLQueryTests(QueryTests):
     def setUp(self):
         super(DMLQueryTests, self).setUp()
         self.directory = self.input.param("directory", "/tmp/tuq_data")
+        self.create_primary_index_for_3_0_and_greater()
 
 ############################################################################################################################
 #
@@ -133,14 +134,6 @@ class DMLQueryTests(QueryTests):
                 keys.append(key)
                 values.append(value)
 
-        def items_check(prefix, vls):
-            for bucket in self.buckets:
-                self.query = 'select * from %s keys %s'  % (bucket.name, ','.join(["%s%s" % (prefix,i)
-                                                                                   for i in xrange(num_docs)]))
-                actual_result = self.run_cbq_query()
-                expected_result = vls
-                self.assertEqual(sorted(actual_result['results']), sorted(expected_result),
-                                 'Item did not appear')
         for bucket in self.buckets:
             for i in xrange(num_docs):
                 self.query = 'insert into %s key "insert_%s" select name from %s keys ["%s"]'  % (bucket.name, str(i),
@@ -151,11 +144,20 @@ class DMLQueryTests(QueryTests):
 
         for bucket in self.buckets:
             for i in xrange(num_docs):
-                self.query = 'insert into %s key "insert_%s" select name from %s keys ["%s"]'  % (bucket.name, str(i),
+                self.query = 'insert into %s key "insert_%s" select name from %s use keys ["%s"]'  % (bucket.name, str(i),
                                                                                               bucket.name, keys[num_docs + i])
                 actual_result = self.run_cbq_query()
                 self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
-        items_check('insert_', values[num_docs:num_docs + num_docs])
+        self.items_check('insert_', values[num_docs:num_docs + num_docs])
+
+        def items_check(self, prefix, vls):
+            for bucket in self.buckets:
+                self.query = 'select * from %s use keys %s'  % (bucket.name, ','.join(["%s%s" % (prefix,i)
+                                                                                   for i in xrange(num_docs)]))
+                actual_result = self.run_cbq_query()
+                expected_result = vls
+                self.assertEqual(sorted(actual_result['results']), sorted(expected_result),
+                                 'Item did not appear')
 ############################################################################################################################
 #
 # DELETE
@@ -351,11 +353,18 @@ class DMLQueryTests(QueryTests):
     def _common_check(self, key, expected_item_value, upsert=False):
         clause = 'UPSERT' if upsert else 'INSERT'
         for bucket in self.buckets:
-            self.query = '%s into %s key "%s" VALUES %s' % (clause, bucket.name, key, expected_item_value)
+            inserted = expected_item_value
+            if isinstance(expected_item_value, str):
+                inserted = '"%s"' % expected_item_value
+            self.query = '%s into %s key "%s" VALUES %s' % (clause, bucket.name, key, inserted)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
-            
             self.query = 'select * from %s'  % (bucket.name)
+            try:
+                actual_result = self.run_cbq_query()
+            except:
+                pass
+            self.sleep(15, 'Wait for index rebuild')
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['results'].count({bucket.name : expected_item_value}), 1,
                              'Item did not appear')
