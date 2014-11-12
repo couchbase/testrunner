@@ -171,12 +171,13 @@ class RemoteMachineShellConnection:
             except Exception as e:
                 if str(e).find('PID check failed. RNG must be re-initialized') != -1 and\
                         attempt != max_attempts_connect:
-                    log.error("Can't establish SSH session: {0}. Will try again in 1 sec"
-                              .format(e))
+                    log.error("Can't establish SSH session to node {1} :\
+                              {0}. Will try again in 1 sec".format(e, self.ip))
                     attempt += 1
                     time.sleep(1)
                 else:
-                    log.error("Can't establish SSH session: {0}".format(e))
+                    log.error("Can't establish SSH session to node {1} :\
+                                                   {0}".format(e, self.ip))
                     exit(1)
         log.info("Connected to {0}".format(serverInfo.ip))
 
