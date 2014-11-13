@@ -10,9 +10,13 @@ JOIN_RIGHT = "RIGHT"
 
 class JoinTests(QueryTests):
     def setUp(self):
-        super(JoinTests, self).setUp()
-        self.gens_tasks = self.generate_docs_tasks()
-        self.type_join = self.input.param("type_join", JOIN_INNER)
+        try:
+            super(JoinTests, self).setUp()
+            self.gens_tasks = self.generate_docs_tasks()
+            self.type_join = self.input.param("type_join", JOIN_INNER)
+        except Exception, ex:
+            self.log.error("ERROR SETUP FAILED: %s" % str(ex))
+            raise ex
 
     def suite_setUp(self):
         super(JoinTests, self).suite_setUp()
