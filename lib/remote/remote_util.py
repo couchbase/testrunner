@@ -1740,7 +1740,7 @@ class RemoteMachineShellConnection:
         if self.use_sudo or use_channel:
             channel = self._ssh_client.get_transport().open_session()
             channel.get_pty()
-            channel.settimeout(600)
+            channel.settimeout(900)
             stdin = channel.makefile('wb')
             stdout = channel.makefile('rb')
             stderro = channel.makefile_stderr('rb')
