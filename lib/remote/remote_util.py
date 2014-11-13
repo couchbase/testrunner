@@ -1389,7 +1389,7 @@ class RemoteMachineShellConnection:
     def couchbase_uninstall(self):
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
-                         "/opt/couchbase"]
+                         "/opt/couchbase", "/data/"]
         terminate_process_list = ["beam.smp", "memcached", "moxi", "vbucketmigrator",
                                   "couchdb", "epmd", "memsup", "cpu_sup"]
         version_file = "VERSION.txt"
