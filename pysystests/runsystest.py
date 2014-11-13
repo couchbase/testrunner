@@ -137,12 +137,21 @@ def start_worker(worker_ip):
     start_process(worker_client, "memcached", cmd)
 
     print("Starting celery worker...")
+
+    _, out, _ = worker_client.exec_command("celery --version")
+    celery_param = ""
+    for line in out:
+        if "3.1.16" in line:
+            celery_param = "-Ofair"
+            print "Celery version: {0} is installed, running it with {1} param".format(line, celery_param)
+            break
+
     if worker_ip == cfg.WORKERS[0]:
         _, stdout, _ = worker_client.exec_command("cd {0}; pwd; export C_FORCE_ROOT=1;screen -dmS celery -L sh -c  \ "
-        "\'celery worker -c 8 -A app -B -l ERROR --purge -I app.init; exec bash;\'".format(cfg.WORKER_PYSYSTESTS_PATH))
+        "\'celery worker -c 8 -A app -B -l ERROR {1} --purge -I app.init; exec bash;\'".format(cfg.WORKER_PYSYSTESTS_PATH, celery_param))
     else:
         _, stdout, _ = worker_client.exec_command("cd {0}; pwd; screen -dmS celery -L sh -c \
-         \'celery worker -c 16 -A app -l ERROR -I app.init; exec bash;\'".format(cfg.WORKER_PYSYSTESTS_PATH))
+         \'celery worker -c 16 -A app -l ERROR {1} -I app.init; exec bash;\'".format(cfg.WORKER_PYSYSTESTS_PATH, celery_param))
     time.sleep(20)
     #read_screenlog(worker_ip, cfg.WORKER_PYSYSTESTS_PATH, stop_if_EOF=True)
     worker_client.close()
