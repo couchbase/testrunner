@@ -53,6 +53,7 @@ class WarmUpTests(BaseTestCase):
                         warmup_time = int(stats_all_buckets[bucket.name].get_stats([server], bucket, 'warmup', 'ep_warmup_time')[server])
                         if warmup_time is not None:
                             self.log.info("ep_warmup_time is %s for %s in bucket %s" % (warmup_time, server.ip, bucket.name))
+                        self.sleep(5, "waiting for warmup...")
                     except Exception as e:
                         self.log.error("Could not get warmup_time stats from server %s:%s, exception %s" % (server.ip, server.port, e))
 
