@@ -263,12 +263,14 @@ class BucketDeleteTask(Task):
 
 class RebalanceTask(Task):
     def __init__(self, servers, to_add=[], to_remove=[], do_stop=False, progress=30,
-                 use_hostnames=False):
+                 use_hostnames=False, services = None):
         Task.__init__(self, "rebalance_task")
         self.servers = servers
         self.to_add = to_add
         self.to_remove = to_remove
         self.start_time = None
+        self.services = services
+
         try:
             self.rest = RestConnection(self.servers[0])
         except ServerUnavailableException, e:
@@ -296,14 +298,19 @@ class RebalanceTask(Task):
 
     def add_nodes(self, task_manager):
         master = self.servers[0]
+        services_for_node = None
+        node_index = 0
         for node in self.to_add:
             self.log.info("adding node {0}:{1} to cluster".format(node.ip, node.port))
+            if self.services != None:
+                services_for_node = [self.services[node_index]]
+                node_index += 1
             if self.use_hostnames:
                 self.rest.add_node(master.rest_username, master.rest_password,
-                                   node.hostname, node.port)
+                                   node.hostname, node.port, services = services_for_node)
             else:
                 self.rest.add_node(master.rest_username, master.rest_password,
-                                   node.ip, node.port)
+                                   node.ip, node.port, services = services_for_node)
 
     def start_rebalance(self, task_manager):
         nodes = self.rest.node_statuses()

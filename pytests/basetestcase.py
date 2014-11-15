@@ -72,6 +72,7 @@ class BaseTestCase(unittest.TestCase):
             self.nodes_init = self.input.param("nodes_init", 1)
             self.nodes_in = self.input.param("nodes_in", 1)
             self.nodes_out = self.input.param("nodes_out", 1)
+            self.services_init = self.input.param("services_init", None)
             self.forceEject = self.input.param("forceEject", False)
             self.force_kill_memcached  = TestInputSingleton.input.param('force_kill_memcached', False)
             self.num_replicas = self.input.param("replicas", 1)
@@ -145,13 +146,16 @@ class BaseTestCase(unittest.TestCase):
                     str(self.__class__).find('negativetests.NegativeTests') != -1 or \
                     str(self.__class__).find('warmuptest.WarmUpTests') != -1 or \
                     str(self.__class__).find('failover.failovertests.FailoverTests') != -1:
+                    services = self.get_services(self.num_servers,self.services_init)
                     # rebalance all nodes into the cluster before each test
-                    self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
+                    self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [], services = services)
                 elif self.nodes_init > 1:
-                    self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
+                    services = self.get_services(self.nodes_init,self.services_init)
+                    self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [], services = services)
                 elif str(self.__class__).find('ViewQueryTests') != -1 and \
                         not self.input.param("skip_rebalance", False):
-                    self.cluster.rebalance(self.servers, self.servers[1:], [])
+                    services = self.get_services(self.num_servers,self.services_init)
+                    self.cluster.rebalance(self.servers, self.servers[1:], [], services = services)
             except BaseException, e:
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
@@ -1461,3 +1465,14 @@ class BaseTestCase(unittest.TestCase):
             victim_nodes = self.add_remove_servers(nodes, nodes, [chosen,self.master],[])
             victim_nodes = victim_nodes[:victim_count]
         return victim_nodes
+
+    def get_services(self, init_nodes, services_init):
+        services = []
+        if services_init != None and "-" in services_init:
+            services = services_init.replace(":",",").split("-")
+        elif services_init != None:
+            for node in range(1,init_nodes):
+                services.append(services_init.replace(":",","))
+        else:
+            return None
+        return services

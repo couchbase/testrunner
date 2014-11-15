@@ -881,7 +881,7 @@ class RestConnection(object):
     #can't add the node to itself ( TODO )
     #server already added
     #returns otpNode
-    def add_node(self, user='', password='', remoteIp='', port='8091', zone_name=''):
+    def add_node(self, user='', password='', remoteIp='', port='8091', zone_name='', services = None):
         otpNode = None
         log.info('adding remote node @{0}:{1} to this cluster @{2}:{3}'\
                           .format(remoteIp, port, self.ip, self.port))
@@ -899,6 +899,62 @@ class RestConnection(object):
         params = urllib.urlencode({'hostname': "{0}:{1}".format(remoteIp, port),
                                    'user': user,
                                    'password': password})
+        if services != None:
+            services = ','.join(services)
+            params = urllib.urlencode({'hostname': "{0}:{1}".format(remoteIp, port),
+                                   'user': user,
+                                   'password': password,
+                                   'services': services})
+        status, content, header = self._http_request(api, 'POST', params)
+        if status:
+            json_parsed = json.loads(content)
+            otpNodeId = json_parsed['otpNode']
+            otpNode = OtpNode(otpNodeId)
+            if otpNode.ip == '127.0.0.1':
+                otpNode.ip = self.ip
+        else:
+            self.print_UI_logs()
+            try:
+                #print logs from node that we want to add
+                wanted_node = deepcopy(self)
+                wanted_node.ip = remoteIp
+                wanted_node.print_UI_logs()
+            except Exception, ex:
+                self.log(ex)
+            if content.find('Prepare join failed. Node is already part of cluster') >= 0:
+                raise ServerAlreadyJoinedException(nodeIp=self.ip,
+                                                   remoteIp=remoteIp)
+            elif content.find('Prepare join failed. Joining node to itself is not allowed') >= 0:
+                raise ServerSelfJoinException(nodeIp=self.ip,
+                                          remoteIp=remoteIp)
+            else:
+                log.error('add_node error : {0}'.format(content))
+                raise AddNodeException(nodeIp=self.ip,
+                                          remoteIp=remoteIp,
+                                          reason=content)
+        return otpNode
+
+        #params serverIp : the server to add to this cluster
+    #raises exceptions when
+    #unauthorized user
+    #server unreachable
+    #can't add the node to itself ( TODO )
+    #server already added
+    #returns otpNode
+    def do_join_cluster(self, user='', password='', remoteIp='', port='8091', zone_name='', services = None):
+        otpNode = None
+        log.info('adding remote node @{0}:{1} to this cluster @{2}:{3}'\
+                          .format(remoteIp, port, self.ip, self.port))
+        api = self.baseUrl + '/node/controller/doJoinCluster'
+        params = urllib.urlencode({'hostname': "{0}:{1}".format(remoteIp, port),
+                                   'user': user,
+                                   'password': password})
+        if services != None:
+            services = ','.join(services)
+            params = urllib.urlencode({'hostname': "{0}:{1}".format(remoteIp, port),
+                                   'user': user,
+                                   'password': password,
+                                   'services': services})
         status, content, header = self._http_request(api, 'POST', params)
         if status:
             json_parsed = json.loads(content)

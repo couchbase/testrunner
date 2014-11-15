@@ -188,7 +188,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_rebalance(self, servers, to_add, to_remove, use_hostnames=False):
+    def async_rebalance(self, servers, to_add, to_remove, use_hostnames=False, services = None):
         """Asyncronously rebalances a cluster
 
         Parameters:
@@ -199,7 +199,7 @@ class Cluster(object):
 
         Returns:
             RebalanceTask - A task future that is a handle to the scheduled task"""
-        _task = RebalanceTask(servers, to_add, to_remove, use_hostnames=use_hostnames)
+        _task = RebalanceTask(servers, to_add, to_remove, use_hostnames=use_hostnames, services = services)
         self.task_manager.schedule(_task)
         return _task
 
@@ -324,7 +324,7 @@ class Cluster(object):
         _task = self.async_init_node(server, async_init_node, disabled_consistent_view)
         return _task.result()
 
-    def rebalance(self, servers, to_add, to_remove, timeout=None, use_hostnames=False):
+    def rebalance(self, servers, to_add, to_remove, timeout=None, use_hostnames=False, services = None):
         """Syncronously rebalances a cluster
 
         Parameters:
@@ -332,10 +332,10 @@ class Cluster(object):
             to_add - All servers being added to the cluster ([TestInputServers])
             to_remove - All servers being removed from the cluster ([TestInputServers])
             use_hostnames - True if nodes should be added using their hostnames (Boolean)
-
+            services - Services definition per Node, default is None (this is since Sherlock release)
         Returns:
             boolean - Whether or not the rebalance was successful"""
-        _task = self.async_rebalance(servers, to_add, to_remove, use_hostnames)
+        _task = self.async_rebalance(servers, to_add, to_remove, use_hostnames, services = services)
         return _task.result(timeout)
 
     def load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, timeout=None,
