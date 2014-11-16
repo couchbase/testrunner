@@ -2292,6 +2292,36 @@ class QueryTests(BaseTestCase):
                                for doc in full_list]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+
+##############################################################################################
+#
+#   LET
+##############################################################################################
+
+    def test_let_nums(self):
+        for bucket in self.buckets:
+            self.query = "select test_r, test_r > 2 compare from %s let test_r = (test_rate / 2)" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"test_r" : doc["test_rate"] / 2,
+                                "compare" : (doc["test_rate"] / 2) > 2}
+                               for doc in full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_let_string(self):
+        for bucket in self.buckets:
+            self.query = "select name, join_date date from %s let join_date = tostr(join_yr) || '-' || tostr(join_mo)" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"name" : doc["name"],
+                                "date" : '%s-%s' % (doc['join_yr'], doc['join_mo'])}
+                               for doc in full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
 ##############################################################################################
 #    
 #   COMMON FUNCTIONS
