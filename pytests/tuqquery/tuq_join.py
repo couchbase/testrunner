@@ -106,7 +106,7 @@ class JoinTests(QueryTests):
 
     def test_subquery_from(self):
         for bucket in self.buckets:
-            self.query = "select count(*) as num from (select task_name from %s use keys %s" % (bucket.name, str(['test_task-%s' % i for i in xrange(0, 29)]))
+            self.query = "select count(*) as num from (select task_name from %s use keys %s)" % (bucket.name, str(['test_task-%s' % i for i in xrange(0, 29)]))
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = [{"num" : 28}]
@@ -234,9 +234,10 @@ class JoinTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT * FROM %s emp %s NEST %s tasks " % (
                                                 bucket.name, self.type_join, bucket.name) +\
-                         "USE KEYS emp.tasks_ids"
+                         "ON KEYS emp.tasks_ids"
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc:
+            actual_result = self.sort_nested_list(actual_result['results'])
+            actual_result = sorted(actual_result, key=lambda doc:
                                    self._get_for_sort(doc))
             self._delete_ids(actual_result)
             full_list = self._generate_full_nested_docs_list(join_type=self.type_join)
@@ -276,7 +277,8 @@ class JoinTests(QueryTests):
                                                     bucket.name, self.type_join, bucket.name) +\
                          "ON KEYS emp.tasks_ids"
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'])
+            actual_result = self.sort_nested_list(actual_result['results'])
+            actual_result = sorted(actual_result)
             full_list = self._generate_full_nested_docs_list(join_type=self.type_join)
             expected_result = [{"name" : doc['item']['name'],
                                 "projects" : [nested_doc['project'] for nested_doc in doc['items_nested']]}
@@ -315,6 +317,10 @@ class JoinTests(QueryTests):
         for item in result:
             if 'emp' in item:
                 del item['emp']['_id']
+            if 'tasks' in item:
+                for task in item['tasks']:
+                    if task and '_id' in task:
+                        del task['_id']
 
     def generate_docs(self, docs_per_day, start=0):
         generators = []
