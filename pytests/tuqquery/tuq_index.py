@@ -87,11 +87,7 @@ class QueriesViewsTests(QueryTests):
                     raise ex
             self.query = "EXPLAIN SELECT * FROM %s" % (bucket.name)
             res = self.run_cbq_query()
-            self.assertTrue(res["results"][0]["input"]["type"] == "fetch",
-                            "Type should be fetch, but is: %s" % res["results"])
-            self.assertTrue(res["results"][0]["input"]["input"]["type"] == "scan",
-                            "Type should be scan, but is: %s" % res["results"])
-            self.assertTrue(res["results"][0]["input"]["input"]["index"] == "#primary",
+            self.assertTrue(res["results"][0]["children"][0]["index"] == "#primary",
                             "Type should be #alldocs, but is: %s" % res["results"])
 
     def test_explain_query_count(self):

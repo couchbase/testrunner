@@ -106,7 +106,7 @@ class JoinTests(QueryTests):
 
     def test_subquery_from(self):
         for bucket in self.buckets:
-            self.query = "select count(*) as num from (select task_name from %s use keys %s)" % (bucket.name, str(['test_task-%s' % i for i in xrange(0, 29)]))
+            self.query = "select count(*) as num from (select task_name from %s d use keys %s)" % (bucket.name, str(['test_task-%s' % i for i in xrange(0, 29)]))
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = [{"num" : 28}]
@@ -115,7 +115,7 @@ class JoinTests(QueryTests):
 
     def test_subquery_select(self):
         for bucket in self.buckets:
-            self.query = "select task_name, (select count(task_name) cn from %s use keys %s) as names from %s" % (bucket.name, str(['test_task-%s' % i for i in xrange(0, 29)]))
+            self.query = "select task_name, (select count(task_name) cn from %s d use keys %s) as names from %s" % (bucket.name, str(['test_task-%s' % i for i in xrange(0, 29)]))
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result_subquery = {"cn" : 28}
@@ -129,7 +129,7 @@ class JoinTests(QueryTests):
     def test_subquery_where_aggr(self):
         for bucket in self.buckets:
             self.query = "select name, join_day from %s where join_day =" +\
-            " (select AVG(join_day) as average from %s use keys %s)[0].average" % (bucket.name, bucket.name,
+            " (select AVG(join_day) as average from %s d use keys %s)[0].average" % (bucket.name, bucket.name,
                                                                                str(['query-test-Sales-%s' % i
                                                                                     for i in xrange(0, self.docs_per_day)]))
             all_docs_list = self._generate_full_docs_list(self.gens_load)
@@ -145,7 +145,7 @@ class JoinTests(QueryTests):
     def test_subquery_where_in(self):
         for bucket in self.buckets:
             self.query = "select name, join_day from %s where join_day IN " +\
-            " (select ARRAY_AGG(join_day) as average from %s use keys %s)[0].average" % (bucket.name, bucket.name,
+            " (select ARRAY_AGG(join_day) as average from %s d use keys %s)[0].average" % (bucket.name, bucket.name,
                                                                                str(['query-test-Sales-%s' % i
                                                                                     for i in xrange(0, self.docs_per_day)]))
             all_docs_list = self._generate_full_docs_list(self.gens_load)
@@ -161,7 +161,7 @@ class JoinTests(QueryTests):
     def test_where_in_subquery(self):
         for bucket in self.buckets:
             self.query = "select name, tasks_ids from %s where tasks_ids[0] IN" % bucket.name +\
-            " (select ARRAY_AGG(DISTINCT task_name) as names from %s " % bucket.name +\
+            " (select ARRAY_AGG(DISTINCT task_name) as names from %s d " % bucket.name +\
             "use keys %s where project='MB')[0].names" % ('["test_task-1", "test_task-2"]')
             all_docs_list = self._generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
@@ -211,6 +211,7 @@ class JoinTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = self._generate_full_docs_list(self.gens_tasks, keys=[key_select])
+            expected_result = [{bucket.name : doc} for doc in expected_result]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
