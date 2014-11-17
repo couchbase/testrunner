@@ -384,12 +384,6 @@ class XDCReplication:
                 format(self.__from_bucket,
                        self.__to_bucket))
 
-        # active_vbreps falls to 0
-        self.__src_cluster.wait_for_xdcr_stat(
-            self.__from_bucket, '',
-            'active_vbreps',
-            '==', 0)
-
     def pause(self, verify=False):
         src_master = self.__src_cluster.get_master_node()
         if not RestConnection(src_master).is_replication_paused(
@@ -443,23 +437,10 @@ class XDCReplication:
                                                             self.__to_bucket):
             raise XDCRException(
                 "Replication is not resumed for SrcBucket: {0}, \
-                Target Bucket: {1}".
-                format(self.__from_bucket,
-                       self.__to_bucket))
+                Target Bucket: {1}".format(self.__from_bucket, self.__to_bucket))
 
-        if self.__is_cluster_replicating():
-            try:
-                self.__src_cluster.wait_for_xdcr_stat(
-                    self.__from_bucket, '',
-                    'active_vbreps', '>=', 0)
-            except KeyError as ex:
-                # thrown when the server is rebalance-in and some nodes aren't
-                # yet replicating or accepting mutations
-                self.log.info(ex)
-        else:
-            self.log.info(
-                "XDCR completed on {0}, resume validations have been skipped".
-                format(src_master.ip))
+        if not self.__is_cluster_replicating():
+            self.log.info("XDCR completed on {0}".format(src_master.ip))
 
     def resume(self, verify=False):
         src_master = self.__src_cluster.get_master_node()

@@ -119,8 +119,6 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
 
     """ Post pause validations include -
         1. incoming replication on remote (paired) bucket falling to 0
-        2. XDCR stat active_vbreps =0 on all nodes
-        3. XDCR queue = 0 on all nodes for the bucket with xdcr paused
         Note : This method should be called immediately after a call to pause xdcr
         and the validation is on the replication paused
         To perform pause validation at both local and remote clusters,
@@ -148,18 +146,8 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
             raise XDCRException("XDCR is not paused for SrcBucket: {0}, Target Bucket: {1}".
                            format(src_bucket_name, dest_bucket_name))
 
-        tasks = []
-        # active_vbreps falls to 0
-        tasks.append(self.cluster.async_wait_for_xdcr_stat(src_nodes,
-                                                       src_bucket_name, '',
-                                                       'active_vbreps',
-                                                       '==', 0))
-        for task in tasks:
-            task.result()
 
-    """ Post pause validations include -
-        1. number of active_vbreps after resume equal the setting value
-        2. XDCR queue != 0 on all nodes for the bucket with xdcr resumed
+    """ Post pause validations
         Note : This method should be called immediately after a call to resume xdcr
         and the validation is only on the bucket whose replication is paused
     """
@@ -177,19 +165,8 @@ class PauseResumeXDCRBaseTest(XDCRReplicationBaseTest):
             raise XDCRException("Replication is not resumed for SrcBucket: {0}, Target Bucket: {1}".
                                 format(src_bucket_name, dest_bucket_name))
 
-        if self.is_cluster_replicating(master, src_bucket_name):
-            # check active_vbreps on all source nodes
-            try:
-                task = self.cluster.async_wait_for_xdcr_stat(src_nodes,
-                                                         src_bucket_name, '',
-                                                         'active_vbreps', '>=', 0)
-                task.result(self.wait_timeout)
-            except KeyError as ex:
-                # thrown when the server is rebalancing-in and some nodes aren't
-                # yet replicating or accepting mutations
-                self.log.info(ex)
-        else:
-            self.log.info("Replication is complete on {0}, resume validations have been skipped".
+        if not self.is_cluster_replicating(master, src_bucket_name):
+            self.log.info("Looks like replication is complete on {0}".
                           format(src_nodes[0].ip))
 
     """ Check replication_changes_left on master, 3 times if 0 """
@@ -374,20 +351,13 @@ class PauseResumeTest(PauseResumeXDCRBaseTest):
         self.sleep(10)
         # check if remote cluster is still replicating
         if self.is_cluster_replicating(self.dest_master, pause_bucket_name):
-            task = self.cluster.async_wait_for_xdcr_stat(self.dest_nodes,
-                                                         pause_bucket_name, '',
-                                                         'active_vbreps', '>', 0)
-            task.result()
-            self.log.info("Active replicators at destination for bucket {0} are not affected".format(pause_bucket_name))
+            self.log.info("Replication has been paused at source, incoming replication for bucket {0} is not affected"
+                          .format(pause_bucket_name))
         # check if pause on one bucket does not affect other replications
         src_buckets = self._get_cluster_buckets(self.src_master)
         for bucket in src_buckets:
             if bucket.name != pause_bucket_name:
                 if self.is_cluster_replicating(self.src_master, bucket.name):
-                    task = self.cluster.async_wait_for_xdcr_stat(self.src_nodes,
-                                                         bucket.name, '',
-                                                         'active_vbreps', '>', 0)
-                    task.result()
                     self.log.info("Pausing one replication does not affect other replications")
                 else:
                     self.log.info("Other buckets have completed replication")
