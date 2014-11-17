@@ -65,8 +65,7 @@ class ViewQueryTests(BaseTestCase):
             self.thread_stopped = Event()
             self.server = None
         except Exception as ex:
-            self.input.test_params["stop-on-failure"] = True
-            self.log.error("SETUP WAS FAILED. ALL TESTS WILL BE SKIPPED")
+            self.log.error("SETUP WAS FAILED. TEST WILL BE SKIPPED")
             self.fail(ex)
 
     def tearDown(self):
