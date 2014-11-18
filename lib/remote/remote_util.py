@@ -1362,14 +1362,17 @@ class RemoteMachineShellConnection:
                                                  .format(process_name))
             self.log_command_output(output, error)
             if output and process_name in output[0]:
-                self.sleep(5, "wait for process ended!")
+                self.sleep(5, "{0} wait for process ended!" \
+                           .format(self.ip))
                 process_running = True
             else:
                 if process_running:
-                    log.info("process {0} ended".format(process_name))
+                    log.info("{1}: process {0} ended" \
+                             .format(process_name, self.ip))
                     process_ended = True
                 else:
-                    log.error("process {0} may not run".format(process_name))
+                    log.error("{1}: process {0} may not run" \
+                              .format(process_name, self.ip))
         return process_ended
 
     def terminate_processes(self, info, list):
