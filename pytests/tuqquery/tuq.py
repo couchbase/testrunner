@@ -124,7 +124,7 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result, expected_result)
 
     def test_all_negative(self):
-        queries_errors = {'SELECT ALL * FROM %s' : 'Parse Error - syntax error'}
+        queries_errors = {'SELECT ALL * FROM %s' : 'syntax error'}
         self.negative_common_body(queries_errors)
 
     def test_distinct_negative(self):
@@ -218,10 +218,10 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_satisfy_negative(self):
-        queries_errors = {'SELECT name FROM %s WHERE ANY x IN 123 SATISFIES job_title = x END' : 'Parse Error - syntax error',
-                          'SELECT name FROM %s WHERE ANY x IN ["Sales"] SATISFIES job_title = x' : 'Parse Error - syntax error',
-                          'SELECT job_title FROM %s WHERE ANY job_title IN ["Sales"] SATISFIES job_title = job_title END' : 'Parse Error - syntax error',
-                          'SELECT job_title FROM %s WHERE EVERY ANY x IN ["Sales"] SATISFIES x = job_title END' : 'Parse Error - syntax error'}
+        queries_errors = {'SELECT name FROM %s WHERE ANY x IN 123 SATISFIES job_title = x END' : 'syntax error',
+                          'SELECT name FROM %s WHERE ANY x IN ["Sales"] SATISFIES job_title = x' : 'syntax error',
+                          'SELECT job_title FROM %s WHERE ANY job_title IN ["Sales"] SATISFIES job_title = job_title END' : 'syntax error',
+                          'SELECT job_title FROM %s WHERE EVERY ANY x IN ["Sales"] SATISFIES x = job_title END' : 'syntax error'}
         self.negative_common_body(queries_errors)
 
     def test_array(self):
@@ -237,10 +237,10 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result, expected_result)
 
     def test_arrays_negative(self):
-        queries_errors = {'SELECT ARRAY vm.memory FOR vm IN 123 END AS vm_memories FROM %s' : 'Parse Error - syntax error',
-                          'SELECT job_title, array_agg(name)[:5] as names FROM %s' : 'Parse Error - syntax error',
-                          'SELECT job_title, array_agg(name)[-20:-5] as names FROM %s' : 'Parse Error - syntax error',
-                          'SELECT job_title, array_agg(name)[a:-b] as names FROM %s' : 'Parse Error - syntax error'}
+        queries_errors = {'SELECT ARRAY vm.memory FOR vm IN 123 END AS vm_memories FROM %s' : 'syntax error',
+                          'SELECT job_title, array_agg(name)[:5] as names FROM %s' : 'syntax error',
+                          'SELECT job_title, array_agg(name)[-20:-5] as names FROM %s' : 'syntax error',
+                          'SELECT job_title, array_agg(name)[a:-b] as names FROM %s' : 'syntax error'}
         self.negative_common_body(queries_errors)
 
     def test_slicing(self):
@@ -407,8 +407,8 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_between_negative(self):
-        queries_errors = {'SELECT name FROM %s WHERE join_mo BETWEEN 1 AND -10 ORDER BY name' : 'Parse Error - syntax error',
-                          'SELECT name FROM %s WHERE join_mo BETWEEN 1 AND a ORDER BY name' : 'Parse Error - syntax error'}
+        queries_errors = {'SELECT name FROM %s WHERE join_mo BETWEEN 1 AND -10 ORDER BY name' : 'syntax error',
+                          'SELECT name FROM %s WHERE join_mo BETWEEN 1 AND a ORDER BY name' : 'syntax error'}
         self.negative_common_body(queries_errors)
 
 ##############################################################################################
@@ -493,20 +493,15 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_group_by_negative(self):
-        queries_errors = {"SELECT tasks_points from {0} WHERE tasks_points.task2>3"
+        queries_errors = {"SELECT tasks_points from {0} WHERE tasks_points.task2>3" +\
                           " GROUP BY tasks_points.*" :
-                           "Parse Error - syntax error",
+                           "syntax error",
                            "SELECT tasks_points from {0} AS TEST " +\
                            "WHERE tasks_points.task2>3 GROUP BY TEST.tasks_points.task1":
                            "The expression TEST is not satisfied by these dependencies",
-                           "SELECT tasks_points.task1 AS task from {0} WHERE join_mo>7" +\
-                           " GROUP BY task" : "Alias task cannot be referenced",
-                           "SELECT tasks_points.task1 AS task from {0} WHERE join_mo>7" +\
-                           " GROUP BY tasks_points.task1 HAVING COUNT(task) > 0" :
-                           "Alias task cannot be referenced",
                            "from {0} WHERE join_mo>7 GROUP BY tasks_points.task1 " +\
                            "SELECT tasks_points.task1 AS task HAVING COUNT(tasks_points.task1) > 0" :
-                           "Parse Error - syntax error"}
+                           "syntax error"}
         self.negative_common_body(queries_errors)
 
 ##############################################################################################
@@ -1573,7 +1568,7 @@ class QueryTests(BaseTestCase):
         self.query = "select clock_str() as now"
         now = datetime.datetime.now()
         res = self.run_cbq_query()
-        expected = "%s-%02d-%02dT%02d:" % (now.year, now.month, now.day, now.hour)
+        expected = "%s-%02d-%02dT" % (now.year, now.month, now.day)
         self.assertTrue(res["results"][0]["now"].startswith(expected),
                         "Result expected: %s. Actual %s" % (expected, res["results"]))
 
