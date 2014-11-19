@@ -585,7 +585,8 @@ class XDCRBaseTest(unittest.TestCase):
                                        eviction_policy=self.eviction_policy))
 
     def _get_bucket_size(self, mem_quota, num_buckets):
-        return int(float(mem_quota) / float(num_buckets))
+        #min size is 100MB now
+        return max(100, int(float(mem_quota) / float(num_buckets)))
 
     def _get_cluster_buckets(self, master_server):
         rest = RestConnection(master_server)
