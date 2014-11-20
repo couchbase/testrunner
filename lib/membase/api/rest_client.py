@@ -119,10 +119,12 @@ class RestHelper(object):
         try:
             buckets = self.rest.get_buckets()
             names = [item.name for item in buckets]
-            log.info("existing buckets : {0}".format(names))
+            log.info("node {1} existing buckets : {0}" \
+                              .format(names, self.rest.ip))
             for item in buckets:
                 if item.name == bucket:
-                    log.info("found bucket {0}".format(bucket))
+                    log.info("node {1} found bucket {0}" \
+                             .format(bucket, self.rest.ip))
                     return True
             return False
         except Exception:
