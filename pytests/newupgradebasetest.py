@@ -482,6 +482,9 @@ class NewUpgradeBaseTest(BaseTestCase):
             else:
                 self.fail("Need vbuckets setting >= 256 for upgrade from 2.x.x to 3.x.x")
         else:
+            if self.master.ip != self.rest.ip:
+                self.rest = RestConnection(self.master)
+                self.rest_helper = RestHelper(self.rest)
             self.log.info("No need to do DCP rebalance upgrade")
 
     def dcp_rebalance_in_offline_upgrade_from_version2_to_version3(self):
