@@ -447,10 +447,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.cluster.rebalance(self.servers, self.servers[half_node:], self.servers[:half_node])
         self.sleep(10)
 
-        """ verify DCP upgrade in 3.0.0 version """
-        if "3.0.0" in self.upgrade_versions[0]:
-            self.master = self.servers[half_node]
-            self.monitor_dcp_rebalance()
+        """ verify DCP upgrade in 3.x.x version """
+        self.master = self.servers[half_node]
+        self.monitor_dcp_rebalance()
         self.sleep(self.sleep_time)
         try:
             for server in self.servers[half_node:]:
