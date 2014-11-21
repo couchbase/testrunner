@@ -27,7 +27,8 @@ class QueryTests(BaseTestCase):
             self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
         else:
             self.shell = RemoteMachineShellConnection(self.master)
-        self._start_command_line_query(self.master)
+        if self.input.param("start_cmd", True):
+            self._start_command_line_query(self.master)
         self.use_rest = self.input.param("use_rest", True)
         self.max_verify = self.input.param("max_verify", None)
         self.buckets = RestConnection(self.master).get_buckets()
@@ -35,6 +36,7 @@ class QueryTests(BaseTestCase):
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.skip_load = self.input.param("skip_load", False)
+        self.n1ql_port = self.input.param("n1ql_port", 8093)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
 
@@ -2345,7 +2347,7 @@ class QueryTests(BaseTestCase):
                server = self.tuq_client
         if self.use_rest:
             self.log.info('RUN QUERY %s' % query)
-            result = RestConnection(server).query_tool(query)
+            result = RestConnection(server).query_tool(query, self.n1ql_port)
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/query/" +\
@@ -2354,14 +2356,15 @@ class QueryTests(BaseTestCase):
                                                        min_output_size=20,
                                                        end_msg='cbq>')
             else:
-                output = self.shell.execute_commands_inside("/tmp/tuq/cbq -engine=http://%s:8093/" % server.ip,
+                output = self.shell.execute_commands_inside("/tmp/tuq/cbq -engine=http://%s:%s/" % (server.ip, str(self.n1ql_port)),
                                                            subcommands=[query,],
                                                            min_output_size=20,
                                                            end_msg='cbq>')
             result = self._parse_query_output(output)
         if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)
-        self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
+        if 'metrics' in result:
+            self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
         return result
 
     def build_url(self, version):
@@ -2410,7 +2413,7 @@ class QueryTests(BaseTestCase):
             cmd += "tar -xvf tuq.tar.gz;rm -rf tuq.tar.gz"
             self.shell.execute_command(cmd)
 
-    def _start_command_line_query(self, server):
+    def _start_command_line_query(self, server, options=''):
         if self.version == "git_repo":
             os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':
@@ -2421,27 +2424,25 @@ class QueryTests(BaseTestCase):
                 gopath = self.input.tuq_client["gopath"]
             if os == 'windows':
                 cmd = "cd %s/src/github.com/couchbaselabs/query/server/cbq-engine; " % (gopath) +\
-                "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
-                                                                server.ip, server.port)
+                "./cbq-engine.exe -datastore http://%s:%s/ %s >/dev/null 2>&1 &" %(
+                                                                server.ip, server.port, options)
             else:
                 cmd = "cd %s/src/github.com/couchbaselabs/query/server/cbq-engine; " % (gopath) +\
-                "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
-                                                                server.ip, server.port)
+                "./cbq-engine -datastore http://%s:%s/ %s >n1ql.log 2>&1 &" %(
+                                                                server.ip, server.port, options)
             self.shell.execute_command(cmd)
         elif self.version == "sherlock":
             os = self.shell.extract_remote_info().type.lower()
-            if os != 'windows':
-                couchbase_path = testconstants.LINUX_COUCHBASE_BIN_PATH
-            else:
-                couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
             if os == 'windows':
+                couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
                 cmd = "cd %s; " % (couchbase_path) +\
-                "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
-                                                                server.ip, server.port)
+                "./cbq-engine.exe -datastore http://%s:%s/ %s >/dev/null 2>&1 &" %(
+                                                                server.ip, server.port, options)
             else:
+                couchbase_path = testconstants.LINUX_COUCHBASE_BIN_PATH
                 cmd = "cd %s; " % (couchbase_path) +\
-                "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
-                                                                server.ip, server.port)
+                "./cbq-engine -datastore http://%s:%s/ %s >n1ql.log 2>&1 &" %(
+                                                                server.ip, server.port, options)
             out = self.shell.execute_command(cmd)
             self.log.info(out)
         else:

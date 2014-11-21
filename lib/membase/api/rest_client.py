@@ -2057,10 +2057,10 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
-    def query_tool(self, query, timeout=650):
+    def query_tool(self, query, port=8093, timeout=650):
         params = urllib.urlencode({'statement' : query})
         log.info('query params : {0}'.format(params))
-        api = "http://%s:8093/query?%s" % (self.ip, params)
+        api = "http://%s:%s/query?%s" % (self.ip, port, params)
         status, content, header = self._http_request(api, 'POST', timeout=timeout)
         try:
             return json.loads(content)
