@@ -1968,7 +1968,7 @@ class XDCRNewBaseTest(unittest.TestCase):
     def verify_rev_ids(self, xdcr_replications, kv_store=1):
         """Verify RevId (sequence number, cas, flags value) for each item on
         every source and destination bucket.
-        @param xdcr_repication: list of XDCRReplication objects.
+        @param xdcr_replications: list of XDCRReplication objects.
         @param kv_store: Index of bucket kv_store to compare.
         """
         error_count = 0
@@ -2048,12 +2048,12 @@ class XDCRNewBaseTest(unittest.TestCase):
     def verify_results(self):
         """Verify data between each couchbase and remote clusters.
         Run below steps for each source and destination cluster..
-        1. Run expiry pager.
-        2. Wait for disk queue size to 0 on each nodes.
-        3. Wait for Outbound mutations to 0.
-        4. Wait for Items counts equal to kv_store size of buckets.
-        5. Verify items value on each bucket.
-        6. Veiry Revision id of each item.
+            1. Run expiry pager.
+            2. Wait for disk queue size to 0 on each nodes.
+            3. Wait for Outbound mutations to 0.
+            4. Wait for Items counts equal to kv_store size of buckets.
+            5. Verify items value on each bucket.
+            6. Veiry Revision id of each item.
         """
         self.__merge_all_buckets()
         for cb_cluster in self.__cb_clusters:
