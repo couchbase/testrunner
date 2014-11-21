@@ -1482,6 +1482,10 @@ class RemoteMachineShellConnection:
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
             elif type in ["centos", "red hat"]:
+                """ Sometimes, vm left with unfinish uninstall/install process.
+                    We need to kill them before doing uninstall """
+                output, error = self.execute_command("killall -9 rpm")
+                self.log_command_output(output, error)
                 uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
                 log.info('running rpm -e to remove couchbase-server')
                 output, error = self.execute_command(uninstall_cmd)
@@ -1632,6 +1636,10 @@ class RemoteMachineShellConnection:
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
             elif type in ["centos", "red hat"]:
+                """ Sometimes, vm left with unfinish uninstall/install process.
+                    We need to kill them before doing uninstall """
+                output, error = self.execute_command("killall -9 rpm")
+                self.log_command_output(output, error)
                 uninstall_cmd = 'rpm -e {0}'.format('membase-server')
                 log.info('running rpm -e to remove membase-server')
                 output, error = self.execute_command(uninstall_cmd)
