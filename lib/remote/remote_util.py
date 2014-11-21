@@ -1366,7 +1366,7 @@ class RemoteMachineShellConnection:
                 process_running = True
             else:
                 if process_running:
-                    log.info("{1}: process {0} ended" \
+                    log.info("{1}: Alright, PROCESS {0} ENDED!" \
                              .format(process_name, self.ip))
                     process_ended = True
                 else:
