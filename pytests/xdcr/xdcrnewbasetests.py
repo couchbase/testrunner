@@ -623,8 +623,11 @@ class CouchbaseCluster:
                 cbcollectRunner(server, path).run()
                 TestInputSingleton.input.test_params[
                     "get-cbcollect-info"] = False
-            except:
-                print "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}".format(server.ip)
+            except Exception as e:
+                self.__log.error(
+                    "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(
+                        server.ip,
+                        e))
 
     def __collect_data_files(self):
         """Collect bucket data files for all the servers in the cluster.
@@ -1470,10 +1473,15 @@ class CouchbaseCluster:
         @return: value of stat
         """
         return int(RestConnection(self.__master_node).fetch_bucket_stats(
-            bucket_name)
-            ['op']['samples'][stat][-1])
+            bucket_name)['op']['samples'][stat][-1])
 
     def wait_for_xdcr_stat(self, bucket, stat, comparison, value):
+        """Wait for given stat for a bucket to given condition.
+        @param bucket: bucket name
+        @param stat: stat name
+        @param comparison: comparison operatior e.g. "==", "<"
+        @param value: value to compare.
+        """
         task = self.__clusterop.async_wait_for_xdcr_stat(
             self.__nodes,
             bucket,
@@ -1618,6 +1626,11 @@ class Utility:
 
     @staticmethod
     def make_default_views(prefix, num_views, is_dev_ddoc=False):
+        """Create default views for testing.
+        @param prefix: prefix for view name
+        @param num_views: number of views to create
+        @param is_dev_ddoc: True if Development View else False
+        """
         default_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
         default_view_name = (prefix, "default_view")[prefix is None]
         return [View(default_view_name + str(i), default_map_func,
@@ -1676,9 +1689,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             .format(self.__case_number, self._testMethodName))
 
     def tearDown(self):
-        # Collect Logs files
-        # Shutdown cluster
-        # Cluster cleanup
+        """Clusters cleanup"""
         try:
             test_failed = (hasattr(self, '_resultForDoCleanups') and
                            len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
@@ -1737,12 +1748,17 @@ class XDCRNewBaseTest(unittest.TestCase):
             cluster.init_cluster(disabled_consistent_view)
 
     def get_cb_cluster_from_name(self, name):
+        """Return couchbase cluster object for given name.
+        @return: CouchbaseCluster object
+        """
         for cb_cluster in self.__cb_clusters:
             if cb_cluster.get_name() == name:
                 return cb_cluster
         raise XDCRException("Couchbase Cluster with name: %s not exist" % name)
 
     def get_num_cb_cluster(self):
+        """Return number of couchbase clusters for tests.
+        """
         return len(self.__cb_clusters)
 
     def __create_buckets(self):
@@ -1821,7 +1837,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 )
 
     def __set_topology_star(self):
-        """Will Setup Remote Cluster Star Topology i.e.
+        """Will Setup Remote Cluster Star Topology i.e. A-> B, A-> C, A-> D
         """
         hub = self.__cb_clusters[0]
         for cb_cluster in self.__cb_clusters[1:]:
@@ -1859,6 +1875,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             )
 
     def set_xdcr_topology(self):
+        """Setup xdcr topology as per ctopology test parameter.
+        """
         if self.__topology == TOPOLOGY.CHAIN:
             self.__set_topology_chain()
         elif self.__topology == TOPOLOGY.STAR:
@@ -1871,16 +1889,17 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.__topology))
 
     def __parse_topology_param(self):
-        """Hybrid Topology Notations:
-        '> or <' for Unidirection between clusters
-        '<>' for Bi-direction between clusters
-        User Input:  topology="C1>C2<>C3>C4<>C1"
-        """
         import re
         tokens = re.split(r'(>|<>|<|\s)', self.__topology)
         return tokens
 
     def set_hybrid_topology(self):
+        """Set user defined topology
+        Hybrid Topology Notations:
+        '> or <' for Unidirection replication between clusters
+        '<>' for Bi-direction replication between clusters
+        Test Input:  ctopology="C1>C2<>C3>C4<>C1"
+        """
         tokens = self.__parse_topology_param()
         counter = 0
         while counter < len(tokens) - 1:
@@ -1919,7 +1938,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         cluster.load_all_buckets(self.__num_items, self.__value_size)
 
     def load_data_topology(self):
-        """load data as per topology
+        """load data as per ctopology test parameter
         """
         if self.__topology == TOPOLOGY.CHAIN:
             self.__load_chain()
@@ -1933,6 +1952,9 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.__topology))
 
     def setup_all_replications(self):
+        """Setup replication between buckets on remote clusters
+        based on the xdcr topology created.
+        """
         for cb_cluster in self.__cb_clusters:
             for remote_cluster in cb_cluster.get_remote_clusters():
                 for src_bucket in remote_cluster.get_src_cluster().get_buckets():
@@ -1944,6 +1966,11 @@ class XDCRNewBaseTest(unittest.TestCase):
                 remote_cluster.start_all_replications()
 
     def verify_rev_ids(self, xdcr_replications, kv_store=1):
+        """Verify RevId (sequence number, cas, flags value) for each item on
+        every source and destination bucket.
+        @param xdcr_repication: list of XDCRReplication objects.
+        @param kv_store: Index of bucket kv_store to compare.
+        """
         error_count = 0
         tasks = []
         for repl in xdcr_replications:
@@ -1992,6 +2019,9 @@ class XDCRNewBaseTest(unittest.TestCase):
                 kv_dest_bucket[kvs_num].release_partition(key)
 
     def __merge_all_buckets(self):
+        """Merge bucket data between source and destination bucket
+        for data verification. This method should be called after replication started.
+        """
         # In case of ring topology first merging keys from last and first
         # cluster e.g. A -> B -> C -> A then merging C-> A then A-> B and B-> C
         # and C->A (to merge keys from B ->C).
@@ -2016,6 +2046,15 @@ class XDCRNewBaseTest(unittest.TestCase):
                     )
 
     def verify_results(self):
+        """Verify data between each couchbase and remote clusters.
+        Run below steps for each source and destination cluster..
+        1. Run expiry pager.
+        2. Wait for disk queue size to 0 on each nodes.
+        3. Wait for Outbound mutations to 0.
+        4. Wait for Items counts equal to kv_store size of buckets.
+        5. Verify items value on each bucket.
+        6. Veiry Revision id of each item.
+        """
         self.__merge_all_buckets()
         for cb_cluster in self.__cb_clusters:
             for remote_cluster_ref in cb_cluster.get_remote_clusters():
