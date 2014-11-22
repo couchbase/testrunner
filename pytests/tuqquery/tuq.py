@@ -2151,6 +2151,11 @@ class QueryTests(BaseTestCase):
 #   String FUNCTIONS
 ##############################################################################################
 
+    def test_uuid(self):
+        self.query = "select uuid() as uuid"
+        actual_list = self.run_cbq_query()
+        self.assertTrue('uuid' in actual_list['results'][0] and actual_list['results'][0]['uuid'], 'UUid is not working')
+
     def test_string_fn_negative(self):
         queries_errors = {'select name from %s when contains(VMs, "Sale")' : 'syntax error',
                           'select TITLE(test_rate) as OS from %s' : 'syntax error',
