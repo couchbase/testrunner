@@ -1,0 +1,14 @@
+json : "{ " properties "}".
+
+properties  : DQ "type"     DQ ": " DQ "project" DQ ", "
+              DQ "name"     DQ ": " DQ projectname DQ ", "
+              DQ "members"  DQ ": " "[" members "]" ", "
+              DQ "language" DQ ": " DQ language DQ.
+
+projectname : bag("propernames").
+members     : members "," DQ bag("propernames") DQ {100}
+            | DQ bag("propernames") DQ.
+language    : "python"
+            | "haskell"
+            | "lua"
+            | "golang".

@@ -1,0 +1,17 @@
+json : "{ " properties "}".
+
+properties  : DQ "type" DQ ": " DQ "user" DQ ", "
+              DQ "first-name" DQ ": " DQ fname DQ ", "
+              lastname
+              age
+              emailid
+              city
+              gender.
+
+fname       : bag("./propernames").
+lastname    : DQ "last-name"  DQ ": " DQ bag("./propernames") DQ ", ".
+age         : DQ "age"        DQ ": " range(15, 80)                     ", ".
+emailid     : DQ "emailid"    DQ ": " DQ $fname "@gmail.com"     DQ ", ".
+city        : DQ "city"       DQ ": " DQ bag("./cities") DQ ", ".
+gender      : DQ "gender"     DQ ": " DQ "male" DQ
+            | DQ "gender"     DQ ": " DQ "female" DQ.
