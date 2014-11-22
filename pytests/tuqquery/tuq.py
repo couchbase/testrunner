@@ -2343,7 +2343,7 @@ class QueryTests(BaseTestCase):
                 else:
                     self.fail("There was no errors. Error expected: %s" % error)
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None):
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}):
         if query is None:
             query = self.query
         if server is None:
@@ -2352,7 +2352,7 @@ class QueryTests(BaseTestCase):
                server = self.tuq_client
         if self.use_rest:
             self.log.info('RUN QUERY %s' % query)
-            result = RestConnection(server).query_tool(query, self.n1ql_port)
+            result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params)
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/query/" +\
