@@ -18,7 +18,7 @@ class SysCatalogTests(QueryTests):
         super(SysCatalogTests, self).suite_tearDown()
 
     def test_sites(self):
-        self.query = "SELECT * FROM :system.datastores"
+        self.query = "SELECT * FROM system:datastores"
         result = self.run_cbq_query()
         host = ('localhost', self.input.tuq_client)[self.input.tuq_client and "client" in self.input.tuq_client]
         for res in result['results']:
@@ -37,7 +37,8 @@ class SysCatalogTests(QueryTests):
         for res in result['results']:
             self.assertEqual(res['namespaces']['id'], res['namespaces']['name'],
                         "Id and url don't match")
-            self.assertTrue(res['namespaces']['store_id'].find(host) != -1,
+            self.assertTrue(res['namespaces']['store_id'].find(host) != -1 or\
+                            res['namespaces']['store_id'].find(self.master.ip) != -1,
                             "Expected: %s, actual: %s" % (host, result))
 
     def test_buckets(self):
@@ -46,7 +47,7 @@ class SysCatalogTests(QueryTests):
         buckets = [bucket.name for bucket in self.buckets]
         self.assertFalse(set(buckets) - set([b['keyspaces']['id'] for b in result['results']]),
                         "Expected ids: %s. Actual result: %s" % (buckets, result))
-        self.assertFalse(set(buckets) - set([b['name'] for b in result['results']]),
+        self.assertFalse(set(buckets) - set([b['keyspaces']['name'] for b in result['results']]),
                         "Expected names: %s. Actual result: %s" % (buckets, result))
         pools = self.run_cbq_query(query='SELECT * FROM system:namespaces')
         self.assertFalse(set([b['keyspaces']['namespace_id'] for b in result['results']]) -\
