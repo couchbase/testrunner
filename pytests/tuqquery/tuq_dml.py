@@ -320,7 +320,7 @@ class DMLQueryTests(QueryTests):
         keys_to_update = keys[:-num_docs_update]
         updated_value = 'new_name'
         for bucket in self.buckets:
-            self.query = 'update %s  keys [%s] set name="%s"'  % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update), updated_value)
+            self.query = 'update %s use keys [%s] set name="%s"'  % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update), updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s keys [%s]' % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update))
@@ -360,7 +360,7 @@ class DMLQueryTests(QueryTests):
         keys_to_update = keys[:-num_docs_update]
         updated_value = 'new_name'
         for bucket in self.buckets:
-            self.query = 'update %s  keys [%s] set vm.os="%s" for vm in VMs'  % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update), updated_value)
+            self.query = 'update %s use keys [%s] set vm.os="%s" for vm in VMs'  % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update), updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s keys [%s]' % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update))
@@ -376,7 +376,7 @@ class DMLQueryTests(QueryTests):
         keys_to_update = keys[:-num_docs_update]
         updated_value = 'new_name'
         for bucket in self.buckets:
-            self.query = 'update %s  keys [%s] set vm.os="%s" for vm in VMs where vm.os="ubuntu"'  % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update), updated_value)
+            self.query = 'update %s use keys [%s] set vm.os="%s" for vm in VMs where vm.os="ubuntu"'  % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update), updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s keys [%s]' % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update))
