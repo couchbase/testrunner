@@ -49,7 +49,7 @@ class DMLQueryTests(QueryTests):
                 for bucket in self.buckets:
                     self.query = 'INSERT into %s key "%s" VALUES %s' % (bucket.name, key, value)
                     actual_result = self.run_cbq_query()
-                    self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+                    self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
 
         self.query = 'select * from %s'  % (bucket.name)
         actual_result = self.run_cbq_query()
@@ -66,7 +66,7 @@ class DMLQueryTests(QueryTests):
                 self.query = 'insert into %s key "insert_%s" select name from %s keys ["%s"]'  % (bucket.name, str(i),
                                                                                                   bucket.name, keys[i])
                 actual_result = self.run_cbq_query()
-                self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+                self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         for bucket in self.buckets:
             self.query = 'select * from %s keys %s'  % (bucket.name, ','.join(["insert_%s" % i for i in xrange(num_docs)]))
             actual_result = self.run_cbq_query()
@@ -130,7 +130,7 @@ class DMLQueryTests(QueryTests):
                 for bucket in self.buckets:
                     self.query = 'UPSERT into %s key "%s" VALUES %s' % (bucket.name, key, value)
                     actual_result = self.run_cbq_query()
-                    self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+                    self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
                 keys.append(key)
                 values.append(value)
 
@@ -139,7 +139,7 @@ class DMLQueryTests(QueryTests):
                 self.query = 'insert into %s key "insert_%s" select name from %s keys ["%s"]'  % (bucket.name, str(i),
                                                                                                   bucket.name, keys[i])
                 actual_result = self.run_cbq_query()
-                self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+                self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         items_check('insert_', values[:num_docs])
 
         for bucket in self.buckets:
@@ -147,7 +147,7 @@ class DMLQueryTests(QueryTests):
                 self.query = 'insert into %s key "insert_%s" select name from %s use keys ["%s"]'  % (bucket.name, str(i),
                                                                                               bucket.name, keys[num_docs + i])
                 actual_result = self.run_cbq_query()
-                self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+                self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.items_check('insert_', values[num_docs:num_docs + num_docs])
 
         def items_check(self, prefix, vls):
@@ -175,7 +175,7 @@ class DMLQueryTests(QueryTests):
             self.query = 'delete from %s  keys [%s]'  % (bucket.name,
                                                          map(lambda x: '"%s"' % x, keys_to_delete))
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
 
     def test_delete_where_clause_non_doc(self):
@@ -191,7 +191,7 @@ class DMLQueryTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'delete from %s where value()=%s'  % (bucket.name, value_to_delete)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
 
     def test_delete_where_clause_json(self):
@@ -200,7 +200,7 @@ class DMLQueryTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'delete from %s where job_title="Sales"'  % (bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
 
     def test_delete_where_satisfy_clause_json(self):
@@ -210,7 +210,7 @@ class DMLQueryTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'delete from %s where ANY vm IN %s.VMs SATISFIES vm.RAM = 5 END'  % (bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
 
     def test_delete_limit_keys(self):
@@ -221,7 +221,7 @@ class DMLQueryTests(QueryTests):
             current_docs = actual_result['results']['actual']
             self.query = 'delete from %s where job_title="Sales" LIMIT 1'  % (bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select count(*) as actual from %s where job_title="Sales"'  % (bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['results']['actual'], current_docs - 1, 'Item was not deleted')
@@ -234,7 +234,7 @@ class DMLQueryTests(QueryTests):
             current_docs = actual_result['results']['actual']
             self.query = 'delete from %s where job_title="Sales" LIMIT 1'  % (bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select count(*) as actual from %s where job_title="Sales"'  % (bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['results']['actual'], current_docs - 1, 'Item was not deleted')
@@ -250,9 +250,9 @@ class DMLQueryTests(QueryTests):
         keys, _ = self._insert_gen_keys(self.num_items)
         self.query = 'MERGE INTO %s USING %s on key %s when matched then delete'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
         actual_result = self.run_cbq_query()
-        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
-        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.assertEqual(actual_result['results']['rows'], 0, 'Query was not run successfully')
 
     def test_merge_delete_match_limit(self):
@@ -260,9 +260,9 @@ class DMLQueryTests(QueryTests):
         keys, _ = self._insert_gen_keys(self.num_items)
         self.query = 'MERGE INTO %s USING %s on key %s when matched then delete limit 1'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
         actual_result = self.run_cbq_query()
-        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
-        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.assertEqual(actual_result['results']['rows'], 0, 'Query was not run successfully')
 
     def test_merge_delete_where_match(self):
@@ -270,9 +270,9 @@ class DMLQueryTests(QueryTests):
         keys, _ = self._insert_gen_keys(self.num_items)
         self.query = 'MERGE INTO %s USING %s on key %s when matched then delete where name LIKE "empl%"'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
         actual_result = self.run_cbq_query()
-        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
-        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.assertEqual(actual_result['results']['rows'], 0, 'Query was not run successfully')
 
     def test_merge_update_match_set(self):
@@ -281,9 +281,9 @@ class DMLQueryTests(QueryTests):
         new_name = 'edited'
         self.query = 'MERGE INTO %s USING %s on key %s when matched then update set name="%s"'  % (self.buckets[0].name, self.buckets[1].name, keys[0], new_name)
         actual_result = self.run_cbq_query()
-        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.query = 'SELECT name FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
-        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.assertEqual(actual_result['results']['name'], new_name, 'Name was not updated')
 
     def test_merge_update_match_unset(self):
@@ -291,9 +291,9 @@ class DMLQueryTests(QueryTests):
         keys, _ = self._insert_gen_keys(self.num_items)
         self.query = 'MERGE INTO %s USING %s on key %s when matched then update unset name'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
         actual_result = self.run_cbq_query()
-        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.query = 'SELECT * as doc FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
-        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.assertTrue('name' not in actual_result['results']['doc'], 'Name was not unset')
 
     def test_merge_not_match_insert(self):
@@ -302,9 +302,9 @@ class DMLQueryTests(QueryTests):
         self.query = 'MERGE INTO %s USING %s on key %s when not matched then insert into %s key "%s" VALUES %s'  % (
                                                             self.buckets[0].name, self.buckets[1].name, new_key, self.buckets[0].name, new_key, '{"name": "new"}')
         actual_result = self.run_cbq_query()
-        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, new_key)
-        self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.assertEqual(actual_result['results']['rows'], 1, 'Query was not run successfully')
         self.assertEqual(actual_result['resultset']['actual'], current_docs - 1, 'Item was not deleted')
 ############################################################################################################################
@@ -322,7 +322,7 @@ class DMLQueryTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'update %s use keys [%s] set name="%s"'  % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update), updated_value)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s keys [%s]' % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update))
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['resultset'],[{'name':updated_value}] * num_docs_update, 'Names were not changed')
@@ -335,7 +335,7 @@ class DMLQueryTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'update %s set name="%s" where join_day=1'  % (bucket.name, updated_value)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s where join_day=1' % (bucket.name)
             actual_result = self.run_cbq_query()
             self.assertFalse([doc for doc in actual_result['resultset'] if doc['name'] != updated_value], 'Names were not changed')
@@ -348,7 +348,7 @@ class DMLQueryTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'update %s set name="%s" where join_day=1 limit 1'  % (bucket.name, updated_value)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s where join_day=1' % (bucket.name)
             actual_result = self.run_cbq_query()
             self.assertEqual(len([doc for doc in actual_result['resultset'] if doc['name'] == updated_value]), 1, 'Names were not changed')
@@ -362,7 +362,7 @@ class DMLQueryTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'update %s use keys [%s] set vm.os="%s" for vm in VMs'  % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update), updated_value)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s keys [%s]' % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update))
             actual_result = self.run_cbq_query()
             self.assertTrue([row for row in actual_result['resultset']
@@ -378,7 +378,7 @@ class DMLQueryTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'update %s use keys [%s] set vm.os="%s" for vm in VMs where vm.os="ubuntu"'  % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update), updated_value)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s keys [%s]' % (bucket.name, map(lambda x: '"%s"' % x, keys_to_update))
             actual_result = self.run_cbq_query()
             self.assertTrue([row for row in actual_result['resultset']
@@ -400,7 +400,7 @@ class DMLQueryTests(QueryTests):
                 for bucket in self.buckets:
                     self.query = 'INSERT into %s key "%s" VALUES %s' % (bucket.name, key, value)
                     actual_result = self.run_cbq_query()
-                    self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+                    self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
                 keys.append(key)
                 values.append(value)
         return keys, values
@@ -426,7 +426,7 @@ class DMLQueryTests(QueryTests):
             for i in xrange(len(keys)):
                 self.query = 'INSERT into %s key "%s" VALUES %s' % (bucket.name, keys[i], values[i])
                 actual_result = self.run_cbq_query()
-                self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+                self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
 
     def _common_check(self, key, expected_item_value, upsert=False):
         clause = 'UPSERT' if upsert else 'INSERT'
@@ -436,7 +436,7 @@ class DMLQueryTests(QueryTests):
                 inserted = '"%s"' % expected_item_value
             self.query = '%s into %s key "%s" VALUES %s' % (clause, bucket.name, key, inserted)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['state'], 'success', 'Query was not run successfully')
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select * from %s'  % (bucket.name)
             try:
                 actual_result = self.run_cbq_query()
