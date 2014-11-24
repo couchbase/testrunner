@@ -1346,7 +1346,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         self.sleep(10)
 
         if self._failover is not None or self._rebalance is not None:
-            timeout *= 2
+            timeout *= 3
 
         # Wait for ep_queue_size on source to become 0
         self.log.info("Verify xdcr replication stats at Source Cluster : {0}".format(self.src_master.ip))
