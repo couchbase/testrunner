@@ -121,7 +121,7 @@ class NULLTests(QueryTests):
                                if "P0" in doc['coverage_tests'] and\
                                 doc['coverage_tests']['P0'] is not None]
             expected_result = sorted(expected_result)
-            actual_result = actual_result['results']
+            actual_result = sorted(actual_result['results'])
             self._verify_results(actual_result, expected_result)
 
     def test_nulls_over(self):
