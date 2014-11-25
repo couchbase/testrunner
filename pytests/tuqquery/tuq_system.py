@@ -20,9 +20,9 @@ class SysCatalogTests(QueryTests):
     def test_sites(self):
         self.query = "SELECT * FROM system:datastores"
         result = self.run_cbq_query()
-        host = ('localhost', self.input.tuq_client)[self.input.tuq_client and "client" in self.input.tuq_client]
+        host = (self.master.ip, self.input.tuq_client)[self.input.tuq_client and "client" in self.input.tuq_client]
         for res in result['results']:
-            self.assertEqual(res['datastores']['id'], res['stores']['url'],
+            self.assertEqual(res['datastores']['id'], res['datastores']['url'],
                              "Id and url don't match")
             self.assertTrue(res['datastores']['url'].find(host) != -1,
                             "Expected: %s, actual: %s" % (host, result))
@@ -54,5 +54,5 @@ class SysCatalogTests(QueryTests):
                         set([p['namespaces']['id'] for p in pools['results']]),
                         "Expected pools: %s, actual: %s" % (pools, result))
         self.assertFalse(set([b['keyspaces']['store_id'] for b in result['results']]) -\
-                        set([p['keyspaces']['store_id'] for p in pools['results']]),
+                        set([p['namespaces']['store_id'] for p in pools['results']]),
                         "Expected site_ids: %s, actual: %s" % (pools, result))

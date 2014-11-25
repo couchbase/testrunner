@@ -108,13 +108,14 @@ class JoinTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select task_name, (select count(task_name) cn from %s d use keys %s) as names from %s" % (bucket.name, str(['test_task-%s' % i for i in xrange(0, 29)]),
                                                                                                                     bucket.name)
+            self.run_cbq_query()
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result_subquery = {"cn" : 28}
-            expected_result = [{'names' : expected_result_subquery}] * self.gen_load.end
+            expected_result_subquery = {"cn" : 29}
+            expected_result = [{'names' : [expected_result_subquery]}] * len(self._generate_full_docs_list(self.gens_load))
             expected_result.extend([{'task_name': doc['task_name'],
-                                     'names' : expected_result_subquery}
-                                    for doc in self.gens_tasks])
+                                     'names' : [expected_result_subquery]}
+                                    for doc in self._generate_full_docs_list(self.gens_tasks)])
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -214,6 +215,7 @@ class JoinTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = self._generate_full_docs_list(self.gens_tasks, keys=[key_select, key2_select])
+            expected_result = [{bucket.name : doc} for doc in expected_result]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 

@@ -385,7 +385,7 @@ class QueryTests(BaseTestCase):
             self.query = "SELECT email FROM %s WHERE email" % (bucket.name) +\
                          " NOT LIKE '%@%.h' ORDER BY email"
             actual_result = self.run_cbq_query()
-            expected_result = sorted([{"email" : doc['email']} for doc in full_list], key=lambda doc: (doc['email']))
+            expected_result = []
             self._verify_results(actual_result['results'], expected_result)
 
     def test_between(self):
@@ -632,7 +632,7 @@ class QueryTests(BaseTestCase):
             client = MemcachedClientHelper.direct_client(self.master, bucket.name)
             expected_result = []
             for key in keys:
-                _, cas, _ = client.get(key.encode('utf-8'))
+                a, cas, b = client.get(key.encode('utf-8'))
                 expected_result.append({"cas" : cas})
             expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))
             self._verify_results(actual_result, expected_result)
@@ -1581,8 +1581,8 @@ class QueryTests(BaseTestCase):
         self.query = "select date_add_str(clock_str(), 10, 'day') as now"
         now = datetime.datetime.now() + datetime.timedelta(days=10)
         res = self.run_cbq_query()
-        expected = "%s-%02d-%02dT" % (now.year, now.month, now.day, now.hour)
-        expected_delta = "%s-%02d-%02dT" % (now.year, now.month, now.day, now.hour + 1)
+        expected = "%s-%02d-%02dT%02d:" % (now.year, now.month, now.day, now.hour)
+        expected_delta = "%s-%02d-%02dT%02d:" % (now.year, now.month, now.day, now.hour + 1)
         self.assertTrue(res["results"][0]["now"].startswith(expected) or res["results"][0]["now"].startswith(expected_delta),
                         "Result expected: %s. Actual %s" % (expected, res["results"]))
 
@@ -1727,7 +1727,10 @@ class QueryTests(BaseTestCase):
                 " tostr(join_mo) || '-0' || tostr(join_day))) as date from %s" % (bucket.name) +\
                 " where join_mo < 10 and join_day < 10 ORDER BY date %s" % order
                 actual_result = self.run_cbq_query()
-                actual_result = ([{"date" : doc["date"][:10]} for doc in actual_result["results"]])
+                actual_result = ([{"date" : doc["date"][:10],
+                                   "join_yr" : doc['join_yr'],
+                                    "join_mo": doc['join_mo'],
+                                    "join_day": doc['join_day']} for doc in actual_result["results"]])
                 full_list = self._generate_full_docs_list(self.gens_load)
                 expected_result = [{"date" : '%s-0%s-0%s' % (doc['join_yr'],
                                     doc['join_mo'], doc['join_day']),
