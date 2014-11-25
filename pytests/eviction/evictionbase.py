@@ -1,7 +1,7 @@
 from basetestcase import BaseTestCase
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from membase.helper.cluster_helper import ClusterOperationHelper
-from couchbase.stats_tools import StatsCommon
+from couchbase_helper.stats_tools import StatsCommon
 
 class EvictionBase(BaseTestCase):
 

@@ -1,7 +1,7 @@
 import time
 import gc
 from backup.backup_base import BackupBaseTest
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, Bucket
 
 class OpsBeforeBackupTests(BackupBaseTest):

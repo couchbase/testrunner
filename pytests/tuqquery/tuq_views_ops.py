@@ -3,7 +3,7 @@ import math
 from tuqquery.tuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
-from couchbase.document import View
+from couchbase_helper.document import View
 
 class QueriesViewsTests(QueryTests):
     def setUp(self):

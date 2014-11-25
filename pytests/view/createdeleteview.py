@@ -2,8 +2,8 @@ import json
 import time
 from threading import Thread, Event
 from basetestcase import BaseTestCase
-from couchbase.document import DesignDocument, View
-from couchbase.documentgenerator import DocumentGenerator
+from couchbase_helper.document import DesignDocument, View
+from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.rest_client import RestConnection
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.api.exception import ReadDocumentException

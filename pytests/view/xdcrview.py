@@ -1,5 +1,5 @@
 from xdcr.xdcrbasetests import XDCRReplicationBaseTest
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from createdeleteview import CreateDeleteViewTests
 from membase.api.exception import QueryViewException
 

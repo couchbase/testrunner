@@ -10,18 +10,18 @@ import random
 from threading import Thread
 
 from membase.api.rest_client import RestConnection, Bucket
-from couchbase.cluster import Cluster
-from couchbase.document import View
+from couchbase_helper.cluster import Cluster
+from couchbase_helper.document import View
 from TestInput import TestInputSingleton
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
-from couchbase.stats_tools import StatsCommon
+from couchbase_helper.stats_tools import StatsCommon
 from scripts.collect_server_info import cbcollectRunner
 
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.exception import ServerUnavailableException, XDCRException
 from testconstants import STANDARD_BUCKET_PORT
 

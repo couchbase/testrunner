@@ -1,7 +1,7 @@
 import json
 import time
 from basetestcase import BaseTestCase
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from mc_bin_client import MemcachedError
 from threading import Thread
 from memcached.helper.data_helper import MemcachedClientHelper

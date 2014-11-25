@@ -5,7 +5,7 @@ import time
 import unittest
 
 from TestInput import TestInputSingleton
-from couchbase.document import DesignDocument, View
+from couchbase_helper.document import DesignDocument, View
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper

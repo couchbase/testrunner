@@ -1,9 +1,9 @@
 from TestInput import TestInputSingleton
 from autocompaction import AutoCompactionTests
 from basetestcase import BaseTestCase
-from couchbase.cluster import Cluster
-from couchbase.document import View
-from couchbase.documentgenerator import DocumentGenerator
+from couchbase_helper.cluster import Cluster
+from couchbase_helper.document import View
+from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.failover_helper import FailoverHelper
 from membase.helper.rebalance_helper import RebalanceHelper

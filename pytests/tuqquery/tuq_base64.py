@@ -3,7 +3,7 @@ import base64
 import testconstants
 from tuqquery.tuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
-from couchbase.documentgenerator import Base64Generator
+from couchbase_helper.documentgenerator import Base64Generator
 from membase.api.exception import CBQError
 
 class Base64Tests(QueryTests):

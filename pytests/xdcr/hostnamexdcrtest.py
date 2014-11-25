@@ -1,5 +1,5 @@
 from xdcrbasetests import XDCRReplicationBaseTest
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from hostname.hostnamemgmt_base import HostnameBaseTests
 
 

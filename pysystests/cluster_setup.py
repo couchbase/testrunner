@@ -9,7 +9,7 @@ sys.path = ["../"] + sys.path
 import unittest
 import logger
 from membase.api.rest_client import RestConnection, Bucket, RestHelper
-from couchbase.cluster import Cluster
+from couchbase_helper.cluster import Cluster
 from TestInput import TestInputSingleton
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper

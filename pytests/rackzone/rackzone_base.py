@@ -1,7 +1,7 @@
 import testconstants
 from basetestcase import BaseTestCase
-from couchbase.document import View
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.document import View
+from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, Bucket
 from remote.remote_util import RemoteMachineShellConnection
 

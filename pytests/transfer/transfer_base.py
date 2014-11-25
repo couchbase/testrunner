@@ -1,5 +1,5 @@
 from basetestcase import BaseTestCase
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 import time
 

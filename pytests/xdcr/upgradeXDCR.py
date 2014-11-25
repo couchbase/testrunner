@@ -12,9 +12,9 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
-from couchbase.document import DesignDocument, View
+from couchbase_helper.document import DesignDocument, View
 
 class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
     def setUp(self):

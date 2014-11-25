@@ -11,8 +11,8 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
-from couchbase.document import DesignDocument, View
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.document import DesignDocument, View
+from couchbase_helper.documentgenerator import BlobGenerator
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from pprint import pprint

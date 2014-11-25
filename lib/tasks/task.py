@@ -16,15 +16,15 @@ from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import KVStoreAwareSmartClient, VBucketAwareMemcached, MemcachedClientHelper
-from couchbase.document import DesignDocument, View
+from couchbase_helper.document import DesignDocument, View
 from mc_bin_client import MemcachedError
 from tasks.future import Future
-from couchbase.stats_tools import StatsCommon
+from couchbase_helper.stats_tools import StatsCommon
 from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
                                     GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, \
                                     ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException, BucketCompactionException
 from remote.remote_util import RemoteMachineShellConnection
-from couchbase.documentgenerator import BatchedDocumentGenerator
+from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 
 # TODO: Setup stacktracer
 # TODO: Needs "easy_install pygments"

@@ -7,10 +7,10 @@ import math
 from lib.remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
-from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from basetestcase import BaseTestCase
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
-from couchbase.stats_tools import StatsCommon
+from couchbase_helper.stats_tools import StatsCommon
 
 class MemorySanity(BaseTestCase):
 

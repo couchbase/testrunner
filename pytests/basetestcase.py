@@ -7,11 +7,11 @@ import string
 import random
 import logging
 import json
-from couchbase.documentgenerator import BlobGenerator
-from couchbase.cluster import Cluster
-from couchbase.document import View
-from couchbase.documentgenerator import DocumentGenerator
-from couchbase.stats_tools import StatsCommon
+from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.cluster import Cluster
+from couchbase_helper.document import View
+from couchbase_helper.documentgenerator import DocumentGenerator
+from couchbase_helper.stats_tools import StatsCommon
 from TestInput import TestInputSingleton
 from membase.api.rest_client import RestConnection, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -20,7 +20,7 @@ from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.api.exception import ServerUnavailableException
-from couchbase.data_analysis_helper import *
+from couchbase_helper.data_analysis_helper import *
 from testconstants import STANDARD_BUCKET_PORT
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD

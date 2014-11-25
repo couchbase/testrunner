@@ -8,7 +8,7 @@ import time
 import string
 
 from basetestcase import BaseTestCase
-from couchbase.document import DesignDocument, View
+from couchbase_helper.document import DesignDocument, View
 from membase.api.rest_client import RestConnection
 from membase.helper.spatial_helper import SpatialHelper
 from membase.helper.failover_helper import FailoverHelper

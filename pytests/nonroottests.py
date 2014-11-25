@@ -6,10 +6,10 @@ import time
 import paramiko
 import os
 
-from couchbase.cluster import Cluster
+from couchbase_helper.cluster import Cluster
 from TestInput import TestInputSingleton
 from membase.api.rest_client import RestConnection, Bucket
-from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 
 class NonRootTests(unittest.TestCase):

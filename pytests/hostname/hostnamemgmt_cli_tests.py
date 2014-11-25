@@ -1,5 +1,5 @@
 import json
-from couchbase.document import View
+from couchbase_helper.document import View
 from hostnamemgmt_base import HostnameBaseTests
 from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection

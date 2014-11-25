@@ -2,7 +2,7 @@ import time
 import logger
 from memcacheConstants import ERR_NOT_FOUND
 from castest.cas_base import CasBaseTest
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from mc_bin_client import MemcachedError
 from memcached.helper.data_helper import MemcachedClientHelper
 

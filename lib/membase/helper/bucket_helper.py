@@ -14,7 +14,7 @@ from mc_bin_client import MemcachedClient
 from threading import Thread
 import Queue
 from collections import defaultdict
-from couchbase.stats_tools import StatsCommon
+from couchbase_helper.stats_tools import StatsCommon
 from remote.remote_util import RemoteMachineShellConnection
 from subprocess import call
 

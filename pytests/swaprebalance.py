@@ -3,7 +3,7 @@ import datetime
 import unittest
 from TestInput import TestInputSingleton
 import logger
-from couchbase.cluster import Cluster
+from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper

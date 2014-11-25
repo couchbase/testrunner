@@ -3,7 +3,7 @@ import logger
 from dcp.constants import *
 from dcpbase import DCPBase
 from membase.api.rest_client import RestConnection, RestHelper
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 
 log = logger.Logger.get_logger()
 

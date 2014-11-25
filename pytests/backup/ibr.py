@@ -3,11 +3,11 @@ import re
 import os
 import gc
 from backup.backup_base import BackupBaseTest
-from couchbase.documentgenerator import BlobGenerator
-from couchbase.documentgenerator import DocumentGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import DocumentGenerator
 from memcached.helper.kvstore import KVStore
 from membase.api.rest_client import RestConnection, Bucket
-from couchbase.data_analysis_helper import *
+from couchbase_helper.data_analysis_helper import *
 from memcached.helper.data_helper import VBucketAwareMemcached
 import copy
 

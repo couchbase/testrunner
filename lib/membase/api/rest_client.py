@@ -10,9 +10,9 @@ from copy import deepcopy
 from threading import Thread
 
 try:
-    from couchbase.document import DesignDocument, View
+    from couchbase_helper.document import DesignDocument, View
 except ImportError:
-    from lib.couchbase.document import DesignDocument, View
+    from lib.couchbase_helper.document import DesignDocument, View
 
 from memcached.helper.kvstore import KVStore
 from exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException

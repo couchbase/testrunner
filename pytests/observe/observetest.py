@@ -3,9 +3,9 @@ from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 from basetestcase import BaseTestCase
 from mc_bin_client import MemcachedError
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from datetime import datetime, timedelta
-from couchbase.document import View
+from couchbase_helper.document import View
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.helper.cluster_helper import  ClusterOperationHelper
 

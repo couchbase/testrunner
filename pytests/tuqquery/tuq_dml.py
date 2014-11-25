@@ -2,7 +2,7 @@ import time
 import copy
 from remote.remote_util import RemoteMachineShellConnection
 from tuqquery.tuq import QueryTests
-from couchbase.documentgenerator import DocumentGenerator
+from couchbase_helper.documentgenerator import DocumentGenerator
 
 
 TIMEOUT_DELETED = 300

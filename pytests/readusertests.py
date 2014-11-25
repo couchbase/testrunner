@@ -5,7 +5,7 @@ from basetestcase import BaseTestCase
 from membase.api.exception import BucketCreationException, \
             DesignDocCreationException, AddNodeException, \
             FailoverFailedException
-from couchbase.document import DesignDocument, View
+from couchbase_helper.document import DesignDocument, View
 
 class ROUserTests(BaseTestCase):
 

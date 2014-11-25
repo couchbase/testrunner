@@ -2,8 +2,8 @@ import time
 from membase.api.rest_client import RestConnection
 from basetestcase import BaseTestCase
 from membase.helper.cluster_helper import ClusterOperationHelper
-from couchbase.documentgenerator import BlobGenerator
-from couchbase.stats_tools import StatsCommon
+from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.stats_tools import StatsCommon
 from remote.remote_util import RemoteMachineShellConnection
 import testconstants
 

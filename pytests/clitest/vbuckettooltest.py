@@ -3,7 +3,7 @@ import zlib
 from clitest.cli_base import CliBaseTest
 from memcached.helper.data_helper import  MemcachedClientHelper
 from membase.api.rest_client import RestConnection
-from couchbase.documentgenerator import DocumentGenerator
+from couchbase_helper.documentgenerator import DocumentGenerator
 from mc_bin_client import MemcachedClient
 from remote.remote_util import RemoteMachineShellConnection
 

@@ -1,9 +1,9 @@
 import time
 import logger
 from basetestcase import BaseTestCase
-from couchbase.documentgenerator import DocumentGenerator
+from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.rest_client import RestConnection
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 
 class DocsTests(BaseTestCase):
 

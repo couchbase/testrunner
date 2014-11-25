@@ -5,12 +5,12 @@ import logger
 
 from threading import Thread
 from tasks.future import TimeoutError
-from couchbase.cluster import Cluster
-from couchbase.stats_tools import StatsCommon
+from couchbase_helper.cluster import Cluster
+from couchbase_helper.stats_tools import StatsCommon
 from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from basetestcase import BaseTestCase
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 import testconstants
 

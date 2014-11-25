@@ -15,7 +15,7 @@ from selenium.common.exceptions import NoSuchElementException
 from threading import Thread
 import ConfigParser
 from TestInput import TestInputSingleton,TestInputParser, TestInputServer
-from couchbase.cluster import Cluster
+from couchbase_helper.cluster import Cluster
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper

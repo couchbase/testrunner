@@ -2,9 +2,9 @@
 
 import logger
 from basetestcase import BaseTestCase
-from couchbase.documentgenerator import DocumentGenerator
+from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.rest_client import RestConnection
-from couchbase.document import View
+from couchbase_helper.document import View
 from memcached.helper.data_helper import MemcachedClientHelper
 
 class DocumentKeysTests(BaseTestCase):

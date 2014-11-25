@@ -1,6 +1,6 @@
 from transfer.transfer_base import TransferBaseTest
 from membase.api.rest_client import RestConnection
-from couchbase.documentgenerator import BlobGenerator, DocumentGenerator
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from mc_bin_client import MemcachedClient
 from memcached.helper.kvstore import KVStore
 from memcached.helper.data_helper import VBucketAwareMemcached

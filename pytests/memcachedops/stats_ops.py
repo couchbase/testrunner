@@ -4,7 +4,7 @@ from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from basetestcase import BaseTestCase
 from mc_bin_client import MemcachedError
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from threading import Thread
 
 class StatsCrashRepro(BaseTestCase):

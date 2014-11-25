@@ -12,7 +12,7 @@ from datetime import date
 from tuq_generators import TuqGenerators
 from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
-from couchbase.documentgenerator import DocumentGenerator
+from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper

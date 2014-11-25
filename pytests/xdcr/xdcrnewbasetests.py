@@ -4,21 +4,21 @@ import copy
 import logger
 import logging
 
-from couchbase.cluster import Cluster
+from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
 from membase.api.exception import ServerUnavailableException
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
 from testconstants import STANDARD_BUCKET_PORT
-from couchbase.document import View
+from couchbase_helper.document import View
 from membase.helper.cluster_helper import ClusterOperationHelper
-from couchbase.stats_tools import StatsCommon
+from couchbase_helper.stats_tools import StatsCommon
 from membase.helper.bucket_helper import BucketOperationHelper
 from TestInput import TestInputSingleton
 from scripts.collect_server_info import cbcollectRunner
 from scripts import collect_data_files
 
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from lib.membase.api.exception import XDCRException
 
 

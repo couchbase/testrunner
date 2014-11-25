@@ -7,7 +7,7 @@ import json
 from collections import defaultdict
 
 from TestInput import TestInputSingleton
-from couchbase.document import View
+from couchbase_helper.document import View
 from membase.api.rest_client import RestConnection, Bucket
 from membase.helper.cluster_helper import ClusterOperationHelper
 from mc_bin_client import MemcachedClient

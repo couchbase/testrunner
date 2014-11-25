@@ -10,7 +10,7 @@ import sys
 sys.path=["../lib"] + sys.path
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
-from couchbase.document import View
+from couchbase_helper.document import View
 from app.celery import celery
 import app
 import testcfg as cfg

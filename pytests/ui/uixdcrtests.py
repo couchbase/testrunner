@@ -2,7 +2,7 @@ import logger
 import time
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
-from couchbase.cluster import Cluster
+from couchbase_helper.cluster import Cluster
 from uibasetest import *
 from uisampletests import Bucket, NavigationHelper, BucketHelper
 

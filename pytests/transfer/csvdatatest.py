@@ -1,8 +1,8 @@
 from membase.api.rest_client import RestConnection
 from basetestcase import BaseTestCase
 from lib.remote.remote_util import RemoteMachineShellConnection
-from couchbase.documentgenerator import BlobGenerator
-from lib.couchbase.cluster import Cluster
+from couchbase_helper.documentgenerator import BlobGenerator
+from lib.couchbase_helper.cluster import Cluster
 
 
 class CsvDataTest(BaseTestCase):

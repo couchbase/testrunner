@@ -4,8 +4,8 @@ import sys
 
 sys.path.extend(('.', 'lib'))
 from lib.remote.remote_util import RemoteMachineShellConnection
-from couchbase.documentgenerator import DocumentGenerator
-from couchbase.cluster import Cluster
+from couchbase_helper.documentgenerator import DocumentGenerator
+from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import Bucket
 import TestInput
 import logger

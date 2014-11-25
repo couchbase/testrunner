@@ -1,7 +1,7 @@
 from random import shuffle
 import time
 import logger
-from couchbase.cluster import Cluster
+from couchbase_helper.cluster import Cluster
 from membase.api.exception import StatsUnavailableException, \
     ServerAlreadyJoinedException, RebalanceFailedException, \
     FailoverFailedException, InvalidArgumentException, ServerSelfJoinException, \

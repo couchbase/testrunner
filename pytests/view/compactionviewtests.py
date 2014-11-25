@@ -3,9 +3,9 @@ from threading import Thread, Event
 import datetime
 from tasks.future import TimeoutError
 from basetestcase import BaseTestCase
-from couchbase.documentgenerator import DocumentGenerator
-from couchbase.documentgenerator import BlobGenerator
-from couchbase.document import DesignDocument, View
+from couchbase_helper.documentgenerator import DocumentGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.document import DesignDocument, View
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection

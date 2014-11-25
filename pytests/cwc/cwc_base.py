@@ -4,7 +4,7 @@ import random
 import testconstants
 
 from basetestcase import BaseTestCase
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, Bucket
 from remote.remote_util import RemoteMachineShellConnection
 from testconstants import LINUX_CW_LOG_PATH

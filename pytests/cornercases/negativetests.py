@@ -8,7 +8,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.api.rest_client import RestConnection, Bucket
 from memcached.helper.data_helper import VBucketAwareMemcached
-from couchbase.documentgenerator import BlobGenerator, KVGenerator
+from couchbase_helper.documentgenerator import BlobGenerator, KVGenerator
 from basetestcase import BaseTestCase
 from xdcr.xdcrbasetests import XDCRReplicationBaseTest
 

@@ -3,10 +3,11 @@ from TestInput import TestInputSingleton
 from basetestcase import BaseTestCase
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.api.rest_client import RestConnection, RestHelper
-from couchbase.documentgenerator import BlobGenerator
-from couchbase.data_analysis_helper import *
+from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.data_analysis_helper import *
 from membase.helper.rebalance_helper import RebalanceHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+
 
 class DataAnalysisTests(BaseTestCase):
     """ Class for defining tests and methods for cluster data analysis """

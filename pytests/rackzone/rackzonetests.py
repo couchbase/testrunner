@@ -9,7 +9,7 @@ from memcached.helper.data_helper import  MemcachedClientHelper
 from membase.api.rest_client import RestConnection, Bucket
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.api.exception import RebalanceFailedException
-from couchbase.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from scripts.install import InstallerJob
