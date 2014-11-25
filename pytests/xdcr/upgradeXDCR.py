@@ -260,8 +260,10 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         self.sleep(120)
 
         self._install(self.servers[self.src_init + self.dest_init:])
+        self.sleep(60)
         self._online_upgrade(self.dest_nodes, self.servers[self.src_init + self.dest_init:])
         self._install(self.dest_nodes)
+        self.sleep(60)
         self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.dest_nodes, False)
 
         self._load_bucket(bucket_standard, self.dest_master, self.gen_delete, 'delete', exp=0)
