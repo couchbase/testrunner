@@ -508,7 +508,10 @@ def auto_failover_nodes(rest, servers='', only_failover=False, failover_orchestr
 
 def failover_by_killing_mc(ip):
     node_ssh, node = create_ssh_conn(ip)
-    cmd = "killall -9 memcached & killall -9 beam.smp"
+    if cfg.COUCHBASE_OS == "windows":
+        cmd = "taskkill /F /T /IM memcached* && taskkill /F /T /IM erl*"
+    else:
+        cmd = "killall -9 memcached && killall -9 beam.smp"
     logger.error(cmd)
     result = node_ssh.execute_command(cmd, node)
     logger.error(result)
@@ -579,7 +582,7 @@ def restart(servers='', type='soft', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
         else:
             logger.error('Soft Restart')
             if cfg.COUCHBASE_OS == "windows":
-                cmd = "net stop couchbaseserver && net start couchbaseserver"
+                cmd = "net stop couchbaseserver || net start couchbaseserver"
             else:
                 cmd = "/etc/init.d/couchbase-server restart"
 
