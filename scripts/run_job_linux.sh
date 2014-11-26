@@ -101,6 +101,8 @@ if [ ${run_install} = true ]
              echo "some nodes were not install successfully! Tests will not run!"
              exit ${INSTALL_FAILED}
        fi
+       # Sleeping after installation to ensure if all the servers are properly up and running
+       sleep 90
 fi
 
 echo '---------------------------- TESTS RUN -----------------------'
