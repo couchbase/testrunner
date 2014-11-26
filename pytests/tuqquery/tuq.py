@@ -1725,7 +1725,7 @@ class QueryTests(BaseTestCase):
             for bucket in self.buckets:
                 self.query = "select millis_to_str(str_to_millis('2010-01-01')) as date"
                 actual_result = self.run_cbq_query()
-                self.assertTrue(actual_result["results"]["date"][:10] == '2010-01-01', 'Actual result %s' %  actual_result)
+                self.assertTrue(actual_result["results"][0]["date"][:10] == '2010-01-01', 'Actual result %s' %  actual_result)
                 self.query = "select join_yr, join_mo, join_day, millis_to_str(str_to_millis(tostr(join_yr) || '-0' ||" +\
                 " tostr(join_mo) || '-0' || tostr(join_day))) as date from %s" % (bucket.name) +\
                 " where join_mo < 10 and join_day < 10 ORDER BY date %s" % order
