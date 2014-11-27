@@ -325,6 +325,7 @@ def install_couchbase():
     for ip in cfg.CLUSTER_IPS:
         os.system("curl -X POST -d \'ale:set_loglevel(xdcr_trace, debug).\' \"http://{0}:{1}@{2}:8091/diag/eval\"".
                   format(cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD, ip))
+    time.sleep(60)
 
 def warn_skip(task):
     print("\nWARNING : Skipping {0}\n".format(task))
