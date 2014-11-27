@@ -165,6 +165,48 @@ class JoinTests(QueryTests):
                                if doc['tasks_ids'] in ['test_task-1', 'test_task-2']]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+
+    def test_subquery_exists(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM %s d1 WHERE " % bucket.name +\
+            "EXISTS (SELECT * FROM %s d  use keys toarray(d1.tasks_ids[0]))" % bucket.name
+            all_docs_list = self._generate_full_docs_list(self.gens_load)
+            tasks_ids = [doc["task_name"] for doc in self._generate_full_docs_list(self.gens_tasks)]
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'])
+            expected_result = [{'name' : doc['name']}
+                               for doc in all_docs_list
+                               if doc['tasks_ids'][0] in tasks_ids]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_subquery_exists_where(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM %s d1 WHERE " % bucket.name +\
+            "EXISTS (SELECT * FROM %s d use keys toarray(d1.tasks_ids[0]) where d.project='MB')" % bucket.name
+            all_docs_list = self._generate_full_docs_list(self.gens_load)
+            tasks_ids = [doc["task_name"] for doc in self._generate_full_docs_list(self.gens_tasks) if doc['project'] == 'MB']
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'])
+            expected_result = [{'name' : doc['name']}
+                               for doc in all_docs_list
+                               if doc['tasks_ids'][0] in tasks_ids]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_subquery_exists_and(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM %s d1 WHERE " % bucket.name +\
+            "EXISTS (SELECT * FROM %s d  use keys toarray(d1.tasks_ids[0]) and join_mo>5)" % bucket.name
+            all_docs_list = self._generate_full_docs_list(self.gens_load)
+            tasks_ids = [doc["task_name"] for doc in self._generate_full_docs_list(self.gens_tasks)]
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'])
+            expected_result = [{'name' : doc['name']}
+                               for doc in all_docs_list
+                               if doc['tasks_ids'][0] in tasks_ids and doc['join_mo']>5]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
 ##############################################################################################
 #
 #   KEY
