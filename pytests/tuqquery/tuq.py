@@ -1978,6 +1978,50 @@ class QueryTests(BaseTestCase):
             expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
 
+    def test_intersect(self):
+        for bucket in self.buckets:
+            self.query = "select name from %s intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"name" : doc["name"]}
+                               for doc in full_list if doc['join_day'] > 5]
+            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
+            self._verify_results(actual_result, expected_result)
+
+    def test_intersect_all(self):
+        for bucket in self.buckets:
+            self.query = "select name from %s intersect all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"name" : doc["name"]}
+                               for doc in full_list if doc['join_day'] > 5]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_except(self):
+        for bucket in self.buckets:
+            self.query = "select name from %s except select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"name" : doc["name"]}
+                               for doc in full_list if not doc['join_day'] > 5]
+            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
+            self._verify_results(actual_result, expected_result)
+
+    def test_except_all(self):
+        for bucket in self.buckets:
+            self.query = "select name from %s except all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"name" : doc["name"]}
+                               for doc in full_list if not doc['join_day'] > 5]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
 ##############################################################################################
 #
 #   WITHIN
