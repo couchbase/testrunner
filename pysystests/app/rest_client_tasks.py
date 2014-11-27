@@ -582,7 +582,15 @@ def restart(servers='', type='soft', cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
         else:
             logger.error('Soft Restart')
             if cfg.COUCHBASE_OS == "windows":
-                cmd = "net stop couchbaseserver || net start couchbaseserver"
+                cmd = "net stop couchbaseserver"
+                logger.error(cmd)
+                result = node_ssh.execute_command(cmd, node)
+                logger.error(result)
+                cmd = "net start couchbaseserver"
+                logger.error(cmd)
+                result = node_ssh.execute_command(cmd, node)
+                logger.error(result)
+                return
             else:
                 cmd = "/etc/init.d/couchbase-server restart"
 
