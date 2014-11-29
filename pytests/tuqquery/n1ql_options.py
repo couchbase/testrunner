@@ -143,3 +143,10 @@ class OptionsRestTests(QueryTests):
             self.query = "SELECT count(test_rate) FROM %s where test_rate>`?`" % (bucket.name)
             actual_result = self.run_cbq_query(query_params= {'positional_params':[3]})
             self.assertTrue(actual_result['results'], 'There are no results')
+
+    def test_named_var_arg(self):
+        self.create_primary_index_for_3_0_and_greater()
+        for bucket in self.buckets:
+            self.query = "SELECT count($1) FROM %s where test_rate>`$rate_min`" % (bucket.name)
+            actual_result = self.run_cbq_query(query_params= {'$rate_min':3, 'args' :['test_rate']})
+            self.assertTrue(actual_result['results'], 'There are no results')
