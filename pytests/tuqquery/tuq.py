@@ -2374,6 +2374,20 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
+    def test_letting(self):
+        for bucket in self.buckets:
+            self.query = "SELECT join_mo, sum_test from %s WHERE join_mo>7 group by join_mo letting sum_test = sum(tasks_points.task1)" % (bucket.name)
+            full_list = self._generate_full_docs_list(self.gens_load)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            tmp_groups = set([doc['join_mo'] for doc in full_list if doc['join_mo']>7])
+            expected_result = [{"join_mo" : group,
+                              "sum_test" : sum([x["tasks_points"]["task1"] for x in full_list
+                                               if x["join_mo"] == group])}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
 ##############################################################################################
 #
 #   COMMON FUNCTIONS
