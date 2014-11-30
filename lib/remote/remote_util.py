@@ -2257,6 +2257,7 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         temp_path = "/tmp/"
         if self.info.type.lower() == 'windows':
+            return "",{}
             temp_path = testconstants.WIN_TMP_PATH
         replicaOption = ""
         prefix = str(uuid.uuid1())
