@@ -104,6 +104,25 @@ class JoinTests(QueryTests):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
+##############################################################################################
+#
+#   SUBQUERY
+##############################################################################################
+
+    def test_subquery_count(self):
+        for bucket in self.buckets:
+            self.query = "select name, ARRAY_LENGTH((select task_name  from %s d use keys %s)) as cn from %s" % (bucket.name, str(['test_task-%s' % i for i in xrange(0, 29)]),
+                                                                                                                    bucket.name)
+            self.run_cbq_query()
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'])
+            all_docs_list = self._generate_full_docs_list(self.gens_load)
+            expected_result= [{'name': doc['name'],
+                                     'cn' : 29}
+                                    for doc in all_docs_list]
+            expected_result.extend([{'cn' : 29}] * 29)
+            self._verify_results(actual_result, expected_result)
+
     def test_subquery_select(self):
         for bucket in self.buckets:
             self.query = "select task_name, (select count(task_name) cn from %s d use keys %s) as names from %s" % (bucket.name, str(['test_task-%s' % i for i in xrange(0, 29)]),
