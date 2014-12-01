@@ -9,7 +9,7 @@ import testconstants
 import datetime
 import time
 from datetime import date
-from tuq_generators import TuqGenerators
+from couchbase_helper.tuq_generators import TuqGenerators
 from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
 from couchbase_helper.documentgenerator import DocumentGenerator
