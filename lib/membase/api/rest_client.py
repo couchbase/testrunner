@@ -822,18 +822,48 @@ class RestConnection(object):
         return json_parsed
 
 
-    #replicationType:continuous toBucket:default toCluster:two fromBucket:default
-    def start_replication(self, replicationType, fromBucket, toCluster, rep_type="xmem", toBucket=None):
+    # replicationType:continuous toBucket:default toCluster:two fromBucket:default
+    # defaults at https://github.com/couchbase/goxdcr/metadata/replication_settings.go#L20-L33
+    def start_replication(self,
+                          replicationType,
+                          fromBucket,
+                          toCluster,
+                          rep_type="xmem",
+                          toBucket=None,
+                          repl_spec=None):
         toBucket = toBucket or fromBucket
-
-        msg = "starting {0} replication type:{1} from {2} to {3} in the remote cluster {4}"
-        log.info(msg.format(replicationType, rep_type, fromBucket, toBucket, toCluster))
+        msg = "starting {0} replication type:{1} from {2} to {3} in the remote" \
+              " cluster {4} with settings {5}"
+        log.info(msg.format(replicationType, rep_type, fromBucket, toBucket,
+                            toCluster, repl_spec))
         api = self.baseUrl + 'controller/createReplication'
-        param_map = {'replicationType': replicationType,
-                     'toBucket': toBucket,
-                     'fromBucket': fromBucket,
-                     'toCluster': toCluster,
-                     'type': rep_type}
+        cb_version = self.get_nodes_self().version
+        cb_version = cb_version[:cb_version.rfind('-')]
+        if (float(cb_version[:2]) >= 3.5) and (repl_spec is not None):
+            param_map = {'replicationType': replicationType,
+                        'toBucket': toBucket,
+                        'fromBucket': fromBucket,
+                        'toCluster': toCluster,
+                        'type': rep_type,
+                        'xdcrCheckpointInterval': repl_spec['checkpoint_interval'],
+                        'xdcrFailureRestartInterval': repl_spec['failure_restart_interval'],
+                        'xdcrOptimisticReplicationThreshold': repl_spec['optimistic_threshold'],
+                        'xdcrFilterExpression': repl_spec['filter_expression'],
+                        'xdcrSourceNozzlePerNode': repl_spec['source_nozzles'],
+                        'xdcrTargetNozzlePerNode': repl_spec['target_nozzles'],
+                        'xdcrWorkerBatchSize': repl_spec['batch_count'],
+                        'xdcrDocBatchSizeKb': repl_spec['batch_size'],
+                        'xdcrLogLevel': repl_spec['log_level'],
+                        'xdcrMaxExpectedReplicationLag': repl_spec['max_replication_lag'],
+                        'xdcrTimeoutPercentageCap': repl_spec['timeout_percentage']
+                        }
+        else:
+            param_map = {'replicationType': replicationType,
+                        'toBucket': toBucket,
+                        'fromBucket': fromBucket,
+                        'toCluster': toCluster,
+                        'type': rep_type
+                        }
         params = urllib.urlencode(param_map)
         status, content, _ = self._http_request(api, 'POST', params)
         #response : {"database":"http://127.0.0.1:9500/_replicator",

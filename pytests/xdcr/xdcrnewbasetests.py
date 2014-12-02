@@ -3,6 +3,7 @@ import time
 import copy
 import logger
 import logging
+import re
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
@@ -112,9 +113,33 @@ class STATE:
 
 
 class XDCR_PARAM:
-    XDCR_FAILURE_RESTART_INTERVAL = "xdcrFailureRestartInterval"
-    XDCR_CHECKPOINT_INTERVAL = "xdcrCheckpointInterval"
-    XDCR_OPTIMISTIC_REPL_THRESHOLD = "xdcrOptimisticReplicationThreshold"
+    # Per-replication params (input)
+    FAILURE_RESTART = "failure_restart_interval"
+    CHECKPOINT_INTERVAL = "checkpoint_interval"
+    OPTIMISTIC_THRESHOLD = "optimistic_threshold"
+    FILTER_EXP = "filter_expression"
+    SOURCE_NOZZLES = "source_nozzles"
+    TARGET_NOZZLES = "target_nozzles"
+    BATCH_COUNT = "batch_count"
+    BATCH_SIZE = "batch_size"
+    LOG_LEVEL = "log_level"
+    MAX_REPLICATION_LAG = "max_replication_lag"
+    TIMEOUT_PERC = "timeout_percentage"
+
+    # defaults at https://github.com/couchbase/goxdcr/metadata/replication_settings.go#L20-L33
+    DEFAULTS = {
+                FAILURE_RESTART : 30,
+                CHECKPOINT_INTERVAL : 60, # test default
+                OPTIMISTIC_THRESHOLD : 256,
+                FILTER_EXP : None,
+                SOURCE_NOZZLES : 2,
+                TARGET_NOZZLES : 2,
+                BATCH_COUNT : 500,
+                BATCH_SIZE : 2049,
+                MAX_REPLICATION_LAG : 1000,
+                TIMEOUT_PERC : 80,
+                LOG_LEVEL : 'Info'
+                }
 
 
 class NodeHelper:
@@ -287,6 +312,12 @@ class NodeHelper:
                 shell.disconnect()
         return hostnames
 
+    # Returns version like "x.x.x" after removing build number
+    @staticmethod
+    def get_cb_version(node):
+        rest = RestConnection(node)
+        version = rest.get_nodes_self().version
+        return version[:version.rfind('-')]
 
 class FloatingServers:
 
@@ -403,16 +434,40 @@ class XDCReplication:
         @param rep_type: replication protocol REPLICATION_PROTOCOL.CAPI/XMEM
         @param to_bucket: Destination bucket name
         """
+        self.__input = TestInputSingleton.input
         self.__remote_cluster_ref = remote_cluster_ref
         self.__from_bucket = from_bucket
         self.__to_bucket = to_bucket or from_bucket
-        self.__rep_type = rep_type
         self.__src_cluster = self.__remote_cluster_ref.get_src_cluster()
         self.__dest_cluster = self.__remote_cluster_ref.get_dest_cluster()
+        self.__src_cluster_name = self.__src_cluster.get_name()
+        self.__rep_type = rep_type
+
+        # get per replication params specified as from_bucket@cluster_name=
+        # eg. default@C1="filter_expression:loadOne,checkpoint_interval:60,
+        # failure_restart_interval:20"
+        repl_str = self.__input.param("%s@%s"
+                            %(self.__from_bucket, self.__src_cluster_name), "None")
+
+        if repl_str:
+            argument_split = re.split('[:,]', repl_str)
+            self.__repl_spec = dict(zip(argument_split[::2], argument_split[1::2]))
+
+            # for those params that have not been passed as input
+            # populate __repl_spec with default settings for REST call
+            for param, value in XDCR_PARAM.DEFAULTS.iteritems():
+                if param not in self.__repl_spec:
+                    self.__repl_spec[param] = value
         self.log = logger.Logger.get_logger()
 
         # Response from REST API
         self.__rep_id = None
+
+    def get_repl_setting(self, param):
+        if param in self.__repl_spec:
+            return self.__repl_spec[param]
+        else:
+            XDCRException("Error: XDCR setting {0} not supported yet!")
 
     def get_src_bucket(self):
         return self.__from_bucket
@@ -435,7 +490,8 @@ class XDCReplication:
             self.__from_bucket,
             self.__remote_cluster_ref.get_name(),
             rep_type=self.__rep_type,
-            toBucket=self.__to_bucket)
+            toBucket=self.__to_bucket,
+            repl_spec=self.__repl_spec)
 
     def __verify_pause(self):
         """Verify if replication is paused"""
@@ -1993,11 +2049,24 @@ class XDCRNewBaseTest(unittest.TestCase):
                                        (len(values), ip, values))
         return error_count
 
-    def __merge_keys(self, kv_src_bucket, kv_dest_bucket, kvs_num=1):
+    def __merge_keys(self, kv_src_bucket, kv_dest_bucket, kvs_num=1, filter_exp=None):
+        filtered_src_keys = []
         valid_keys_src, deleted_keys_src = kv_src_bucket[
             kvs_num].key_set()
         valid_keys_dest, deleted_keys_dest = kv_dest_bucket[
             kvs_num].key_set()
+
+        if filter_exp is not None:
+            for key in valid_keys_src:
+                try:
+                    if re.search(filter_exp, key) is not None:
+                        filtered_src_keys.append(key)
+                except Exception as ex:
+                    XDCRException("Unable to compile filter expression {}".
+                                  format(filter_exp))
+            valid_keys_src = filtered_src_keys
+            self.log.info("{0} keys matched the filter expression {1}".
+                            format(len(valid_keys_src), filter_exp))
 
         for key in valid_keys_src:
             # replace/add the values for each key in src kvs
@@ -2039,10 +2108,16 @@ class XDCRNewBaseTest(unittest.TestCase):
         for cb_cluster in self.__cb_clusters:
             for remote_cluster_ref in cb_cluster.get_remote_clusters():
                 for repl in remote_cluster_ref.get_replications():
+                    self.log.info("Merging buckets for replication {0}.{1}->{2}.{3}".
+                                     format(repl.get_src_cluster().get_name(),
+                                            repl.get_src_bucket(),
+                                            repl.get_dest_cluster().get_name(),
+                                            repl.get_dest_bucket()))
                     self.__merge_keys(
                         repl.get_src_bucket().kvs,
                         repl.get_dest_bucket().kvs,
-                        kvs_num=1
+                        kvs_num=1,
+                        filter_exp=repl.get_repl_setting(XDCR_PARAM.FILTER_EXP)
                     )
 
     def verify_results(self):
@@ -2053,7 +2128,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             3. Wait for Outbound mutations to 0.
             4. Wait for Items counts equal to kv_store size of buckets.
             5. Verify items value on each bucket.
-            6. Veiry Revision id of each item.
+            6. Verify Revision id of each item.
         """
         self.__merge_all_buckets()
         for cb_cluster in self.__cb_clusters:
