@@ -1,4 +1,7 @@
+from documentgenerator import  DocumentGenerator
 import re
+import datetime
+import uuid
 import logger
 
 log = logger.Logger.get_logger()
@@ -463,3 +466,251 @@ class TuqGenerators(object):
         self.aliases = {}
         self.attr_order_clause_greater_than_select = []
         self.parent_selected = False
+
+class JsonGenerator:
+
+    def generate_docs_employee(self, docs_per_day, start=0):
+        generators = []
+        types = ['Engineer', 'Sales', 'Support']
+        join_yr = [2010, 2011]
+        join_mo = xrange(1, 12 + 1)
+        join_day = xrange(1, 28 + 1)
+        template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
+        template += ' "email":"{4}", "job_title":"{5}", "test_rate":{8}, "skills":{9},'
+        template += '"VMs": {10},'
+        template += ' "tasks_points" : {{"task1" : {6}, "task2" : {7}}}}}'
+        for info in types:
+            for year in join_yr:
+                for month in join_mo:
+                    for day in join_day:
+                        prefix = str(uuid.uuid4())[:7]
+                        name = ["employee-%s" % (str(day))]
+                        email = ["%s-mail@couchbase.com" % (str(day))]
+                        vms = [{"RAM": month, "os": "ubuntu",
+                                "name": "vm_%s" % month, "memory": month},
+                               {"RAM": month, "os": "windows",
+                                "name": "vm_%s"% (month + 1), "memory": month}]
+                        generators.append(DocumentGenerator("query-test" + prefix,
+                                               template,
+                                               name, [year], [month], [day],
+                                               email, [info], range(1,10), range(1,10),
+                                               [float("%s.%s" % (month, month))],
+                                               [["skill%s" % y for y in join_yr]],
+                                               [vms],
+                                               start=start, end=docs_per_day))
+        return generators
+
+    def generate_docs_sabre(self, docs_per_day, start=0):
+        generators = []
+        dests = ['BOS', 'MIA', 'SFO']
+        join_yr = [2010, 2011]
+        join_mo = xrange(1, 12 + 1)
+        join_day = xrange(1, 28 + 1)
+        template = '{{ "Amount":{0}, "CurrencyCode":"{1}",'
+        template += ' "TotalTax":{{"DecimalPlaces" : {2}, "Amount" : {3}, "CurrencyCode" : "{4}",}}, ,'
+        template += ' "Tax":{5}, "FareBasisCode":{6}, "PassengerTypeQuantity":{7}, "TicketType":"{8}",'
+        template += '"SequenceNumber": {9},'
+        template += ' "DirectionInd" : "{10}",  "Itinerary" : {11}, "Destination" : "{12}",'
+        template += '"join_yr":{13}, "join_mo":{14}, "join_day":{15}, "Codes" :{16}}}'
+        for dest in dests:
+            for year in join_yr:
+                for month in join_mo:
+                    for day in join_day:
+                        prefix = '%s_%s-%s-%s' % (dest, year, month, day)
+                        amount = [float("%s.%s" % (month, month))]
+                        currency = [("USD", "EUR")[month in [1,3,5]]]
+                        decimal_tax = [1,2]
+                        amount_tax = [day]
+                        currency_tax = currency
+                        taxes = [{"DecimalPlaces": 2, "Amount": float(amount_tax)/3,
+                                  "TaxCode": "US1", "CurrencyCode": currency},
+                                 {"DecimalPlaces": 2, "Amount": float(amount_tax)/4,
+                                  "TaxCode": "US2", "CurrencyCode": currency},
+                                 {"DecimalPlaces": 2, "Amount": amount_tax - float(amount_tax)/4-\
+                                  float(amount_tax)/3,
+                                  "TaxCode": "US2", "CurrencyCode": currency}]
+
+                        fare_basis = [{"content": "XA21A0NY", "DepartureAirportCode": dest,
+                                       "BookingCode": "X", "ArrivalAirportCode": "MSP"},
+                                      {"content": "XA21A0NY", "DepartureAirportCode": "MSP",
+                                       "AvailabilityBreak": True, "BookingCode": "X",
+                                       "ArrivalAirportCode": "BOS"}]
+                        pass_amount = [day]
+                        ticket_type = [("eTicket", "testType")[month in [1,3,5]]]
+                        sequence = [year]
+                        direction = [("oneWay", "return")[month in [2,6,10]]]
+                        itinerary = {"OriginDestinationOptions":
+                                     {"OriginDestinationOption": [
+                                       {"FlightSegment": [
+                                         {"TPA_Extensions":
+                                           {"eTicket": {"Ind": True}},
+                                           "MarketingAirline": {"Code": dest},
+                                           "StopQuantity": month,
+                                           "DepartureTimeZone": {"GMTOffset": -7},
+                                           "OperatingAirline": {"Code": "DL",
+                                                                "FlightNumber": year + month},
+                                           "DepartureAirport": {"LocationCode": "SFO"},
+                                           "ArrivalTimeZone": {"GMTOffset": -5},
+                                           "ResBookDesigCode": "X",
+                                           "FlightNumber": year + day,
+                                           "ArrivalDateTime": "2014-07-12T06:07:00",
+                                           "ElapsedTime": 212,
+                                           "Equipment": {"AirEquipType": 763},
+                                           "DepartureDateTime": "2014-07-12T00:35:00",
+                                           "MarriageGrp": "O",
+                                           "ArrivalAirport": {"LocationCode": "MSP"}},
+                                        {"TPA_Extensions":
+                                           {"eTicket": {"Ind": False}},
+                                           "MarketingAirline": {"Code": dest},
+                                           "StopQuantity": month,
+                                           "DepartureTimeZone": {"GMTOffset": -7},
+                                           "OperatingAirline": {"Code": "DL",
+                                                                "FlightNumber": year + month + 1},
+                                           "DepartureAirport": {"LocationCode": "SFO"},
+                                           "ArrivalTimeZone": {"GMTOffset": -3},
+                                           "ResBookDesigCode": "X",
+                                           "FlightNumber": year + day,
+                                           "ArrivalDateTime": "2014-07-12T06:07:00",
+                                           "ElapsedTime": 212,
+                                           "Equipment": {"AirEquipType": 764},
+                                           "DepartureDateTime": "2014-07-12T00:35:00",
+                                           "MarriageGrp": "1",
+                                           "ArrivalAirport": {"LocationCode": "MSP"}}],
+                                    "ElapsedTime": 619},
+                                   {"FlightSegment": [
+                                         {"TPA_Extensions":
+                                           {"eTicket": {"Ind": True}},
+                                           "MarketingAirline": {"Code": dest},
+                                           "StopQuantity": month,
+                                           "DepartureTimeZone": {"GMTOffset": -7},
+                                           "OperatingAirline": {"Code": "DL",
+                                                                "FlightNumber": year + month},
+                                           "DepartureAirport": {"LocationCode": "SFO"},
+                                           "ArrivalTimeZone": {"GMTOffset": -5},
+                                           "ResBookDesigCode": "X",
+                                           "FlightNumber": year + day,
+                                           "ArrivalDateTime": "2014-07-12T06:07:00",
+                                           "ElapsedTime": 212,
+                                           "Equipment": {"AirEquipType": 763},
+                                           "DepartureDateTime": "2014-07-12T00:35:00",
+                                           "MarriageGrp": "O",
+                                           "ArrivalAirport": {"LocationCode": "MSP"}},
+                                        {"TPA_Extensions":
+                                           {"eTicket": {"Ind": False}},
+                                           "MarketingAirline": {"Code": dest},
+                                           "StopQuantity": month,
+                                           "DepartureTimeZone": {"GMTOffset": -7},
+                                           "OperatingAirline": {"Code": "DL",
+                                                                "FlightNumber": year + month + 1},
+                                           "DepartureAirport": {"LocationCode": "SFO"},
+                                           "ArrivalTimeZone": {"GMTOffset": -3},
+                                           "ResBookDesigCode": "X",
+                                           "FlightNumber": year + day,
+                                           "ArrivalDateTime": "2014-07-12T06:07:00",
+                                           "ElapsedTime": 212,
+                                           "Equipment": {"AirEquipType": 764},
+                                           "DepartureDateTime": "2014-07-12T00:35:00",
+                                           "MarriageGrp": "1",
+                                           "ArrivalAirport": {"LocationCode": "MSP"}}]}]},
+                                     "DirectionInd": "Return"}
+                        generators.append(DocumentGenerator(prefix, template,
+                                               amount, currency, decimal_tax, amount_tax, currency_tax,
+                                               [taxes], [fare_basis], pass_amount, ticket_type, sequence,
+                                               direction, itinerary, [dest], [year], [month], [day],
+                                               [[dest, dest]], start=start, end=docs_per_day))
+        return generators
+
+    def generate_docs_sales_data(self, key_prefix, test_data_type, start=0, end=None):
+        generators = []
+        if end is None:
+            end = self.docs_per_day
+        join_yr = range(2008, 2008 + self.years)
+        join_mo = range(1, self.months + 1)
+        join_day = range(1, self.days + 1)
+
+        if test_data_type:
+            template = '{{ "join_yr" : {0}, "join_mo" : {1}, "join_day" : {2},'
+            template += ' "sales" : {3}, "delivery_date" : "{4}", "is_support_included" : {5},'
+            template += ' "is_high_priority_client" : {6}, "client_contact" :  "{7}",'
+            template += ' "client_name" : "{8}", "client_reclaims_rate" : {9}}}'
+            sales = [200000, 400000, 600000, 800000]
+
+            is_support = ['true', 'false']
+            is_priority = ['true', 'false']
+            contact = str(uuid.uuid4())[:10]
+            name = str(uuid.uuid4())[:10]
+            rate = [x * 0.1 for x in range(0, 10)]
+            for year in join_yr:
+                for month in join_mo:
+                    for day in join_day:
+                        prefix = str(uuid.uuid4())[:7]
+                        delivery = str(datetime.date(year, month, day))
+                        generators.append(DocumentGenerator(key_prefix + prefix,
+                                                  template,
+                                                  [year], [month], [day],
+                                                  sales, [delivery], is_support,
+                                                  is_priority, [contact],
+                                                  [name], rate,
+                                                  start=start, end=end))
+        else:
+            template = '{{ "join_yr" : {0}, "join_mo" : {1}, "join_day" : {2},'
+            if self.template_items_num:
+                for num in xrange(self.template_items_num - 2):
+                    template += '"item_%s" : "value_%s",' % (num, num)
+            template += ' "sales" : {3} }}'
+            sales = [200000, 400000, 600000, 800000]
+            for year in join_yr:
+                for month in join_mo:
+                    for day in join_day:
+                        prefix = str(uuid.uuid4())[:7]
+                        generators.append(DocumentGenerator(key_prefix + prefix,
+                                                  template,
+                                                  [year], [month], [day],
+                                                  sales,
+                                                  start=start, end=end))
+        return generators
+
+    def generate_docs_big_data(self, key_prefix, value_size, start=0, end=None):
+        if end is None:
+            end = self.num_docs
+        age = range(start, end)
+        name = ['a' * value_size,]
+        template = '{{ "age": {0}, "name": "{1}" }}'
+
+        gen_load = DocumentGenerator(key_prefix, template, age, name, start=start,
+                                     end=end)
+        return [gen_load]
+
+    def generate_docs_employee_data(self, key_prefix, start=0, end=None):
+        generators = []
+        sys_admin_info = {"title" : "System Administrator and heliport manager",
+                              "desc" : "...Last but not least, as the heliport manager, you will help maintain our growing fleet of remote controlled helicopters, that crash often due to inexperienced pilots.  As an independent thinker, you may be free to replace some of the technologies we currently use with ones you feel are better. If so, you should be prepared to discuss and debate the pros and cons of suggested technologies with other stakeholders",
+                              "type" : "admin"}
+        ui_eng_info = {"title" : "UI Engineer",
+                           "desc" : "Couchbase server UI is one of the crown jewels of our product, which makes the Couchbase NoSQL database easy to use and operate, reports statistics on real time across large clusters, and much more. As a Member of Couchbase Technical Staff, you will design and implement front-end software for cutting-edge distributed, scale-out data infrastructure software systems, which is a pillar for the growing cloud infrastructure.",
+                            "type" : "ui"}
+        senior_arch_info = {"title" : "Senior Architect",
+                               "desc" : "As a Member of Technical Staff, Senior Architect, you will design and implement cutting-edge distributed, scale-out data infrastructure software systems, which is a pillar for the growing cloud infrastructure. More specifically, you will bring Unix systems and server tech kung-fu to the team.",
+                               "type" : "arch"}
+        data_sets = [sys_admin_info, ui_eng_info, senior_arch_info]
+        if end is None:
+            end = self.docs_per_day
+        join_yr = range(2008, 2008 + self.years)
+        join_mo = range(1, self.months + 1)
+        join_day = range(1, self.days + 1)
+        name = ["employee-%s-%s" % (key_prefix, str(i)) for i in xrange(start, end)]
+        email = ["%s-mail@couchbase.com" % str(i) for i in xrange(start, end)]
+        template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
+        template += ' "email":"{4}", "job_title":"{5}", "type":"{6}", "desc":"{7}"}}'
+        for info in data_sets:
+            for year in join_yr:
+                for month in join_mo:
+                    for day in join_day:
+                        prefix = str(uuid.uuid4())[:7]
+                        generators.append(DocumentGenerator(key_prefix + prefix,
+                                               template,
+                                               name, [year], [month], [day],
+                                               email, [info["title"]],
+                                               [info["type"]], [info["desc"]],
+                                               start=start, end=end))
+        return generators

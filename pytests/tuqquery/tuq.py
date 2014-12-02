@@ -4,12 +4,12 @@ import uuid
 import copy
 import math
 import re
-
 import testconstants
 from datetime import date, timedelta
 import datetime
 import time
 from remote.remote_util import RemoteMachineShellConnection
+from couchbase_helper.tuq_generators import JsonGenerator
 from basetestcase import BaseTestCase
 from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.exception import CBQError, ReadDocumentException
@@ -37,7 +37,7 @@ class QueryTests(BaseTestCase):
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.skip_load = self.input.param("skip_load", False)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
-        self.full_list = self._generate_full_docs_list(self.gens_load)
+        self.full_list = self.generate_full_docs_list(self.gens_load)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
 
@@ -2523,79 +2523,8 @@ class QueryTests(BaseTestCase):
         return json.loads(output)
 
     def generate_docs(self, docs_per_day, start=0):
-        generators = []
-        types = ['Engineer', 'Sales', 'Support']
-        join_yr = [2010, 2011]
-        join_mo = xrange(1, 12 + 1)
-        join_day = xrange(1, 28 + 1)
-        template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
-        template += ' "email":"{4}", "job_title":"{5}", "test_rate":{8}, "skills":{9},'
-        template += '"VMs": {10},'
-        template += ' "tasks_points" : {{"task1" : {6}, "task2" : {7}}}}}'
-        for info in types:
-            for year in join_yr:
-                for month in join_mo:
-                    for day in join_day:
-                        prefix = str(uuid.uuid4())[:7]
-                        name = ["employee-%s" % (str(day))]
-                        email = ["%s-mail@couchbase.com" % (str(day))]
-                        vms = [{"RAM": month, "os": "ubuntu",
-                                "name": "vm_%s" % month, "memory": month},
-                               {"RAM": month, "os": "windows",
-                                "name": "vm_%s"% (month + 1), "memory": month}]
-                        generators.append(DocumentGenerator("query-test" + prefix,
-                                               template,
-                                               name, [year], [month], [day],
-                                               email, [info], range(1,10), range(1,10),
-                                               [float("%s.%s" % (month, month))],
-                                               [["skill%s" % y for y in join_yr]],
-                                               [vms],
-                                               start=start, end=docs_per_day))
-        return generators
-
-    def load(self, generators_load, exp=0, flag=0,
-             kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
-             timeout_secs=30, op_type='create', start_items=0):
-        gens_load = {}
-        for bucket in self.buckets:
-            tmp_gen = []
-            for generator_load in generators_load:
-                tmp_gen.append(copy.deepcopy(generator_load))
-            gens_load[bucket] = copy.deepcopy(tmp_gen)
-        tasks = []
-        items = 0
-        for gen_load in gens_load[self.buckets[0]]:
-                items += (gen_load.end - gen_load.start)
-
-        for bucket in self.buckets:
-            self.log.info("%s %s to %s documents..." % (op_type, items, bucket.name))
-            tasks.append(self.cluster.async_load_gen_docs(self.master, bucket.name,
-                                             gens_load[bucket],
-                                             bucket.kvs[kv_store], op_type, exp, flag,
-                                             only_store_hash, batch_size, pause_secs,
-                                             timeout_secs))
-        for task in tasks:
-            task.result()
-        self.num_items = items + start_items
-        self.verify_cluster_stats(self.servers[:self.nodes_init])
-        self.log.info("LOAD IS FINISHED")
-
-    def _generate_full_docs_list(self, gens_load, keys=[]):
-        all_docs_list = []
-        for gen_load in gens_load:
-            doc_gen = copy.deepcopy(gen_load)
-            while doc_gen.has_next():
-                key, val = doc_gen.next()
-                try:
-                    val = json.loads(val)
-                    val['mutated'] = 0
-                except TypeError:
-                    pass
-                if keys:
-                    if not (key in keys):
-                        continue
-                all_docs_list.append(val)
-        return all_docs_list
+        json_generator = JsonGenerator()
+        return json_generator.generate_docs_employee( docs_per_day, start)
 
     def _verify_results(self, actual_result, expected_result):
         if len(actual_result) != len(expected_result):

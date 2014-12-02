@@ -1476,3 +1476,47 @@ class BaseTestCase(unittest.TestCase):
         else:
             return None
         return services
+
+    def load(self, generators_load, exp=0, flag=0,
+             kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
+             timeout_secs=30, op_type='create', start_items=0):
+        gens_load = {}
+        for bucket in self.buckets:
+            tmp_gen = []
+            for generator_load in generators_load:
+                tmp_gen.append(copy.deepcopy(generator_load))
+            gens_load[bucket] = copy.deepcopy(tmp_gen)
+        tasks = []
+        items = 0
+        for gen_load in gens_load[self.buckets[0]]:
+                items += (gen_load.end - gen_load.start)
+
+        for bucket in self.buckets:
+            self.log.info("%s %s to %s documents..." % (op_type, items, bucket.name))
+            tasks.append(self.cluster.async_load_gen_docs(self.master, bucket.name,
+                                             gens_load[bucket],
+                                             bucket.kvs[kv_store], op_type, exp, flag,
+                                             only_store_hash, batch_size, pause_secs,
+                                             timeout_secs))
+        for task in tasks:
+            task.result()
+        self.num_items = items + start_items
+        self.verify_cluster_stats(self.servers[:self.nodes_init])
+        self.log.info("LOAD IS FINISHED")
+
+    def generate_full_docs_list(self, gens_load, keys=[]):
+        all_docs_list = []
+        for gen_load in gens_load:
+            doc_gen = copy.deepcopy(gen_load)
+            while doc_gen.has_next():
+                key, val = doc_gen.next()
+                try:
+                    val = json.loads(val)
+                    val['mutated'] = 0
+                except TypeError:
+                    pass
+                if keys:
+                    if not (key in keys):
+                        continue
+                all_docs_list.append(val)
+        return all_docs_list
