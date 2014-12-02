@@ -11,7 +11,6 @@ from basetestcase import BaseTestCase
 from couchbase_helper.document import DesignDocument, View
 from membase.api.rest_client import RestConnection
 from membase.helper.spatial_helper import SpatialHelper
-from membase.helper.failover_helper import FailoverHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from remote.remote_util import RemoteMachineShellConnection
 
@@ -747,27 +746,6 @@ class SpatialViewTests(unittest.TestCase):
 
         inserted_keys = self._setup_index(design_name, num_docs, prefix)
         self.assertEqual(len(inserted_keys), num_docs)
-
-
-    def test_x_docs_failover(self):
-        num_docs = self.helper.input.param("num-docs", 10000)
-        self.log.info("description : test failover with {0} documents"\
-                          .format(num_docs))
-        design_name = "dev_test_failover_{0}".format(num_docs)
-        prefix = str(uuid.uuid4())[:7]
-        inserted_keys = self._setup_index(design_name, num_docs, prefix)
-        try:
-            fh = FailoverHelper(self.helper.servers, self)
-
-            failover_nodes = fh.failover(1)
-            self.helper.query_index_for_verification(design_name,
-                                                     inserted_keys)
-
-            # The test cleanup expects all nodes running, hence spin the
-            # full cluster up again
-            fh.undo_failover(failover_nodes)
-        finally:
-            fh._start_servers(failover_nodes)
 
 
     def test_update_view_x_docs(self):
