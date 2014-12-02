@@ -492,7 +492,7 @@ class SpatialViewTests(unittest.TestCase):
 
 
     def test_create_x_design_docs(self):
-        num_design_docs = self.helper.input.param("num-design-docs", 5)
+        num_design_docs = self.helper.input.param("num-design-docs")
         self.log.info("description : create {0} spatial views without "
                       "running any spatial view query".format(num_design_docs))
 
@@ -501,7 +501,7 @@ class SpatialViewTests(unittest.TestCase):
 
 
     def test_update_x_design_docs(self):
-        num_design_docs = self.helper.input.param("num-design-docs", 5)
+        num_design_docs = self.helper.input.param("num-design-docs")
         self.log.info("description : update {0} spatial views without "
                       "running any spatial view query".format(num_design_docs))
 
@@ -534,7 +534,7 @@ class SpatialViewTests(unittest.TestCase):
 
 
     def test_insert_x_docs(self):
-        num_docs = self.helper.input.param("num-docs", 100)
+        num_docs = self.helper.input.param("num-docs")
         self.log.info("description : create a spatial view on {0} documents"\
                           .format(num_docs))
         design_name = "dev_test_insert_{0}_docs".format(num_docs)
@@ -543,7 +543,7 @@ class SpatialViewTests(unittest.TestCase):
 
     # Does verify the full docs and not only the keys
     def test_insert_x_docs_full_verification(self):
-        num_docs = self.helper.input.param("num-docs", 100)
+        num_docs = self.helper.input.param("num-docs")
         self.log.info("description : create a spatial view with {0} docs"
                       " and verify the full documents".format(num_docs))
         design_name = "dev_test_insert_{0}_docs_full_verification"\
@@ -556,8 +556,8 @@ class SpatialViewTests(unittest.TestCase):
 
 
     def test_insert_x_delete_y_docs(self):
-        num_docs = self.helper.input.param("num-docs", 15000)
-        num_deleted_docs = self.helper.input.param("num-deleted-docs", 10000)
+        num_docs = self.helper.input.param("num-docs")
+        num_deleted_docs = self.helper.input.param("num-deleted-docs")
         self.log.info("description : create spatial view with {0} docs "
                       " and delete {1} docs".format(num_docs,
                                                     num_deleted_docs))
@@ -577,8 +577,8 @@ class SpatialViewTests(unittest.TestCase):
 
 
     def test_insert_x_update_y_docs(self):
-        num_docs = self.helper.input.param("num-docs", 15000)
-        num_updated_docs = self.helper.input.param("num-updated-docs", 100)
+        num_docs = self.helper.input.param("num-docs")
+        num_updated_docs = self.helper.input.param("num-updated-docs")
         self.log.info("description : create spatial view with {0} docs "
                       " and update {1} docs".format(num_docs,
                                                     num_updated_docs))
@@ -597,8 +597,8 @@ class SpatialViewTests(unittest.TestCase):
 
 
     def test_get_spatial_during_x_min_load_y_working_set(self):
-        num_docs = self.helper.input.param("num-docs", 10000)
-        duration = self.helper.input.param("load-time", 1)
+        num_docs = self.helper.input.param("num-docs")
+        duration = self.helper.input.param("load-time")
         self.log.info("description : this test will continuously insert data "
                       "and get the spatial view results for {0} minutes")
         design_name = "dev_test_insert_and_get_spatial_{0}_mins"\
@@ -622,9 +622,9 @@ class SpatialViewTests(unittest.TestCase):
 
     def test_get_spatial_during_x_min_load_y_working_set_multiple_design_docs(
         self):
-        num_docs = self.helper.input.param("num-docs", 10000)
-        num_design_docs = self.helper.input.param("num-design-docs", 10)
-        duration = self.helper.input.param("load-time", 1)
+        num_docs = self.helper.input.param("num-docs")
+        num_design_docs = self.helper.input.param("num-design-docs")
+        duration = self.helper.input.param("load-time")
         self.log.info("description : will create {0} docs per design doc and "
                       "{1} design docs that will be queried while the data "
                       "is loaded for {2} minutes"
@@ -657,8 +657,8 @@ class SpatialViewTests(unittest.TestCase):
 
 
     def test_spatial_view_on_x_docs_y_design_docs(self):
-        num_docs = self.helper.input.param("num-docs", 10000)
-        num_design_docs = self.helper.input.param("num-design-docs", 21)
+        num_docs = self.helper.input.param("num-docs")
+        num_design_docs = self.helper.input.param("num-design-docs")
         self.log.info("description : will create {0} docs per design doc and "
                       "{1} design docs that will be queried")
         name = "dev_test_spatial_test_{0}_docs_y_design_docs"\
@@ -734,7 +734,7 @@ class SpatialViewTests(unittest.TestCase):
 
 
     def test_update_view_x_docs(self):
-        num_docs = self.helper.input.param("num-docs", 100)
+        num_docs = self.helper.input.param("num-docs")
         self.log.info("description : create a spatial view on {0} documents "
                       "and update the view so that it returns only a subset"\
                           .format(num_docs))
@@ -755,7 +755,7 @@ class SpatialViewTests(unittest.TestCase):
 
 
     def test_compare_views_all_nodes_x_docs(self):
-        num_docs = self.helper.input.param("num-docs", 100)
+        num_docs = self.helper.input.param("num-docs")
         self.log.info("description : creates view on {0} documents, queries "
                       "all nodes (not only the master node) and compares "
                       "if the results are all the same"\
