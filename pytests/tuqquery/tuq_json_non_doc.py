@@ -5,6 +5,7 @@ from couchbase_helper.documentgenerator import JSONNonDocGenerator
 class JSONNonDocTests(QueryTests):
     def setUp(self):
         try:
+            self.skip_generation=True
             super(JSONNonDocTests, self).setUp()
             self.value_type = self.input.param("value_type", "int")
             self.gens_load = self.generate_docs(self.value_type)
@@ -32,7 +33,7 @@ class JSONNonDocTests(QueryTests):
             self.sleep(5, 'wait for index build')
             actual_result = self.run_cbq_query()
             actual_result = [doc[bucket.name] for doc in actual_result['results']]
-            expected_result = self._generate_full_docs_list(self.gens_load)
+            expected_result = self.generate_full_docs_list(self.gens_load)
             self._verify_results(sorted(actual_result), sorted(expected_result))
 
     def test_int_where(self):
@@ -42,7 +43,7 @@ class JSONNonDocTests(QueryTests):
             self.sleep(5, 'wait for index build')
             actual_result = self.run_cbq_query()
             actual_result = [doc["$1"] for doc in actual_result['results']]
-            expected_result = self._generate_full_docs_list(self.gens_load)
+            expected_result = self.generate_full_docs_list(self.gens_load)
             expected_result = [doc for doc in expected_result if doc > 300 ]
             self._verify_results(sorted(actual_result), sorted(expected_result))
 
@@ -53,7 +54,7 @@ class JSONNonDocTests(QueryTests):
             self.sleep(5, 'wait for index build')
             actual_result = self.run_cbq_query()
             actual_result = [doc["$1"] for doc in actual_result['results']]
-            expected_result = self._generate_full_docs_list(self.gens_load)
+            expected_result = self.generate_full_docs_list(self.gens_load)
             expected_result = [doc for doc in expected_result if doc == 4 ]
             self._verify_results(sorted(actual_result), sorted(expected_result))
 
@@ -64,7 +65,7 @@ class JSONNonDocTests(QueryTests):
             self.sleep(5, 'wait for index build')
             actual_result = self.run_cbq_query()
             actual_result = [doc["$1"] for doc in actual_result['results']]
-            expected_result = self._generate_full_docs_list(self.gens_load)
+            expected_result = self.generate_full_docs_list(self.gens_load)
             expected_result = [doc for doc in expected_result if doc[0] > 20 or doc[1] > 20 ]
             self._verify_results(sorted(actual_result), sorted(expected_result))
 

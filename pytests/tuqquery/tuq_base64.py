@@ -8,6 +8,7 @@ from membase.api.exception import CBQError
 
 class Base64Tests(QueryTests):
     def setUp(self):
+        self.skip_generation = True
         super(Base64Tests, self).setUp()
         self.gens_load = self.generate_docs()
         for bucket in self.buckets:
