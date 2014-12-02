@@ -96,7 +96,7 @@ class JoinTests(QueryTests):
             self.query = "SELECT emp.name, task FROM %s emp %s UNNEST emp.tasks_ids task" % (bucket.name,self.type_join)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = self._generate_full_docs_list(self.gens_load)
+            expected_result = self.generate_full_docs_list(self.gens_load)
             expected_result = [{"task" : task, "name" : doc["name"]}
                                for doc in expected_result for task in doc['tasks_ids']]
             if self.type_join.upper() == JOIN_LEFT:
@@ -116,7 +116,7 @@ class JoinTests(QueryTests):
             self.run_cbq_query()
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            all_docs_list = self._generate_full_docs_list(self.gens_load)
+            all_docs_list = self.generate_full_docs_list(self.gens_load)
             expected_result= [{'name': doc['name'],
                                      'cn' : 29}
                                     for doc in all_docs_list]
@@ -131,10 +131,10 @@ class JoinTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result_subquery = {"cn" : 29}
-            expected_result = [{'names' : [expected_result_subquery]}] * len(self._generate_full_docs_list(self.gens_load))
+            expected_result = [{'names' : [expected_result_subquery]}] * len(self.generate_full_docs_list(self.gens_load))
             expected_result.extend([{'task_name': doc['task_name'],
                                      'names' : [expected_result_subquery]}
-                                    for doc in self._generate_full_docs_list(self.gens_tasks)])
+                                    for doc in self.generate_full_docs_list(self.gens_tasks)])
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -144,7 +144,7 @@ class JoinTests(QueryTests):
             " (select AVG(join_day) as average from %s d use keys %s)[0].average" % (bucket.name,
                                                                                str(['query-test-Sales-%s' % i
                                                                                     for i in xrange(0, self.docs_per_day)]))
-            all_docs_list = self._generate_full_docs_list(self.gens_load)
+            all_docs_list = self.generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = [{'name' : doc['name'],
@@ -160,7 +160,7 @@ class JoinTests(QueryTests):
             " (select ARRAY_AGG(join_day) as average from %s d use keys %s)[0].average" % (bucket.name,
                                                                                str(['query-test-Sales-%s' % i
                                                                                     for i in xrange(0, self.docs_per_day)]))
-            all_docs_list = self._generate_full_docs_list(self.gens_load)
+            all_docs_list = self.generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = [{'name' : doc['name'],
@@ -175,7 +175,7 @@ class JoinTests(QueryTests):
             self.query = "select name, tasks_ids from %s where tasks_ids[0] IN" % bucket.name +\
             " (select ARRAY_AGG(DISTINCT task_name) as names from %s d " % bucket.name +\
             "use keys %s where project='MB')[0].names" % ('["test_task-1", "test_task-2"]')
-            all_docs_list = self._generate_full_docs_list(self.gens_load)
+            all_docs_list = self.generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = [{'name' : doc['name'],
@@ -189,8 +189,8 @@ class JoinTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s d1 WHERE " % bucket.name +\
             "EXISTS (SELECT * FROM %s d  use keys toarray(d1.tasks_ids[0]))" % bucket.name
-            all_docs_list = self._generate_full_docs_list(self.gens_load)
-            tasks_ids = [doc["task_name"] for doc in self._generate_full_docs_list(self.gens_tasks)]
+            all_docs_list = self.generate_full_docs_list(self.gens_load)
+            tasks_ids = [doc["task_name"] for doc in self.generate_full_docs_list(self.gens_tasks)]
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = [{'name' : doc['name']}
@@ -203,8 +203,8 @@ class JoinTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s d1 WHERE " % bucket.name +\
             "EXISTS (SELECT * FROM %s d use keys toarray(d1.tasks_ids[0]) where d.project='MB')" % bucket.name
-            all_docs_list = self._generate_full_docs_list(self.gens_load)
-            tasks_ids = [doc["task_name"] for doc in self._generate_full_docs_list(self.gens_tasks) if doc['project'] == 'MB']
+            all_docs_list = self.generate_full_docs_list(self.gens_load)
+            tasks_ids = [doc["task_name"] for doc in self.generate_full_docs_list(self.gens_tasks) if doc['project'] == 'MB']
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = [{'name' : doc['name']}
@@ -217,8 +217,8 @@ class JoinTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s d1 WHERE " % bucket.name +\
             "EXISTS (SELECT * FROM %s d  use keys toarray(d1.tasks_ids[0]) and join_mo>5)" % bucket.name
-            all_docs_list = self._generate_full_docs_list(self.gens_load)
-            tasks_ids = [doc["task_name"] for doc in self._generate_full_docs_list(self.gens_tasks)]
+            all_docs_list = self.generate_full_docs_list(self.gens_load)
+            tasks_ids = [doc["task_name"] for doc in self.generate_full_docs_list(self.gens_tasks)]
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = [{'name' : doc['name']}
@@ -242,7 +242,7 @@ class JoinTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['task_name']))
-            full_list = self._generate_full_docs_list(self.gens_tasks, keys=keys_select)
+            full_list = self.generate_full_docs_list(self.gens_tasks, keys=keys_select)
             expected_result = [{"task_name" : doc['task_name']} for doc in full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['task_name']))
             self._verify_results(actual_result, expected_result)
@@ -264,7 +264,7 @@ class JoinTests(QueryTests):
             self.query = 'SELECT * FROM %s USE KEYS ARRAY emp._id FOR emp IN [%s] END' % (bucket.name, value_select)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = self._generate_full_docs_list(self.gens_tasks, keys=[key_select])
+            expected_result = self.generate_full_docs_list(self.gens_tasks, keys=[key_select])
             expected_result = [{bucket.name : doc} for doc in expected_result]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
@@ -275,7 +275,7 @@ class JoinTests(QueryTests):
                                                                                       value2_select)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
-            expected_result = self._generate_full_docs_list(self.gens_tasks, keys=[key_select, key2_select])
+            expected_result = self.generate_full_docs_list(self.gens_tasks, keys=[key_select, key2_select])
             expected_result = [{bucket.name : doc} for doc in expected_result]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
@@ -420,13 +420,13 @@ class JoinTests(QueryTests):
     def _generate_full_joined_docs_list(self, join_type=JOIN_INNER,
                                         particular_key=None):
         joined_list = []
-        all_docs_list = self._generate_full_docs_list(self.gens_load)
+        all_docs_list = self.generate_full_docs_list(self.gens_load)
         if join_type.upper() == JOIN_INNER:
             for item in all_docs_list:
                 keys = item["tasks_ids"]
                 if particular_key is not None:
                     keys=[item["tasks_ids"][particular_key]]
-                tasks_items = self._generate_full_docs_list(self.gens_tasks, keys=keys)
+                tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
                 for tasks_item in tasks_items:
                     item_to_add = copy.deepcopy(item)
                     item_to_add.update(tasks_item)
@@ -436,7 +436,7 @@ class JoinTests(QueryTests):
                 keys = item["tasks_ids"]
                 if particular_key is not None:
                     keys=[item["tasks_ids"][particular_key]]
-                tasks_items = self._generate_full_docs_list(self.gens_tasks, keys=keys)
+                tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
                 for key in keys:
                     item_to_add = copy.deepcopy(item)
                     if key in [doc["_id"] for doc in tasks_items]:
@@ -452,13 +452,13 @@ class JoinTests(QueryTests):
     def _generate_full_nested_docs_list(self, join_type=JOIN_INNER,
                                         particular_key=None):
         nested_list = []
-        all_docs_list = self._generate_full_docs_list(self.gens_load)
+        all_docs_list = self.generate_full_docs_list(self.gens_load)
         if join_type.upper() == JOIN_INNER:
             for item in all_docs_list:
                 keys = item["tasks_ids"]
                 if particular_key is not None:
                     keys=[item["tasks_ids"][particular_key]]
-                tasks_items = self._generate_full_docs_list(self.gens_tasks, keys=keys)
+                tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
                 if tasks_items:
                     nested_list.append({"items_nested" : tasks_items,
                                         "item" : item})
@@ -467,11 +467,11 @@ class JoinTests(QueryTests):
                 keys = item["tasks_ids"]
                 if particular_key is not None:
                     keys=[item["tasks_ids"][particular_key]]
-                tasks_items = self._generate_full_docs_list(self.gens_tasks, keys=keys)
+                tasks_items = self.generate_full_docs_list(self.gens_tasks, keys=keys)
                 if tasks_items:
                     nested_list.append({"items_nested" : tasks_items,
                                         "item" : item})
-            tasks_doc_list = self._generate_full_docs_list(self.gens_tasks)
+            tasks_doc_list = self.generate_full_docs_list(self.gens_tasks)
             for item in tasks_doc_list:
                 nested_list.append({"item" : item})
         elif join_type.upper() == JOIN_RIGHT:
