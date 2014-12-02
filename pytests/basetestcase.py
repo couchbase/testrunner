@@ -101,6 +101,7 @@ class BaseTestCase(unittest.TestCase):
             self.test_timeout = self.input.param("test_timeout", 3600)  # kill hang test and jump to next one.
             self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
             self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
+            self.protocol = self.get_protocol_type()
             if self.sasl_bucket_priority != None:
                 self.sasl_bucket_priority = self.sasl_bucket_priority.split(":")
             if self.standard_bucket_priority != None:
@@ -528,7 +529,7 @@ class BaseTestCase(unittest.TestCase):
         timeout - Waiting the end of the thread. (str)
     """
     def _wait_for_stats_all_buckets(self, servers, ep_queue_size=0, \
-                                     ep_queue_size_cond='==', check_ep_items_remaining = False, protocol = "dcp", timeout=360):
+                                     ep_queue_size_cond='==', check_ep_items_remaining = False, timeout=360):
         tasks = []
         for server in servers:
             for bucket in self.buckets:
@@ -537,12 +538,9 @@ class BaseTestCase(unittest.TestCase):
                 tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
                                    'ep_queue_size', ep_queue_size_cond, ep_queue_size))
                 if check_ep_items_remaining:
-                    if protocol == "dcp":
-                        tasks.append(self.cluster.async_wait_for_stats([server], bucket, 'dcp',
-                                   'ep_dcp_items_remaining', "==", 0))
-                    else:
-                        tasks.append(self.cluster.async_wait_for_stats([server], bucket, 'tap',
-                                   'ep_tap_items_remaining', "==", 0))
+                    ep_items_remaining = 'ep_{0}_items_remaining'.format(self.protocol)
+                    tasks.append(self.cluster.async_wait_for_stats([server], bucket, self.protocol,
+                                   ep_items_remaining, "==", 0))
         for task in tasks:
             task.result(timeout)
 
@@ -640,7 +638,7 @@ class BaseTestCase(unittest.TestCase):
         return gen_load
 
     def verify_cluster_stats(self, servers=None, master=None, max_verify=None, timeout=None, check_items=True,
-                             only_store_hash=True, replica_to_read=None, batch_size=1000, check_bucket_stats = True):
+                             only_store_hash=True, replica_to_read=None, batch_size=1000, check_bucket_stats = True, check_ep_items_remaining = False):
         if servers is None:
             servers = self.servers
         if master is None:
@@ -648,7 +646,7 @@ class BaseTestCase(unittest.TestCase):
         if max_verify is None:
             max_verify = self.max_verify
 
-        self._wait_for_stats_all_buckets(servers, timeout=(timeout or 120))
+        self._wait_for_stats_all_buckets(servers, timeout=(timeout or 120), check_ep_items_remaining = check_ep_items_remaining)
         if check_items:
             try:
                 self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify,
@@ -1520,3 +1518,16 @@ class BaseTestCase(unittest.TestCase):
                         continue
                 all_docs_list.append(val)
         return all_docs_list
+
+    def get_protocol_type(self):
+        rest = RestConnection(self.master)
+        versions = rest.get_nodes_versions()
+        for version in versions:
+            if "3" > version:
+                return "tap"
+        return "dcp"
+
+
+
+
+

@@ -47,7 +47,6 @@ class FailoverTests(FailoverBaseTest):
         self.print_test_params(failover_reason)
         self.rest = RestConnection(self.master)
         self.nodes = self.rest.node_statuses()
-        self.protocol = "dcp"
         # Set the data path for the cluster
         self.data_path = self.rest.get_data_path()
 
@@ -57,7 +56,6 @@ class FailoverTests(FailoverBaseTest):
         for version in versions:
             if "3" > version:
                 self.version_greater_than_2_5 = False
-                self.protocol = "tap"
 
         # Do not run this this test if graceful category is being used
         if not self.version_greater_than_2_5 and (self.graceful or (self.recoveryType != None)):
@@ -117,7 +115,7 @@ class FailoverTests(FailoverBaseTest):
         """ Method to run rebalance after failover and verify """
         # Need a delay > min because MB-7168
         _servers_ = self.filter_servers(self.servers, chosen)
-        self._wait_for_stats_all_buckets(_servers_, check_ep_items_remaining = True, protocol = self.protocol)
+        self._wait_for_stats_all_buckets(_servers_, check_ep_items_remaining = True)
         self.sleep(5, "after failover before invoking rebalance...")
         # Rebalance after Failover operation
         self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[node.id for node in chosen])
@@ -163,10 +161,8 @@ class FailoverTests(FailoverBaseTest):
             return
 
         #  Drain Queue and make sure intra-cluster replication is complete
-        self._wait_for_stats_all_buckets(_servers_)
-        self._wait_for_stats_all_buckets(_servers_, check_ep_items_remaining = True, protocol = self.protocol)
         self.log.info("Begin VERIFICATION for Rebalance after Failover Only")
-        self.verify_cluster_stats(_servers_, self.master, check_bucket_stats = True)
+        self.verify_cluster_stats(_servers_, self.master, check_bucket_stats = True, check_ep_items_remaining = True)
         # Verify all data set with meta data if failover happens after failover
         if not self.withMutationOps:
             self.sleep(60)
@@ -191,7 +187,7 @@ class FailoverTests(FailoverBaseTest):
             It also verifies if the operations are correct with data verificaiton steps
         """
         _servers_ = self.filter_servers(self.servers, chosen)
-        self._wait_for_stats_all_buckets(_servers_, check_ep_items_remaining = True, protocol = self.protocol)
+        self._wait_for_stats_all_buckets(_servers_, check_ep_items_remaining = True)
         serverMap =  self.get_server_map(self.servers)
         recoveryTypeMap = self.define_maps_during_failover(self.recoveryType)
         fileMapsForVerification = self.create_file(chosen, self.buckets, serverMap)
@@ -232,12 +228,12 @@ class FailoverTests(FailoverBaseTest):
         self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
 
         #  Drain ep_queue and make sure that intra-cluster replication is complete
-        self._wait_for_stats_all_buckets(self.servers, check_ep_items_remaining = True, protocol = self.protocol)
+        self._wait_for_stats_all_buckets(self.servers, check_ep_items_remaining = True)
 
         self.log.info("Begin VERIFICATION for Add-back and rebalance")
 
         # Verify Stats of cluster and Data is max_verify > 0
-        self.verify_cluster_stats(self.servers, self.master, check_bucket_stats = True)
+        self.verify_cluster_stats(self.servers, self.master, check_bucket_stats = True, check_ep_items_remaining = True)
 
         # Verify recovery Type succeeded if we added-back nodes
         self.verify_for_recovery_type(chosen, serverMap, self.buckets,recoveryTypeMap, fileMapsForVerification, self.deltaRecoveryBuckets)
@@ -423,7 +419,7 @@ class FailoverTests(FailoverBaseTest):
         tasks += self._async_load_all_buckets(self.master, self.gen_initial_create, "create", 0, flag = 2, batch_size=20000)
         for task in tasks:
             task.result()
-        self._wait_for_stats_all_buckets(self.servers)
+        self._wait_for_stats_all_buckets(self.servers, check_ep_items_remaining = True)
         self._verify_stats_all_buckets(self.servers,timeout = 120)
 
     def run_mutation_operations(self):
