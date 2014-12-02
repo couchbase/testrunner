@@ -85,7 +85,7 @@ class SpatialHelper:
     # JSON document
     # If `return_docs` is true, it'll return the full docs and not
     # only the keys
-    def insert_docs(self, num_of_docs, prefix, extra_values={},
+    def insert_docs(self, num_of_docs, prefix='doc', extra_values={},
                     return_docs=False):
         random.seed(12345)
         rest = RestConnection(self.master)
@@ -244,7 +244,7 @@ class SpatialHelper:
 
     # Returns the keys of the deleted documents
     # If you try to delete a document that doesn't exists, just skip it
-    def delete_docs(self, num_of_docs, prefix):
+    def delete_docs(self, num_of_docs, prefix='doc'):
         smart = VBucketAwareMemcached(RestConnection(self.master), self.bucket)
         doc_names = []
         for i in range(0, num_of_docs):

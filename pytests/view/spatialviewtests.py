@@ -495,34 +495,32 @@ class SpatialViewTests(unittest.TestCase):
         num_design_docs = self.helper.input.param("num-design-docs", 5)
         self.log.info("description : create {0} spatial views without "
                       "running any spatial view query".format(num_design_docs))
-        prefix = str(uuid.uuid4())
 
         fun = "function (doc) {emit(doc.geometry, doc);}"
-        self._insert_x_design_docs(num_design_docs, prefix, fun)
+        self._insert_x_design_docs(num_design_docs, fun)
 
 
     def test_update_x_design_docs(self):
         num_design_docs = self.helper.input.param("num-design-docs", 5)
         self.log.info("description : update {0} spatial views without "
                       "running any spatial view query".format(num_design_docs))
-        prefix = str(uuid.uuid4())
 
         fun = "function (doc) {emit(doc.geometry, doc);}"
-        self._insert_x_design_docs(num_design_docs, prefix, fun)
+        self._insert_x_design_docs(num_design_docs, fun)
 
         # Update the design docs with a different function
         fun = "function (doc) {emit(doc.geometry, null);}"
-        self._insert_x_design_docs(num_design_docs, prefix, fun)
+        self._insert_x_design_docs(num_design_docs, fun)
 
 
-    def _insert_x_design_docs(self, num_design_docs, prefix, fun):
+    def _insert_x_design_docs(self, num_design_docs, fun):
         rest = self.helper.rest
         bucket = self.helper.bucket
         name = "dev_test_multiple_design_docs"
 
         for i in range(0, num_design_docs):
-            design_name = "{0}-{1}-{2}".format(name, i, prefix)
-            self.helper.create_index_fun(design_name, prefix, fun)
+            design_name = "{0}-{1}".format(name, i)
+            self.helper.create_index_fun(design_name, fun)
 
             # Verify that the function was really stored
             response, meta = rest.get_spatial(bucket, design_name)
@@ -550,11 +548,9 @@ class SpatialViewTests(unittest.TestCase):
                       " and verify the full documents".format(num_docs))
         design_name = "dev_test_insert_{0}_docs_full_verification"\
             .format(num_docs)
-        prefix = str(uuid.uuid4())[:7]
 
-        self.helper.create_index_fun(design_name, prefix)
-        inserted_docs = self.helper.insert_docs(num_docs, prefix,
-                                                return_docs=True)
+        self.helper.create_index_fun(design_name)
+        inserted_docs = self.helper.insert_docs(num_docs, return_docs=True)
         self.helper.query_index_for_verification(design_name, inserted_docs,
                                                  full_docs=True)
 
@@ -567,12 +563,11 @@ class SpatialViewTests(unittest.TestCase):
                                                     num_deleted_docs))
         design_name = "dev_test_insert_{0}_delete_{1}_docs"\
             .format(num_docs, num_deleted_docs)
-        prefix = str(uuid.uuid4())[:7]
 
-        inserted_keys = self._setup_index(design_name, num_docs, prefix)
+        inserted_keys = self._setup_index(design_name, num_docs)
 
         # Delete documents and verify that the documents got deleted
-        deleted_keys = self.helper.delete_docs(num_deleted_docs, prefix)
+        deleted_keys = self.helper.delete_docs(num_deleted_docs)
         num_expected = num_docs - len(deleted_keys)
         results = self.helper.get_results(design_name, 2 * num_docs,
                                           num_expected=num_expected)
@@ -589,13 +584,12 @@ class SpatialViewTests(unittest.TestCase):
                                                     num_updated_docs))
         design_name = "dev_test_insert_{0}_delete_{1}_docs"\
             .format(num_docs, num_updated_docs)
-        prefix = str(uuid.uuid4())[:7]
 
-        self._setup_index(design_name, num_docs, prefix)
+        self._setup_index(design_name, num_docs)
 
         # Update documents and verify that the documents got updated
-        updated_keys = self.helper.insert_docs(num_updated_docs, prefix,
-                                               dict(updated=True))
+        updated_keys = self.helper.insert_docs(num_updated_docs,
+                                               extra_values=dict(updated=True))
         results = self.helper.get_results(design_name, 2 * num_docs)
         result_updated_keys = self._get_updated_docs_keys(results)
         self.assertEqual(len(updated_keys), len(result_updated_keys))
@@ -609,15 +603,13 @@ class SpatialViewTests(unittest.TestCase):
                       "and get the spatial view results for {0} minutes")
         design_name = "dev_test_insert_and_get_spatial_{0}_mins"\
             .format(duration)
-        prefix = str(uuid.uuid4())[:7]
 
-        self._query_x_mins_during_loading(num_docs, duration, design_name,
-                                         prefix)
+        self._query_x_mins_during_loading(num_docs, duration, design_name)
 
-    def _query_x_mins_during_loading(self, num_docs, duration, design_name, prefix):
-        self.helper.create_index_fun(design_name, prefix)
+    def _query_x_mins_during_loading(self, num_docs, duration, design_name):
+        self.helper.create_index_fun(design_name)
 
-        load_thread = InsertDataTillStopped(self.helper, num_docs, prefix)
+        load_thread = InsertDataTillStopped(self.helper, num_docs)
         load_thread.start()
 
         self._get_results_for_x_minutes(design_name, duration)
@@ -642,14 +634,12 @@ class SpatialViewTests(unittest.TestCase):
 
         view_test_threads = []
         for i in range(0, num_design_docs):
-            prefix = str(uuid.uuid4())[:7]
-            design_name = "{0}-{1}-{2}".format(name, i, prefix)
+            design_name = "{0}-{1}".format(name, i)
             thread_result = []
             t = Thread(
                 target=SpatialViewTests._test_multiple_design_docs_thread_wrapper,
                 name="Insert documents and query multiple design docs in parallel",
-                args=(self, num_docs, duration, design_name, prefix,
-                      thread_result))
+                args=(self, num_docs, duration, design_name, thread_result))
             t.start()
             view_test_threads.append((t, thread_result))
         for (t, failures) in view_test_threads:
@@ -659,11 +649,9 @@ class SpatialViewTests(unittest.TestCase):
                 self.fail("view thread failed : {0}".format(failures[0]))
 
     def _test_multiple_design_docs_thread_wrapper(self, num_docs, duration,
-                                                  design_name, prefix,
-                                                  failures):
+                                                  design_name, failures):
         try:
-            self._query_x_mins_during_loading(num_docs, duration, design_name,
-                                              prefix)
+            self._query_x_mins_during_loading(num_docs, duration, design_name)
         except Exception as ex:
             failures.append(ex)
 
@@ -675,9 +663,8 @@ class SpatialViewTests(unittest.TestCase):
                       "{1} design docs that will be queried")
         name = "dev_test_spatial_test_{0}_docs_y_design_docs"\
             .format(num_docs, num_design_docs)
-        prefix = str(uuid.uuid4())[:7]
 
-        design_names = ["{0}-{1}-{2}".format(name, i, prefix) \
+        design_names = ["{0}-{1}".format(name, i) \
                             for i in range(0, num_design_docs)]
 
         view_test_threads = []
@@ -707,9 +694,9 @@ class SpatialViewTests(unittest.TestCase):
     # Create the index and insert documents including verififaction that
     # the index contains them
     # Returns the keys of the inserted documents
-    def _setup_index(self, design_name, num_docs, prefix):
-        self.helper.create_index_fun(design_name, prefix)
-        inserted_keys = self.helper.insert_docs(num_docs, prefix)
+    def _setup_index(self, design_name, num_docs):
+        self.helper.create_index_fun(design_name)
+        inserted_keys = self.helper.insert_docs(num_docs)
         self.helper.query_index_for_verification(design_name, inserted_keys)
 
         return inserted_keys
@@ -742,9 +729,7 @@ class SpatialViewTests(unittest.TestCase):
 
 
     def _insert_x_docs_and_query(self, num_docs, design_name):
-        prefix = str(uuid.uuid4())[:7]
-
-        inserted_keys = self._setup_index(design_name, num_docs, prefix)
+        inserted_keys = self._setup_index(design_name, num_docs)
         self.assertEqual(len(inserted_keys), num_docs)
 
 
@@ -754,16 +739,18 @@ class SpatialViewTests(unittest.TestCase):
                       "and update the view so that it returns only a subset"\
                           .format(num_docs))
         design_name = "dev_test_update_view_{0}_docs".format(num_docs)
-        prefix = str(uuid.uuid4())[:7]
 
         # Create an index that emits all documents
-        self.helper.create_index_fun(design_name, prefix)
-        keys_b = self.helper.insert_docs(num_docs / 3, prefix + "bbb")
-        keys_c = self.helper.insert_docs(num_docs - (num_docs / 3), prefix + "ccc")
+        self.helper.create_index_fun(design_name)
+        keys_b = self.helper.insert_docs(num_docs / 3, "bbb")
+        keys_c = self.helper.insert_docs(num_docs - (num_docs / 3), "ccc")
         self.helper.query_index_for_verification(design_name, keys_b + keys_c)
 
         # Update index to only a subset of the documents
-        self.helper.create_index_fun(design_name, prefix + "ccc")
+        spatial_fun = ('function (doc, meta) {'
+                       'if(meta.id.indexOf("ccc") != -1) {'
+                       'emit(doc.geometry, doc);}}')
+        self.helper.create_index_fun(design_name, spatial_fun)
         self.helper.query_index_for_verification(design_name, keys_c)
 
 
@@ -774,9 +761,8 @@ class SpatialViewTests(unittest.TestCase):
                       "if the results are all the same"\
                           .format(num_docs))
         design_name = "dev_test_compare_views_{0}_docs".format(num_docs)
-        prefix = str(uuid.uuid4())[:7]
 
-        inserted_keys = self._setup_index(design_name, num_docs, prefix)
+        inserted_keys = self._setup_index(design_name, num_docs)
 
         nodes = self.helper.rest.get_nodes()
         params = {"connection_timeout": 60000, "full_set": True}
@@ -796,11 +782,10 @@ class SpatialViewTests(unittest.TestCase):
 
 
 class InsertDataTillStopped(threading.Thread):
-    def __init__(self, helper, num_docs, prefix):
+    def __init__(self, helper, num_docs):
         threading.Thread.__init__(self)
         self._helper = helper
         self._num_docs = num_docs
-        self._prefix = prefix
         self._stop_insertion = False
         self._last_inserted = []
 
@@ -808,9 +793,8 @@ class InsertDataTillStopped(threading.Thread):
         i = 0
         while not self._stop_insertion:
             i += 1
-            prefix = self._prefix + "-{0}".format(i)
             self._last_inserted = self._helper.insert_docs(
-                self._num_docs, prefix)
+                self._num_docs)
 
     def stop_insertion(self):
         self._stop_insertion = True
