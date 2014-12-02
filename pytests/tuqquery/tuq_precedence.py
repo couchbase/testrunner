@@ -24,11 +24,10 @@ class PrecedenceTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                 doc['name'],doc['period']))
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name'],
                                 "period" : ('other','winter')
                                             [doc['join_mo'] in [12,1,2]]}
-                               for doc in full_list
+                               for doc in self.full_list
                                if ('other','winter')[doc['join_mo'] in [12,1,2]].startswith(
                                                                                 'win')]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
@@ -43,11 +42,10 @@ class PrecedenceTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name'],doc['period']))
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name'],
                                 "period" : ('other','winter')
                                             [doc['join_mo'] in [12,1,2]]}
-                               for doc in full_list
+                               for doc in self.full_list
                                if (0, 1)[doc['join_mo'] in [12,1,2]] > 0 and\
                                   doc['job_title'] == 'Sales']
             expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
@@ -63,11 +61,10 @@ class PrecedenceTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name'],doc['period']))
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name'],
                                 "period" : ('other','winter')
                                             [doc['join_mo'] in [12,1,2]]}
-                               for doc in full_list
+                               for doc in self.full_list
                                if (doc['join_mo'], 1)[doc['join_mo'] in [12,1,2]] == 1 and\
                                   doc['job_title'] == 'Sales']
             expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
@@ -81,9 +78,8 @@ class PrecedenceTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name']))
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name']}
-                               for doc in full_list
+                               for doc in self.full_list
                                if doc['join_mo'] > (3 + 1)]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result, expected_result)
@@ -93,7 +89,7 @@ class PrecedenceTests(QueryTests):
             actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name']))
             expected_result = [{"name" : doc['name']}
-                               for doc in full_list
+                               for doc in self.full_list
                                if doc['join_mo'] == (3 + 1)]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result, expected_result)
@@ -104,9 +100,8 @@ class PrecedenceTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name']))
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name']}
-                               for doc in full_list
+                               for doc in self.full_list
                                if doc['job_title'].startswith('S')]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result, expected_result)
@@ -118,9 +113,8 @@ class PrecedenceTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name'], doc['join_mo']))
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name'], "join_mo" : doc['join_mo']}
-                               for doc in full_list
+                               for doc in self.full_list
                                if ((not (doc['join_mo'] > 10)) and doc['job_title'] == 'Sales') or\
                                    (doc['join_mo'] < 2)]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name'], doc['join_mo']))
@@ -131,7 +125,7 @@ class PrecedenceTests(QueryTests):
             actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['email']))
             expected_result = [{"email" : doc['email']}
-                               for doc in full_list
+                               for doc in self.full_list
                                if (not (doc['join_mo'] < 10)) or (doc['join_mo'] < 2)]
             expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             expected_result = sorted(expected_result, key=lambda doc: (doc['email']))
@@ -143,8 +137,7 @@ class PrecedenceTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name'], doc['join_mo']))
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{"name" : doc['name'], "join_mo" : doc['join_mo']}
-                               for doc in full_list]
+                               for doc in self.full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name'], doc['join_mo']))
             self._verify_results(actual_result, expected_result)

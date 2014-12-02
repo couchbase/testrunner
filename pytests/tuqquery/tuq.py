@@ -1918,7 +1918,6 @@ class QueryTests(BaseTestCase):
     def test_union_multiply_buckets(self):
         self.assertTrue(len(self.buckets) > 1, 'This test needs more than one bucket')
         self.query = "select name from %s union select email from %s" % (self.buckets[0].name, self.buckets[1].name)
-        self.full_list = self._generate_full_docs_list(self.gens_load)
         actual_list = self.run_cbq_query()
         actual_result = sorted(actual_list['results'])
         expected_result = [{"name" : doc["name"]}
@@ -1944,7 +1943,6 @@ class QueryTests(BaseTestCase):
     def test_union_all_multiply_buckets(self):
         self.assertTrue(len(self.buckets) > 1, 'This test needs more than one bucket')
         self.query = "select name from %s union all select email from %s" % (self.buckets[0].name, self.buckets[1].name)
-        self.full_list = self._generate_full_docs_list(self.gens_load)
         actual_list = self.run_cbq_query()
         actual_result = sorted(actual_list['results'])
         expected_result = [{"name" : doc["name"]}
@@ -1981,44 +1979,40 @@ class QueryTests(BaseTestCase):
     def test_intersect(self):
         for bucket in self.buckets:
             self.query = "select name from %s intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
-            full_list = self._generate_full_docs_list(self.gens_load)
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"]}
-                               for doc in full_list if doc['join_day'] > 5]
+                               for doc in self.full_list if doc['join_day'] > 5]
             expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
 
     def test_intersect_all(self):
         for bucket in self.buckets:
             self.query = "select name from %s intersect all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
-            full_list = self._generate_full_docs_list(self.gens_load)
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"]}
-                               for doc in full_list if doc['join_day'] > 5]
+                               for doc in self.full_list if doc['join_day'] > 5]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_except(self):
         for bucket in self.buckets:
             self.query = "select name from %s except select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
-            full_list = self._generate_full_docs_list(self.gens_load)
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"]}
-                               for doc in full_list if not doc['join_day'] > 5]
+                               for doc in self.full_list if not doc['join_day'] > 5]
             expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
 
     def test_except_all(self):
         for bucket in self.buckets:
             self.query = "select name from %s except all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
-            full_list = self._generate_full_docs_list(self.gens_load)
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"name" : doc["name"]}
-                               for doc in full_list if not doc['join_day'] > 5]
+                               for doc in self.full_list if not doc['join_day'] > 5]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -2377,12 +2371,11 @@ class QueryTests(BaseTestCase):
     def test_letting(self):
         for bucket in self.buckets:
             self.query = "SELECT join_mo, sum_test from %s WHERE join_mo>7 group by join_mo letting sum_test = sum(tasks_points.task1)" % (bucket.name)
-            full_list = self._generate_full_docs_list(self.gens_load)
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-            tmp_groups = set([doc['join_mo'] for doc in full_list if doc['join_mo']>7])
+            tmp_groups = set([doc['join_mo'] for doc in self.full_list if doc['join_mo']>7])
             expected_result = [{"join_mo" : group,
-                              "sum_test" : sum([x["tasks_points"]["task1"] for x in full_list
+                              "sum_test" : sum([x["tasks_points"]["task1"] for x in self.full_list
                                                if x["join_mo"] == group])}
                                for group in tmp_groups]
             expected_result = sorted(expected_result)

@@ -27,9 +27,8 @@ class NULLTests(QueryTests):
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{'feature_name' : doc['feature_name']}
-                               for doc in full_list
+                               for doc in self.full_list
                                if "P0" in doc['coverage_tests'] and\
                                 doc['coverage_tests']['P0'] is None]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
@@ -42,9 +41,8 @@ class NULLTests(QueryTests):
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{'feature_name' : doc['feature_name']}
-                               for doc in full_list
+                               for doc in self.full_list
                                if "P0" in doc['coverage_tests'] and\
                                 doc['coverage_tests']['P0'] is not None]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
@@ -57,9 +55,8 @@ class NULLTests(QueryTests):
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{'feature_name' : doc['feature_name']}
-                               for doc in full_list
+                               for doc in self.full_list
                                if not "P0" in doc['coverage_tests']]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
             self._verify_results(actual_result['results'], expected_result)
@@ -71,9 +68,8 @@ class NULLTests(QueryTests):
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{'feature_name' : doc['feature_name']}
-                               for doc in full_list
+                               for doc in self.full_list
                                if "P1" in doc['coverage_tests']]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
             self._verify_results(actual_result['results'], expected_result)
@@ -85,9 +81,8 @@ class NULLTests(QueryTests):
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{'feature_name' : doc['feature_name']}
-                               for doc in full_list
+                               for doc in self.full_list
                                if "P0" in doc['coverage_tests'] and\
                                 doc['coverage_tests']['P0'] is not None]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
@@ -100,9 +95,8 @@ class NULLTests(QueryTests):
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{'feature_name' : doc['feature_name']}
-                               for doc in full_list
+                               for doc in self.full_list
                                if "P0" not in doc['coverage_tests'] or\
                                 doc['coverage_tests']['P0'] is None]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
@@ -115,9 +109,8 @@ class NULLTests(QueryTests):
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{'feature_name' : doc['feature_name']}
-                               for doc in full_list
+                               for doc in self.full_list
                                if "P0" in doc['coverage_tests'] and\
                                 doc['coverage_tests']['P0'] is not None]
             expected_result = sorted(expected_result)
@@ -131,18 +124,16 @@ class NULLTests(QueryTests):
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{'feature_name' : doc['feature_name']}
-                               for doc in full_list
+                               for doc in self.full_list
                                if len([point for point in doc['story_point'] if point is None]) > 0]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
             self._verify_results(actual_result['results'], expected_result)
             self.query = "SELECT feature_name FROM %s"  % bucket.name +\
                         " WHERE EVERY story_point_n IN story_point SATISFIES story_point_n IS NULL END ORDER BY feature_name"
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{'feature_name' : doc['feature_name']}
-                               for doc in full_list
+                               for doc in self.full_list
                                if len([point for point in doc['story_point']
                                        if point is None]) == len(doc['story_point'])]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
@@ -155,9 +146,8 @@ class NULLTests(QueryTests):
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = []
-            for doc in full_list:
+            for doc in self.full_list:
                 if len(doc['story_point']) < 3:
                     expected_result.append({'feature_name' : doc['feature_name'],
                                             'point': None})
@@ -174,9 +164,8 @@ class NULLTests(QueryTests):
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = []
-            for doc in full_list:
+            for doc in self.full_list:
                 if len(doc['story_point']) < 3:
                     expected_result.append({'feature_name' : doc['feature_name']})
                 else:
@@ -192,9 +181,8 @@ class NULLTests(QueryTests):
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = []
-            for doc in full_list:
+            for doc in self.full_list:
                 if len(doc['story_point']) < 3:
                     expected_result.append({'feature_name' : doc['feature_name'],
                                             'point' : None})
@@ -214,9 +202,8 @@ class NULLTests(QueryTests):
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = [{'feature_name' : doc['feature_name']}
-                               for doc in full_list]
+                               for doc in self.full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
             self._verify_results(actual_result['results'], expected_result)
 
@@ -227,9 +214,8 @@ class NULLTests(QueryTests):
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = []
-            for doc in full_list:
+            for doc in self.full_list:
                 if len(doc['story_point']) < 3:
                     expected_result.append({'feature_name' : doc['feature_name'],
                                             'point' : None})
@@ -248,9 +234,8 @@ class NULLTests(QueryTests):
                    " FROM %s ORDER BY feature_name",
                    "SELECT feature_name, IFNANORINF(story_point[2],story_point[1]) as point" +\
                    " FROM %s ORDER BY feature_name",]
-        full_list = self._generate_full_docs_list(self.gens_load)
         expected_result = []
-        for doc in full_list:
+        for doc in self.full_list:
             if len(doc['story_point']) < 3:
                 expected_result.append({'feature_name' : doc['feature_name'],
                                         'point': None})
@@ -270,9 +255,8 @@ class NULLTests(QueryTests):
                         "coverage_tests.P4) as C FROM %s ORDER BY feature_name",
                     "SELECT feature_name, IFMISSING(coverage_tests.P0," +\
                         "coverage_tests.P4) as C FROM %s ORDER BY feature_name"]
-        full_list = self._generate_full_docs_list(self.gens_load)
         expected_result = []
-        for doc in full_list:
+        for doc in self.full_list:
             if "P0" in doc['coverage_tests']:
                 expected_result.append({'feature_name' : doc['feature_name'],
                                         'C' : doc['coverage_tests']['P0']})
@@ -294,9 +278,8 @@ class NULLTests(QueryTests):
             self.run_cbq_query()
             self.sleep(3)
             actual_result = self.run_cbq_query()
-            full_list = self._generate_full_docs_list(self.gens_load)
             expected_result = []
-            for doc in full_list:
+            for doc in self.full_list:
                 if (not 'P0' in doc['coverage_tests']) or doc['coverage_tests']['P0'] == 0:
                     expected_result.append({'feature_name' : doc['feature_name']})
                 else:
