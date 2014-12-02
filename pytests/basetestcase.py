@@ -528,7 +528,7 @@ class BaseTestCase(unittest.TestCase):
         timeout - Waiting the end of the thread. (str)
     """
     def _wait_for_stats_all_buckets(self, servers, ep_queue_size=0, \
-                                     ep_queue_size_cond='==', check_ep_items_remaining = True, protocol = "dcp", timeout=360):
+                                     ep_queue_size_cond='==', check_ep_items_remaining = False, protocol = "dcp", timeout=360):
         tasks = []
         for server in servers:
             for bucket in self.buckets:
