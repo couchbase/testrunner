@@ -77,7 +77,7 @@ class QueryTests(BaseTestCase):
 
     def test_simple_negative_check(self):
         queries_errors = {'SELECT $str0 FROM {0} WHERE COUNT({0}.$str0)>3' :
-                          'Aggregate function not allowed here',
+                          'Aggregates not allowed in WHERE',
                           'SELECT *.$str0 FROM {0}' : 'syntax error',
                           'SELECT *.* FROM {0} ... ERROR' : 'syntax error',
                           'FROM %s SELECT $str0 WHERE id=null' : 'syntax error',}
@@ -187,8 +187,7 @@ class QueryTests(BaseTestCase):
                           'SELECT COUNT($obj0) as COUNT_NEW_POINT, COUNT($str0) ' +
                            'as COUNT_EMP  FROM {0} AS TEST GROUP BY $str0 ' +
                            'HAVING COUNT_NEW_POINT >0' :
-                                'Alias COUNT_NEW_POINT cannot be referenced',
-                          'SELECT * FROM {0} emp UNNEST {0}.$list_obj0' : 'Invalid Bucket in UNNEST clause'}
+                                'Alias COUNT_NEW_POINT cannot be referenced'}
         self.negative_common_body(queries_errors)
 
     def test_alias_from_clause(self):

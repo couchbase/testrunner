@@ -38,11 +38,11 @@ class JSONNonDocTests(QueryTests):
 
     def test_int_where(self):
         for bucket in self.buckets:
-            self.query = "select v from %s where v > 300" % bucket.name
+            self.query = "select v from %s v where v > 300" % bucket.name
             actual_result = self.run_cbq_query()
             self.sleep(5, 'wait for index build')
             actual_result = self.run_cbq_query()
-            actual_result = [doc["$1"] for doc in actual_result['results']]
+            actual_result = [doc["v"] for doc in actual_result['results']]
             expected_result = self.generate_full_docs_list(self.gens_load)
             expected_result = [doc for doc in expected_result if doc > 300 ]
             self._verify_results(sorted(actual_result), sorted(expected_result))
@@ -60,11 +60,11 @@ class JSONNonDocTests(QueryTests):
 
     def test_array_where(self):
         for bucket in self.buckets:
-            self.query = "SELECT v FROM %s WHERE ANY num IN v SATISFIES num > 20 end" % bucket.name
+            self.query = "SELECT v FROM %s v WHERE ANY num IN v SATISFIES num > 20 end" % bucket.name
             actual_result = self.run_cbq_query()
             self.sleep(5, 'wait for index build')
             actual_result = self.run_cbq_query()
-            actual_result = [doc["$1"] for doc in actual_result['results']]
+            actual_result = [doc["v"] for doc in actual_result['results']]
             expected_result = self.generate_full_docs_list(self.gens_load)
             expected_result = [doc for doc in expected_result if doc[0] > 20 or doc[1] > 20 ]
             self._verify_results(sorted(actual_result), sorted(expected_result))

@@ -15,6 +15,7 @@ class Base64Tests(QueryTests):
             self.cluster.bucket_flush(self.master, bucket=bucket,
                                   timeout=self.wait_timeout * 5)
         self.load(self.gens_load)
+        self.create_primary_index_for_3_0_and_greater()
 
     def suite_setUp(self):
         super(Base64Tests, self).suite_setUp()

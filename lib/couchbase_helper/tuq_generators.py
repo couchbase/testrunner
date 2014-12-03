@@ -380,7 +380,11 @@ class TuqGenerators(object):
             groups = set([(doc[attrs[0]],doc[attrs[1]])  for doc in self.full_set])
         elif len(attrs) == 1:
             if attrs[0].find('.') != -1:
-                groups = set([doc[attrs[0].split('.')[0]][attrs[0].split('.')[1]]
+                if len(attrs[0].split('.')) > 2:
+                    groups = set([doc[attrs[0].split('.')[1]][attrs[0].split('.')[2]]
+                              for doc in self.full_set])
+                else:
+                    groups = set([doc[attrs[0].split('.')[0]][attrs[0].split('.')[1]]
                               for doc in self.full_set])
             else:
                 groups = set([doc[attrs[0]]  for doc in self.full_set])

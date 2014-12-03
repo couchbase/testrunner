@@ -6,6 +6,7 @@ from tuqquery.tuq import QueryTests
 class OptionsTests(QueryTests):
     def setUp(self):
         super(OptionsTests, self).setUp()
+        self.create_primary_index_for_3_0_and_greater()
 
     def suite_setUp(self):
         super(OptionsTests, self).suite_setUp()
@@ -86,6 +87,7 @@ class OptionsTests(QueryTests):
 class OptionsRestTests(QueryTests):
     def setUp(self):
         super(OptionsRestTests, self).setUp()
+        self.create_primary_index_for_3_0_and_greater()
 
     def suite_setUp(self):
         super(OptionsRestTests, self).suite_setUp()
