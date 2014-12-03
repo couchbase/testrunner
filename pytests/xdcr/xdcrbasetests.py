@@ -20,6 +20,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
 from couchbase_helper.stats_tools import StatsCommon
 from scripts.collect_server_info import cbcollectRunner
+from tasks.future import TimeoutError
 
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.exception import ServerUnavailableException, XDCRException
@@ -624,9 +625,24 @@ class XDCRBaseTest(unittest.TestCase):
             if server.ip == node.ip and int(server.port) == int(node.port):
                 rest.add_back_node(node.id)
 
-    def _async_failover(self, nodes, failover_node):
+    def _get_active_replica_count_from_cluster(self, master):
+        buckets = self._get_cluster_buckets(master)
+        for bucket in buckets:
+            keys_loaded = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+            self.log.info("Keys loaded into bucket {0}:{1}".format(bucket.name,
+                                                                   keys_loaded))
+            self.log.info("Stat: vb_active_curr_items = {}".
+                          format(MemcachedClientHelper.direct_client(master,
+                                 bucket.name).stats()['vb_active_curr_items']))
+            self.log.info("Stat: vb_replica_curr_items = {}".
+                          format(MemcachedClientHelper.direct_client(master,
+                                 bucket.name).stats()['vb_replica_curr_items']))
+
+    def _async_failover(self, nodes, failover_nodes):
+        self.log.info("Printing pre-failover stats")
+        self._get_active_replica_count_from_cluster(nodes[0])
         tasks = []
-        tasks.append(self.cluster.async_failover(nodes, failover_node))
+        tasks.append(self.cluster.async_failover(nodes, failover_nodes, graceful=self._graceful))
         return tasks
 
     def _async_rebalance(self, nodes, to_add_node, to_remove_node):
@@ -665,7 +681,9 @@ class XDCRBaseTest(unittest.TestCase):
         else:
             remove_nodes = cluster_nodes[len(cluster_nodes) - self._num_rebalance:]
         if self._failover and cluster_type in self._failover:
-            self.cluster.failover(cluster_nodes, remove_nodes, self._graceful)
+            tasks = self._async_failover(cluster_nodes, remove_nodes)
+            for task in tasks:
+                task.result()
         tasks = self._async_rebalance(cluster_nodes, [], remove_nodes)
         remove_node_ips = [remove_node.ip for remove_node in remove_nodes]
         self.log.info(" Starting rebalance-out nodes:{0} at {1} cluster {2}".
@@ -1297,7 +1315,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
     def _verify_item_count(self, master, servers, timeout=120):
         stats_tasks = []
         buckets = self._get_cluster_buckets(master)
-        self.assertTrue(buckets, "No buckets recieved from the server {0} for verification".format(master.ip))
+        self.assertTrue(buckets, "No buckets received from the server {0} for verification".format(master.ip))
         for bucket in buckets:
             items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
             for stat in ['curr_items', 'vb_active_curr_items']:
@@ -1306,8 +1324,12 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             if self._num_replicas >= 1 and len(servers) > 1:
                 stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
                     'vb_replica_curr_items', '==', items * self._num_replicas))
-        for task in stats_tasks:
-            task.result(timeout)
+        try:
+            for task in stats_tasks:
+                task.result(timeout)
+        except TimeoutError:
+            self.log.error('ERROR: Timed-out waiting for item count to match.'
+                          ' Will proceed to do metadata checks.')
 
     # CBQE-1695 Wait for replication_changes_left (outbound mutations) to be 0.
     def __wait_for_outbound_mutations_zero(self, master_node, timeout=180):

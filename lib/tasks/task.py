@@ -2455,7 +2455,7 @@ class FailoverTask(Task):
         for server in self.to_failover:
             for node in rest.node_statuses():
                 if (server.hostname if self.use_hostnames else server.ip) == node.ip and int(server.port) == int(node.port):
-                    self.log.info("Failing over {0}:{1}".format(node.ip, node.port))
+                    self.log.info("Failing over {0}:{1} with graceful={2}".format(node.ip, node.port, self.graceful))
                     rest.fail_over(node.id, self.graceful)
 
 class GenerateExpectedViewResultsTask(Task):
