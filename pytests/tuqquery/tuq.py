@@ -37,7 +37,7 @@ class QueryTests(BaseTestCase):
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.skip_load = self.input.param("skip_load", False)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
-        if hasattr(self, 'skip_generation') and self.skip_generation:
+        if not (hasattr(self, 'skip_generation') and self.skip_generation):
             self.full_list = self.generate_full_docs_list(self.gens_load)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
