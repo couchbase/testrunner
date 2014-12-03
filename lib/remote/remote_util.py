@@ -1085,14 +1085,13 @@ class RemoteMachineShellConnection:
         task = "upgrade"
         bat_file = "upgrade.bat"
         version_file = "VERSION.txt"
-        print "version in couchbase upgrade windows ", version
         deleted = False
         self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb', version, task)
         self.stop_schedule_tasks()
         self.remove_win_backup_dir()
         self.remove_win_collect_tmp()
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
-        log.info("version to upgrade: {0}".format(output))
+        log.info("version to upgrade from: {0} to {1}".format(output, version))
         log.info('before running task schedule upgrademe')
         if '1.8.0' in str(output):
             # run installer in second time as workaround for upgrade 1.8.0 only:
@@ -1361,6 +1360,8 @@ class RemoteMachineShellConnection:
         return False
 
     def wait_till_process_ended(self, process_name, timeout_in_seconds=240):
+        if process_name[-1:] == "-":
+            process_name = process_name[:-1]
         end_time = time.time() + float(timeout_in_seconds)
         process_ended = False
         process_running = False
@@ -1953,7 +1954,11 @@ class RemoteMachineShellConnection:
         info = self.extract_remote_info()
         if not info.domain:
             return None
-        return '%s.%s' % (info.hostname[0], info.domain[0][0])
+        log.info("hostname of this {0} is {1}"
+                 .format(self.ip, info.hostname[0]))
+        log.info("domain name of this {0} is {1}"
+                 .format(self.ip, info.domain))
+        return '%s.%s' % (info.hostname[0], info.domain)
 
     def get_cpu_info(self, win_info=None, mac=False):
         if win_info:
