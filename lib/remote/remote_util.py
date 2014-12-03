@@ -797,10 +797,10 @@ class RemoteMachineShellConnection:
 
         if task == "install":
             template_file = "cb-install.wct"
-            file = "install.iss"
+            file = "{0}_install.iss".format(self.ip)
         elif task == "uninstall":
             template_file = "cb-uninstall.wct"
-            file = "uninstall.iss"
+            file = "{0}_uninstall.iss".format(self.ip)
 
         # create in/uninstall file from windows capture template (wct) file
         full_src_path_template = os.path.join(src_path, template_file)
@@ -809,7 +809,7 @@ class RemoteMachineShellConnection:
 
         f1 = open(full_src_path_template, 'r')
         f2 = open(full_src_path, 'w')
-        # replace ####### with reg ID to install/uninstall
+        """ replace ####### with reg ID to install/uninstall """
         if "2.2.0-837" in version:
             reg_id = "2B630EB8-BBC7-6FE4-C9B8-D8843EB1EFFA"
         log.info("register ID: {0}".format(reg_id))
@@ -822,8 +822,8 @@ class RemoteMachineShellConnection:
         f2.close()
 
         self.copy_file_local_to_remote(full_src_path, full_des_path)
-        # remove capture file from source after copy to destination
-        # os.remove(full_src_path)
+        """ remove capture file from source after copy to destination """
+        os.remove(full_src_path)
 
     def get_windows_system_info(self):
         try:
@@ -877,7 +877,8 @@ class RemoteMachineShellConnection:
                 content = 'c:\\tmp\{3}.exe /s -f1c:\\automation\{0}_{1}_{2}.iss'.format(name,
                                                                          product_version, task, version)
             else:
-                content = 'c:\\tmp\{0}.exe /s -f1c:\\automation\{1}.iss'.format(version, task)
+                content = 'c:\\tmp\{0}.exe /s -f1c:\\automation\{2}_{1}.iss' \
+                             .format(version, task, self.ip)
             log.info("create {0} task with content:{1}".format(task, content))
             f.write(content)
             log.info('Successful write to {0}'.format(found))
@@ -1164,6 +1165,9 @@ class RemoteMachineShellConnection:
             if vbuckets:
                 self.set_vbuckets_win(vbuckets)
 
+            output, error = self.execute_command("rm \
+                       /cygdrive/c/automation/{0}_install.iss".format(self.ip))
+            self.log_command_output(output, error)
             # output, error = self.execute_command("cmd rm /cygdrive/c/tmp/{0}*.exe".format(build_name))
             # self.log_command_output(output, error)
         elif self.info.deliverable_type in ["rpm", "deb"]:
@@ -1283,6 +1287,9 @@ class RemoteMachineShellConnection:
             self.wait_till_file_added(remote_path, file_check, timeout_in_seconds=600)
             self.wait_till_process_ended(build.product_version[:10])
             self.sleep(10, "wait for server to start up completely")
+            output, error = self.execute_command("rm \
+                       /cygdrive/c/automation/{0}_install.iss".format(self.ip))
+            self.log_command_output(output, error)
             output, error = self.execute_command("rm -f *-diag.zip")
             self.log_command_output(output, error, track_words)
             if vbuckets:
@@ -1458,6 +1465,9 @@ class RemoteMachineShellConnection:
                 """ delete binary after uninstall """
                 output, error = self.execute_command("rm /cygdrive/c/tmp/{0}".format(build_name))
                 self.log_command_output(output, error)
+                output, error = self.execute_command("rm \
+                       /cygdrive/c/automation/{0}_uninstall.iss".format(self.ip))
+                self.log_command_output(output, error)
 
                 """ the code below need to remove when bug MB-11328 is fixed in 3.0.1 """
                 output, error = self.kill_erlang(os="windows")
@@ -1557,6 +1567,9 @@ class RemoteMachineShellConnection:
                 sys.exit()
             self.wait_till_process_ended(build_name[:10])
             self.sleep(10, "next step is to install")
+            output, error = self.execute_command("rm \
+                       /cygdrive/c/automation/{0}_uninstall.iss".format(self.ip))
+            self.log_command_output(output, error)
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
             self.log_command_output(output, error)
             output, error = self.execute_command("rm /cygdrive/c/tmp/{0}".format(build_name))
@@ -1625,6 +1638,9 @@ class RemoteMachineShellConnection:
                     sys.exit()
                 self.wait_till_process_ended(full_version[:10])
                 self.sleep(10, "next step is to install")
+                output, error = self.execute_command("rm \
+                       /cygdrive/c/automation/{0}_uninstall.iss".format(self.ip))
+                self.log_command_output(output, error)
                 output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
                 self.log_command_output(output, error)
             else:
