@@ -95,10 +95,12 @@ class CWCBaseTest(BaseTestCase):
                         result["perNode"][tmp_ip]["status"] = tmp_stt[1].strip()
                     if "path" in n:
                         tmp_p = n.split(":")
-                        result["perNode"][tmp_ip]["path"] = tmp_p[1].strip()
+                        result["perNode"][tmp_ip]["path"] = \
+                                   ":".join((tmp_p[1].strip(),tmp_p[2].strip()))
                     if "url" in n:
                         tmp_u = n.split(":")
-                        result["perNode"][tmp_ip]["url"] = ":".join((tmp_u[1].strip(), tmp_u[2].strip()))
+                        result["perNode"][tmp_ip]["url"] = \
+                                  ":".join((tmp_u[1].strip(), tmp_u[2].strip()))
 
             return result
         else:
