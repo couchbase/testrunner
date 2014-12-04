@@ -3,11 +3,14 @@ import re
 import datetime
 import uuid
 import logger
-
+import json
+import random
+import os
+import logger
 log = logger.Logger.get_logger()
 
 class TuqGenerators(object):
-    
+
     def __init__(self, log, full_set):
         self.log = log
         self.full_set = full_set
@@ -473,7 +476,7 @@ class TuqGenerators(object):
 
 class JsonGenerator:
 
-    def generate_docs_employee(self, docs_per_day, start=0):
+    def generate_docs_employee(self, docs_per_day = 1, start=0):
         generators = []
         types = ['Engineer', 'Sales', 'Support']
         join_yr = [2010, 2011]
@@ -504,7 +507,7 @@ class JsonGenerator:
                                                start=start, end=docs_per_day))
         return generators
 
-    def generate_docs_sabre(self, docs_per_day, start=0):
+    def generate_docs_sabre(self, docs_per_day = 1, start=0):
         generators = []
         dests = ['BOS', 'MIA', 'SFO']
         join_yr = [2010, 2011]
@@ -624,7 +627,7 @@ class JsonGenerator:
                                                [[dest, dest]], start=start, end=docs_per_day))
         return generators
 
-    def generate_docs_sales_data(self, key_prefix, test_data_type, start=0, end=None):
+    def generate_docs_sales_data(self, key_prefix = "", test_data_type = True, start=0, docs_per_day=None):
         generators = []
         if end is None:
             end = self.docs_per_day
@@ -655,7 +658,7 @@ class JsonGenerator:
                                                   sales, [delivery], is_support,
                                                   is_priority, [contact],
                                                   [name], rate,
-                                                  start=start, end=end))
+                                                  start=start, docs_per_day=end))
         else:
             template = '{{ "join_yr" : {0}, "join_mo" : {1}, "join_day" : {2},'
             if self.template_items_num:
@@ -674,7 +677,7 @@ class JsonGenerator:
                                                   start=start, end=end))
         return generators
 
-    def generate_docs_big_data(self, key_prefix, value_size, start=0, end=None):
+    def generate_docs_big_data(self, key_prefix = "", value_size = 1024, start=0, docs_per_day=1):
         if end is None:
             end = self.num_docs
         age = range(start, end)
@@ -682,10 +685,10 @@ class JsonGenerator:
         template = '{{ "age": {0}, "name": "{1}" }}'
 
         gen_load = DocumentGenerator(key_prefix, template, age, name, start=start,
-                                     end=end)
+                                     end=docs_per_day)
         return [gen_load]
 
-    def generate_docs_employee_data(self, key_prefix, start=0, end=None):
+    def generate_docs_employee_data(self, key_prefix ="", start=0, docs_per_day=1):
         generators = []
         sys_admin_info = {"title" : "System Administrator and heliport manager",
                               "desc" : "...Last but not least, as the heliport manager, you will help maintain our growing fleet of remote controlled helicopters, that crash often due to inexperienced pilots.  As an independent thinker, you may be free to replace some of the technologies we currently use with ones you feel are better. If so, you should be prepared to discuss and debate the pros and cons of suggested technologies with other stakeholders",
@@ -716,5 +719,39 @@ class JsonGenerator:
                                                name, [year], [month], [day],
                                                email, [info["title"]],
                                                [info["type"]], [info["desc"]],
-                                               start=start, end=end))
+                                               start=start, end=docs_per_day))
         return generators
+
+    def generate_docs_using_monster(self,
+            executatble_path = None, key_prefix=  "", bag_dir = "lib/couchbase_helper/monster/bags",
+            pod_name = None, num_items = 1, seed = None):
+        "This method runs monster tool using localhost, creates a map of json based on a pattern"
+        list = []
+        command = executatble_path
+        dest_path = "/tmp/{0}.txt".format(int(random.random()*1000))
+        if pod_name == None:
+            return list
+        else:
+            pod_path = "lib/couchbase_helper/monster/prod/%s" % pod_name
+        command += " -bagdir {0}".format(bag_dir)
+        if seed != None:
+            command += " -s {0}".format(seed)
+        command += " -n {0}".format(num_items)
+        command += " -o {0}".format(dest_path)
+        if pod_path != None:
+            command += " {0}".format(pod_path)
+        print "Will run the following command: {0}".format(command)
+        # run command and generate temp file
+        os.system(command)
+        # read file and generate list
+        with open(dest_path) as f:
+            i= 1
+            for line in f.readlines():
+                key = "{0}{1}".format(key_prefix,i)
+                data = json.loads(line[:len(line)-1])
+                data["_id"] = key
+                data["mutate"] = 0
+                list.append(data)
+                i+=1
+        os.remove(dest_path)
+        return list
