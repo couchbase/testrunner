@@ -1317,28 +1317,34 @@ class RemoteMachineShellConnection:
     def wait_till_file_deleted(self, remotepath, filename, timeout_in_seconds=180):
         end_time = time.time() + float(timeout_in_seconds)
         deleted = False
+        log.info("file {0} checked at {1}".format(filename, remotepath))
         while time.time() < end_time and not deleted:
             # get the process list
             exists = self.file_exists(remotepath, filename)
             if exists:
-                log.error('at {2} file still exists : {0}{1}'.format(remotepath, filename, self.ip))
-                time.sleep(5)
+                log.error('at {2} file {1} still exists' \
+                          .format(remotepath, filename, self.ip))
+                time.sleep(10)
             else:
-                log.info('at {2} FILE DOES NOT EXIST ANYMORE : {0}{1}'.format(remotepath, filename, self.ip))
+                log.info('at {2} FILE {1} DOES NOT EXIST ANYMORE!' \
+                         .format(remotepath, filename, self.ip))
                 deleted = True
         return deleted
 
     def wait_till_file_added(self, remotepath, filename, timeout_in_seconds=180):
         end_time = time.time() + float(timeout_in_seconds)
         added = False
+        log.info("file {0} checked at {1}".format(filename, remotepath))
         while time.time() < end_time and not added:
             # get the process list
             exists = self.file_exists(remotepath, filename)
             if not exists:
-                log.error('at {2} file does not exist : {0}{1}'.format(remotepath, filename, self.ip))
-                time.sleep(5)
+                log.error('at {2} file {1} does not exist' \
+                          .format(remotepath, filename, self.ip))
+                time.sleep(10)
             else:
-                log.info('at {2} FILE EXISTS : {0}{1}'.format(remotepath, filename, self.ip))
+                log.info('at {2} FILE {1} EXISTS!' \
+                         .format(remotepath, filename, self.ip))
                 added = True
         return added
 
