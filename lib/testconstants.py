@@ -58,7 +58,7 @@ LINUX_CONFIG_FILE = '/opt/couchbase/var/lib/couchbase/config/config.dat'
 LINUX_MOXI_PATH = '/opt/moxi/bin/'
 LINUX_CW_LOG_PATH = "/opt/couchbase/var/lib/couchbase/tmp/"
 MAC_CW_LOG_PATH = "/Applications/Couchbase\ Server.app/Contents/Resources/couchbase-core/var/lib/couchbase/tmp"
-WINDOWS_CW_LOG_PATH = "/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/tmp/"
+WINDOWS_CW_LOG_PATH = "c:/Program Files/Couchbase/Server/var/lib/couchbase/tmp/"
 CLI_COMMANDS = ["cbbackup", "cbbrowse_logs", "cbcollect_info", "cbcompact", "cbdump-config", "cbenable_core_dumps.sh", \
                 "cbepctl", "cbhealthchecker", "cbrecovery", "cbreset_password", "cbrestore", "cbsasladm", "cbstats", \
                 "cbtransfer", "cbvbucketctl", "cbworkloadgen", "couchbase-cli", "couchbase-server", "couch_compact", \
