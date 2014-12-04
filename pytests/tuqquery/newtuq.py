@@ -525,6 +525,24 @@ class QueryTests(BaseTestCase):
         json_generator = JsonGenerator()
         return json_generator.generate_docs_sabre(docs_per_day, start)
 
+    def generate_docs_employee(self, docs_per_day, start=0):
+        json_generator = JsonGenerator()
+        return json_generator.generate_docs_employee_data(docs_per_day = docs_per_day, start = start)
+
+    def generate_docs_simple(self, docs_per_day, start=0):
+        json_generator = JsonGenerator()
+        return json_generator.generate_docs_employee_simple_data(docs_per_day = docs_per_day, start = start)
+
+    def generate_docs_sales(self, docs_per_day, start=0):
+        json_generator = JsonGenerator()
+        return json_generator.generate_docs_employee_sales_data(docs_per_day = docs_per_day, start = start)
+
+    def generate_docs_bigdata(self, docs_per_day, start=0):
+        json_generator = JsonGenerator()
+        return json_generator.generate_docs_employee_big_data(docs_per_day = docs_per_day,
+            start = start, value_size = self.value_size)
+
+
     def _verify_results(self, actual_result, expected_result):
         if len(actual_result) != len(expected_result):
             missing, extra = self.check_missing_and_extra(actual_result, expected_result)
