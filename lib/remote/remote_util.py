@@ -1376,7 +1376,7 @@ class RemoteMachineShellConnection:
                                                  .format(process_name))
             self.log_command_output(output, error)
             if output and process_name in output[0]:
-                self.sleep(5, "wait for process ended!")
+                self.sleep(10, "wait for process ended!")
                 process_running = True
             else:
                 if process_running:
