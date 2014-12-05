@@ -95,8 +95,13 @@ class CWCBaseTest(BaseTestCase):
                         result["perNode"][tmp_ip]["status"] = tmp_stt[1].strip()
                     if "path" in n:
                         tmp_p = n.split(":")
-                        result["perNode"][tmp_ip]["path"] = \
+                        if type.lower() == 'windows':
+                            result["perNode"][tmp_ip]["path"] = \
                                    ":".join((tmp_p[1].strip(),tmp_p[2].strip()))
+                        elif type.lower() in ["ubuntu", "centos", "red hat"]:
+                            result["perNode"][tmp_ip]["path"] = tmp_p[1].strip()
+                        elif type.lower() == "mac":
+                            result["perNode"][tmp_ip]["path"] = tmp_p[1].strip()
                     if "url" in n:
                         tmp_u = n.split(":")
                         result["perNode"][tmp_ip]["url"] = \
