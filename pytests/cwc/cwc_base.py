@@ -54,13 +54,17 @@ class CWCBaseTest(BaseTestCase):
         shell.disconnect()
         self.log_path = ""
         self.bin_path = ""
+        self.os_type = ""
         if type.lower() == 'windows':
+            self.os_type = 'windows'
             self.log_path = WINDOWS_CW_LOG_PATH
             self.bin_path = WIN_COUCHBASE_BIN_PATH
         elif type.lower() in ["ubuntu", "centos", "red hat"]:
+            self.os_type = "unix"
             self.log_path = LINUX_CW_LOG_PATH
             self.bin_path = LINUX_COUCHBASE_BIN_PATH
         elif type.lower() == "mac":
+            self.os_type = 'mac'
             self.log_path = MAC_CW_LOG_PATH
             self.bin_path = MAC_COUCHBASE_BIN_PATH
 
@@ -95,12 +99,12 @@ class CWCBaseTest(BaseTestCase):
                         result["perNode"][tmp_ip]["status"] = tmp_stt[1].strip()
                     if "path" in n:
                         tmp_p = n.split(":")
-                        if type.lower() == 'windows':
+                        if self.os_type == 'windows':
                             result["perNode"][tmp_ip]["path"] = \
                                    ":".join((tmp_p[1].strip(),tmp_p[2].strip()))
-                        elif type.lower() in ["ubuntu", "centos", "red hat"]:
+                        elif self.os_type == 'unix':
                             result["perNode"][tmp_ip]["path"] = tmp_p[1].strip()
-                        elif type.lower() == "mac":
+                        elif self.os_type == "mac":
                             result["perNode"][tmp_ip]["path"] = tmp_p[1].strip()
                     if "url" in n:
                         tmp_u = n.split(":")
