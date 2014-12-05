@@ -1962,9 +1962,14 @@ class RemoteMachineShellConnection:
             return None
         log.info("hostname of this {0} is {1}"
                  .format(self.ip, info.hostname[0]))
-        log.info("domain name of this {0} is {1}"
+        if info.type.lower() == 'windows':
+            log.info("domain name of this {0} is {1}"
                  .format(self.ip, info.domain))
-        return '%s.%s' % (info.hostname[0], info.domain)
+            return '%s.%s' % (info.hostname[0], info.domain)
+        else:
+            log.info("domain name of this {0} is {1}"
+                 .format(self.ip, info.domain[0][0]))
+            return '%s.%s' % (info.hostname[0], info.domain[0][0])
 
     def get_cpu_info(self, win_info=None, mac=False):
         if win_info:
