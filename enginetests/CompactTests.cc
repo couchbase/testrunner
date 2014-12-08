@@ -228,6 +228,38 @@ protected:
 		}
 		return TotalDbSize;
 	}
+
+	void run_compaction(int vbid, string const & compaction_arguments = "")
+	{
+		string compaction_cmd = "/opt/couchbase/bin/cbcompact localhost:11210 compact ";
+		stringstream ss;
+		ss << vbid;
+		compaction_cmd = compaction_cmd + ss.str() + " " + compaction_arguments;
+		this->exec(compaction_cmd.c_str());
+
+	}
+
+	DbInfo * get_db_info(string const & filename)
+	{
+		Db* db = (Db*) malloc(sizeof(Db));
+		DbInfo* dbinfo = (DbInfo*) malloc(sizeof(DbInfo));
+		couchstore_error_t error = couchstore_open_db(filename.c_str(), COUCHSTORE_OPEN_FLAG_RDONLY, &db);
+		EXPECT_EQ(0, error);
+		//get vB info
+		error = couchstore_db_info(db, dbinfo);
+		EXPECT_EQ(0, error);
+		this->print_dbinfo(dbinfo);
+		couchstore_close_db(db);
+		return dbinfo;
+	}
+
+	void disable_auto_compaction()
+	{
+		char autocompact[] = "curl -X POST -u Administrator:password -d  "
+			"autoCompactionDefined=false -d parallelDBAndViewCompaction=false  "
+			"http://localhost:8091/controller/setAutoCompaction";
+		this->exec(autocompact);
+	}
 };
 
 TEST_F(CompactionTest, SizeReductionTest)
@@ -243,11 +275,6 @@ TEST_F(CompactionTest, SizeReductionTest)
 	sleep(30);
 	fprintf(stderr, "\nperformed 100000 mutations on vbucket 14\n");
 
-	couchstore_error_t error;
-	//structs to hold vB file information
-	Db* db = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo = (DbInfo*) malloc(sizeof(DbInfo));
-
 	//parameters for LCB_COMPACT command
 	uint16_t vbid = 14;
 	uint64_t purge_before_ts = 0;
@@ -258,33 +285,21 @@ TEST_F(CompactionTest, SizeReductionTest)
 	uint64_t fsize_b4compact = 0;
 	uint64_t fsize_a4trcompact = 0;
 
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.1";
-
 	//open vB file
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db);
-	EXPECT_EQ(0, error);
-	//get vB info 
-	error = couchstore_db_info(db, dbinfo);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo);
+	DbInfo* dbinfo = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.1");
 	fsize_b4compact = dbinfo->file_size;
-	//close db handles
-	couchstore_close_db(db);
-
 	//send lcb_compact command
 	this->sendcompact(vbid, purge_before_ts, purge_before_seq, drop_deletes);
 	lcb_wait(instance);
 
-	//open vB file with new rev number 
-	filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.2";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db, dbinfo);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo);
-	fsize_a4trcompact = dbinfo->file_size;
+	//open vB file with new rev number
+	DbInfo* dbinfo1 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.2");
+	fsize_a4trcompact = dbinfo1->file_size;
 	//assert the expected file sizes
 	EXPECT_LT(fsize_a4trcompact, 0.01 * fsize_b4compact);
+
+	free(dbinfo);
+	free(dbinfo1);
 }
 
 /*TEST_F(CompactionTest, DatatypeVerificationTest) {
@@ -388,15 +403,6 @@ TEST_F(CompactionTest, FileStatVerifyTest)
 	string filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.1";
 	newRevNum = this->checkNewRevNum(filename);
 	EXPECT_GE(newRevNum, 2);
-	//structs to hold vB file information
-	Db* db = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo = (DbInfo*) malloc(sizeof(DbInfo));
-	//open vB file
-	couchstore_error_t error = couchstore_open_db(filename.c_str(), COUCHSTORE_OPEN_FLAG_RDONLY, &db);
-	EXPECT_EQ(0, error);
-	//get vB info 
-	error = couchstore_db_info(db, dbinfo);
-	EXPECT_EQ(0, error);
 	uint64_t space_used = 0;
 	uint64_t file_size = 0;
 	(void) lcb_set_stat_callback(instance, stats_generic_callback);
@@ -417,6 +423,8 @@ TEST_F(CompactionTest, FileStatVerifyTest)
 			file_size = atoi(itr->second.c_str());
 		}
 	}
+	//structs to hold vB file information
+	DbInfo* dbinfo = this->get_db_info(filename);
 	EXPECT_EQ(space_used, dbinfo->space_used);
 	EXPECT_EQ(file_size, dbinfo->file_size);
 	genericstats.refcount = 0;
@@ -444,6 +452,7 @@ TEST_F(CompactionTest, FileStatVerifyTest)
 	EXPECT_EQ(high_seqno, dbinfo->last_sequence);
 	EXPECT_EQ(purge_seqno, dbinfo->purge_seq);
 
+	free(dbinfo);
 }
 
 TEST_F(CompactionTest, FragThresholdPercTest)
@@ -524,206 +533,96 @@ TEST_F(CompactionTest, FragThresholdSizeTest)
 TEST_F(CompactionTest, Expired10ItemPurgeTest)
 {
 	this->sendHello();
-	couchstore_error_t error;
 	int numitems = 10;
 	int vbucket = 15;
 	this->insert_items_vbucket(vbucket, numitems);
 	sleep(30);
-	//structs to hold vB file information
-	Db* db = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo = (DbInfo*) malloc(sizeof(DbInfo));
 
-	//file sizes before and after compaction
-	uint64_t fsize_b4compact = 0;
-	uint64_t fsize_a4trcompact = 0;
-
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/15.couch.1";
-
-	//open vB file
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db);
-	EXPECT_EQ(0, error);
-	//get vB info 
-	error = couchstore_db_info(db, dbinfo);
-	this->print_dbinfo(dbinfo);
-	fsize_b4compact = dbinfo->file_size;
+	DbInfo* dbinfo = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/15.couch.1");
 
 	//no documents should be deleted prior to compaction
 	EXPECT_EQ(0, dbinfo->deleted_count);
 
-	//close db handles
-	couchstore_close_db(db);
-	//send lcb_compact command
-	//sendcompact(vbid, purge_before_ts, purge_before_seq, drop_deletes);  
-	//lcb_wait(instance);
-	char compact[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 15";
-	this->exec(compact);
+	this->run_compaction(vbucket);
 
 	sleep(120);
-	//open vB file with new rev number 
-	filename = "/opt/couchbase/var/lib/couchbase/data/default/15.couch.2";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db, dbinfo);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo);
-	fsize_a4trcompact = dbinfo->file_size;
-	//11 documents should be deleted post compaction
-	EXPECT_EQ(10, dbinfo->deleted_count);
 
+	DbInfo* dbinfo1 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/15.couch.2");
+	//11 documents should be deleted post compaction
+	EXPECT_EQ(10, dbinfo1->deleted_count);
+
+	free(dbinfo);
+	free(dbinfo1);
 }
 
 TEST_F(CompactionTest, Expired1KItemPurgeTest)
 {
 	this->sendHello();
-	couchstore_error_t error;
 	int numitems = 1000;
 	int vbucket = 16;
 	this->insert_items_vbucket(vbucket, numitems);
 	sleep(30);
-	//structs to hold vB file information
-	Db* db = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo = (DbInfo*) malloc(sizeof(DbInfo));
 
-	//file sizes before and after compaction
-	uint64_t fsize_b4compact = 0;
-	uint64_t fsize_a4trcompact = 0;
-
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/16.couch.1";
-
-	//open vB file
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db);
-	EXPECT_EQ(0, error);
-	//get vB info 
-	error = couchstore_db_info(db, dbinfo);
-	this->print_dbinfo(dbinfo);
-	fsize_b4compact = dbinfo->file_size;
+	DbInfo* dbinfo = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/16.couch.1");
 
 	//no documents should be deleted prior to compaction
 	EXPECT_EQ(0, dbinfo->deleted_count);
 
-	//close db handles
-	couchstore_close_db(db);
-	//send lcb_compact command
-	//sendcompact(vbid, purge_before_ts, purge_before_seq, drop_deletes);  
-	//lcb_wait(instance);
-	char compact[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 16";
-	this->exec(compact);
+	this->run_compaction(vbucket);
 
 	sleep(120);
 	//open vB file with new rev number 
-	filename = "/opt/couchbase/var/lib/couchbase/data/default/16.couch.2";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db, dbinfo);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo);
-	fsize_a4trcompact = dbinfo->file_size;
-	//11 documents should be deleted post compaction
-	EXPECT_EQ(1000, dbinfo->deleted_count);
+	DbInfo* dbinfo1 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/16.couch.2");
+	EXPECT_EQ(1000, dbinfo1->deleted_count);
 
+	free(dbinfo);
+	free(dbinfo1);
 }
 
 TEST_F(CompactionTest, Expired10KItemPurgeTest)
 {
 	this->sendHello();
-	couchstore_error_t error;
 	int numitems = 10000;
 	int vbucket = 16;
 	this->insert_items_vbucket(vbucket, numitems);
 	sleep(30);
-	//structs to hold vB file information
-	Db* db = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo = (DbInfo*) malloc(sizeof(DbInfo));
 
-	//file sizes before and after compaction
-	uint64_t fsize_b4compact = 0;
-	uint64_t fsize_a4trcompact = 0;
-
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/16.couch.1";
-
-	//open vB file
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db);
-	EXPECT_EQ(0, error);
-	//get vB info 
-	error = couchstore_db_info(db, dbinfo);
-	this->print_dbinfo(dbinfo);
-	fsize_b4compact = dbinfo->file_size;
-
+	DbInfo* dbinfo = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/16.couch.1");
 	//no documents should be deleted prior to compaction
 	EXPECT_EQ(0, dbinfo->deleted_count);
 
-	//close db handles
-	couchstore_close_db(db);
-	//send lcb_compact command
-	//sendcompact(vbid, purge_before_ts, purge_before_seq, drop_deletes);  
-	//lcb_wait(instance);
-	char compact[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 16";
-	this->exec(compact);
+	this->run_compaction(vbucket);
 
 	sleep(120);
-	//open vB file with new rev number 
-	filename = "/opt/couchbase/var/lib/couchbase/data/default/16.couch.2";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db, dbinfo);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo);
-	fsize_a4trcompact = dbinfo->file_size;
-	//11 documents should be deleted post compaction
-	EXPECT_EQ(10000, dbinfo->deleted_count);
+	//open vB file with new rev number
+	DbInfo* dbinfo1 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/16.couch.2");
+	EXPECT_EQ(10000, dbinfo1->deleted_count);
 
+	free(dbinfo);
+	free(dbinfo1);
 }
 
 TEST_F(CompactionTest, Expired100KItemPurgeTest)
 {
 	this->sendHello();
-	couchstore_error_t error;
-	//structs to hold vB file information
-	Db* db = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo = (DbInfo*) malloc(sizeof(DbInfo));
-	//open vB file
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/18.couch.1";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db);
-	EXPECT_EQ(0, error);
+	this->disable_auto_compaction();
 	int numitems = 100000;
 	int vbucket = 18;
 	this->insert_items_vbucket(vbucket, numitems);
 	sleep(30);
 
-	//file sizes before and after compaction
-	uint64_t fsize_b4compact = 0;
-	uint64_t fsize_a4trcompact = 0;
-
-	//get vB info 
-	error = couchstore_db_info(db, dbinfo);
-	this->print_dbinfo(dbinfo);
-	fsize_b4compact = dbinfo->file_size;
-
+	DbInfo* dbinfo = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/18.couch.1");
 	//no documents should be deleted prior to compaction
 	EXPECT_EQ(0, dbinfo->deleted_count);
 
-	//close db handles
-	couchstore_close_db(db);
-	//send lcb_compact command
-	//sendcompact(vbid, purge_before_ts, purge_before_seq, drop_deletes);  
-	//lcb_wait(instance);
-	string const compact = "/opt/couchbase/bin/cbcompact localhost:11210 compact 18";
-	this->exec(compact.c_str());
+	this->run_compaction(vbucket);
 
 	sleep(120);
-	//open vB file with new rev number 
-	Db* db1 = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo1 = (DbInfo*) malloc(sizeof(DbInfo));
-	filename = "/opt/couchbase/var/lib/couchbase/data/default/18.couch.3";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db1);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db1, dbinfo1);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo1);
-	fsize_a4trcompact = dbinfo1->file_size;
-	//11 documents should be deleted post compaction
+	DbInfo* dbinfo1 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/18.couch.2");
 	EXPECT_EQ(100000, dbinfo1->deleted_count);
 
+	free(dbinfo);
+	free(dbinfo1);
 }
 
 TEST_F(CompactionTest, DropDeletesFalseDocExptimeGreaterTest)
@@ -745,37 +644,16 @@ TEST_F(CompactionTest, DropDeletesFalseDocExptimeGreaterTest)
 	lcb_wait(instance);
 	sleep(60);
 
-	couchstore_error_t error;
-	Db* db1 = (Db*) malloc(sizeof(Db));
-	Db* db2 = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo1 = (DbInfo*) malloc(sizeof(DbInfo));
-	DbInfo* dbinfo2 = (DbInfo*) malloc(sizeof(DbInfo));
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.2";
-
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db1);
-	EXPECT_EQ(0, error);
-
-	error = couchstore_db_info(db1, dbinfo1);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo1);
+	DbInfo* dbinfo1 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.2");
 	EXPECT_EQ(10, dbinfo1->deleted_count);
-	couchstore_close_db(db1);
 
-	//send another compaction to drop the tombstones
-	//sendcompact(vbid, purge_before_ts, purge_before_seq, drop_deletes);  
-	//lcb_wait(instance);
-	char compact2[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14  "
-		"--purge-before=946759881 --purge-only-upto-seq=1";
-	this->exec(compact2);
+	this->run_compaction(vbid, "--purge-before=946759881 --purge-only-upto-seq=1");
 
-	filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.3";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db2);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db2, dbinfo2);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo2);
+	DbInfo* dbinfo2 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.3");
 	EXPECT_EQ(10, dbinfo2->deleted_count);
 
+	free(dbinfo1);
+	free(dbinfo2);
 }
 
 TEST_F(CompactionTest, DropDeletesFalseDocPurgeseqGreaterTest)
@@ -786,44 +664,21 @@ TEST_F(CompactionTest, DropDeletesFalseDocPurgeseqGreaterTest)
 	int vbucket = 14;
 	this->insert_items_vbucket(vbucket, numitems);
 	sleep(30);
-	//set compact_cmd parameters 
-	//uint64_t exptime = 2946759881;                   //a very future date
+
 	//run compaction once to mark expired items as deleted 
-	char compact[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14";
-	this->exec(compact);
+	this->run_compaction(vbucket);
 	sleep(60);
 
-	couchstore_error_t error;
-	Db* db1 = (Db*) malloc(sizeof(Db));
-	Db* db2 = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo1 = (DbInfo*) malloc(sizeof(DbInfo));
-	DbInfo* dbinfo2 = (DbInfo*) malloc(sizeof(DbInfo));
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.2";
-
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db1);
-	EXPECT_EQ(0, error);
-
-	error = couchstore_db_info(db1, dbinfo1);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo1);
+	DbInfo* dbinfo1 = this->get_db_info( "/opt/couchbase/var/lib/couchbase/data/default/14.couch.2");
 	EXPECT_EQ(10, dbinfo1->deleted_count);
-	couchstore_close_db(db1);
 
-	//send another compaction to drop the tombstones
-	//sendcompact(vbid, purge_before_ts, purge_before_seq, drop_deletes);  
-	//lcb_wait(instance);
-	char compact2[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14  "
-		"--purge-before=2946759881 --purge-only-upto-seq=1";
-	this->exec(compact2);
+	this->run_compaction(vbucket, "--purge-before=2946759881 --purge-only-upto-seq=1");
 
-	filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.3";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db2);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db2, dbinfo2);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo2);
+	DbInfo* dbinfo2 = this->get_db_info( "/opt/couchbase/var/lib/couchbase/data/default/14.couch.3");
 	EXPECT_EQ(10, dbinfo2->deleted_count);
 
+	free(dbinfo1);
+	free(dbinfo2);
 }
 
 TEST_F(CompactionTest, DropDeletesFalsePurgeSeqZeroTest)
@@ -832,6 +687,7 @@ TEST_F(CompactionTest, DropDeletesFalsePurgeSeqZeroTest)
 	this->sendHello();
 	stringstream ss;
 	ss << "fooaaa";
+	uint16_t vbid = 14;
 	string myString = ss.str();
 	for (int i = 0; i < 1000; i++)
 	{
@@ -839,8 +695,7 @@ TEST_F(CompactionTest, DropDeletesFalsePurgeSeqZeroTest)
 	}
 	sleep(30);
 	//run compaction once to mark expired items as deleted 
-	char compact[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14";
-	this->exec(compact);
+	this->run_compaction(vbid);
 	sleep(60);
 	couchstore_error_t error;
 	Db* db1 = (Db*) malloc(sizeof(Db));
@@ -852,7 +707,6 @@ TEST_F(CompactionTest, DropDeletesFalsePurgeSeqZeroTest)
 	//get the expiry time of a doc
 	uint32_t exptime;
 	const char* key = "fooaaa";
-	uint16_t vbid = 14;
 	uint64_t fsize_b4compact = 0;
 	//uint64_t fsize_a4trcompact = 0;
 	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.2";
@@ -928,8 +782,7 @@ TEST_F(CompactionTest, DropDeletesMaxPurgedSeqnoTest)
 	this->print_docinfo(docinfo1);
 	uint64_t docrev_seqno = docinfo1->db_seq;
 	//run compaction once to mark expired items as deleted 
-	char compact[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14";
-	this->exec(compact);
+	this->run_compaction(vbid);
 	sleep(60);
 
 	//read the document expiry time and decrement it 
@@ -983,37 +836,16 @@ TEST_F(CompactionTest, DropDeletesTrue10StoneTest)
 	lcb_wait(instance);
 	sleep(60);
 
-	couchstore_error_t error;
-	Db* db1 = (Db*) malloc(sizeof(Db));
-	Db* db2 = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo1 = (DbInfo*) malloc(sizeof(DbInfo));
-	DbInfo* dbinfo2 = (DbInfo*) malloc(sizeof(DbInfo));
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.2";
-
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db1);
-	EXPECT_EQ(0, error);
-
-	error = couchstore_db_info(db1, dbinfo1);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo1);
+	DbInfo* dbinfo1 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.2");
 	EXPECT_EQ(10, dbinfo1->deleted_count);
-	couchstore_close_db(db1);
 
-	//send another compaction to drop the tombstones
-	//this->sendcompact(vbid, purge_before_ts, purge_before_seq, drop_deletes);
-	//lcb_wait(instance);
-	char compact2[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14  "
-		"--purge-before=946759881 --purge-only-upto-seq=1 --dropdeletes";
-	this->exec(compact2);
+	this->run_compaction(vbid, "--purge-before=946759881 --purge-only-upto-seq=1 --dropdeletes");
 
-	filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.3";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db2);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db2, dbinfo2);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo2);
+	DbInfo* dbinfo2 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.3");
 	EXPECT_EQ(0, dbinfo2->deleted_count);
 
+	free(dbinfo1);
+	free(dbinfo2);
 }
 
 TEST_F(CompactionTest, DropDeletesTrue10KStoneTest)
@@ -1035,37 +867,16 @@ TEST_F(CompactionTest, DropDeletesTrue10KStoneTest)
 	lcb_wait(instance);
 	sleep(100);
 
-	couchstore_error_t error;
-	Db* db1 = (Db*) malloc(sizeof(Db));
-	Db* db2 = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo1 = (DbInfo*) malloc(sizeof(DbInfo));
-	DbInfo* dbinfo2 = (DbInfo*) malloc(sizeof(DbInfo));
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.2";
-
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db1);
-	EXPECT_EQ(0, error);
-
-	error = couchstore_db_info(db1, dbinfo1);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo1);
+	DbInfo* dbinfo1 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.2");
 	EXPECT_EQ(10000, dbinfo1->deleted_count);
-	couchstore_close_db(db1);
 
-	//send another compaction to drop the tombstones
-	//this->sendcompact(vbid, purge_before_ts, purge_before_seq, drop_deletes);
-	//lcb_wait(instance);
-	char compact2[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14  "
-		"--purge-before=946759881 --purge-only-upto-seq=1 --dropdeletes";
-	this->exec(compact2);
+	this->run_compaction(vbid, "--purge-before=946759881 --purge-only-upto-seq=1 --dropdeletes");
 
-	filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.3";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db2);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db2, dbinfo2);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo2);
+	DbInfo* dbinfo2 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.3");
 	EXPECT_EQ(0, dbinfo2->deleted_count);
 
+	free(dbinfo1);
+	free(dbinfo2);
 }
 
 TEST_F(CompactionTest, DropDeletesTrue100KStoneTest)
@@ -1087,142 +898,86 @@ TEST_F(CompactionTest, DropDeletesTrue100KStoneTest)
 	lcb_wait(instance);
 	sleep(240);
 
-	couchstore_error_t error;
-	Db* db1 = (Db*) malloc(sizeof(Db));
-	Db* db2 = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo1 = (DbInfo*) malloc(sizeof(DbInfo));
-	DbInfo* dbinfo2 = (DbInfo*) malloc(sizeof(DbInfo));
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.2";
-	cout << "debug1" << endl;
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db1);
-	EXPECT_EQ(0, error);
-
-	cout << "debug2" << endl;
-	error = couchstore_db_info(db1, dbinfo1);
-	cout << "debug3" << endl;
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo1);
+	DbInfo* dbinfo1 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.2");
 	EXPECT_EQ(100000, dbinfo1->deleted_count);
-	couchstore_close_db(db1);
 
-	//send another compaction to drop the tombstones
-	//this->sendcompact(vbid, purge_before_ts, purge_before_seq, drop_deletes);
-	//lcb_wait(instance);
-	char compact2[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14  "
-		"--purge-before=946759881 --purge-only-upto-seq=1 --dropdeletes";
-	this->exec(compact2);
+	this->run_compaction(vbid, "--purge-before=946759881 --purge-only-upto-seq=1 --dropdeletes");
 
-	filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.3";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db2);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db2, dbinfo2);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo2);
+	DbInfo* dbinfo2 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.3");
 	EXPECT_EQ(0, dbinfo2->deleted_count);
 
+	free(dbinfo1);
+	free(dbinfo2);
 }
 
 TEST_F(CompactionTest, cbcompactnodropsTest)
 {
-
-	couchstore_error_t error;
-	Db* db1 = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo1 = (DbInfo*) malloc(sizeof(DbInfo));
 	this->sendHello();
 	int numitems = 10000;
 	int vbucket = 14;
 	this->insert_items_vbucket(vbucket, numitems);
 	sleep(30);
-	char compact[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14";
-	this->exec(compact);
+	this->run_compaction(vbucket);
 	sleep(30);
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.2";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db1);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db1, dbinfo1);
-	EXPECT_EQ(0, error);
+
+	DbInfo* dbinfo1 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.2");
 	EXPECT_EQ(10000, dbinfo1->deleted_count);
 
+	free(dbinfo1);
 }
 
 TEST_F(CompactionTest, cbcompactdropTrueTest)
 {
-
-	couchstore_error_t error;
-	Db* db1 = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo1 = (DbInfo*) malloc(sizeof(DbInfo));
 	this->sendHello();
 	int numitems = 10000;
 	int vbucket = 14;
 	this->insert_items_vbucket(vbucket, numitems);
 	sleep(30);
-	char compact[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14";
-	this->exec(compact);
+	this->run_compaction(vbucket);
 	sleep(30);
-	char compact2[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14  "
-		"--purge-before=0 --purge-only-upto-seq=0 --dropdeletes";
-	this->exec(compact2);
+	this->run_compaction(vbucket, "--purge-before=0 --purge-only-upto-seq=0 --dropdeletes");
 	sleep(30);
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.3";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db1);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db1, dbinfo1);
-	EXPECT_EQ(0, error);
+
+	DbInfo* dbinfo1 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.3");
 	EXPECT_EQ(0, dbinfo1->deleted_count);
 
+	free(dbinfo1);
 }
 
 TEST_F(CompactionTest, cbcompactdropexpTest)
 {
-
-	couchstore_error_t error;
-	Db* db1 = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo1 = (DbInfo*) malloc(sizeof(DbInfo));
 	this->sendHello();
 	int numitems = 10000;
 	int vbucket = 14;
 	this->insert_items_vbucket(vbucket, numitems);
 	sleep(30);
-	char compact[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14";
-	this->exec(compact);
+	this->run_compaction(vbucket);
 	//we wont hit the epoch time below any time soon
-	char compact2[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14  "
-		"--purge-before=2000000000 --purge-only-upto-seq=20000";
-	this->exec(compact2);
+	this->run_compaction(vbucket, "--purge-before=2000000000 --purge-only-upto-seq=20000");
 	sleep(30);
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.3";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db1);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db1, dbinfo1);
-	EXPECT_EQ(0, error);
+
+	DbInfo* dbinfo1 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.3");
 	EXPECT_EQ(0, dbinfo1->deleted_count);
 
+	free(dbinfo1);
 }
 
 TEST_F(CompactionTest, cbcompactdropseqnoTest)
 {
-
-	couchstore_error_t error;
-	Db* db1 = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo1 = (DbInfo*) malloc(sizeof(DbInfo));
 	this->sendHello();
 	int numitems = 10000;
 	int vbucket = 14;
 	this->insert_items_vbucket(vbucket, numitems);
 	sleep(30);
-	char compact[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14";
-	this->exec(compact);
-	char compact2[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14  "
-		"--purge-before=2000000000 --purge-only-upto-seq=15000";
-	this->exec(compact2);
+	this->run_compaction(vbucket);
+	//we wont hit the epoch time below any time soon
+	this->run_compaction(vbucket, "--purge-before=2000000000 --purge-only-upto-seq=15000");
 	sleep(30);
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.3";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db1);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db1, dbinfo1);
-	EXPECT_EQ(0, error);
+
+	DbInfo* dbinfo1 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.3");
 	EXPECT_EQ(5000, dbinfo1->deleted_count);
 
+	free(dbinfo1);
 }
 
 TEST_F(CompactionTest, Expired1MItemPurgeTest)
@@ -1231,54 +986,32 @@ TEST_F(CompactionTest, Expired1MItemPurgeTest)
 	    "curl -X POST -u Administrator:password -d autoCompactionDefined=false -d parallelDBAndViewCompaction=false http://localhost:8091/controller/setAutoCompaction";
 	this->exec(autocompact);
 	this->sendHello();
-	couchstore_error_t error;
 	int numitems = 1000000;
 	int vbucket = 20;
 	this->insert_items_vbucket(vbucket, numitems);
 	sleep(30);
-	//structs to hold vB file information
-	Db* db = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo = (DbInfo*) malloc(sizeof(DbInfo));
 
-	//file sizes before and after compaction
-	uint64_t fsize_b4compact = 0;
-	uint64_t fsize_a4trcompact = 0;
 	uint64_t newRevNum = 1;
+
 	string filename = "/opt/couchbase/var/lib/couchbase/data/default/20.couch.1";
 	newRevNum = this->checkNewRevNum(filename);
 	cout << "current filename: " << filename << "\n";
-	//open vB file
-	error = couchstore_open_db(filename.c_str(), COUCHSTORE_OPEN_FLAG_RDONLY, &db);
-	EXPECT_EQ(0, error);
-	//get vB info 
-	error = couchstore_db_info(db, dbinfo);
-	this->print_dbinfo(dbinfo);
-	fsize_b4compact = dbinfo->file_size;
+	DbInfo* dbinfo = this->get_db_info(filename);
 
 	//no documents should be deleted prior to compaction
 	EXPECT_EQ(0, dbinfo->deleted_count);
 
-	//close db handles
-	couchstore_close_db(db);
-	//send lcb_compact command
-	//using cbcompact tool as lcb 2.3.0 has a bug here
-	// this->sendcompact(vbid, purge_before_ts, purge_before_seq, drop_deletes);
-	//lcb_wait(instance);
-	char compact[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 20";
-	this->exec(compact);
+	this->run_compaction(vbucket);
 	sleep(120);
 	//open vB file with new rev number 
 	newRevNum = this->checkNewRevNum(filename);
 	cout << "new filename after compaction: " << filename << "\n";
-	error = couchstore_open_db(filename.c_str(), COUCHSTORE_OPEN_FLAG_RDONLY, &db);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db, dbinfo);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo);
-	fsize_a4trcompact = dbinfo->file_size;
-	//11 documents should be deleted post compaction
-	EXPECT_EQ(1000000, dbinfo->deleted_count);
 
+	DbInfo* dbinfo1 = this->get_db_info(filename);
+	EXPECT_EQ(1000000, dbinfo1->deleted_count);
+
+	free(dbinfo);
+	free(dbinfo1);
 }
 
 TEST_F(CompactionTest, DropDeletesTrue1MStoneTest)
@@ -1293,42 +1026,20 @@ TEST_F(CompactionTest, DropDeletesTrue1MStoneTest)
 	int vbucket = 14;
 	this->insert_items_vbucket(vbucket, numitems);
 	sleep(30);
-	//run compaction once to mark expired items as deleted 
-	char compact[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14";
-	this->exec(compact);
+	//run compaction once to mark expired items as deleted
+	this->run_compaction(vbucket);
 	sleep(240);
 
-	couchstore_error_t error;
-	Db* db1 = (Db*) malloc(sizeof(Db));
-	Db* db2 = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo1 = (DbInfo*) malloc(sizeof(DbInfo));
-	DbInfo* dbinfo2 = (DbInfo*) malloc(sizeof(DbInfo));
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.2";
-
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db1);
-	EXPECT_EQ(0, error);
-
-	error = couchstore_db_info(db1, dbinfo1);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo1);
+	DbInfo* dbinfo1 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.2");
 	EXPECT_EQ(1000000, dbinfo1->deleted_count);
-	couchstore_close_db(db1);
 
-	//send another compaction to drop the tombstones
-	//this->sendcompact(vbid, purge_before_ts, purge_before_seq, drop_deletes);
-	//lcb_wait(instance);
-	char compact2[] = "/opt/couchbase/bin/cbcompact localhost:11210 compact 14  "
-		"--purge-before=0 --purge-only-upto-seq=0 --dropdeletes";
-	this->exec(compact2);
+	this->run_compaction(vbucket, "--purge-before=0 --purge-only-upto-seq=0 --dropdeletes");
 
-	filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.3";
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db2);
-	EXPECT_EQ(0, error);
-	error = couchstore_db_info(db2, dbinfo2);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo2);
+	DbInfo* dbinfo2 = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.3");
 	EXPECT_EQ(0, dbinfo2->deleted_count);
 
+	free(dbinfo1);
+	free(dbinfo2);
 }
 
 //This test needs to be migrated to Warmup Tests
@@ -1337,29 +1048,16 @@ TEST_F(CompactionTest, ExpireAtWarmupTest)
 	this->sendHello();
 	stringstream ss;
 	ss << "fooaaa";
-	string myString = ss.str();
-	storekey(myString);
+	storekey(ss.str());
 	fprintf(stderr, "\n1 mutation on vbucket 14\n");
-	char restart[] = "sudo /etc/init.d/couchbase-server restart";
-	this->exec(restart);
+	string const restart = "sudo /etc/init.d/couchbase-server restart";
+	this->exec(restart.c_str());
 	sleep(40);
-	couchstore_error_t error;
-	//structs to hold vB file information
-	Db* db = (Db*) malloc(sizeof(Db));
-	DbInfo* dbinfo = (DbInfo*) malloc(sizeof(DbInfo));
 
-	const char *filename = "/opt/couchbase/var/lib/couchbase/data/default/14.couch.1";
-	//open vB file
-	error = couchstore_open_db(filename, COUCHSTORE_OPEN_FLAG_RDONLY, &db);
-	EXPECT_EQ(0, error);
-	//get vB info 
-	error = couchstore_db_info(db, dbinfo);
-	EXPECT_EQ(0, error);
-	this->print_dbinfo(dbinfo);
-	//close db handles
+	DbInfo* dbinfo = this->get_db_info("/opt/couchbase/var/lib/couchbase/data/default/14.couch.1");
 	EXPECT_EQ(0, dbinfo->deleted_count);
-	couchstore_close_db(db);
 
+	free(dbinfo);
 }
 
 //This test needs to be migrated to Warmup Tests
