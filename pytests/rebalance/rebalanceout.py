@@ -50,7 +50,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         rebalance = self.cluster.async_rebalance(self.servers[:1], [], servs_out)
         rebalance.result()
         self._verify_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out], timeout=120)
-        self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out], check_ep_items_remaining = true)
+        self.verify_cluster_stats(self.servers[:self.num_servers - self.nodes_out], check_ep_items_remaining = True)
         new_failover_stats = self.compare_failovers_logs(prev_failover_stats, self.servers[:self.num_servers - self.nodes_out], self.buckets)
         new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, self.servers[:self.num_servers - self.nodes_out], self.buckets, perNode=False)
         self.sleep(60)
