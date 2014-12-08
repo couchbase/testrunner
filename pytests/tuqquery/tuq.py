@@ -41,6 +41,8 @@ class QueryTests(BaseTestCase):
             self.full_list = self.generate_full_docs_list(self.gens_load)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
+        # temporary for MB-12848
+        self.create_primary_index_for_3_0_and_greater()
 
     def suite_setUp(self):
         try:

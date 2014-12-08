@@ -40,6 +40,8 @@ class QueryTests(BaseTestCase):
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
         self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
+         # temporary for MB-12848
+        self.create_primary_index_for_3_0_and_greater()
 
     def suite_setUp(self):
         try:
