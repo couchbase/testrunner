@@ -54,6 +54,7 @@ protected:
 
 	virtual void TearDown()
 	{
+		this->delBucket();
 		lcb_destroy(this->instance);
 		this->resetboolFlags();
 		genericstats.statsvec.clear();
@@ -103,11 +104,16 @@ protected:
 		}
 	}
 
-	void createBucket(bool fullEvict)
+	void delBucket()
 	{
 		char del[] = "/opt/couchbase/bin/couchbase-cli bucket-delete -c 127.0.0.1:8091 --bucket=default -u Administrator -p password";
 		this->exec(del);
 		sleep(45);
+	}
+
+	void createBucket(bool fullEvict)
+	{
+		this->delBucket();
 		if (!fullEvict)
 		{
 			char create[] =
