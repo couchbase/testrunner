@@ -533,6 +533,7 @@ TEST_F(CompactionTest, FragThresholdSizeTest)
 TEST_F(CompactionTest, Expired10ItemPurgeTest)
 {
 	this->sendHello();
+	this->disable_auto_compaction();
 	int numitems = 10;
 	int vbucket = 15;
 	this->insert_items_vbucket(vbucket, numitems);
@@ -558,6 +559,7 @@ TEST_F(CompactionTest, Expired10ItemPurgeTest)
 TEST_F(CompactionTest, Expired1KItemPurgeTest)
 {
 	this->sendHello();
+	this->disable_auto_compaction();
 	int numitems = 1000;
 	int vbucket = 16;
 	this->insert_items_vbucket(vbucket, numitems);
@@ -582,6 +584,7 @@ TEST_F(CompactionTest, Expired1KItemPurgeTest)
 TEST_F(CompactionTest, Expired10KItemPurgeTest)
 {
 	this->sendHello();
+	this->disable_auto_compaction();
 	int numitems = 10000;
 	int vbucket = 16;
 	this->insert_items_vbucket(vbucket, numitems);
@@ -629,6 +632,7 @@ TEST_F(CompactionTest, DropDeletesFalseDocExptimeGreaterTest)
 {
 
 	this->sendHello();
+	this->disable_auto_compaction();
 	int numitems = 10;
 	int vbucket = 14;
 	this->insert_items_vbucket(vbucket, numitems);
@@ -658,8 +662,8 @@ TEST_F(CompactionTest, DropDeletesFalseDocExptimeGreaterTest)
 
 TEST_F(CompactionTest, DropDeletesFalseDocPurgeseqGreaterTest)
 {
-
 	this->sendHello();
+	this->disable_auto_compaction();
 	int numitems = 10;
 	int vbucket = 14;
 	this->insert_items_vbucket(vbucket, numitems);
@@ -683,8 +687,8 @@ TEST_F(CompactionTest, DropDeletesFalseDocPurgeseqGreaterTest)
 
 TEST_F(CompactionTest, DropDeletesFalsePurgeSeqZeroTest)
 {
-
 	this->sendHello();
+	this->disable_auto_compaction();
 	stringstream ss;
 	ss << "fooaaa";
 	uint16_t vbid = 14;
@@ -750,7 +754,6 @@ TEST_F(CompactionTest, DropDeletesFalsePurgeSeqZeroTest)
 
 TEST_F(CompactionTest, DropDeletesMaxPurgedSeqnoTest)
 {
-
 	this->sendHello();
 	stringstream ss;
 	ss << "fooaaa";
@@ -929,6 +932,7 @@ TEST_F(CompactionTest, cbcompactnodropsTest)
 TEST_F(CompactionTest, cbcompactdropTrueTest)
 {
 	this->sendHello();
+	this->disable_auto_compaction();
 	int numitems = 10000;
 	int vbucket = 14;
 	this->insert_items_vbucket(vbucket, numitems);
@@ -947,6 +951,7 @@ TEST_F(CompactionTest, cbcompactdropTrueTest)
 TEST_F(CompactionTest, cbcompactdropexpTest)
 {
 	this->sendHello();
+	this->disable_auto_compaction();
 	int numitems = 10000;
 	int vbucket = 14;
 	this->insert_items_vbucket(vbucket, numitems);
@@ -965,6 +970,7 @@ TEST_F(CompactionTest, cbcompactdropexpTest)
 TEST_F(CompactionTest, cbcompactdropseqnoTest)
 {
 	this->sendHello();
+	this->disable_auto_compaction();
 	int numitems = 10000;
 	int vbucket = 14;
 	this->insert_items_vbucket(vbucket, numitems);
@@ -982,10 +988,8 @@ TEST_F(CompactionTest, cbcompactdropseqnoTest)
 
 TEST_F(CompactionTest, Expired1MItemPurgeTest)
 {
-	char autocompact[] =
-	    "curl -X POST -u Administrator:password -d autoCompactionDefined=false -d parallelDBAndViewCompaction=false http://localhost:8091/controller/setAutoCompaction";
-	this->exec(autocompact);
 	this->sendHello();
+	this->disable_auto_compaction();
 	int numitems = 1000000;
 	int vbucket = 20;
 	this->insert_items_vbucket(vbucket, numitems);
@@ -1016,12 +1020,8 @@ TEST_F(CompactionTest, Expired1MItemPurgeTest)
 
 TEST_F(CompactionTest, DropDeletesTrue1MStoneTest)
 {
-
-	char autocompact[] = "curl -X POST -u Administrator:password -d  "
-		"autoCompactionDefined=false -d parallelDBAndViewCompaction=false  "
-		"http://localhost:8091/controller/setAutoCompaction";
-	this->exec(autocompact);
 	this->sendHello();
+	this->disable_auto_compaction();
 	int numitems = 1000000;
 	int vbucket = 14;
 	this->insert_items_vbucket(vbucket, numitems);
@@ -1046,6 +1046,7 @@ TEST_F(CompactionTest, DropDeletesTrue1MStoneTest)
 TEST_F(CompactionTest, ExpireAtWarmupTest)
 {
 	this->sendHello();
+	this->disable_auto_compaction();
 	stringstream ss;
 	ss << "fooaaa";
 	storekey(ss.str());
@@ -1064,6 +1065,7 @@ TEST_F(CompactionTest, ExpireAtWarmupTest)
 TEST_F(CompactionTest, CheckpointWarmupTest)
 {
 	this->sendHello();
+	this->disable_auto_compaction();
 	insertItems(10000);
 	string const stop = "sudo /etc/init.d/couchbase-server stop";
 	this->exec(stop.c_str());
