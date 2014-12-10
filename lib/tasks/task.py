@@ -1238,6 +1238,8 @@ class VerifyRevIdTask(GenericLoadingTask):
         self.itr = 0
         self.err_count = 0
         self.max_err_count = max_err_count
+        self.src_server = src_server
+        self.bucket = bucket
 
     def has_next(self):
         if self.itr < (self.num_valid_keys + self.num_deleted_keys) and self.err_count < self.max_err_count:
@@ -1246,6 +1248,17 @@ class VerifyRevIdTask(GenericLoadingTask):
                       .format(self.itr if self.itr < self.num_valid_keys else self.num_valid_keys))
         self.log.info("RevId Verification : {0} deleted items have been verified"
                       .format(self.itr - self.num_valid_keys if self.itr > self.num_valid_keys else 0))
+
+        # if there are missing keys, we would have printed them by now
+        # check if excess keys are present on server, if yes, set an exception
+        # TODO : print excess keys
+        server = RestConnection(self.src_server)
+        server_count = server.fetch_bucket_stats(bucket=self.bucket.name)["op"]["samples"]["curr_items"][-1]
+        if server_count > self.num_valid_keys:
+            self.set_exception(Exception("ERROR: {0} keys present on bucket {1} "
+                                        "on {2} while kvstore expects only {3}"
+                                        .format(server_count, self.bucket.name,
+                                         self.src_server.ip, self.num_valid_keys)))
         return False
 
     def next(self):
@@ -1260,6 +1273,7 @@ class VerifyRevIdTask(GenericLoadingTask):
         # show progress of verification for every 50k items
         if math.fmod(self.itr, 50000) == 0.0:
             self.log.info("{0} items have been verified".format(self.itr))
+
 
     def __get_meta_data(self, client, key):
         try:

@@ -18,6 +18,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from TestInput import TestInputSingleton
 from scripts.collect_server_info import cbcollectRunner
 from scripts import collect_data_files
+from tasks.future import TimeoutError
 
 from couchbase_helper.documentgenerator import BlobGenerator
 from lib.membase.api.exception import XDCRException
@@ -1450,7 +1451,7 @@ class CouchbaseCluster:
     def async_failover(self, num_nodes=1, graceful=False):
         return self.__async_failover(num_nodes=num_nodes, graceful=graceful)
 
-    def failover_master(self, graceful=False, rebalance=True):
+    def failover_and_rebalance_master(self, graceful=False, rebalance=True):
         """Failover master node
         @param graceful: True if graceful failover else False
         @param rebalance: True if do rebalance operation after failover.
@@ -1464,7 +1465,8 @@ class CouchbaseCluster:
                 self.__fail_over_nodes)
             self.__fail_over_nodes = []
 
-    def failover_nodes(self, num_nodes=1, graceful=False, rebalance=True):
+    def failover_and_rebalance_nodes(self, num_nodes=1, graceful=False,
+                                     rebalance=True):
         """ Failover non-master nodes
         @param num_nodes: number of nodes to failover.
         @param graceful: True if graceful failover else False
@@ -1506,7 +1508,7 @@ class CouchbaseCluster:
             deltaRecoveryBuckets=self.__buckets)
         self.__fail_over_nodes = []
 
-    def warmp_node(self, master=False):
+    def warmup_node(self, master=False):
         """Warmup node on cluster
         @param master: True if warmup master-node else False.
         """
@@ -1514,6 +1516,7 @@ class CouchbaseCluster:
             NodeHelper.do_a_warm_up(self.__master_node)
         else:
             NodeHelper.do_a_warm_up(self.__nodes[-1])
+
 
     def set_xdcr_param(self, param, value):
         """Set Replication parameter on couchbase server:
@@ -1608,8 +1611,11 @@ class CouchbaseCluster:
                 stats_tasks.append(self.__clusterop.async_wait_for_stats(
                     self.__nodes, bucket, '',
                     'vb_replica_curr_items', '==', items * bucket.numReplicas))
-        for task in stats_tasks:
-            task.result(timeout)
+        try:
+            for task in stats_tasks:
+                task.result(timeout)
+        except TimeoutError:
+            self.__log.error("ERROR: Timed-out waiting for item count to match")
 
     def verify_data(self, kv_store=1, timeout=None,
                     max_verify=None, only_store_hash=True, batch_size=1000):
@@ -1817,12 +1823,44 @@ class XDCRNewBaseTest(unittest.TestCase):
         """
         return len(self.__cb_clusters)
 
+    def get_doc_ops_clusters(self):
+        doc_ops_clusters = self._input.param("doc_ops_clusters", None)
+        if doc_ops_clusters:
+            doc_ops_clusters = doc_ops_clusters.split(":")
+            return doc_ops_clusters
+        return []
+
+    def get_doc_ops(self):
+        doc_ops = self._input.param("doc_ops", None)
+        if doc_ops:
+            return doc_ops.split('-')
+        return []
+
+    def perform_update_delete(self):
+        percent_update = self._input.param("upd", 30)
+        percent_delete = self._input.param("del", 30)
+        expires = self._input.param("expires", 0)
+        wait_for_expiration = self._input.param("wait_for_expiration", True)
+        for doc_ops_cluster in self.get_doc_ops_clusters():
+            cb_cluster = self.get_cb_cluster_from_name(doc_ops_cluster)
+            for doc_op in self.get_doc_ops():
+                if doc_op == OPS.UPDATE:
+                    self.log.info("Updating keys @ {}".format(cb_cluster.get_name()))
+                    cb_cluster.update_delete_data(
+                        doc_op,
+                        perc=percent_update,
+                        expiration=expires,
+                        wait_for_expiration=wait_for_expiration)
+                elif doc_op == OPS.DELETE:
+                    self.log.info("Deleting keys @ {}".format(cb_cluster.get_name()))
+                    cb_cluster.update_delete_data(doc_op, perc=percent_delete)
+
     def __create_buckets(self):
         num_sasl_buckets = self._input.param("sasl_buckets", 0)
         num_stand_buckets = self._input.param("standard_buckets", 0)
         create_default_bucket = self._input.param("default_bucket", True)
         num_replicas = self._input.param("replicas", 1)
-        dgm_run = self._input.param("dgm_run", 1)
+        dgm_run = self._input.param("dgm_run", 0)
         eviction_policy = self._input.param(
             "eviction_policy",
             'valueOnly')  # or 'fullEviction'
@@ -1980,8 +2018,12 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def __load_chain(self):
         for i, cluster in enumerate(self.__cb_clusters):
-            if i >= len(self.__cb_clusters) - 1:
-                break
+            if self.__rdirection == REPLICATION_DIRECTION.BIDIRECTION:
+                if i > len(self.__cb_clusters) - 1:
+                    break
+            else:
+                if i >= len(self.__cb_clusters) - 1:
+                    break
             cluster.load_all_buckets(self.__num_items, self.__value_size)
 
     def __load_star(self):
@@ -2020,6 +2062,20 @@ class XDCRNewBaseTest(unittest.TestCase):
                         toBucket=remote_cluster.get_dest_cluster().get_bucket(
                             src_bucket.name))
                 remote_cluster.start_all_replications()
+
+    def setup_xdcr_and_load(self):
+        self.set_xdcr_topology()
+        self.setup_all_replications()
+        self.load_data_topology()
+
+
+    def load_and_setup_xdcr(self):
+        """Initial xdcr
+        first load then create xdcr
+        """
+        self.load_data_topology()
+        self.set_xdcr_topology()
+        self.setup_all_replications()
 
     def verify_rev_ids(self, xdcr_replications, kv_store=1):
         """Verify RevId (sequence number, cas, flags value) for each item on
