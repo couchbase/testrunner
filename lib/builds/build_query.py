@@ -88,8 +88,7 @@ class BuildQuery(object):
 
             """ if the job trigger with url, no need to check version.
                 remove builds.product_version.find(version) != -1 """
-            if product == builds.product and builds.architecture_type == arch \
-               and type == builds.deliverable_type:
+            if product == builds.product and builds.architecture_type == arch:
                 return builds
             else:
                 self.log.info("if build not found, url link may not match...")
@@ -291,21 +290,35 @@ class BuildQuery(object):
                 build_info = build_info.replace("couchbase_server","couchbase-server")
             """ End remove here """
 
-            """ sherlock build name: couchbase-server-enterprise-3.5.0-71-centos6.x86_64  """
-            if "-3.5.0-" in build_info:
-                product_version = build_info.split("-")
-                product_version = product_version[3] + "-" + product_version[4]
+            """ sherlock build name: couchbase-server-enterprise-3.5.0-71-centos6.x86_64
+                sherlock debian7:    couchbase-server-enterprise_3.5.0-10-debian7_amd64.deb """
+            if "3.5.0-" in build_info:
+                if "debian7" in build_info:
+                    product_version = build_info.split("_")
+                    product_version = product_version[1].replace("-debian7" , "")
+                else:
+                    product_version = build_info.split("-")
+                    product_version = product_version[3] + "-" + product_version[4]
                 if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
                     build.product_version = product_version
-                    build_info = build_info.replace("-" + product_version,"")
+                    if "debian7" in build_info:
+                        build_info = build_info.replace("_" + product_version,"")
+                    else:
+                        build_info = build_info.replace("-" + product_version,"")
                 if "x86_64" in build_info:
                     build.architecture_type = "x86_64"
                     build_info = build_info.replace(".x86_64", "")
                 elif "x86" in build_info:
                     build.architecture_type = "x86"
                     build_info = build_info.replace(".x86", "")
+                elif "_amd64" in build_info:
+                    build.architecture_type = "x86_64"
+                    build_info = build_info.replace("_amd64", "")
                 if build_info.startswith("couchbase-server"):
-                    build.product = build_info.replace("-centos6", "")
+                    if "-centos6" in build_info:
+                        build.product = build_info.replace("-centos6", "")
+                    elif "-debian7" in build_info:
+                        build.product = build_info.replace("-debian7", "")
                 return build
             product_version = build_info.split("_")
             product_version = product_version[len(product_version)-1]
