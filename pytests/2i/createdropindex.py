@@ -15,7 +15,7 @@ class CreateDropIndexTests(BaseTestCase):
 
     def setUp(self):
         try:
-            super(CreateDeleteViewTests, self).setUp()
+            super(CreateDropIndexTests, self).setUp()
             self.bucket_ddoc_map = {}
             self.ddoc_ops = self.input.param("ddoc_ops", None)
             self.boot_op = self.input.param("boot_op", None)
