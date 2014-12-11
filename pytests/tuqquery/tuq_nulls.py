@@ -211,7 +211,7 @@ class NULLTests(QueryTests):
 
     def test_ifposinf(self):
         for bucket in self.buckets:
-            self.query = "SELECT feature_name, IFPOSINF(story_point[2],story_point[1]) as point" +\
+            self.query = "SELECT feature_name, POSINFIF(story_point[2],story_point[1]) as point" +\
                         " FROM %s ORDER BY feature_name"  % bucket.name
             self.run_cbq_query()
             self.sleep(3)
@@ -226,7 +226,7 @@ class NULLTests(QueryTests):
                                             'point' : doc['story_point'][2]})
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
             self._verify_results(actual_result['results'], expected_result)
-            self.query = "SELECT feature_name, IFNEGINF(story_point[2],story_point[1]) as point" +\
+            self.query = "SELECT feature_name, NEGINFIF(story_point[2],story_point[1]) as point" +\
                         " FROM %s ORDER BY feature_name"  % bucket.name
             actual_result = self.run_cbq_query()
             self._verify_results(actual_result['results'], expected_result)
