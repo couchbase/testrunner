@@ -150,16 +150,16 @@ class BaseTestCase(unittest.TestCase):
                     self.services_map = self.get_services(self.num_servers,self.services_init)
                     # rebalance all nodes into the cluster before each test
                     self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers],
-                        [], services = self.services_map.values())
+                        [], services = services_map.values())
                 elif self.nodes_init > 1:
                     self.services_map = self.get_services(self.nodes_init,self.services_init)
                     self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init],
-                        [], services = self.services_map.values())
+                        [], services = services_map.values())
                 elif str(self.__class__).find('ViewQueryTests') != -1 and \
                         not self.input.param("skip_rebalance", False):
                     self.services_map = self.get_services(self.num_servers,self.services_init)
                     self.cluster.rebalance(self.servers, self.servers[1:],
-                        [], services = self.services_map.values())
+                        [], services = services_map.values())
             except BaseException, e:
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
