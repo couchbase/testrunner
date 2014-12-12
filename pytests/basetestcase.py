@@ -147,19 +147,19 @@ class BaseTestCase(unittest.TestCase):
                     str(self.__class__).find('negativetests.NegativeTests') != -1 or \
                     str(self.__class__).find('warmuptest.WarmUpTests') != -1 or \
                     str(self.__class__).find('failover.failovertests.FailoverTests') != -1:
-                    self.services_map = self.get_services(self.num_servers,self.services_init)
+                    self.services = self.get_services(self.num_servers,self.services_init)
                     # rebalance all nodes into the cluster before each test
                     self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers],
-                        [], services = services_map.values())
+                        [], services = self.services)
                 elif self.nodes_init > 1:
-                    self.services_map = self.get_services(self.nodes_init,self.services_init)
+                    self.services = self.get_services(self.nodes_init,self.services_init)
                     self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init],
-                        [], services = services_map.values())
+                        [], services = self.services)
                 elif str(self.__class__).find('ViewQueryTests') != -1 and \
                         not self.input.param("skip_rebalance", False):
-                    self.services_map = self.get_services(self.num_servers,self.services_init)
+                    self.services = self.get_services(self.num_servers,self.services_init)
                     self.cluster.rebalance(self.servers, self.servers[1:],
-                        [], services = services_map.values())
+                        [], services = self.services)
             except BaseException, e:
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
@@ -1476,11 +1476,7 @@ class BaseTestCase(unittest.TestCase):
                 services.append(services_init.replace(":",","))
         else:
             return None
-        service_map = {}
-        service_map[self.servers[0].ip] = "kv,moxi"
-        for node in range(1,init_nodes):
-            service_map[self.servers[node].ip] = services[node - 1]
-        return service_map
+        return services
 
     def load(self, generators_load, exp=0, flag=0,
              kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
