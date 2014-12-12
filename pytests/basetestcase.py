@@ -1477,9 +1477,9 @@ class BaseTestCase(unittest.TestCase):
         else:
             return None
         service_map = {}
-        service_map[self.servers[0]] = "kv,moxi"
-        for node in for node in range(1,init_nodes):
-            service_map[self.servers[node]] = services[node - 1]
+        service_map[self.servers[0].ip] = "kv,moxi"
+        for node in range(1,init_nodes):
+            service_map[self.servers[node].ip] = services[node - 1]
         return service_map
 
     def load(self, generators_load, exp=0, flag=0,
