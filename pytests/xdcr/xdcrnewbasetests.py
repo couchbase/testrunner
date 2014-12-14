@@ -1877,8 +1877,9 @@ class XDCRNewBaseTest(unittest.TestCase):
         for cb_cluster in self.__cb_clusters:
             total_quota = cb_cluster.get_mem_quota()
             if dgm_run:
-                total_quota = 256
-            bucket_size = int(float(total_quota) / float(num_buckets))
+                # buckets cannot be created if size<100MB
+                bucket_size = 100
+                total_quota = bucket_size * num_buckets
 
             if create_default_bucket:
                 cb_cluster.create_default_bucket(
