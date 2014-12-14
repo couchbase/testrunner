@@ -24,6 +24,7 @@ from couchbase_helper.data_analysis_helper import *
 from testconstants import STANDARD_BUCKET_PORT
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD
+import testconstants
 
 
 class BaseTestCase(unittest.TestCase):
@@ -50,6 +51,7 @@ class BaseTestCase(unittest.TestCase):
         self.data_collector = DataCollector()
         self.data_analyzer = DataAnalyzer()
         self.result_analyzer = DataAnalysisResultAnalyzer()
+        self.set_testrunner_client()
         try:
             self.vbuckets = self.input.param("vbuckets", None)
             self.upr = self.input.param("upr", None)
@@ -1578,6 +1580,10 @@ class BaseTestCase(unittest.TestCase):
                 return "tap"
         return "dcp"
 
+    def set_testrunner_client(self):
+        self.testrunner_client = self.input.param("testrunner_client", None)
+        if self.testrunner_client != None:
+            os.environ[testconstants.TESTRUNNER_CLIENT] = self.testrunner_client
 
 
 

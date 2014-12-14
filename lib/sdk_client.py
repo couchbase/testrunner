@@ -3,12 +3,15 @@
 Python based SDK client interface
 
 """
-
+import crc32
+from couchbase import FMT_AUTO
+from memcached.helper.old_kvstore import ClientKeyValueStore
 from couchbase.bucket import Bucket as CouchbaseBucket
 from couchbase.exceptions import CouchbaseError,BucketNotFoundError
+from mc_bin_client import MemcachedError
 
 class SDKClient(object):
-    """Python SDK Client Implementation for testrunner"""
+    """Python SDK Client Implementation for testrunner - master branch Implementation"""
 
     def __init__(self, bucket, hosts = ["localhost"] , scheme = "couchbase",
                  ssl_path = None, uhm_options = None, password=None,
@@ -19,7 +22,6 @@ class SDKClient(object):
         self.password = password
         self.quiet = quiet
         self.transcoder = transcoder
-        print self.connection_string
         self._createConn()
 
     def _createString(self, scheme ="couchbase", bucket = None, hosts = ["localhost"], certpath = None, uhm_options = ""):
@@ -89,11 +91,17 @@ class SDKClient(object):
     def cas(self, key, value, cas=0, ttl=0, format=None):
         return self.cb.replace(key, value, cas=cas,format=format)
 
+    def delete(self,key, cas=0, quiet=None, persist_to=0, replicate_to=0):
+        self.remove(key, cas=cas, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to)
+
     def remove(self,key, cas=0, quiet=None, persist_to=0, replicate_to=0):
         try:
-            self.cb.remove(key, cas=cas, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to)
+            return self.cb.remove(key, cas=cas, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to)
         except CouchbaseError as e:
             raise
+
+    def delete(self, keys, quiet=None, persist_to=0, replicate_to=0):
+        return self.remove(self, keys, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to)
 
     def remove_multi(self, keys, quiet=None, persist_to=0, replicate_to=0):
         try:
@@ -101,11 +109,17 @@ class SDKClient(object):
         except CouchbaseError as e:
             raise
 
+    def set(self, key, value, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0):
+        return self.upsert(key, value, cas=cas, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+
     def upsert(self, key, value, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0):
         try:
             self.cb.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
         except CouchbaseError as e:
             raise
+
+    def set_multi(self, keys, ttl=0, format=None, persist_to=0, replicate_to=0):
+        return self.upsert_multi(keys, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
 
     def upsert_multi(self, keys, ttl=0, format=None, persist_to=0, replicate_to=0):
         try:
@@ -172,7 +186,7 @@ class SDKClient(object):
 
     def rget(self, key, replica_index=None, quiet=None):
         try:
-            data  = self.get(key, replica_index=None, quiet=None)
+            data  = self.rget(key, replica_index=replica_index, quiet=None)
             return self.__translate_get(data)
         except CouchbaseError as e:
             raise
@@ -187,7 +201,7 @@ class SDKClient(object):
     def rget_multi(self, key, replica_index=None, quiet=None):
         try:
             data = self.cb.rget_multi(key, replica_index=None, quiet=None)
-            return self.__translate_get(data)
+            return self.__translate_get_multi(data)
         except CouchbaseError as e:
             raise
 
@@ -207,8 +221,7 @@ class SDKClient(object):
 
     def observe(self, key, master_only=False):
         try:
-            data = self.cb.observe(key, master_only = master_only)
-            return self.__translate_observe(data)
+            return self.cb.observe(key, master_only = master_only)
         except CouchbaseError as e:
             raise
 
@@ -264,11 +277,14 @@ class SDKClient(object):
         if data == None:
             return map
         for key, result in data.items():
-            map[key] = [result.value,result.cas,result.flags]
+            map[key] = [result.flags, result.cas, result.value]
         return map
 
     def __translate_get(self, data):
-        return data.value, data.flags, data.cas
+        return data.flags, data.cas, data.value
+
+    def __translate_delete(self, data):
+        return data
 
     def __translate_observe(self, data):
         return data
@@ -292,3 +308,191 @@ class SDKClient(object):
     def __translate_upsert_op(self, data):
         return data.rc, data.success, data.errstr, data.key
 
+class SDKSmartClient(object):
+      def __init__(self, rest, bucket, info = None):
+        self.rest = rest
+        if hasattr(bucket, 'name'):
+            self.bucket=bucket.name
+        else:
+            self.bucket=bucket
+        if hasattr(bucket, 'saslPassword'):
+            self.saslPassword = bucket.saslPassword
+        else:
+            self.saslPassword = None
+        if rest.ip == "127.0.0.1":
+            self.host = "{0}:{1}".format(rest.ip,rest.port)
+            self.scheme = "http"
+        else:
+            self.host = rest.ip
+            self.scheme = "couchbase"
+        self.client = SDKClient(self.bucket, hosts = [self.host], scheme = self.scheme, password = self.saslPassword)
+
+      def reset(self, rest=None):
+        self.client = SDKClient(self.bucket, hosts = [self.host], scheme = self.scheme, password = self.saslPassword)
+
+      def memcached(self, key):
+        return self.client
+
+      def set(self, key, exp, flags, value, format = FMT_AUTO):
+        return self.client.set(key, value, ttl = exp, format = format)
+
+      def append(self, key, value, format = FMT_AUTO):
+          return self.client.set(key, value, format = format)
+
+      def observe(self, key):
+        return self.client.observe(key)
+
+      def get(self, key):
+        return self.client.get(key)
+
+      def getr(self, key, replica_index=0):
+        return self.client.rget(key,replica_index=replica_index)
+
+      def setMulti(self, exp, flags, key_val_dic, pause = None, timeout = None, parallel=None, format = FMT_AUTO):
+          return self.client.upsert_multi(key_val_dic, ttl = exp, format = format)
+
+      def getMulti(self, keys_lst, pause = None, timeout_sec = None, parallel=None):
+        map = self.client.get_multi(keys_lst)
+        return map
+
+      def getrMulti(self, keys_lst, replica_index= None, pause = None, timeout_sec = None, parallel=None):
+        map = self.client.rget_multi(keys_lst, replica_index = replica_index)
+        return map
+
+      def delete(self, key):
+          return self.client.remove(key)
+
+class SDKBasedKVStoreAwareSmartClient(SDKSmartClient):
+    def __init__(self, rest, bucket, kv_store=None, info=None, store_enabled=True):
+        SDKSmartClient.__init__(self, rest, bucket, info)
+        self.kv_store = kv_store or ClientKeyValueStore()
+        self.store_enabled = store_enabled
+        self._rlock = threading.Lock()
+
+    def set(self, key, value, ttl=-1):
+        self._rlock.acquire()
+        try:
+            if ttl >= 0:
+                self.memcached(key).set(key, ttl, 0, value)
+            else:
+                self.memcached(key).set(key, 0, 0, value)
+
+            if self.store_enabled:
+                self.kv_store.write(key, hashlib.md5(value).digest(), ttl)
+        except MemcachedError as e:
+            self._rlock.release()
+            raise MemcachedError(e.status, e.msg)
+        except AssertionError:
+            self._rlock.release()
+            raise AssertionError
+        except:
+            self._rlock.release()
+            raise Exception("General Exception from KVStoreAwareSmartClient.set()")
+
+        self._rlock.release()
+
+    """
+    " retrieve meta data of document from disk
+    """
+    def get_doc_metadata(self, num_vbuckets, key):
+        vid = crc32.crc32_hash(key) & (num_vbuckets - 1)
+
+        mc = self.memcached(key)
+        metadatastats = None
+
+        try:
+            metadatastats = mc.stats("vkey {0} {1}".format(key, vid))
+        except MemcachedError:
+            msg = "key {0} doesn't exist in memcached".format(key)
+            self.log.info(msg)
+
+        return metadatastats
+
+
+    def delete(self, key):
+        try:
+            self._rlock.acquire()
+            opaque, cas, data = self.memcached(key).delete(key)
+            if self.store_enabled:
+                self.kv_store.delete(key)
+            self._rlock.release()
+            if cas == 0:
+                raise MemcachedError(7, "Invalid cas value")
+        except Exception as e:
+            self._rlock.release()
+            raise MemcachedError(7, e.message)
+
+    def get_valid_key(self, key):
+        return self.get_key_check_status(key, "valid")
+
+    def get_deleted_key(self, key):
+        return self.get_key_check_status(key, "deleted")
+
+    def get_expired_key(self, key):
+        return self.get_key_check_status(key, "expired")
+
+    def get_all_keys(self):
+        return self.kv_store.keys()
+
+    def get_all_valid_items(self):
+        return self.kv_store.valid_items()
+
+    def get_all_deleted_items(self):
+        return self.kv_store.deleted_items()
+
+    def get_all_expired_items(self):
+        return self.kv_store.expired_items()
+
+    def get_key_check_status(self, key, status):
+        item = self.kv_get(key)
+        if(item is not None  and item["status"] == status):
+            return item
+        else:
+            msg = "key {0} is not valid".format(key)
+            self.log.info(msg)
+            return None
+
+    # safe kvstore retrieval
+    # return dict of {key,status,value,ttl}
+    # or None if not found
+    def kv_get(self, key):
+        item = None
+        try:
+            item = self.kv_store.read(key)
+        except KeyError:
+            msg = "key {0} doesn't exist in store".format(key)
+            # self.log.info(msg)
+
+        return item
+
+    # safe memcached retrieval
+    # return dict of {key, flags, seq, value}
+    # or None if not found
+    def mc_get(self, key):
+        item = self.mc_get_full(key)
+        if item is not None:
+            item["value"] = hashlib.md5(item["value"]).digest()
+        return item
+
+    # unhashed value
+    def mc_get_full(self, key):
+        item = None
+        try:
+            x, y, value = self.memcached(key).get(key)
+            item = {}
+            item["key"] = key
+            item["flags"] = x
+            item["seq"] = y
+            item["value"] = value
+        except MemcachedError:
+            msg = "key {0} doesn't exist in memcached".format(key)
+
+        return item
+
+    def kv_mc_sync_get(self, key, status):
+        self._rlock.acquire()
+        kv_item = self.get_key_check_status(key, status)
+        mc_item = self.mc_get(key)
+        self._rlock.release()
+
+        return kv_item, mc_item

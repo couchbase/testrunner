@@ -1,3 +1,4 @@
+import os
 import time
 import logger
 import random
@@ -9,13 +10,14 @@ import re
 import math
 import crc32
 import traceback
+import testconstants
 from httplib import IncompleteRead
 from threading import Thread
-from memcacheConstants import ERR_NOT_FOUND
+from memcacheConstants import ERR_NOT_FOUND,NotFoundError
 from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
-from memcached.helper.data_helper import KVStoreAwareSmartClient, VBucketAwareMemcached, MemcachedClientHelper
+from memcached.helper.data_helper import KVStoreAwareSmartClient, MemcachedClientHelper
 from couchbase_helper.document import DesignDocument, View
 from mc_bin_client import MemcachedError
 from tasks.future import Future
@@ -25,6 +27,17 @@ from membase.api.exception import DesignDocCreationException, QueryViewException
                                     ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException, BucketCompactionException
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
+try:
+    CHECK_FLAG = False
+    if (testconstants.TESTRUNNER_CLIENT in os.environ.keys()) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.MC_BIN_CLIENT:
+        CHECK_FLAG = True
+        from memcached.helper.data_helper import VBucketAwareMemcached,KVStoreAwareSmartClient
+    else:
+        from sdk_client import SDKSmartClient as VBucketAwareMemcached
+        from sdk_client import SDKBasedKVStoreAwareSmartClient as KVStoreAwareSmartClient
+except Exception as e:
+    CHECK_FLAG = True
+    from memcached.helper.data_helper import VBucketAwareMemcached,KVStoreAwareSmartClient
 
 # TODO: Setup stacktracer
 # TODO: Needs "easy_install pygments"
@@ -1028,7 +1041,7 @@ class ValidateDataTask(GenericLoadingTask):
                 if d != json.loads(value):
                     self.state = FINISHED
                     self.set_exception(Exception('Key: %s, Bad result: %s != %s for key %s' % (key, json.dumps(d), value, key)))
-            if o != flag:
+            if CHECK_FLAG and o != flag:
                 self.state = FINISHED
                 self.set_exception(Exception('Key: %s, Bad result for flag value: %s != the value we set: %s' % (key, o, flag)))
 
@@ -1048,7 +1061,7 @@ class ValidateDataTask(GenericLoadingTask):
         partition = self.kv_store.acquire_partition(key)
 
         try:
-            o, c, d = self.client.delete(key)
+            self.client.delete(key)
             if partition.get_valid(key) is not None:
                 self.state = FINISHED
                 self.set_exception(Exception('Not Deletes: %s' % (key)))
@@ -1056,6 +1069,10 @@ class ValidateDataTask(GenericLoadingTask):
             if error.status == ERR_NOT_FOUND:
                 pass
             else:
+                self.state = FINISHED
+                self.set_exception(error)
+        except Exception as error:
+            if error.rc != NotFoundError:
                 self.state = FINISHED
                 self.set_exception(error)
         self.kv_store.release_partition(key)
@@ -1119,7 +1136,7 @@ class ValidateDataWithActiveAndReplicaTask(GenericLoadingTask):
     def _check_deleted_key(self, key):
         partition = self.kv_store.acquire_partition(key)
         try:
-            o, c, d = self.client.delete(key)
+            self.client.delete(key)
             if partition.get_valid(key) is not None:
                 self.state = FINISHED
                 self.set_exception(Exception('ACTIVE CHECK :: Not Deletes: %s' % (key)))
@@ -1127,6 +1144,10 @@ class ValidateDataWithActiveAndReplicaTask(GenericLoadingTask):
             if error.status == ERR_NOT_FOUND:
                 pass
             else:
+                self.state = FINISHED
+                self.set_exception(error)
+        except Exception as error:
+            if error.rc != NotFoundError:
                 self.state = FINISHED
                 self.set_exception(error)
         self.kv_store.release_partition(key)
@@ -1204,7 +1225,7 @@ class BatchedValidateDataTask(GenericLoadingTask):
                     if d != json.loads(value):
                         self.state = FINISHED
                         self.set_exception(Exception('Key: %s Bad result: %s != %s' % (key, json.dumps(d), value)))
-                if o != flag:
+                if CHECK_FLAG and o != flag:
                     self.state = FINISHED
                     self.set_exception(Exception('Key: %s Bad result for flag value: %s != the value we set: %s' % (key, o, flag)))
             except KeyError as error:
@@ -1213,9 +1234,8 @@ class BatchedValidateDataTask(GenericLoadingTask):
 
     def _check_deleted_key(self, key):
         partition = self.kv_store.acquire_partition(key)
-
         try:
-            o, c, d = self.client.delete(key)
+            self.client.delete(key)
             if partition.get_valid(key) is not None:
                 self.state = FINISHED
                 self.set_exception(Exception('Not Deletes: %s' % (key)))
@@ -1225,13 +1245,19 @@ class BatchedValidateDataTask(GenericLoadingTask):
             else:
                 self.state = FINISHED
                 self.set_exception(error)
+        except Exception as error:
+            if error.rc != NotFoundError:
+                self.state = FINISHED
+                self.set_exception(error)
         self.kv_store.release_partition(key)
 
 
 class VerifyRevIdTask(GenericLoadingTask):
     def __init__(self, src_server, dest_server, bucket, kv_store, max_err_count=100):
         GenericLoadingTask.__init__(self, src_server, bucket, kv_store)
-        self.client_dest = VBucketAwareMemcached(RestConnection(dest_server), bucket)
+        from memcached.helper.data_helper import VBucketAwareMemcached as SmartClient
+        self.client_src = SmartClient(RestConnection(src_server), bucket)
+        self.client_dest = SmartClient(RestConnection(dest_server), bucket)
         self.valid_keys, self.deleted_keys = kv_store.key_set()
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
@@ -1296,7 +1322,7 @@ class VerifyRevIdTask(GenericLoadingTask):
             self.set_exception(e)
 
     def _check_key_revId(self, key, ignore_meta_data=[]):
-        src_meta_data = self.__get_meta_data(self.client, key)
+        src_meta_data = self.__get_meta_data(self.client_src, key)
         dest_meta_data = self.__get_meta_data(self.client_dest, key)
         if not src_meta_data or not dest_meta_data:
             return
@@ -1315,7 +1341,10 @@ class VerifyRevIdTask(GenericLoadingTask):
 
         # verify all metadata
         for meta_key in src_meta_data.keys():
-            if src_meta_data[meta_key] != dest_meta_data[meta_key] and meta_key not in ignore_meta_data:
+            check = True
+            if meta_key == 'flags' and not CHECK_FLAG:
+                check = False
+            if check and src_meta_data[meta_key] != dest_meta_data[meta_key] and meta_key not in ignore_meta_data:
                 self.err_count += 1
                 err_msg.append("{0} mismatch: Source {0}:{1}, Destination {0}:{2}, Error Count:{3}"
                     .format(meta_key, src_meta_data[meta_key],
@@ -1331,7 +1360,8 @@ class VerifyRevIdTask(GenericLoadingTask):
 class VerifyMetaDataTask(GenericLoadingTask):
     def __init__(self, dest_server, bucket, kv_store, meta_data_store, max_err_count=100):
         GenericLoadingTask.__init__(self, dest_server, bucket, kv_store)
-        self.client = VBucketAwareMemcached(RestConnection(dest_server), bucket)
+        from memcached.helper.data_helper import VBucketAwareMemcached as SmartClient
+        self.client = SmartClient(RestConnection(dest_server), bucket)
         self.valid_keys, self.deleted_keys = kv_store.key_set()
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
@@ -1408,7 +1438,8 @@ class VerifyMetaDataTask(GenericLoadingTask):
 class GetMetaDataTask(GenericLoadingTask):
     def __init__(self, dest_server, bucket, kv_store):
         GenericLoadingTask.__init__(self, dest_server, bucket, kv_store)
-        self.client = VBucketAwareMemcached(RestConnection(dest_server), bucket)
+        from memcached.helper.data_helper import VBucketAwareMemcached as SmartClient
+        self.client = SmartClient(RestConnection(dest_server), bucket)
         self.valid_keys, self.deleted_keys = kv_store.key_set()
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)

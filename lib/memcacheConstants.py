@@ -222,6 +222,7 @@ EXTRA_HDR_SIZES = dict(
     [(k, struct.calcsize(v)) for (k, v) in EXTRA_HDR_FMTS.items()])
 
 ERR_NOT_FOUND = 0x01
+NotFoundError = 0xD
 ERR_EXISTS = 0x02
 ERR_2BIG = 0x03
 ERR_EINVAL = 0x04

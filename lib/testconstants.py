@@ -70,3 +70,5 @@ CLI_COMMANDS = ["cbbackup", "cbbrowse_logs", "cbcollect_info", "cbcompact", "cbd
 # old url MV_LATESTBUILD_REPO = "http://builds.hq.northscale.net/latestbuilds/"
 MV_LATESTBUILD_REPO = "http://latestbuilds.hq.couchbase.com/"
 SHERLOCK_BUILD_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/sherlock/"
+MC_BIN_CLIENT = "mc_bin_client"
+TESTRUNNER_CLIENT = "testrunner_client"
