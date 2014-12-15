@@ -197,6 +197,7 @@ class NodeHelper:
             test_case,
             wait_if_warmup=True)
         RestConnection(server).enable_xdcr_trace_logging()
+        RestConnection(server).enable_goxdcr()
 
     @staticmethod
     def enable_firewall(
@@ -221,6 +222,7 @@ class NodeHelper:
         shell.start_couchbase()
         shell.disconnect()
         RestConnection(server).enable_xdcr_trace_logging()
+        RestConnection(server).enable_goxdcr()
 
     @staticmethod
     def wait_service_started(server, wait_time=120):
@@ -239,6 +241,7 @@ class NodeHelper:
             if str(output).lower().find("running") != -1:
                 # self.log.info("Couchbase service is running")
                 RestConnection(server).enable_xdcr_trace_logging()
+                RestConnection(server).enable_goxdcr()
                 return
             time.sleep(10)
         raise Exception(
@@ -668,6 +671,7 @@ class CouchbaseCluster:
             use_hostnames=self.__use_hostname).result()
         for node in self.__nodes:
             RestConnection(node).enable_xdcr_trace_logging()
+            RestConnection(node).enable_goxdcr()
 
     def __get_cbcollect_info(self):
         """Collect cbcollectinfo logs for all the servers in the cluster.
