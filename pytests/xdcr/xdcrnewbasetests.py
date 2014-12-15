@@ -1879,7 +1879,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             if dgm_run:
                 # buckets cannot be created if size<100MB
                 bucket_size = 100
-                total_quota = bucket_size * num_buckets
+            else:
+                bucket_size = int(float(total_quota) / float(num_buckets))
 
             if create_default_bucket:
                 cb_cluster.create_default_bucket(
