@@ -73,6 +73,7 @@ class BaseTestCase(unittest.TestCase):
             self.nodes_in = self.input.param("nodes_in", 1)
             self.nodes_out = self.input.param("nodes_out", 1)
             self.services_init = self.input.param("services_init", None)
+            self.services_in = self.input.param("services_in", None)
             self.forceEject = self.input.param("forceEject", False)
             self.force_kill_memcached  = TestInputSingleton.input.param('force_kill_memcached', False)
             self.num_replicas = self.input.param("replicas", 1)
@@ -96,6 +97,7 @@ class BaseTestCase(unittest.TestCase):
             self.log_location = self.input.param("log_location", None)
             self.stat_info = self.input.param("stat_info", None)
             self.port_info = self.input.param("port_info", None)
+            self.nodes_out_dist = self.input.param("nodes_out_dist", None)
             self.eviction_policy = self.input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
             self.absolute_path = self.input.param("absolute_path", True)
             self.test_timeout = self.input.param("test_timeout", 3600)  # kill hang test and jump to next one.
@@ -160,6 +162,7 @@ class BaseTestCase(unittest.TestCase):
                     self.services = self.get_services(self.num_servers,self.services_init)
                     self.cluster.rebalance(self.servers, self.servers[1:],
                         [], services = self.services)
+
             except BaseException, e:
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
@@ -1467,16 +1470,59 @@ class BaseTestCase(unittest.TestCase):
             victim_nodes = victim_nodes[:victim_count]
         return victim_nodes
 
-    def get_services(self, init_nodes, services_init):
+    def get_services(self, tgt_nodes, tgt_services):
         services = []
-        if services_init != None and "-" in services_init:
-            services = services_init.replace(":",",").split("-")
-        elif services_init != None:
-            for node in range(1,init_nodes):
-                services.append(services_init.replace(":",","))
-        else:
-            return None
+        if tgt_services == None:
+            for node in tgt_nodes:
+                if node.services != None or node.services != '':
+                    services.append(node.services)
+            if len(services) > 0:
+                return services
+            else:
+                return None
+        if tgt_services != None and "-" in tgt_services:
+            services = tgt_services.replace(":",",").split("-")
+        elif tgt_services != None:
+            for node in range(1,tgt_nodes):
+                services.append(tgt_services.replace(":",","))
         return services
+
+    def generate_map_nodes_out_dist(self):
+        self.nodes_out_list = []
+        if self.nodes_out_dist == None:
+            self.nodes_out_list.append(self.servers[1])
+        for service_fail_map in self.nodes_out_dist.split("-"):
+            tokens = service_fail_map.split(":")
+            service_type = tokens[0]
+            service_type_count = int(tokens[1])
+            for node in self.services_map.keys():
+                if (service_type in self.services_map[node]) and (node not in [node.ip for node in self.service_failure_nodes]):
+                    for server in self.servers:
+                        if server.ip == node.ip:
+                            self.nodes_out_list.append(server)
+
+    def generate_services_map(self, nodes):
+        map = {}
+        index = 0
+        if services == None:
+            return map
+        for node in nodes:
+            map[node.ip] = node.services
+            index += 1
+        return map
+
+    def find_nodes_in_list(self):
+        self.nodes_in_list = self.servers[self.nodes_init:self.nodes_init+self.nodes_in]
+        self.services_in = get_services(self, nodes_in_list, nodes_in_services)
+
+    def filter_nodes(self, filter_nodes):
+        src_nodes = []
+        for node in filter_nodes:
+            check = False
+            for src_node in self.servers:
+                if node.ip == src_node.ip:
+                    src_nodes.append(src_node)
+        return src_nodes
 
     def load(self, generators_load, exp=0, flag=0,
              kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,

@@ -10,6 +10,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.sql_definitions = sql_definition_generator.generate_default_data_sql_definitions()
         self.sql_definitions = sql_definition_generator.filter_by_group(self.groups, self.sql_definitions)
         self.ops_map = self._create_operation_map()
+        self.find_nodes_in_list()
+        self.generate_map_nodes_out_dist()
 
     def suite_setUp(self):
         super(BaseSecondaryIndexingTests, self).suite_setUp()
@@ -115,7 +117,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.run_multi_operations(self, buckets = [bucket], query_definitions = [query_definition],
             expected_results = {"0": expected_results},
             create_index = create_index, drop_index = drop_index,
-            query_with_explain = query_with_explain, query = query):
+            query_with_explain = query_with_explain, query = query)
 
     def _create_operation_map(self):
         map_before = {"create_index":False, "query_ops": False, "drop_index": False}

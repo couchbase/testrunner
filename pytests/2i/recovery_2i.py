@@ -17,62 +17,61 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
     def suite_tearDown(self):
         super(SecondaryIndexingRecoveryTests, self).suite_tearDown()
 
-    def test_incr_rebalance_in(self):
+    def test_rebalance_in(self):
         self.check_and_run_operations(before = True)
-        self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
-        for i in xrange(1, self.nodes_in + 1):
-            rebalance = self.cluster.async_rebalance(self.servers[:i],
-                                                     self.servers[i:i+1], [])
-            self.check_and_run_operations(in_between = True)
-            rebalance.result()
-        self.check_and_run_operations(after = True)
-
-    def test_incr_rebalance_out(self):
-        self.assertTrue(len(self.servers[:self.nodes_init]) > self.nodes_out,
-                        "Servers are not enough")
-        self.check_and_run_operations(before = True)
-        for i in xrange(1, self.nodes_out + 1):
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i-1)],
-                                    [],
-                                    self.servers[self.nodes_init - i:self.nodes_init - (i-1)])
-            self.check_and_run_operations(in_between = True)
-            rebalance.result()
-        self.check_and_run_operations(after = True)
-
-    def test_swap_rebalance(self):
-        self.check_and_run_operations(before = True)
-        self.assertTrue(len(self.servers) >= self.nodes_init + self.nodes_in,
-                        "Servers are not enough")
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                               self.servers[self.nodes_init:self.nodes_init + self.nodes_in],
-                               self.servers[self.nodes_init - self.nodes_out:self.nodes_init])
+        rebalance = self.cluster.async_rebalance(self.servers[:i],self.nodes_in_list, [], services = self.services_in)
         self.check_and_run_operations(in_between = True)
         rebalance.result()
         self.check_and_run_operations(after = True)
 
-    def test_rebalance_with_server_crash(self):
+    def test_rebalance_out(self):
         self.check_and_run_operations(before = True)
-        servr_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
-        servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
-        self.test_case()
-        for i in xrange(3):
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                     servr_in, servr_out)
-            self.sleep(5, "Wait some time for rebalance process and then kill memcached")
-            remote = RemoteMachineShellConnection(self.servers[self.nodes_init -1])
-            remote.terminate_process(process_name='memcached')
-            try:
-                self.check_and_run_operations(in_between = True)
-                rebalance.result()
-            except:
-                pass
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
+        self.check_and_run_operations(in_between = True)
+        rebalance.result()
         self.check_and_run_operations(after = True)
-        self.cluster.rebalance(self.servers[:self.nodes_init], servr_in, servr_out)
+
+    def test_rebalance_in_out(self):
+        self.check_and_run_operations(before = True)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                self.nodes_in_list,
+                               self.nodes_out_list, services = self.services_in)
+        self.check_and_run_operations(in_between = True)
+        rebalance.result()
+        self.check_and_run_operations(after = True)
+
+    def test_server_crash(self):
+        self.check_and_run_operations(before = True)
+        self.sleep(5, "Wait some time for rebalance process and then kill memcached")
+        for node in self.nodes_out_list:
+            remote = RemoteMachineShellConnection(node)
+            remote.terminate_process(process_name='memcached')
+        self.check_and_run_operations(in_between = True)
+        self.check_and_run_operations(after = True)
+
+    def test_server_retstart(self):
+        self.check_and_run_operations(before = True)
+        self.sleep(5, "Wait some time for rebalance process and then kill memcached")
+        for node in self.nodes_out_list:
+            remote = RemoteMachineShellConnection(node)
+            remote.stop_server()
+        self.check_and_run_operations(in_between = True)
+        for node in self.nodes_out_list:
+            remote = RemoteMachineShellConnection(node)
+            remote.start_server()
+        self.check_and_run_operations(in_between = True)
+        self.check_and_run_operations(after = True)
 
     def test_failover(self):
         self.check_and_run_operations(before = True)
-        servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
-        self.cluster.failover(self.servers[:self.nodes_init], servr_out)
+        servr_out = self.nodes_out_list
+        failover_tasks = []
+        for chosen in servr_out:
+            failover_tasks += self.cluster.async_failover([self.master],
+                failover_nodes = chosen, graceful=self.graceful)
+        self.check_and_run_operations(in_between = True)
+        for task in failover_tasks:
+            task.result()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                [], servr_out)
         self.check_and_run_operations(in_between = True)
@@ -80,15 +79,17 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.check_and_run_operations(after = True)
 
     def test_failover_add_back(self):
-        servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
+        servr_out = self.nodes_out_list
         nodes_all = RestConnection(self.master).node_statuses()
-        nodes = []
         self.check_and_run_operations(before = True)
-        for failover_node in servr_out:
-            nodes.extend([node for node in nodes_all
-                if node.ip != failover_node.ip or str(node.port) != failover_node.port])
-        self.cluster.failover(self.servers[:self.nodes_init], servr_out)
-        for node in nodes:
+        failover_tasks = []
+        for chosen in servr_out:
+            failover_tasks += self.cluster.async_failover([self.master],
+                failover_nodes = chosen, graceful=self.graceful)
+        self.check_and_run_operations(in_between = True)
+        for task in failover_tasks:
+            task.result()
+        for node in servr_out:
             RestConnection(self.master).add_back_node(node.id)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
         self.check_and_run_operations(in_between = True)
@@ -100,8 +101,8 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         status = RestConnection(self.master).update_autofailover_settings(True, autofailover_timeout)
         self.assertTrue(status, 'failed to change autofailover_settings!')
         self.check_and_run_operations(before = True)
-        servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
-        remote = RemoteMachineShellConnection(self.servers[self.nodes_init -1])
+        servr_out = self.nodes_out_list
+        remote = RemoteMachineShellConnection(servr_out[0])
         try:
             remote.stop_server()
             self.sleep(autofailover_timeout + 10, "Wait for autofailover")

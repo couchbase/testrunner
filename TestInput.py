@@ -73,6 +73,7 @@ class TestInputServer(object):
         self.ssh_key = ''
         self.rest_username = ''
         self.rest_password = ''
+        self.services = ''
         self.port = ''
         self.cli_path = ''
         self.data_path = ''
@@ -262,6 +263,8 @@ class TestInputParser():
                     server.data_path = global_properties['data_path']
                 if server.index_path == '' and 'index_path' in global_properties:
                     server.index_path = global_properties['index_path']
+                if server.services == '' and 'services' in global_properties:
+                    server.services = global_properties['services']
         return servers
 
     @staticmethod
@@ -325,6 +328,8 @@ class TestInputParser():
                         server.port = config.get(section, option)
                     if option == 'ip':
                         server.ip = config.get(section, option)
+                    if option == 'services':
+                        server.services = config.get(section, option)
                 break
                 #get username
                 #get password
