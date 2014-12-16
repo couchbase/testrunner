@@ -1860,11 +1860,6 @@ class RestConnection(object):
     def enable_xdcr_trace_logging(self):
         self.diag_eval('ale:set_loglevel(xdcr_trace, debug).')
 
-    """ Use goxdcr instead of erlang xdcr
-    wget -O- --user=Administrator --password=asdasd --post-data='ns_config:set(goxdcr_enabled, true).' http://127.0.0.1:9000/diag/eval"""
-    def enable_goxdcr(self):
-        self.diag_eval('ns_config:set(goxdcr_enabled, true).')
-
     def get_recent_xdcr_vb_ckpt(self, src_bucket_name):
         command = 'ns_server_testrunner_api:grab_all_xdcr_checkpoints("%s", 10).' % src_bucket_name
         status, content = self.diag_eval(command)

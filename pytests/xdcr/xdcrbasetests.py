@@ -500,7 +500,6 @@ class XDCRBaseTest(unittest.TestCase):
             self._create_buckets(nodes)
             for node in nodes:
                 RestConnection(node).enable_xdcr_trace_logging()
-                RestConnection(node).enable_goxdcr()
 
     def _init_nodes(self, nodes, disabled_consistent_view=None):
         _tasks = []
@@ -618,7 +617,6 @@ class XDCRBaseTest(unittest.TestCase):
         shell.start_couchbase()
         shell.disconnect()
         RestConnection(node).enable_xdcr_trace_logging()
-        RestConnection(node).enable_goxdcr()
 
     def adding_back_a_node(self, master, server):
         rest = RestConnection(master)
@@ -806,7 +804,6 @@ class XDCRBaseTest(unittest.TestCase):
             if str(output).lower().find("running") != -1:
                 self.log.info("Couchbase service is running")
                 RestConnection(server).enable_xdcr_trace_logging()
-                RestConnection(server).enable_goxdcr()
                 return
             self.sleep(10, "couchbase service is not running")
         self.fail("Couchbase service is not running after {0} seconds".format(wait_time))
@@ -847,7 +844,6 @@ class XDCRBaseTest(unittest.TestCase):
         # wait till node is ready after warmup
         ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self, wait_if_warmup=True)
         RestConnection(node).enable_xdcr_trace_logging()
-        RestConnection(node).enable_goxdcr()
 
     def disable_compaction(self, server=None, bucket="default"):
         server = server or self.src_master
