@@ -1774,7 +1774,6 @@ class QueryTests(BaseTestCase):
     def test_check_types(self):
         types_list = [("name", "ISSTR", True), ("skills[0]", "ISSTR", True),
                       ("test_rate", "ISSTR", False), ("VMs", "ISSTR", False),
-                      ("some_wrong_key", "ISSTR", False),
                       ("false", "ISBOOL", True), ("join_day", "ISBOOL", False),
                       ("VMs", "ISARRAY", True), ("VMs[0]", "ISARRAY", False),
                       ("skills[0]", "ISARRAY", False), ("skills", "ISARRAY", True)]
