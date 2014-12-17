@@ -802,7 +802,11 @@ class RestConnection(object):
     def remove_all_remote_clusters(self):
         remote_clusters = self.get_remote_clusters()
         for remote_cluster in remote_clusters:
-            if remote_cluster["deleted"] == False:
+            try:
+                if remote_cluster["deleted"] == False:
+                    self.remove_remote_cluster(remote_cluster["name"])
+            except KeyError:
+                # goxdcr cluster references will not contain "deleted" field
                 self.remove_remote_cluster(remote_cluster["name"])
 
     def remove_remote_cluster(self, name):
@@ -812,14 +816,11 @@ class RestConnection(object):
         api = self.baseUrl + 'pools/default/remoteClusters/{0}'.format(urllib.quote(name))
         params = urllib.urlencode({})
         status, content, header = self._http_request(api, 'DELETE', params)
-        #sample response :
-        # [{"name":"two","uri":"/pools/default/remoteClusters/two","validateURI":"/pools/default/remoteClusters/two?just_validate=1","hostname":"127.0.0.1:9002","username":"Administrator"}]
-        if status:
-            json_parsed = json.loads(content)
-        else:
+        #sample response : "ok"
+        if not status:
             log.error("failed to remove remote cluster: status:{0},content:{1}".format(status, content))
             raise Exception("remoteCluster API 'remove cluster' failed")
-        return json_parsed
+
 
 
     # replicationType:continuous toBucket:default toCluster:two fromBucket:default
@@ -866,14 +867,29 @@ class RestConnection(object):
                         }
         params = urllib.urlencode(param_map)
         status, content, _ = self._http_request(api, 'POST', params)
-        #response : {"database":"http://127.0.0.1:9500/_replicator",
-        # "id": "replication_id"}
+        #response : {"id": "replication_id"}
         if status:
             json_parsed = json.loads(content)
-            return (json_parsed['database'], json_parsed['id'])
+            log.info("Replication created with id: {}".format(json_parsed['id']))
+            return json_parsed['id']
         else:
-            log.error("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
-            raise Exception("create replication failed : status:{0},content:{1}".format(status, content))
+            if "already exists" in content:
+                # workaround for MB-12946
+                # temporary code to drop and recreate replication
+                log.info("Workaround for MB-12946 : dropping and recreating replication")
+                for token in content.split(' '):
+                    if token.startswith("replicationSpec"):
+                        id = token[:len(token)-1]
+                self.stop_replication("controller/cancelXDCR/{}".format(id))
+                self.start_replication(replicationType,
+                                        fromBucket,
+                                        toCluster,
+                                        rep_type=rep_type,
+                                        toBucket=toBucket,
+                                        repl_spec=repl_spec)
+            else:
+                log.error("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
+                raise Exception("create replication failed : status:{0},content:{1}".format(status, content))
 
     def get_replications(self):
         replications = []

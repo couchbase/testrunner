@@ -486,7 +486,7 @@ class XDCReplication:
         """Start replication"""
         src_master = self.__src_cluster.get_master_node()
         rest_conn_src = RestConnection(src_master)
-        (_, self.__rep_id) = rest_conn_src.start_replication(
+        self.__rep_id = rest_conn_src.start_replication(
             REPLICATION_TYPE.CONTINUOUS,
             self.__from_bucket,
             self.__remote_cluster_ref.get_name(),

@@ -177,7 +177,7 @@ class SETUP(initialize):
         if len(self._buckets) == 0:
             self._buckets = rest.get_buckets()
         for bucket in set(self._buckets):
-            rep_database, rep_id = rest.start_replication("continuous", bucket, cluster_name)
+            rep_id = rest.start_replication("continuous", bucket, cluster_name)
 
     def _create_sasl_buckets(self, server, server_id, bucket_size, password):
         rest = RestConnection(server)

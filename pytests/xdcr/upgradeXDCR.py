@@ -118,12 +118,12 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
     def _replicate_clusters(self, src_master, dest_cluster_name, buckets):
         rest_conn_src = RestConnection(src_master)
         for bucket in buckets:
-            (rep_database, rep_id) = rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
+            rep_id = rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
                 bucket, dest_cluster_name, self.rep_type)
             self._start_replication_time[bucket] = datetime.now()
             self.sleep(5)
         if self._get_cluster_buckets(src_master):
-            self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_database, rep_id))
+            self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_id))
 
     @staticmethod
     def _get_bucket(self, bucket_name, server):

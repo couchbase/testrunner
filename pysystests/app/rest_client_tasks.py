@@ -406,9 +406,9 @@ def xdcr_start_replication(src_master, dest_cluster_name, bucketFilter = None):
         rest_conn_src = RestConnection(src_master)
         for bucket in rest_conn_src.get_buckets():
             if bucketFilter is None or bucket.name in bucketFilter:
-                (rep_database, rep_id) = rest_conn_src.start_replication("continuous",
+                rep_id = rest_conn_src.start_replication("continuous",
                                                                          bucket.name, dest_cluster_name)
-                logger.error("rep_database: %s rep_id: %s" % (rep_database, rep_id))
+                logger.error("rep_id: %s" %rep_id)
 
 def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status", zone_name = ''):
 
