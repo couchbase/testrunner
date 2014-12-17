@@ -189,9 +189,6 @@ TEST_F(WarmupTest, WarmupActive_100DGM_ValueEvic_Test)
 	exec(restart2);
 	sleep(40);
 	EXPECT_TRUE(verifyWarmup(numInserted));
-	char delBucket[] = "/root/ep-engine-tests/delBucket";
-	exec(delBucket);
-	sleep(40);
 }
 
 TEST_F(WarmupTest, WarmupActive_100DGM_FullEvic_Test)
@@ -206,9 +203,6 @@ TEST_F(WarmupTest, WarmupActive_100DGM_FullEvic_Test)
 	exec(restart2);
 	sleep(40);
 	EXPECT_TRUE(verifyWarmup(numInserted));
-	char delBucket[] = "/root/ep-engine-tests/delBucket";
-	exec(delBucket);
-	sleep(40);
 }
 
 TEST_F(WarmupTest, WarmupActive_64DGM_ValueEvic_Test)
@@ -223,9 +217,6 @@ TEST_F(WarmupTest, WarmupActive_64DGM_ValueEvic_Test)
 	exec(restart2);
 	sleep(40);
 	EXPECT_TRUE(verifyWarmup(numInserted));
-	char delBucket[] = "/root/ep-engine-tests/delBucket";
-	exec(delBucket);
-	sleep(40);
 }
 
 TEST_F(WarmupTest, WarmupActive_74DGM_FullEvic_Test)
@@ -240,9 +231,6 @@ TEST_F(WarmupTest, WarmupActive_74DGM_FullEvic_Test)
 	exec(restart2);
 	sleep(40);
 	EXPECT_TRUE(verifyWarmup(numInserted));
-	char delBucket[] = "/root/ep-engine-tests/delBucket";
-	exec(delBucket);
-	sleep(40);
 }
 
 TEST_F(WarmupTest, WarmupActive_30DGM_ValueEvic_Test)
@@ -274,9 +262,6 @@ TEST_F(WarmupTest, WarmupActive_55DGM_FullEvic_Test)
 	exec(restart2);
 	sleep(40);
 	EXPECT_TRUE(verifyWarmup(numInserted));
-	char delBucket[] = "/root/ep-engine-tests/delBucket";
-	exec(delBucket);
-	sleep(40);
 }
 
 TEST_F(WarmupTest, WarmupActive_10DGM_ValueEvic_Test)
@@ -291,9 +276,6 @@ TEST_F(WarmupTest, WarmupActive_10DGM_ValueEvic_Test)
 	exec(restart2);
 	sleep(40);
 	EXPECT_TRUE(verifyWarmup(numInserted));
-	char delBucket[] = "/root/ep-engine-tests/delBucket";
-	//exec(delBucket);
-	sleep(40);
 }
 
 TEST_F(WarmupTest, WarmupActive_30DGM_FullEvic_Test)
@@ -308,9 +290,6 @@ TEST_F(WarmupTest, WarmupActive_30DGM_FullEvic_Test)
 	exec(restart2);
 	sleep(40);
 	EXPECT_TRUE(verifyWarmup(numInserted));
-	char delBucket[] = "/root/ep-engine-tests/delBucket";
-	exec(delBucket);
-	sleep(40);
 }
 
 TEST_F(WarmupTest, WarmupActive_4DGM_ValueEvic_Test)
@@ -325,9 +304,6 @@ TEST_F(WarmupTest, WarmupActive_4DGM_ValueEvic_Test)
 	exec(restart2);
 	sleep(40);
 	EXPECT_TRUE(verifyWarmup(numInserted));
-	char delBucket[] = "/root/ep-engine-tests/delBucket";
-	exec(delBucket);
-	sleep(40);
 }
 
 TEST_F(WarmupTest, WarmupActive_18DGM_FullEvic_Test)
@@ -342,9 +318,6 @@ TEST_F(WarmupTest, WarmupActive_18DGM_FullEvic_Test)
 	exec(restart2);
 	sleep(40);
 	EXPECT_TRUE(verifyWarmup(numInserted));
-	char delBucket[] = "/root/ep-engine-tests/delBucket";
-	exec(delBucket);
-	sleep(40);
 }
 
 TEST_F(WarmupTest, PostWarmupReplication_Test)
@@ -367,8 +340,6 @@ TEST_F(WarmupTest, PostWarmupReplication_Test)
 	fprintf(stderr, "\nnumber of replica  elements after restart:  %d \n", warmuprepcount);
 	EXPECT_EQ(warmuprepcount, repcount);
 	verifyReplication(10);
-	//char removeNode[] = "/root/ep-engine-tests/removeNode";
-	//exec(removeNode);
 }
 
 TEST_F(WarmupTest, WarmupReplica_100DGM_ValueEvic_Test)

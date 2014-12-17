@@ -188,7 +188,7 @@ protected:
 			string statjson = string(localdoc->json.buf, localdoc->json.size);
 			cJSON *parsedjson = cJSON_Parse(statjson.c_str());
 			string checkpoint_id = getJSONObjString(cJSON_GetObjectItem(parsedjson, "checkpoint_id"));
-			cout << "vbid: " << vbnum << "checkpoint: " << checkpoint_id << "\n";
+			cout << "vbid: " << vbnum << " checkpoint: " << checkpoint_id << "\n";
 			chkpointvec.push_back(atoi(checkpoint_id.c_str()));
 		}
 		return chkpointvec;
@@ -259,6 +259,14 @@ protected:
 			"autoCompactionDefined=false -d parallelDBAndViewCompaction=false  "
 			"http://localhost:8091/controller/setAutoCompaction";
 		this->exec(autocompact);
+	}
+
+	void TearDown()
+	{
+		string const start = "sudo /etc/init.d/couchbase-server start";
+		this->exec(start.c_str());
+		sleep(30);
+		this->BaseTest::TearDown();
 	}
 };
 
