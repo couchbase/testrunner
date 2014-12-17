@@ -1545,12 +1545,8 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "EXPLAIN SELECT * FROM %s" % (bucket.name)
             res = self.run_cbq_query()
-            self.assertTrue(res["results"][0]["input"]["type"] == "fetch",
-                            "Type should be fetch, but is: %s" % res["results"])
-            self.assertTrue(res["results"][0]["input"]["input"]["type"] == "scan",
-                            "Type should be scan, but is: %s" % res["results"])
-            self.assertTrue(res["results"][0]["input"]["input"]["index"] == "#alldocs",
-                            "Type should be #alldocs, but is: %s" % res["results"])
+            self.assertTrue(res["results"][0]["children"][0]["index"] == "#primary",
+                            "Type should be #primary, but is: %s" % res["results"])
 
 ##############################################################################################
 #
