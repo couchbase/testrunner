@@ -87,6 +87,7 @@ class QueriesViewsTests(QueryTests):
                     raise ex
             self.query = "EXPLAIN SELECT * FROM %s" % (bucket.name)
             res = self.run_cbq_query()
+            self.log.info(res)
             self.assertTrue(res["results"][0]["~children"][0]["index"] == "#primary",
                             "Type should be #alldocs, but is: %s" % res["results"])
 
@@ -98,6 +99,7 @@ class QueriesViewsTests(QueryTests):
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT count(VMs) FROM %s ' % (bucket.name)
                 res = self.run_cbq_query()
+                self.log.info(res)
                 self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name,res["results"]))
             finally:
@@ -112,6 +114,7 @@ class QueriesViewsTests(QueryTests):
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT count(VMs) FROM %s GROUP BY VMs' % (bucket.name)
                 res = self.run_cbq_query()
+                self.log.info(res)
                 self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name,res["results"]))
             finally:
@@ -126,6 +129,7 @@ class QueriesViewsTests(QueryTests):
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT ARRAY vm.memory FOR vm IN VMs END AS vm_memories FROM %s' % (bucket.name)
                 res = self.run_cbq_query()
+                self.log.info(res)
                 self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name,res["results"]))
             finally:
