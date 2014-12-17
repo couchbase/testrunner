@@ -149,17 +149,17 @@ class BaseTestCase(unittest.TestCase):
                     str(self.__class__).find('negativetests.NegativeTests') != -1 or \
                     str(self.__class__).find('warmuptest.WarmUpTests') != -1 or \
                     str(self.__class__).find('failover.failovertests.FailoverTests') != -1:
-                    self.services = self.get_services(self.num_servers,self.services_init)
+                    self.services = self.get_services(self.servers,self.services_init)
                     # rebalance all nodes into the cluster before each test
                     self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers],
                         [], services = self.services)
                 elif self.nodes_init > 1:
-                    self.services = self.get_services(self.nodes_init,self.services_init)
+                    self.services = self.get_services(self.servers[:self.nodes_init],self.services_init)
                     self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init],
                         [], services = self.services)
                 elif str(self.__class__).find('ViewQueryTests') != -1 and \
                         not self.input.param("skip_rebalance", False):
-                    self.services = self.get_services(self.num_servers,self.services_init)
+                    self.services = self.get_services(self.servers,self.services_init)
                     self.cluster.rebalance(self.servers, self.servers[1:],
                         [], services = self.services)
 
@@ -1474,7 +1474,7 @@ class BaseTestCase(unittest.TestCase):
         services = []
         if tgt_services == None:
             for node in tgt_nodes:
-                if node.services != None or node.services != '':
+                if node.services != None and node.services != '':
                     services.append(node.services)
             if len(services) > 0:
                 return services
@@ -1483,7 +1483,7 @@ class BaseTestCase(unittest.TestCase):
         if tgt_services != None and "-" in tgt_services:
             services = tgt_services.replace(":",",").split("-")
         elif tgt_services != None:
-            for node in range(1,tgt_nodes):
+            for node in range(1,len(tgt_nodes)):
                 services.append(tgt_services.replace(":",","))
         return services
 
