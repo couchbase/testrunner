@@ -54,7 +54,7 @@ class TuqGenerators(object):
         self.query = query
         return query
 
-    def generate_expected_result(self):
+    def generate_expected_result(self, print_expected_result = True):
         try:
             self._create_alias_map()
             from_clause = self._format_from_clause()
@@ -68,7 +68,8 @@ class TuqGenerators(object):
             result = self._filter_full_set(select_clause, where_clause, unnest_clause)
             result = self._order_results(result)
             result = self._limit_and_offset(result)
-            log.info("Expected result is %s ..." % str(result[:15]))
+            if print_expected_result:
+                log.info("Expected result is %s ..." % str(result[:15]))
             return result
         finally:
             self._clear_current_query()

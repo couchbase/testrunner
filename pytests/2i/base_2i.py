@@ -1,14 +1,15 @@
 from tuqquery.newtuq import QueryTests
+from couchbase_helper.query_definitions import SQLDefinitionGenerator
 
 class BaseSecondaryIndexingTests(QueryTests):
 
     def setUp(self):
         super(BaseSecondaryIndexingTests, self).setUp()
         self.groups = self.input.param("groups", "simple").split(":")
-        sql_definition_generator = SQLDefinitionGenerator()
+        query_definition_generator = SQLDefinitionGenerator()
         if self.dataset == "default" or self.dataset == "employee":
-            self.sql_definitions = sql_definition_generator.generate_default_data_sql_definitions()
-        self.sql_definitions = sql_definition_generator.filter_by_group(self.groups, self.sql_definitions)
+            self.query_definitions = query_definition_generator.generate_employee_data_sql_definitions()
+        self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
         self.ops_map = self._create_operation_map()
         self.find_nodes_in_list()
         self.generate_map_nodes_out_dist()
@@ -23,24 +24,32 @@ class BaseSecondaryIndexingTests(QueryTests):
         super(BaseSecondaryIndexingTests, self).suite_tearDown()
 
     def create_index(self, bucket, query_definition, verifycreate = True):
-        self.query = query_definition.generate_indexcreate_query(bucket = bucket)
+        self.query = query_definition.generate_index_create_query(bucket = bucket)
         actual_result = self.run_cbq_query()
         if verifycreate:
             check = self._is_index_in_list(bucket, query_definition.index_name)
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
     def multi_create_index(self, buckets = [], query_definitions =[]):
+        list = []
         for bucket in buckets:
             for query_definition in query_definitions:
-                self.create_index(bucket.name, query_definition)
+                index_info = query_definition.generate_index_create_query(bucket = bucket.name)
+                if index_info not in list:
+                    list.append(index_info)
+                    self.create_index(bucket.name, query_definition)
 
     def multi_drop_index(self, buckets = [], query_definitions =[]):
+        list = []
         for bucket in buckets:
             for query_definition in query_definitions:
-                self.drop_index(bucket.name, query_definition)
+                index_info = query_definition.generate_index_drop_query(bucket = bucket.name)
+                if index_info not in list:
+                    list.append(index_info)
+                    self.drop_index(bucket.name, query_definition)
 
     def drop_index(self, bucket, query_definition, verifydrop = True):
-        self.query = query_definition.generate_indexcreate_query(bucket = bucket)
+        self.query = query_definition.generate_index_drop_query(bucket = bucket)
         actual_result = self.run_cbq_query()
         if verifydrop:
             check = self._is_index_in_list(bucket, query_definition.index_name)
@@ -49,14 +58,12 @@ class BaseSecondaryIndexingTests(QueryTests):
     def query_using_index_with_explain(self, bucket, query_definition):
         self.query = query_definition.generate_query_with_explain(bucket = bucket)
         actual_result = self.run_cbq_query()
-        keys = res["results"][0].keys()
-        res = res["results"][0]
-        while "index" not in keys:
-            keys = res["input"].keys()
-            res = res["input"]
-        actual_index_name = res["index"]
-        self.assertTrue(actual_index_name == index_name,
-                                "Index should be %s, but is: %s" % (index_name,res["results"]))
+        for item in actual_result["results"][0]["children"]:
+            if "index" in item.keys():
+                actual_index_name = item["index"]
+                if actual_index_name == query_definition.index_name:
+                    return
+        self.fail("Index %s not found" % (query_definition.index_name))
 
     def multi_query_using_index_with_explain(self, buckets =[], query_definitions = []):
         for bucket in buckets:
@@ -64,14 +71,14 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.query_using_index_with_explain(bucket.name,
                     query_definition)
 
-    def query_using_index(self, bucket, query_definition, expected_result):
-        self.query = query_definition.generate_query(bucket = bucket)
-        if expected_result != None:
-            actual_result = self.run_cbq_query()
-        else:
+    def query_using_index(self, bucket, query_definition, expected_result = None):
+        self.gen_results.query = query_definition.generate_query(bucket = bucket)
+        self.log.info("Query : {0}".format(self.gen_results.query))
+        if expected_result == None:
             expected_result = self.gen_results.generate_expected_result()
-            actual_result = self.run_cbq_query()
-        self._verify_results(actual_result['results'], expected_result)
+        self.query = self.gen_results.query
+        actual_result = self.run_cbq_query()
+        self._verify_results(actual_result['results'], expected_result, print_expected_result = False)
 
     def multi_query_using_index(self, buckets =[], query_definitions = [], expected_results = {}):
         for bucket in buckets:
@@ -98,14 +105,16 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def run_multi_operations(self, buckets = [], query_definitions = [], expected_results = {},
         create_index = False, drop_index = False, query_with_explain = False, query = False):
-        if create_index:
-            self.multi_create_index(buckets,query_definitions)
-        if query_with_explain:
-            self.multi_query_using_index_with_explain(bucket, query_definition)
-        if query:
-            self.multi_query_using_index(bucket, query_definition, expected_result)
-        if drop_index:
-            self.multi_drop_index(buckets,query_definitions)
+        try:
+            if create_index:
+                self.multi_create_index(buckets,query_definitions)
+            if query:
+                self.multi_query_using_index(buckets, query_definitions, expected_results)
+            if query_with_explain:
+                self.multi_query_using_index_with_explain(buckets, query_definitions)
+        finally:
+            if drop_index:
+                self.multi_drop_index(buckets,query_definitions)
 
     def _run_operations(self, create_index = False, run_queries = False, drop_index = False):
         self.run_multi_operations(self, buckets = self.buckets, query_definitions = self.query_definitions,
@@ -133,3 +142,14 @@ class BaseSecondaryIndexingTests(QueryTests):
         for op_type in in_between.split(":"):
             map_after[op_type] = True
         return {"before":map_before, "in_between": map_in_between, "after": map_after}
+
+    def _is_index_in_list(self, bucket, index_name):
+        query = "SELECT * FROM system:indexes"
+        res = self.run_cbq_query(query)
+        for item in res['results']:
+            if 'keyspace_id' not in item['indexes']:
+                self.log.error(item)
+                continue
+            if item['indexes']['keyspace_id'] == bucket and item['indexes']['id'] == index_name:
+                return True
+        return False

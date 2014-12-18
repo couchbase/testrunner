@@ -1490,7 +1490,9 @@ class BaseTestCase(unittest.TestCase):
     def generate_map_nodes_out_dist(self):
         self.nodes_out_list = []
         if self.nodes_out_dist == None:
-            self.nodes_out_list.append(self.servers[1])
+            if len(self.servers) > 1:
+                self.nodes_out_list.append(self.servers[1])
+            return
         for service_fail_map in self.nodes_out_dist.split("-"):
             tokens = service_fail_map.split(":")
             service_type = tokens[0]
@@ -1513,7 +1515,7 @@ class BaseTestCase(unittest.TestCase):
 
     def find_nodes_in_list(self):
         self.nodes_in_list = self.servers[self.nodes_init:self.nodes_init+self.nodes_in]
-        self.services_in = get_services(self, nodes_in_list, nodes_in_services)
+        self.services_in = self.get_services(self.nodes_in_list, self.services_in)
 
     def filter_nodes(self, filter_nodes):
         src_nodes = []

@@ -33,10 +33,11 @@ class QueryTests(BaseTestCase):
         self.use_rest = self.input.param("use_rest", True)
         self.max_verify = self.input.param("max_verify", None)
         self.buckets = RestConnection(self.master).get_buckets()
-        docs_per_day = self.input.param("doc-per-day", 49)
+        self.docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
+        self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.dataset = self.input.param("dataset", "default")
-        self.gens_load = self.generate_docs(docs_per_day)
+        self.gens_load = self.generate_docs(self.docs_per_day)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
         self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
@@ -47,7 +48,7 @@ class QueryTests(BaseTestCase):
         try:
             self.load(self.gens_load, flag=self.item_flag)
             self.create_primary_index_for_3_0_and_greater()
-            if not self.input.param("skip_build_tuq", False):
+            if not self.input.param("skip_build_tuq", True):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
         except:
@@ -88,7 +89,7 @@ class QueryTests(BaseTestCase):
     def test_consistent_simple_check(self):
         queries = [self.gen_results.generate_query('SELECT $str0, $int0, $int1 FROM %s ' +\
                     'WHERE $str0 IS NOT NULL AND $int0<10 ' +\
-                    'OR $int1 = 6 ORDER BY $int0, $int1'), 
+                    'OR $int1 = 6 ORDER BY $int0, $int1'),
                    self.gen_results.generate_query('SELECT $str0, $int0, $int1 FROM %s ' +\
                     'WHERE $int1 = 6 OR $str0 IS NOT NULL AND ' +\
                     '$int0<10 ORDER BY $int0, $int1')]
@@ -393,7 +394,7 @@ class QueryTests(BaseTestCase):
            if self.input.tuq_client and "client" in self.input.tuq_client:
                server = self.tuq_client
         if self.use_rest:
-            result = RestConnection(server).query_tool(query)
+            result = RestConnection(server).query_tool(query, self.n1ql_port)
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/" +\
@@ -545,10 +546,10 @@ class QueryTests(BaseTestCase):
             start = start, value_size = self.value_size)
 
 
-    def _verify_results(self, actual_result, expected_result):
+    def _verify_results(self, actual_result, expected_result, missing_count = 1, extra_count = 1):
         if len(actual_result) != len(expected_result):
             missing, extra = self.check_missing_and_extra(actual_result, expected_result)
-            self.log.error("Missing items: %s.\n Extra items: %s" % (missing[:100], extra[:100]))
+            self.log.error("Missing items: %s.\n Extra items: %s" % (missing[:missing_count], extra[:extra_count]))
             self.fail("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
                                             len(actual_result), len(expected_result)))
         if self.max_verify is not None:
