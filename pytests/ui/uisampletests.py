@@ -539,8 +539,7 @@ class ViewsTests(BaseUITestCase):
     def test_delete_view(self):
         try:
             NavigationHelper(self).navigate('Views')
-            for i in xrange(self.view_num):
-                DdocViewHelper(self).create_view(self.ddoc_name, self.view_name + str(i))
+            DdocViewHelper(self).create_view(self.ddoc_name, self.view_name)
             DdocViewHelper(self).delete_view(self.view_name)
         except Exception, ex:
             self.log.error(str(ex))
