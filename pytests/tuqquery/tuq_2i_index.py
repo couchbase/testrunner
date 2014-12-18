@@ -34,7 +34,7 @@ class QueriesIndexTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     view_name = "my_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s) " % (
-                                            view_name, bucket.name, ','.join(self.FIELDS_TO_INDEX[ind-1]))
+                                            view_name, bucket.name, ','.join(self.FIELDS_TO_INDEX[ind - 1]))
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     created_indexes.append(view_name)
@@ -53,12 +53,12 @@ class QueriesIndexTests(QueryTests):
             try:
                 for ind in xrange(self.num_indexes):
                     view_name = "tuq_index%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(%s) " % (view_name, bucket.name, ','.join(self.FIELDS_TO_INDEX[ind-1]))
+                    self.query = "CREATE INDEX %s ON %s(%s) " % (view_name, bucket.name, ','.join(self.FIELDS_TO_INDEX[ind - 1]))
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     created_indexes.append(view_name)
-                    self.query = "select %s from %s where %s is not null and %s is not null" % (','.join(self.FIELDS_TO_INDEX[ind-1]), bucket.name, 
-                                                                                                self.FIELDS_TO_INDEX[ind-1][0], self.FIELDS_TO_INDEX[ind-1][1])
+                    self.query = "select %s from %s where %s is not null and %s is not null" % (','.join(self.FIELDS_TO_INDEX[ind - 1]), bucket.name,
+                                                                                                self.FIELDS_TO_INDEX[ind - 1][0], self.FIELDS_TO_INDEX[ind - 1][1])
                     actual_result = self.run_cbq_query()
                     self.assertTrue(len(actual_result['results']), self.num_items)
             except Exception, ex:
@@ -68,11 +68,11 @@ class QueriesIndexTests(QueryTests):
                 raise ex
             finally:
                 for view_name in created_indexes:
-                    self.query = "DROP INDEX %s.%s" % (bucket.name,view_name)
+                    self.query = "DROP INDEX %s.%s" % (bucket.name, view_name)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
-                self.query = "select %s from %s where %s is not null and %s is not null" % (','.join(self.FIELDS_TO_INDEX[ind-1]), bucket.name, 
-                                                                                                self.FIELDS_TO_INDEX[ind-1][0], self.FIELDS_TO_INDEX[ind-1][1])
+                self.query = "select %s from %s where %s is not null and %s is not null" % (','.join(self.FIELDS_TO_INDEX[ind - 1]), bucket.name,
+                                                                                                self.FIELDS_TO_INDEX[ind - 1][0], self.FIELDS_TO_INDEX[ind - 1][1])
                 actual_result = self.run_cbq_query()
                 self.assertTrue(len(actual_result['results']), self.num_items)
 
@@ -85,7 +85,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'EXPLAIN SELECT count(VMs) FROM %s where VMs is not null union SELECT count(name) FROM %s where name is not null' % (bucket.name, bucket.name)
                 res = self.run_cbq_query()
                 self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
-                                "Index should be %s, but is: %s" % (index_name,res["results"]))
+                                "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                 self.run_cbq_query()
@@ -99,7 +99,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'EXPLAIN SELECT count(*) FROM %s GROUP BY VMs, join_yr' % (bucket.name)
                 res = self.run_cbq_query()
                 self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
-                                "Index should be %s, but is: %s" % (index_name,res["results"]))
+                                "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                 self.run_cbq_query()
@@ -113,7 +113,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'EXPLAIN SELECT name FROM %s WHERE meta(%s).type = "json" and name is not null' % (bucket.name, bucket.name)
                 res = self.run_cbq_query()
                 self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
-                                "Index should be %s, but is: %s" % (index_name,res["results"]))
+                                "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                 self.run_cbq_query()
@@ -130,7 +130,7 @@ class QueriesIndexTests(QueryTests):
                     self.query = "EXPLAIN SELECT employee.name, new_task.project FROM %s as employee JOIN %s as new_task" % (bucket.name, bucket.name)
                     res = self.run_cbq_query()
                     self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
-                                    "Index should be %s, but is: %s" % (index_name,res["results"]))
+                                    "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
@@ -148,7 +148,7 @@ class QueriesIndexTests(QueryTests):
                     self.query = "EXPLAIN select task_name, (select sum(test_rate) cn from %s use keys ['query-1'] where join_day>2 and name =='abc') as names from %s" % (bucket.name, bucket.name)
                     res = self.run_cbq_query()
                     self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
-                                    "Index should be %s, but is: %s" % (index_name,res["results"]))
+                                    "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
@@ -160,11 +160,11 @@ class QueriesIndexTests(QueryTests):
             try:
                 self.query = "CREATE INDEX %s ON %s(VMs[0].RAM, VMS[1].RAM) " % (index_name, bucket.name)
                 self.run_cbq_query()
-                self.query = 'EXPLAIN SELECT VMs FROM %s ' % (bucket.name) +\
+                self.query = 'EXPLAIN SELECT VMs FROM %s ' % (bucket.name) + \
                         'WHERE ANY vm IN VMs SATISFIES vm.RAM > 5 AND vm.os = "ubuntu" end'
                 res = self.run_cbq_query()
                 self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
-                                "Index should be %s, but is: %s" % (index_name,res["results"]))
+                                "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                 self.run_cbq_query()
@@ -175,11 +175,11 @@ class QueriesIndexTests(QueryTests):
             try:
                 self.query = "CREATE INDEX %s ON %s(tasks_points, join_mo) " % (index_name, bucket.name)
                 self.run_cbq_query()
-                self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) +\
+                self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
                              'WHERE join_mo>7 and task_points > 0'
                 res = self.run_cbq_query()
                 self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
-                                "Index should be %s, but is: %s" % (index_name,res["results"]))
+                                "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                 self.run_cbq_query()
@@ -190,11 +190,11 @@ class QueriesIndexTests(QueryTests):
             try:
                 self.query = "CREATE INDEX %s ON %s(tasks_points.task1, join_mo) " % (index_name, bucket.name)
                 self.run_cbq_query()
-                self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) +\
+                self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
                              'WHERE join_mo>7 and  task_points.task1 > 0'
                 res = self.run_cbq_query()
                 self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
-                                "Index should be %s, but is: %s" % (index_name,res["results"]))
+                                "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                 self.run_cbq_query()
@@ -207,6 +207,9 @@ class QueriesIndexTests(QueryTests):
         query = "SELECT * FROM system:indexes"
         res = self.run_cbq_query(query)
         for item in res['results']:
-            if item['keyspace_id'] == bucket.name and item['name'] == index_name:
+            if 'keyspace_id' not in item['indexes']:
+                self.log.error(item)
+                continue
+            if item['indexes']['keyspace_id'] == bucket.name and item['indexes']['name'] == index_name:
                 return True
         return False
