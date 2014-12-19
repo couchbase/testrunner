@@ -208,6 +208,9 @@ class RestHelper(object):
 
 class RestConnection(object):
 
+    # a dirty hack for MB-12950
+    # to be removed once MB is resolved
+    replications = []
     def __new__(self, serverInfo={}):
 
 
@@ -871,25 +874,11 @@ class RestConnection(object):
         if status:
             json_parsed = json.loads(content)
             log.info("Replication created with id: {}".format(json_parsed['id']))
+            self.replications.append(json_parsed['id'])
             return json_parsed['id']
         else:
-            if "already exists" in content:
-                # workaround for MB-12946
-                # temporary code to drop and recreate replication
-                log.info("Workaround for MB-12946 : dropping and recreating replication")
-                for token in content.split(' '):
-                    if token.startswith("replicationSpec"):
-                        id = token[:len(token)-1]
-                self.stop_replication("controller/cancelXDCR/{}".format(id))
-                self.start_replication(replicationType,
-                                        fromBucket,
-                                        toCluster,
-                                        rep_type=rep_type,
-                                        toBucket=toBucket,
-                                        repl_spec=repl_spec)
-            else:
-                log.error("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
-                raise Exception("create replication failed : status:{0},content:{1}".format(status, content))
+            log.error("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
+            raise Exception("create replication failed : status:{0},content:{1}".format(status, content))
 
     def get_replications(self):
         replications = []
@@ -903,6 +892,19 @@ class RestConnection(object):
         replications = self.get_replications()
         for replication in replications:
             self.stop_replication(replication["cancelURI"])
+        # temporary hack since goxdcr replications are
+        # not listed in /pools/default/tasks yet
+        if not replications:
+            for replication in self.replications:
+                try:
+                    log.info("Deleting replication {}".format(replication))
+                    self.stop_replication("controller/cancelXDCR/%s" %replication)
+                    self.replications.remove(replication)
+                except:
+                    # we are not logging replication on per cluster basis
+                    # so it is possible the replication does not belong to
+                    # this cluster in which case, just ignore the exception
+                    pass
 
     def stop_replication(self, uri):
         api = self.baseUrl + uri
@@ -920,7 +922,6 @@ class RestConnection(object):
             if not status:
                 raise CBRecoveryFailedException("impossible to stop cbrecovery by {0}".format(api))
             log.info("recovery stopped by {0}".format(api))
-
 
     #params serverIp : the server to add to this cluster
     #raises exceptions when
