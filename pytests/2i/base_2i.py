@@ -58,7 +58,7 @@ class BaseSecondaryIndexingTests(QueryTests):
     def query_using_index_with_explain(self, bucket, query_definition):
         self.query = query_definition.generate_query_with_explain(bucket = bucket)
         actual_result = self.run_cbq_query()
-        for item in actual_result["results"][0]["children"]:
+        for item in actual_result["results"][0]["~children"]:
             if "index" in item.keys():
                 actual_index_name = item["index"]
                 if actual_index_name == query_definition.index_name:

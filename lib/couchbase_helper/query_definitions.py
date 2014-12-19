@@ -51,7 +51,7 @@ class SQLDefinitionGenerator:
 		index_name_prefix = "employee"+str(uuid.uuid4()).replace("-","")
 		#emit_fields = "name, job_title, join_yr, join_mo, join_day"
 		emit_fields = "*"
-		and_conditions = ["job_title == \"System\"","job_title == \"Senior\"","job_title == \UI\""]
+		and_conditions = ["job_title == \"Senior\""]
 		definitions_list.append(
 			QueryDefinition(
 				index_name=index_name_prefix+"job_title",
@@ -76,7 +76,7 @@ class SQLDefinitionGenerator:
 					index_name=index_name_prefix+"job_title",
 							 index_fields = ["job_title"],
 							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields,"job_title IS NOT NULL and %s" % condition),
-							 groups = [SIMPLE_INDEX,RANGE_SCAN, "employee"]))
+							 groups = [SIMPLE_INDEX,RANGE_SCAN, "equals","employee"]))
 			definitions_list.append(
 				QueryDefinition(
 					index_name=index_name_prefix+"job_title",
