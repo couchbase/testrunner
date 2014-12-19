@@ -336,6 +336,7 @@ TEST_F(AccessLogTest, InsertItems_DGM_10_Test_ValEvict)
 	}
 
 	this->generateAccessLogs();
+	sleep(180);
 	this->compare_warmup_counts();
 }
 
@@ -359,6 +360,7 @@ TEST_F(AccessLogTest, InsertItems_DGM_10_Test_fullEvict)
 	}
 
 	this->generateAccessLogs();
+	sleep(180);
 	this->compare_warmup_counts();
 }
 

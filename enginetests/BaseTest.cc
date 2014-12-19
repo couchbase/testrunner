@@ -80,6 +80,7 @@ protected:
 
 	std::string exec(char const * cmd)
 	{
+		std::cout << "Executing command: " << cmd << std::endl;
 		FILE* pipe = popen(cmd, "r");
 		if (!pipe)
 			return "ERROR";
