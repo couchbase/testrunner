@@ -75,10 +75,10 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.gen_results.query = query_definition.generate_query(bucket = bucket)
         self.log.info("Query : {0}".format(self.gen_results.query))
         if expected_result == None:
-            expected_result = self.gen_results.generate_expected_result()
+            expected_result = self.gen_results.generate_expected_result(print_expected_result = False)
         self.query = self.gen_results.query
         actual_result = self.run_cbq_query()
-        self._verify_results(actual_result['results'], expected_result, print_expected_result = False)
+        self._verify_results(actual_result['results'], expected_result)
 
     def multi_query_using_index(self, buckets =[], query_definitions = [], expected_results = {}):
         for bucket in buckets:
