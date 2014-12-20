@@ -17,6 +17,8 @@ ORDER_BY="orderby"
 RANGE_SCAN="range"
 FULL_SCAN="full"
 JOIN = "join"
+EQUALS = "equals"
+NO_ORDERBY_GROUPBY="no_orderby_groupby"
 class QueryDefinition(object):
 	def __init__(self, name = "default", index_name = "Random", index_fields = [], index_creation_template = INDEX_CREATION_TEMPLATE,
 		index_drop_template = INDEX_DROP_TEMPLATE, query_template = "", groups = []):
@@ -75,20 +77,20 @@ class SQLDefinitionGenerator:
 				QueryDefinition(
 					index_name=index_name_prefix+"job_title",
 							 index_fields = ["job_title"],
-							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields,"job_title IS NOT NULL and %s" % condition),
-							 groups = [SIMPLE_INDEX,RANGE_SCAN, "equals","employee"]))
+							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % condition),
+							 groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,"employee"]))
 			definitions_list.append(
 				QueryDefinition(
 					index_name=index_name_prefix+"job_title",
 							 index_fields = ["job_title"],
-							 query_template = RANGE_SCAN_GROUP_BY_TEMPLATE.format(emit_fields,"job_title IS NOT NULL and %s" % condition,"job_title"),
-							 groups = [SIMPLE_INDEX, RANGE_SCAN, GROUP_BY, "employee"]))
+							 query_template = RANGE_SCAN_GROUP_BY_TEMPLATE.format(emit_fields," %s " % condition,"job_title"),
+							 groups = [SIMPLE_INDEX, RANGE_SCAN, EQUALS, GROUP_BY, "employee"]))
 			definitions_list.append(
 				QueryDefinition(
 					index_name=index_name_prefix+"job_title",
 							 index_fields = ["job_title"],
-							 query_template = RANGE_SCAN_ORDER_BY_TEMPLATE.format(emit_fields,"job_title IS NOT NULL and %s" % condition,"job_title"),
-							 groups = [SIMPLE_INDEX, RANGE_SCAN, ORDER_BY, "employee"]))
+							 query_template = RANGE_SCAN_ORDER_BY_TEMPLATE.format(emit_fields," %s " % condition,"job_title"),
+							 groups = [SIMPLE_INDEX, RANGE_SCAN, EQUALS, ORDER_BY, "employee"]))
 		definitions_list.append(
 			QueryDefinition(
 				index_name=index_name_prefix+"join_month_join_yr_join_day",
