@@ -17,6 +17,7 @@ from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from pprint import pprint
 from testconstants import MV_LATESTBUILD_REPO
+from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 
@@ -171,9 +172,12 @@ class NewUpgradeBaseTest(BaseTestCase):
     def _get_build(self, server, version, remote, is_amazon=False, info=None):
         if info is None:
             info = remote.extract_remote_info()
+        build_repo = MV_LATESTBUILD_REPO
+        if version[:3] == "3.5":
+            build_repo = SHERLOCK_BUILD_REPO
         builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5, \
                     deliverable_type=info.deliverable_type, architecture_type=info.architecture_type, \
-                    edition_type="couchbase-server-enterprise", repo=MV_LATESTBUILD_REPO, \
+                    edition_type="couchbase-server-enterprise", repo=build_repo, \
                     distribution_version=info.distribution_version.lower())
         self.log.info("finding build %s for machine %s" % (version, server))
 
