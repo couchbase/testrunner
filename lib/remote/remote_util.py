@@ -13,6 +13,7 @@ from testconstants import MEMBASE_VERSIONS
 from testconstants import COUCHBASE_VERSIONS
 from testconstants import MISSING_UBUNTU_LIB
 from testconstants import MV_LATESTBUILD_REPO
+from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import WIN_CB_VERSION_3
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
@@ -1421,12 +1422,15 @@ class RemoteMachineShellConnection:
             product_name = "couchbase-server-enterprise"
             version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
             deleted = False
+            build_repo = MV_LATESTBUILD_REPO
 
             exist = self.file_exists(version_path, version_file)
             log.info("Is VERSION file existed on {0}? {1}".format(self.ip, exist))
             if exist:
                 log.info("VERSION file exists.  Start to uninstall {0} on {1} server".format(product, self.ip))
                 build_name, short_version, full_version = self.find_build_version(version_path, version_file, product)
+                if full_version[:3] == "3.5":
+                    build_repo = SHERLOCK_BUILD_REPO
                 log.info('Build name: {0}'.format(build_name))
                 build_name = build_name.rstrip() + ".exe"
                 log.info('Check if {0} is in tmp directory on {1} server'.format(build_name, self.ip))
@@ -1435,7 +1439,7 @@ class RemoteMachineShellConnection:
                     builds, changes = query.get_all_builds(version=full_version, \
                                       deliverable_type=self.info.deliverable_type, \
                                       architecture_type=self.info.architecture_type, \
-                                      edition_type=product_name, repo=MV_LATESTBUILD_REPO, \
+                                      edition_type=product_name, repo=build_repo, \
                                       distribution_version=self.info.distribution_version.lower())
                     build = query.find_build(builds, product_name, os_type, self.info.architecture_type, \
                                       full_version, distribution_version=self.info.distribution_version.lower())

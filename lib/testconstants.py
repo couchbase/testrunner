@@ -69,4 +69,4 @@ CLI_COMMANDS = ["cbbackup", "cbbrowse_logs", "cbcollect_info", "cbcompact", "cbd
                 "memcached", "moxi", "reports", "sigar_port", "sqlite3", "to_erl", "tools", "typer", "uconv", "vbmap"]
 # old url MV_LATESTBUILD_REPO = "http://builds.hq.northscale.net/latestbuilds/"
 MV_LATESTBUILD_REPO = "http://latestbuilds.hq.couchbase.com/"
-SHERLOCK_BUILD_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/sherlock"
+SHERLOCK_BUILD_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/sherlock/"

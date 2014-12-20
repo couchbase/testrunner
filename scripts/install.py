@@ -21,6 +21,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from testconstants import MV_LATESTBUILD_REPO
+from testconstants import SHERLOCK_BUILD_REPO
 import TestInput
 
 
@@ -198,6 +199,9 @@ class Installer(object):
                 timeout = int(params["timeout"])
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
             cb_releases_version = ["1.8.1", "2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0", "2.5.0", "2.5.1"]
+            build_repo = MV_LATESTBUILD_REPO
+            if version[:3] == "3.5":
+                build_repo = SHERLOCK_BUILD_REPO
             for name in names:
                 if version in releases_version:
                     build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
@@ -215,7 +219,7 @@ class Installer(object):
                                       deliverable_type=info.deliverable_type, \
                                       architecture_type=info.architecture_type, \
                                       edition_type=name, \
-                                      repo=MV_LATESTBUILD_REPO, toy=toy, \
+                                      repo=build_repo, toy=toy, \
                                       distribution_version=info.distribution_version.lower())
                     build = BuildQuery().find_build(builds, name, info.deliverable_type, \
                                                     info.architecture_type, version, toy=toy, \

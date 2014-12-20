@@ -352,6 +352,9 @@ class BuildQuery(object):
         architecture_type: x86_64
         edition_type: couchbase-server-enterprise or couchbase-server-community
         repo: http://builds.hq.northscale.net/latestbuilds/
+        sherlock repo: http://latestbuilds.hq.couchbase.com/couchbase-server/sherlock
+        sherlock build name with extra build number:
+               /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
         toy=Ce
         build.name = couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
         build.url = http://builds.hq.northscale.net/latestbuilds/couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
@@ -366,12 +369,19 @@ class BuildQuery(object):
 
         os_name = ""
         setup = ""
+        build_number = ""
         unix_deliverable_type = ["deb", "rpm", "zip"]
         if deliverable_type in unix_deliverable_type:
-            if "rel" not in version and toy == "":
-                build.product_version = version + "-rel"
+            if version[:3] == "3.5":
+                if "rel" not in version and toy == "":
+                    build.product_version = version
+                elif "-rel" in version:
+                    build.product_version = version.replace("-rel", "")
             else:
-                build.product_version = version
+                if "rel" not in version and toy == "":
+                    build.product_version = version + "-rel"
+                else:
+                    build.product_version = version
         if "exe" in deliverable_type:
             if version[:5] not in WIN_CB_VERSION_3:
                 setup = "setup."
@@ -402,10 +412,18 @@ class BuildQuery(object):
         if "exe" in deliverable_type and version[:5] in WIN_CB_VERSION_3:
             joint_char = "-"
             version_join_char = "-"
+        if version[:3] == "3.5":
+            build_number = version.replace(version[:6],"")
+            build.name = edition_type + "-" + build.product_version + \
+                   "-centos6." + build.architecture_type + \
+                   "." + build.deliverable_type
+            build.url = repo + build_number + "/" + build.name
+        else:
+            build.name = edition_type + joint_char + os_name + \
+                build.architecture_type +  version_join_char + \
+                build.product_version + "." + setup + build.deliverable_type
+            build.url = repo + build.name
 
-        build.name = edition_type + joint_char + os_name + build.architecture_type + \
-                     version_join_char + build.product_version + "." + setup + build.deliverable_type
-        build.url = repo + build.name
 
         """ reset build.architecture back to x86_64 in windows """
         build.architecture_type = architecture_type
