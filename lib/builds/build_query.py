@@ -413,7 +413,7 @@ class BuildQuery(object):
             joint_char = "-"
             version_join_char = "-"
         if version[:3] == "3.5":
-            build_number = version.replace(version[:6],"")
+            build_number = build.product_version.replace(version[:6],"")
             build.name = edition_type + "-" + build.product_version + \
                    "-centos6." + build.architecture_type + \
                    "." + build.deliverable_type
