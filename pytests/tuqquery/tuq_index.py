@@ -309,7 +309,7 @@ class QueriesViewsTests(QueryTests):
                 self.query = "CREATE INDEX %s ON %s(tasks_points) " % (index_name, bucket.name)
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) +\
-                             'WHERE join_mo>7 and task_points > 0'
+                             'WHERE tasks_points > 0'
                 res = self.run_cbq_query()
                 self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name,res["results"]))
@@ -324,7 +324,7 @@ class QueriesViewsTests(QueryTests):
                 self.query = "CREATE INDEX %s ON %s(tasks_points.task1) " % (index_name, bucket.name)
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) +\
-                             'WHERE join_mo>7 and  task_points.task1 > 0'
+                             'WHERE tasks_points.task1 > 0'
                 res = self.run_cbq_query()
                 self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name,res["results"]))

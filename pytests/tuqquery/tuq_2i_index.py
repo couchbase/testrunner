@@ -73,7 +73,7 @@ class QueriesIndexTests(QueryTests):
                     self._verify_results(actual_result['results'], [])
                 self.query = "select %s from %s where %s is not null and %s is not null" % (','.join(self.FIELDS_TO_INDEX[ind - 1]), bucket.name,
                                                                                                 self.FIELDS_TO_INDEX[ind - 1][0], self.FIELDS_TO_INDEX[ind - 1][1])
-                actual_result = self.run_cbq_query()
+                actual_result = self.run_cbq_query(query_params={'scan_consistency' : 'statement_plus'})
                 self.assertTrue(len(actual_result['results']), self.num_items)
 
     def test_explain_query_count(self):
@@ -84,11 +84,14 @@ class QueriesIndexTests(QueryTests):
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT count(VMs) FROM %s where VMs is not null union SELECT count(name) FROM %s where name is not null' % (bucket.name, bucket.name)
                 res = self.run_cbq_query()
-                self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
+                self.assertTrue(res["results"][0]['~children'][0]["children"][0]['~children'][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
-                self.run_cbq_query()
+                try:
+                    self.run_cbq_query()
+                except:
+                    pass
 
     def test_explain_query_group_by(self):
         for bucket in self.buckets:
@@ -98,11 +101,14 @@ class QueriesIndexTests(QueryTests):
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT count(*) FROM %s GROUP BY VMs, join_yr' % (bucket.name)
                 res = self.run_cbq_query()
-                self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
+                self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
-                self.run_cbq_query()
+                try:
+                    self.run_cbq_query()
+                except:
+                    pass
 
     def test_explain_query_meta(self):
         for bucket in self.buckets:
@@ -112,7 +118,7 @@ class QueriesIndexTests(QueryTests):
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT name FROM %s WHERE meta(%s).type = "json" and name is not null' % (bucket.name, bucket.name)
                 res = self.run_cbq_query()
-                self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
+                self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
@@ -156,18 +162,21 @@ class QueriesIndexTests(QueryTests):
 
     def test_explain_childs_list_objects(self):
         for bucket in self.buckets:
-            index_name = "my_index_child"
+            index_name = "my_index_child2"
             try:
                 self.query = "CREATE INDEX %s ON %s(VMs[0].RAM, VMS[1].RAM) " % (index_name, bucket.name)
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT VMs FROM %s ' % (bucket.name) + \
                         'WHERE ANY vm IN VMs SATISFIES vm.RAM > 5 AND vm.os = "ubuntu" end'
                 res = self.run_cbq_query()
-                self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
+                self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
-                self.run_cbq_query()
+                try:
+                    self.run_cbq_query()
+                except:
+                    pass
 
     def test_explain_childs_objects(self):
         for bucket in self.buckets:
@@ -178,11 +187,14 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
                              'WHERE join_mo>7 and task_points > 0'
                 res = self.run_cbq_query()
-                self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
+                self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
-                self.run_cbq_query()
+                try:
+                    self.run_cbq_query()
+                except:
+                    pass
 
     def test_explain_childs_objects_element(self):
         for bucket in self.buckets:
@@ -193,11 +205,14 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
                              'WHERE join_mo>7 and  task_points.task1 > 0'
                 res = self.run_cbq_query()
-                self.assertTrue(res["results"][0]["children"][0]["index"] == index_name,
+                self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
-                self.run_cbq_query()
+                try:
+                    self.run_cbq_query()
+                except:
+                    pass
 
     def _verify_view_is_present(self, view_name, bucket):
         ddoc, _ = RestConnection(self.master).get_ddoc(bucket.name, "ddl_%s" % view_name)
