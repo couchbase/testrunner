@@ -27,6 +27,10 @@ class SpatialHelper:
         self.master = self.servers[0]
         self.rest = RestConnection(self.master)
         self.log = logger.Logger.get_logger()
+        self.num_nodes_to_add = self.input.param('num_nodes_to_add', 0)
+        self.num_nodes_to_remove = self.input.param('num_nodes_to_remove', 0)
+        self.skip_rebalance = self.input.param("skip_rebalance", False)
+        self.failover_factor = self.input.param("failover-factor", 1)
 
         # A set of indexes that were created with create_spatial_index_fun
         # It's a set, so indexes can be updated without problems
@@ -35,7 +39,7 @@ class SpatialHelper:
     def set_bucket(self, bucket):
         self.bucket = bucket
 
-    def setup_cluster(self, do_rebalance=True):
+    def setup_cluster(self):
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
         mem_quota = int(self.rest.get_nodes_self().mcdMemoryReserved *
                         node_ram_ratio)
@@ -49,13 +53,12 @@ class SpatialHelper:
         ClusterOperationHelper.wait_for_ns_servers_or_assert(
             [self.master], self.testcase)
 
-        if do_rebalance:
+        if not self.skip_rebalance:
             rebalanced = ClusterOperationHelper.add_and_rebalance(
                 self.servers)
             self.testcase.assertTrue(rebalanced, "cluster is not rebalanced")
 
         self._create_default_bucket()
-
 
     def cleanup_cluster(self):
         if not "skip_cleanup" in TestInputSingleton.input.test_params:

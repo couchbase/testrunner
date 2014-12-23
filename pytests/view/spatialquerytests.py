@@ -3,6 +3,10 @@ import time
 import unittest
 import threading
 from threading import Thread
+from membase.helper.rebalance_helper import RebalanceHelper
+from couchbase_helper.cluster import Cluster
+from basetestcase import BaseTestCase
+from remote.remote_util import RemoteMachineShellConnection
 import json
 import sys
 
@@ -14,6 +18,8 @@ class SpatialQueryTests(unittest.TestCase):
         self.log = logger.Logger.get_logger()
         self.helper = SpatialHelper(self, "default")
         self.helper.setup_cluster()
+        self.cluster = Cluster()
+        self.servers = self.helper.servers
 
     def tearDown(self):
         self.helper.cleanup_cluster()
@@ -54,7 +60,6 @@ class SpatialQueryTests(unittest.TestCase):
         data_set.add_range_queries()
         self._query_test_init(data_set)
 
-
     def test_multidim_dataset_limit_queries(self):
         num_docs = self.helper.input.param("num-docs")
         self.log.info("description : Make limit queries on a multidimensional "
@@ -90,6 +95,223 @@ class SpatialQueryTests(unittest.TestCase):
         data_set = MultidimDataSet(self.helper, num_docs)
         data_set.add_range_and_limit_queries()
         self._query_test_init(data_set)
+
+
+    def test_rebalance_in_simple_dataset_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance In and limit queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_limit_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_in_simple_dataset_skip_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance In and skip (and limit) queries on a "
+                      "simple dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_skip_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_with_simple_dataset_bbox_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance In and bounding box queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_bbox_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_in_simple_dataset_range_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance In and range queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_range_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_in_multidim_dataset_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance In and limit queries on a multidimensional "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_limit_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_in_multidim_dataset_skip_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance In and skip (and limit) queries on a "
+                      "multidimensional dataset with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_skip_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_in_multidim_dataset_range_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance In and range queries on a "
+                      "multidimensional with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_range_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_in_multidim_dataset_range_and_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance In and range queries with limits on a "
+                      "multidimensional with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_range_and_limit_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_out_simple_dataset_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and  limit queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_limit_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_out_simple_dataset_skip_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and skip (and limit) queries on a "
+                      "simple dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_skip_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_out_simple_dataset_bbox_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and bounding box queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_bbox_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_out_simple_dataset_range_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and range queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_range_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_out_multidim_dataset_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and limit queries on a multidimensional "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_limit_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_out_multidim_dataset_skip_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and skip (and limit) queries on a "
+                      "multidimensional dataset with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_skip_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_out_multidim_dataset_range_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and range queries on a "
+                      "multidimensional with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_range_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_rebalance_out_multidim_dataset_range_and_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and range queries with limits on a "
+                      "multidimensional with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_range_and_limit_queries()
+        self._rebalance_cluster(data_set)
+
+    def test_failover_simple_dataset_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Failover and limit queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_limit_queries()
+        self._failover_cluster(data_set)
+
+    def test_failover_simple_dataset_skip_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and skip (and limit) queries on a "
+                      "simple dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_skip_queries()
+        self._failover_cluster(data_set)
+
+    def test_failover_simple_dataset_bbox_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and bounding box queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_bbox_queries()
+        self._failover_cluster(data_set)
+
+    def test_failover_simple_dataset_range_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and range queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_range_queries()
+        self._failover_cluster(data_set)
+
+    def test_failover_multidim_dataset_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and limit queries on a multidimensional "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_limit_queries()
+        self._failover_cluster(data_set)
+
+    def test_failover_multidim_dataset_skip_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and skip (and limit) queries on a "
+                      "multidimensional dataset with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_skip_queries()
+        self._failover_cluster(data_set)
+
+    def test_failover_multidim_dataset_range_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and range queries on a "
+                      "multidimensional with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_range_queries()
+        self._failover_cluster(data_set)
+
+    def test_failover_multidim_dataset_range_and_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Rebalance Out and range queries with limits on a "
+                      "multidimensional with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_range_and_limit_queries()
+        self._failover_cluster(data_set)
 
     ###
     # load the data defined for this dataset.
@@ -146,6 +368,47 @@ class SpatialQueryTests(unittest.TestCase):
                 self.fail(result.test_results.errors[0][1])
             if result.test_results.failures:
                 self.fail(result.test_results.failures[0][1])
+
+    ###
+    # Failover nodes
+    ###
+    def _rebalance_cluster(self, data_set):
+        if self.helper.num_nodes_to_add >= 1:
+            rebalance = self.cluster.async_rebalance(self.servers[:1],
+                self.servers[1:self.helper.num_nodes_to_add + 1],
+                [])
+            self._query_test_init(data_set)
+            rebalance.result()
+
+        elif self.helper.num_nodes_to_remove >= 1:
+            rebalance = self.cluster.async_rebalance(self.servers[:1],[],
+                self.servers[1:self.helper.num_nodes_to_add + 1])
+            self._query_test_init(data_set)
+            rebalance.result()
+
+    def _failover_cluster(self, data_set):
+        failover_nodes = self.servers[1 : self.helper.failover_factor + 1]
+        try:
+            # failover and verify loaded data
+            self.cluster.failover(self.servers, failover_nodes)
+            self.log.info("10 seconds sleep after failover before invoking rebalance...")
+            time.sleep(10)
+            rebalance = self.cluster.async_rebalance(self.servers,
+                [], failover_nodes)
+
+            self._query_test_init(data_set)
+
+            msg = "rebalance failed while removing failover nodes {0}".format(failover_nodes)
+            self.assertTrue(rebalance.result(), msg=msg)
+
+            #verify queries after failover
+            self._query_test_init(data_set)
+        finally:
+            for server in failover_nodes:
+                shell = RemoteMachineShellConnection(server)
+                shell.start_couchbase()
+                time.sleep(10)
+                shell.disconnect()
 
 
 
