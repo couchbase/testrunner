@@ -559,7 +559,7 @@ class RestConnection(object):
                          "end_range"] or isinstance(params[param], bool):
                 api += "{0}={1}".format(param,
                                         json.dumps(params[param],
-                                                   separators=(',', ':')))
+                                                   separators=(',',':')))
             else:
                 api += "{0}={1}".format(param, params[param])
 
@@ -828,21 +828,46 @@ class RestConnection(object):
 
     # replicationType:continuous toBucket:default toCluster:two fromBucket:default
     # defaults at https://github.com/couchbase/goxdcr/metadata/replication_settings.go#L20-L33
-    # replicationType:continuous toBucket:default toCluster:two fromBucket:default
-    # defaults at https://github.com/couchbase/goxdcr/metadata/replication_settings.go#L20-L33
-    def start_replication(self, replicationType, fromBucket, toCluster, rep_type="xmem", toBucket=None, xdcr_params={}):
+    def start_replication(self,
+                          replicationType,
+                          fromBucket,
+                          toCluster,
+                          rep_type="xmem",
+                          toBucket=None,
+                          repl_spec=None):
         toBucket = toBucket or fromBucket
         msg = "starting {0} replication type:{1} from {2} to {3} in the remote" \
               " cluster {4} with settings {5}"
         log.info(msg.format(replicationType, rep_type, fromBucket, toBucket,
-                            toCluster, xdcr_params))
+                            toCluster, repl_spec))
         api = self.baseUrl + 'controller/createReplication'
-        param_map = {'replicationType': replicationType,
-                     'toBucket': toBucket,
-                     'fromBucket': fromBucket,
-                     'toCluster': toCluster,
-                     'type': rep_type}
-        param_map.update(xdcr_params)
+        cb_version = self.get_nodes_self().version
+        cb_version = cb_version[:cb_version.rfind('-')]
+        if (float(cb_version[:2]) >= 3.5) and (repl_spec is not None):
+            param_map = {'replicationType': replicationType,
+                        'toBucket': toBucket,
+                        'fromBucket': fromBucket,
+                        'toCluster': toCluster,
+                        'type': rep_type,
+                        'xdcrCheckpointInterval': repl_spec['checkpoint_interval'],
+                        'xdcrFailureRestartInterval': repl_spec['failure_restart_interval'],
+                        'xdcrOptimisticReplicationThreshold': repl_spec['optimistic_threshold'],
+                        'xdcrFilterExpression': repl_spec['filter_expression'],
+                        'xdcrSourceNozzlePerNode': repl_spec['source_nozzles'],
+                        'xdcrTargetNozzlePerNode': repl_spec['target_nozzles'],
+                        'xdcrWorkerBatchSize': repl_spec['batch_count'],
+                        'xdcrDocBatchSizeKb': repl_spec['batch_size'],
+                        'xdcrLogLevel': repl_spec['log_level'],
+                        'xdcrMaxExpectedReplicationLag': repl_spec['max_replication_lag'],
+                        'xdcrTimeoutPercentageCap': repl_spec['timeout_percentage']
+                        }
+        else:
+            param_map = {'replicationType': replicationType,
+                        'toBucket': toBucket,
+                        'fromBucket': fromBucket,
+                        'toCluster': toCluster,
+                        'type': rep_type
+                        }
         params = urllib.urlencode(param_map)
         status, content, _ = self._http_request(api, 'POST', params)
         #response : {"id": "replication_id"}
@@ -873,7 +898,7 @@ class RestConnection(object):
             for replication in self.replications:
                 try:
                     log.info("Deleting replication {}".format(replication))
-                    self.stop_replication("controller/cancelXDCR/%s" % replication)
+                    self.stop_replication("controller/cancelXDCR/%s" %replication)
                     self.replications.remove(replication)
                 except:
                     # we are not logging replication on per cluster basis
@@ -905,7 +930,7 @@ class RestConnection(object):
     #can't add the node to itself ( TODO )
     #server already added
     #returns otpNode
-    def add_node(self, user='', password='', remoteIp='', port='8091', zone_name='', services=None):
+    def add_node(self, user='', password='', remoteIp='', port='8091', zone_name='', services = None):
         otpNode = None
         log.info('adding remote node @{0}:{1} to this cluster @{2}:{3}'\
                           .format(remoteIp, port, self.ip, self.port))
@@ -965,7 +990,7 @@ class RestConnection(object):
     #can't add the node to itself ( TODO )
     #server already added
     #returns otpNode
-    def do_join_cluster(self, user='', password='', remoteIp='', port='8091', zone_name='', services=None):
+    def do_join_cluster(self, user='', password='', remoteIp='', port='8091', zone_name='', services = None):
         otpNode = None
         log.info('adding remote node @{0}:{1} to this cluster @{2}:{3}'\
                           .format(remoteIp, port, self.ip, self.port))
