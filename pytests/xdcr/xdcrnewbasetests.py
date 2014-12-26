@@ -15,6 +15,7 @@ from couchbase_helper.document import View
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.stats_tools import StatsCommon
 from membase.helper.bucket_helper import BucketOperationHelper
+from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
 from scripts.collect_server_info import cbcollectRunner
 from scripts import collect_data_files
@@ -84,6 +85,7 @@ class OPS:
     CREATE = "create"
     UPDATE = "update"
     DELETE = "delete"
+    APPEND = "append"
 
 
 class EVICTION_POLICY:
@@ -113,8 +115,7 @@ class STATE:
     RUNNING = "running"
 
 
-class XDCR_PARAM:
-    # Per-replication params (input)
+class TEST_XDCR_PARAM:
     FAILURE_RESTART = "failure_restart_interval"
     CHECKPOINT_INTERVAL = "checkpoint_interval"
     OPTIMISTIC_THRESHOLD = "optimistic_threshold"
@@ -127,23 +128,54 @@ class XDCR_PARAM:
     MAX_REPLICATION_LAG = "max_replication_lag"
     TIMEOUT_PERC = "timeout_percentage"
 
-    # defaults at https://github.com/couchbase/goxdcr/metadata/replication_settings.go#L20-L33
-    DEFAULTS = {
-                FAILURE_RESTART : 30,
-                CHECKPOINT_INTERVAL : 60, # test default
-                OPTIMISTIC_THRESHOLD : 256,
-                FILTER_EXP : None,
-                SOURCE_NOZZLES : 2,
-                TARGET_NOZZLES : 2,
-                BATCH_COUNT : 500,
-                BATCH_SIZE : 2049,
-                MAX_REPLICATION_LAG : 1000,
-                TIMEOUT_PERC : 80,
-                LOG_LEVEL : 'Info'
-                }
+    @staticmethod
+    def get_test_to_create_repl_param_map():
+        return {
+            TEST_XDCR_PARAM.FAILURE_RESTART: CREATE_REPL_PARAM.FAILURE_RESTART,
+            TEST_XDCR_PARAM.CHECKPOINT_INTERVAL: CREATE_REPL_PARAM.CHECKPOINT_INTERVAL,
+            TEST_XDCR_PARAM.OPTIMISTIC_THRESHOLD: CREATE_REPL_PARAM.OPTIMISTIC_THRESHOLD,
+            TEST_XDCR_PARAM.FILTER_EXP: CREATE_REPL_PARAM.FILTER_EXP,
+            TEST_XDCR_PARAM.SOURCE_NOZZLES: CREATE_REPL_PARAM.SOURCE_NOZZLES,
+            TEST_XDCR_PARAM.TARGET_NOZZLES: CREATE_REPL_PARAM.TARGET_NOZZLES,
+            TEST_XDCR_PARAM.BATCH_COUNT: CREATE_REPL_PARAM.BATCH_COUNT,
+            TEST_XDCR_PARAM.BATCH_SIZE: CREATE_REPL_PARAM.BATCH_SIZE,
+            TEST_XDCR_PARAM.MAX_REPLICATION_LAG: CREATE_REPL_PARAM.MAX_REPLICATION_LAG,
+            TEST_XDCR_PARAM.TIMEOUT_PERC: CREATE_REPL_PARAM.TIMEOUT_PERC,
+            TEST_XDCR_PARAM.LOG_LEVEL: CREATE_REPL_PARAM.LOG_LEVEL
+        }
+
+
+class CREATE_REPL_PARAM:
+    FAILURE_RESTART = "failureRestartInterval"
+    CHECKPOINT_INTERVAL = "checkpointInterval"
+    OPTIMISTIC_THRESHOLD = "optimisticReplicationThreshold"
+    FILTER_EXP = "filterExpression"
+    SOURCE_NOZZLES = "sourceNozzlePerNode"
+    TARGET_NOZZLES = "targetNozzlePerNode"
+    BATCH_COUNT = "workerBatchSize"
+    BATCH_SIZE = "docBatchSizeKb"
+    LOG_LEVEL = "logLevel"
+    MAX_REPLICATION_LAG = "maxExpectedReplicationLag"
+    TIMEOUT_PERC = "timeoutPercentageCap"
+
+
+class XDCR_PARAM:
+    # Per-replication params (input)
+    XDCR_FAILURE_RESTART = "xdcrFailureRestartInterval"
+    XDCR_CHECKPOINT_INTERVAL = "xdcrCheckpointInterval"
+    XDCR_OPTIMISTIC_THRESHOLD = "xdcrOptimisticReplicationThreshold"
+    XDCR_FILTER_EXP = "xdcrFilterExpression"
+    XDCR_SOURCE_NOZZLES = "xdcrSourceNozzlePerNode"
+    XDCR_TARGET_NOZZLES = "xdcrTargetNozzlePerNode"
+    XDCR_BATCH_COUNT = "xdcrWorkerBatchSize"
+    XDCR_BATCH_SIZE = "xdcrDocBatchSizeKb"
+    XDCR_LOG_LEVEL = "xdcrLogLevel"
+    XDCR_MAX_REPLICATION_LAG = "xdcrMaxExpectedReplicationLag"
+    XDCR_TIMEOUT_PERC = "xdcrTimeoutPercentageCap"
 
 
 class NodeHelper:
+    _log = logger.Logger.get_logger()
 
     @staticmethod
     def disable_firewall(
@@ -246,6 +278,34 @@ class NodeHelper:
                 wait_time))
 
     @staticmethod
+    def wait_warmup_completed(warmupnodes, bucket_names=["default"]):
+        if isinstance(bucket_names, str):
+            bucket_names = [bucket_names]
+        for server in warmupnodes:
+            for bucket in bucket_names:
+                mc = MemcachedClientHelper.direct_client(server, bucket)
+                start = time.time()
+                while time.time() - start < 150:
+                    if mc.stats()["ep_warmup_thread"] == "complete":
+                        NodeHelper._log.info(
+                            "Warmed up: %s items " %
+                            (mc.stats()["curr_items_tot"]))
+                        time.sleep(10)
+                        break
+                    elif mc.stats()["ep_warmup_thread"] == "running":
+                        NodeHelper._log.info(
+                            "Still warming up .. curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
+                        continue
+                    else:
+                        NodeHelper._log.info(
+                            "Value of ep_warmup_thread does not exist, exiting from this server")
+                        break
+                if mc.stats()["ep_warmup_thread"] == "running":
+                    NodeHelper._log.info(
+                        "ERROR: ep_warmup_thread's status not complete")
+                mc.close
+
+    @staticmethod
     def wait_node_restarted(
             server, test_case, wait_time=120, wait_if_warmup=False,
             check_service=False):
@@ -272,6 +332,7 @@ class NodeHelper:
     def kill_erlang(server):
         """Kill erlang process running on server.
         """
+        NodeHelper._log.info("Killing erlang on server: {1}".format(server))
         shell = RemoteMachineShellConnection(server)
         os_info = shell.extract_remote_info()
         shell.kill_erlang(os_info)
@@ -320,6 +381,7 @@ class NodeHelper:
         version = rest.get_nodes_self().version
         return version[:version.rfind('-')]
 
+
 class FloatingServers:
 
     """Keep Track of free servers, For Rebalance-in
@@ -348,6 +410,11 @@ class XDCRRemoteClusterRef:
 
         # List of XDCRepication objects
         self.__replications = []
+
+    def __str__(self):
+        return "{0} -> {1}, Name: {2}".format(
+            self.__src_cluster.get_name(), self.__dest_cluster.get_name(),
+            self.__name)
 
     def get_src_cluster(self):
         return self.__src_cluster
@@ -443,32 +510,44 @@ class XDCReplication:
         self.__dest_cluster = self.__remote_cluster_ref.get_dest_cluster()
         self.__src_cluster_name = self.__src_cluster.get_name()
         self.__rep_type = rep_type
+        self.__test_xdcr_params = {}
 
-        # get per replication params specified as from_bucket@cluster_name=
-        # eg. default@C1="filter_expression:loadOne,checkpoint_interval:60,
-        # failure_restart_interval:20"
-        repl_str = self.__input.param("%s@%s"
-                            %(self.__from_bucket, self.__src_cluster_name), "None")
-
-        if repl_str:
-            argument_split = re.split('[:,]', repl_str)
-            self.__repl_spec = dict(zip(argument_split[::2], argument_split[1::2]))
-
-            # for those params that have not been passed as input
-            # populate __repl_spec with default settings for REST call
-            for param, value in XDCR_PARAM.DEFAULTS.iteritems():
-                if param not in self.__repl_spec:
-                    self.__repl_spec[param] = value
+        self.__parse_test_xdcr_params()
         self.log = logger.Logger.get_logger()
 
         # Response from REST API
         self.__rep_id = None
 
-    def get_repl_setting(self, param):
-        if param in self.__repl_spec:
-            return self.__repl_spec[param]
-        else:
-            XDCRException("Error: XDCR setting {0} not supported yet!")
+    def __str__(self):
+        return "Replication {0}:{1} -> {2}:{3}".format(
+            self.__src_cluster.get_name(),
+            self.__from_bucket, self.__dest_cluster.get_name(),
+            self.__to_bucket)
+
+    # get per replication params specified as from_bucket@cluster_name=
+    # eg. default@C1="xdcrFilterExpression:loadOne,xdcrCheckpointInterval:60,
+    # xdcrFailureRestartInterval:20"
+    def __parse_test_xdcr_params(self):
+        param_str = self.__input.param(
+            "%s@%s" %
+            (self.__from_bucket, self.__src_cluster_name), None)
+        if param_str:
+            argument_split = re.split('[:,]', param_str)
+            self.__test_xdcr_params.update(
+                dict(zip(argument_split[::2], argument_split[1::2]))
+            )
+
+    def __convert_test_to_xdcr_params(self):
+        xdcr_params = {}
+        xdcr_param_map = TEST_XDCR_PARAM.get_test_to_create_repl_param_map()
+        for test_param, value in self.__test_xdcr_params.iteritems():
+            xdcr_params[xdcr_param_map[test_param]] = value
+        return xdcr_params
+
+    def get_filter_exp(self):
+        if TEST_XDCR_PARAM.FILTER_EXP in self.__test_xdcr_params:
+            return self.__test_xdcr_params[TEST_XDCR_PARAM.FILTER_EXP]
+        return None
 
     def get_src_bucket(self):
         return self.__from_bucket
@@ -492,7 +571,7 @@ class XDCReplication:
             self.__remote_cluster_ref.get_name(),
             rep_type=self.__rep_type,
             toBucket=self.__to_bucket,
-            repl_spec=self.__repl_spec)
+            xdcr_params=self.__convert_test_to_xdcr_params())
 
     def __verify_pause(self):
         """Verify if replication is paused"""
@@ -606,11 +685,8 @@ class CouchbaseCluster:
         self.__kv_gen = None
 
     def __str__(self):
-        return self.__master_node.ip
-
-    def __sleep(self, timeout=1, message=""):
-        self.__log.info("sleep for {0} secs. {1} ...".format(timeout, message))
-        time.sleep(timeout)
+        return "Couchbase Cluster: %s, Master Ip: %s" % (
+            self.__name, self.__master_node.ip)
 
     def __stop_rebalance(self):
         rest = RestConnection(self.__master_node)
@@ -853,7 +929,7 @@ class CouchbaseCluster:
     def get_buckets(self):
         return self.__buckets
 
-    def get_bucket(self, bucket_name):
+    def get_bucket_by_name(self, bucket_name):
         """Return the bucket with given name
         @param bucket_name: bucket name.
         @return: bucket object
@@ -868,26 +944,33 @@ class CouchbaseCluster:
 
     def delete_bucket(self, bucket_name):
         """Delete bucket with given name
-        @param bucket_name: bucket name to delete
+        @param bucket_name: bucket name (string) to delete
         """
-        bucket_to_remove = self.get_bucket(bucket_name)
+        bucket_to_remove = self.get_bucket_by_name(bucket_name)
         self.__clusterop.bucket_delete(
             self.__master_node,
             bucket_to_remove.name)
         self.__buckets.remove(bucket_to_remove)
 
-    def async_load_bucket(
-            self,
-            bucket,
-            num_items,
-            value_size=256,
-            exp=0,
-            kv_store=1,
-            flag=0,
-            only_store_hash=True,
-            batch_size=1000,
-            pause_secs=1,
-            timeout_secs=30):
+    def delete_all_buckets(self):
+        for bucket_to_remove in self.__buckets:
+            self.__clusterop.bucket_delete(
+                self.__master_node,
+                bucket_to_remove.name)
+            self.__buckets.remove(bucket_to_remove)
+
+    def flush_buckets(self, buckets=[]):
+        buckets = buckets or self.__buckets
+        tasks = []
+        for bucket in buckets:
+            tasks.append(self.__clusterop.async_bucket_flush(
+                self.__master_node,
+                bucket))
+        [task.result() for task in tasks]
+
+    def async_load_bucket(self, bucket, num_items, value_size=256, exp=0,
+                          kv_store=1, flag=0, only_store_hash=True,
+                          batch_size=1000, pause_secs=1, timeout_secs=30):
         """Load data asynchronously on given bucket. Function don't wait for
         load data to finish, return immidiately.
         @param bucket: bucket where to load data.
@@ -902,39 +985,19 @@ class CouchbaseCluster:
         @param timeout_secs: timeout
         @return: task object
         """
-        self.__kv_gen = BlobGenerator(
-            self.__name,
-            self.__name,
-            value_size,
-            end=num_items)
+        seed = "%s-key-" % self.__name
+        self.__kv_gen = BlobGenerator(seed, seed, value_size, end=num_items)
 
         gen = copy.deepcopy(self.__kv_gen)
         task = self.__clusterop.async_load_gen_docs(
-            self.__master_node,
-            bucket.name,
-            gen,
-            bucket.kvs[kv_store],
-            OPS.CREATE,
-            exp,
-            flag,
-            only_store_hash,
-            batch_size,
-            pause_secs,
+            self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
+            OPS.CREATE, exp, flag, only_store_hash, batch_size, pause_secs,
             timeout_secs)
         return task
 
-    def load_bucket(
-            self,
-            bucket,
-            num_items,
-            value_size=256,
-            exp=0,
-            kv_store=1,
-            flag=0,
-            only_store_hash=True,
-            batch_size=1000,
-            pause_secs=1,
-            timeout_secs=30):
+    def load_bucket(self, bucket, num_items, value_size=256, exp=0,
+                    kv_store=1, flag=0, only_store_hash=True,
+                    batch_size=1000, pause_secs=1, timeout_secs=30):
         """Load data synchronously on given bucket. Function wait for
         load data to finish.
         @param bucket: bucket where to load data.
@@ -948,32 +1011,16 @@ class CouchbaseCluster:
         @param pause_secs: pause for next batch load.
         @param timeout_secs: timeout
         """
-        task = self.async_load_bucket(
-            bucket,
-            num_items,
-            value_size,
-            exp,
-            kv_store,
-            flag,
-            only_store_hash,
-            batch_size,
-            pause_secs,
-            timeout_secs)
+        task = self.async_load_bucket(bucket, num_items, value_size, exp,
+                                      kv_store, flag, only_store_hash,
+                                      batch_size, pause_secs, timeout_secs)
         task.result()
 
-    def async_load_all_buckets(
-            self,
-            num_items,
-            value_size=256,
-            exp=0,
-            kv_store=1,
-            flag=0,
-            only_store_hash=True,
-            batch_size=1000,
-            pause_secs=1,
-            timeout_secs=30):
-        """Load data asynchronously on all buckets of the cluster. Function don't wait for
-        load data to finish, return immidiately.
+    def async_load_all_buckets(self, num_items, value_size=256, exp=0,
+                               kv_store=1, flag=0, only_store_hash=True,
+                               batch_size=1000, pause_secs=1, timeout_secs=30):
+        """Load data asynchronously on all buckets of the cluster.
+        Function don't wait for load data to finish, return immidiately.
         @param num_items: number of items to load
         @param value_size: size of the one item.
         @param exp: expiration value.
@@ -985,40 +1032,22 @@ class CouchbaseCluster:
         @param timeout_secs: timeout
         @return: task objects list
         """
-        self.__kv_gen = BlobGenerator(
-            self.__name,
-            self.__name,
-            value_size,
-            end=num_items)
+        seed = "%s-key-" % self.__name
+        self.__kv_gen = BlobGenerator(seed, seed, value_size, end=num_items)
         tasks = []
         for bucket in self.__buckets:
             gen = copy.deepcopy(self.__kv_gen)
             tasks.append(
                 self.__clusterop.async_load_gen_docs(
-                    self.__master_node,
-                    bucket.name, gen,
-                    bucket.kvs[kv_store],
-                    OPS.CREATE,
-                    exp,
-                    flag,
-                    only_store_hash,
-                    batch_size,
-                    pause_secs,
-                    timeout_secs)
+                    self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
+                    OPS.CREATE, exp, flag, only_store_hash, batch_size,
+                    pause_secs, timeout_secs)
             )
         return tasks
 
-    def load_all_buckets(
-            self,
-            num_items,
-            value_size=256,
-            exp=0,
-            kv_store=1,
-            flag=0,
-            only_store_hash=True,
-            batch_size=1000,
-            pause_secs=1,
-            timeout_secs=30):
+    def load_all_buckets(self, num_items, value_size=256, exp=0,
+                         kv_store=1, flag=0, only_store_hash=True,
+                         batch_size=1000, pause_secs=1, timeout_secs=30):
         """Load data synchronously on all buckets. Function wait for
         load data to finish.
         @param num_items: number of items to load
@@ -1032,29 +1061,41 @@ class CouchbaseCluster:
         @param timeout_secs: timeout
         """
         tasks = self.async_load_all_buckets(
-            num_items,
-            value_size,
-            exp,
-            kv_store,
-            flag,
-            only_store_hash,
-            batch_size,
-            pause_secs,
-            timeout_secs)
+            num_items, value_size, exp, kv_store, flag, only_store_hash,
+            batch_size, pause_secs, timeout_secs)
         for task in tasks:
             task.result()
 
-    def load_all_buckets_till_dgm(
-            self,
-            active_resident_threshold,
-            value_size=256,
-            exp=0,
-            kv_store=1,
-            flag=0,
-            only_store_hash=True,
-            batch_size=1000,
-            pause_secs=5,
-            timeout_secs=60):
+    def load_all_buckets_gen(self, kv_gen, ops=OPS.CREATE, exp=0,
+                         kv_store=1, flag=0, only_store_hash=True,
+                         batch_size=1000, pause_secs=1, timeout_secs=30):
+        """Load data synchronously on all buckets. Function wait for
+        load data to finish.
+        @param gen: BlobGenerator() object
+        @param ops: OPS.CREATE/UPDATE/DELETE/APPEND.
+        @param exp: expiration value.
+        @param kv_store: kv store index.
+        @param flag:
+        @param only_store_hash: True to store hash of item else False.
+        @param batch_size: batch size for load data at a time.
+        @param pause_secs: pause for next batch load.
+        @param timeout_secs: timeout
+        """
+        tasks = []
+        for bucket in self.__buckets:
+            tasks.append(
+                self.__clusterop.async_load_gen_docs(
+                    self.__master_node, bucket.name, kv_gen,
+                    bucket.kvs[kv_store], ops, exp, flag,
+                    only_store_hash, batch_size, pause_secs, timeout_secs)
+            )
+        for task in tasks:
+            task.result()
+
+    def load_all_buckets_till_dgm(self, active_resident_threshold,
+                                  value_size=256, exp=0, kv_store=1, flag=0,
+                                  only_store_hash=True, batch_size=1000,
+                                  pause_secs=1, timeout_secs=30):
         """Load data synchronously on all buckets till dgm (Data greater than memory)
         for given active_resident_threshold
         @param active_resident_threshold: Dgm threshold.
@@ -1089,15 +1130,9 @@ class CouchbaseCluster:
                     end=batch_size * 10)
 
                 self.load_bucket(
-                    bucket,
-                    kv_gen,
-                    OPS.CREATE,
-                    exp=exp,
-                    kv_store=kv_store,
-                    flag=flag,
-                    only_store_hash=only_store_hash,
-                    batch_size=batch_size,
-                    pause_secs=pause_secs,
+                    bucket, kv_gen, OPS.CREATE, exp=exp, kv_store=kv_store,
+                    flag=flag, only_store_hash=only_store_hash,
+                    batch_size=batch_size, pause_secs=pause_secs,
                     timeout_secs=timeout_secs)
 
                 random_key += 1
@@ -1161,7 +1196,8 @@ class CouchbaseCluster:
         [task.result() for task in tasks]
 
         if wait_for_expiration and expiration:
-            self.__sleep(expiration, "Waiting for expiration of updated items")
+            self.__log.info("Waiting for expiration of updated items")
+            time.sleep(expiration)
 
     def run_expiry_pager(self, val=10):
         """Run expiry pager process and set interval to 10 seconds
@@ -1438,15 +1474,7 @@ class CouchbaseCluster:
             self.__fail_over_nodes,
             graceful)
 
-        [self.__nodes.remove(node) for node in self.__fail_over_nodes]
-
-        if master:
-            self.__master_node = self.__nodes[0]
-
         return task
-
-    def async_failover_master(self, graceful=False):
-        return self.__async_failover(master=True, graceful=graceful)
 
     def async_failover(self, num_nodes=1, graceful=False):
         return self.__async_failover(num_nodes=num_nodes, graceful=graceful)
@@ -1459,11 +1487,8 @@ class CouchbaseCluster:
         task = self.__async_failover(master=True, graceful=graceful)
         task.result()
         if rebalance:
-            self.__clusterop.rebalance(
-                self.__nodes,
-                [],
-                self.__fail_over_nodes)
-            self.__fail_over_nodes = []
+            self.rebalance_failover_nodes()
+        self.__master_node = self.__nodes[0]
 
     def failover_and_rebalance_nodes(self, num_nodes=1, graceful=False,
                                      rebalance=True):
@@ -1478,11 +1503,12 @@ class CouchbaseCluster:
             graceful=graceful)
         task.result()
         if rebalance:
-            self.__clusterop.rebalance(
-                self.__nodes,
-                [],
-                self.__fail_over_nodes)
-            self.__fail_over_nodes = []
+            self.rebalance_failover_nodes()
+
+    def rebalance_failover_nodes(self):
+        self.__clusterop.rebalance(self.__nodes, [], self.__fail_over_nodes)
+        [self.__nodes.remove(node) for node in self.__fail_over_nodes]
+        self.__fail_over_nodes = []
 
     def add_back_node(self, recovery_type=None):
         """add-back failed-over node to the cluster.
@@ -1492,31 +1518,52 @@ class CouchbaseCluster:
             len(self.__fail_over_nodes) < 1,
             XDCRException("No failover nodes available to add_back")
         )
+        rest = RestConnection(self.__master_node)
+        server_nodes = rest.node_statuses()
         for failover_node in self.__fail_over_nodes:
-            rest = RestConnection(self.__master_node)
-            rest.add_back_node(failover_node.id)
-            if recovery_type:
-                rest.set_recovery_type(
-                    otpNode=failover_node.id,
-                    recoveryType=recovery_type)
-        [self.__nodes.append(node) for node in self.__fail_over_nodes]
-        # FIXME: Passing all buckets as delta recovery nodes
-        rest.rebalance(
-            otpNodes=[
-                node.id for node in self.__nodes],
-            ejectedNodes=[],
-            deltaRecoveryBuckets=self.__buckets)
+            for server_node in server_nodes:
+                if server_node.ip == failover_node.ip:
+                    rest.add_back_node(server_node.id)
+                    if recovery_type:
+                        rest.set_recovery_type(
+                            otpNode=server_node.id,
+                            recoveryType=recovery_type)
+        for node in self.__fail_over_nodes:
+            if node not in self.__nodes:
+                self.__nodes.append(node)
+        self.__clusterop.rebalance(self.__nodes, [], [])
         self.__fail_over_nodes = []
 
     def warmup_node(self, master=False):
         """Warmup node on cluster
         @param master: True if warmup master-node else False.
         """
-        if master:
-            NodeHelper.do_a_warm_up(self.__master_node)
-        else:
-            NodeHelper.do_a_warm_up(self.__nodes[-1])
+        from random import randrange
 
+        if master:
+            warmup_node = self.__master_node
+
+        else:
+            warmup_node = self.__nodes[
+                randrange(
+                    1, len(
+                        self.__nodes))]
+        NodeHelper.do_a_warm_up(warmup_node)
+        return warmup_node
+
+    def reboot_one_node(self, test_case, master=False):
+        from random import randrange
+
+        if master:
+            reboot_node = self.__master_node
+
+        else:
+            reboot_node = self.__nodes[
+                randrange(
+                    1, len(
+                        self.__nodes))]
+        NodeHelper.reboot_server(reboot_node, test_case)
+        return reboot_node
 
     def set_xdcr_param(self, param, value):
         """Set Replication parameter on couchbase server:
@@ -1615,7 +1662,8 @@ class CouchbaseCluster:
             for task in stats_tasks:
                 task.result(timeout)
         except TimeoutError:
-            self.__log.error("ERROR: Timed-out waiting for item count to match")
+            self.__log.error(
+                "ERROR: Timed-out waiting for item count to match")
 
     def verify_data(self, kv_store=1, timeout=None,
                     max_verify=None, only_store_hash=True, batch_size=1000):
@@ -1707,9 +1755,59 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def setUp(self):
         unittest.TestCase.setUp(self)
-        self.__cb_clusters = []
-        self.log = logger.Logger.get_logger()
         self._input = TestInputSingleton.input
+        self.log = logger.Logger.get_logger()
+        self.__init_logger()
+        self.__cb_clusters = []
+        self.__cluster_op = Cluster()
+        self.__init_parameters()
+        self.log.info(
+            "==== XDCRNewbasetests setup is started for test #{0} {1} ===="
+            .format(self.__case_number, self._testMethodName))
+
+        self.__setup_for_test()
+
+        self.log.info(
+            "==== XDCRNewbasetests setup is finished for test #{0} {1} ===="
+            .format(self.__case_number, self._testMethodName))
+
+    def __is_test_failed(self):
+        return (hasattr(self, '_resultForDoCleanups')
+                and len(self._resultForDoCleanups.failures
+                        or self._resultForDoCleanups.errors)) \
+            or (hasattr(self, '_exc_info')
+                and self._exc_info()[1] is not None)
+
+    def __is_cleanup_needed(self):
+        return self.__is_test_failed() and (str(self.__class__).find(
+            'upgradeXDCR') != -1 or self._input.param("stop-on-failure", False)
+        )
+
+    def __is_cluster_run(self):
+        return len(set([server.ip for server in self._input.servers])) == 1
+
+    def tearDown(self):
+        """Clusters cleanup"""
+        try:
+            if self.__is_cleanup_needed():
+                self.log.warn("CLEANUP WAS SKIPPED")
+                return
+            self.log.info(
+                "====  XDCRNewbasetests cleanup is started for test #{0} {1} ===="
+                .format(self.__case_number, self._testMethodName))
+            for cb_cluster in self.__cb_clusters:
+                cb_cluster.cleanup_cluster(
+                    self,
+                    test_failed=self.__is_test_failed(),
+                    cluster_run=self.__is_cluster_run())
+            self.log.info(
+                "====  XDCRNewbasetests cleanup is finished for test #{0} {1} ==="
+                .format(self.__case_number, self._testMethodName))
+        finally:
+            self.__cluster_op.shutdown(force=True)
+            unittest.TestCase.tearDown(self)
+
+    def __init_logger(self):
         if self._input.param("log_level", None):
             self.log.setLevel(level=0)
             for hd in self.log.handlers:
@@ -1723,13 +1821,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                                 "log_level",
                                 None)))
 
-        if not hasattr(self, 'cluster'):
-            self.cluster = Cluster()
-        self.__init_parameters()
-        self.log.info(
-            "==== XDCRNewbasetests setup is started for test #{0} {1} ===="
-            .format(self.__case_number, self._testMethodName))
-
+    def __setup_for_test(self):
         use_hostanames = self._input.param("use_hostnames", False)
         counter = 1
         for _, nodes in self._input.clusters.iteritems():
@@ -1744,47 +1836,13 @@ class XDCRNewBaseTest(unittest.TestCase):
 
         self.__cleanup_previous()
         self.__init_clusters()
-        self.__create_buckets()
         self.__set_free_servers()
-        self.log.info(
-            "==== XDCRNewbasetests setup is finished for test #{0} {1} ===="
-            .format(self.__case_number, self._testMethodName))
-
-    def tearDown(self):
-        """Clusters cleanup"""
-        try:
-            test_failed = (hasattr(self, '_resultForDoCleanups') and
-                           len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
-                or (hasattr(
-                    self, '_exc_info') and self._exc_info()[1] is not None)
-
-            if test_failed and (str(self.__class__).find(
-                    'upgradeXDCR') != -1 or TestInputSingleton.input.param("stop-on-failure", False)):
-                self.log.warn("CLEANUP WAS SKIPPED")
-                return
-            self.log.info(
-                "====  XDCRNewbasetests cleanup is started for test #{0} {1} ===="
-                .format(self.__case_number, self._testMethodName))
-            cluster_run = len(
-                set([server.ip for server in self._input.servers])) == 1
-            for cb_cluster in self.__cb_clusters:
-                cb_cluster.cleanup_cluster(
-                    self,
-                    test_failed=test_failed,
-                    cluster_run=cluster_run)
-            self.log.info(
-                "====  XDCRNewbasetests cleanup is finished for test #{0} {1} ==="
-                .format(self.__case_number, self._testMethodName))
-        finally:
-            self.cluster.shutdown(force=True)
-            unittest.TestCase.tearDown(self)
+        self.__create_buckets()
 
     def __init_parameters(self):
         self.__case_number = self._input.param("case_number", 0)
-        self.__num_items = self._input.param("items", 1000)
-        self.__value_size = self._input.param("value_size", 256)
-        self.__percent_update = self._input.param("upd", 30)
-        self.__percent_delete = self._input.param("del", 30)
+        self._num_items = self._input.param("items", 1000)
+        self._value_size = self._input.param("value_size", 256)
         self.__topology = self._input.param("ctopology", TOPOLOGY.CHAIN)
         self.__chain_length = self._input.param("chain_length", None)
         self.__rdirection = self._input.param(
@@ -1796,6 +1854,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__rep_type = self._input.param(
             "replication_type",
             REPLICATION_PROTOCOL.CAPI)
+        self._poll_timeout = self._input.param("poll_timeout", 120)
 
     def __cleanup_previous(self):
         for cluster in self.__cb_clusters:
@@ -1809,7 +1868,16 @@ class XDCRNewBaseTest(unittest.TestCase):
         for cluster in self.__cb_clusters:
             cluster.init_cluster(disabled_consistent_view)
 
-    def get_cb_cluster_from_name(self, name):
+    def __set_free_servers(self):
+        total_servers = self._input.servers
+        cluster_nodes = []
+        for _, nodes in self._input.clusters.iteritems():
+            cluster_nodes.extend(nodes)
+
+        FloatingServers._serverlist = [
+            server for server in total_servers if server not in cluster_nodes]
+
+    def get_cb_cluster_by_name(self, name):
         """Return couchbase cluster object for given name.
         @return: CouchbaseCluster object
         """
@@ -1823,47 +1891,22 @@ class XDCRNewBaseTest(unittest.TestCase):
         """
         return len(self.__cb_clusters)
 
-    def get_doc_ops_clusters(self):
-        doc_ops_clusters = self._input.param("doc_ops_clusters", None)
-        if doc_ops_clusters:
-            doc_ops_clusters = doc_ops_clusters.split(":")
-            return doc_ops_clusters
-        return []
-
-    def get_doc_ops(self):
-        doc_ops = self._input.param("doc_ops", None)
-        if doc_ops:
-            return doc_ops.split('-')
-        return []
-
-    def perform_update_delete(self):
-        percent_update = self._input.param("upd", 30)
-        percent_delete = self._input.param("del", 30)
-        expires = self._input.param("expires", 0)
-        wait_for_expiration = self._input.param("wait_for_expiration", True)
-        for doc_ops_cluster in self.get_doc_ops_clusters():
-            cb_cluster = self.get_cb_cluster_from_name(doc_ops_cluster)
-            for doc_op in self.get_doc_ops():
-                if doc_op == OPS.UPDATE:
-                    self.log.info("Updating keys @ {}".format(cb_cluster.get_name()))
-                    cb_cluster.update_delete_data(
-                        doc_op,
-                        perc=percent_update,
-                        expiration=expires,
-                        wait_for_expiration=wait_for_expiration)
-                elif doc_op == OPS.DELETE:
-                    self.log.info("Deleting keys @ {}".format(cb_cluster.get_name()))
-                    cb_cluster.update_delete_data(doc_op, perc=percent_delete)
+    def __calculate_bucket_size(self, cluster_quota, num_buckets):
+        dgm_run = self._input.param("dgm_run", 0)
+        if dgm_run:
+            # buckets cannot be created if size<100MB
+            bucket_size = 100
+        else:
+            bucket_size = int(float(cluster_quota) / float(num_buckets))
+        return bucket_size
 
     def __create_buckets(self):
         num_sasl_buckets = self._input.param("sasl_buckets", 0)
         num_stand_buckets = self._input.param("standard_buckets", 0)
         create_default_bucket = self._input.param("default_bucket", True)
         num_replicas = self._input.param("replicas", 1)
-        dgm_run = self._input.param("dgm_run", 0)
-        eviction_policy = self._input.param(
-            "eviction_policy",
-            'valueOnly')  # or 'fullEviction'
+
+        eviction_policy = self._input.param("eviction_policy", 'valueOnly')
         mixed_priority = self._input.param("mixed_priority", None)
         # if mixed priority is set by user, set high priority for sasl and
         # standard buckets
@@ -1876,11 +1919,9 @@ class XDCRNewBaseTest(unittest.TestCase):
 
         for cb_cluster in self.__cb_clusters:
             total_quota = cb_cluster.get_mem_quota()
-            if dgm_run:
-                # buckets cannot be created if size<100MB
-                bucket_size = 100
-            else:
-                bucket_size = int(float(total_quota) / float(num_buckets))
+            bucket_size = self.__calculate_bucket_size(
+                total_quota,
+                num_buckets)
 
             if create_default_bucket:
                 cb_cluster.create_default_bucket(
@@ -1900,15 +1941,6 @@ class XDCRNewBaseTest(unittest.TestCase):
                 num_replicas=num_replicas,
                 eviction_policy=eviction_policy,
                 bucket_priority=bucket_priority)
-
-    def __set_free_servers(self):
-        total_servers = self._input.servers
-        cluster_nodes = []
-        for _, nodes in self._input.clusters.iteritems():
-            cluster_nodes.extend(nodes)
-
-        FloatingServers._serverlist = [
-            server for server in total_servers if server not in cluster_nodes]
 
     def __set_topology_chain(self):
         """Will Setup Remote Cluster Chain Topology i.e. A -> B -> C
@@ -1985,7 +2017,6 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.__topology))
 
     def __parse_topology_param(self):
-        import re
         tokens = re.split(r'(>|<>|<|\s)', self.__topology)
         return tokens
 
@@ -1999,8 +2030,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         tokens = self.__parse_topology_param()
         counter = 0
         while counter < len(tokens) - 1:
-            src_cluster = self.get_cb_cluster_from_name(tokens[counter])
-            dest_cluster = self.get_cb_cluster_from_name(tokens[counter + 2])
+            src_cluster = self.get_cb_cluster_by_name(tokens[counter])
+            dest_cluster = self.get_cb_cluster_by_name(tokens[counter + 2])
             if ">" in tokens[counter + 1]:
                 src_cluster.add_remote_cluster(
                     dest_cluster,
@@ -2026,16 +2057,16 @@ class XDCRNewBaseTest(unittest.TestCase):
             else:
                 if i >= len(self.__cb_clusters) - 1:
                     break
-            cluster.load_all_buckets(self.__num_items, self.__value_size)
+            cluster.load_all_buckets(self._num_items, self._value_size)
 
     def __load_star(self):
         hub = self.__cb_clusters[0]
-        hub.load_all_buckets(self.__num_items, self.__value_size)
+        hub.load_all_buckets(self._num_items, self._value_size)
 
     def __load_ring(self):
         self.__load_chain()
         cluster = self.__cb_clusters[-1]
-        cluster.load_all_buckets(self.__num_items, self.__value_size)
+        cluster.load_all_buckets(self._num_items, self._value_size)
 
     def load_data_topology(self):
         """load data as per ctopology test parameter
@@ -2051,6 +2082,70 @@ class XDCRNewBaseTest(unittest.TestCase):
                 'Unknown topology set: {0}'.format(
                     self.__topology))
 
+    def perform_update_delete(self):
+        percent_update = self._input.param("upd", 30)
+        percent_delete = self._input.param("del", 30)
+        update_clusters = self._input.param("update", [])
+        if update_clusters:
+            update_clusters = update_clusters.split("-")
+        delete_clusters = self._input.param("delete", [])
+        if delete_clusters:
+            delete_clusters = delete_clusters.split('-')
+        expires = self._input.param("expires", 0)
+        wait_for_expiration = self._input.param("wait_for_expiration", True)
+
+        # UPDATES
+        for doc_ops_cluster in update_clusters:
+            cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)
+            self.log.info("Updating keys @ {}".format(cb_cluster.get_name()))
+            cb_cluster.update_delete_data(
+                OPS.UPDATE,
+                perc=percent_update,
+                expiration=expires,
+                wait_for_expiration=wait_for_expiration)
+
+        # DELETES
+        for doc_ops_cluster in delete_clusters:
+            cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)
+            self.log.info("Deleting keys @ {}".format(cb_cluster.get_name()))
+            cb_cluster.update_delete_data(OPS.DELETE, perc=percent_delete)
+
+    def async_perform_update_delete(self):
+        percent_update = self._input.param("upd", 30)
+        percent_delete = self._input.param("del", 30)
+        update_clusters = self._input.param("update", [])
+        if update_clusters:
+            update_clusters = update_clusters.split("-")
+        delete_clusters = self._input.param("delete", [])
+        if delete_clusters:
+            delete_clusters = delete_clusters.split('-')
+        expires = self._input.param("expires", 0)
+        wait_for_expiration = self._input.param("wait_for_expiration", True)
+
+        tasks = []
+        # UPDATES
+        for doc_ops_cluster in update_clusters:
+            cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)
+            self.log.info("Updating keys @ {}".format(cb_cluster.get_name()))
+            tasks.extend(cb_cluster.async_update_delete(
+                OPS.UPDATE,
+                perc=percent_update,
+                expiration=expires))
+
+        # DELETES
+        for doc_ops_cluster in delete_clusters:
+            cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)
+            self.log.info("Deleting keys @ {}".format(cb_cluster.get_name()))
+            tasks.extend(
+                cb_cluster.async_update_delete(
+                    OPS.DELETE,
+                    perc=percent_delete))
+
+        [task.result() for task in tasks]
+
+        if wait_for_expiration and expires:
+            self.sleep(expires, "Waiting for expiration of updated items")
+
     def setup_all_replications(self):
         """Setup replication between buckets on remote clusters
         based on the xdcr topology created.
@@ -2061,7 +2156,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                     remote_cluster.create_replication(
                         src_bucket,
                         rep_type=self.__rep_type,
-                        toBucket=remote_cluster.get_dest_cluster().get_bucket(
+                        toBucket=remote_cluster.get_dest_cluster().get_bucket_by_name(
                             src_bucket.name))
                 remote_cluster.start_all_replications()
 
@@ -2069,7 +2164,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.set_xdcr_topology()
         self.setup_all_replications()
         self.load_data_topology()
-
+        self.sleep(60)
 
     def load_and_setup_xdcr(self):
         """Initial xdcr
@@ -2091,7 +2186,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.log.info("Verifying RevIds for {0} -> {1}".format(
                 repl.get_src_cluster(),
                 repl.get_dest_cluster()))
-            task_info = self.cluster.async_verify_revid(
+            task_info = self.__cluster_op.async_verify_revid(
                 repl.get_src_cluster().get_master_node(),
                 repl.get_dest_cluster().get_master_node(),
                 repl.get_src_bucket(),
@@ -2107,24 +2202,23 @@ class XDCRNewBaseTest(unittest.TestCase):
                                        (len(values), ip, values))
         return error_count
 
-    def __merge_keys(self, kv_src_bucket, kv_dest_bucket, kvs_num=1, filter_exp=None):
-        filtered_src_keys = []
+    def __merge_keys(
+            self, kv_src_bucket, kv_dest_bucket, kvs_num=1, filter_exp=None):
         valid_keys_src, deleted_keys_src = kv_src_bucket[
             kvs_num].key_set()
         valid_keys_dest, deleted_keys_dest = kv_dest_bucket[
             kvs_num].key_set()
 
-        if filter_exp is not None:
-            for key in valid_keys_src:
-                try:
-                    if re.search(filter_exp, key) is not None:
-                        filtered_src_keys.append(key)
-                except Exception as ex:
-                    XDCRException("Unable to compile filter expression {}".
-                                  format(filter_exp))
+        if filter_exp:
+            filtered_src_keys = filter(
+                lambda key: re.search(str(filter_exp), key) is not None,
+                valid_keys_src
+            )
             valid_keys_src = filtered_src_keys
-            self.log.info("{0} keys matched the filter expression {1}".
-                            format(len(valid_keys_src), filter_exp))
+            self.log.info(
+                "{0} keys matched the filter expression {1}".format(
+                    len(valid_keys_src),
+                    filter_exp))
 
         for key in valid_keys_src:
             # replace/add the values for each key in src kvs
@@ -2166,17 +2260,18 @@ class XDCRNewBaseTest(unittest.TestCase):
         for cb_cluster in self.__cb_clusters:
             for remote_cluster_ref in cb_cluster.get_remote_clusters():
                 for repl in remote_cluster_ref.get_replications():
-                    self.log.info("Merging buckets for replication {0}.{1}->{2}.{3}".
-                                     format(repl.get_src_cluster().get_name(),
-                                            repl.get_src_bucket(),
-                                            repl.get_dest_cluster().get_name(),
-                                            repl.get_dest_bucket()))
+                    self.log.info(
+                        "Merging keys for replication {0}".format(repl))
                     self.__merge_keys(
                         repl.get_src_bucket().kvs,
                         repl.get_dest_bucket().kvs,
                         kvs_num=1,
-                        filter_exp=repl.get_repl_setting(XDCR_PARAM.FILTER_EXP)
+                        filter_exp=repl.get_filter_exp()
                     )
+
+    def sleep(self, timeout=1, message=""):
+        self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
+        time.sleep(timeout)
 
     def verify_results(self):
         """Verify data between each couchbase and remote clusters.
