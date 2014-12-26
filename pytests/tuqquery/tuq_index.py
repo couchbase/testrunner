@@ -394,7 +394,7 @@ class QueriesViewsTests(QueryTests):
                 "str_to_millis(tostr(join_yr) || '-0' || tostr(join_mo) || '-0' || tostr(join_day))) "
                 self.run_cbq_query()
             except Exception, ex:
-                self.assertTrue(str(ex).find("Expression is not supported by indexing currently") != -1,
+                self.assertTrue(str(ex).find("Error creating index") != -1,
                                 "Error message is %s." % str(ex))
             else:
                 self.fail("Error message expected")
@@ -411,7 +411,7 @@ class QueriesViewsTests(QueryTests):
                     created_indexes.append('%s_%s' % (index_name_prefix, attr))
                     self.query = 'SELECT name, join_day, join_mo FROM %s WHERE join_day>2 AND join_mo>3' % (bucket.name)
                     res = self.run_cbq_query()
-                    full_list = self._generate_full_docs_list(self.gens_load)
+                    full_list = self.generate_full_docs_list(self.gens_load)
                     expected_result = [{"name" : doc['name'], "join_mo" : doc['join_mo'], "join_day" : doc["join_day"]}
                                        for doc in full_list if doc['join_day'] > 2 and doc['join_mo'] > 3]
                     self._verify_results(sorted(res['results']), sorted(expected_result))
@@ -435,7 +435,7 @@ class QueriesViewsTests(QueryTests):
                     created_indexes.append('%s_%s' % (index_name_prefix, attr))
                     self.query = 'SELECT name, join_day, join_yr FROM %s WHERE join_yr>3' % (bucket.name)
                     res = self.run_cbq_query()
-                    full_list = self._generate_full_docs_list(self.gens_load)
+                    full_list = self.generate_full_docs_list(self.gens_load)
                     expected_result = [{"name" : doc['name'], "join_yr" : doc['join_yr'], "join_day" : doc["join_day"]}
                                        for doc in full_list if doc['join_yr'] > 3]
                     self._verify_results(sorted(res['results']), sorted(expected_result))
