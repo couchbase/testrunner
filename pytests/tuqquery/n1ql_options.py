@@ -69,6 +69,7 @@ class OptionsTests(QueryTests):
             self.query = "SELECT count(name) FROM %s" % (bucket.name)
             try:
                 actual_result = self.run_cbq_query()
+                print actual_result
             except Exception, ex:
                 self.assertTrue(str(ex).find('timeout') != -1, 'Server timeout did not work')
                 self.log.info('Timeout is on')
@@ -124,6 +125,7 @@ class OptionsRestTests(QueryTests):
             self.query = "SELECT count(name) FROM %s" % (bucket.name)
             try:
                 actual_result = self.run_cbq_query(query_params= {'timeout':'1ms'})
+                print actual_result
             except Exception, ex:
                 self.assertTrue(str(ex).find('timeout') != -1, 'Server timeout did not work')
                 self.log.info('Timeout is on')

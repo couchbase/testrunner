@@ -53,6 +53,8 @@ class QueriesViewsTests(QueryTests):
             try:
                 actual_result = self.run_cbq_query()
                 self._verify_results(actual_result['results'], [])
+            except Exception, ex:
+                self.assertTrue(str(ex).find('already exists') != -1)
             finally:
                 self.assertTrue(self._is_index_in_list(bucket, "#primary"), "Index is not in list")
 
@@ -353,7 +355,7 @@ class QueriesViewsTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_list"
             try:
-                self.query = "CREATE INDEX %s ON %s(skills) " % (index_name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(skills[0]) " % (index_name, bucket.name)
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT DISTINCT skills[0] as skill' +\
                          ' FROM %s WHERE skill[0] = "skill2010"' % (bucket.name)
