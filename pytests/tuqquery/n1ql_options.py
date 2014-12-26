@@ -20,6 +20,7 @@ class OptionsTests(QueryTests):
     def test_metrics(self):
         self.shell.execute_command("killall cbq-engine")
         self._start_command_line_query(self.master, options='-metrics=false')
+        self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
             self.query = "SELECT name, CASE WHEN join_mo < 3 OR join_mo > 11 THEN" +\
             " 'winter' ELSE 'other' END AS period FROM %s WHERE CASE WHEN" % (bucket.name) +\
@@ -149,6 +150,6 @@ class OptionsRestTests(QueryTests):
     def test_named_var_arg(self):
         self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
-            self.query = "SELECT count($1) FROM %s where test_rate>`$rate_min`" % (bucket.name)
-            actual_result = self.run_cbq_query(query_params= {'$rate_min':3, 'args' :['test_rate']})
+            self.query = 'SELECT count($1) FROM %s where test_rate>"$rate_min"' % (bucket.name)
+            actual_result = self.run_cbq_query(query_params= {'$rate_min':3, 'args' :["test_rate"]})
             self.assertTrue(actual_result['results'], 'There are no results')

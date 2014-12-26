@@ -47,7 +47,6 @@ class StatsTests(QueryTests):
                 pass
         new_stats = self.rest.query_tool_stats()
         self.assertTrue(new_stats['requests.Count'] == stats['requests.Count']+len(self.buckets), 'Request were not increased')
-        self.assertTrue(new_stats['selects.Count'] == stats['selects.Count']+len(self.buckets), 'Selects count were not increased')
         self.assertTrue(new_stats['errors.Count'] == stats['errors.Count']+len(self.buckets), 'Selects count were not increased')
         self.log.info('errors count is checked')
 
