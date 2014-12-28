@@ -47,6 +47,11 @@ class JSONNonDocTests(QueryTests):
             expected_result = [doc for doc in expected_result if doc > 300 ]
             self._verify_results(sorted(actual_result), sorted(expected_result))
 
+    def test_prepared_int_where(self):
+        for bucket in self.buckets:
+            self.query = "select v from %s v where v > 300" % bucket.name
+            self.prepared_common_body()
+
     def test_string_where(self):
         for bucket in self.buckets:
             self.query = "select v from %s where v = 4" % bucket.name

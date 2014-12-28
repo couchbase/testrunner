@@ -447,6 +447,23 @@ class QueriesViewsTests(QueryTests):
                     self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                     self.run_cbq_query()
 
+    def test_prepared_with_index_simple_where(self):
+        index_name_prefix = 'auto_ind_prepared'
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                for attr in ['join_day', 'join_mo']:
+                    self.query = "CREATE INDEX %s_%s ON %s(%s) " % (index_name_prefix, attr,
+                                                                    bucket.name, attr)
+                    self.run_cbq_query()
+                    created_indexes.append('%s_%s' % (index_name_prefix, attr))
+                    self.query = 'SELECT name, join_day, join_yr FROM %s WHERE join_yr>3' % (bucket.name)
+                    self.prepared_common_body()
+            finally:
+                for index_name in created_indexes:
+                    self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                    self.run_cbq_query()
+
     def _verify_view_is_present(self, view_name, bucket):
         ddoc, _ = RestConnection(self.master).get_ddoc(bucket.name, "ddl_%s" % view_name)
         self.assertTrue(view_name in ddoc["views"], "View %s wasn't created" % view_name)

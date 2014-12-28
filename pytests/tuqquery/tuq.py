@@ -193,6 +193,16 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['results'], expected_result)
 
+    def test_prepared_any_no_in_clause(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' end)" % (
+                                                                bucket.name) +\
+                         "AND (ANY vm IN %s.VMs SATISFIES vm.RAM = 5 end) " % (
+                                                            bucket.name) +\
+                         "AND  NOT (job_title = 'Sales') ORDER BY name"
+            self.prepared_common_body()
+
     def test_any_external(self):
         for bucket in self.buckets:
             self.query = 'SELECT name FROM %s WHERE '  % (bucket.name) +\
@@ -392,6 +402,12 @@ class QueryTests(BaseTestCase):
             expected_result = []
             self._verify_results(actual_result['results'], expected_result)
 
+    def test_prepared_like_wildcards(self):
+        for bucket in self.buckets:
+            self.query = "SELECT email FROM %s WHERE email " % (bucket.name) +\
+                         "LIKE '%@%.%' ORDER BY email"
+            self.prepared_common_body()
+
     def test_between(self):
         for bucket in self.buckets:
             self.query = "SELECT name FROM {0} WHERE join_mo BETWEEN 1 AND 6 ORDER BY name".format(bucket.name)
@@ -469,6 +485,15 @@ class QueryTests(BaseTestCase):
                                      if doc['tasks_points']["task1"] == group]) == 2011)]
             expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
             self._verify_results(actual_result['results'], expected_result)
+
+    def test_prepared_group_by_aggr_fn(self):
+        for bucket in self.buckets:
+            self.query = "SELECT tasks_points.task1 AS task from %s " % (bucket.name) +\
+                         "WHERE join_mo>7 GROUP BY tasks_points.task1 " +\
+                         "HAVING COUNT(tasks_points.task1) > 0 AND "  +\
+                         "(MIN(join_day)=1 OR MAX(join_yr=2011)) " +\
+                         "ORDER BY tasks_points.task1"
+            self.prepared_common_body()
 
     def test_group_by_satisfy(self):
         for bucket in self.buckets:
@@ -616,6 +641,12 @@ class QueryTests(BaseTestCase):
             expected_result = [{"name" : doc['name']} for doc in self.full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result, expected_result)
+
+    def test_prepared_meta_like(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT name FROM %s WHERE META(%s).id LIKE "query-test%"'  % (
+                                                                            bucket.name, bucket.name)
+            self.prepared_common_body()
 
     def test_meta_flags(self):
         for bucket in self.buckets:
@@ -787,6 +818,13 @@ class QueryTests(BaseTestCase):
                                             doc['job_title'] == 'Sales'] ) < 100000]
             expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
             self._verify_results(actual_result, expected_result)
+
+    def test_prepared_sum(self):
+        for bucket in self.buckets:
+            self.query = "SELECT join_mo, SUM(tasks_points.task1) as points_sum" +\
+                        " FROM %s WHERE join_mo < 5 GROUP BY join_mo " % (bucket.name) +\
+                        "ORDER BY join_mo"
+            self.prepared_common_body()
 
     def test_sum_negative(self):
         queries_errors = {'SELECT join_mo, SUM(job_title) as rate FROM %s as employees' +\
@@ -972,6 +1010,14 @@ class QueryTests(BaseTestCase):
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
+
+    def test_prepared_array_append(self):
+        for bucket in self.buckets:
+            self.query = "SELECT job_title," +\
+                         " array_append(array_agg(DISTINCT name), 'new_name') as names" +\
+                         " FROM %s GROUP BY job_title" % (bucket.name)
+
+            self.prepared_common_body()
 
     def test_array_concat(self):
         for bucket in self.buckets:
@@ -1393,6 +1439,11 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result, expected_result)
 
+    def test_prepared_in_str(self):
+        for bucket in self.buckets:
+            self.query = "select name from %s where job_title in ['Sales', 'Support']" % (bucket.name)
+            self.prepared_common_body()
+
     def test_logic_expr(self):
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
@@ -1646,6 +1697,13 @@ class QueryTests(BaseTestCase):
                                                                         doc['join_mo'],
                                                                         doc['join_day']))
             self._verify_results(actual_result, expected_result)
+
+    def test_prepared_date_where(self):
+        for bucket in self.buckets:
+            self.query = 'select name, join_yr, join_mo, join_day from %s' % (bucket.name) +\
+            ' where date_part_str(now_str(),"month") < join_mo AND date_part_str(now_str(),"year")' +\
+            ' > join_yr AND date_part_str(now_str(),"day") < join_day'
+            self.prepared_common_body()
 
     def test_now_millis(self):
         self.query = "select now_millis() as now"
@@ -1913,6 +1971,11 @@ class QueryTests(BaseTestCase):
             expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
 
+    def test_prepared_union(self):
+        for bucket in self.buckets:
+            self.query = "select name from %s union select email from %s" % (bucket.name, bucket.name)
+            self.prepared_common_body()
+
     def test_union_multiply_buckets(self):
         self.assertTrue(len(self.buckets) > 1, 'This test needs more than one bucket')
         self.query = "select name from %s union select email from %s" % (self.buckets[0].name, self.buckets[1].name)
@@ -1994,6 +2057,11 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
+    def test_prepared_intersect(self):
+        for bucket in self.buckets:
+            self.query = "select name from %s intersect all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
+            self.prepared_common_body()
+
     def test_except(self):
         for bucket in self.buckets:
             self.query = "select name from %s except select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
@@ -2030,6 +2098,11 @@ class QueryTests(BaseTestCase):
                                if len([vm for vm in doc["VMs"] if vm["RAM"] == 5])]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+
+    def test_prepared_within_list_object(self):
+        for bucket in self.buckets:
+            self.query = "select name, VMs from %s WHERE 5 WITHIN VMs" % (bucket.name)
+            self.prepared_common_body()
 
     def test_within_list_of_lists(self):
         for bucket in self.buckets:
@@ -2240,6 +2313,11 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
+    def test_prepared_title(self):
+        for bucket in self.buckets:
+            self.query = "select TITLE(VMs[0].os) as OS from %s" % (bucket.name)
+            self.prepared_common_body()
+
     def test_position(self):
         for bucket in self.buckets:
             self.query = "select POSITION(VMs[1].name, 'vm') pos from %s" % (bucket.name)
@@ -2354,6 +2432,11 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
+    def test_prepared_let_nums(self):
+        for bucket in self.buckets:
+            self.query = "select test_r, test_r > 2 compare from %s let test_r = (test_rate / 2)" % (bucket.name)
+            self.prepared_common_body()
+
     def test_let_string(self):
         for bucket in self.buckets:
             self.query = "select name, join_date date from %s let join_date = tostr(join_yr) || '-' || tostr(join_mo)" % (bucket.name)
@@ -2379,6 +2462,11 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
+    def test_prepared_letting(self):
+        for bucket in self.buckets:
+            self.query = "SELECT join_mo, sum_test from %s WHERE join_mo>7 group by join_mo letting sum_test = sum(tasks_points.task1)" % (bucket.name)
+            self.prepared_common_body()
+
 ##############################################################################################
 #
 #   COMMON FUNCTIONS
@@ -2399,7 +2487,17 @@ class QueryTests(BaseTestCase):
                 else:
                     self.fail("There was no errors. Error expected: %s" % error)
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}):
+    def prepared_common_body(self):
+        result_no_prepare = self.run_cbq_query()['results']
+        query = "PREPARE %s" % self.query
+        prepared = self.run_cbq_query(query=query)['results'][0]
+        result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True)['results']
+        msg = "Query resut with prepare and without doesn't match.\nNo prepare: %s ... %s\nWith prepare: %s ... %s"
+        self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare),
+                          msg % (result_no_prepare[:100],result_no_prepare[-100:],
+                                 result_with_prepare[:100],result_with_prepare[-100:]))
+
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False):
         if query is None:
             query = self.query
         if server is None:
@@ -2410,7 +2508,7 @@ class QueryTests(BaseTestCase):
             if hasattr(self, 'query_params') and self.query_params:
                 query_params = self.query_params
             self.log.info('RUN QUERY %s' % query)
-            result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params)
+            result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared=is_prepared)
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/query/" +\

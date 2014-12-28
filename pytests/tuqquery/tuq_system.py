@@ -56,3 +56,8 @@ class SysCatalogTests(QueryTests):
         self.assertFalse(set([b['keyspaces']['store_id'] for b in result['results']]) -\
                         set([p['namespaces']['store_id'] for p in pools['results']]),
                         "Expected site_ids: %s, actual: %s" % (pools, result))
+
+    def test_prepared_buckets(self):
+        for bucket in self.buckets:
+            self.query = "SELECT * FROM system:keyspaces"
+            self.prepared_common_body()

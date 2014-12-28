@@ -2079,12 +2079,19 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
-    def query_tool(self, query, port=8093, timeout=650, query_params={}):
-        params = {'statement' : query}
-        params.update(query_params)
-        params = urllib.urlencode(params)
-        log.info('query params : {0}'.format(params))
-        api = "http://%s:%s/query?%s" % (self.ip, port, params)
+    def query_tool(self, query, port=8093, timeout=650, query_params={}, is_prepared=False):
+        key = 'prepared' if is_prepared else 'statement'
+        if is_prepared:
+            prepared = json.dumps(query)
+            prepared = str(prepared.encode('utf-8'))
+            params = 'prepared=' + urllib.quote(prepared, '~()')
+            api = "http://%s:%s/query/service?%s" % (self.ip, port, params)
+        else:
+            params = {key : query}
+            params.update(query_params)
+            params = urllib.urlencode(params)
+            log.info('query params : {0}'.format(params))
+            api = "http://%s:%s/query?%s" % (self.ip, port, params)
         status, content, header = self._http_request(api, 'POST', timeout=timeout)
         try:
             return json.loads(content)

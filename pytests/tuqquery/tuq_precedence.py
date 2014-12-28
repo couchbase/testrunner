@@ -53,6 +53,13 @@ class PrecedenceTests(QueryTests):
                                                                        doc['period']))
             self._verify_results(actual_result, expected_result)
 
+    def test_prepared_case_and_logic_exp(self):
+        for bucket in self.buckets:
+            self.query = "SELECT DISTINCT name, CASE WHEN join_mo < 3 OR join_mo > 11 THEN" +\
+            " 'winter' ELSE 'other' END AS period FROM %s WHERE CASE WHEN join_mo < 3" %(bucket.name) +\
+            " OR join_mo > 11 THEN 1 ELSE 0 END > 0 AND job_title='Sales'"
+            self.prepared_common_body()
+
     def test_case_and_comparision_exp(self):
         for bucket in self.buckets:
             self.query = "SELECT DISTINCT name, CASE WHEN join_mo < 3 OR join_mo > 11 THEN" +\
@@ -130,6 +137,12 @@ class PrecedenceTests(QueryTests):
             expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             expected_result = sorted(expected_result, key=lambda doc: (doc['email']))
             self._verify_results(actual_result, expected_result)
+
+    def test_prepared_logic_exp(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, join_mo from %s WHERE NOT join_mo>10 AND" % (bucket.name) +\
+            " job_title='Sales' OR join_mo<2"
+            self.prepared_common_body()
 
     def test_logic_exp_nulls(self):
         for bucket in self.buckets:

@@ -50,6 +50,12 @@ class NULLTests(QueryTests):
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
             self._verify_results(actual_result['results'], expected_result)
 
+    def test_prepared_not_null_query(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name FROM %s"  % bucket.name +\
+                        " WHERE coverage_tests.P0 IS NOT NULL ORDER BY feature_name"
+            self.prepared_common_body()
+
     def test_missing_query(self):
         for bucket in self.buckets:
             self.query = "SELECT feature_name FROM %s"  % bucket.name +\
@@ -62,6 +68,12 @@ class NULLTests(QueryTests):
                                if not "P0" in doc['coverage_tests']]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
             self._verify_results(actual_result['results'], expected_result)
+
+    def test_prepared_missing_query(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name FROM %s"  % bucket.name +\
+                        " WHERE coverage_tests.P0 IS MISSING ORDER BY feature_name"
+            self.prepared_common_body()
 
     def test_not_missing_query(self):
         for bucket in self.buckets:
@@ -140,6 +152,12 @@ class NULLTests(QueryTests):
                                        if point is None]) == len(doc['story_point'])]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
             self._verify_results(actual_result['results'], expected_result)
+
+    def test_prepared_nulls_over(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name FROM %s"  % bucket.name +\
+                        " WHERE ANY story_point_n IN story_point SATISFIES story_point_n IS NULL END ORDER BY feature_name"
+            self.prepared_common_body()
 
     def test_ifnan(self):
         for bucket in self.buckets:

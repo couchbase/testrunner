@@ -45,6 +45,13 @@ class JoinTests(QueryTests):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
+    def test_prepared_simple_join_keys(self):
+        for bucket in self.buckets:
+            self.query = "SELECT employee.name, employee.tasks_ids, new_project " +\
+            "FROM %s as employee %s JOIN default.project as new_project " % (bucket.name, self.type_join) +\
+            "ON KEYS employee.tasks_ids"
+            self.prepared_common_body()
+
     def test_join_several_keys(self):
         for bucket in self.buckets:
             self.query = "SELECT employee.name, employee.tasks_ids, new_task.project, new_task.task_name " +\
@@ -104,6 +111,11 @@ class JoinTests(QueryTests):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
+    def test_prepared_unnest(self):
+        for bucket in self.buckets:
+            self.query = "SELECT emp.name, task FROM %s emp %s UNNEST emp.tasks_ids task" % (bucket.name,self.type_join)
+            self.prepared_common_body()
+
 ##############################################################################################
 #
 #   SUBQUERY
@@ -137,6 +149,12 @@ class JoinTests(QueryTests):
                                     for doc in self.generate_full_docs_list(self.gens_tasks)])
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+
+    def test_prepared_subquery_select(self):
+        for bucket in self.buckets:
+            self.query = "select task_name, (select count(task_name) cn from %s d use keys %s) as names from %s" % (bucket.name, str(['test_task-%s' % i for i in xrange(0, 29)]),
+                                                                                                                    bucket.name)
+            self.prepared_common_body()
 
     def test_subquery_where_aggr(self):
         for bucket in self.buckets:
@@ -342,6 +360,14 @@ class JoinTests(QueryTests):
             expected_result.extend([{} for doc in full_list if not 'items_nested' in doc])
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+
+    def test_prepared_nest_keys_with_array(self):
+        for bucket in self.buckets:
+            self.query = "select emp.name, ARRAY item.project FOR item in items end projects " +\
+                         "FROM %s emp %s NEST %s items " % (
+                                                    bucket.name, self.type_join, bucket.name) +\
+                         "ON KEYS emp.tasks_ids"
+            self.prepared_common_body()
 
     def test_nest_keys_where(self):
         for bucket in self.buckets:
