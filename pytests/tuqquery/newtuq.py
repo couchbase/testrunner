@@ -171,7 +171,7 @@ class QueryTests(BaseTestCase):
                           'SELECT $str0._last_name as DATABASE ?' : 'Parse Error - syntax error',
                           'SELECT $str0 AS NULL FROM {0}' : 'Parse Error - syntax error',
                           'SELECT $str1 as $str0, $str0 FROM {0}' :
-                                'alias name is defined more than once',
+                                'Duplicate result alias name',
                           'SELECT $obj0 AS points, points.task1 FROM {0}' :
                                 'Alias points cannot be referenced',
                           'SELECT $obj0.task1 AS points_new FROM {0} AS test ' +
