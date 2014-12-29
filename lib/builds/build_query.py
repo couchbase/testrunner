@@ -290,18 +290,25 @@ class BuildQuery(object):
                 build_info = build_info.replace("couchbase_server","couchbase-server")
             """ End remove here """
 
-            """ sherlock build name: couchbase-server-enterprise-3.5.0-71-centos6.x86_64
-                sherlock debian7:    couchbase-server-enterprise_3.5.0-10-debian7_amd64.deb """
+            """ sherlock build name
+                centos 6: couchbase-server-enterprise-3.5.0-71-centos6.x86_64
+                debian7:  couchbase-server-enterprise_3.5.0-10-debian7_amd64.deb
+                ubuntu 12.04:
+                    couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb """
             if "3.5.0-" in build_info:
                 if "debian7" in build_info:
                     product_version = build_info.split("_")
                     product_version = product_version[1].replace("-debian7" , "")
+                elif "ubuntu12.04" in build_info:
+                    product_version = build_info.split("_")
+                    product_version = product_version[1].replace("-ubuntu12.04" , "")
                 else:
                     product_version = build_info.split("-")
                     product_version = product_version[3] + "-" + product_version[4]
                 if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
                     build.product_version = product_version
-                    if "debian7" in build_info:
+                    if "debian7" in build_info or \
+                       "ubuntu12.04" in build_info:
                         build_info = build_info.replace("_" + product_version,"")
                     else:
                         build_info = build_info.replace("-" + product_version,"")
@@ -319,6 +326,8 @@ class BuildQuery(object):
                         build.product = build_info.replace("-centos6", "")
                     elif "-debian7" in build_info:
                         build.product = build_info.replace("-debian7", "")
+                    elif "ubuntu12.04" in build_info:
+                        build.product = build_info.replace("-ubuntu12.04", "")
                 return build
             product_version = build_info.split("_")
             product_version = product_version[len(product_version)-1]
@@ -355,6 +364,8 @@ class BuildQuery(object):
         sherlock repo: http://latestbuilds.hq.couchbase.com/couchbase-server/sherlock
         sherlock build name with extra build number:
                /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
+               /723/couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
+               /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb
         toy=Ce
         build.name = couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
         build.url = http://builds.hq.northscale.net/latestbuilds/couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
