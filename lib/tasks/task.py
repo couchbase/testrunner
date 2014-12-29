@@ -370,6 +370,7 @@ class RebalanceTask(Task):
                 self.retry_get_progress += 1
             if self.previous_progress != progress:
                 self.previous_progress = progress
+                self.retry_get_progress = 0
             else:
                 self.retry_get_progress += 1
         except RebalanceFailedException as ex:
