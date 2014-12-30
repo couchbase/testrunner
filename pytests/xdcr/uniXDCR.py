@@ -1,19 +1,23 @@
-import copy
-import time
-from random import randrange
 from threading import Thread
+import copy
 
 from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import LoadWithMcsoda
-from xdcrbasetests import XDCRReplicationBaseTest
+from xdcrnewbasetests import XDCRNewBaseTest
+from xdcrnewbasetests import NodeHelper
+from xdcrnewbasetests import Utility, BUCKET_NAME, OPS
 
 
 # Assumption that at least 2 nodes on every cluster
-class unidirectional(XDCRReplicationBaseTest):
+class unidirectional(XDCRNewBaseTest):
     def setUp(self):
         super(unidirectional, self).setUp()
+        self.src_cluster = self.get_cb_cluster_by_name('C1')
+        self.src_master = self.src_cluster.get_master_node()
+        self.dest_cluster = self.get_cb_cluster_by_name('C2')
+        self.dest_master = self.dest_cluster.get_master_node()
 
     def tearDown(self):
         super(unidirectional, self).tearDown()
@@ -22,44 +26,28 @@ class unidirectional(XDCRReplicationBaseTest):
     subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified by the user. """
 
     def load_with_ops(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-
-        self._modify_src_data()
-
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.sleep(self.wait_timeout / 2)
+        self.setup_xdcr_and_load()
+        self.perform_update_delete()
         self.verify_results()
 
     """Testing Unidirectional load( Loading only at source) Verifying whether XDCR replication is successful on
     subsequent destination clusters. Create/Update/Delete are performed in parallel- doc-ops specified by the user. """
 
     def load_with_async_ops(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-
-        self._async_modify_data()
-
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-
-        self._wait_flusher_empty(self.src_master, self.src_nodes)
-        self.sleep(self.wait_timeout / 2)
+        self.setup_xdcr_and_load()
+        self.async_perform_update_delete()
         self.verify_results()
 
     def load_with_async_ops_diff_data_size(self):
         # Load 1 item with size 1
         # 52 alphabets (small and capital letter)
-        gen_create = BlobGenerator('loadOne', 'loadOne', 1, start=0, end=52)
-        self._load_all_buckets(self.src_master, gen_create, "create", 0, batch_size=1)
-
+        self.src_cluster.load_all_buckets(52, value_size=1)
         # Load items with below sizes of 1M
-        gen_create = BlobGenerator('loadOne', 'loadOne', 1000000, start=52, end=99)
-        self._load_all_buckets(self.src_master, gen_create, "create", 0, batch_size=1)
-
+        self.src_cluster.load_all_buckets(5, value_size=1000000)
         # Load items with size 10MB
         # Getting memory issue with 20MB data on VMs.
-        gen_create = BlobGenerator('loadOne', 'loadOne', 10000000, start=99, end=100)
-        self._load_all_buckets(self.src_master, gen_create, "create", 0, batch_size=1)
+        self.src_cluster.load_all_buckets(1, value_size=10000000)
 
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.verify_results()
 
     """Testing Unidirectional load( Loading only at source). Failover node at Source/Destination while
@@ -67,161 +55,95 @@ class unidirectional(XDCRReplicationBaseTest):
     Verifying whether XDCR replication is successful on subsequent destination clusters. """
 
     def load_with_ops_with_warmup(self):
-        #warmup
+        self.setup_xdcr_and_load()
         warmupnodes = []
-        if self._warmup is not None:
-            if "source" in self._warmup:
-                warmupnodes.append(self.src_nodes[randrange(1, len(self.src_nodes))])
-            if "destination" in self._warmup:
-                warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
-        for node in warmupnodes:
-            self.do_a_warm_up(node)
-        self.sleep(self.wait_timeout)
+        if "C1" in self._warmup:
+            warmupnodes.append(self.src_cluster.warmup_node())
+        if "C2" in self._warmup:
+            warmupnodes.append(self.dest_cluster.warmup_node())
 
-        self._modify_src_data()
+        self.sleep(self._wait_timeout)
+        self.perform_update_delete()
+        self.sleep(self._wait_timeout / 2)
 
-        self._wait_flusher_empty(self.src_master, self.src_nodes)
-
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-
-        self.wait_warmup_completed(warmupnodes)
+        NodeHelper.wait_warmup_completed(warmupnodes)
 
         self.verify_results()
 
     def load_with_ops_with_warmup_master(self):
-        #warmup
+        self.setup_xdcr_and_load()
         warmupnodes = []
-        if self._warmup is not None:
-            if "source" in self._warmup:
-                warmupnodes.append(self.src_master)
-            if "destination" in self._warmup:
-                warmupnodes.append(self.dest_master)
-        for node in warmupnodes:
-            self.do_a_warm_up(node)
-        self.sleep(self.wait_timeout)
-        self._modify_src_data()
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.wait_warmup_completed(warmupnodes)
+        if "C1" in self._warmup:
+            warmupnodes.append(self.src_cluster.warmup_node(master=True))
+        if "C2" in self._warmup:
+            warmupnodes.append(self.dest_cluster.warmup_node(master=True))
+
+        self.sleep(self._wait_timeout)
+        self.perform_update_delete()
+        self.sleep(self._wait_timeout / 2)
+
+        NodeHelper.wait_warmup_completed(warmupnodes)
+
         self.verify_results()
 
     def load_with_async_ops_with_warmup(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self.wait_timeout)
-
-        #warmup
+        self.setup_xdcr_and_load()
         warmupnodes = []
-        if self._warmup is not None:
-            if "source" in self._warmup:
-                warmupnodes.append(self.src_nodes[randrange(1, len(self.src_nodes))])
-            if "destination" in self._warmup:
-                warmupnodes.append(self.dest_nodes[randrange(1, len(self.dest_nodes))])
-        for node in warmupnodes:
-            self.do_a_warm_up(node)
-        self.sleep(self.wait_timeout)
-        self._async_modify_data()
-        self.sleep(30)
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self._wait_flusher_empty(self.src_master, self.src_nodes)
-        self.wait_warmup_completed(warmupnodes)
+        if "C1" in self._warmup:
+            warmupnodes.append(self.src_cluster.warmup_node())
+        if "C2" in self._warmup:
+            warmupnodes.append(self.dest_cluster.warmup_node())
+
+        self.sleep(self._wait_timeout)
+        self.async_perform_update_delete()
+        self.sleep(self._wait_timeout / 2)
+
+        NodeHelper.wait_warmup_completed(warmupnodes)
+
         self.verify_results()
 
     def load_with_async_ops_with_warmup_master(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self.wait_timeout)
-
-        #warmup
+        self.setup_xdcr_and_load()
         warmupnodes = []
-        if self._warmup is not None:
-            if "source" in self._warmup:
-                warmupnodes.append(self.src_master)
-            if "destination" in self._warmup:
-                warmupnodes.append(self.dest_master)
-        for node in warmupnodes:
-            self.do_a_warm_up(node)
-        self.sleep(self.wait_timeout)
-        self._async_modify_data()
-        self.sleep(self.wait_timeout / 2)
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self._wait_flusher_empty(self.dest_master, self.dest_nodes)
-        self.wait_warmup_completed(warmupnodes)
+        if "C1" in self._warmup:
+            warmupnodes.append(self.src_cluster.warmup_node(master=True))
+        if "C2" in self._warmup:
+            warmupnodes.append(self.dest_cluster.warmup_node(master=True))
+
+        self.sleep(self._wait_timeout)
+        self.async_perform_update_delete()
+        self.sleep(self._wait_timeout / 2)
+
+        NodeHelper.wait_warmup_completed(warmupnodes)
+
         self.verify_results()
 
     def load_with_failover(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self.wait_timeout)
+        self.setup_xdcr_and_load()
 
-        if self._failover is not None:
-            if "source" in self._failover:
-                if len(self.src_nodes) > 1:
-                    i = len(self.src_nodes) - 1
-                    self.log.info(
-                            " Failing over Source Non-Master Node {0}:{1}".format(self.src_nodes[i].ip, self.src_nodes[i].port))
-                    self.cluster.failover(self.src_nodes, [self.src_nodes[i]])
-                    self.log.info(" Rebalance out Source Non-Master Node {0}:{1}".format(self.src_nodes[i].ip,
-                                                                                          self.src_nodes[i].port))
-                    self.cluster.rebalance(self.src_nodes, [], [self.src_nodes[i]])
-                    self.src_nodes.remove(self.src_nodes[i])
-                else:
-                    self.log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
-                                    len(self.src_nodes)))
-            if "destination" in self._failover:
-                if len(self.dest_nodes) > 1:
-                    i = len(self.dest_nodes) - 1
-                    self.log.info(" Failing over Destination Non-Master Node {0}:{1}".format(self.dest_nodes[i].ip,
-                                                                                              self.dest_nodes[i].port))
-                    self.cluster.failover(self.dest_nodes, [self.dest_nodes[i]])
-                    self.log.info(" Rebalance out Destination Non-Master Node {0}:{1}".format(self.dest_nodes[i].ip,
-                                                                                               self.dest_nodes[i].port))
-                    self.cluster.rebalance(self.dest_nodes, [], [self.dest_nodes[i]])
-                    self.dest_nodes.remove(self.dest_nodes[i])
-                else:
-                    self.log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
-                                    len(self.dest_nodes)))
+        if "C1" in self._failover:
+            self.src_cluster.failover_and_rebalance_nodes()
+        if "C2" in self._failover:
+            self.dest_cluster.failover_and_rebalance_nodes()
 
-        self.sleep(self.wait_timeout / 6)
-        self._async_modify_data()
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.sleep(self._wait_timeout / 6)
+        self.perform_update_delete()
+
         self.verify_results()
 
     def load_with_failover_then_add_back(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self.wait_timeout)
 
-        if self._failover is not None:
-            if "source" in self._failover:
-                if len(self.src_nodes) > 1:
-                    i = len(self.src_nodes) - 1
-                    self.log.info(
-                            " Failing over Source Non-Master Node {0}:{1}".format(self.src_nodes[i].ip, self.src_nodes[i].port))
-                    self.cluster.failover(self.src_nodes, [self.src_nodes[i]])
-                    self.log.info(" Add back Source Non-Master Node {0}:{1}".format(self.src_nodes[i].ip,
-                                                                                     self.src_nodes[i].port))
-                    self.adding_back_a_node(self.src_master, self.src_nodes[i])
-                    self.cluster.rebalance(self.src_nodes, [], [])
-                else:
-                    self.log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
-                                    len(self.src_nodes)))
-            if "destination" in self._failover:
-                if len(self.dest_nodes) > 1:
-                    i = len(self.dest_nodes) - 1
-                    self.log.info(" Failing over Destination Non-Master Node {0}:{1}".format(self.dest_nodes[i].ip,
-                                                                                              self.dest_nodes[i].port))
-                    self.cluster.failover(self.dest_nodes, [self.dest_nodes[i]])
-                    self.log.info(" Add back Destination Non-Master Node {0}:{1}".format(self.dest_nodes[i].ip,
-                                                                                          self.dest_nodes[i].port))
-                    self.adding_back_a_node(self.dest_master, self.dest_nodes[i])
-                    self.cluster.rebalance(self.dest_nodes, [], [])
-                else:
-                    self.log.info("Number of nodes {0} is less than minimum '2' needed for failover on a cluster.".format(
-                                    len(self.dest_nodes)))
+        self.setup_xdcr_and_load()
 
-        now = time.time()
-        self._async_modify_data()
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        #The failover/rebalance things at destination may take some time to finish.
-        #During the process, each vb replicator source XDCR will probe every 30 seconds,
-        #once the failover/rebalance is over and new vb map is generated, source XDCR will resume replication.
-        self.sleep(max(0, 30 + now - time.time()))
+        if "C1" in self._failover:
+            self.src_cluster.failover_and_rebalance_nodes(rebalance=False)
+            self.src_cluster.add_back_node()
+        if "C2" in self._failover:
+            self.dest_cluster.failover_and_rebalance_nodes(rebalance=False)
+            self.dest_cluster.add_back_node()
+
+        self.perform_update_delete()
+
         self.verify_results()
 
     """Testing Unidirectional load( Loading only at source). Failover node at Source/Destination while
@@ -229,41 +151,16 @@ class unidirectional(XDCRReplicationBaseTest):
     Verifying whether XDCR replication is successful on subsequent destination clusters. """
 
     def load_with_failover_master(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self.wait_timeout)
+        self.setup_xdcr_and_load()
 
-        if self._failover is not None:
-            if "source" in self._failover:
-                self.log.info(" Failing over Source Master Node {0}:{1}".format(self.src_master.ip, self.src_master.port))
-                prev_master_id = RestConnection(self.src_master).get_nodes_self().id
-                self.cluster.failover(self.src_nodes, [self.src_master])
-                self.log.info(" Rebalance out Source Master Node {0}".format(self.src_master.ip))
-                self.cluster.rebalance(self.src_nodes, [], [self.src_master])
-                self.src_nodes.remove(self.src_master)
-                self.src_master = self.src_nodes[0]
-                rest = RestConnection(self.src_master)
-                master_id = rest.get_nodes_self().id
-                for bucket in self.buckets:
-                    if bucket.master_id == prev_master_id:
-                        bucket.master_id = master_id
+        if "C1" in self._failover:
+            self.src_cluster.failover_and_rebalance_master()
+        if "C2" in self._failover:
+            self.dest_cluster.failover_and_rebalance_master()
 
-            if "destination" in self._failover:
-                self.log.info(" Failing over Destination Master Node {0}".format(self.dest_master.ip))
-                prev_master_id = RestConnection(self.dest_master).get_nodes_self().id
-                self.cluster.failover(self.dest_nodes, [self.dest_master])
-                self.log.info(" Rebalance out Destination Master Node {0}".format(self.dest_master.ip))
-                self.cluster.rebalance(self.dest_nodes, [], [self.dest_master])
-                self.dest_nodes.remove(self.dest_master)
-                self.dest_master = self.dest_nodes[0]
-                rest = RestConnection(self.dest_master)
-                master_id = rest.get_nodes_self().id
-                for bucket in self.buckets:
-                    if bucket.master_id == prev_master_id:
-                        bucket.master_id = master_id
+        self.sleep(self._wait_timeout / 6)
+        self.perform_update_delete()
 
-        self.sleep(self.wait_timeout / 6)
-        self._async_modify_data()
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.verify_results()
 
     """Testing Unidirectional load( Loading only at source). Failover node at Source/Destination while
@@ -271,42 +168,26 @@ class unidirectional(XDCRReplicationBaseTest):
     Verifying whether XDCR replication is successful on subsequent destination clusters. """
 
     def load_with_async_failover(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self.wait_timeout)
+        self.setup_xdcr_and_load()
 
         tasks = []
-        """Setting up failover while creates/updates/deletes at source nodes"""
-        if self._failover is not None:
-            if "source" in self._failover:
-                i = len(self.src_nodes) - 1
-                tasks.extend(self._async_failover(self.src_nodes, [self.src_nodes[i]]))
-                self.log.info(" Failing over Source Node {0}".format(self.src_nodes[i].ip))
-            if "destination" in self._failover:
-                i = len(self.dest_nodes) - 1
-                tasks.extend(self._async_failover(self.dest_nodes, [self.dest_nodes[i]]))
-                self.log.info(" Failing over Destination Node {0}".format(self.dest_nodes[i].ip))
+        if "C1" in self._failover:
+            tasks.append(self.src_cluster.async_failover())
+        if "C2" in self._failover:
+            tasks.append(self.dest_cluster.async_failover())
 
-        self._async_modify_data()
+        self.perform_update_delete()
+        self.sleep(self._wait_timeout / 4)
 
-        self.sleep(self.wait_timeout / 4)
         for task in tasks:
             task.result()
 
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-
-        if self._failover is not None:
-            if "source" in self._failover:
-                self.log.info(" Rebalance out Source Node {0}".format(self.src_nodes[i].ip))
-                self.cluster.rebalance(self.src_nodes, [], [self.src_nodes[i]])
-                self.src_nodes.pop(i)
-
-            if "destination" in self._failover:
-                self.log.info(" Rebalance out Destination Node {0}".format(self.dest_nodes[i].ip))
-                self.cluster.rebalance(self.dest_nodes, [], [self.dest_nodes[i]])
-                self.dest_nodes.pop(i)
+        if "C1" in self._failover:
+            self.src_cluster.rebalance_failover_nodes()
+        if "C2" in self._failover:
+            self.dest_cluster.rebalance_failover_nodes()
 
         self.verify_results()
-            #ToDO - Failover and ADD BACK NODE
 
     """Replication with compaction ddocs and view queries on both clusters.
 
@@ -320,95 +201,39 @@ class unidirectional(XDCRReplicationBaseTest):
         a full verification: wait for the disk queues to drain
         and then verify that there has been any data loss on all clusters."""
     def replication_with_ddoc_compaction(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self.wait_timeout)
+        self.setup_xdcr_and_load()
 
-        src_buckets = self._get_cluster_buckets(self.src_master)
-        for bucket in src_buckets:
-            views = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
+        num_views = self._input.param("num_views", 5)
+        is_dev_ddoc = self._input.param("is_dev_ddoc", True)
+        fragmentation_value = self._input.param("fragmentation_value", 80)
+        for bucket in self.src_cluster.get_buckets():
+            views = Utility.make_default_views(bucket.name, num_views, is_dev_ddoc)
+
         ddoc_name = "ddoc1"
-        prefix = ("", "dev_")[self._is_dev_ddoc]
+        prefix = ("", "dev_")[is_dev_ddoc]
 
-        query = {"full_set" : "true", "stale" : "false"}
+        query = {"full_set": "true", "stale": "false"}
 
-        tasks = self.async_create_views(self.src_master, ddoc_name, views, self.default_bucket_name)
-        tasks += self.async_create_views(self.dest_master, ddoc_name, views, self.default_bucket_name)
+        tasks = self.src_cluster.async_create_views(ddoc_name, views, BUCKET_NAME.DEFAULT)
+        tasks += self.dest_cluster.async_create_views(ddoc_name, views, BUCKET_NAME.DEFAULT)
         for task in tasks:
             task.result(self._poll_timeout)
 
-        self.disable_compaction()
-        fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.src_master,
-            prefix + ddoc_name, self.fragmentation_value, "default")
+        self.src_cluster.disable_compaction()
+        fragmentation_monitor = self.src_cluster.async_monitor_view_fragmentation(prefix + ddoc_name, fragmentation_value, BUCKET_NAME.DEFAULT)
 
-        #generate load until fragmentation reached
+        # generate load until fragmentation reached
         while fragmentation_monitor.state != "FINISHED":
-            #update docs to create fragmentation
-            self._load_all_buckets(self.src_master, self.gen_update, "update", self._expires)
+            # update docs to create fragmentation
+            self.src_cluster.update_delete_data(OPS.UPDATE)
             for view in views:
                 # run queries to create indexes
-                self.cluster.query_view(self.src_master, prefix + ddoc_name, view.name, query)
+                self.src_cluster.query_view(prefix + ddoc_name, view.name, query)
         fragmentation_monitor.result()
 
-        compaction_task = self.cluster.async_compact_view(self.src_master, prefix + ddoc_name, 'default')
+        compaction_task = self.src_cluster.async_compact_view(prefix + ddoc_name, 'default')
 
-        result = compaction_task.result()
-        self.assertTrue(result)
-
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-
-        self.verify_results()
-
-    def replication_with_view_queries_and_ops(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self.wait_timeout)
-
-        src_buckets = self._get_cluster_buckets(self.src_master)
-        dest_buckets = self._get_cluster_buckets(self.src_master)
-        for bucket in src_buckets:
-            views = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
-
-        ddoc_name = "ddoc1"
-        prefix = ("", "dev_")[self._is_dev_ddoc]
-
-        query = {"full_set" : "true", "stale" : "false"}
-
-        tasks = self.async_create_views(self.src_master, ddoc_name, views, self.default_bucket_name)
-        tasks += self.async_create_views(self.dest_master, ddoc_name, views, self.default_bucket_name)
-        for task in tasks:
-            task.result(self._poll_timeout)
-
-        tasks = []
-        #Setting up doc-ops at source nodes
-        if self._doc_ops is not None:
-            # allows multiple of them but one by one on either of the clusters
-            if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
-
-            if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-
-            self.sleep(5)
-
-        while True:
-            for view in views:
-                self.cluster.query_view(self.src_master, prefix + ddoc_name, view.name, query)
-                self.cluster.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
-            if set([task.state for task in tasks]) != set(["FINISHED"]):
-                continue
-            else:
-                if "update" in self._doc_ops and self._wait_for_expiration:
-                    self.sleep(self._expires)
-                break
-
-        tasks = []
-        for view in views:
-            tasks.append(self.cluster.async_query_view(self.src_master, prefix + ddoc_name, view.name, query, src_buckets[0].kvs[1].__len__()))
-            tasks.append(self.cluster.async_query_view(self.dest_master, prefix + ddoc_name, view.name, query, dest_buckets[0].kvs[1].__len__()))
-
-        for task in tasks:
-            task.result(self._poll_timeout)
-
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.assertTrue(compaction_task.result())
 
         self.verify_results()
 
@@ -421,89 +246,56 @@ class unidirectional(XDCRReplicationBaseTest):
         we perform a full verification: wait for the disk queues to drain
         and then verify that there has been no data loss on both all clusters."""
     def replication_with_disabled_ddoc_compaction(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self.wait_timeout)
+        self.setup_xdcr_and_load()
 
-        if self.disable_src_comp:
-            self.disable_compaction(self.src_master)
-        if self.disable_dest_comp:
-            self.disable_compaction(self.dest_master)
+        if "C1" in self._disable_compaction:
+            self.src_cluster.disable_compaction()
+        if "C2" in self._disable_compaction:
+            self.dest_cluster.disable_compaction()
 
         # perform doc's ops 3 times to increase rev number
-        for i in range(3):
-            self._async_modify_data()
-            #restore deleted items
-            if self._doc_ops is not None:
-                if "delete" in self._doc_ops:
-                    tasks = self._async_load_all_buckets(self.src_master, self.gen_delete, "create", 0)
-                    self.sleep(5)
-                    for task in tasks:
-                        task.result()
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        for _ in range(3):
+            self.async_perform_update_delete()
+            # restore(re-creating) deleted items
+            if 'C1' in self._del_clusters:
+                c1_kv_gen = self.src_cluster.get_kv_gen()
+                gen_delete = copy.deepcopy(c1_kv_gen[OPS.DELETE])
+                self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_delete)
+                self.sleep(5)
+
         self.verify_results()
 
     def replication_while_rebooting_a_non_master_destination_node(self):
-        self.set_xdcr_param("xdcrFailureRestartInterval", 1)
+        self.setup_xdcr_and_load()
+        self.src_cluster.set_xdcr_param("xdcrFailureRestartInterval", 1)
+        self.perform_update_delete()
+        rebooted_node = self.dest_cluster.reboot_one_node(self)
+        NodeHelper.wait_node_restarted(rebooted_node, self, wait_time=self._wait_timeout * 4, wait_if_warmup=True)
 
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self._async_modify_data()
-        self.sleep(self.wait_timeout)
-
-        i = len(self.dest_nodes) - 1
-        shell = RemoteMachineShellConnection(self.dest_nodes[i])
-        type = shell.extract_remote_info().type.lower()
-        if type == 'windows':
-            o, r = shell.execute_command("shutdown -r -f -t 0")
-        elif type == 'linux':
-            o, r = shell.execute_command("reboot")
-        shell.log_command_output(o, r)
-        shell.disconnect()
-        self.sleep(60, "after rebooting node")
-        num = 0
-        while num < 10:
-            try:
-                shell = RemoteMachineShellConnection(self.dest_nodes[i])
-            except BaseException, e:
-                self.log.warn("node {0} is unreachable".format(self.dest_nodes[i].ip))
-                self.sleep(60, "still can't connect to node")
-                num += 1
-            else:
-                break
-        if num == 10:
-            self.fail("Can't establish SSH session after 10 minutes")
-        shell.disable_firewall()
-        shell.disconnect()
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.wait_node_restarted(self.dest_nodes[i], wait_time=self.wait_timeout * 4, wait_if_warmup=True)
         self.verify_results()
 
     def replication_with_firewall_enabled(self):
-        self.set_xdcr_param("xdcrFailureRestartInterval", 1)
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self.wait_timeout / 6)
-        self._async_modify_data()
-        self.sleep(self.wait_timeout / 6)
-        self._enable_firewall(self.dest_master)
-        self.sleep(self.wait_timeout / 2)
-        self._disable_firewall(self.dest_master)
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.src_cluster.set_xdcr_param("xdcrFailureRestartInterval", 1)
+        self.setup_xdcr_and_load()
+        self.perform_update_delete()
+
+        NodeHelper.enable_firewall(self.dest_master)
+        self.sleep(30)
+        NodeHelper.disable_firewall(self.dest_master)
         self.verify_results()
 
     """Testing Unidirectional append ( Loading only at source) Verifying whether XDCR replication is successful on
     subsequent destination clusters. """
 
     def test_append(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.sleep(self.wait_timeout)
+        self.setup_xdcr_and_load()
         self.verify_results()
         loop_count = self._input.param("loop_count", 20)
         for i in xrange(loop_count):
             self.log.info("Append iteration # %s" % i)
-            gen = copy.deepcopy(self.gen_append)
-            self._load_all_buckets(self.src_master, gen, "append", 0,
-                                   batch_size=1)
-            self.sleep(self.wait_timeout)
+            gen_append = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self._num_items)
+            self.src_cluster.load_all_buckets_from_generator(gen_append, ops=OPS.APPEND, batch_size=1)
+            self.sleep(self._wait_timeout)
         self.verify_results()
 
     '''
@@ -517,21 +309,20 @@ class unidirectional(XDCRReplicationBaseTest):
         self.shell = RemoteMachineShellConnection(self.src_master)
         self.shell.execute_cbcollect_info("%s.zip" % (self.log_filename))
         from clitest import collectinfotest
+        # FIXME HACK added self.buckets data member.
+        self.buckets = self.src_cluster.get_buckets()
         collectinfotest.CollectinfoTests.verify_results(
-                                                    self, self.log_filename)
+            self, self.log_filename
+        )
 
     """ Verify the fix for MB-9548"""
     def test_verify_replications_stream_delete(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        self.sleep(60)
+        self.setup_xdcr_and_load()
         self.verify_results()
-        src_buckets = self._get_cluster_buckets(self.src_master)
         rest_conn = RestConnection(self.src_master)
         replications = rest_conn.get_replications()
         self.assertTrue(replications, "Number of replication streams should not be 0")
-        for bucket in src_buckets:
-            self.cluster.bucket_delete(self.src_master, bucket.name)
+        self.src_cluster.delete_all_buckets()
 
         replications = rest_conn.get_replications()
         self.assertTrue(not replications, "No replication streams should exists after deleting the buckets")
@@ -602,42 +393,30 @@ class unidirectional(XDCRReplicationBaseTest):
 
     # Buckets States
     def delete_recreate_dest_buckets(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self.wait_timeout)
+        self.setup_xdcr_and_load()
 
         # Remove destination buckets
-        for bucket in self._get_cluster_buckets(self.dest_master):
-            self.cluster.bucket_delete(self.dest_master, bucket)
+        self.dest_cluster.delete_all_buckets()
 
-        # Create destination buckets
-        self._create_buckets(self.dest_nodes)
+        # Code for re-create_buckets
+        self.create_buckets_on_cluster("C2")
 
-        self._async_modify_data()
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.async_perform_update_delete()
         self.verify_results()
 
     def flush_dest_buckets(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.sleep(self.wait_timeout)
+        self.setup_xdcr_and_load()
 
         # flush destination buckets
-        tasks = []
-        for bucket in self._get_cluster_buckets(self.dest_master):
-            tasks.append(self.cluster.async_bucket_flush(self.dest_master,
-                                                         bucket))
-        [task.result() for task in tasks]
+        self.dest_cluster.flush_buckets()
 
-        self._async_modify_data()
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.async_perform_update_delete()
         self.verify_results()
 
     # Nodes Crashing Scenarios
     def __kill_processes(self, crashed_nodes=[]):
         for node in crashed_nodes:
-            shell = RemoteMachineShellConnection(node)
-            os_info = shell.extract_remote_info()
-            shell.kill_erlang(os_info)
-            shell.disconnect()
+            NodeHelper.kill_erlang(node)
 
     def __start_cb_server(self, node):
         shell = RemoteMachineShellConnection(node)
@@ -645,22 +424,22 @@ class unidirectional(XDCRReplicationBaseTest):
         shell.disconnect()
 
     def test_node_crash_master(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.setup_xdcr_and_load()
+
         crashed_nodes = []
-        crash = self._input.param("crash", "source").split('-')
-        if "source" in crash:
+        crash = self._input.param("crash", "").split('-')
+        if "C1" in crash:
             crashed_nodes.append(self.src_master)
-        if "destination" in crash:
+        if "C2" in crash:
             crashed_nodes.append(self.dest_master)
 
         self.__kill_processes(crashed_nodes)
 
         for crashed_node in crashed_nodes:
             self.__start_cb_server(crashed_node)
-        self.wait_warmup_completed(crashed_nodes)
+        NodeHelper.wait_warmup_completed(crashed_nodes)
 
-        self._async_modify_data()
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.async_perform_update_delete()
         self.verify_results()
 
     # Disaster at site.
@@ -670,63 +449,66 @@ class unidirectional(XDCRReplicationBaseTest):
     # 4. Wait for Dest to warmup.
     # 5. Verify data.
     def test_node_crash_cluster(self):
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.setup_xdcr_and_load()
+
         crashed_nodes = []
-        crash = self._input.param("crash", "source").split('-')
-        if "source" in crash:
-            crashed_nodes += self.src_nodes
+        crash = self._input.param("crash", "").split('-')
+        if "C1" in crash:
+            crashed_nodes += self.src_cluster.get_nodes()
             self.__kill_processes(crashed_nodes)
             self.sleep(30)
-        if "destination" in crash:
-            crashed_nodes += self.dest_nodes
+        if "C2" in crash:
+            crashed_nodes += self.dest_cluster.get_nodes()
             self.__kill_processes(crashed_nodes)
 
         for crashed_node in crashed_nodes:
             self.__start_cb_server(crashed_node)
 
-        if "source" in crash:
-            self.wait_warmup_completed(self.src_nodes)
-            self.gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self.num_items)
-            self._load_all_buckets(self.src_master, self.gen_create2, "create", 0)
+        if "C1" in crash:
+            NodeHelper.wait_warmup_completed(self.src_cluster.get_nodes())
+            gen_create = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self._num_items)
+            self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
 
-        self._async_modify_data()
+        self.async_perform_update_delete()
 
-        if "destination" in crash:
-            self.wait_warmup_completed(self.dest_nodes)
+        if "C2" in crash:
+            NodeHelper.wait_warmup_completed(self.dest_cluster.get_nodes())
 
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.verify_results()
 
     """ Test if replication restarts 60s after idle xdcr following dest bucket flush """
     def test_idle_xdcr_dest_flush(self):
-        self._load_all_buckets(self.src_master,self.gen_create ,'create', 0)
-        self._wait_for_replication_to_catchup()
-        self.cluster.async_bucket_flush(self.dest_master, 'default')
-        self.sleep(self.wait_timeout)
-        self._wait_for_replication_to_catchup()
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.setup_xdcr_and_load()
+        self.verify_results()
+
+        bucket = self.dest_cluster.get_bucket(BUCKET_NAME.DEFAULT)
+        self.dest_cluster.flust_buckets([bucket])
+
+        self.sleep(self._wait_timeout)
+
         self.verify_results()
 
     """ Test if replication restarts 60s after idle xdcr following dest bucket recreate """
     def test_idle_xdcr_dest_recreate(self):
-        self._load_all_buckets(self.src_master,self.gen_create ,'create', 0)
-        self._wait_for_replication_to_catchup()
-        self.cluster.bucket_delete(self.dest_master, 'default')
-        self._create_buckets(self.dest_nodes)
-        self.sleep(self.wait_timeout)
-        self._wait_for_replication_to_catchup()
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.setup_xdcr_and_load()
+        self.verify_results()
+
+        bucket = self.dest_cluster.get_bucket(BUCKET_NAME.DEFAULT)
+        self.dest_cluster.delete_bucket(BUCKET_NAME.DEFAULT)
+
+        self.dest_cluster.create_default_bucket(bucket.size, bucket.numReplicas, bucket.eviction_policy, bucket.bucket_priority)
+
+        self.sleep(self._wait_timeout)
+
         self.verify_results()
 
     """ Test if replication restarts 60s after idle xdcr following dest failover """
     def test_idle_xdcr_dest_failover(self):
-        self._load_all_buckets(self.src_master,self.gen_create ,'create', 0)
-        self._wait_for_replication_to_catchup()
-        tasks = self._async_failover(self.dest_nodes, [self.dest_nodes[-1]])
-        tasks = self._async_rebalance(self.dest_nodes, [], [])
-        for task in tasks:
-            task.result()
-        self.sleep(self.wait_timeout)
-        self._wait_for_replication_to_catchup()
-        self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
+        self.setup_xdcr_and_load()
+        self.verify_results()
+
+        self.dest_cluster.failover_and_rebalance_nodes()
+
+        self.sleep(self._wait_timeout)
+
         self.verify_results()

@@ -332,7 +332,7 @@ class NodeHelper:
     def kill_erlang(server):
         """Kill erlang process running on server.
         """
-        NodeHelper._log.info("Killing erlang on server: {1}".format(server))
+        NodeHelper._log.info("Killing erlang on server: {0}".format(server))
         shell = RemoteMachineShellConnection(server)
         os_info = shell.extract_remote_info()
         shell.kill_erlang(os_info)
@@ -682,7 +682,7 @@ class CouchbaseCluster:
         self.__data_verified = True
         self.__remote_clusters = []
         self.__clusterop = Cluster()
-        self.__kv_gen = None
+        self.__kv_gen = {}
 
     def __str__(self):
         return "Couchbase Cluster: %s, Master Ip: %s" % (
@@ -727,8 +727,19 @@ class CouchbaseCluster:
     def get_remote_clusters(self):
         return self.__remote_clusters
 
+    def get_nodes(self):
+        return self.__nodes
+
     def get_name(self):
         return self.__name
+
+    def get_kv_gen(self):
+        raise_if(
+            self.__kv_gen is None,
+            XDCRException(
+                "KV store is empty on couchbase cluster: %s" %
+                self))
+        return self.__kv_gen
 
     def init_cluster(self, disabled_consistent_view=None):
         """Initialize cluster.
@@ -986,9 +997,14 @@ class CouchbaseCluster:
         @return: task object
         """
         seed = "%s-key-" % self.__name
-        self.__kv_gen = BlobGenerator(seed, seed, value_size, end=num_items)
+        self.__kv_gen[
+            OPS.CREATE] = BlobGenerator(
+            seed,
+            seed,
+            value_size,
+            end=num_items)
 
-        gen = copy.deepcopy(self.__kv_gen)
+        gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
         task = self.__clusterop.async_load_gen_docs(
             self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
             OPS.CREATE, exp, flag, only_store_hash, batch_size, pause_secs,
@@ -1033,10 +1049,15 @@ class CouchbaseCluster:
         @return: task objects list
         """
         seed = "%s-key-" % self.__name
-        self.__kv_gen = BlobGenerator(seed, seed, value_size, end=num_items)
+        self.__kv_gen[
+            OPS.CREATE] = BlobGenerator(
+            seed,
+            seed,
+            value_size,
+            end=num_items)
         tasks = []
         for bucket in self.__buckets:
-            gen = copy.deepcopy(self.__kv_gen)
+            gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
             tasks.append(
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
@@ -1066,9 +1087,9 @@ class CouchbaseCluster:
         for task in tasks:
             task.result()
 
-    def load_all_buckets_gen(self, kv_gen, ops=OPS.CREATE, exp=0,
-                         kv_store=1, flag=0, only_store_hash=True,
-                         batch_size=1000, pause_secs=1, timeout_secs=30):
+    def load_all_buckets_from_generator(self, kv_gen, ops=OPS.CREATE, exp=0,
+                                        kv_store=1, flag=0, only_store_hash=True,
+                                        batch_size=1000, pause_secs=1, timeout_secs=30):
         """Load data synchronously on all buckets. Function wait for
         load data to finish.
         @param gen: BlobGenerator() object
@@ -1081,6 +1102,10 @@ class CouchbaseCluster:
         @param pause_secs: pause for next batch load.
         @param timeout_secs: timeout
         """
+        # TODO append generator values if op_type is already present
+        if ops not in self.__kv_gen:
+            self.__kv_gen[ops] = kv_gen
+
         tasks = []
         for bucket in self.__buckets:
             tasks.append(
@@ -1091,6 +1116,35 @@ class CouchbaseCluster:
             )
         for task in tasks:
             task.result()
+
+    def async_load_all_buckets_from_generator(self, kv_gen, ops=OPS.CREATE, exp=0,
+                                              kv_store=1, flag=0, only_store_hash=True,
+                                              batch_size=1000, pause_secs=1, timeout_secs=30):
+        """Load data asynchronously on all buckets. Function wait for
+        load data to finish.
+        @param gen: BlobGenerator() object
+        @param ops: OPS.CREATE/UPDATE/DELETE/APPEND.
+        @param exp: expiration value.
+        @param kv_store: kv store index.
+        @param flag:
+        @param only_store_hash: True to store hash of item else False.
+        @param batch_size: batch size for load data at a time.
+        @param pause_secs: pause for next batch load.
+        @param timeout_secs: timeout
+        """
+        # TODO append generator values if op_type is already present
+        if ops not in self.__kv_gen:
+            self.__kv_gen[ops] = kv_gen
+
+        tasks = []
+        for bucket in self.__buckets:
+            tasks.append(
+                self.__clusterop.async_load_gen_docs(
+                    self.__master_node, bucket.name, kv_gen,
+                    bucket.kvs[kv_store], ops, exp, flag,
+                    only_store_hash, batch_size, pause_secs, timeout_secs)
+            )
+        return tasks
 
     def load_all_buckets_till_dgm(self, active_resident_threshold,
                                   value_size=256, exp=0, kv_store=1, flag=0,
@@ -1147,25 +1201,27 @@ class CouchbaseCluster:
         @return: task object list
         """
         raise_if(
-            not self.__kv_gen,
+            OPS.CREATE not in self.__kv_gen,
             XDCRException(
                 "Data is not loaded in cluster.Load data before update/delete")
         )
         if op_type == OPS.UPDATE:
-            gen = BlobGenerator(
-                self.__kv_gen.name,
-                self.__kv_gen.seed,
-                self.__kv_gen.value_size,
+            self.__kv_gen[OPS.UPDATE] = BlobGenerator(
+                self.__kv_gen[OPS.CREATE].name,
+                self.__kv_gen[OPS.CREATE].seed,
+                self.__kv_gen[OPS.CREATE].value_size,
                 start=0,
-                end=int(self.__kv_gen.end * (float)(perc) / 100))
+                end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
+            gen = copy.deepcopy(self.__kv_gen[OPS.UPDATE])
         elif op_type == OPS.DELETE:
-            gen = BlobGenerator(
-                self.__kv_gen.name,
-                self.__kv_gen.seed,
-                self.__kv_gen.value_size,
-                start=int((self.__kv_gen.end) * (float)(
+            self.__kv_gen[OPS.DELETE] = BlobGenerator(
+                self.__kv_gen[OPS.CREATE].name,
+                self.__kv_gen[OPS.CREATE].seed,
+                self.__kv_gen[OPS.CREATE].value_size,
+                start=int((self.__kv_gen[OPS.CREATE].end) * (float)(
                     100 - perc) / 100),
-                end=self.__kv_gen.end)
+                end=self.__kv_gen[OPS.CREATE].end)
+            gen = copy.deepcopy(self.__kv_gen[OPS.DELETE])
         else:
             raise XDCRException("Unknown op_type passed: %s" % op_type)
         tasks = []
@@ -1827,12 +1883,13 @@ class XDCRNewBaseTest(unittest.TestCase):
         use_hostanames = self._input.param("use_hostnames", False)
         counter = 1
         for _, nodes in self._input.clusters.iteritems():
+            cluster_nodes = copy.deepcopy(nodes)
             if self.__chain_length and len(
                     self.__cb_clusters) > self.__chain_length:
                 break
             self.__cb_clusters.append(
                 CouchbaseCluster(
-                    "C%s" % counter, nodes,
+                    "C%s" % counter, cluster_nodes,
                     self.log, use_hostanames))
             counter += 1
 
@@ -1843,8 +1900,6 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def __init_parameters(self):
         self.__case_number = self._input.param("case_number", 0)
-        self._num_items = self._input.param("items", 1000)
-        self._value_size = self._input.param("value_size", 256)
         self.__topology = self._input.param("ctopology", TOPOLOGY.CHAIN)
         self.__chain_length = self._input.param("chain_length", None)
         self.__rdirection = self._input.param(
@@ -1856,7 +1911,41 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__rep_type = self._input.param(
             "replication_type",
             REPLICATION_PROTOCOL.CAPI)
+        self.__num_sasl_buckets = self._input.param("sasl_buckets", 0)
+        self.__num_stand_buckets = self._input.param("standard_buckets", 0)
+        self.__create_default_bucket = self._input.param(
+            "default_bucket",
+            True)
+        self.__num_replicas = self._input.param("replicas", 1)
+        self.__eviction_policy = self._input.param(
+            "eviction_policy",
+            'valueOnly')
+        self.__mixed_priority = self._input.param("mixed_priority", None)
+
+        # Public init parameters - Used in other tests too.
+        # Move above private to this section if needed in future, but
+        # Ensure to change other tests too.
+        self._num_items = self._input.param("items", 1000)
+        self._value_size = self._input.param("value_size", 256)
         self._poll_timeout = self._input.param("poll_timeout", 120)
+        self._perc_upd = self._input.param("upd", 30)
+        self._perc_del = self._input.param("del", 30)
+        self._upd_clusters = self._input.param("update", [])
+        if self._upd_clusters:
+            self._upd_clusters = self._upd_clusters.split("-")
+        self._del_clusters = self._input.param("delete", [])
+        if self._del_clusters:
+            self._del_clusters = self._del_clusters.split('-')
+        self._expires = self._input.param("expires", 0)
+        self._wait_for_expiration = self._input.param(
+            "wait_for_expiration",
+            True)
+        self._warmup = self._input.param("warm", "").split('-')
+        self._failover = self._input.param("failover", "").split('-')
+        self._wait_timeout = self._input.param("timeout", 60)
+        self._disable_compaction = self._input.param(
+            "disable_compaction",
+            "").split('-')
 
     def __cleanup_previous(self):
         for cluster in self.__cb_clusters:
@@ -1905,21 +1994,14 @@ class XDCRNewBaseTest(unittest.TestCase):
         return bucket_size
 
     def __create_buckets(self):
-        num_sasl_buckets = self._input.param("sasl_buckets", 0)
-        num_stand_buckets = self._input.param("standard_buckets", 0)
-        create_default_bucket = self._input.param("default_bucket", True)
-        num_replicas = self._input.param("replicas", 1)
-
-        eviction_policy = self._input.param("eviction_policy", 'valueOnly')
-        mixed_priority = self._input.param("mixed_priority", None)
         # if mixed priority is set by user, set high priority for sasl and
         # standard buckets
-        if mixed_priority:
+        if self.__mixed_priority:
             bucket_priority = 'high'
         else:
             bucket_priority = None
-        num_buckets = num_sasl_buckets + \
-            num_stand_buckets + int(create_default_bucket)
+        num_buckets = self.__num_sasl_buckets + \
+            self.__num_stand_buckets + int(self.__create_default_bucket)
 
         for cb_cluster in self.__cb_clusters:
             total_quota = cb_cluster.get_mem_quota()
@@ -1927,24 +2009,62 @@ class XDCRNewBaseTest(unittest.TestCase):
                 total_quota,
                 num_buckets)
 
-            if create_default_bucket:
+            if self.__create_default_bucket:
                 cb_cluster.create_default_bucket(
                     bucket_size,
-                    num_replicas,
-                    eviction_policy=eviction_policy,
+                    self.__num_replicas,
+                    eviction_policy=self.__eviction_policy,
                     bucket_priority=bucket_priority)
 
             cb_cluster.create_sasl_buckets(
-                bucket_size, num_buckets=num_sasl_buckets,
-                num_replicas=num_replicas,
-                eviction_policy=eviction_policy,
+                bucket_size, num_buckets=self.__num_sasl_buckets,
+                num_replicas=self.__num_replicas,
+                eviction_policy=self.__eviction_policy,
                 bucket_priority=bucket_priority)
 
             cb_cluster.create_standard_buckets(
-                bucket_size, num_buckets=num_stand_buckets,
-                num_replicas=num_replicas,
-                eviction_policy=eviction_policy,
+                bucket_size, num_buckets=self.__num_stand_buckets,
+                num_replicas=self.__num_replicas,
+                eviction_policy=self.__eviction_policy,
                 bucket_priority=bucket_priority)
+
+    def create_buckets_on_cluster(self, cluster_name):
+        # if mixed priority is set by user, set high priority for sasl and
+        # standard buckets
+        if self.__mixed_priority:
+            bucket_priority = 'high'
+        else:
+            bucket_priority = None
+        num_buckets = self.__num_sasl_buckets + \
+            self.__num_stand_buckets + int(self.__create_default_bucket)
+
+        cb_cluster = self.get_cb_cluster_by_name(cluster_name)
+        total_quota = cb_cluster.get_mem_quota()
+        bucket_size = self.__calculate_bucket_size(
+            total_quota,
+            num_buckets)
+
+        if self.__create_default_bucket:
+            cb_cluster.create_default_bucket(
+                bucket_size,
+                self.__num_replicas,
+                eviction_policy=self.__eviction_policy,
+                bucket_priority=bucket_priority)
+
+        cb_cluster.create_sasl_buckets(
+            bucket_size, num_buckets=self.__num_sasl_buckets,
+            num_replicas=self.__num_replicas,
+            eviction_policy=self.__eviction_policy,
+            bucket_priority=bucket_priority)
+
+        cb_cluster.create_standard_buckets(
+            bucket_size, num_buckets=self.__num_stand_buckets,
+            num_replicas=self.__num_replicas,
+            eviction_policy=self.__eviction_policy,
+            bucket_priority=bucket_priority)
+
+        # FIX-ME UPDATE replication information if re-create bucket with new
+        # bucket object.
 
     def __set_topology_chain(self):
         """Will Setup Remote Cluster Chain Topology i.e. A -> B -> C
@@ -2087,68 +2207,48 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.__topology))
 
     def perform_update_delete(self):
-        percent_update = self._input.param("upd", 30)
-        percent_delete = self._input.param("del", 30)
-        update_clusters = self._input.param("update", [])
-        if update_clusters:
-            update_clusters = update_clusters.split("-")
-        delete_clusters = self._input.param("delete", [])
-        if delete_clusters:
-            delete_clusters = delete_clusters.split('-')
-        expires = self._input.param("expires", 0)
-        wait_for_expiration = self._input.param("wait_for_expiration", True)
-
         # UPDATES
-        for doc_ops_cluster in update_clusters:
+        for doc_ops_cluster in self._upd_clusters:
             cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)
             self.log.info("Updating keys @ {0}".format(cb_cluster.get_name()))
             cb_cluster.update_delete_data(
                 OPS.UPDATE,
-                perc=percent_update,
-                expiration=expires,
-                wait_for_expiration=wait_for_expiration)
+                perc=self._perc_upd,
+                expiration=self._expires,
+                wait_for_expiration=self._wait_for_expiration)
 
         # DELETES
-        for doc_ops_cluster in delete_clusters:
+        for doc_ops_cluster in self._del_clusters:
             cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)
             self.log.info("Deleting keys @ {0}".format(cb_cluster.get_name()))
-            cb_cluster.update_delete_data(OPS.DELETE, perc=percent_delete)
+            cb_cluster.update_delete_data(OPS.DELETE, perc=self._perc_del)
 
     def async_perform_update_delete(self):
-        percent_update = self._input.param("upd", 30)
-        percent_delete = self._input.param("del", 30)
-        update_clusters = self._input.param("update", [])
-        if update_clusters:
-            update_clusters = update_clusters.split("-")
-        delete_clusters = self._input.param("delete", [])
-        if delete_clusters:
-            delete_clusters = delete_clusters.split('-')
-        expires = self._input.param("expires", 0)
-        wait_for_expiration = self._input.param("wait_for_expiration", True)
-
         tasks = []
         # UPDATES
-        for doc_ops_cluster in update_clusters:
+        for doc_ops_cluster in self._upd_clusters:
             cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)
             self.log.info("Updating keys @ {0}".format(cb_cluster.get_name()))
             tasks.extend(cb_cluster.async_update_delete(
                 OPS.UPDATE,
-                perc=percent_update,
-                expiration=expires))
+                perc=self._perc_upd,
+                expiration=self._expires))
 
         # DELETES
-        for doc_ops_cluster in delete_clusters:
+        for doc_ops_cluster in self._del_clusters:
             cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)
             self.log.info("Deleting keys @ {0}".format(cb_cluster.get_name()))
             tasks.extend(
                 cb_cluster.async_update_delete(
                     OPS.DELETE,
-                    perc=percent_delete))
+                    perc=self._perc_del))
 
         [task.result() for task in tasks]
 
-        if wait_for_expiration and expires:
-            self.sleep(expires, "Waiting for expiration of updated items")
+        if self._wait_for_expiration and self._expires:
+            self.sleep(
+                self._expires,
+                "Waiting for expiration of updated items")
 
     def setup_all_replications(self):
         """Setup replication between buckets on remote clusters
@@ -2226,7 +2326,7 @@ class XDCRNewBaseTest(unittest.TestCase):
 
         for key in valid_keys_src:
             # replace/add the values for each key in src kvs
-            if key not in valid_keys_dest:
+            if key not in valid_keys_dest and key not in deleted_keys_dest:
                 partition1 = kv_src_bucket[kvs_num].acquire_partition(key)
                 partition2 = kv_dest_bucket[kvs_num].acquire_partition(key)
                 key_add = partition1.get_key(key)
@@ -2272,6 +2372,10 @@ class XDCRNewBaseTest(unittest.TestCase):
                         kvs_num=1,
                         filter_exp=repl.get_filter_exp()
                     )
+
+    # Interface for other tests.
+    def merge_all_buckets(self):
+        self.__merge_all_buckets()
 
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
