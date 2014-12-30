@@ -296,19 +296,18 @@ class BuildQuery(object):
                 ubuntu 12.04:
                     couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb """
             if "3.5.0-" in build_info:
-                if "debian7" in build_info:
-                    product_version = build_info.split("_")
-                    product_version = product_version[1].replace("-debian7" , "")
-                elif "ubuntu12.04" in build_info:
-                    product_version = build_info.split("_")
-                    product_version = product_version[1].replace("-ubuntu12.04" , "")
+                deb_words = ["debian7", "ubuntu12.04", "ubuntu14.04"]
+                if "centos6" not in build_info:
+                    tmp_str = build_info.split("_")
+                    product_version = tmp_str[1].split("-")
+                    product_version = "-".join([i for i in product_version \
+                                                 if i not in deb_words])
                 else:
                     product_version = build_info.split("-")
                     product_version = product_version[3] + "-" + product_version[4]
                 if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
                     build.product_version = product_version
-                    if "debian7" in build_info or \
-                       "ubuntu12.04" in build_info:
+                    if "centos6" not in build_info:
                         build_info = build_info.replace("_" + product_version,"")
                     else:
                         build_info = build_info.replace("-" + product_version,"")
@@ -321,13 +320,11 @@ class BuildQuery(object):
                 elif "_amd64" in build_info:
                     build.architecture_type = "x86_64"
                     build_info = build_info.replace("_amd64", "")
+                del_words = ["centos6", "debian7", "ubuntu12.04", "ubuntu14.04"]
                 if build_info.startswith("couchbase-server"):
-                    if "-centos6" in build_info:
-                        build.product = build_info.replace("-centos6", "")
-                    elif "-debian7" in build_info:
-                        build.product = build_info.replace("-debian7", "")
-                    elif "ubuntu12.04" in build_info:
-                        build.product = build_info.replace("-ubuntu12.04", "")
+                    build.product = build_info.split("-")
+                    build.product = "-".join([i for i in build.product \
+                                                 if i not in del_words])
                 return build
             product_version = build_info.split("_")
             product_version = product_version[len(product_version)-1]
