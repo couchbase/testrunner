@@ -84,6 +84,8 @@ class CWCBaseTest(BaseTestCase):
                                      .format(self.bin_path, command, self.master.ip))
         shell.log_command_output(output, e)
         result = {}
+        if "runCmd" in output[0]:
+            output = output[1:]
         if "Status" in output[0]:
             tmp = output[0].split(":")
             result["Status"] = tmp[1].strip()

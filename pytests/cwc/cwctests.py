@@ -160,6 +160,8 @@ class CWCTests(CWCBaseTest):
                            command, self.master.ip, num_node_collect, self.uploadHost, self.customer, \
                            self.ticket))
         shell.log_command_output(o, e)
+        if "runCmd" in o[0]:
+            o = o[1:]
         """ output when --nodes is used
                 ['NODES: ns_1@12,ns_1@11,ns_1@10', 'SUCCESS: Log collection started']
             output when --all-nodes is used
@@ -181,8 +183,8 @@ class CWCTests(CWCBaseTest):
                 else:
                     self.fail("Failed to cancel log collection by CLI")
             shell.disconnect()
-        elif o and "ERROR" in o[0]:
-            self.fail("ERROR:  {0}".format(o[0]))
+        elif o and o[0] and "ERROR" in o[0]:
+                self.fail("ERROR:  {0}".format(o[0]))
 
     def _generate_random_collecting_node(self, rest):
         random_nodes = []
