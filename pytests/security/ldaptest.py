@@ -10,7 +10,6 @@ from membase.api.exception import ReadDocumentException
 from membase.api.exception import DesignDocCreationException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
-from collectFiles import cbfiledownload
 import logger
 from membase.api.rest_client import ldapUser
 
