@@ -2381,6 +2381,68 @@ class RestConnection(object):
             raise BucketCompactionException(bucket)
         return True
 
+        '''
+    Function to do LDAP Auth operations using REST Command
+    Parameter -
+    authOperation - values - True or 1, to enable/disable LDAPAuth
+    userlist - List of user to be added to LDAPAuth.
+    Returns -
+    status, content and header of adding and setting of LDAPAuth
+    '''
+    def ldapRestOperation(self,authOperation,userlist):
+        self.authOperation = authOperation
+        value = self.ldapRestOperationGET()
+        api = self.baseUrl + "/settings/ldapAuth"
+
+        if (authOperation == "clear"):
+            status, content,header = self._http_request(api, 'POST')
+            return status
+
+        if (authOperation != None):
+            self.authOperation = authOperation
+        else:
+            self.authOperation = value['enabled']
+
+        if (userlist != None):
+            for user in userlist:
+                if user.adminType ==  "Admin":
+                    self.currAdmins = user.userName
+                else:
+                    self.currROAdmins = user.userName
+        else:
+            self.currAdmins = ''
+            self.currROAdmins = ''
+
+        params = urllib.urlencode({'enabled': self.authOperation,
+                                        'admins': '{0}'.format(self.currAdmins),
+                                        'roAdmins':'{0}'.format(self.currROAdmins),
+                                        'username': 'Administrator',
+                                        'password': 'password'})
+        status, content,header = self._http_request(api, 'POST', params)
+
+    '''
+    validateLogin - Validate if user can login using a REST API
+    Input Parameter - user and password to check for login
+    Returns - 400 if user login fails, 200 if user logins succeeds
+    '''
+    def validateLogin(self,user,password):
+        api = self.baseUrl + "uilogin"
+        header = {'Content-type': 'application/x-www-form-urlencoded'}
+        params = urllib.urlencode({'user':'{0}'.format(user),'password':'{0}'.format(password)})
+        http = httplib2.Http()
+        status, content = http.request(api,'POST',headers=header,body=params)
+        log.info ("API execution successful, value of status is {0}".format(status))
+        return status
+
+    '''
+    ldapRestOperationGet - Get setting of LDAPAuth - Settings
+    Returns - list of Admins, ROAdmins and is LDAPAuth enabled or not
+    '''
+    def ldapRestOperationGET(self):
+        api = self.baseUrl + "/settings/ldapAuth"
+        status, content, header = self._http_request(api, 'GET')
+        return json.loads(content)
+
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
         self.implementationVersion = implementationVersion
@@ -2678,4 +2740,7 @@ class RestParser(object):
             bucket.nodes.append(node)
         return bucket
 
-
+class ldapUser(object):
+    def __init__(self,userName,adminType):
+        self.userName = userName
+        self.adminType = adminType
