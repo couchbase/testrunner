@@ -1182,14 +1182,14 @@ class RemoteMachineShellConnection:
             success &= self.log_command_output(output, error, track_words)
 
             if self.info.deliverable_type == 'rpm':
-                self.check_openssl_version(self.info.deliverable_type, openssl)
+                self.check_openssl_version(self.info.deliverable_type, openssl, build.product_version)
                 self.check_pkgconfig(self.info.deliverable_type, openssl)
                 if force:
                     output, error = self.execute_command('{0}rpm -Uvh --force /tmp/{1}'.format(environment, build.name))
                 else:
                     output, error = self.execute_command('{0}rpm -i /tmp/{1}'.format(environment, build.name))
             elif self.info.deliverable_type == 'deb':
-                self.check_openssl_version(self.info.deliverable_type, openssl)
+                self.check_openssl_version(self.info.deliverable_type, openssl, build.product_version)
                 self.install_missing_lib()
                 if force:
                     output, error = self.execute_command('{0}dpkg --force-all -i /tmp/{1}'.format(environment, build.name))
@@ -2568,79 +2568,80 @@ class RemoteMachineShellConnection:
                 self.log_command_output(o, r)
         return success
 
-    def check_openssl_version(self, deliverable_type, openssl):
-        if self.info.deliverable_type == "deb":
-            ubuntu_version = ["12.04", "13.04"]
-            o, r = self.execute_command("lsb_release -r")
-            self.log_command_output(o, r)
-            if o[0] != "":
-                o = o[0].split(":")
-                if o[1].strip() in ubuntu_version and "1" in openssl:
-                    o, r = self.execute_command("dpkg --get-selections | grep libssl")
-                    self.log_command_output(o, r)
-                    for s in o:
-                        if "libssl0.9.8" in s:
-                            o, r = self.execute_command("apt-get --purge remove -y {0}".format(s[:11]))
-                            self.log_command_output(o, r)
-                            o, r = self.execute_command("dpkg --get-selections | grep libssl")
-                            log.info("package {0} should not appear below".format(s[:11]))
-                            self.log_command_output(o, r)
-                elif openssl == "":
-                    o, r = self.execute_command("dpkg --get-selections | grep libssl")
-                    self.log_command_output(o, r)
-                    if not o:
-                        o, r = self.execute_command("apt-get install -y libssl0.9.8")
-                        self.log_command_output(o, r)
+    def check_openssl_version(self, deliverable_type, openssl, version):
+        if not version.startswith("3.5"):
+            if self.info.deliverable_type == "deb":
+                ubuntu_version = ["12.04", "13.04"]
+                o, r = self.execute_command("lsb_release -r")
+                self.log_command_output(o, r)
+                if o[0] != "":
+                    o = o[0].split(":")
+                    if o[1].strip() in ubuntu_version and "1" in openssl:
                         o, r = self.execute_command("dpkg --get-selections | grep libssl")
-                        log.info("package {0} should not appear below".format(s[:11]))
                         self.log_command_output(o, r)
-                    elif o:
                         for s in o:
-                            if "libssl0.9.8" not in s:
-                                o, r = self.execute_command("apt-get install -y libssl0.9.8")
+                            if "libssl0.9.8" in s:
+                                o, r = self.execute_command("apt-get --purge remove -y {0}".format(s[:11]))
                                 self.log_command_output(o, r)
                                 o, r = self.execute_command("dpkg --get-selections | grep libssl")
                                 log.info("package {0} should not appear below".format(s[:11]))
                                 self.log_command_output(o, r)
-        if self.info.deliverable_type == "rpm":
-            centos_version = ["6.4"]
-            o, r = self.execute_command("cat /etc/redhat-release")
-            self.log_command_output(o, r)
-            if o[0] != "":
-                o = o[0].split(" ")
-                if o[2] in centos_version and "1" in openssl:
-                    o, r = self.execute_command("rpm -qa | grep openssl")
-                    self.log_command_output(o, r)
-                    for s in o:
-                        if "openssl098e" in s:
-                            o, r = self.execute_command("yum remove -y {0}".format(s))
-                            self.log_command_output(o, r)
-                            o, r = self.execute_command("rpm -qa | grep openssl")
-                            log.info("package {0} should not appear below".format(s))
-                            self.log_command_output(o, r)
-                        elif "openssl-1.0.0" not in s:
-                            o, r = self.execute_command("yum install -y openssl")
-                            self.log_command_output(o, r)
-                    o, r = self.execute_command("rpm -qa | grep openssl")
-                    log.info("openssl-1.0.0 should appear below".format(s))
-                    self.log_command_output(o, r)
-                elif openssl == "":
-                    o, r = self.execute_command("rpm -qa | grep openssl")
-                    self.log_command_output(o, r)
-                    if not o:
-                        o, r = self.execute_command("yum install -y openssl098e")
+                    elif openssl == "":
+                        o, r = self.execute_command("dpkg --get-selections | grep libssl")
                         self.log_command_output(o, r)
+                        if not o:
+                            o, r = self.execute_command("apt-get install -y libssl0.9.8")
+                            self.log_command_output(o, r)
+                            o, r = self.execute_command("dpkg --get-selections | grep libssl")
+                            log.info("package {0} should not appear below".format(s[:11]))
+                            self.log_command_output(o, r)
+                        elif o:
+                            for s in o:
+                                if "libssl0.9.8" not in s:
+                                    o, r = self.execute_command("apt-get install -y libssl0.9.8")
+                                    self.log_command_output(o, r)
+                                    o, r = self.execute_command("dpkg --get-selections | grep libssl")
+                                    log.info("package {0} should not appear below".format(s[:11]))
+                                    self.log_command_output(o, r)
+            if self.info.deliverable_type == "rpm":
+                centos_version = ["6.4"]
+                o, r = self.execute_command("cat /etc/redhat-release")
+                self.log_command_output(o, r)
+                if o[0] != "":
+                    o = o[0].split(" ")
+                    if o[2] in centos_version and "1" in openssl:
                         o, r = self.execute_command("rpm -qa | grep openssl")
-                        log.info("package openssl098e should appear below")
                         self.log_command_output(o, r)
-                    elif o:
                         for s in o:
-                            if "openssl098e" not in s:
-                                o, r = self.execute_command("yum install -y openssl098e")
+                            if "openssl098e" in s:
+                                o, r = self.execute_command("yum remove -y {0}".format(s))
                                 self.log_command_output(o, r)
                                 o, r = self.execute_command("rpm -qa | grep openssl")
-                                log.info("package openssl098e should appear below")
+                                log.info("package {0} should not appear below".format(s))
                                 self.log_command_output(o, r)
+                            elif "openssl-1.0.0" not in s:
+                                o, r = self.execute_command("yum install -y openssl")
+                                self.log_command_output(o, r)
+                        o, r = self.execute_command("rpm -qa | grep openssl")
+                        log.info("openssl-1.0.0 should appear below".format(s))
+                        self.log_command_output(o, r)
+                    elif openssl == "":
+                        o, r = self.execute_command("rpm -qa | grep openssl")
+                        self.log_command_output(o, r)
+                        if not o:
+                            o, r = self.execute_command("yum install -y openssl098e")
+                            self.log_command_output(o, r)
+                            o, r = self.execute_command("rpm -qa | grep openssl")
+                            log.info("package openssl098e should appear below")
+                            self.log_command_output(o, r)
+                        elif o:
+                            for s in o:
+                                if "openssl098e" not in s:
+                                    o, r = self.execute_command("yum install -y openssl098e")
+                                    self.log_command_output(o, r)
+                                    o, r = self.execute_command("rpm -qa | grep openssl")
+                                    log.info("package openssl098e should appear below")
+                                    self.log_command_output(o, r)
 
     def check_pkgconfig(self, deliverable_type, openssl):
         if self.info.deliverable_type == "rpm":
