@@ -1446,6 +1446,14 @@ class RestConnection(object):
         log.info("Node versions in cluster {0}".format(versions))
         return versions
 
+    # this method returns the services of nodes in cluster - implemented for Sherlock
+    def get_nodes_services(self):
+        nodes = self.get_nodes()
+        map = {}
+        for node in nodes:
+            key = "{0}:{1}".format(node.ip,node.port)
+            map[key]=node.services
+        return map
 
     def get_bucket_stats(self, bucket='default'):
         stats = {}
@@ -2556,6 +2564,7 @@ class Node(object):
         self.rest_username = ""
         self.rest_password = ""
         self.port = 8091
+        self.services = []
 
 
 class AutoFailoverSettings(object):
@@ -2606,6 +2615,8 @@ class RestParser(object):
         node.port = parsed["hostname"][parsed["hostname"].find(":") + 1:]
         node.os = parsed['os']
 
+        if "services" in parsed:
+            node.services = parsed["services"]
         if "otpNode" in parsed:
             node.id = parsed["otpNode"]
             if parsed["otpNode"].find('@') >= 0:

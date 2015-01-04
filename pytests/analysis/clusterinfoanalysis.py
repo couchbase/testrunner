@@ -14,7 +14,8 @@ class DataAnalysisTests(BaseTestCase):
 
     def setUp(self):
         super(DataAnalysisTests, self).setUp()
-        self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [])
+        self.services = self.services = self.get_services(self.servers,self.services_init)
+        self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [], services = self.services)
         self.data_collector=DataCollector()
         self.data_analyzer=DataAnalyzer()
         credentials = self.input.membase_settings
@@ -36,6 +37,19 @@ class DataAnalysisTests(BaseTestCase):
         output = remote_client.read_remote_file(log_path, "http_access.log")
         logic = self.verify_http_acesslog(output,[self.master.ip])
         self.assertTrue(logic, "search string not present in http_access.log")
+
+    def test_node_services(self):
+        """
+            Test node services information
+        """
+        self.get_services_map()
+        for key in self.services_map:
+            self.log.info("{0} : {1}".format(key,self.services_map[key]))
+        server = self.get_nodes_from_services_map(service_type = "n1ql")
+        self.log.info("node with n1ql service {0}:{1}".format(server.ip,server.port))
+        servers = self.get_nodes_from_services_map(service_type = "kv", get_all_nodes = True)
+        for server in servers:
+            self.log.info("node with data service {0}:{1}".format(server.ip,server.port))
 
     def test_timeline_analysis_metadata(self):
         """

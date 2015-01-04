@@ -1472,6 +1472,39 @@ class BaseTestCase(unittest.TestCase):
             victim_nodes = victim_nodes[:victim_count]
         return victim_nodes
 
+    def get_services_map(self, reset = True):
+        if not reset:
+            return self.services_map
+        else:
+            self.services_map = {}
+        rest = RestConnection(self.master)
+        map = rest.get_nodes_services()
+        self.log.info(map)
+        for key, val in map.iteritems():
+            for service in val:
+                if service not in self.services_map.keys():
+                    self.services_map[service] = []
+                self.services_map[service].append(key)
+
+    def get_nodes_from_services_map(self, service_type ="n1ql", get_all_nodes = False):
+        if self.services_map is None:
+            self.get_services_map()
+        if (service_type not in self.services_map):
+            self.log.info("cannot find service node {0} in cluster ".format(service_type))
+        else:
+            list = []
+            for server_info in self.services_map[service_type]:
+                tokens = server_info.split(":")
+                ip = tokens[0]
+                port = int(tokens[1])
+                for server in self.servers:
+                    if (port != 8091 and port == int(server.port)) or (port == 8091 and server.ip == ip):
+                        list.append(server)
+            if get_all_nodes:
+                return list
+            else:
+                return list[0]
+
     def get_services(self, tgt_nodes, tgt_services):
         services = []
         if tgt_services == None:
