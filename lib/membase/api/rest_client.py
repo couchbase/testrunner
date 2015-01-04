@@ -849,7 +849,7 @@ class RestConnection(object):
         if status:
             json_parsed = json.loads(content)
             log.info("Replication created with id: {}".format(json_parsed['id']))
-            self.replications.append(json_parsed['id'])
+            self.replications.append(urllib.quote(json_parsed['id']))
             return json_parsed['id']
         else:
             log.error("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
