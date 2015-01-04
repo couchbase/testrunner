@@ -106,6 +106,7 @@ class BaseTestCase(unittest.TestCase):
             self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
             self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
             self.protocol = self.get_protocol_type()
+            self.services_map = None
             if self.sasl_bucket_priority != None:
                 self.sasl_bucket_priority = self.sasl_bucket_priority.split(":")
             if self.standard_bucket_priority != None:

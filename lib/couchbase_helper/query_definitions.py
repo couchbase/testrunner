@@ -59,26 +59,26 @@ class SQLDefinitionGenerator:
 				index_name=index_name_prefix+"job_title",
 				index_fields = ["job_title"],
 				query_template = RANGE_SCAN_TEMPLATE.format(emit_fields,"job_title IS NOT NULL"),
-				groups = [SIMPLE_INDEX, FULL_SCAN, "employee","isnotnull"]))
+				groups = [SIMPLE_INDEX, FULL_SCAN, "employee","isnotnull",NO_ORDERBY_GROUPBY]))
 		definitions_list.append(
 			QueryDefinition(
 				index_name=index_name_prefix+"job_title",
 				index_fields = ["job_title"],
-				query_template = RANGE_SCAN_GROUP_BY_TEMPLATE.format("job_title, count(*)","job_title IS NOT NULL","job_title"),
-				groups = [SIMPLE_INDEX, RANGE_SCAN, GROUP_BY, "employee"]))
+				query_template = RANGE_SCAN_GROUP_BY_TEMPLATE.format("job_title, name","job_title IS NOT NULL","job_title"),
+				groups = [SIMPLE_INDEX, FULL_SCAN, GROUP_BY, "employee","isnotnull"]))
 		definitions_list.append(
 			QueryDefinition(
 				index_name=index_name_prefix+"job_title",
 							 index_fields = ["job_title"],
 							 query_template = RANGE_SCAN_ORDER_BY_TEMPLATE.format(emit_fields,"job_title IS NOT NULL","job_title"),
-							 groups = [SIMPLE_INDEX, FULL_SCAN, ORDER_BY, "employee"]))
+							 groups = [SIMPLE_INDEX, FULL_SCAN, ORDER_BY, "employee","isnotnull"]))
 		for condition in and_conditions:
 			definitions_list.append(
 				QueryDefinition(
 					index_name=index_name_prefix+"job_title",
 							 index_fields = ["job_title"],
 							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % condition),
-							 groups = [SIMPLE_INDEX,FULL_SCAN, NO_ORDERBY_GROUPBY, EQUALS,"employee"]))
+							 groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,"employee"]))
 		definitions_list.append(
 			QueryDefinition(
 				index_name=index_name_prefix+"join_month_join_yr_join_day",

@@ -25,7 +25,8 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def create_index(self, bucket, query_definition, verifycreate = True):
         self.query = query_definition.generate_index_create_query(bucket = bucket)
-        actual_result = self.run_cbq_query()
+        server = self.get_nodes_from_services_map(service_type = "n1ql")
+        actual_result = self.run_cbq_query(server = server)
         if verifycreate:
             check = self._is_index_in_list(bucket, query_definition.index_name)
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
@@ -50,14 +51,16 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def drop_index(self, bucket, query_definition, verifydrop = True):
         self.query = query_definition.generate_index_drop_query(bucket = bucket)
-        actual_result = self.run_cbq_query()
+        server = self.get_nodes_from_services_map(service_type = "n1ql")
+        actual_result = self.run_cbq_query(server = server)
         if verifydrop:
             check = self._is_index_in_list(bucket, query_definition.index_name)
             self.assertFalse(check, "index {0} failed to be deleted".format(query_definition.index_name))
 
     def query_using_index_with_explain(self, bucket, query_definition):
         self.query = query_definition.generate_query_with_explain(bucket = bucket)
-        actual_result = self.run_cbq_query()
+        server = self.get_nodes_from_services_map(service_type = "n1ql")
+        actual_result = self.run_cbq_query(server = server)
         for item in actual_result["results"][0]["~children"]:
             if "index" in item.keys():
                 actual_index_name = item["index"]
@@ -77,8 +80,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         if expected_result == None:
             expected_result = self.gen_results.generate_expected_result(print_expected_result = False)
         self.query = self.gen_results.query
-        actual_result = self.run_cbq_query()
-        self._verify_results(actual_result['results'], expected_result)
+        server = self.get_nodes_from_services_map(service_type = "n1ql")
+        actual_result = self.run_cbq_query(server = server)
+        self._verify_results(sorted(actual_result['results']), sorted(expected_result))
 
     def multi_query_using_index(self, buckets =[], query_definitions = [], expected_results = {}):
         for bucket in buckets:
@@ -112,6 +116,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.multi_query_using_index(buckets, query_definitions, expected_results)
             if query_with_explain:
                 self.multi_query_using_index_with_explain(buckets, query_definitions)
+        except Exception, ex:
+            raise
         finally:
             if drop_index:
                 self.multi_drop_index(buckets,query_definitions)
@@ -145,7 +151,8 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def _is_index_in_list(self, bucket, index_name):
         query = "SELECT * FROM system:indexes"
-        res = self.run_cbq_query(query)
+        server = self.get_nodes_from_services_map(service_type = "n1ql")
+        res = self.run_cbq_query(query, server = server)
         for item in res['results']:
             if 'keyspace_id' not in item['indexes']:
                 self.log.error(item)
