@@ -251,8 +251,6 @@ class NULLTests(QueryTests):
 
     def test_ifinf(self):
         queries = ["SELECT feature_name, IFINF(story_point[2],story_point[1]) as point" +\
-                   " FROM %s ORDER BY feature_name",
-                   "SELECT feature_name, IFNANORINF(story_point[2],story_point[1]) as point" +\
                    " FROM %s ORDER BY feature_name",]
         expected_result = []
         for doc in self.full_list:
@@ -264,10 +262,23 @@ class NULLTests(QueryTests):
         expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
         for bucket in self.buckets:
             for query in queries:
-                self.run_cbq_query(query % bucket)
+                self.run_cbq_query(query % bucket.name)
                 self.sleep(3)
-                actual_result = self.run_cbq_query(query % bucket)
+                actual_result = self.run_cbq_query(query % bucket.name)
                 self._verify_results(actual_result['results'], expected_result)
+        self.query = "SELECT feature_name, IFNANORINF(story_point[2],story_point[1]) as point" +\
+                     " FROM %s ORDER BY feature_name" % bucket.name
+        expected_result =[]
+        for doc in self.full_list:
+            if len(doc['story_point']) < 3:
+                expected_result.append({'feature_name' : doc['feature_name'],
+                                        'point': None})
+            else:
+                expected_result.append({'feature_name' : doc['feature_name'],
+                                         'point' : doc['story_point'][2]})
+        expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+        actual_result = self.run_cbq_query(query % bucket.name)
+        self._verify_results(actual_result['results'], expected_result)
 
     def test_ifmissing(self):
         queries = ["SELECT feature_name, IFMISSINGORNULL(coverage_tests.P0," +\

@@ -644,8 +644,8 @@ class QueryTests(BaseTestCase):
 
     def test_prepared_meta_like(self):
         for bucket in self.buckets:
-            self.query = 'SELECT name FROM %s WHERE META(%s).id LIKE "query-test%"'  % (
-                                                                            bucket.name, bucket.name)
+            self.query = 'SELECT name FROM %s WHERE META(%s).id '  % (bucket.name, bucket.name) +\
+                         'LIKE "query-test%"'
             self.prepared_common_body()
 
     def test_meta_flags(self):

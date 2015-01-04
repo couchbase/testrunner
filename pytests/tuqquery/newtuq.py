@@ -186,7 +186,7 @@ class QueryTests(BaseTestCase):
                                 'The expression TEST is not satisfied by these dependencies',
                           'SELECT test.$obj0 as points FROM {0} AS TEST ' +
                            'GROUP BY $obj0 AS GROUP_POINT' :
-                                'parse_error',
+                                'syntax error',
                           'SELECT COUNT($obj0) as COUNT_NEW_POINT, COUNT($str0) ' +
                            'as COUNT_EMP  FROM {0} AS TEST GROUP BY $str0 ' +
                            'HAVING COUNT_NEW_POINT >0' :
