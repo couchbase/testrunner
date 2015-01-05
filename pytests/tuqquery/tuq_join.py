@@ -160,7 +160,7 @@ class JoinTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select name, join_day from %s where join_day =" % (bucket.name) +\
             " (select AVG(join_day) as average from %s d use keys %s)[0].average" % (bucket.name,
-                                                                               str(['query-test-Sales-%s' % i
+                                                                               str(['query-test-Sales-2010-1-1-%s' % i
                                                                                     for i in xrange(0, self.docs_per_day)]))
             all_docs_list = self.generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
@@ -176,7 +176,7 @@ class JoinTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select name, join_day from %s where join_day IN " % (bucket.name) +\
             " (select ARRAY_AGG(join_day) as average from %s d use keys %s)[0].average" % (bucket.name,
-                                                                               str(['query-test-Sales-%s' % i
+                                                                               str(['query-test-Sales-2010-1-1-%s' % i
                                                                                     for i in xrange(0, self.docs_per_day)]))
             all_docs_list = self.generate_full_docs_list(self.gens_load)
             actual_result = self.run_cbq_query()
