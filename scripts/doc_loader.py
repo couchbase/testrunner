@@ -138,6 +138,47 @@ class DocLoaderCouchbase(DocLoader):
             task.result()
         self.log.info("LOAD IS FINISHED")
 
+class JoinDocLoader(DocLoaderCouchbase):
+    def __init__(self, servers, cluster):
+        super(JoinDocLoader, self).__init__(servers, cluster)
+
+    def generate_docs(self, docs_per_day, years):
+        generators = []
+        start = 0
+        types = ['Engineer', 'Sales', 'Support']
+        join_yr = [2010, 2011]
+        join_mo = xrange(1, 12 + 1)
+        join_day = xrange(1, 28 + 1)
+        template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
+        template += ' "job_title":"{4}", "tasks_ids":{5}}}'
+        for info in types:
+            for year in join_yr:
+                for month in join_mo:
+                    for day in join_day:
+                        name = ["employee-%s" % (str(day))]
+                        tasks_ids = ["test_task-%s" % day, "test_task-%s" % (day + 1)]
+                        generators.append(DocumentGenerator("query-test-%s-%s-%s-%s" % (info, year, month, day),
+                                               template,
+                                               name, [year], [month], [day],
+                                               [info], [tasks_ids],
+                                               start=start, end=docs_per_day))
+        start, end = 0, (28 + 1)
+        template = '{{ "task_name":"{0}", "project": "{1}"}}'
+        generators.append(DocumentGenerator("test_task", template,
+                                            ["test_task-%s" % i for i in xrange(0,10)],
+                                            ["CB"],
+                                            start=start, end=10))
+        generators.append(DocumentGenerator("test_task", template,
+                                            ["test_task-%s" % i for i in xrange(10,20)],
+                                            ["MB"],
+                                            start=10, end=20))
+        generators.append(DocumentGenerator("test_task", template,
+                                            ["test_task-%s" % i for i in xrange(20,end)],
+                                            ["IT"],
+                                            start=20, end=end))
+        return generators
+
+
 def initialize_bucket(name, port=None, saslPassword=None):
     if saslPassword:
        return Bucket(name=name, authType="sasl", saslPassword=saslPassword)
@@ -198,6 +239,7 @@ def main():
     bucket_sasl_pass = input.param("bucket_sasl_pass", None)
     flag = input.param("flags", 0)
     to_directory = input.param("to_dir", '')
+    loader_type = input.param("loader_type", 'default')
 
     if to_directory:
         loader = DocLoaderDirectory(input.servers[0], to_directory, bucket_name)
@@ -207,7 +249,10 @@ def main():
         cluster = Cluster()
         try:
             bucket = initialize_bucket(bucket_name, bucket_port, bucket_sasl_pass)
-            loader = DocLoaderCouchbase(input.servers, cluster)
+            if loader_type == 'default':
+                loader = DocLoaderCouchbase(input.servers, cluster)
+            elif loader_type == 'join':
+                loader = JoinDocLoader(input.servers, cluster)
             generators_load = loader.generate_docs(docs_per_day, years)
             loader.load(generators_load, bucket, flag=flag)
         finally:
