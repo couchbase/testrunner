@@ -64,8 +64,8 @@ class JoinTests(QueryTests):
             expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids'],
                                      "project" : doc['project'], "task_name" : doc['task_name']}
                                     for doc in full_list if doc and 'project' in doc])
-            expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids']}
-                                    for doc in full_list if doc and not 'project' in doc])
+            #expected_result.extend([{"name" : doc['name'], "tasks_ids" : doc['tasks_ids']}
+            #                        for doc in full_list if doc and not 'project' in doc])
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -467,7 +467,7 @@ class JoinTests(QueryTests):
                     item_to_add = copy.deepcopy(item)
                     if key in [doc["_id"] for doc in tasks_items]:
                         item_to_add.update([doc for doc in tasks_items if key == doc['_id']][0])
-                    joined_list.append(item_to_add)
+                        joined_list.append(item_to_add)
             joined_list.extend([{}] * self.gens_tasks[-1].end)
         elif join_type.upper() == JOIN_RIGHT:
             raise Exception("RIGHT JOIN doen't exists in corrunt implementation")
