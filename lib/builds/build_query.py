@@ -421,9 +421,28 @@ class BuildQuery(object):
             joint_char = "-"
             version_join_char = "-"
         if version[:3] == "3.5":
+            """ format for sherlock build name
+            /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
+            /723/couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
+            /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb """
             build_number = build.product_version.replace(version[:6],"")
-            build.name = edition_type + "-" + build.product_version + \
+            if "centos" in distribution_version:
+                build.name = edition_type + "-" + build.product_version + \
                    "-centos6." + build.architecture_type + \
+                   "." + build.deliverable_type
+            else:
+                os_name = ""
+                """ sherlock build in unix only support 64-bit """
+                build.architecture_type = "amd64"
+                if  "ubuntu 12.04" in distribution_version:
+                    os_name = "ubuntu12.04"
+                elif "ubuntu 14.04" in distribution_version:
+                    os_name = "ubuntu14.04"
+                elif "debian gnu/linux 7" in distribution_version:
+                    build.distribution_version = "debian7"
+                    os_name = "debian7"
+                build.name = edition_type + "_" + build.product_version + \
+                   "-" + os_name + "_" +  build.architecture_type + \
                    "." + build.deliverable_type
             build.url = repo + build_number + "/" + build.name
         else:
