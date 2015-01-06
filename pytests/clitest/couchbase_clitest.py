@@ -887,33 +887,39 @@ class CouchbaseCliTest(CliBaseTest):
             options = " --create --group-name=group2"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.del_runCmd_value(output)
             self.assertEqual(output, ["SUCCESS: group created group2"])
             # create existing group. operation should fail
             options = " --create --group-name=group2"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.del_runCmd_value(output)
             self.assertEqual(output[0], "ERROR: unable to create group group2 (400) Bad Request")
             self.assertEqual(output[1], "{u'name': u'already exists'}")
             # rename group test
             options = " --rename=group3 --group-name=group2"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.del_runCmd_value(output)
             self.assertEqual(output, ["SUCCESS: group renamed group2"])
             # delete group test
             options = " --delete --group-name=group3"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.del_runCmd_value(output)
             self.assertEqual(output, ["SUCCESS: group deleted group3"])
             # delete non-empty group test
             options = " --delete --group-name=\"Group 1\""
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.del_runCmd_value(output)
             self.assertEqual(output[0], "ERROR: unable to delete group Group 1 (400) Bad Request")
             self.assertEqual(output[1], "{u'_': u'group is not empty'}")
             # delete non-existing group
             options = " --delete --group-name=groupn"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.del_runCmd_value(output)
             self.assertEqual(output, ["ERROR: invalid group name:groupn"])
             remote_client.disconnect()
 
@@ -963,6 +969,7 @@ class CouchbaseCliTest(CliBaseTest):
             options = " --create --group-name=group2"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.del_runCmd_value(output)
             self.assertEqual(output, ["SUCCESS: group created group2"])
             # add multiple servers to group
             for num in xrange(nodes_add):
@@ -972,6 +979,7 @@ class CouchbaseCliTest(CliBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="{0}:8091".format(self.servers[num].ip), \
                         user="Administrator", password="password")
+                self.del_runCmd_value(output)
                 self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'group2'" \
                                                               .format(self.servers[num + 1].ip))
                 self.assertEqual(output[1], "SUCCESS: add server '{0}:8091' to group 'group2'" \
@@ -983,6 +991,7 @@ class CouchbaseCliTest(CliBaseTest):
                            .format(self.servers[num + 3].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.del_runCmd_value(output)
                 self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'group2'" \
                                                            .format(self.servers[num + 3].ip)])
             # list servers in group
@@ -990,6 +999,7 @@ class CouchbaseCliTest(CliBaseTest):
                 options = " --list --group-name=group2"
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.del_runCmd_value(output)
                 self.assertEqual(output[0], "group2")
                 self.assertEqual(output[1], " server: {0}:8091".format(self.servers[num + 1].ip))
                 self.assertEqual(output[2], " server: {0}:8091".format(self.servers[num + 2].ip))
@@ -1001,11 +1011,13 @@ class CouchbaseCliTest(CliBaseTest):
                                                        self.servers[num + 2].ip, self.servers[num + 3].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.del_runCmd_value(output)
                 self.assertEqual(output, ["SUCCESS: move servers from group 'group2' to group 'Group 1'"])
             # clean up by deleting group
             options = " --delete --group-name=group2"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user="Administrator", password="password")
+            self.del_runCmd_value(output)
             self.assertEqual(output, ["SUCCESS: group deleted group2"])
 
         if self.os == "windows":
@@ -1072,6 +1084,7 @@ class CouchbaseCliTest(CliBaseTest):
                            .format(self.servers[num + 1].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.del_runCmd_value(output)
                 self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'Group 1'" \
                                                             .format(self.servers[num + 1].ip)])
 
@@ -1083,6 +1096,7 @@ class CouchbaseCliTest(CliBaseTest):
                                                     .format(self.servers[num + 2].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.del_runCmd_value(output)
                 self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
                                                                .format(self.servers[num + 2].ip))
                 self.assertTrue("INFO: rebalancing" in output[1])
@@ -1094,6 +1108,7 @@ class CouchbaseCliTest(CliBaseTest):
                            --group-name=\"Group 1\"".format(self.servers[num + 2].ip, self.servers[num + 3].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user="Administrator", password="password")
+                self.del_runCmd_value(output)
                 self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
                                                                .format(self.servers[num + 3].ip))
                 self.assertTrue("INFO: rebalancing" in output[1])
