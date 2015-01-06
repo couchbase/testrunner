@@ -131,11 +131,16 @@ class BaseTestCase(unittest.TestCase):
                 self.tearDown()
                 self.cluster = Cluster()
             self.change_checkpoint_params()
+            self.log.info("initializing cluster")
+            master_services = self.get_services(self.servers[:1],self.services_init, start_node = 0)
+            if master_services != None:
+                master_services = master_services[0].split(",")
             self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
-                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port, self.quota_percent)
+                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port, self.quota_percent, services = master_services)
 
             self.change_env_variables()
+            self.log.info("done initializing cluster")
             if self.input.param("log_info", None):
                 self.change_log_info()
             if self.input.param("log_location", None):
@@ -280,14 +285,14 @@ class BaseTestCase(unittest.TestCase):
 
     def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None, rebalanceIndexWaitingDisabled=None,
                           rebalanceIndexPausingDisabled=None, maxParallelIndexers=None, maxParallelReplicaIndexers=None,
-                          port=None, quota_percent=None):
+                          port=None, quota_percent=None, services = None):
         quota = 0
         init_tasks = []
         for server in servers:
             init_port = port or server.port or '8091'
             init_tasks.append(cluster.async_init_node(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
                           rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers, init_port,
-                          quota_percent))
+                          quota_percent, services = services))
         for task in init_tasks:
             node_quota = task.result()
             if node_quota < quota or quota == 0:
@@ -1506,7 +1511,7 @@ class BaseTestCase(unittest.TestCase):
             else:
                 return list[0]
 
-    def get_services(self, tgt_nodes, tgt_services):
+    def get_services(self, tgt_nodes, tgt_services, start_node=1):
         services = []
         if tgt_services == None:
             for node in tgt_nodes:
@@ -1519,7 +1524,7 @@ class BaseTestCase(unittest.TestCase):
         if tgt_services != None and "-" in tgt_services:
             services = tgt_services.replace(":",",").split("-")
         elif tgt_services != None:
-            for node in range(1,len(tgt_nodes)):
+            for node in range(start_node,len(tgt_nodes)):
                 services.append(tgt_services.replace(":",","))
         return services
 

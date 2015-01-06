@@ -117,7 +117,7 @@ class Cluster(object):
     def async_init_node(self, server, disabled_consistent_view=None,
                         rebalanceIndexWaitingDisabled=None, rebalanceIndexPausingDisabled=None,
                         maxParallelIndexers=None, maxParallelReplicaIndexers=None, port=None,
-                        quota_percent=None):
+                        quota_percent=None, services = None):
         """Asynchronously initializes a node
 
         The task scheduled will initialize a nodes username and password and will establish
@@ -132,11 +132,12 @@ class Cluster(object):
             maxParallelReplicaIndexers - max parallel replica indexers threads(int)
             port - port to initialize cluster
             quota_percent - percent of memory to initialize
+            services - can be kv, n1ql, index
         Returns:
             NodeInitTask - A task future that is a handle to the scheduled task."""
         _task = NodeInitializeTask(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
                           rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers,
-                          port, quota_percent)
+                          port, quota_percent, services = services)
         self.task_manager.schedule(_task)
         return _task
 
@@ -309,7 +310,7 @@ class Cluster(object):
         _task = self.async_bucket_delete(server, bucket)
         return _task.result(timeout)
 
-    def init_node(self, server, async_init_node=True, disabled_consistent_view=None):
+    def init_node(self, server, async_init_node=True, disabled_consistent_view=None, services = None):
         """Synchronously initializes a node
 
         The task scheduled will initialize a nodes username and password and will establish
@@ -321,7 +322,7 @@ class Cluster(object):
 
         Returns:
             boolean - Whether or not the node was properly initialized."""
-        _task = self.async_init_node(server, async_init_node, disabled_consistent_view)
+        _task = self.async_init_node(server, async_init_node, disabled_consistent_view, services = services)
         return _task.result()
 
     def rebalance(self, servers, to_add, to_remove, timeout=None, use_hostnames=False, services = None):

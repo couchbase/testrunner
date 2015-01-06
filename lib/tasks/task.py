@@ -84,7 +84,8 @@ class NodeInitializeTask(Task):
                  rebalanceIndexPausingDisabled=None,
                  maxParallelIndexers=None,
                  maxParallelReplicaIndexers=None,
-                 port=None, quota_percent=None):
+                 port=None, quota_percent=None,
+                 services = None):
         Task.__init__(self, "node_init_task")
         self.server = server
         self.port = port or server.port
@@ -95,6 +96,7 @@ class NodeInitializeTask(Task):
         self.rebalanceIndexPausingDisabled = rebalanceIndexPausingDisabled
         self.maxParallelIndexers = maxParallelIndexers
         self.maxParallelReplicaIndexers = maxParallelReplicaIndexers
+        self.services = services
 
 
     def execute(self, task_manager):
@@ -106,7 +108,12 @@ class NodeInitializeTask(Task):
                 return
         username = self.server.rest_username
         password = self.server.rest_password
-
+        if self.services:
+            status = rest.init_node_services(username= username, password = password, port = self.port, hostname= self.server.ip, services= self.services)
+            if not status:
+                self.state = FINISHED
+                self.set_exception(Exception('unable to set services for server %s' % (self.server.ip)))
+                return
         if self.disable_consistent_view is not None:
             rest.set_reb_cons_view(self.disable_consistent_view)
         if self.rebalanceIndexWaitingDisabled is not None:

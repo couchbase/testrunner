@@ -724,6 +724,25 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
+    def init_node_services(self, username='Administrator', password='password', hostname = '127.0.0.1', port='8091', services = None):
+        api = self.baseUrl + '/node/controller/setupServices'
+        if services == None:
+            log.info(" servces are marked as None, will not work")
+            return False
+        if hostname == "127.0.0.1":
+            hostname="{0}:{1}".format(hostname,port)
+        params = urllib.urlencode({ 'hostname':hostname,
+                                    'user': username,
+                                    'password': password,
+                                    'services':",".join(services)})
+        log.info('/node/controller/setupServices params on {0}:{1}:{2}'.format(self.ip, self.port, params))
+        status, content, header = self._http_request(api, 'POST', params)
+        error_message = "cannot change node services after cluster is provisioned"
+        if not status and content == error_message:
+            status = True
+            log.info("This node is already provisioned with services, we do not consider this as failure for test case")
+        return status
+
     def get_cluster_settings(self):
         settings = {}
         api = self.baseUrl + 'settings/web'
