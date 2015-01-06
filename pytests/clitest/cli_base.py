@@ -1,5 +1,6 @@
 from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
 from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import MAC_COUCHBASE_BIN_PATH
@@ -43,6 +44,12 @@ class CliBaseTest(BaseTestCase):
             if self.case_number > 1 or self.times_teardown_called > 1:
                 self.shell.disconnect()
         self.times_teardown_called += 1
+        serverInfo = self.servers[0]
+        rest = RestConnection(serverInfo)
+        zones = rest.get_zone_names()
+        for zone in zones:
+            if zone != "Group 1":
+                rest.delete_zone(zone)
         super(CliBaseTest, self).tearDown()
 
     def _set_vbucket(self, key, vbucket= -1):
@@ -55,3 +62,4 @@ class CliBaseTest(BaseTestCase):
     def del_runCmd_value(self, output):
         if "runCmd" in output[0]:
             output = output[1:]
+        return output
