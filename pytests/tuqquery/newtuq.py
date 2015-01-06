@@ -42,6 +42,7 @@ class QueryTests(BaseTestCase):
             self.configure_gomaxprocs()
         self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
          # temporary for MB-12848
+        self._start_command_line_query(self.master) # temporary added as workaround
         self.create_primary_index_for_3_0_and_greater()
 
     def suite_setUp(self):
@@ -484,6 +485,9 @@ class QueryTests(BaseTestCase):
                 couchbase_path = testconstants.LINUX_COUCHBASE_BIN_PATH
             else:
                 couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
+            if self.input.tuq_client and "sherlock_path" in self.input.tuq_client:
+                couchbase_path = "%s/bin" % self.input.tuq_client["sherlock_path"]
+                print "PATH TO SHERLOCK: %s" % couchbase_path
             if os == 'windows':
                 cmd = "cd %s; " % (couchbase_path) +\
                 "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
@@ -492,6 +496,11 @@ class QueryTests(BaseTestCase):
                 cmd = "cd %s; " % (couchbase_path) +\
                 "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
                                                                 server.ip, server.port)
+                if self.input.param("n1ql_port", None):
+                    print "PORT IS %s" % self.input.param("n1ql_port", None)
+                    cmd = "cd %s; " % (couchbase_path) +\
+                './cbq-engine -datastore http://%s:%s/ -http=":%s">n1ql.log 2>&1 &' %(
+                                                                server.ip, server.port, self.input.param("n1ql_port", None))
             self.shell.execute_command(cmd)
         else:
             os = self.shell.extract_remote_info().type.lower()
