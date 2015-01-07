@@ -424,7 +424,8 @@ class BuildQuery(object):
             """ format for sherlock build name
             /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
             /723/couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
-            /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb """
+            /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb
+            /795/couchbase_server-enterprise-windows-amd64-3.5.0-795.exe"""
             build_number = build.product_version.replace(version[:6],"")
             if "centos" in distribution_version:
                 build.name = edition_type + "-" + build.product_version + \
@@ -441,9 +442,18 @@ class BuildQuery(object):
                 elif "debian gnu/linux 7" in distribution_version:
                     build.distribution_version = "debian7"
                     os_name = "debian7"
-                build.name = edition_type + "_" + build.product_version + \
+                elif "windows" in distribution_version:
+                    os_name = "windows"
+                if "windows" not in os_name:
+                    build.name = edition_type + "_" + build.product_version + \
                    "-" + os_name + "_" +  build.architecture_type + \
                    "." + build.deliverable_type
+                else:
+                    """ windows sherlock build name:
+                        couchbase_server-enterprise-windows-amd64-3.5.0-795.exe """
+                    build.name = edition_type + "-" + os_name + "-" + \
+                        build.architecture_type + "-" + build.product_version + \
+                        "." + build.deliverable_type
             build.url = repo + build_number + "/" + build.name
         else:
             build.name = edition_type + joint_char + os_name + \
