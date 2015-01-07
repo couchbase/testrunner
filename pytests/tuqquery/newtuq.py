@@ -392,8 +392,18 @@ class QueryTests(BaseTestCase):
             query = self.query
         if server is None:
            server = self.master
-           if self.input.tuq_client and "client" in self.input.tuq_client:
-               server = self.tuq_client
+           if server.ip == "127.0.0.1":
+            self.n1ql_port = server.n1ql_port
+        else:
+            if server.ip == "127.0.0.1":
+                self.n1ql_port = server.n1ql_port
+            if self.input.tuq_client and "client" in self.input.tuq_client:
+                server = self.tuq_client
+        if self.n1ql_port == None or self.n1ql_port == '':
+            self.n1ql_port = self.input.param("n1ql_port", 8093)
+            if not self.n1ql_port:
+                self.log.info(" n1ql_port is not defined, processing will not proceed further")
+                raise Exception("n1ql_port is not defined, processing will not proceed further")
         if self.use_rest:
             result = RestConnection(server).query_tool(query, self.n1ql_port)
         else:
@@ -496,11 +506,17 @@ class QueryTests(BaseTestCase):
                 cmd = "cd %s; " % (couchbase_path) +\
                 "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
                                                                 server.ip, server.port)
-                if self.input.param("n1ql_port", None):
-                    print "PORT IS %s" % self.input.param("n1ql_port", None)
+                if server.ip == "127.0.0.1":
+                    n1ql_port = server.n1ql_port
+                if n1ql_port == None or n1ql_port == '':
+                    n1ql_port = self.input.param("n1ql_port", None)
+                    if n1ql_port == None:
+                        self.log.info("n1ql port not found for {0}:{1}".format(server.ip,server.port))
+                if n1ql_port:
+                    self.log.info("PORT IS %s" % n1ql_port)
                     cmd = "cd %s; " % (couchbase_path) +\
                 './cbq-engine -datastore http://%s:%s/ -http=":%s">n1ql.log 2>&1 &' %(
-                                                                server.ip, server.port, self.input.param("n1ql_port", None))
+                                                                server.ip, server.port, n1ql_port)
             self.shell.execute_command(cmd)
         else:
             os = self.shell.extract_remote_info().type.lower()

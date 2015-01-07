@@ -78,6 +78,7 @@ class TestInputServer(object):
         self.cli_path = ''
         self.data_path = ''
         self.index_path = ''
+        self.n1ql_port = ''
 
     def __str__(self):
         #ip_str = "ip:{0}".format(self.ip)
@@ -265,6 +266,8 @@ class TestInputParser():
                     server.index_path = global_properties['index_path']
                 if server.services == '' and 'services' in global_properties:
                     server.services = global_properties['services']
+                if server.n1ql_port == '' and 'n1ql_port' in global_properties:
+                    server.n1ql_port = global_properties['n1ql_port']
         return servers
 
     @staticmethod
@@ -330,6 +333,8 @@ class TestInputParser():
                         server.ip = config.get(section, option)
                     if option == 'services':
                         server.services = config.get(section, option)
+                    if option == 'n1ql_port':
+                        server.n1ql_port = config.get(section, option)
                 break
                 #get username
                 #get password
