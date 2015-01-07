@@ -16,5 +16,4 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
 
     def test_multi_create_drop_index(self):
         self.log.info("test_multi_create_drop_index")
-        self.run_multi_operations(buckets = self.buckets,
-            query_definitions = self.query_definitions, create_index = True, drop_index = True)
+        self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = True, drop_index = True)

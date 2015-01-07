@@ -290,9 +290,12 @@ class BaseTestCase(unittest.TestCase):
         init_tasks = []
         for server in servers:
             init_port = port or server.port or '8091'
+            assigned_services = services
+            if self.master != server:
+                assigned_services = None
             init_tasks.append(cluster.async_init_node(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
-                          rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers, init_port,
-                          quota_percent, services = services))
+                        rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers, init_port,
+                        quota_percent, services = assigned_services))
         for task in init_tasks:
             node_quota = task.result()
             if node_quota < quota or quota == 0:
@@ -1514,7 +1517,7 @@ class BaseTestCase(unittest.TestCase):
     def get_services(self, tgt_nodes, tgt_services, start_node=1):
         services = []
         if tgt_services == None:
-            for node in tgt_nodes:
+            for node in tgt_nodes[start_node:]:
                 if node.services != None and node.services != '':
                     services.append(node.services)
             if len(services) > 0:
@@ -1556,7 +1559,7 @@ class BaseTestCase(unittest.TestCase):
 
     def find_nodes_in_list(self):
         self.nodes_in_list = self.servers[self.nodes_init:self.nodes_init+self.nodes_in]
-        self.services_in = self.get_services(self.nodes_in_list, self.services_in)
+        self.services_in = self.get_services(self.nodes_in_list, self.services_in,start_node =0)
 
     def filter_nodes(self, filter_nodes):
         src_nodes = []

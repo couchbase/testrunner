@@ -5,6 +5,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def setUp(self):
         super(BaseSecondaryIndexingTests, self).setUp()
+        self.graceful = self.input.param("graceful",False)
         self.groups = self.input.param("groups", "simple").split(":")
         query_definition_generator = SQLDefinitionGenerator()
         if self.dataset == "default" or self.dataset == "employee":
@@ -93,43 +94,44 @@ class BaseSecondaryIndexingTests(QueryTests):
                 else:
                      self.query_using_index(bucket.name,query_definition, None)
 
-    def check_and_run_operations(self, before = False, after = False, in_between = False):
+    def check_and_run_operations(self, buckets = [], before = False, after = False, in_between = False):
         if before:
-            self._run_operations(create_index = self.ops_map["before"]["create_index"],
+            self._run_operations(buckets = buckets, create_index = self.ops_map["before"]["create_index"],
                 drop_index = self.ops_map["before"]["drop_index"],
-                query_ops = self.ops_map["before"]["query_ops"])
+                run_queries = self.ops_map["before"]["query_ops"])
         if after:
-            self._run_operations(create_index = self.ops_map["after"]["create_index"],
+            self._run_operations(buckets = buckets, create_index = self.ops_map["after"]["create_index"],
                 drop_index = self.ops_map["after"]["drop_index"],
-                query_ops = self.ops_map["after"]["query_ops"])
+                run_queries = self.ops_map["after"]["query_ops"])
         if in_between:
-            self._run_operations(create_index = self.ops_map["in_between"]["create_index"],
+            self._run_operations(buckets = buckets, create_index = self.ops_map["in_between"]["create_index"],
                 drop_index = self.ops_map["in_between"]["drop_index"],
-                query_ops = self.ops_map["in_between"]["query_ops"])
+                run_queries = self.ops_map["in_between"]["query_ops"])
 
     def run_multi_operations(self, buckets = [], query_definitions = [], expected_results = {},
         create_index = False, drop_index = False, query_with_explain = False, query = False):
         try:
             if create_index:
-                self.multi_create_index(buckets,query_definitions)
+                self.multi_create_index(buckets, query_definitions)
             if query:
                 self.multi_query_using_index(buckets, query_definitions, expected_results)
             if query_with_explain:
                 self.multi_query_using_index_with_explain(buckets, query_definitions)
         except Exception, ex:
+            self.log.info(ex)
             raise
         finally:
             if drop_index:
-                self.multi_drop_index(buckets,query_definitions)
+                self.multi_drop_index(self.buckets,query_definitions)
 
-    def _run_operations(self, create_index = False, run_queries = False, drop_index = False):
-        self.run_multi_operations(self, buckets = self.buckets, query_definitions = self.query_definitions,
+    def _run_operations(self, buckets = [], create_index = False, run_queries = False, drop_index = False):
+        self.run_multi_operations(buckets, query_definitions = self.query_definitions,
             create_index = create_index, drop_index = drop_index,
             query_with_explain = run_queries, query = run_queries)
 
     def run_operations(self, bucket, query_definition, expected_results,
         create_index = False, drop_index = False, query_with_explain = False, query = False):
-        self.run_multi_operations(self, buckets = [bucket], query_definitions = [query_definition],
+        self.run_multi_operations(buckets = [bucket], query_definitions = [query_definition],
             expected_results = {"0": expected_results},
             create_index = create_index, drop_index = drop_index,
             query_with_explain = query_with_explain, query = query)
@@ -145,7 +147,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         for op_type in in_between.split(":"):
             map_in_between[op_type] = True
         after = self.input.param("after", "drop_index")
-        for op_type in in_between.split(":"):
+        for op_type in after.split(":"):
             map_after[op_type] = True
         return {"before":map_before, "in_between": map_in_between, "after": map_after}
 
