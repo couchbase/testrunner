@@ -42,7 +42,6 @@ Available keys:
  parallel=false          Useful when you're installing a cluster.
  toy=                    Install a toy build
  vbuckets=               The number of vbuckets in the server installation.
- cluster_init=True       Cluster initalization
  sync_threads=True       Sync or acync threads(+S or +A)
  erlang_threads=         Number of erlang threads (default=16:16 for +S type)
  upr=True                Enable UPR replication
@@ -322,10 +321,6 @@ class MembaseServerInstaller(Installer):
         info = remote_client.extract_remote_info()
         type = info.type.lower()
         server = params["server"]
-        if "cluster_init" in params:
-            cluster_init = bool(params["cluster_init"])
-        else:
-            cluster_init = True
         if "vbuckets" in params:
             vbuckets = int(params["vbuckets"][0])
         else:
@@ -394,11 +389,10 @@ class CouchbaseServerInstaller(Installer):
                 time.sleep(3)
 
                 # Initialize cluster
-                if cluster_init:
-                    rest.init_cluster(username=server.rest_username,
-                        password=server.rest_password)
-                    memory_quota = rest.get_nodes_self().mcdMemoryReserved
-                    rest.init_cluster_memoryQuota(memoryQuota=memory_quota)
+                rest.init_cluster(username=server.rest_username,
+                                  password=server.rest_password)
+                memory_quota = rest.get_nodes_self().mcdMemoryReserved
+                rest.init_cluster_memoryQuota(memoryQuota=memory_quota)
 
                 # TODO: Symlink data-dir to custom path
                 # remote_client.stop_couchbase()
