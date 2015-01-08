@@ -100,7 +100,7 @@ class QueryTests(BaseTestCase):
             self.assertTrue(actual_result1['results'] == actual_result2['results'],
                               "Results are inconsistent.Difference: %s %s %s %s" %(
                                     len(actual_result1['results']), len(actual_result2['results']),
-                                    actual_result1['results'][100], actual_result2['results'][100]))
+                                    actual_result1['results'][:100], actual_result2['results'][:100]))
 
     def test_simple_nulls(self):
         queries = ['SELECT id FROM %s WHERE id=NULL or id="null"']
