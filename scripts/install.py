@@ -41,6 +41,7 @@ Available keys:
  version=SHORT_VERSION   Example: "2.0.0r-71".
  parallel=false          Useful when you're installing a cluster.
  toy=                    Install a toy build
+ init_nodes=False        Initialize nodes
  vbuckets=               The number of vbuckets in the server installation.
  sync_threads=True       Sync or acync threads(+S or +A)
  erlang_threads=         Number of erlang threads (default=16:16 for +S type)
@@ -389,10 +390,15 @@ class CouchbaseServerInstaller(Installer):
                 time.sleep(3)
 
                 # Initialize cluster
-                rest.init_cluster(username=server.rest_username,
+                if "init_nodes" in params:
+                    init_nodes = params["init_nodes"]
+                else:
+                    init_nodes = "True"
+                if init_nodes.lower() == "true":
+                    rest.init_cluster(username=server.rest_username,
                                   password=server.rest_password)
-                memory_quota = rest.get_nodes_self().mcdMemoryReserved
-                rest.init_cluster_memoryQuota(memoryQuota=memory_quota)
+                    memory_quota = rest.get_nodes_self().mcdMemoryReserved
+                    rest.init_cluster_memoryQuota(memoryQuota=memory_quota)
 
                 # TODO: Symlink data-dir to custom path
                 # remote_client.stop_couchbase()
@@ -461,7 +467,6 @@ class CouchbaseServerInstaller(Installer):
             swappiness = int(params["swappiness"])
         else:
             swappiness = 0
-
         if "openssl" in params:
             openssl = params["openssl"]
         else:
