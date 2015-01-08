@@ -868,7 +868,7 @@ class RestConnection(object):
         if status:
             json_parsed = json.loads(content)
             log.info("Replication created with id: {}".format(json_parsed['id']))
-            self.replications.append(urllib.quote_plus(json_parsed['id']))
+            RestConnection.replications.append(urllib.quote_plus(json_parsed['id']))
             return json_parsed['id']
         else:
             log.error("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
@@ -889,11 +889,10 @@ class RestConnection(object):
         # temporary hack since goxdcr replications are
         # not listed in /pools/default/tasks yet
         if not replications:
-            for replication in self.replications:
+            for replication in RestConnection.replications:
                 try:
                     log.info("Deleting replication {}".format(replication))
                     self.stop_replication("controller/cancelXDCR/%s" % replication)
-                    self.replications.remove(replication)
                 except:
                     # we are not logging replication on per cluster basis
                     # so it is possible the replication does not belong to
@@ -1470,8 +1469,8 @@ class RestConnection(object):
         nodes = self.get_nodes()
         map = {}
         for node in nodes:
-            key = "{0}:{1}".format(node.ip,node.port)
-            map[key]=node.services
+            key = "{0}:{1}".format(node.ip, node.port)
+            map[key] = node.services
         return map
 
     def get_bucket_stats(self, bucket='default'):
@@ -2423,13 +2422,13 @@ class RestConnection(object):
     Returns -
     status, content and header of adding and setting of LDAPAuth
     '''
-    def ldapRestOperation(self,authOperation,userlist):
+    def ldapRestOperation(self, authOperation, userlist):
         self.authOperation = authOperation
         value = self.ldapRestOperationGET()
         api = self.baseUrl + "/settings/ldapAuth"
 
         if (authOperation == "clear"):
-            status, content,header = self._http_request(api, 'POST')
+            status, content, header = self._http_request(api, 'POST')
             return status
 
         if (authOperation != None):
@@ -2439,7 +2438,7 @@ class RestConnection(object):
 
         if (userlist != None):
             for user in userlist:
-                if user.adminType ==  "Admin":
+                if user.adminType == "Admin":
                     self.currAdmins = user.userName
                 else:
                     self.currROAdmins = user.userName
@@ -2452,19 +2451,19 @@ class RestConnection(object):
                                         'roAdmins':'{0}'.format(self.currROAdmins),
                                         'username': 'Administrator',
                                         'password': 'password'})
-        status, content,header = self._http_request(api, 'POST', params)
+        status, content, header = self._http_request(api, 'POST', params)
 
     '''
     validateLogin - Validate if user can login using a REST API
     Input Parameter - user and password to check for login
     Returns - 400 if user login fails, 200 if user logins succeeds
     '''
-    def validateLogin(self,user,password):
+    def validateLogin(self, user, password):
         api = self.baseUrl + "uilogin"
         header = {'Content-type': 'application/x-www-form-urlencoded'}
-        params = urllib.urlencode({'user':'{0}'.format(user),'password':'{0}'.format(password)})
+        params = urllib.urlencode({'user':'{0}'.format(user), 'password':'{0}'.format(password)})
         http = httplib2.Http()
-        status, content = http.request(api,'POST',headers=header,body=params)
+        status, content = http.request(api, 'POST', headers=header, body=params)
         log.info ("API execution successful, value of status is {0}".format(status))
         return status
 
@@ -2778,6 +2777,6 @@ class RestParser(object):
         return bucket
 
 class ldapUser(object):
-    def __init__(self,userName,adminType):
+    def __init__(self, userName, adminType):
         self.userName = userName
         self.adminType = adminType
