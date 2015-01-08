@@ -506,14 +506,10 @@ class QueryTests(BaseTestCase):
                 cmd = "cd %s; " % (couchbase_path) +\
                 "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
                                                                 server.ip, server.port)
-                if server.ip == "127.0.0.1":
+                n1ql_port = self.input.param("n1ql_port", None)
+                if server.ip == "127.0.0.1" and server.n1ql_port:
                     n1ql_port = server.n1ql_port
-                if n1ql_port == None or n1ql_port == '':
-                    n1ql_port = self.input.param("n1ql_port", None)
-                    if n1ql_port == None:
-                        self.log.info("n1ql port not found for {0}:{1}".format(server.ip,server.port))
                 if n1ql_port:
-                    self.log.info("PORT IS %s" % n1ql_port)
                     cmd = "cd %s; " % (couchbase_path) +\
                 './cbq-engine -datastore http://%s:%s/ -http=":%s">n1ql.log 2>&1 &' %(
                                                                 server.ip, server.port, n1ql_port)
