@@ -8,14 +8,8 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
     def setUp(self):
         super(SecondaryIndexingRecoveryTests, self).setUp()
 
-    def suite_setUp(self):
-        super(SecondaryIndexingRecoveryTests, self).suite_setUp()
-
     def tearDown(self):
         super(SecondaryIndexingRecoveryTests, self).tearDown()
-
-    def suite_tearDown(self):
-        super(SecondaryIndexingRecoveryTests, self).suite_tearDown()
 
     def test_rebalance_in(self):
         self.check_and_run_operations(buckets = self.buckets, before = True)

@@ -1,4 +1,4 @@
-from tuqquery.newtuq import QueryTests
+from newtuq import QueryTests
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 
 class BaseSecondaryIndexingTests(QueryTests):
@@ -15,14 +15,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.find_nodes_in_list()
         self.generate_map_nodes_out_dist()
 
-    def suite_setUp(self):
-        super(BaseSecondaryIndexingTests, self).suite_setUp()
-
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
-
-    def suite_tearDown(self):
-        super(BaseSecondaryIndexingTests, self).suite_tearDown()
 
     def create_index(self, bucket, query_definition, verifycreate = True):
         self.query = query_definition.generate_index_create_query(bucket = bucket)
