@@ -64,14 +64,10 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
     def test_failover(self):
         self.check_and_run_operations(buckets = self.buckets, before = True)
         servr_out = self.nodes_out_list
-        failover_tasks = []
-        for chosen in servr_out:
-            failover_tasks += self.cluster.async_failover([self.master],
-                failover_nodes = chosen, graceful=self.graceful)
-        self.sleep(3)
+        failover_task = self.cluster.async_failover([self.master],
+                failover_nodes = servr_out, graceful=self.graceful)
         self.check_and_run_operations(buckets = self.buckets, in_between = True)
-        for task in failover_tasks:
-            task.result()
+        failover_task.result()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                [], servr_out)
         self.check_and_run_operations(buckets = self.buckets, in_between = True)
@@ -79,18 +75,24 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.check_and_run_operations(buckets = self.buckets, after = True)
 
     def test_failover_add_back(self):
+        recoveryType = self.input.param("recoveryType", "full")
         servr_out = self.nodes_out_list
         nodes_all = RestConnection(self.master).node_statuses()
         self.check_and_run_operations(buckets = self.buckets, before = True)
-        failover_tasks = []
-        for chosen in servr_out:
-            failover_tasks += self.cluster.async_failover([self.master],
-                failover_nodes = chosen, graceful=self.graceful)
+        failover_task =self.cluster.async_failover([self.master],
+                failover_nodes = servr_out, graceful=self.graceful)
         self.check_and_run_operations(buckets = self.buckets, in_between = True)
-        for task in failover_tasks:
-            task.result()
-        for node in servr_out:
-            RestConnection(self.master).add_back_node(node.id)
+        failover_task.result()
+        self.log.info(servr_out)
+        rest = RestConnection(self.master)
+        nodes_all = rest.node_statuses()
+        nodes = []
+        for failover_node in servr_out:
+            nodes.extend([node for node in nodes_all
+                if node.ip != failover_node.ip or str(node.port) != failover_node.port])
+        for node in nodes:
+            rest.add_back_node(node.id)
+            rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
         self.check_and_run_operations(buckets = self.buckets, in_between = True)
         rebalance.result()
