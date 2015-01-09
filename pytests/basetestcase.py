@@ -1483,12 +1483,11 @@ class BaseTestCase(unittest.TestCase):
 
     def get_services_map(self, reset = True):
         if not reset:
-            return self.services_map
+            return
         else:
             self.services_map = {}
         rest = RestConnection(self.master)
         map = rest.get_nodes_services()
-        self.log.info(map)
         for key, val in map.iteritems():
             for service in val:
                 if service not in self.services_map.keys():
@@ -1533,6 +1532,7 @@ class BaseTestCase(unittest.TestCase):
 
     def generate_map_nodes_out_dist(self):
         self.nodes_out_list = []
+        self.get_services_map(reset = True)
         if self.nodes_out_dist == None:
             if len(self.servers) > 1:
                 self.nodes_out_list.append(self.servers[1])
@@ -1544,10 +1544,10 @@ class BaseTestCase(unittest.TestCase):
             for node in self.services_map.keys():
                 if (service_type in self.services_map[node]) and (node not in [node.ip for node in self.service_failure_nodes]):
                     for server in self.servers:
-                        if server.ip == node.ip:
+                        if server.ip == node.ip and self.master.ip != server.ip:
                             self.nodes_out_list.append(server)
 
-    def generate_services_map(self, nodes):
+    def generate_services_map(self, nodes, services = None):
         map = {}
         index = 0
         if services == None:

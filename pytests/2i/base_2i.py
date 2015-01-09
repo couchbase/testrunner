@@ -14,6 +14,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.ops_map = self._create_operation_map()
         self.find_nodes_in_list()
         self.generate_map_nodes_out_dist()
+        self.memory_create_list = []
+        self.memory_drop_list = []
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
@@ -27,21 +29,19 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
     def multi_create_index(self, buckets = [], query_definitions =[]):
-        list = []
         for bucket in buckets:
             for query_definition in query_definitions:
                 index_info = query_definition.generate_index_create_query(bucket = bucket.name)
-                if index_info not in list:
-                    list.append(index_info)
+                if index_info not in self.memory_create_list:
+                    self.memory_create_list.append(index_info)
                     self.create_index(bucket.name, query_definition)
 
     def multi_drop_index(self, buckets = [], query_definitions =[]):
-        list = []
         for bucket in buckets:
             for query_definition in query_definitions:
                 index_info = query_definition.generate_index_drop_query(bucket = bucket.name)
-                if index_info not in list:
-                    list.append(index_info)
+                if index_info not in self.memory_drop_list:
+                    self.memory_drop_list.append(index_info)
                     self.drop_index(bucket.name, query_definition)
 
     def drop_index(self, bucket, query_definition, verifydrop = True):
@@ -136,13 +136,16 @@ class BaseSecondaryIndexingTests(QueryTests):
         map_after = {"create_index":False, "query_ops": False, "drop_index": False}
         before = self.input.param("before", "create_index")
         for op_type in before.split(":"):
-            map_before[op_type] = True
+            if op_type != '':
+                map_before[op_type] = True
         in_between = self.input.param("in_between", "query_ops")
         for op_type in in_between.split(":"):
-            map_in_between[op_type] = True
+            if op_type != '':
+                map_in_between[op_type] = True
         after = self.input.param("after", "drop_index")
         for op_type in after.split(":"):
-            map_after[op_type] = True
+            if op_type != '':
+                map_after[op_type] = True
         return {"before":map_before, "in_between": map_in_between, "after": map_after}
 
     def _is_index_in_list(self, bucket, index_name):

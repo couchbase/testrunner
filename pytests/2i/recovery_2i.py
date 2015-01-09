@@ -89,7 +89,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         nodes = []
         for failover_node in servr_out:
             nodes.extend([node for node in nodes_all
-                if node.ip != failover_node.ip or str(node.port) != failover_node.port])
+                if node.ip == failover_node.ip or (node.ip == "127.0.0.1" and str(node.port) != failover_node.port)])
         for node in nodes:
             rest.add_back_node(node.id)
             rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
