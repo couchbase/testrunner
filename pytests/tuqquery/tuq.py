@@ -2658,13 +2658,16 @@ class QueryTests(BaseTestCase):
                 missing.append(item)
         return missing, extra
 
-    def sort_nested_list(self, result):
+    def sort_nested_list(self, result, key=None):
         actual_result = []
         for item in result:
             curr_item = {}
             for key, value in item.iteritems():
                 if isinstance(value, list) or isinstance(value, set):
-                    curr_item[key] = sorted(value)
+                    if key and isinstance(value[0], dict) and key in value[0]:
+                        curr_item[key] = sorted(value, key=lambda doc: (doc['task_name']))
+                    else:
+                        curr_item[key] = sorted(value)
                 else:
                     curr_item[key] = value
             actual_result.append(curr_item)

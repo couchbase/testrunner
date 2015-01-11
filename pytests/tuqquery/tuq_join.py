@@ -168,7 +168,7 @@ class JoinTests(QueryTests):
             expected_result = [{'name' : doc['name'],
                                 'join_day' : doc['join_day']}
                                for doc in all_docs_list
-                               if doc['job_title'] == 'Sales' and doc['join_day'] == 1]
+                               if  doc['join_day'] == 1]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -184,7 +184,7 @@ class JoinTests(QueryTests):
             expected_result = [{'name' : doc['name'],
                                 'join_day' : doc['join_day']}
                                for doc in all_docs_list
-                               if doc['job_title'] == 'Sales' and doc['join_day'] == 1]
+                               if doc['join_day'] == 1]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -234,7 +234,7 @@ class JoinTests(QueryTests):
     def test_subquery_exists_and(self):
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s d1 WHERE " % bucket.name +\
-            "EXISTS (SELECT * FROM %s d  use keys toarray(d1.tasks_ids[0]) and join_mo>5)" % bucket.name
+            "EXISTS (SELECT * FROM %s d  use keys toarray(d1.tasks_ids[0])) and join_mo>5" % bucket.name
             all_docs_list = self.generate_full_docs_list(self.gens_load)
             tasks_ids = [doc["task_name"] for doc in self.generate_full_docs_list(self.gens_tasks)]
             actual_result = self.run_cbq_query()
@@ -310,18 +310,20 @@ class JoinTests(QueryTests):
                                                 bucket.name, self.type_join, bucket.name) +\
                          "ON KEYS emp.tasks_ids"
             actual_result = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_result['results'])
+            actual_result = actual_result['results']
+            self._delete_ids(actual_result)
+            actual_result = self.sort_nested_list(actual_result, key='task_name')
             actual_result = sorted(actual_result, key=lambda doc:
                                    self._get_for_sort(doc))
-            self._delete_ids(actual_result)
             full_list = self._generate_full_nested_docs_list(join_type=self.type_join)
             expected_result = [{"emp" : doc['item'], "tasks" : doc['items_nested']}
                                for doc in full_list if doc and 'items_nested' in doc]
             expected_result.extend([{"emp" : doc['item']}
                                     for doc in full_list if not 'items_nested' in doc])
+            self._delete_ids(expected_result)
+            expected_result = self.sort_nested_list(expected_result, key='task_name')
             expected_result = sorted(expected_result, key=lambda doc:
                                    self._get_for_sort(doc))
-            self._delete_ids(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_simple_nest_key(self):
@@ -351,13 +353,14 @@ class JoinTests(QueryTests):
                                                     bucket.name, self.type_join, bucket.name) +\
                          "ON KEYS emp.tasks_ids"
             actual_result = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_result['results'])
+            actual_result = self.sort_nested_list(actual_result['results'], key='projects')
             actual_result = sorted(actual_result)
             full_list = self._generate_full_nested_docs_list(join_type=self.type_join)
             expected_result = [{"name" : doc['item']['name'],
                                 "projects" : [nested_doc['project'] for nested_doc in doc['items_nested']]}
                                for doc in full_list if doc and 'items_nested' in doc]
             expected_result.extend([{} for doc in full_list if not 'items_nested' in doc])
+            expected_result = self.sort_nested_list(expected_result, key='projects')
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -376,13 +379,15 @@ class JoinTests(QueryTests):
                                                     bucket.name, self.type_join, bucket.name) +\
                          "ON KEYS emp.tasks_ids where ANY item IN items SATISFIES item.project == 'CB' end"
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['name'], doc['projects']))
+            actual_result = self.sort_nested_list(actual_result['results'], key='projects')
+            actual_result = sorted(actual_result, key=lambda doc: (doc['name'], doc['projects']))
             full_list = self._generate_full_nested_docs_list(join_type=self.type_join)
             expected_result = [{"name" : doc['item']['name'],
                                 "projects" : [nested_doc['project'] for nested_doc in doc['items_nested']]}
                                for doc in full_list if doc and 'items_nested' in doc and\
                                len([nested_doc for nested_doc in doc['items_nested']
                                     if nested_doc['project'] == 'CB']) > 0]
+            expected_result = self.sort_nested_list(expected_result, key='projects')
             expected_result = sorted(expected_result, key=lambda doc: (doc['name'], doc['projects']))
             self._verify_results(actual_result, expected_result)
 
