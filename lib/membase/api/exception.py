@@ -9,7 +9,9 @@ class MembaseHttpExceptionTypes(object):
     BUCKET_CREATION_ERROR = 1004
     STATS_UNAVAILABLE = 1005
     REMOTE_CLUSTER_JOIN_FAILED = 1006
-
+    N1QL_QUERY_EXCEPTION = 1007
+    CREATE_INDEX_EXCEPTION = 1008
+    DROP_INDEX_EXCEPTION = 1009
 
 #base exception class for membase apis
 class MembaseHttpException(Exception):
@@ -52,6 +54,26 @@ class BucketCreationException(MembaseHttpException):
         self._message = 'unable to create bucket {0} on the host @ {1}'.\
             format(bucket_name, ip)
 
+class N1QLQueryException(MembaseHttpException):
+    def __init__(self, query):
+        self.parameters = dict()
+        self.parameters['query'] = query
+        self.type = MembaseHttpExceptionTypes.N1QL_QUERY_EXCEPTION
+        self._message = 'unable to get expected results for query {0}'.format(query)
+
+class CreateIndexException(MembaseHttpException):
+    def __init__(self, index_name):
+        self.parameters = dict()
+        self.parameters['index_name'] = index_name
+        self.type = MembaseHttpExceptionTypes.CREATE_ONDEX_EXCEPTION
+        self._message = 'unable to create index {0}'.format(index_name)
+
+class DropIndexException(MembaseHttpException):
+    def __init__(self, index_name):
+        self.parameters = dict()
+        self.parameters['index_name'] = index_name
+        self.type = MembaseHttpExceptionTypes.DROP_INDEX_EXCEPTION
+        self._message = 'unable to drop index {0}'.format(index_name)
 
 class StatsUnavailableException(MembaseHttpException):
     def __init__(self):

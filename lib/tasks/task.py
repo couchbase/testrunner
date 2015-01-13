@@ -22,7 +22,7 @@ from couchbase_helper.document import DesignDocument, View
 from mc_bin_client import MemcachedError
 from tasks.future import Future
 from couchbase_helper.stats_tools import StatsCommon
-from membase.api.exception import DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
+from membase.api.exception import N1QLQueryException, DropIndexException, CreateIndexException, DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
                                     GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, \
                                     ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException, BucketCompactionException
 from remote.remote_util import RemoteMachineShellConnection
@@ -1812,6 +1812,163 @@ class ViewQueryTask(Task):
                 # retry until expected results or task times out
                 task_manager.schedule(self, self.retry_time)
         except QueryViewException as e:
+            # subsequent query failed! exit
+            self.state = FINISHED
+            self.set_exception(e)
+
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)
+
+class N1QLQueryTask(Task):
+    def __init__(self,
+                 server, bucket,
+                 query, n1ql_helper = None,
+                 expected_result=None,
+                 verify_results = True,
+                 is_explain_query = False,
+                 index_name = None,
+                 retry_time=2):
+        Task.__init__(self, "query_n1ql_task")
+        self.server = server
+        self.bucket = bucket
+        self.query = query
+        self.expected_result = expected_result
+        self.n1ql_helper = n1ql_helper
+        self.timeout = 900
+        self.verify_results = verify_results
+        self.is_explain_query = is_explain_query
+        self.index_name = index_name
+        self.retry_time = 2
+
+    def execute(self, task_manager):
+        try:
+            # Query and get results
+            self.actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.server)
+            self.state = CHECKING
+            task_manager.schedule(self)
+        except N1QLQueryException as e:
+            # initial query failed, try again
+            task_manager.schedule(self, self.retry_time)
+
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)
+
+    def check(self, task_manager):
+        try:
+           # Verify correctness of result set
+           if self.verify_results:
+            if not self.is_explain_query:
+                self.n1ql_helper._verify_results(sorted(self.actual_result['results']), sorted(self.expected_result))
+            else:
+                self.n1ql_helper.verify_index_with_explain(self.actual_result, self.index_name)
+            self.set_result(True)
+            self.state = FINISHED
+        except N1QLQueryException as e:
+            # subsequent query failed! exit
+            self.state = FINISHED
+            self.set_exception(e)
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)
+
+
+class CreateIndexTask(Task):
+    def __init__(self,
+                 server, bucket, index_name,
+                 query, n1ql_helper = None,
+                 retry_time=2):
+        Task.__init__(self, "create_index_task")
+        self.server = server
+        self.bucket = bucket
+        self.query = query
+        self.index_name = index_name
+        self.n1ql_helper = n1ql_helper
+        self.retry_time = 2
+
+    def execute(self, task_manager):
+        try:
+            # Query and get results
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.server)
+            self.state = CHECKING
+            task_manager.schedule(self)
+        except CreateIndexException as e:
+            # initial query failed, try again
+            task_manager.schedule(self, self.retry_time)
+
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)
+
+    def check(self, task_manager):
+        try:
+           # Verify correctness of result set
+            check = self.n1ql_helper._is_index_in_list(self.bucket, self.index_name, server = self.server)
+            if not check:
+                self.state = FINISHED
+                raise CreateIndexException("Index {0} not created as expected ".format(self.index_name))
+            self.set_result(True)
+            self.state = FINISHED
+        except CreateIndexException as e:
+            # subsequent query failed! exit
+            self.state = FINISHED
+            self.set_exception(e)
+
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)
+
+class DropIndexTask(Task):
+    def __init__(self,
+                 server, bucket, index_name,
+                 query, n1ql_helper = None,
+                 retry_time=2):
+        Task.__init__(self, "drop_index_task")
+        self.server = server
+        self.bucket = bucket
+        self.query = query
+        self.index_name = index_name
+        self.n1ql_helper = n1ql_helper
+        self.timeout = 900
+        self.retry_time = 2
+
+    def execute(self, task_manager):
+        try:
+            # Query and get results
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.server)
+            self.state = CHECKING
+            task_manager.schedule(self)
+        except N1QLQueryException as e:
+            # initial query failed, try again
+            task_manager.schedule(self, self.retry_time)
+
+        # catch and set all unexpected exceptions
+        except DropIndexException as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)
+
+    def check(self, task_manager):
+        try:
+        # Verify correctness of result set
+            check = self.n1ql_helper._is_index_in_list(self.bucket, self.index_name)
+            if check:
+                self.state = FINISHED
+                raise Exception("Index {0} not dropped as expected ".format(self.index_name))
+            self.set_result(True)
+            self.state = FINISHED
+        except DropIndexException as e:
             # subsequent query failed! exit
             self.state = FINISHED
             self.set_exception(e)

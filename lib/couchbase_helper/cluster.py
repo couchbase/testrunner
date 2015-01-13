@@ -607,6 +607,168 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
+    def async_n1ql_query_verification(self,
+                 server, bucket,
+                 query, n1ql_helper = None,
+                 expected_result=None,
+                 is_explain_query = False,
+                 index_name = None,
+                 verify_results = True,
+                 retry_time=2):
+        """Asynchronously runs n1ql querya and verifies result if required
+
+        Parameters:
+            server - The server to handle query verification task. (TestInputServer)
+            query - Query params being used with the query. (dict)
+            expected_result - expected result after querying
+            is_explain_query - is query explain query
+            index_name - index related to query
+            bucket - The name of the bucket containing items for this view. (String)
+            verify_results -  Verify results after query runs successfully
+            retry_time - The time in seconds to wait before retrying failed queries (int)
+            n1ql_helper - n1ql helper object
+        Returns:
+            N1QLQueryTask - A task future that is a handle to the scheduled task."""
+        _task = N1QLQueryTask(n1ql_helper = n1ql_helper,
+                 server = server, bucket = bucket,
+                 query = query, expected_result=expected_result,
+                 verify_results = verify_results,
+                 is_explain_query = is_explain_query,
+                 index_name = index_name,
+                 retry_time= retry_time)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def n1ql_query_verification(self,
+                 server, bucket,
+                 query, n1ql_helper = None,
+                 expected_result=None,
+                 is_explain_query = False,
+                 index_name = None,
+                 verify_results = True,
+                 retry_time=2,
+                 timeout = 60):
+        """Synchronously runs n1ql querya and verifies result if required
+
+        Parameters:
+            server - The server to handle query verification task. (TestInputServer)
+            query - Query params being used with the query. (dict)
+            expected_result - expected result after querying
+            is_explain_query - is query explain query
+            index_name - index related to query
+            bucket - The name of the bucket containing items for this view. (String)
+            verify_results -  Verify results after query runs successfully
+            retry_time - The time in seconds to wait before retrying failed queries (int)
+            n1ql_helper - n1ql helper object
+            timeout - timeout for task
+        Returns:
+            N1QLQueryTask - A task future that is a handle to the scheduled task."""
+        _task = self.async_n1ql_query_verification(n1ql_helper = n1ql_helper,
+                 server = server, bucket = bucket,
+                 query = query, expected_result=expected_result,
+                 is_explain_query = is_explain_query,
+                 index_name = index_name,
+                 verify_results = verify_results,
+                 retry_time= retry_time)
+        return _task.result(timeout)
+
+    def async_create_index(self,
+                 server, bucket,
+                 query, n1ql_helper = None,
+                 index_name = None,
+                 retry_time=2):
+        """Asynchronously runs create index task
+
+        Parameters:
+            server - The server to handle query verification task. (TestInputServer)
+            query - Query params being used with the query.
+            bucket - The name of the bucket containing items for this view. (String)
+            index_name - Name of the index to be created
+            retry_time - The time in seconds to wait before retrying failed queries (int)
+            n1ql_helper - n1ql helper object
+        Returns:
+            CreateIndexTask - A task future that is a handle to the scheduled task."""
+        _task = CreateIndexTask(n1ql_helper = n1ql_helper,
+                 server = server, bucket = bucket,
+                 index_name = index_name,
+                 query = query,
+                 retry_time= retry_time)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def create_index(self,
+                 server, bucket,
+                 query, n1ql_helper = None,
+                 index_name = None,
+                 retry_time=2, timeout= 60):
+        """Asynchronously runs drop index task
+
+        Parameters:
+            server - The server to handle query verification task. (TestInputServer)
+            query - Query params being used with the query.
+            bucket - The name of the bucket containing items for this view. (String)
+            index_name - Name of the index to be created
+            retry_time - The time in seconds to wait before retrying failed queries (int)
+            n1ql_helper - n1ql helper object
+            timeout - timeout for the task
+        Returns:
+            N1QLQueryTask - A task future that is a handle to the scheduled task."""
+        _task = self.async_create_index(n1ql_helper = n1ql_helper,
+                 server = server, bucket = bucket,
+                 query = query,
+                 index_name = index_name,
+                 retry_time= retry_time)
+        return _task.result(timeout)
+
+    def async_drop_index(self,
+                 server = None, bucket = "default",
+                 query = None, n1ql_helper = None,
+                 index_name = None,
+                 retry_time=2):
+        """Synchronously runs drop index task
+
+        Parameters:
+            server - The server to handle query verification task. (TestInputServer)
+            query - Query params being used with the query.
+            bucket - The name of the bucket containing items for this view. (String)
+            index_name - Name of the index to be dropped
+            retry_time - The time in seconds to wait before retrying failed queries (int)
+            n1ql_helper - n1ql helper object
+        Returns:
+            DropIndexTask - A task future that is a handle to the scheduled task."""
+        _task = DropIndexTask(n1ql_helper = n1ql_helper,
+                 server = server, bucket = bucket,
+                 query = query,
+                 index_name = index_name,
+                 retry_time= retry_time)
+        self.task_manager.schedule(_task)
+        return _task
+
+
+    def drop_index(self,
+                 server, bucket,
+                 query, n1ql_helper = None,
+                 index_name = None,
+                 retry_time=2, timeout = 60):
+        """Synchronously runs drop index task
+
+        Parameters:
+            server - The server to handle query verification task. (TestInputServer)
+            query - Query params being used with the query. (dict)
+            bucket - The name of the bucket containing items for this view. (String)
+            index_name - Name of the index to be created
+            retry_time - The time in seconds to wait before retrying failed queries (int)
+            n1ql_helper - n1ql helper object
+            timeout - timeout for the task
+        Returns:
+            N1QLQueryTask - A task future that is a handle to the scheduled task."""
+        _task = self.async_drop_index(n1ql_helper = n1ql_helper,
+                 server = server, bucket = bucket,
+                 query = query,
+                 index_name = index_name,
+                 retry_time= retry_time)
+        return _task.result(timeout)
+
     def async_view_query_verification(self, design_doc_name, view_name, query, expected_rows, num_verified_docs=20, bucket="default", query_timeout=20,
                                       results=None, server=None):
         """Asynchronously query a views in a design doc and does full verification of results

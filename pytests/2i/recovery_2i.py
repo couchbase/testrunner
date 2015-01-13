@@ -19,6 +19,17 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         rebalance.result()
         self.check_and_run_operations(buckets = self.buckets, after = True)
 
+    def test_async_rebalance_in(self):
+        self.check_and_run_operations(buckets = self.buckets, before = True)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],self.nodes_in_list, [], services = self.services_in)
+        self.sleep(3)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
+        for task in tasks:
+            task.result()
+        rebalance.result()
+        self.check_and_run_operations(buckets = self.buckets, after = True)
+
+
     def test_rebalance_out(self):
         self.check_and_run_operations(buckets = self.buckets, before = True)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
