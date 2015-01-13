@@ -1294,7 +1294,7 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error, track_words)
             if vbuckets:
                 self.set_vbuckets_win(vbuckets)
-            if "3.5" in version[:5]
+            if "3.5" in version[:5]:
                 """  remove these code below when bug MB-13046 fixed """
                 self.execute_command("net stop couchbaseserver")
                 self.execute_command("rm -rf /cygdrive/c/Jenkins/workspace/sherlock-windows/couchbase/install/etc/security")
