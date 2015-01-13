@@ -1,61 +1,21 @@
-from couchbase_helper.documentgenerator import BlobGenerator
-from membase.api.rest_client import RestConnection
-from membase.helper.bucket_helper import BucketOperationHelper
-from membase.helper.cluster_helper import ClusterOperationHelper
-from xdcrbasetests import XDCRReplicationBaseTest
-
+from xdcrnewbasetests import XDCRNewBaseTest
+from xdcrnewbasetests import Utility, BUCKET_NAME, OPS
 """Testing Rebalance on Unidirectional and Bidirectional XDCR replication setup"""
 
-#VERIFICATION CURRENTLY DOESN'T SUPPORT STAR TOPOLOGY
 
-class Rebalance(XDCRReplicationBaseTest):
+# VERIFICATION CURRENTLY DOESN'T SUPPORT STAR TOPOLOGY
+class Rebalance(XDCRNewBaseTest):
     def setUp(self):
         super(Rebalance, self).setUp()
-        if self._replication_direction_str in "bidirection":
-            self.gen_create2 = BlobGenerator('LoadTwo', 'LoadTwo', self._value_size, end=self.num_items)
-            self.gen_delete2 = BlobGenerator('LoadTwo', 'LoadTwo-', self._value_size,
-                start=int((self.num_items) * (float)(100 - self._percent_delete) / 100), end=self.num_items)
-            self.gen_update2 = BlobGenerator('LoadTwo', 'LoadTwo-', self._value_size, start=0,
-                end=int(self.num_items * (float)(self._percent_update) / 100))
+        self.src_cluster = self.get_cb_cluster_by_name('C1')
+        self.src_master = self.src_cluster.get_master_node()
+        self.dest_cluster = self.get_cb_cluster_by_name('C2')
+        self.dest_master = self.dest_cluster.get_master_node()
+        self.__rebalance = self._input.param("rebalance", "").split('-')
+        self.__num_rebalance = self._input.param("num_rebalance", 1)
 
     def tearDown(self):
         super(Rebalance, self).tearDown()
-
-    def __update_delete(self):
-        if self._replication_direction_str in "unidirection":
-            self._async_modify_data()
-        elif self._replication_direction_str in "bidirection":
-            self._async_update_delete_data()
-        self.sleep(self.wait_timeout / 2)
-
-    def __merge_buckets(self):
-        if self._replication_direction_str in "unidirection":
-            self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
-        elif self._replication_direction_str in "bidirection":
-            self.merge_buckets(self.src_master, self.dest_master, bidirection=True)
-
-    def __sync_load_data(self):
-        self.log.info("Loading data Synchronously")
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        if self._replication_direction_str in "bidirection":
-            self._load_all_buckets(self.dest_master, self.gen_create2, "create", 0)
-        self.sleep(self.wait_timeout / 2)
-
-    def __async_load_data(self):
-        self.log.info("Loading data Asynchronously")
-        load_tasks = self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0, batch_size=1000)
-        if self._replication_direction_str in "bidirection":
-            load_tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_create2, "create", 0, batch_size=1000))
-        return load_tasks
-
-    def __load_data(self):
-        async_data_load = self._input.param("async_load", False)
-        load_tasks = []
-        if async_data_load:
-            load_tasks = self.__async_load_data()
-        else:
-            self.__sync_load_data()
-        return load_tasks
 
     """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
     Async Rebalance-In node at Source/Destination while
@@ -64,17 +24,16 @@ class Rebalance(XDCRReplicationBaseTest):
 
     def async_rebalance_in(self):
         try:
-            self.__load_data()
+            self.setup_xdcr_and_load()
 
             # Rebalance-IN
-            tasks = self._async_rebalance_in()
-            [task.result() for task in tasks]
+            if "C1" in self.__rebalance:
+                self.src_cluster.rebalance_in()
+            if "C2" in self.__rebalance:
+                self.dest_cluster.rebalance_in()
 
-            # Update-Deletes
-            self.__update_delete()
+            self.perform_update_delete()
 
-            # Merge Items
-            self.__merge_buckets()
             self.verify_results()
         finally:
             pass
@@ -87,16 +46,18 @@ class Rebalance(XDCRReplicationBaseTest):
 
     def async_rebalance_out(self):
         try:
-            #MB-9497 to load data during rebalance-out/replication
-            tasks = self.__load_data()
+            # MB-9497 to load data during rebalance-out/replication
+            # FIXME for async_load
+            self.setup_xdcr_and_load()
 
-            # rebalance-out
-            tasks += self._async_rebalance_out()
-            [task.result() for task in tasks]
+            # Rebalance-Out
+            if "C1" in self.__rebalance:
+                self.src_cluster.rebalance_out()
+            if "C2" in self.__rebalance:
+                self.dest_cluster.rebalance_out()
 
-            self.__update_delete()
+            self.perform_update_delete()
 
-            self.__merge_buckets()
             self.verify_results()
         finally:
             pass
@@ -107,15 +68,15 @@ class Rebalance(XDCRReplicationBaseTest):
 
     def async_rebalance_out_master(self):
         try:
-            self.__load_data()
+            self.setup_xdcr_and_load()
 
-            # rebalance-out Master
-            tasks = self._async_rebalance_out(master=True)
-            [task.result() for task in tasks]
+            # Rebalance-IN
+            if "C1" in self.__rebalance:
+                self.src_cluster.rebalance_out_master()
+            if "C2" in self.__rebalance:
+                self.dest_cluster.rebalance_out_master()
 
-            self.__update_delete()
-
-            self.__merge_buckets()
+            self.perform_update_delete()
 
             self.verify_results()
         finally:
@@ -128,15 +89,17 @@ class Rebalance(XDCRReplicationBaseTest):
 
     def swap_rebalance(self):
         try:
-            self.__load_data()
-            # Swap-rebalance
-            for _ in range(self._num_rebalance):
-                tasks = self._async_swap_rebalance()
-                [task.result() for task in tasks]
+            self.setup_xdcr_and_load()
 
-                self.__update_delete()
+            # Swap-Rebalance
+            for _ in range(self.__num_rebalance):
+                if "C1" in self.__rebalance:
+                    self.src_cluster.swap_rebalance()
+                if "C2" in self.__rebalance:
+                    self.dest_cluster.swap_rebalance()
 
-            self.__merge_buckets()
+            self.perform_update_delete()
+
             self.verify_results()
         finally:
             pass
@@ -148,14 +111,16 @@ class Rebalance(XDCRReplicationBaseTest):
 
     def swap_rebalance_out_master(self):
         try:
-            self.__load_data()
+            self.setup_xdcr_and_load()
 
-            # Swap-rebalance-master
-            tasks = self._async_swap_rebalance(master=True)
-            [task.result() for task in tasks]
+            # Swap-Rebalance
+            if "C1" in self.__rebalance:
+                self.src_cluster.swap_rebalance_master()
+            if "C2" in self.__rebalance:
+                self.dest_cluster.swap_rebalance_master()
 
-            self.__update_delete()
-            self.__merge_buckets()
+            self.perform_update_delete()
+
             self.verify_results()
         finally:
             pass
@@ -166,45 +131,49 @@ class Rebalance(XDCRReplicationBaseTest):
 
     def swap_rebalance_replication_with_ddoc_compaction(self):
         try:
-            self.__load_data()
+            self.setup_xdcr_and_load()
 
-            src_buckets = self._get_cluster_buckets(self.src_master)
-            for bucket in src_buckets:
-                views = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
+            num_views = self._input.param("num_views", 5)
+            is_dev_ddoc = self._input.param("is_dev_ddoc", True)
+            fragmentation_value = self._input.param("fragmentation_value", 80)
+            for bucket in self.src_cluster.get_buckets():
+                views = Utility.make_default_views(bucket.name, num_views, is_dev_ddoc)
+
             ddoc_name = "ddoc1"
-            prefix = ("", "dev_")[self._is_dev_ddoc]
+            prefix = ("", "dev_")[is_dev_ddoc]
 
             query = {"full_set": "true", "stale": "false"}
 
-            for _ in range(self._num_rebalance):
-                tasks = self.async_create_views(self.src_master, ddoc_name, views, self.default_bucket_name)
-                tasks += self.async_create_views(self.dest_master, ddoc_name, views, self.default_bucket_name)
-                self.sleep(self.wait_timeout / 2)
+            tasks = self.src_cluster.async_create_views(ddoc_name, views, BUCKET_NAME.DEFAULT)
+            tasks += self.dest_cluster.async_create_views(ddoc_name, views, BUCKET_NAME.DEFAULT)
 
-                # Swap-rebalance
-                tasks += self._async_swap_rebalance()
-                self.sleep(30)
-                [task.result(self._poll_timeout) for task in tasks]
+            # Swap-Rebalance
+            for _ in range(self.__num_rebalance):
+                if "C1" in self.__rebalance:
+                    tasks.append(self.src_cluster.async_swap_rebalance())
+                if "C2" in self.__rebalance:
+                    tasks.append(self.dest_cluster.async_swap_rebalance())
 
-                self.disable_compaction()
-                fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.src_master,
-                    prefix + ddoc_name, self.fragmentation_value)
-                # generate load until fragmentation reached
-                while fragmentation_monitor.state != "FINISHED":
-                    # update docs to create fragmentation
-                    self._load_all_buckets(self.src_master, self.gen_update, "update", self._expires)
-                    for view in views:
-                        # run queries to create indexes
-                        self.cluster.query_view(self.src_master, prefix + ddoc_name, view.name, query)
-                        self.cluster.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
-                fragmentation_monitor.result()
+            self.sleep(self._wait_timeout / 2)
+            for task in tasks:
+                task.result(self._poll_timeout)
 
-                compaction_task = self.cluster.async_compact_view(self.src_master, prefix + ddoc_name, 'default')
+            self.src_cluster.disable_compaction()
+            fragmentation_monitor = self.src_cluster.async_monitor_view_fragmentation(prefix + ddoc_name, fragmentation_value, BUCKET_NAME.DEFAULT)
+            # generate load until fragmentation reached
+            while fragmentation_monitor.state != "FINISHED":
+                # update docs to create fragmentation
+                self.src_cluster.update_delete_data(OPS.UPDATE, self._perc_upd, self._expires)
+                for view in views:
+                    # run queries to create indexes
+                    self.src_cluster.query_view(prefix + ddoc_name, view.name, query)
+                    self.dest_cluster.query_view(prefix + ddoc_name, view.name, query)
+            fragmentation_monitor.result()
 
-                result = compaction_task.result()
-                self.assertTrue(result)
+            compaction_task = self.src_cluster.async_compact_view(prefix + ddoc_name, 'default')
 
-            self.__merge_buckets()
+            self.assertTrue(compaction_task.result())
+
             self.verify_results()
         finally:
             pass
@@ -212,73 +181,69 @@ class Rebalance(XDCRReplicationBaseTest):
     def swap_rebalance_replication_with_view_queries_and_ops(self):
         tasks = []
         try:
-            self.__load_data()
+            self.setup_xdcr_and_load()
 
-            src_buckets = self._get_cluster_buckets(self.src_master)
-            dest_buckets = self._get_cluster_buckets(self.src_master)
-            for bucket in src_buckets:
-                views = self.make_default_views(bucket.name, self._num_views, self._is_dev_ddoc)
+            num_views = self._input.param("num_views", 5)
+            is_dev_ddoc = self._input.param("is_dev_ddoc", True)
+            for bucket in self.src_cluster.get_buckets():
+                views = Utility.make_default_views(bucket.name, num_views, is_dev_ddoc)
+
             ddoc_name = "ddoc1"
-            prefix = ("", "dev_")[self._is_dev_ddoc]
+            prefix = ("", "dev_")[is_dev_ddoc]
 
-            query = {"full_set": "true", "stale": "false"}
+            query = {"full_set" : "true", "stale" : "false", "connection_timeout" : 60000}
 
-            for _ in range(self._num_rebalance):
-                tasks = []
-                tasks = self.async_create_views(self.src_master, ddoc_name, views, self.default_bucket_name)
-                tasks += self.async_create_views(self.dest_master, ddoc_name, views, self.default_bucket_name)
-                [task.result(self._poll_timeout) for task in tasks]
+            tasks = self.src_cluster.async_create_views(ddoc_name, views, BUCKET_NAME.DEFAULT)
+            tasks += self.dest_cluster.async_create_views(ddoc_name, views, BUCKET_NAME.DEFAULT)
 
-                tasks = []
-                #Setting up doc-ops at source nodes
-                if self._doc_ops is not None:
-                    # allows multiple of them but one by one on either of the clusters
-                    if "update" in self._doc_ops:
-                        tasks.extend(
-                            self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
-                    if "delete" in self._doc_ops:
-                        tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
+            for task in tasks:
+                task.result(self._poll_timeout)
 
-                    self.sleep(10)
+            tasks = []
+            # Setting up doc-ops at source nodes
+            if "C1" in self._upd_clusters:
+                tasks.extend(self.src_cluster.async_update_delete(OPS.UPDATE, self._perc_upd, self._expires))
+            if "C1" in self._del_clusters:
+                tasks.extend(self.src_cluster.async_update_delete(OPS.DELETE, self._perc_del))
+            if "C2" in self._upd_clusters:
+                tasks.extend(self.dest_cluster.async_update_delete(OPS.UPDATE, self._perc_upd, self._expires))
+            if "C2" in self._del_clusters:
+                tasks.extend(self.dest_cluster.async_update_delete(OPS.DELETE, self._perc_del))
 
-                if self._doc_ops_dest is not None:
-                    if "update" in self._doc_ops_dest:
-                        tasks.extend(
-                            self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
-                    if "delete" in self._doc_ops_dest:
-                        tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
+            # Swap-Rebalance
+            for _ in range(self.__num_rebalance):
+                if "C1" in self.__rebalance:
+                    tasks.append(self.src_cluster.async_swap_rebalance())
+                if "C2" in self.__rebalance:
+                    tasks.append(self.dest_cluster.async_swap_rebalance())
 
-                    self.sleep(10)
-
-                # Swap-rebalance
-                tasks += self._async_swap_rebalance()
-
-                self.sleep(5)
-
-                while True:
-                    for view in views:
-                        self.cluster.query_view(self.src_master, prefix + ddoc_name, view.name, query)
-                        self.cluster.query_view(self.dest_master, prefix + ddoc_name, view.name, query)
-                    for task in tasks:
-                        if task.state != "FINISHED":
-                            break
-                    else:
-                        break
-
-                self.__merge_buckets()
-
-                self._verify_item_count(self.src_master, self.src_nodes)
-                self._verify_item_count(self.dest_master, self.dest_nodes)
-                tasks = []
+            self.sleep(5)
+            while True:
                 for view in views:
-                    tasks.append(
-                        self.cluster.async_query_view(self.src_master, prefix + ddoc_name, view.name, query,
-                            src_buckets[0].kvs[1].__len__()))
-                    tasks.append(
-                        self.cluster.async_query_view(self.dest_master, prefix + ddoc_name, view.name, query,
-                            dest_buckets[0].kvs[1].__len__()))
+                    self.src_cluster.query_view(prefix + ddoc_name, view.name, query)
+                    self.dest_cluster.query_view(prefix + ddoc_name, view.name, query)
+                if set([task.state for task in tasks]) != set(["FINISHED"]):
+                    continue
+                else:
+                    if self._wait_for_expiration:
+                        if "C1" in self._upd_clusters or "C2" in self._upd_clusters:
+                            self.sleep(self._expires)
+                    break
 
-                [task.result(self._poll_timeout) for task in tasks]
+            self.merge_all_buckets()
+            self.src_cluster.verify_items_count()
+            self.dest_cluster.verify_items_count()
+
+            tasks = []
+            src_buckets = self.src_cluster.get_buckets()
+            dest_buckets = self.dest_cluster.get_buckets()
+            for view in views:
+                tasks.append(self.src_cluster.async_query_view(prefix + ddoc_name, view.name, query, src_buckets[0].kvs[1].__len__()))
+                tasks.append(self.src_cluster.async_query_view(prefix + ddoc_name, view.name, query, dest_buckets[0].kvs[1].__len__()))
+
+            for task in tasks:
+                task.result(self._poll_timeout)
+
             self.verify_results()
         finally:
             # Some query tasks not finished after timeout and keep on running,
