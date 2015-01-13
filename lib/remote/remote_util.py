@@ -1294,6 +1294,11 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error, track_words)
             if vbuckets:
                 self.set_vbuckets_win(vbuckets)
+            if "3.5" in version[:5]:
+                """  remove folder if it exists in work around of bub MB-13046 """
+                self.execute_command("rm -rf \
+                /cygdrive/c/Jenkins/workspace/sherlock-windows/couchbase/install/etc/security")
+                """ end remove code for bug MB-13046 """
             return success
 
 
