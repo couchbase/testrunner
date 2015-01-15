@@ -17,7 +17,7 @@ class XDCRFilterTests(XDCRNewBaseTest):
         clusters = []
         input_clusters = input.split(':')
         for cluster_name in input_clusters:
-            clusters.append(self.get_cb_cluster_from_name(cluster_name))
+            clusters.append(self.get_cb_cluster_by_name(cluster_name))
         return clusters
 
     def test_xdcr_with_filter(self):
