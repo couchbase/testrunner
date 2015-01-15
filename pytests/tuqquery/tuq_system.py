@@ -35,6 +35,8 @@ class SysCatalogTests(QueryTests):
         if self.input.tuq_client and "client" in self.input.tuq_client:
             host = self.input.tuq_client.client
         for res in result['results']:
+            
+            self.log.info(res)
             self.assertEqual(res['namespaces']['id'], res['namespaces']['name'],
                         "Id and url don't match")
             self.assertTrue(res['namespaces']['store_id'].find(host) != -1 or\
@@ -45,6 +47,7 @@ class SysCatalogTests(QueryTests):
         self.query = "SELECT * FROM system:keyspaces"
         result = self.run_cbq_query()
         buckets = [bucket.name for bucket in self.buckets]
+        elf.log.info(res)
         self.assertFalse(set(buckets) - set([b['keyspaces']['id'] for b in result['results']]),
                         "Expected ids: %s. Actual result: %s" % (buckets, result))
         self.assertFalse(set(buckets) - set([b['keyspaces']['name'] for b in result['results']]),

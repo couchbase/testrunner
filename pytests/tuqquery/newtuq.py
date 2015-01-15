@@ -168,30 +168,14 @@ class QueryTests(BaseTestCase):
                                         actual_result['results'], expected_result))
 
     def test_simple_negative_alias(self):
-        queries_errors = {'SELECT $str0._last_name as *' : 'Parse Error - syntax error',
-                          'SELECT $str0._last_name as DATABASE ?' : 'Parse Error - syntax error',
-                          'SELECT $str0 AS NULL FROM {0}' : 'Parse Error - syntax error',
+        queries_errors = {'SELECT $str0._last_name as *' : 'syntax error',
+                          'SELECT $str0._last_name as DATABASE ?' : 'syntax error',
+                          'SELECT $str0 AS NULL FROM {0}' : 'syntax error',
                           'SELECT $str1 as $str0, $str0 FROM {0}' :
                                 'Duplicate result alias name',
-                          'SELECT $obj0 AS points, points.task1 FROM {0}' :
-                                'Alias points cannot be referenced',
-                          'SELECT $obj0.task1 AS points_new FROM {0} AS test ' +
-                           'WHERE points_new >0' : "Alias points_new cannot be referenced",
-                          'SELECT DISTINCT $obj0 AS points_new FROM {0} AS test ' +
-                           'ORDER BY points_new':
-                                'Expression points_new is not in the list',
-                          'SELECT $obj0 AS points FROM {0} AS test GROUP BY points':
-                                'Alias points cannot be referenced',
-                          'SELECT test.$obj0 as points FROM {0} AS TEST ' +
-                           'GROUP BY TEST.points' :
-                                'The expression TEST is not satisfied by these dependencies',
                           'SELECT test.$obj0 as points FROM {0} AS TEST ' +
                            'GROUP BY $obj0 AS GROUP_POINT' :
-                                'syntax error',
-                          'SELECT COUNT($obj0) as COUNT_NEW_POINT, COUNT($str0) ' +
-                           'as COUNT_EMP  FROM {0} AS TEST GROUP BY $str0 ' +
-                           'HAVING COUNT_NEW_POINT >0' :
-                                'Alias COUNT_NEW_POINT cannot be referenced'}
+                                'syntax error'}
         self.negative_common_body(queries_errors)
 
     def test_alias_from_clause(self):
