@@ -1806,6 +1806,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         finally:
             self.__cluster_op.shutdown(force=True)
             unittest.TestCase.tearDown(self)
+            # Remove once MB-12950 is fixed.
+            RestConnection.replications = []
 
     def __init_logger(self):
         if self._input.param("log_level", None):
@@ -1859,6 +1861,8 @@ class XDCRNewBaseTest(unittest.TestCase):
     def __cleanup_previous(self):
         for cluster in self.__cb_clusters:
             cluster.cleanup_cluster(self, cluster_shutdown=False)
+        # Remove once MB-12950 is fixed.
+        RestConnection.replications = []
 
     def __init_clusters(self):
         self.log.info("Initializing all clusters...")
