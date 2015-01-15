@@ -1,6 +1,7 @@
 import base64
 import json
 import urllib
+import requests
 import httplib2
 import socket
 import time
@@ -359,14 +360,19 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status, content
 
+
     def active_tasks(self):
-        api = self.capiBaseUrl + "_active_tasks"
+        url = 'http://{0}:{1}/pools/default/tasks'.format(self.ip, self.port)
+        auth = (self.username, self.password)
+
         try:
-            status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers())
-            json_parsed = json.loads(content)
-        except ValueError:
+            tasks = requests.get(url=url, auth=auth).json()
+        except requests.exceptions.ConnectionError:
+            log.error('active_tasks: connection error')
             return ""
-        return json_parsed
+
+        return tasks
+
 
     def ns_server_tasks(self):
         api = self.baseUrl + 'pools/default/tasks'
