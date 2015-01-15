@@ -111,10 +111,14 @@ class BucketTests(BaseUITestCase):
 class InitializeTest(BaseUITestCase):
     def setUp(self):
         super(InitializeTest, self).setUp()
+        self.cluster = Cluster()
         self._deinitialize_api()
 
     def tearDown(self):
-        super(InitializeTest, self).tearDown()
+        try:
+            super(InitializeTest, self).tearDown()
+        finally:
+            self.cluster.shutdown()
 
     def test_initialize(self):
         try:
@@ -437,9 +441,13 @@ class  GracefullFailoverTests(BaseUITestCase):
                 self.buckets.append(bucket)
         except:
             self.tearDown()
+            self.cluster.shutdown()
 
     def tearDown(self):
-        super(GracefullFailoverTests, self).tearDown()
+        try:
+            super(GracefullFailoverTests, self).tearDown()
+        finally:
+            self.cluster.shutdown()
 
     def test_failover(self):
         confirm = self.input.param("confirm_failover", True)

@@ -15,7 +15,6 @@ from selenium.common.exceptions import NoSuchElementException
 from threading import Thread
 import ConfigParser
 from TestInput import TestInputSingleton,TestInputParser, TestInputServer
-from couchbase_helper.cluster import Cluster
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -83,7 +82,6 @@ class BaseUITestCase(unittest.TestCase):
             self.browser = self.input.ui_conf['browser']
             self.replica  = self.input.param("replica", 1)
             self.case_number = self.input.param("case_number", 0)
-            self.cluster = Cluster()
             self.machine = self.input.ui_conf['server']
             self.driver = None
             self.shell = RemoteMachineShellConnection(self.machine)
@@ -160,7 +158,6 @@ class BaseUITestCase(unittest.TestCase):
         finally:
             if self.driver:
                 self.shell.disconnect()
-            self.cluster.shutdown()
 
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
