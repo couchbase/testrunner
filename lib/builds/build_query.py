@@ -285,7 +285,8 @@ class BuildQuery(object):
                 windows build name: couchbase_server-enterprise-windows-amd64-3.0.0-892 """
 
             """ Remove the code below when cb name is standardlized (MB-11372) """
-            if "windows" in direct_build_url and build.deliverable_type == "exe":
+            if "windows" in direct_build_url and build.deliverable_type == "exe" \
+                and "3.5.0" not in build_info:
                 build_info = build_info.replace("-windows-amd64-","_x86_64_")
                 build_info = build_info.replace("couchbase_server","couchbase-server")
             """ End remove here """
@@ -294,13 +295,19 @@ class BuildQuery(object):
                 centos 6: couchbase-server-enterprise-3.5.0-71-centos6.x86_64
                 debian7:  couchbase-server-enterprise_3.5.0-10-debian7_amd64.deb
                 ubuntu 12.04:
-                    couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb """
+                    couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
+                windows:
+                    couchbase_server-enterprise-windows-amd64-3.5.0-926.exe"""
             if "3.5.0-" in build_info:
                 deb_words = ["debian7", "ubuntu12.04", "ubuntu14.04"]
                 if "centos6" not in build_info:
-                    tmp_str = build_info.split("_")
-                    product_version = tmp_str[1].split("-")
-                    product_version = "-".join([i for i in product_version \
+                    if "windows" in build_info:
+                        tmp_str = build_info.split("-")
+                        product_version = "-".join(tmp_str[-2:])
+                    else:
+                        tmp_str = build_info.split("_")
+                        product_version = tmp_str[1].split("-")
+                        product_version = "-".join([i for i in product_version \
                                                  if i not in deb_words])
                 else:
                     product_version = build_info.split("-")
@@ -308,7 +315,11 @@ class BuildQuery(object):
                 if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
                     build.product_version = product_version
                     if "centos6" not in build_info:
-                        build_info = build_info.replace("_" + product_version,"")
+                        if "windows" in build_info:
+                            build_info = build_info.replace("-" + product_version,"")
+                            # build_info: couchbase_server-enterprise-windows-amd64
+                        else:
+                            build_info = build_info.replace("_" + product_version,"")
                     else:
                         build_info = build_info.replace("-" + product_version,"")
                 if "x86_64" in build_info:
@@ -320,11 +331,17 @@ class BuildQuery(object):
                 elif "_amd64" in build_info:
                     build.architecture_type = "x86_64"
                     build_info = build_info.replace("_amd64", "")
+                elif "-amd64" in build_info:
+                    build.architecture_type = "x86_64"
+                    build_info = build_info.replace("-amd64", "")
                 del_words = ["centos6", "debian7", "ubuntu12.04", "ubuntu14.04"]
                 if build_info.startswith("couchbase-server"):
                     build.product = build_info.split("-")
                     build.product = "-".join([i for i in build.product \
                                                  if i not in del_words])
+                elif build_info.startswith("couchbase_server") and \
+                    "windows" in build_info:
+                    build.product = "couchbase-server-enterprise"
                 return build
             product_version = build_info.split("_")
             product_version = product_version[len(product_version)-1]
