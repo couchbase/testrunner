@@ -297,7 +297,8 @@ class BuildQuery(object):
                 ubuntu 12.04:
                     couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
                 windows:
-                    couchbase_server-enterprise-windows-amd64-3.5.0-926.exe"""
+                    couchbase_server-enterprise-windows-amd64-3.5.0-926.exe
+                    couchbase-server-enterprise_3.5.0-952-windows_amd64.exe"""
             if "3.5.0-" in build_info:
                 deb_words = ["debian7", "ubuntu12.04", "ubuntu14.04"]
                 if "centos6" not in build_info:
@@ -386,6 +387,7 @@ class BuildQuery(object):
         For toy build: name  =  couchbase-server-community_cent58-3.0.0-toy-toyName-x86_64_3.0.0-xx-toy.rpm
         For windows build diff - and _ compare to unix build
                        name = couchbase_server-enterprise-windows-amd64-3.0.0-998.exe
+                              couchbase-server-enterprise_3.5.0-952-windows_amd64.exe
         """
         build.toy = toy
         build.deliverable_type = deliverable_type
@@ -418,7 +420,8 @@ class BuildQuery(object):
                 build.product_version = version + "-rel"
             else:
                 build.product_version = version
-            if "couchbase-server" in edition_type and version[:5] in WIN_CB_VERSION_3:
+            if "couchbase-server" in edition_type and version[:5] in WIN_CB_VERSION_3 \
+                and "3.5" != version[:3]:
                 edition_type = edition_type.replace("couchbase-", "couchbase_")
             if "x86_64" in architecture_type and version[:5] in WIN_CB_VERSION_3:
                 build.architecture_type = "amd64"
@@ -442,7 +445,8 @@ class BuildQuery(object):
             /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
             /723/couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
             /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb
-            /795/couchbase_server-enterprise-windows-amd64-3.5.0-795.exe"""
+            /795/couchbase_server-enterprise-windows-amd64-3.5.0-795.exe
+            /952/couchbase-server-enterprise_3.5.0-952-windows_amd64.exe"""
             build_number = build.product_version.replace(version[:6],"")
             if "centos" in distribution_version:
                 build.name = edition_type + "-" + build.product_version + \
@@ -461,16 +465,9 @@ class BuildQuery(object):
                     os_name = "debian7"
                 elif "windows" in distribution_version:
                     os_name = "windows"
-                if "windows" not in os_name:
-                    build.name = edition_type + "_" + build.product_version + \
+                build.name = edition_type + "_" + build.product_version + \
                    "-" + os_name + "_" +  build.architecture_type + \
                    "." + build.deliverable_type
-                else:
-                    """ windows sherlock build name:
-                        couchbase_server-enterprise-windows-amd64-3.5.0-795.exe """
-                    build.name = edition_type + "-" + os_name + "-" + \
-                        build.architecture_type + "-" + build.product_version + \
-                        "." + build.deliverable_type
             build.url = repo + build_number + "/" + build.name
         else:
             build.name = edition_type + joint_char + os_name + \
