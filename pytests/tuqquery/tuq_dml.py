@@ -371,7 +371,7 @@ class DMLQueryTests(QueryTests):
         _, values = self._insert_gen_keys(num_docs)
         updated_value = 'new_name'
         for bucket in self.buckets:
-            self.query = 'update %s set name="%s" where join_day=1'  % (bucket.name, updated_value)
+            self.query = 'update %s set name="%s" where join_day=1 returning name'  % (bucket.name, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s where join_day=1' % (bucket.name)
@@ -402,7 +402,7 @@ class DMLQueryTests(QueryTests):
         keys_to_update = keys[:-num_docs_update]
         updated_value = 'new_name'
         for bucket in self.buckets:
-            self.query = 'update %s use keys %s set vm.os="%s" for vm in VMs'  % (bucket.name, keys_to_update, updated_value)
+            self.query = 'update %s use keys %s set vm.os="%s" for vm in VMs END returning VMs'  % (bucket.name, keys_to_update, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s keys %s' % (bucket.name, keys_to_update)
@@ -420,7 +420,7 @@ class DMLQueryTests(QueryTests):
         keys_to_update = keys[:num_docs_update]
         updated_value = 'new_name'
         for bucket in self.buckets:
-            self.query = 'update %s use keys %s set vm.os="%s" for vm in VMs where vm.os="ubuntu"'  % (bucket.name, keys_to_update, updated_value)
+            self.query = 'update %s use keys %s set vm.os="%s" for vm in VMs when vm.os="ubuntu" END returning VMs'  % (bucket.name, keys_to_update, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s keys %s' % (bucket.name, keys_to_update)
