@@ -447,7 +447,8 @@ class  GracefullFailoverTests(BaseUITestCase):
         try:
             super(GracefullFailoverTests, self).tearDown()
         finally:
-            self.cluster.shutdown()
+            if hasattr(self, 'cluster'):
+                self.cluster.shutdown()
 
     def test_failover(self):
         confirm = self.input.param("confirm_failover", True)
@@ -1330,9 +1331,15 @@ class ServerHelper():
                 i += 1
                 if i == 4:
                     raise ex
-        self.wait.until(lambda fn: self.controls.recovery_dialog().conf_dialog.is_displayed(),
+        self.wait.until(lambda fn: self.recovery_dialog_opened(),
                         "Recovery btn is not displayed in %d sec" % (self.wait._timeout))
         self.tc.log.info("Dialog is opened")
+
+    def recovery_dialog_opened(self):
+        try:
+            return self.controls.recovery_dialog().conf_dialog.is_displayed()
+        except:
+            return False
 
     def set_recovery(self, server, option='full', confirm=True):
         self.controls.pending_rebalance_tab().click()
