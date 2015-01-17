@@ -33,12 +33,11 @@ class QueriesIndexTests(QueryTests):
             try:
                 for ind in xrange(self.num_indexes):
                     view_name = "my_index%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(%s) " % (
+                    self.query = "CREATE INDEX %s ON %s(%s) USING GSI" % (
                                             view_name, bucket.name, ','.join(self.FIELDS_TO_INDEX[ind - 1]))
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     created_indexes.append(view_name)
-                    self._verify_view_is_present(view_name, bucket)
                     self.assertTrue(self._is_index_in_list(bucket, view_name), "Index is not in list")
             finally:
                 for view_name in created_indexes:
@@ -53,7 +52,7 @@ class QueriesIndexTests(QueryTests):
             try:
                 for ind in xrange(self.num_indexes):
                     view_name = "tuq_index%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(%s) " % (view_name, bucket.name, ','.join(self.FIELDS_TO_INDEX[ind - 1]))
+                    self.query = "CREATE INDEX %s ON %s(%s)  USING GSI" % (view_name, bucket.name, ','.join(self.FIELDS_TO_INDEX[ind - 1]))
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     created_indexes.append(view_name)
@@ -80,7 +79,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_child"
             try:
-                self.query = "CREATE INDEX %s ON %s(VMs, name) " % (index_name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(VMs, name)  USING GSI" % (index_name, bucket.name)
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT count(VMs) FROM %s where VMs is not null union SELECT count(name) FROM %s where name is not null' % (bucket.name, bucket.name)
                 res = self.run_cbq_query()
@@ -97,7 +96,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_child"
             try:
-                self.query = "CREATE INDEX %s ON %s(VMs, join_yr) " % (index_name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(VMs, join_yr)  USING GSI" % (index_name, bucket.name)
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT count(*) FROM %s GROUP BY VMs, join_yr' % (bucket.name)
                 res = self.run_cbq_query()
@@ -114,7 +113,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_meta"
             try:
-                self.query = "CREATE INDEX %s ON %s(meta(%s).type, name) " % (index_name, bucket.name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(meta(%s).type, name)  USING GSI" % (index_name, bucket.name, bucket.name)
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT name FROM %s WHERE meta(%s).type = "json" and name is not null' % (bucket.name, bucket.name)
                 res = self.run_cbq_query()
@@ -130,7 +129,7 @@ class QueriesIndexTests(QueryTests):
             try:
                 for ind in xrange(self.num_indexes):
                     index_name = "join_index%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(name, project) " % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(name, project)  USING GSI" % (index_name, bucket.name)
                     self.run_cbq_query()
                     created_indexes.append(index_name)
                     self.query = "EXPLAIN SELECT employee.name, new_task.project FROM %s as employee JOIN %s as new_task USE KEYS ['key1']" % (bucket.name, bucket.name)
@@ -148,7 +147,7 @@ class QueriesIndexTests(QueryTests):
             try:
                 for ind in xrange(self.num_indexes):
                     index_name = "join_index%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(join_day, name) " % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(join_day, name)  USING GSI" % (index_name, bucket.name)
                     self.run_cbq_query()
                     created_indexes.append(index_name)
                     self.query = "EXPLAIN select task_name, (select sum(test_rate) cn from %s use keys ['query-1'] where join_day>2 and name =='abc') as names from %s" % (bucket.name, bucket.name)
@@ -164,7 +163,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_child2"
             try:
-                self.query = "CREATE INDEX %s ON %s(VMs[0].RAM, VMS[1].RAM) " % (index_name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(VMs[0].RAM, VMS[1].RAM)  USING GSI" % (index_name, bucket.name)
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT VMs FROM %s ' % (bucket.name) + \
                         'WHERE ANY vm IN VMs SATISFIES vm.RAM > 5 AND vm.os = "ubuntu" end'
@@ -182,7 +181,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_obj"
             try:
-                self.query = "CREATE INDEX %s ON %s(tasks_points, join_mo) " % (index_name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(tasks_points, join_mo)  USING GSI" % (index_name, bucket.name)
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
                              'WHERE join_mo>7 and task_points > 0'
@@ -200,7 +199,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_obj_el"
             try:
-                self.query = "CREATE INDEX %s ON %s(tasks_points.task1, join_mo) " % (index_name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(tasks_points.task1, join_mo)  USING GSI" % (index_name, bucket.name)
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
                              'WHERE join_mo>7 and  task_points.task1 > 0'
@@ -213,10 +212,6 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
                 except:
                     pass
-
-    def _verify_view_is_present(self, view_name, bucket):
-        ddoc, _ = RestConnection(self.master).get_ddoc(bucket.name, "ddl_%s" % view_name)
-        self.assertTrue(view_name in ddoc["views"], "View %s wasn't created" % view_name)
 
     def _is_index_in_list(self, bucket, index_name):
         query = "SELECT * FROM system:indexes"
