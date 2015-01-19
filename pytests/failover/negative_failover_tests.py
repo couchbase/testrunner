@@ -17,9 +17,10 @@ class NegativeFailoverTests(FailoverBaseTest):
     def graceful_failover_when_rebalance_running(self):
         try:
             self.rest = RestConnection(self.master)
-            nodes = self.get_nodes(self.master)
+            nodes = self.rest.node_statuses()
             chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
-            status = self.rest.rebalance(otpNodes=nodes,ejectedNodes=nodes[1:])
+            status = self.rest.rebalance(otpNodes=[node.id for node in nodes],
+                ejectedNodes=[node.id for node in nodes[1:]])
             self.assertTrue(status," Rebalance did not run ")
             success_failed_over = self.rest.fail_over(chosen[0].id, graceful=True)
             self.assertFalse(success_failed_over," Failover did not fail as expected ")
