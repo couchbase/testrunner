@@ -495,13 +495,15 @@ class RemoteMachineShellConnection:
             remove_words = ["-rel", ".exe"]
             for word in remove_words:
                 filename = filename.replace(word, "")
-            tmp = filename.split("-")
-            print "tmp at split filename", tmp
-            tmp.reverse()
-            print "tmp at reverse", tmp
-            version = tmp[1] + "-" + tmp[0]
-            print version
-            #filename = filename.replace(".exe", "")
+            if "3.5" in filename:
+                """couchbase-server-enterprise_3.5.0-968-windows_amd64"""
+                tmp = filename.split("_")
+                version = tmp[1].replace("-windows", "")
+            else:
+                tmp = filename.split("-")
+                tmp.reverse()
+                version = tmp[1] + "-" + tmp[0]
+
             exist = self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
             if not exist:
                 output, error = self.execute_command(
