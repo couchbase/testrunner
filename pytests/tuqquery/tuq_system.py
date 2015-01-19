@@ -39,15 +39,15 @@ class SysCatalogTests(QueryTests):
             self.log.info(res)
             self.assertEqual(res['namespaces']['id'], res['namespaces']['name'],
                         "Id and url don't match")
-            self.assertTrue(res['namespaces']['store_id'].find(host) != -1 or\
-                            res['namespaces']['store_id'].find(self.master.ip) != -1,
+            self.assertTrue(res['namespaces']['datastore_id'].find(host) != -1 or\
+                            res['namespaces']['datastore_id'].find(self.master.ip) != -1,
                             "Expected: %s, actual: %s" % (host, result))
 
     def test_buckets(self):
         self.query = "SELECT * FROM system:keyspaces"
         result = self.run_cbq_query()
         buckets = [bucket.name for bucket in self.buckets]
-        elf.log.info(res)
+        self.log.info(result)
         self.assertFalse(set(buckets) - set([b['keyspaces']['id'] for b in result['results']]),
                         "Expected ids: %s. Actual result: %s" % (buckets, result))
         self.assertFalse(set(buckets) - set([b['keyspaces']['name'] for b in result['results']]),
@@ -56,8 +56,8 @@ class SysCatalogTests(QueryTests):
         self.assertFalse(set([b['keyspaces']['namespace_id'] for b in result['results']]) -\
                         set([p['namespaces']['id'] for p in pools['results']]),
                         "Expected pools: %s, actual: %s" % (pools, result))
-        self.assertFalse(set([b['keyspaces']['store_id'] for b in result['results']]) -\
-                        set([p['namespaces']['store_id'] for p in pools['results']]),
+        self.assertFalse(set([b['keyspaces']['datastore_id'] for b in result['results']]) -\
+                        set([p['namespaces']['datastore_id'] for p in pools['results']]),
                         "Expected site_ids: %s, actual: %s" % (pools, result))
 
     def test_prepared_buckets(self):
