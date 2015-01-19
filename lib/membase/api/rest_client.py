@@ -360,11 +360,13 @@ class RestConnection(object):
         return status, content
 
     def active_tasks(self):
-        api = self.capiBaseUrl + "_active_tasks"
+        api = 'http://{0}:{1}/pools/default/tasks'.format(self.ip, self.port)
         try:
-            status, content, header = self._http_request(api, 'GET', headers=self._create_capi_headers())
+            status, content, header = self._http_request(api, 'GET',
+                          headers=self._create_capi_headers_with_auth(self.username, self.password))
             json_parsed = json.loads(content)
-        except ValueError:
+        except ValueError as e:
+            print( e )
             return ""
         return json_parsed
 
