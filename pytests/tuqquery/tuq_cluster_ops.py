@@ -194,6 +194,81 @@ class QueriesOpsTests(QueryTests):
         finally:
             self.shell.delete_files(tmp_folder)
 
+    def test_queries_after_backup_restore(self):
+        method_name = self.input.param('to_run', 'test_any')
+        self.couchbase_login_info = "%s:%s" % (self.input.membase_settings.rest_username,
+                                               self.input.membase_settings.rest_password)
+        self.backup_location = self.input.param("backup_location", "/tmp/backup")
+        self.command_options = self.input.param("command_options", '')
+        shell = RemoteMachineShellConnection(self.master)
+        fn = getattr(self, method_name)
+        fn()
+        self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
+        fn = getattr(self, method_name)
+        fn()
+        for bucket in self.buckets:
+            self.cluster.bucket_flush(self.master, bucket=bucket)
+        self.sleep(5, 'wait some time before restore')
+        shell.restore_backupFile(self.couchbase_login_info, self.backup_location, [bucket.name for bucket in self.buckets])
+        fn = getattr(self, method_name)
+        fn()
+
+    def test_queries_after_backup_with_view(self):
+        index_name = "Automation_backup_index"
+        method_name = self.input.param('to_run', 'test_any')
+        self.couchbase_login_info = "%s:%s" % (self.input.membase_settings.rest_username,
+                                               self.input.membase_settings.rest_password)
+        self.backup_location = self.input.param("backup_location", "/tmp/backup")
+        self.command_options = self.input.param("command_options", '')
+        index_field = self.input.param("index_field", '')
+        self.assertTrue(index_field, "Index field should be provided")
+        for bucket in self.bucket:
+            self.run_cbq_query(query="CREATE INDEX %s ON %s(%s)" % (index_name, bucket.name, ','.join(index_field.split(';'))))
+        try:
+            shell = RemoteMachineShellConnection(self.master)
+            fn = getattr(self, method_name)
+            fn()
+            self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
+            fn = getattr(self, method_name)
+            fn()
+            for bucket in self.buckets:
+                self.cluster.bucket_flush(self.master, bucket=bucket)
+            self.sleep(5, 'wait some time before restore')
+            shell.restore_backupFile(self.couchbase_login_info, self.backup_location, [bucket.name for bucket in self.buckets])
+            fn = getattr(self, method_name)
+            fn()
+        finally:
+            for bucket in self.buckets:
+                self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
+
+    def test_queries_after_backup_with_2i(self):
+        index_name = "Automation_backup_index"
+        method_name = self.input.param('to_run', 'test_any')
+        self.couchbase_login_info = "%s:%s" % (self.input.membase_settings.rest_username,
+                                               self.input.membase_settings.rest_password)
+        self.backup_location = self.input.param("backup_location", "/tmp/backup")
+        self.command_options = self.input.param("command_options", '')
+        index_field = self.input.param("index_field", '')
+        self.assertTrue(index_field, "Index field should be provided")
+        for bucket in self.bucket:
+            self.run_cbq_query(query="CREATE INDEX %s ON %s(%s) USING GSI" % (index_name, bucket.name, ','.join(index_field.split(';'))))
+        try:
+            shell = RemoteMachineShellConnection(self.master)
+            fn = getattr(self, method_name)
+            fn()
+            self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
+            fn = getattr(self, method_name)
+            fn()
+            for bucket in self.buckets:
+                self.cluster.bucket_flush(self.master, bucket=bucket)
+            self.sleep(5, 'wait some time before restore')
+            shell.restore_backupFile(self.couchbase_login_info, self.backup_location, [bucket.name for bucket in self.buckets])
+            fn = getattr(self, method_name)
+            fn()
+        finally:
+            for bucket in self.buckets:
+                self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
+
 
 class QueriesOpsJoinsTests(JoinTests):
     def setUp(self):
