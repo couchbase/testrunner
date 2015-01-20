@@ -9,7 +9,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.groups = self.input.param("groups", "simple").split(":")
         query_definition_generator = SQLDefinitionGenerator()
         if self.dataset == "default" or self.dataset == "employee":
-            self.query_definitions = query_definition_generator.generate_employee_data_sql_definitions()
+            self.query_definitions = query_definition_generator.generate_employee_data_query_definitions()
+        if self.dataset == "simple":
+            self.query_definitions = query_definition_generator.generate_simple_data_query_definitions()
         self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
         self.ops_map = self._create_operation_map()
         self.find_nodes_in_list()
@@ -29,7 +31,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
     def async_create_index(self, bucket, query_definition):
-        self.query = query_definition.generate_index_create_query(bucket = bucket)
+        self.query = query_definition.generate_index_create_query(bucket = bucket,
+            use_gsi_for_secondary = self.use_gsi_for_secondary)
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         create_index_task = self.cluster.async_create_index(
                  server = server, bucket = bucket,
@@ -328,7 +331,20 @@ class BaseSecondaryIndexingTests(QueryTests):
                 else:
                     self.fail("There was no errors. Error expected: %s" % error)
 
+    def check_missing_and_extra(self, actual, expected):
+        missing = []
+        extra = []
+        for item in actual:
+            if not (item in expected):
+                 extra.append(item)
+        for item in expected:
+            if not (item in actual):
+                missing.append(item)
+        return missing, extra
+
     def _verify_results(self, actual_result, expected_result, missing_count = 1, extra_count = 1):
+        actual_result = self._gen_dict(actual_result)
+        expected_result = self._gen_dict(expected_result)
         if len(actual_result) != len(expected_result):
             missing, extra = self.check_missing_and_extra(actual_result, expected_result)
             self.log.error("Missing items: %s.\n Extra items: %s" % (missing[:missing_count], extra[:extra_count]))
@@ -343,6 +359,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.assertTrue(actual_result == expected_result,
                           msg % (actual_result[:100],actual_result[-100:],
                                  expected_result[:100],expected_result[-100:]))
+
+    def _gen_dict(self, result):
+        if result != None and len(result) > 0:
+            return result[0].values()
+        return []
 
     def _create_operation_map(self):
         map_before = {"create_index":False, "query_ops": False, "drop_index": False}

@@ -30,9 +30,9 @@ class N1QLHelper():
         self.gen_results = TuqGenerators(self.log, self.full_docs_list)
 
     def killall_tuq_process(self):
-        self.shell.execute_command("killall /tmp/tuq/cbq-engine")
+        self.shell.execute_command("killall cbq-engine")
         self.shell.execute_command("killall tuqtng")
-        self.shell.disconnect()
+        self.shell.execute_command("killall indexer")
 
     def run_query_from_template(self, query_template):
         self.query = self.gen_results.generate_query(query_template)
@@ -136,10 +136,17 @@ class N1QLHelper():
             self.shell.execute_command(cmd)
         else:
             cbq_url = self.build_url(self.version)
-            #TODO for windows
+            #TODO for windowsself.shell.execute_command(cmd)
             cmd = "cd /tmp; mkdir tuq;cd tuq; wget {0} -O tuq.tar.gz;".format(cbq_url)
             cmd += "tar -xvf tuq.tar.gz;rm -rf tuq.tar.gz"
             self.shell.execute_command(cmd)
+
+    def _restart_indexer(self):
+        couchbase_path = "/opt/couchbase/var/lib/couchbase"
+        cmd = "rm -f {0}/meta;rm -f /tmp/log_upr_client.sock".format(couchbase_path)
+        self.shell.execute_command(cmd)
+
+
 
     def _start_command_line_query(self, server):
         if self.version == "git_repo":
@@ -205,16 +212,7 @@ class N1QLHelper():
             output = output[:output.find("tuq_client>")].strip()
         return json.loads(output)
 
-    def check_missing_and_extra(self, actual, expected):
-        missing = []
-        extra = []
-        for item in actual:
-            if not (item in expected):
-                 extra.append(item)
-        for item in expected:
-            if not (item in actual):
-                missing.append(item)
-        return missing, extra
+
 
     def sort_nested_list(self, result):
         actual_result = []
@@ -235,7 +233,7 @@ class N1QLHelper():
             shell_connection = RemoteMachineShellConnection(self.master)
             shell_connection.execute_command(cmd)
 
-    def create_primary_index_for_3_0_and_greater(self):
+    def create_primary_index_for_3_0_and_greater(self, using_gsi = True):
         self.log.info("CHECK FOR PRIMARY INDEXES")
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
@@ -245,8 +243,10 @@ class N1QLHelper():
                 rest.get_ddoc(self.buckets[0], ddoc_name)
             except ReadDocumentException:
                 for bucket in self.buckets:
-                    self.log.info("Creating primary index for %s ..." % bucket.name)
                     self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
+                    if using_gsi:
+                        self.query += " USING GSI"
+                    self.log.info(self.query)
                     try:
                         self.run_cbq_query()
                     except Exception, ex:

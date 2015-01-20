@@ -8,7 +8,7 @@ RANGE_SCAN_ORDER_BY_TEMPLATE = "SELECT {0} FROM %s where {1} ORDER BY {2}"
 FULL_SCAN_COUNT_TEMPLATE = "SELECT count(*) FROM %s"
 RANGE_SCAN_COUNT_TEMPLATE = "SELECT count(*) FROM %s WHERE {1}"
 RANGE_SCAN_JOIN_TEMPLATE = "SELECT s1.{0},s2.{1} FROM %s as s1 JOIN %s as s2"
-INDEX_CREATION_TEMPLATE =  "CREATE INDEX %s ON %s(%s) using gsi"
+INDEX_CREATION_TEMPLATE =  "CREATE INDEX %s ON %s(%s)"
 INDEX_DROP_TEMPLATE = "DROP INDEX %s.%s"
 SIMPLE_INDEX="simple"
 COMPOSITE_INDEX="composite"
@@ -30,8 +30,11 @@ class QueryDefinition(object):
 		self.query_template = query_template
 		self.groups = groups
 
-	def generate_index_create_query(self, bucket = "default"):
-		return "CREATE INDEX %s ON %s(%s) using gsi" % (self.index_name,bucket, ",".join(self.index_fields))
+	def generate_index_create_query(self, bucket = "default", use_gsi_for_secondary = True):
+		query = "CREATE INDEX %s ON %s(%s)" % (self.index_name,bucket, ",".join(self.index_fields))
+		if use_gsi_for_secondary:
+			query += "USING GSI"
+		return query
 
 	def generate_index_drop_query(self, bucket = "default"):
 		return "DROP INDEX %s.%s" % (bucket, self.index_name)
@@ -48,7 +51,18 @@ class QueryDefinition(object):
 		self.groups.append(group)
 
 class SQLDefinitionGenerator:
-	def generate_employee_data_sql_definitions(self):
+	def generate_simple_data_query_definitions(self):
+		definitions_list = []
+		index_name_prefix = "simple"+str(uuid.uuid4()).replace("-","")
+		definitions_list.append(
+			QueryDefinition(
+				index_name=index_name_prefix+"job_title",
+				index_fields = ["job_title"],
+				query_template = FULL_SCAN_TEMPLATE.format("*","name IS NOT NULL"),
+				groups = [SIMPLE_INDEX, FULL_SCAN, "simple","isnotnull",NO_ORDERBY_GROUPBY]))
+		return definitions_list
+
+	def generate_employee_data_query_definitions(self):
 		definitions_list = []
 		index_name_prefix = "employee"+str(uuid.uuid4()).replace("-","")
 		#emit_fields = "name, job_title, join_yr, join_mo, join_day"
@@ -58,7 +72,7 @@ class SQLDefinitionGenerator:
 			QueryDefinition(
 				index_name=index_name_prefix+"job_title",
 				index_fields = ["job_title"],
-				query_template = RANGE_SCAN_TEMPLATE.format(emit_fields,"job_title IS NOT NULL"),
+				query_template = FULL_SCAN_TEMPLATE.format(emit_fields,"job_title IS NOT NULL"),
 				groups = [SIMPLE_INDEX, FULL_SCAN, "employee","isnotnull",NO_ORDERBY_GROUPBY]))
 		definitions_list.append(
 			QueryDefinition(

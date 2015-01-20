@@ -27,7 +27,9 @@ class QueryTests(BaseTestCase):
             self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
         else:
             self.shell = RemoteMachineShellConnection(self.master)
-        self.create_primary_index = self.input.param("create_primary_index", False)
+        self.use_gsi_for_primary = self.input.param("use_gsi_for_primary", True)
+        self.use_gsi_for_secondary = self.input.param("use_gsi_for_secondary", True)
+        self.create_primary_index = self.input.param("create_primary_index", True)
         self.use_rest = self.input.param("use_rest", True)
         self.max_verify = self.input.param("max_verify", None)
         self.buckets = RestConnection(self.master).get_buckets()
@@ -49,17 +51,28 @@ class QueryTests(BaseTestCase):
             log = self.log, input = self.input, master = self.master)
         self.n1ql_helper._start_command_line_query(self.master)
         if self.create_primary_index:
-            self.n1ql_helper.create_primary_index_for_3_0_and_greater()
+            try:
+                self.n1ql_helper.create_primary_index_for_3_0_and_greater(using_gsi = self.use_gsi_for_primary)
+            except Exception, ex:
+                self.log.info(ex)
 
     def tearDown(self):
         if hasattr(self, 'shell'):
+            self.n1ql_helper._restart_indexer()
             self.n1ql_helper.killall_tuq_process()
         super(QueryTests, self).tearDown()
 
     def generate_docs(self, num_items, start=0):
         try:
+            if self.dataset == "simple":
+                return self.generate_docs_simple(num_items, start)
+            if self.dataset == "sales":
+                return self.generate_docs_sales(num_items, start)
+            if self.dataset == "bigdata":
+                return self.generate_docs_bigdata(num_items, start)
             return getattr(self, 'generate_docs_' + self.dataset)(num_items, start)
-        except:
+        except Exception, ex:
+            self.log.info(ex)
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
 
     def generate_docs_default(self, docs_per_day, start=0):
@@ -72,17 +85,17 @@ class QueryTests(BaseTestCase):
 
     def generate_docs_employee(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_employee_data(docs_per_day = docs_per_day, start = start)
+        return json_generator.generate_docs_employee(docs_per_day = docs_per_day, start = start)
 
     def generate_docs_simple(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_employee_simple_data(docs_per_day = docs_per_day, start = start)
+        return json_generator.generate_docs_simple(start = start, docs_per_day = docs_per_day)
 
     def generate_docs_sales(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_employee_sales_data(docs_per_day = docs_per_day, start = start)
+        return json_generator.generate_docs_sales(docs_per_day = docs_per_day, start = start)
 
     def generate_docs_bigdata(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_employee_big_data(docs_per_day = docs_per_day,
+        return json_generator.generate_docs_employee_bigdata(docs_per_day = docs_per_day,
             start = start, value_size = self.value_size)

@@ -628,7 +628,7 @@ class JsonGenerator:
                                                [[dest, dest]], start=start, end=docs_per_day))
         return generators
 
-    def generate_docs_sales_data(self, key_prefix = "", test_data_type = True, start=0, docs_per_day=None):
+    def generate_docs_sales(self, key_prefix = "sales_dataset", test_data_type = True, start=0, docs_per_day=None):
         generators = []
         if end is None:
             end = self.docs_per_day
@@ -678,7 +678,7 @@ class JsonGenerator:
                                                   start=start, end=end))
         return generators
 
-    def generate_docs_big_data(self, key_prefix = "", value_size = 1024, start=0, docs_per_day=1):
+    def generate_docs_bigdata(self, key_prefix = "big_dataset", value_size = 1024, start=0, docs_per_day=1):
         if end is None:
             end = self.num_docs
         age = range(start, end)
@@ -689,7 +689,16 @@ class JsonGenerator:
                                      end=docs_per_day)
         return [gen_load]
 
-    def generate_docs_employee_data(self, key_prefix ="", start=0, docs_per_day=1):
+    def generate_docs_simple(self, key_prefix ="simple_dataset", start=0, docs_per_day = 1000):
+        end = docs_per_day
+        age = range(start, end)
+        name = [key_prefix + '-' + str(i) for i in xrange(start, end)]
+        template = '{{ "age": {0}, "name": "{1}" }}'
+
+        gen_load = DocumentGenerator(key_prefix, template, age, name, start=start, end=end)
+        return [gen_load]
+
+    def generate_docs_employee_data(self, key_prefix ="employee_dataset", start=0, docs_per_day = 1):
         generators = []
         sys_admin_info = {"title" : "System Administrator and heliport manager",
                               "desc" : "...Last but not least, as the heliport manager, you will help maintain our growing fleet of remote controlled helicopters, that crash often due to inexperienced pilots.  As an independent thinker, you may be free to replace some of the technologies we currently use with ones you feel are better. If so, you should be prepared to discuss and debate the pros and cons of suggested technologies with other stakeholders",
