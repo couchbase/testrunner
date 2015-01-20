@@ -724,13 +724,13 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
-    def init_node_services(self, username='Administrator', password='password', hostname = '127.0.0.1', port='8091', services = None):
+    def init_node_services(self, username='Administrator', password='password', hostname='127.0.0.1', port='8091', services=None):
         api = self.baseUrl + '/node/controller/setupServices'
         if services == None:
             log.info(" servces are marked as None, will not work")
             return False
         if hostname == "127.0.0.1":
-            hostname="{0}:{1}".format(hostname,port)
+            hostname = "{0}:{1}".format(hostname, port)
         params = urllib.urlencode({ 'hostname':hostname,
                                     'user': username,
                                     'password': password,
@@ -867,7 +867,7 @@ class RestConnection(object):
         #response : {"id": "replication_id"}
         if status:
             json_parsed = json.loads(content)
-            log.info("Replication created with id: {}".format(json_parsed['id']))
+            log.info("Replication created with id: {0}".format(json_parsed['id']))
             RestConnection.replications.append(urllib.quote_plus(json_parsed['id']))
             return json_parsed['id']
         else:
@@ -891,7 +891,7 @@ class RestConnection(object):
         if not replications:
             for replication in RestConnection.replications:
                 try:
-                    log.info("Deleting replication {}".format(replication))
+                    log.info("Deleting replication {0}".format(replication))
                     self.stop_replication("controller/cancelXDCR/%s" % replication)
                 except:
                     # we are not logging replication on per cluster basis

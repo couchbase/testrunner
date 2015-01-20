@@ -631,10 +631,10 @@ class XDCRBaseTest(unittest.TestCase):
             keys_loaded = sum([len(kv_store) for kv_store in bucket.kvs.values()])
             self.log.info("Keys loaded into bucket {0}:{1}".format(bucket.name,
                                                                    keys_loaded))
-            self.log.info("Stat: vb_active_curr_items = {}".
+            self.log.info("Stat: vb_active_curr_items = {0}".
                           format(MemcachedClientHelper.direct_client(master,
                                  bucket.name).stats()['vb_active_curr_items']))
-            self.log.info("Stat: vb_replica_curr_items = {}".
+            self.log.info("Stat: vb_replica_curr_items = {0}".
                           format(MemcachedClientHelper.direct_client(master,
                                  bucket.name).stats()['vb_replica_curr_items']))
 

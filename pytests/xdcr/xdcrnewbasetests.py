@@ -2101,7 +2101,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         # UPDATES
         for doc_ops_cluster in update_clusters:
             cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)
-            self.log.info("Updating keys @ {}".format(cb_cluster.get_name()))
+            self.log.info("Updating keys @ {0}".format(cb_cluster.get_name()))
             cb_cluster.update_delete_data(
                 OPS.UPDATE,
                 perc=percent_update,
@@ -2111,7 +2111,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         # DELETES
         for doc_ops_cluster in delete_clusters:
             cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)
-            self.log.info("Deleting keys @ {}".format(cb_cluster.get_name()))
+            self.log.info("Deleting keys @ {0}".format(cb_cluster.get_name()))
             cb_cluster.update_delete_data(OPS.DELETE, perc=percent_delete)
 
     def async_perform_update_delete(self):
@@ -2130,7 +2130,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         # UPDATES
         for doc_ops_cluster in update_clusters:
             cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)
-            self.log.info("Updating keys @ {}".format(cb_cluster.get_name()))
+            self.log.info("Updating keys @ {0}".format(cb_cluster.get_name()))
             tasks.extend(cb_cluster.async_update_delete(
                 OPS.UPDATE,
                 perc=percent_update,
@@ -2139,7 +2139,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         # DELETES
         for doc_ops_cluster in delete_clusters:
             cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)
-            self.log.info("Deleting keys @ {}".format(cb_cluster.get_name()))
+            self.log.info("Deleting keys @ {0}".format(cb_cluster.get_name()))
             tasks.extend(
                 cb_cluster.async_update_delete(
                     OPS.DELETE,
