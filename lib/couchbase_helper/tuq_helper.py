@@ -79,10 +79,12 @@ class N1QLHelper():
         return result
 
     def _verify_results(self, actual_result, expected_result, missing_count = 1, extra_count = 1):
+        actual_result = self._gen_dict(actual_result)
+        expected_result = self._gen_dict(expected_result)
         if len(actual_result) != len(expected_result):
             missing, extra = self.check_missing_and_extra(actual_result, expected_result)
             self.log.error("Missing items: %s.\n Extra items: %s" % (missing[:missing_count], extra[:extra_count]))
-            self.fail("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
+            raise Exception("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
                                             len(actual_result), len(expected_result)))
         if self.max_verify is not None:
             actual_result = actual_result[:self.max_verify]
@@ -90,10 +92,21 @@ class N1QLHelper():
 
         msg = "Results are incorrect.\n Actual first and last 100:  %s.\n ... \n %s" +\
         "Expected first and last 100: %s.\n  ... \n %s"
-        error_message = msg % (actual_result[:1],actual_result[-1:],
-                                 expected_result[:1],expected_result[-10:])
+        error_message = msg % (actual_result[:10],actual_result[-10:],
+                                 expected_result[:10],expected_result[-10:])
         if actual_result != expected_result:
             raise Exception(error_message)
+
+    def check_missing_and_extra(self, actual, expected):
+        missing = []
+        extra = []
+        for item in actual:
+            if not (item in expected):
+                 extra.append(item)
+        for item in expected:
+            if not (item in actual):
+                missing.append(item)
+        return missing, extra
 
     def build_url(self, version):
         info = self.shell.extract_remote_info()
@@ -212,8 +225,6 @@ class N1QLHelper():
             output = output[:output.find("tuq_client>")].strip()
         return json.loads(output)
 
-
-
     def sort_nested_list(self, result):
         actual_result = []
         for item in result:
@@ -272,3 +283,11 @@ class N1QLHelper():
             if item['indexes']['keyspace_id'] == bucket and item['indexes']['id'] == index_name:
                 return True
         return False
+
+    def _gen_dict(self, result):
+        result_set = []
+        if result != None and len(result) > 0:
+            for val in result:
+                for key in val.keys():
+                    result_set.append(val[key])
+        return result_set

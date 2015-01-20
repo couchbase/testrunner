@@ -361,9 +361,12 @@ class BaseSecondaryIndexingTests(QueryTests):
                                  expected_result[:100],expected_result[-100:]))
 
     def _gen_dict(self, result):
+        result_set = []
         if result != None and len(result) > 0:
-            return result[0].values()
-        return []
+            for val in result:
+                for key in val.keys():
+                    result_set.append(val[key])
+        return result_set
 
     def _create_operation_map(self):
         map_before = {"create_index":False, "query_ops": False, "drop_index": False}

@@ -18,7 +18,10 @@ RANGE_SCAN="range"
 FULL_SCAN="full"
 JOIN = "join"
 EQUALS = "equals"
+NOTEQUALS ="notequals"
 NO_ORDERBY_GROUPBY="no_orderby_groupby"
+AND = "and"
+OR = "or"
 class QueryDefinition(object):
 	def __init__(self, name = "default", index_name = "Random", index_fields = [], index_creation_template = INDEX_CREATION_TEMPLATE,
 		index_drop_template = INDEX_DROP_TEMPLATE, query_template = "", groups = []):
@@ -67,7 +70,7 @@ class SQLDefinitionGenerator:
 		index_name_prefix = "employee"+str(uuid.uuid4()).replace("-","")
 		#emit_fields = "name, job_title, join_yr, join_mo, join_day"
 		emit_fields = "*"
-		and_conditions = ["job_title == \"Senior\""]
+		and_conditions = ["job_title == \"Sales\"","job_title != \"Sales\""]
 		definitions_list.append(
 			QueryDefinition(
 				index_name=index_name_prefix+"job_title",
@@ -86,54 +89,48 @@ class SQLDefinitionGenerator:
 							 index_fields = ["job_title"],
 							 query_template = RANGE_SCAN_ORDER_BY_TEMPLATE.format(emit_fields,"job_title IS NOT NULL","job_title"),
 							 groups = [SIMPLE_INDEX, FULL_SCAN, ORDER_BY, "employee","isnotnull"]))
-		for condition in and_conditions:
-			definitions_list.append(
-				QueryDefinition(
-					index_name=index_name_prefix+"job_title",
+		definitions_list.append(
+			QueryDefinition(
+				index_name=index_name_prefix+"job_title",
 							 index_fields = ["job_title"],
-							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % condition),
+							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\""),
 							 groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,"employee"]))
 		definitions_list.append(
 			QueryDefinition(
-				index_name=index_name_prefix+"join_month_join_yr_join_day",
-							 index_fields = ["join_mon", "join_yr", "join_day"],
-							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields,
-							 	self._create_condition(["join_yr","join_mon","join_day"],[2008,0,1],"<=",[2008,7,1],">=")+" ORDER BY join_yr"),
-							 groups = [COMPOSITE_INDEX, RANGE_SCAN, "employee"]))
+				index_name=index_name_prefix+"job_title",
+							 index_fields = ["job_title"],
+							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" ORDER BY job_title "),
+							 groups = [SIMPLE_INDEX,RANGE_SCAN, ORDER_BY, EQUALS,"employee"]))
 		definitions_list.append(
 			QueryDefinition(
-				index_name=index_name_prefix+"join_month_join_yr_join_day",
-							 index_fields =["join_mon", "join_yr", "join_day"],
-							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields,
-							 	self._create_condition(["join_yr","join_mon","join_day"],[2008,0,1],"<=",[],None)+" ORDER BY join_yr"),
-							 groups = [COMPOSITE_INDEX, RANGE_SCAN, ORDER_BY, "employee"]))
+				index_name=index_name_prefix+"job_title",
+							 index_fields = ["job_title"],
+							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title != \"Sales\""),
+							 groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, NOTEQUALS,"employee"]))
 		definitions_list.append(
 			QueryDefinition(
-				index_name=index_name_prefix+"join_month_join_yr_join_day",
-							 index_fields = ["join_mon", "join_yr", "join_day"],
-							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields,
-							 	self._create_condition(["join_yr","join_mon","join_day"],[],None,[2008,7,1],">=")+" ORDER BY join_yr"),
-							 groups = [COMPOSITE_INDEX, RANGE_SCAN,  ORDER_BY,"employee"]))
+				index_name=index_name_prefix+"job_title",
+							 index_fields = ["job_title"],
+							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" or job_title == \"Engineer\""),
+							 groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, OR,"employee"]))
 		definitions_list.append(
 			QueryDefinition(
-				index_name=index_name_prefix+"join_month_join_yr_join_day",
-							 index_fields = ["join_mon", "join_yr", "join_day"],
-							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields,
-							 	self._create_condition(["join_yr","join_mon","join_day"],[2008,7,1],"<=",[2008,7,1],">=")+" ORDER BY join_yr"),
-							 groups = [COMPOSITE_INDEX, RANGE_SCAN,  ORDER_BY,"employee"]))
+				index_name=index_name_prefix+"join_yr",
+							 index_fields = ["join_yr"],
+							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "join_yr > 1999 and join_yr < 2014"),
+							 groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, AND,"employee"]))
 		definitions_list.append(
 			QueryDefinition(
-				index_name=index_name_prefix+"join_month_join_yr_join_day",
-							 index_fields = ["join_mon", "join_yr", "join_day"],
-							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields,
-							 	self._create_condition(["join_yr","join_mon","join_day"],[1999,7,1],"<=",[2030,7,1],">=")+" ORDER BY join_yr"),
-							 groups = [COMPOSITE_INDEX, RANGE_SCAN,  ORDER_BY, "employee"]))
+				index_name=index_name_prefix+"job_title_join_yr",
+							 index_fields = ["join_yr","job_title"],
+							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" and join_yr > 1999 and join_yr < 2014"),
+							 groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,AND,"employee"]))
 		definitions_list.append(
 			QueryDefinition(
-				index_name=index_name_prefix+"composite_range_join_{0}_{1}".format(index_name_prefix,"name_job_title"),
-							 index_fields = ["name","job_title"],
-							 query_template = RANGE_SCAN_JOIN_TEMPLATE.format("name", emit_fields),
-							 groups = [COMPOSITE_INDEX, RANGE_SCAN, JOIN, "employee"]))
+				index_name=index_name_prefix+"job_title_join_yr",
+							 index_fields = ["join_yr","job_title"],
+							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" or join_yr > 1999 and join_yr < 2004 ORDER BY job_title"),
+							 groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,OR,"employee"]))
 		return definitions_list
 
 	def filter_by_group(self, groups = [], query_definitions = []):
