@@ -24,6 +24,8 @@ from couchbase_helper.data_analysis_helper import *
 from testconstants import STANDARD_BUCKET_PORT
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD
+from membase.helper.cluster_helper import ClusterOperationHelper
+
 import testconstants
 
 
@@ -105,6 +107,7 @@ class BaseTestCase(unittest.TestCase):
             self.test_timeout = self.input.param("test_timeout", 3600)  # kill hang test and jump to next one.
             self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
             self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
+            self.enable_bloom_filter = self.input.param("enable_bloom_filter", False)
             self.protocol = self.get_protocol_type()
             self.services_map = None
             if self.sasl_bucket_priority != None:
@@ -490,6 +493,14 @@ class BaseTestCase(unittest.TestCase):
     def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0,
                           only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30,
                           proxy_client=None):
+
+
+        if self.enable_bloom_filter:
+          for bucket in self.buckets:
+            ClusterOperationHelper.flushctl_set(self.master, "bfilter_enabled", 'true', bucket)
+
+
+
         tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag,
                                              only_store_hash, batch_size, pause_secs, timeout_secs,
                                              proxy_client)

@@ -345,7 +345,12 @@ class ClusterOperationHelper(object):
             rv = mc.set_flush_param(key, str(val))
         else:
             type = ClusterOperationHelper._get_engine_param_type(key)
-            rv = mc.set_param(key, str(val), type)
+
+            if val == 'true' or val == 'false':
+               rv = mc.set_param(key, val, type)
+            else:
+               rv = mc.set_param(key, str(val), type)
+
         log.info("Setting flush param on server {0}, {1} to {2}, result: {3}".format(server, key, val, rv))
         mc.close()
 
@@ -357,7 +362,7 @@ class ClusterOperationHelper(object):
         flush_params = ['bg_fetch_delay', 'couch_response_timeout', 'exp_pager_stime', 'flushall_enabled',
                         'klog_compactor_queue_cap', 'klog_max_log_size', 'klog_max_entry_ratio',
                         'queue_age_cap', 'max_size', 'max_txn_size', 'mem_high_wat', 'mem_low_wat',
-                        'min_data_age', 'timing_log', 'alog_sleep_time']
+                        'min_data_age', 'timing_log', 'alog_sleep_time', 'bfilter_enabled' ]
         if key in tap_params:
             return memcacheConstants.ENGINE_PARAM_TAP
         if key in checkpoint_params:
