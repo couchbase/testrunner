@@ -38,7 +38,6 @@ class Rebalance(XDCRNewBaseTest):
         finally:
             pass
 
-
     """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
      Async Rebalance-Out Non-master node at Source/Destination while
     Create/Update/Delete are performed in parallel based on doc-ops specified by the user.

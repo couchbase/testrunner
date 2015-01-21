@@ -8,7 +8,6 @@ from xdcrnewbasetests import Utility, BUCKET_NAME, OPS
 
 
 # Assumption that at least 2 nodes on every cluster
-# TODO fail the tests if this condition is not met
 class bidirectional(XDCRNewBaseTest):
     def setUp(self):
         super(bidirectional, self).setUp()
@@ -57,7 +56,6 @@ class bidirectional(XDCRNewBaseTest):
         self.sleep(self._wait_timeout)
 
     """Bidirectional replication between two clusters(currently), create-updates-deletes on DISJOINT sets on same bucket."""
-    # TODO fix exit condition on mismatch error, to check for a range instead of exiting on 1st mismatch
     def load_with_ops(self):
         self.setup_xdcr_and_load()
         self.perform_update_delete()

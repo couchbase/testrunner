@@ -28,7 +28,6 @@ class XDCRTopologyTest(XDCRNewBaseTest):
 
         self.verify_results()
 
-    # TODO - add update/deletes after rebalance operation
     def load_with_rebalance_out(self):
         num_rebalance = self._input.param("num_rebalance", 1)
 

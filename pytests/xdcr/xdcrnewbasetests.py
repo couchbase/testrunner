@@ -319,8 +319,6 @@ class NodeHelper:
         while num < wait_time / 10:
             try:
                 ClusterOperationHelper.wait_for_ns_servers_or_assert(
-                    # FIXME 'self' is the test_case object. Need to check how
-                    # can we pass it.
                     [server], test_case, wait_time=wait_time - num * 10,
                     wait_if_warmup=wait_if_warmup)
                 break
@@ -476,6 +474,9 @@ class XDCRRemoteClusterRef:
                 fromBucket,
                 rep_type,
                 toBucket))
+
+    def clear_all_replications(self):
+        self.__replications = []
 
     def start_all_replications(self):
         """Start all created replication
@@ -848,7 +849,6 @@ class CouchbaseCluster:
         @param eviction_policy: valueOnly etc.
         @param bucket_priority: high/low etc.
         """
-        # FIXME eviction_policy and bucket_priority needs to be configurable
         bucket_tasks = []
         for i in range(num_buckets):
             name = "sasl_bucket_" + str(i + 1)
@@ -1465,8 +1465,6 @@ class CouchbaseCluster:
         if master:
             to_remove_node = [self.__master_node]
         else:
-            # TODO add assert if number of free servers are less than required
-            # TODO add assert in case of only one node server
             to_remove_node = [self.__nodes[-1]]
 
         to_add_node = [FloatingServers._serverlist.pop()]
@@ -2063,9 +2061,6 @@ class XDCRNewBaseTest(unittest.TestCase):
             eviction_policy=self.__eviction_policy,
             bucket_priority=bucket_priority)
 
-        # FIX-ME UPDATE replication information if re-create bucket with new
-        # bucket object.
-
     def __set_topology_chain(self):
         """Will Setup Remote Cluster Chain Topology i.e. A -> B -> C
         """
@@ -2264,6 +2259,20 @@ class XDCRNewBaseTest(unittest.TestCase):
                             src_bucket.name))
                 remote_cluster.start_all_replications()
 
+    def _resetup_replication_for_recreate_buckets(self, cluster_name):
+        for cb_cluster in self.__cb_clusters:
+            for remote_cluster_ref in cb_cluster.get_remote_clusters():
+                if remote_cluster_ref.get_src_cluster().get_name(
+                ) != cluster_name and remote_cluster_ref.get_dest_cluster().get_name() != cluster_name:
+                    continue
+                remote_cluster_ref.clear_all_replications()
+                for src_bucket in remote_cluster_ref.get_src_cluster().get_buckets():
+                    remote_cluster_ref.create_replication(
+                        src_bucket,
+                        rep_type=self.__rep_type,
+                        toBucket=remote_cluster_ref.get_dest_cluster().get_bucket_by_name(
+                            src_bucket.name))
+
     def setup_xdcr_and_load(self):
         self.set_xdcr_topology()
         self.setup_all_replications()
@@ -2350,7 +2359,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         # In case of ring topology first merging keys from last and first
         # cluster e.g. A -> B -> C -> A then merging C-> A then A-> B and B-> C
         # and C->A (to merge keys from B ->C).
-        # FIXME need to be tested for Hybrid Topology
+        # TODO need to be tested for Hybrid Topology
         if self.__topology == TOPOLOGY.RING and len(
                 self.__cb_clusters) > 2:
             for remote_cluster_ref in self.__cb_clusters[-1].get_remote_clusters():
@@ -2395,6 +2404,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         for cb_cluster in self.__cb_clusters:
             for remote_cluster_ref in cb_cluster.get_remote_clusters():
                 try:
+                    verification_completed = False
                     src_cluster = remote_cluster_ref.get_src_cluster()
                     dest_cluster = remote_cluster_ref.get_dest_cluster()
                     src_cluster.run_expiry_pager()
@@ -2411,5 +2421,9 @@ class XDCRNewBaseTest(unittest.TestCase):
 
                     src_cluster.verify_data()
                     dest_cluster.verify_data()
+                    verification_completed = True
                 finally:
                     self.verify_rev_ids(remote_cluster_ref.get_replications())
+                    if not verification_completed:
+                        self.fail(
+                            "Verification failed for remote-cluster: {0}".format(remote_cluster_ref))

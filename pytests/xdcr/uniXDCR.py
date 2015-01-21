@@ -309,7 +309,7 @@ class unidirectional(XDCRNewBaseTest):
         self.shell = RemoteMachineShellConnection(self.src_master)
         self.shell.execute_cbcollect_info("%s.zip" % (self.log_filename))
         from clitest import collectinfotest
-        # FIXME HACK added self.buckets data member.
+        # HACK added self.buckets data member.
         self.buckets = self.src_cluster.get_buckets()
         collectinfotest.CollectinfoTests.verify_results(
             self, self.log_filename
@@ -400,6 +400,8 @@ class unidirectional(XDCRNewBaseTest):
 
         # Code for re-create_buckets
         self.create_buckets_on_cluster("C2")
+
+        self._resetup_replication_for_recreate_buckets("C2")
 
         self.async_perform_update_delete()
         self.verify_results()
