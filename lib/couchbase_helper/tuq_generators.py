@@ -678,15 +678,15 @@ class JsonGenerator:
                                                   start=start, end=end))
         return generators
 
-    def generate_docs_bigdata(self, key_prefix = "big_dataset", value_size = 1024, start=0, docs_per_day=1):
+    def generate_docs_bigdata(self, key_prefix = "big_dataset", value_size = 1024, start=0, docs_per_day=1, end=None):
         if end is None:
-            end = self.num_docs
+            end = docs_per_day
         age = range(start, end)
         name = ['a' * value_size,]
         template = '{{ "age": {0}, "name": "{1}" }}'
 
         gen_load = DocumentGenerator(key_prefix, template, age, name, start=start,
-                                     end=docs_per_day)
+                                     end=end)
         return [gen_load]
 
     def generate_docs_simple(self, key_prefix ="simple_dataset", start=0, docs_per_day = 1000):

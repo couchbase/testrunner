@@ -546,7 +546,7 @@ class QueryTests(BaseTestCase):
 
     def generate_docs_bigdata(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_employee_big_data(docs_per_day = docs_per_day,
+        return json_generator.generate_docs_bigdata(docs_per_day = docs_per_day * 1000,
             start = start, value_size = self.value_size)
 
 
