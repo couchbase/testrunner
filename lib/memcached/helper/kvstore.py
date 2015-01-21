@@ -80,6 +80,7 @@ class Partition(object):
         self.part_id = part_id
         self.__valid = {}
         self.__deleted = {}
+        self.__timestamp = {}
         self.__expired_keys = []
 
     def set(self, key, value, exp=0, flag=0):
@@ -92,11 +93,16 @@ class Partition(object):
         self.__valid[key] = {"value": value,
                            "expires": exp,
                            "flag": flag}
+        self.__timestamp[key] = time.time()
 
     def delete(self, key):
         if key in self.__valid:
             self.__deleted[key] = self.__valid[key]["value"]
+            self.__timestamp[key] = time.time()
             del self.__valid[key]
+
+    def get_timestamp(self, key):
+        return self.__timestamp.get(key, 0)
 
     def get_key(self, key):
         return self.__valid.get(key)

@@ -389,6 +389,19 @@ class NodeHelper:
         version = rest.get_nodes_self().version
         return version[:version.rfind('-')]
 
+    @staticmethod
+    def set_wall_clock_time(node, date_str):
+        shell = RemoteMachineShellConnection(node)
+        # os_info = shell.extract_remote_info()
+        # if os_info == OS.LINUX:
+        # date command works on linux and windows cygwin as well.
+        shell.execute_command(
+            "sudo date -s '%s'" %
+            time.ctime(
+                date_str.tx_time))
+        # elif os_info == OS.WINDOWS:
+        #    raise "NEED To SETUP DATE COMMAND FOR WINDOWS"
+
 
 class FloatingServers:
 
@@ -772,8 +785,8 @@ class CouchbaseCluster:
 
     def set_global_checkpt_interval(self, value):
         RestConnection(self.__master_node).set_internalSetting(
-                        XDCR_PARAM.XDCR_CHECKPOINT_INTERVAL,
-                        value)
+            XDCR_PARAM.XDCR_CHECKPOINT_INTERVAL,
+            value)
 
     def __get_cbcollect_info(self):
         """Collect cbcollectinfo logs for all the servers in the cluster.
@@ -1631,6 +1644,12 @@ class CouchbaseCluster:
         NodeHelper.reboot_server(reboot_node, test_case)
         return reboot_node
 
+    def restart_couchbase_on_all_nodes(self):
+        for node in self.__nodes:
+            NodeHelper.do_a_warm_up(node)
+
+        NodeHelper.wait_warmup_completed(self.__nodes)
+
     def set_xdcr_param(self, param, value):
         """Set Replication parameter on couchbase server:
         @param param: XDCR parameter name.
@@ -1797,6 +1816,25 @@ class CouchbaseCluster:
             return False
         return True
 
+    def pause_all_replications(self):
+        for remote_cluster_ref in self.__remote_clusters:
+            remote_cluster_ref.pause_all_replications()
+
+    def resume_all_replications(self):
+        for remote_cluster_ref in self.__remote_clusters:
+            remote_cluster_ref.resume_all_replications()
+
+    def enable_time_sync(self, enable):
+        """
+        @param enable: True if time_sync needs to enabled else False
+        """
+        # TODO call rest api
+        pass
+
+    def set_wall_clock_time(self, date_str):
+        for node in self.__nodes:
+            NodeHelper.set_wall_clock_time(node, date_str)
+
 
 class Utility:
 
@@ -1857,9 +1895,11 @@ class XDCRNewBaseTest(unittest.TestCase):
 
         # collect logs before tearing down clusters
         if self._input.param("get-cbcollect-info", False) and \
-            self.__is_test_failed():
+                self.__is_test_failed():
             for cb_cluster in self.__cb_clusters:
-                self.log.info("Collecting logs @ {0}".format(cb_cluster.get_name()))
+                self.log.info(
+                    "Collecting logs @ {0}".format(
+                        cb_cluster.get_name()))
                 cb_cluster.collect_logs(self.__is_cluster_run())
         try:
             if self.__is_cleanup_needed():
@@ -1938,6 +1978,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             'valueOnly')
         self.__mixed_priority = self._input.param("mixed_priority", None)
 
+        self.__lww = self._input.param("lww", 0)
+
         # Public init parameters - Used in other tests too.
         # Move above private to this section if needed in future, but
         # Ensure to change other tests too.
@@ -1967,7 +2009,9 @@ class XDCRNewBaseTest(unittest.TestCase):
             "disable_compaction",
             "").split('-')
         # Default value needs to be changed to 60s after MB-13233 is resolved
-        self._checkpoint_interval = self._input.param("checkpoint_interval", 1800)
+        self._checkpoint_interval = self._input.param(
+            "checkpoint_interval",
+            1800)
 
     def __cleanup_previous(self):
         for cluster in self.__cb_clusters:
@@ -2005,6 +2049,9 @@ class XDCRNewBaseTest(unittest.TestCase):
         """Return number of couchbase clusters for tests.
         """
         return len(self.__cb_clusters)
+
+    def get_cb_clusters(self):
+        return self.__cb_clusters
 
     def __calculate_bucket_size(self, cluster_quota, num_buckets):
         dgm_run = self._input.param("dgm_run", 0)
@@ -2301,9 +2348,12 @@ class XDCRNewBaseTest(unittest.TestCase):
                         toBucket=remote_cluster_ref.get_dest_cluster().get_bucket_by_name(
                             src_bucket.name))
 
-    def setup_xdcr_and_load(self):
+    def setup_xdcr(self):
         self.set_xdcr_topology()
         self.setup_all_replications()
+
+    def setup_xdcr_and_load(self):
+        self.setup_xdcr()
         self.load_data_topology()
         self.sleep(60)
 
@@ -2312,8 +2362,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         first load then create xdcr
         """
         self.load_data_topology()
-        self.set_xdcr_topology()
-        self.setup_all_replications()
+        self.setup_xdcr()
 
     def verify_rev_ids(self, xdcr_replications, kv_store=1):
         """Verify RevId (sequence number, cas, flags value) for each item on
@@ -2363,9 +2412,14 @@ class XDCRNewBaseTest(unittest.TestCase):
 
         for key in valid_keys_src:
             # replace/add the values for each key in src kvs
-            if key not in valid_keys_dest and key not in deleted_keys_dest:
+            if key not in deleted_keys_dest:
                 partition1 = kv_src_bucket[kvs_num].acquire_partition(key)
                 partition2 = kv_dest_bucket[kvs_num].acquire_partition(key)
+                # In case of lww, if source's key timestamp is lower than
+                # destination than no need to set.
+                if self.__lww and partition1.get_timestamp(
+                        key) < partition2.get_timestamp(key):
+                    continue
                 key_add = partition1.get_key(key)
                 partition2.set(
                     key,
@@ -2377,7 +2431,15 @@ class XDCRNewBaseTest(unittest.TestCase):
 
         for key in deleted_keys_src:
             if key not in deleted_keys_dest:
-                kv_dest_bucket[kvs_num].acquire_partition(key).delete(key)
+                partition1 = kv_src_bucket[kvs_num].acquire_partition(key)
+                partition2 = kv_dest_bucket[kvs_num].acquire_partition(key)
+                # In case of lww, if source's key timestamp is lower than
+                # destination than no need to delete.
+                if self.__lww and partition1.get_timestamp(
+                        key) < partition2.get_timestamp(key):
+                    continue
+                partition2.delete(key)
+                kv_src_bucket[kvs_num].release_partition(key)
                 kv_dest_bucket[kvs_num].release_partition(key)
 
     def __merge_all_buckets(self):
@@ -2450,6 +2512,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     src_cluster.verify_data()
                     dest_cluster.verify_data()
                     verification_completed = True
+                except Exception as e:
+                    self.log.error(e)
                 finally:
                     self.verify_rev_ids(remote_cluster_ref.get_replications())
                     if not verification_completed:
