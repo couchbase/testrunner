@@ -2426,67 +2426,109 @@ class RestConnection(object):
             raise BucketCompactionException(bucket)
         return True
 
-        '''
-    Function to do LDAP Auth operations using REST Command
-    Parameter -
-    authOperation - values - True or 1, to enable/disable LDAPAuth
-    userlist - List of user to be added to LDAPAuth.
-    Returns -
-    status, content and header of adding and setting of LDAPAuth
+
+    '''LDAP Rest API '''
     '''
-    def ldapRestOperation(self, authOperation, userlist):
-        self.authOperation = authOperation
-        value = self.ldapRestOperationGET()
-        api = self.baseUrl + "/settings/ldapAuth"
-
-        if (authOperation == "clear"):
-            status, content, header = self._http_request(api, 'POST')
-            return status
-
-        if (authOperation != None):
-            self.authOperation = authOperation
-        else:
-            self.authOperation = value['enabled']
-
-        if (userlist != None):
-            for user in userlist:
-                if user.adminType == "Admin":
-                    self.currAdmins = user.userName
-                else:
-                    self.currROAdmins = user.userName
-        else:
-            self.currAdmins = ''
-            self.currROAdmins = ''
-
-        params = urllib.urlencode({'enabled': self.authOperation,
-                                        'admins': '{0}'.format(self.currAdmins),
-                                        'roAdmins':'{0}'.format(self.currROAdmins),
-                                        'username': 'Administrator',
-                                        'password': 'password'})
+    clearLDAPSettings - Function to clear LDAP settings
+    Parameter - None
+    Returns -
+    status of LDAPAuth clear command
+    '''
+    def clearLDAPSettings (self):
+        api = self.baseUrl + '/settings/saslauthdAuth'
+        params = urllib.urlencode({'enabled':'false'})
         status, content, header = self._http_request(api, 'POST', params)
+        return status, content, header
+
+    '''
+    ldapUserRestOperation - Execute LDAP REST API
+    Input Parameter -
+        authOperation - this is for auth need to be enabled or disabled - True or 0
+        currAdmmins - a list of username to add to full admin matching with ldap
+        currROAdmins - a list of username to add to RO Admin
+    Returns - status, content and header for the command executed
+    '''
+    def ldapUserRestOperation(self, authOperation, adminUser='', ROadminUser=''):
+        authOperation = authOperation
+        currAdmins = ''
+        currROAdmins = ''
+
+        if (adminUser != ''):
+            for user in adminUser:
+                currAdmins = user[0] + "\n\r" + currAdmins
+
+        if (ROadminUser != ''):
+            for user in ROadminUser:
+                currROAdmins = user[0] + "\n\r" + currROAdmins
+        content = self.executeLDAPCommand(authOperation, currAdmins, currROAdmins)
+
+    '''
+    executeLDAPCommand - Execute LDAP REST API
+    Input Parameter -
+        authOperation - this is for auth need to be enabled or disabled - True or 0
+        currAdmmins - a list of username to add to full admin matching with ldap
+        currROAdmins - a list of username to add to RO Admin
+    Returns - status, content and header for the command executed
+    '''
+    def executeLDAPCommand(self, authOperation, currAdmins, currROAdmins):
+        log.info ("Executing LDAP command")
+        api = self.baseUrl + "/settings/saslauthdAuth"
+        params = urllib.urlencode({
+                                        'enabled': authOperation,
+                                        'admins': '{0}'.format(currAdmins),
+                                        'roAdmins':'{0}'.format(currROAdmins),
+        #                                'username': '{0}'.format(self.username),
+        #                                'password': '{0}'.format(self.password)
+                                        })
+        log.info ("Value of LDAP command is {0}".format(params))
+        content = self._http_request(api, 'POST', params)
 
     '''
     validateLogin - Validate if user can login using a REST API
-    Input Parameter - user and password to check for login
-    Returns - 400 if user login fails, 200 if user logins succeeds
+    Input Parameter - user and password to check for login. Also take a boolean to
+    decide if the status should be 200 or 400 and everything else should be
+    false
+    Returns - True of false based if user should login or login fail
     '''
-    def validateLogin(self, user, password):
+    def validateLogin(self, user, password, login):
+        log.info ("Login using username-{0} and password-{0}".format(user, password))
         api = self.baseUrl + "uilogin"
         header = {'Content-type': 'application/x-www-form-urlencoded'}
         params = urllib.urlencode({'user':'{0}'.format(user), 'password':'{0}'.format(password)})
         http = httplib2.Http()
         status, content = http.request(api, 'POST', headers=header, body=params)
-        log.info ("API execution successful, value of status is {0}".format(status))
-        return status
+        log.info ("Status of login command - {0}".format(status))
+        if ((status['status'] == "200" and login == True) or (status ['status'] == "400" and login == False)):
+            return True
+        else:
+            return False
 
     '''
     ldapRestOperationGet - Get setting of LDAPAuth - Settings
     Returns - list of Admins, ROAdmins and is LDAPAuth enabled or not
     '''
-    def ldapRestOperationGET(self):
-        api = self.baseUrl + "/settings/ldapAuth"
+    def ldapRestOperationGetResponse(self):
+        log.info ("GET command for LDAP Auth")
+        api = self.baseUrl + "/settings/saslauthdAuth"
         status, content, header = self._http_request(api, 'GET')
         return json.loads(content)
+
+    '''
+    executeValidateCredentials - API to check credentials of users
+    Input - user and password that needs validation
+    Returns -
+        [role]:<currentrole>
+        [source]:<saslauthd,builtin>
+    '''
+    def executeValidateCredentials(self, user, password):
+        api = self.baseUrl + "validateCredentials"
+        params = urllib.urlencode({
+                                   'user':'{0}'.format(user),
+                                   'password':'{0}'.format(password)
+                                   })
+        status, content, header = self._http_request(api, 'POST', params)
+        log.info ("Status of executeValidateCredentials command - {0}".format(status))
+        return status, json.loads(content)
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
@@ -2787,8 +2829,3 @@ class RestParser(object):
                 node.id = nodeDictionary["otpNode"]
             bucket.nodes.append(node)
         return bucket
-
-class ldapUser(object):
-    def __init__(self, userName, adminType):
-        self.userName = userName
-        self.adminType = adminType
