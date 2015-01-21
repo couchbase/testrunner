@@ -264,11 +264,8 @@ class N1QLHelper():
                         self.log.error('ERROR during index creation %s' % str(ex))
 
     def verify_index_with_explain(self, actual_result, index_name):
-        for item in actual_result["results"][0]["~children"]:
-            if "index" in item.keys():
-                actual_index_name = item["index"]
-                if actual_index_name == index_name:
-                    return True
+        if index_name in str(actual_result):
+            return True
         return False
 
     def _is_index_in_list(self, bucket, index_name, server = None):
