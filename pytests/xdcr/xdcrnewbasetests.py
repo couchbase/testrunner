@@ -498,9 +498,9 @@ class XDCReplication:
     def __init__(self, remote_cluster_ref, from_bucket, rep_type, to_bucket):
         """
         @param remote_cluster_ref: XDCRRemoteClusterRef object
-        @param from_bucket: Source bucket name
+        @param from_bucket: Source bucket (Bucket object)
         @param rep_type: replication protocol REPLICATION_PROTOCOL.CAPI/XMEM
-        @param to_bucket: Destination bucket name
+        @param to_bucket: Destination bucket (Bucket object)
         """
         self.__input = TestInputSingleton.input
         self.__remote_cluster_ref = remote_cluster_ref
@@ -578,21 +578,21 @@ class XDCReplication:
         src_master = self.__src_cluster.get_master_node()
         # Is bucket replication paused?
         if not RestConnection(src_master).is_replication_paused(
-                self.__from_bucket,
-                self.__to_bucket):
+                self.__from_bucket.name,
+                self.__to_bucket.name):
             raise XDCRException(
                 "XDCR is not paused for SrcBucket: {0}, Target Bucket: {1}".
-                format(self.__from_bucket,
-                       self.__to_bucket))
+                format(self.__from_bucket.name,
+                       self.__to_bucket.name))
 
     def pause(self, verify=False):
         """Pause replication"""
         src_master = self.__src_cluster.get_master_node()
         if not RestConnection(src_master).is_replication_paused(
-                self.__from_bucket, self.__to_bucket):
+                self.__from_bucket.name, self.__to_bucket.name):
             RestConnection(src_master).set_xdcr_param(
-                self.__from_bucket,
-                self.__to_bucket,
+                self.__from_bucket.name,
+                self.__to_bucket.name,
                 'pauseRequested',
                 'true')
 
@@ -636,8 +636,8 @@ class XDCReplication:
         """Verify if replication is resumed"""
         src_master = self.__src_cluster.get_master_node()
         # Is bucket replication paused?
-        if RestConnection(src_master).is_replication_paused(self.__from_bucket,
-                                                            self.__to_bucket):
+        if RestConnection(src_master).is_replication_paused(self.__from_bucket.name,
+                                                            self.__to_bucket.name):
             raise XDCRException(
                 "Replication is not resumed for SrcBucket: {0}, \
                 Target Bucket: {1}".format(self.__from_bucket, self.__to_bucket))
@@ -649,9 +649,9 @@ class XDCReplication:
         """Resume replication if paused"""
         src_master = self.__src_cluster.get_master_node()
         if RestConnection(src_master).is_replication_paused(
-                self.__from_bucket, self.__to_bucket):
-            RestConnection(src_master).set_xdcr_param(self.__from_bucket,
-                                                      self.__to_bucket,
+                self.__from_bucket.name, self.__to_bucket.name):
+            RestConnection(src_master).set_xdcr_param(self.__from_bucket.name,
+                                                      self.__to_bucket.name,
                                                       'pauseRequested',
                                                       'false')
 
