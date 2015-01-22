@@ -117,19 +117,19 @@ class SQLDefinitionGenerator:
 			QueryDefinition(
 				index_name=index_name_prefix+"join_yr",
 							 index_fields = ["join_yr"],
-							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "join_yr > 1999 and join_yr < 2014"),
+							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "join_yr > 2010 and join_yr < 2014"),
 							 groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, AND,"employee"]))
 		definitions_list.append(
 			QueryDefinition(
 				index_name=index_name_prefix+"job_title_join_yr",
 							 index_fields = ["join_yr","job_title"],
-							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" and join_yr > 1999 and join_yr < 2014"),
+							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" and join_yr > 2010 and join_yr < 2014"),
 							 groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,AND,"employee"]))
 		definitions_list.append(
 			QueryDefinition(
 				index_name=index_name_prefix+"job_title_join_yr",
 							 index_fields = ["join_yr","job_title"],
-							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" or join_yr > 1999 and join_yr < 2004 ORDER BY job_title"),
+							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" or join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
 							 groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,OR,"employee"]))
 		return definitions_list
 
