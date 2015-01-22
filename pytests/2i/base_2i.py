@@ -27,7 +27,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         super(BaseSecondaryIndexingTests, self).tearDown()
 
     def create_index(self, bucket, query_definition, verifycreate = True):
-        self.query = query_definition.generate_index_create_query(bucket = bucket)
+        self.query = query_definition.generate_index_create_query(bucket = bucket,
+         use_gsi_for_secondary = self.use_gsi_for_secondary)
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         if verifycreate:

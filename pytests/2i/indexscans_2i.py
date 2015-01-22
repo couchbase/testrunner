@@ -27,7 +27,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
     	self.run_multi_operations(
 			buckets = self.buckets,
 			query_definitions = [query_definition],
-			create_index = self.run_create_index, drop_index = self.eun_drop_index,
+			create_index = self.run_create_index, drop_index = self.run_drop_index,
 			query_with_explain = self.run_query_with_explain, query = self.run_query)
 
     def test_multi_create_query_explain_drop_index(self):
