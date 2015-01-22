@@ -27,40 +27,41 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
     	self.run_multi_operations(
 			buckets = self.buckets,
 			query_definitions = [query_definition],
-			create_index = True, drop_index = True,
-			query_with_explain = True, query = True)
+			create_index = self.run_create_index, drop_index = self.eun_drop_index,
+			query_with_explain = self.run_query_with_explain, query = self.run_query)
 
     def test_multi_create_query_explain_drop_index(self):
-    	if self.async_run:
+    	if self.run_async:
     		tasks = self.async_run_multi_operations(buckets = self.buckets,
             	query_definitions = self.query_definitions,
-            	create_index = True, drop_index = False,
+            	create_index = self.run_create_index, drop_index = False,
             	query_with_explain = False, query = False)
     		self._run_tasks(tasks)
     		tasks = self.async_run_multi_operations(buckets = self.buckets,
             	query_definitions = self.query_definitions,
             	create_index = False, drop_index = False,
-            	query_with_explain = False, query = True)
+            	query_with_explain = False, query = self.run_query)
     		self._run_tasks(tasks)
     		tasks = self.async_run_multi_operations(buckets = self.buckets,
             	query_definitions = self.query_definitions,
             	create_index = False, drop_index = False,
-            	query_with_explain = True, query = False)
+            	query_with_explain = self.run_query_with_explain, query = False)
     		self._run_tasks(tasks)
     		tasks = self.async_run_multi_operations(buckets = self.buckets,
             	query_definitions = self.query_definitions,
-            	create_index = False, drop_index = True,
+            	create_index = False, drop_index = self.run_drop_index,
             	query_with_explain = False, query = False)
     		self._run_tasks(tasks)
     	else:
         	self.run_multi_operations(buckets = self.buckets,
             	query_definitions = self.query_definitions,
-            	create_index = True, drop_index = True,
-            	query_with_explain = True, query = True)
+            	create_index = self.run_create_index, drop_index = self.run_drop_index,
+            	query_with_explain = self.run_query_with_explain, query = self.run_query)
 
     def _run_tasks(self, tasks):
     	for task in tasks:
     		task.result()
+
     def _translate_where_clause(self, query):
     	query = query.replace("EQUALS","==")
     	query = query.replace("NOT_EQUALS","!=")

@@ -50,7 +50,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_server_retstart(self):
         self.check_and_run_operations(buckets = self.buckets, before = True)
-        self.sleep(5, "Wait some time for rebalance process and then kill memcached")
+        self.sleep(5, "Wait some time for rebalance process and then restart server")
         for node in self.nodes_out_list:
             remote = RemoteMachineShellConnection(node)
             remote.stop_server()

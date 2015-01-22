@@ -80,12 +80,6 @@ class SQLDefinitionGenerator:
 		definitions_list.append(
 			QueryDefinition(
 				index_name=index_name_prefix+"job_title",
-				index_fields = ["job_title"],
-				query_template = RANGE_SCAN_GROUP_BY_TEMPLATE.format("job_title, name","job_title IS NOT NULL","job_title"),
-				groups = [SIMPLE_INDEX, FULL_SCAN, GROUP_BY, "employee","isnotnull"]))
-		definitions_list.append(
-			QueryDefinition(
-				index_name=index_name_prefix+"job_title",
 							 index_fields = ["job_title"],
 							 query_template = RANGE_SCAN_ORDER_BY_TEMPLATE.format(emit_fields,"job_title IS NOT NULL","job_title"),
 							 groups = [SIMPLE_INDEX, FULL_SCAN, ORDER_BY, "employee","isnotnull"]))

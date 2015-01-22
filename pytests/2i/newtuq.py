@@ -22,7 +22,7 @@ from memcached.helper.data_helper import MemcachedClientHelper
 class QueryTests(BaseTestCase):
     def setUp(self):
         super(QueryTests, self).setUp()
-        self.async_run = self.input.param("async_run", False)
+        self.run_async = self.input.param("run_async", False)
         self.version = self.input.param("cbq_version", "git_repo")
         if self.input.tuq_client and "client" in self.input.tuq_client:
             self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])

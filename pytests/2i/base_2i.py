@@ -5,6 +5,10 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def setUp(self):
         super(BaseSecondaryIndexingTests, self).setUp()
+        self.run_create_index= self.input.param("run_create_index",True)
+        self.run_drop_index= self.input.param("run_drop_index",True)
+        self.run_query_with_explain= self.input.param("run_query_with_explain",True)
+        self.run_query= self.input.param("run_query",True)
         self.graceful = self.input.param("graceful",False)
         self.groups = self.input.param("groups", "simple").split(":")
         query_definition_generator = SQLDefinitionGenerator()
