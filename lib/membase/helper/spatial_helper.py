@@ -30,7 +30,9 @@ class SpatialHelper:
         self.num_nodes_to_add = self.input.param('num_nodes_to_add', 0)
         self.num_nodes_to_remove = self.input.param('num_nodes_to_remove', 0)
         self.skip_rebalance = self.input.param("skip_rebalance", False)
-        self.failover_factor = self.input.param("failover-factor", 1)
+        self.failover_factor = self.input.param("failover-factor", 0)
+        self.num_nodes_warmup = self.input.param('num_nodes_warmup', 0)
+        self.num_nodes_reboot = self.input.param('num_nodes_reboot', 0)
 
         # A set of indexes that were created with create_spatial_index_fun
         # It's a set, so indexes can be updated without problems
@@ -129,7 +131,7 @@ class SpatialHelper:
                             time.sleep(1)
                     else:
                         raise e
-        self.log.info("inserted {0} json documents".format(num_of_docs))
+        self.log.info("Inserted {0} json documents".format(num_of_docs))
         return doc_names
 
     def create_default_views(self, is_one_ddoc=False):

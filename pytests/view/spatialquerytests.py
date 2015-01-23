@@ -96,7 +96,7 @@ class SpatialQueryTests(unittest.TestCase):
         data_set.add_range_and_limit_queries()
         self._query_test_init(data_set)
 
-
+## Rebalance In
     def test_rebalance_in_simple_dataset_limit_queries(self):
         num_docs = self.helper.input.param("num-docs")
         self.log.info("description : Rebalance In and limit queries on a simple "
@@ -169,6 +169,7 @@ class SpatialQueryTests(unittest.TestCase):
         data_set.add_range_and_limit_queries()
         self._rebalance_cluster(data_set)
 
+#Rebalance Out
     def test_rebalance_out_simple_dataset_limit_queries(self):
         num_docs = self.helper.input.param("num-docs")
         self.log.info("description : Rebalance Out and  limit queries on a simple "
@@ -241,6 +242,155 @@ class SpatialQueryTests(unittest.TestCase):
         data_set.add_range_and_limit_queries()
         self._rebalance_cluster(data_set)
 
+# Warmup Tests
+
+    def test_warmup_simple_dataset_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Warmup with skip and limit queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_limit_queries()
+        self._query_test_init_integration(data_set)
+
+    def test_warmup_simple_dataset_skip_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Warmup with  skip (and limit) queries on a "
+                      "simple dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_skip_queries()
+        self._query_test_init_integration(data_set)
+
+    def test_warmup_simple_dataset_bbox_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Warmup with  bounding box queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_bbox_queries()
+        self._query_test_init_integration(data_set)
+
+    def test_warmup_simple_dataset_range_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Warmup with  range queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_range_queries()
+        self._query_test_init_integration(data_set)
+
+    def test_warmup_multidim_dataset_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Warmup with  limit queries on a multidimensional "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_limit_queries()
+        self._query_test_init_integration(data_set)
+
+    def test_warmup_multidim_dataset_skip_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Warmup with  skip (and limit) queries on a "
+                      "multidimensional dataset with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_skip_queries()
+        self._query_test_init_integration(data_set)
+
+    def test_warmup_multidim_dataset_range_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Warmup with  range queries on a "
+                      "multidimensional with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_range_queries()
+        self._query_test_init_integration(data_set)
+
+    def test_warmup_multidim_dataset_range_and_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Warmup with  range queries with limits on a "
+                      "multidimensional with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_range_and_limit_queries()
+        self._query_test_init_integration(data_set)
+
+
+# Reboot Tests
+    def test_reboot_simple_dataset_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Reboot and limit queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_limit_queries()
+        self._query_test_init_integration(data_set)
+
+    def test_reboot_simple_dataset_skip_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Reboot with  skip (and limit) queries on a "
+                      "simple dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_skip_queries()
+        self._query_test_init_integration(data_set)
+
+    def test_reboot_simple_dataset_bbox_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Reboot with  bounding box queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_bbox_queries()
+        self._query_test_init_integration(data_set)
+
+    def test_reboot_simple_dataset_range_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Reboot with  range queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_range_queries()
+        self._query_test_init_integration(data_set)
+
+    def test_reboot_multidim_dataset_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Reboot with  limit queries on a multidimensional "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_limit_queries()
+        self._query_test_init_integration(data_set)
+
+    def test_reboot_multidim_dataset_skip_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Reboot with  skip (and limit) queries on a "
+                      "multidimensional dataset with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_skip_queries()
+        self._query_test_init_integration(data_set)
+
+    def test_reboot_multidim_dataset_range_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Reboot with  range queries on a "
+                      "multidimensional with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_range_queries()
+        self._query_test_init_integration(data_set)
+
+    def test_reboot_multidim_dataset_range_and_limit_queries(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Reboot with  range queries with limits on a "
+                      "multidimensional with {0} docs".format(num_docs))
+
+        data_set = MultidimDataSet(self.helper, num_docs)
+        data_set.add_range_and_limit_queries()
+        self._query_test_init_integration(data_set)
+
+# Failover Tests
     def test_failover_simple_dataset_limit_queries(self):
         num_docs = self.helper.input.param("num-docs")
         self.log.info("description : Failover and limit queries on a simple "
@@ -341,12 +491,69 @@ class SpatialQueryTests(unittest.TestCase):
         else:
             self._check_view_intergrity(views)
 
+    ###
+    # load the data defined for this dataset.
+    # create views and query the data as it loads.
+    # verification is optional, and best practice is to
+    # set to False if you plan on running _query_all_views()
+    # later in the test case
+    ###
+    def _query_test_init_blah2(self, data_set, verify_results = True):
+        views = data_set.views
+        inserted_keys = data_set.load()
+        target_fn = ()
+
+        if self.helper.num_nodes_reboot >= 1:
+            target_fn = self._reboot_cluster(data_set)
+        elif self.helper.num_nodes_warmup >= 1:
+            target_fn = self._warmup_cluster(data_set)
+        elif self.helper.num_nodes_to_add >= 1 or self.helper.num_nodes_to_remove >= 1:
+            target_fn = self._rebalance_cluster(data_set)
+
+        t = Thread(target=target_fn)
+        t.start()
+        # run queries while loading data
+        while t.is_alive():
+            self._query_all_views(views, False)
+            time.sleep(5)
+        t.join()
+
+        # results will be verified if verify_results set
+        if verify_results:
+            self._query_all_views(views, verify_results)
+        else:
+            self._check_view_intergrity(views)
+
+    def _query_test_init_integration(self, data_set, verify_results = True):
+        views = data_set.views
+        inserted_keys = data_set.load()
+        target_fn = ()
+
+        if self.helper.num_nodes_reboot >= 1:
+            target_fn = self._reboot_cluster(data_set)
+        elif self.helper.num_nodes_warmup >= 1:
+            target_fn = self._warmup_cluster(data_set)
+        elif self.helper.num_nodes_to_add >= 1 or self.helper.num_nodes_to_remove >= 1:
+            target_fn = self._rebalance_cluster(data_set)
+
+        t = Thread(target=self._query_all_views(views, False))
+        t.start()
+        # run queries while loading data
+        while t.is_alive():
+            self._rebalance_cluster(data_set)
+            time.sleep(5)
+        t.join()
+
+        # results will be verified if verify_results set
+        if verify_results:
+            self._query_all_views(views, verify_results)
+        else:
+            self._check_view_intergrity(views)
 
     ##
     # run all queries for all views in parallel
     ##
     def _query_all_views(self, views, verify_results = True):
-
         query_threads = []
         for view in views:
             t = RunQueriesThread(view, verify_results)
@@ -370,7 +577,7 @@ class SpatialQueryTests(unittest.TestCase):
                 self.fail(result.test_results.failures[0][1])
 
     ###
-    # Failover nodes
+    # Rebalance
     ###
     def _rebalance_cluster(self, data_set):
         if self.helper.num_nodes_to_add >= 1:
@@ -409,6 +616,46 @@ class SpatialQueryTests(unittest.TestCase):
                 shell.start_couchbase()
                 time.sleep(10)
                 shell.disconnect()
+
+    ###
+    # Warmup
+    ###
+    def _warmup_cluster(self, data_set):
+        for server in self.servers[0:self.helper.num_nodes_warmup]:
+            remote = RemoteMachineShellConnection(server)
+            remote.stop_server()
+            remote.start_server()
+            remote.disconnect()
+            self.log.info("Node {0} should be warming up ".format(server.ip))
+            time.sleep(20)
+        self._query_test_init(data_set)
+
+    # REBOOT
+    def _reboot_cluster(self, data_set):
+        try:
+            for server in self.servers[0:self.helper.num_nodes_reboot]:
+                shell = RemoteMachineShellConnection(server)
+                if shell.extract_remote_info().type.lower() == 'windows':
+                    o, r = shell.execute_command("shutdown -r -f -t 0")
+                    shell.log_command_output(o, r)
+                    shell.disconnect()
+                    self.log.info("Node {0} is being stopped".format(server.ip))
+                elif shell.extract_remote_info().type.lower() == 'linux':
+                    o, r = shell.execute_command("reboot")
+                    shell.log_command_output(o, r)
+                    shell.disconnect()
+                    self.log.info("Node {0} is being stopped".format(server.ip))
+
+                    time.sleep(60)
+                    shell = RemoteMachineShellConnection(server)
+                    command = "/sbin/iptables -F"
+                    o, r = shell.execute_command(command)
+                    shell.log_command_output(o, r)
+                    shell.disconnect()
+                    self.log.info("Node {0} backup".format(server.ip))
+        finally:
+            self.log.info("Warming-up server ..".format(server.ip))
+            time.sleep(100)
 
 
 
