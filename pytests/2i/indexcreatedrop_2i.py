@@ -68,6 +68,41 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     		self.query = query_definition.generate_index_drop_query(bucket = self.buckets[0].name)
     		actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
 
+    def test_failure_create_index_big_fields(self):
+        field_name = ""
+        field_name += ",".join([ str(a) for a in range(1,100)]).replace(",","_")
+        query_definition = QueryDefinition(
+            index_name="test_failure_create_index_existing_index",
+            index_fields = field_name,
+            query_template = "",
+            groups = [])
+        self.query = query_definition.generate_index_create_query(bucket = self.buckets[0])
+        try:
+            # create index
+            server = self.get_nodes_from_services_map(service_type = "n1ql")
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        except Exception, ex:
+            msg="Expression not indexable"
+            self.assertTrue(msg in str(ex),
+                " 5000 error not recived as expected {0}".format(ex))
+
+    def test_create_gsi_index_without_primary_index(self):
+        self.indexes= self.input.param("indexes","").split(":")
+        query_definition = QueryDefinition(
+            index_name="test_failure_create_index_existing_index",
+            index_fields = self.indexes,
+            query_template = "",
+            groups = [])
+        self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name)
+        try:
+            # create index
+            server = self.get_nodes_from_services_map(service_type = "n1ql")
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        except Exception, ex:
+            msg="Keyspace not_present_bucket name not found - cause: Bucket not_present_bucket not found. - cause: No bucket named not_present_bucket"
+            self.assertTrue(msg in str(ex),
+                " 5000 error not recived as expected {0}".format(ex))
+
     def test_failure_create_index_non_existing_bucket(self):
     	self.indexes= self.input.param("indexes","").split(":")
     	query_definition = QueryDefinition(
