@@ -52,12 +52,6 @@ class CliBaseTest(BaseTestCase):
                 rest.delete_zone(zone)
         super(CliBaseTest, self).tearDown()
 
-    def _set_vbucket(self, key, vbucket= -1):
-        if vbucket < 0:
-            self.vbucketId = (((zlib.crc32(key)) >> 16) & 0x7fff) & (self.vbucket_count - 1)
-        else:
-            self.vbucketId = vbucket
-
     """ in sherlock, there is an extra value called runCmd in the 1st element """
     def del_runCmd_value(self, output):
         if "runCmd" in output[0]:
