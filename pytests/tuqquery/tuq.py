@@ -24,6 +24,8 @@ class QueryTests(BaseTestCase):
             self.skip_buckets_handle = True
         super(QueryTests, self).setUp()
         self.version = self.input.param("cbq_version", "git_repo")
+        self.flat_json = self.input.param("flat_json", False)
+        self.directory_flat_json = self.input.param("directory_flat_json", "/tmp/")
         if self.input.tuq_client and "client" in self.input.tuq_client:
             self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
         else:
@@ -47,18 +49,19 @@ class QueryTests(BaseTestCase):
             self.full_list = self.generate_full_docs_list(self.gens_load)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
-        # temporary for MB-12848
-        self.create_primary_index_for_3_0_and_greater()
 
     def suite_setUp(self):
         try:
             if not self.skip_load:
-                self.load(self.gens_load, flag=self.item_flag)
-                self.create_primary_index_for_3_0_and_greater()
+                if self.flat_json:
+                    self.load_directory(self.gens_load)
+                else:
+                    self.load(self.gens_load, flag=self.item_flag)
+            self.create_primary_index_for_3_0_and_greater()
             if not self.input.param("skip_build_tuq", False):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
-        except:
+        except Exception, ex:
             self.log.error('SUITE SETUP FAILED')
             self.tearDown()
 
@@ -2586,7 +2589,18 @@ class QueryTests(BaseTestCase):
         self.shell.execute_command("export NS_SERVER_CBAUTH_USER=\"{0}\"".format(server.rest_username))
         self.shell.execute_command("export NS_SERVER_CBAUTH_PWD=\"{0}\"".format(server.rest_password))
         self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip,server.port))
-        if self.version == "git_repo":
+        if self.flat_json:
+            if os == 'windows':
+                gopath = testconstants.WINDOWS_GOPATH
+                cmd = "cd %s/src/github.com/couchbaselabs/query/server/cbq-engine; " % (gopath) +\
+                "./cbq-engine.exe -datastore=dir:%sdata >/dev/null 2>&1 &" % (self.directory_flat_json)
+            else:
+                gopath = testconstants.LINUX_GOPATH
+                cmd = "cd %s/src/github.com/couchbaselabs/query/server/cbq-engine; " % (gopath) +\
+                "./cbq-engine -datastore=dir:%s/data >n1ql.log 2>&1 &" %(self.directory_flat_json)
+            o = self.shell.execute_command(cmd)
+            self.log.info(o)
+        elif self.version == "git_repo":
             if os != 'windows':
                 gopath = testconstants.LINUX_GOPATH
             else:
@@ -2687,6 +2701,30 @@ class QueryTests(BaseTestCase):
         for server in self.servers:
             shell_connection = RemoteMachineShellConnection(self.master)
             shell_connection.execute_command(cmd)
+
+    def load_directory(self, generators_load):
+        gens_load = []
+        for generator_load in generators_load:
+            gens_load.append(copy.deepcopy(generator_load))
+        items = 0
+        for gen_load in gens_load:
+            items += (gen_load.end - gen_load.start)
+        shell = RemoteMachineShellConnection(self.master)
+        for bucket in self.buckets:
+            try:
+                self.log.info("Delete directory's content %s/data/default/%s ..." % (self.directory_flat_json, bucket.name))
+                o = shell.execute_command('rm -rf %sdata/default/*' % self.directory_flat_json)
+                self.log.info("Create directory %s/data/default/%s..." % (self.directory_flat_json, bucket.name))
+                o = shell.execute_command('mkdir -p %sdata/default/%s' % (self.directory_flat_json, bucket.name))
+                self.log.info("Load %s documents to %sdata/default/%s..." % (items, self.directory_flat_json, bucket.name))
+                for gen_load in gens_load:
+                    for i in xrange(gen_load.end):
+                        key, value = gen_load.next()
+                        out = shell.execute_command("echo '%s' > %sdata/default/%s/%s.json" % (value, self.directory_flat_json,
+                                                                                                bucket.name, key))
+                self.log.info("LOAD IS FINISHED")
+            finally:
+                shell.disconnect()
 
     def create_primary_index_for_3_0_and_greater(self):
         self.log.info("CHECK FOR PRIMARY INDEXES")
