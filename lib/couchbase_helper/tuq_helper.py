@@ -162,6 +162,7 @@ class N1QLHelper():
 
 
     def _start_command_line_query(self, server):
+        self._set_env_variable(server)
         if self.version == "git_repo":
             os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':
@@ -213,7 +214,6 @@ class N1QLHelper():
                 cmd = "cd /cygdrive/c/tuq;./cbq-engine.exe -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
                                                                 server.ip, server.port)
             self.shell.execute_command(cmd)
-
     def _parse_query_output(self, output):
         if output.find("cbq>") == 0:
             output = output[output.find("cbq>") + 4:].strip()
@@ -288,3 +288,8 @@ class N1QLHelper():
                 for key in val.keys():
                     result_set.append(val[key])
         return result_set
+
+    def _set_env_variable(self, server):
+        self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip,server.port))
+        self.shell.execute_command("export NS_SERVER_CBAUTH_USER=\"{0}\"".format(server.rest_username))
+        self.shell.execute_command("export NS_SERVER_CBAUTH_PWD=\"{0}\"".format(server.rest_password))
