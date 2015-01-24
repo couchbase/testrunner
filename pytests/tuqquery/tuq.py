@@ -38,6 +38,8 @@ class QueryTests(BaseTestCase):
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.skip_load = self.input.param("skip_load", False)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
+        self.primary_indx_type = self.input.param("primary_indx_type", 'VIEWS')
+        self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         if not (hasattr(self, 'skip_generation') and self.skip_generation):
             self.full_list = self.generate_full_docs_list(self.gens_load)
         if self.input.param("gomaxprocs", None):
@@ -2693,8 +2695,12 @@ class QueryTests(BaseTestCase):
                 rest.get_ddoc(self.buckets[0], ddoc_name)
             except ReadDocumentException:
                 for bucket in self.buckets:
+                    if self.primary_indx_drop:
+                        self.log.info("Dropping primary index for %s ..." % bucket.name)
+                        self.query = "DROP PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
+                        self.sleep(3, 'Sleep for some time after index drop')
                     self.log.info("Creating primary index for %s ..." % bucket.name)
-                    self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
+                    self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
                     try:
                         self.run_cbq_query()
                     except Exception, ex:
