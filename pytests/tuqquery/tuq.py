@@ -2584,6 +2584,7 @@ class QueryTests(BaseTestCase):
             self.shell.execute_command(cmd)
 
     def _start_command_line_query(self, server, options=''):
+        out = ''
         os = self.shell.extract_remote_info().type.lower()
         self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip,server.port))
         self.shell.execute_command("export NS_SERVER_CBAUTH_USER=\"{0}\"".format(server.rest_username))
@@ -2598,8 +2599,8 @@ class QueryTests(BaseTestCase):
                 gopath = testconstants.LINUX_GOPATH
                 cmd = "cd %s/src/github.com/couchbaselabs/query/server/cbq-engine; " % (gopath) +\
                 "./cbq-engine -datastore=dir:%s/data >n1ql.log 2>&1 &" %(self.directory_flat_json)
-            o = self.shell.execute_command(cmd)
-            self.log.info(o)
+            out = self.shell.execute_command(cmd)
+            self.log.info(out)
         elif self.version == "git_repo":
             if os != 'windows':
                 gopath = testconstants.LINUX_GOPATH
@@ -2615,7 +2616,7 @@ class QueryTests(BaseTestCase):
                 cmd = "cd %s/src/github.com/couchbaselabs/query/server/cbq-engine; " % (gopath) +\
                 "./cbq-engine -datastore http://%s:%s/ %s >n1ql.log 2>&1 &" %(
                                                                 server.ip, server.port, options)
-            self.shell.execute_command(cmd)
+            out = self.shell.execute_command(cmd)
         elif self.version == "sherlock":
             if os == 'windows':
                 couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
@@ -2637,6 +2638,7 @@ class QueryTests(BaseTestCase):
                 cmd = "cd /cygdrive/c/tuq;./cbq-engine.exe -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
                                                                 server.ip, server.port)
             self.shell.execute_command(cmd)
+        return out
 
     def _parse_query_output(self, output):
         if output.find("cbq>") == 0:
