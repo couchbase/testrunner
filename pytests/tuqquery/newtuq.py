@@ -17,7 +17,6 @@ from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
-from couchbase_helper.tuq_helper import N1QLHelper
 
 class QueryTests(BaseTestCase):
     def setUp(self):
@@ -456,7 +455,10 @@ class QueryTests(BaseTestCase):
             self.shell.execute_command(cmd)
 
     def _start_command_line_query(self, server):
-        N1QLHelper(shell=self.shell)._set_env_variable(server)
+        self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip,server.port))
+        self.shell.execute_command("export NS_SERVER_CBAUTH_USER=\"{0}\"".format(server.rest_username))
+        self.shell.execute_command("export NS_SERVER_CBAUTH_PWD=\"{0}\"".format(server.rest_password))
+        self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip,server.port))
         if self.version == "git_repo":
             os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':

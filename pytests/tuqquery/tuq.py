@@ -2577,7 +2577,10 @@ class QueryTests(BaseTestCase):
 
     def _start_command_line_query(self, server, options=''):
         os = self.shell.extract_remote_info().type.lower()
-        N1QLHelper(shell=self.shell)._set_env_variable(server)
+        self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip,server.port))
+        self.shell.execute_command("export NS_SERVER_CBAUTH_USER=\"{0}\"".format(server.rest_username))
+        self.shell.execute_command("export NS_SERVER_CBAUTH_PWD=\"{0}\"".format(server.rest_password))
+        self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip,server.port))
         if self.version == "git_repo":
             if os != 'windows':
                 gopath = testconstants.LINUX_GOPATH
