@@ -54,3 +54,15 @@ class SGInstallerTest(GatewayBaseTest):
 
         self.assertEqual(error, [])
         self.assertEqual(output, temp_help)
+        shell.disconnect()
+
+
+    def testSGServiceInstallNoUser(self):
+        shell = RemoteMachineShellConnection(self.master)
+        self.kill_processes_gateway(shell)
+        self.uninstall_gateway(shell)
+        self.install_gateway(shell)
+        output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
+        self.assertEqual(error, [self.expected_error])
+        self.assertEqual(output, [])
+        shell.disconnect()

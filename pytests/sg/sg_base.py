@@ -35,6 +35,8 @@ class GatewayBaseTest(unittest.TestCase):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.version = self.input.param("version", "0.0.0-422")
+        self.extra_param = self.input.param("extra_param", "").replace("$", "=")  # '=' is a delimiter in conf file
+        self.expected_error = self.input.param("expected_error", "")
         self.servers = self.input.servers
         self.master = self.servers[0]
 
