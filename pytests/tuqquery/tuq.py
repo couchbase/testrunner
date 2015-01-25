@@ -15,6 +15,7 @@ from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
+from couchbase_helper.tuq_helper import N1QLHelper
 
 
 class QueryTests(BaseTestCase):
@@ -2575,8 +2576,9 @@ class QueryTests(BaseTestCase):
             self.shell.execute_command(cmd)
 
     def _start_command_line_query(self, server, options=''):
+        os = self.shell.extract_remote_info().type.lower()
+        N1QLHelper(shell=self.shell)._set_env_variable(server)
         if self.version == "git_repo":
-            os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':
                 gopath = testconstants.LINUX_GOPATH
             else:
@@ -2593,7 +2595,6 @@ class QueryTests(BaseTestCase):
                                                                 server.ip, server.port, options)
             self.shell.execute_command(cmd)
         elif self.version == "sherlock":
-            os = self.shell.extract_remote_info().type.lower()
             if os == 'windows':
                 couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
                 cmd = "cd %s; " % (couchbase_path) +\
@@ -2607,7 +2608,6 @@ class QueryTests(BaseTestCase):
             out = self.shell.execute_command(cmd)
             self.log.info(out)
         else:
-            os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':
                 cmd = "cd /tmp/tuq;./cbq-engine -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
                                                                 server.ip, server.port)
