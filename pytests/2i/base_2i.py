@@ -26,6 +26,7 @@ class BaseSecondaryIndexingTests(QueryTests):
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
 
+
     def create_index(self, bucket, query_definition, verifycreate = True):
         self.query = query_definition.generate_index_create_query(bucket = bucket,
          use_gsi_for_secondary = self.use_gsi_for_secondary)
@@ -33,6 +34,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         if verifycreate:
             check = self.n1ql_helper._is_index_in_list(bucket, query_definition.index_name, server = server)
+            self.log.info(" RESULT : {0}".format(check))
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
     def async_create_index(self, bucket, query_definition):
@@ -212,6 +214,19 @@ class BaseSecondaryIndexingTests(QueryTests):
                  query = self.query, n1ql_helper = self.n1ql_helper,
                  expected_result=expected_result)
 
+    def query_using_index_with_emptyset(self, bucket, query_definition):
+        self.gen_results.query = query_definition.generate_query(bucket = bucket)
+        self.log.info("Query : {0}".format(self.gen_results.query))
+        self.query = self.gen_results.query
+        server = self.get_nodes_from_services_map(service_type = "n1ql")
+        actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        self.verify_result_set_isempty(actual_result["results"])
+
+    def multi_query_using_index_with_emptyresult(self, buckets =[], query_definitions = []):
+        for bucket in buckets:
+            for query_definition in query_definitions:
+                self.query_using_index_with_emptyset(bucket.name, query_definition)
+
     def multi_query_using_index(self, buckets =[], query_definitions = [], expected_results = {}):
         for bucket in buckets:
             for query_definition in query_definitions:
@@ -364,6 +379,16 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.assertTrue(actual_result == expected_result,
                           msg % (actual_result[:100],actual_result[-100:],
                                  expected_result[:100],expected_result[-100:]))
+
+    def verify_index_absence(self, query_definitions, buckets):
+        server = self.get_nodes_from_services_map(service_type = "n1ql")
+        for bucket in buckets:
+            for query_definition in query_definitions:
+                check = self.n1ql_helper._is_index_in_list(bucket.name, query_definition.index_name, server = server)
+                self.assertFalse(check, " {0} was not absent as expected".format(query_definition.index_name))
+
+    def verify_result_set_isempty(self,result):
+        self.assertTrue(len(result) == 0, "Result is not empty {0}".format(result))
 
     def _gen_dict(self, result):
         result_set = []
