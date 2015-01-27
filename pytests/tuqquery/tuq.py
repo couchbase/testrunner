@@ -40,6 +40,9 @@ class QueryTests(BaseTestCase):
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.primary_indx_type = self.input.param("primary_indx_type", 'VIEWS')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
+        if self.input.param("reload_data", False):
+            self.gens_load = self.generate_docs(self.docs_per_day)
+            self.load(self.gens_load, flag=self.item_flag)
         if not (hasattr(self, 'skip_generation') and self.skip_generation):
             self.full_list = self.generate_full_docs_list(self.gens_load)
         if self.input.param("gomaxprocs", None):
