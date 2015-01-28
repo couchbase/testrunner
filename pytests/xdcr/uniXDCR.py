@@ -483,8 +483,8 @@ class unidirectional(XDCRNewBaseTest):
         self.setup_xdcr_and_load()
         self.verify_results()
 
-        bucket = self.dest_cluster.get_bucket(BUCKET_NAME.DEFAULT)
-        self.dest_cluster.flust_buckets([bucket])
+        bucket = self.dest_cluster.get_bucket_by_name(BUCKET_NAME.DEFAULT)
+        self.dest_cluster.flush_buckets([bucket])
 
         self.sleep(self._wait_timeout)
 
@@ -495,7 +495,7 @@ class unidirectional(XDCRNewBaseTest):
         self.setup_xdcr_and_load()
         self.verify_results()
 
-        bucket = self.dest_cluster.get_bucket(BUCKET_NAME.DEFAULT)
+        bucket = self.dest_cluster.get_bucket_by_name(BUCKET_NAME.DEFAULT)
         self.dest_cluster.delete_bucket(BUCKET_NAME.DEFAULT)
 
         self.dest_cluster.create_default_bucket(bucket.size, bucket.numReplicas, bucket.eviction_policy, bucket.bucket_priority)
