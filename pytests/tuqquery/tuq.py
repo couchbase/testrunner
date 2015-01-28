@@ -2583,8 +2583,11 @@ class QueryTests(BaseTestCase):
             cmd += "tar -xvf tuq.tar.gz;rm -rf tuq.tar.gz"
             self.shell.execute_command(cmd)
 
-    def _start_command_line_query(self, server, options=''):
+    def _start_command_line_query(self, server, options='', user=None, password=None):
+        auth_row = None
         out = ''
+        if user and password:
+            auth_row = '%s:%s@' % (user, password)
         os = self.shell.extract_remote_info().type.lower()
         self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip,server.port))
         self.shell.execute_command("export NS_SERVER_CBAUTH_USER=\"{0}\"".format(server.rest_username))
@@ -2610,24 +2613,24 @@ class QueryTests(BaseTestCase):
                 gopath = self.input.tuq_client["gopath"]
             if os == 'windows':
                 cmd = "cd %s/src/github.com/couchbaselabs/query/server/cbq-engine; " % (gopath) +\
-                "./cbq-engine.exe -datastore http://%s:%s/ %s >/dev/null 2>&1 &" %(
-                                                                server.ip, server.port, options)
+                "./cbq-engine.exe -datastore http://%s%s:%s/ %s >/dev/null 2>&1 &" %(
+                                                                ('', auth_row)[auth_row is not None], server.ip, server.port, options)
             else:
                 cmd = "cd %s/src/github.com/couchbaselabs/query/server/cbq-engine; " % (gopath) +\
-                "./cbq-engine -datastore http://%s:%s/ %s >n1ql.log 2>&1 &" %(
-                                                                server.ip, server.port, options)
+                "./cbq-engine -datastore http://%s%s:%s/ %s >n1ql.log 2>&1 &" %(
+                                                                ('', auth_row)[auth_row is not None], server.ip, server.port, options)
             out = self.shell.execute_command(cmd)
         elif self.version == "sherlock":
             if os == 'windows':
                 couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
                 cmd = "cd %s; " % (couchbase_path) +\
-                "./cbq-engine.exe -datastore http://%s:%s/ %s >/dev/null 2>&1 &" %(
-                                                                server.ip, server.port, options)
+                "./cbq-engine.exe -datastore http://%s%s:%s/ %s >/dev/null 2>&1 &" %(
+                                                                ('', auth_row)[auth_row is not None], server.ip, server.port, options)
             else:
                 couchbase_path = testconstants.LINUX_COUCHBASE_BIN_PATH
                 cmd = "cd %s; " % (couchbase_path) +\
-                "./cbq-engine -datastore http://%s:%s/ %s >n1ql.log 2>&1 &" %(
-                                                                server.ip, server.port, options)
+                "./cbq-engine -datastore http://%s%s:%s/ %s >n1ql.log 2>&1 &" %(
+                                                                ('', auth_row)[auth_row is not None], server.ip, server.port, options)
             out = self.shell.execute_command(cmd)
             self.log.info(out)
         else:
