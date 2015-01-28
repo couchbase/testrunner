@@ -19,6 +19,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
     @staticmethod
     def common_setup(self):
+        self.cluster_helper = Cluster()
         self.log = logger.Logger.get_logger()
         self.cluster_run = False
         self.input = TestInputSingleton.input
@@ -52,7 +53,6 @@ class SwapRebalanceBase(unittest.TestCase):
             self.log.info("==============  SwapRebalanceBase setup was started for test #{0} {1}=============="\
                       .format(self.case_number, self._testMethodName))
             SwapRebalanceBase.reset(self)
-            self.cluster_helper = Cluster()
 
             # Make sure the test is setup correctly
             min_servers = int(self.num_initial_servers) + int(self.num_swap)
