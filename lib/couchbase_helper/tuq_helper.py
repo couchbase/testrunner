@@ -159,8 +159,6 @@ class N1QLHelper():
         cmd = "rm -f {0}/meta;rm -f /tmp/log_upr_client.sock".format(couchbase_path)
         self.shell.execute_command(cmd)
 
-
-
     def _start_command_line_query(self, server):
         self._set_env_variable(server)
         if self.version == "git_repo":

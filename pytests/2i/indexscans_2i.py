@@ -1,5 +1,6 @@
 from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
+from couchbase_helper.tuq_generators import TuqGenerators
 QUERY_TEMPLATE = "SELECT {0} FROM %s "
 class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
 
@@ -37,32 +38,49 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
 			query_with_explain = self.run_query_with_explain, query = self.run_query)
 
     def test_multi_create_query_explain_drop_index(self):
-    	if self.run_async:
-    		tasks = self.async_run_multi_operations(buckets = self.buckets,
-            	query_definitions = self.query_definitions,
-            	create_index = self.run_create_index, drop_index = False,
-            	query_with_explain = False, query = False)
-    		self._run_tasks(tasks)
-    		tasks = self.async_run_multi_operations(buckets = self.buckets,
-            	query_definitions = self.query_definitions,
-            	create_index = False, drop_index = False,
-            	query_with_explain = False, query = self.run_query)
-    		self._run_tasks(tasks)
-    		tasks = self.async_run_multi_operations(buckets = self.buckets,
-            	query_definitions = self.query_definitions,
-            	create_index = False, drop_index = False,
-            	query_with_explain = self.run_query_with_explain, query = False)
-    		self._run_tasks(tasks)
-    		tasks = self.async_run_multi_operations(buckets = self.buckets,
-            	query_definitions = self.query_definitions,
-            	create_index = False, drop_index = self.run_drop_index,
-            	query_with_explain = False, query = False)
-    		self._run_tasks(tasks)
-    	else:
-        	self.run_multi_operations(buckets = self.buckets,
-            	query_definitions = self.query_definitions,
-            	create_index = self.run_create_index, drop_index = self.run_drop_index,
-            	query_with_explain = self.run_query_with_explain, query = self.run_query)
+        if self.run_async:
+            try:
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions,
+                    create_index = self.run_create_index, drop_index = False,
+                    query_with_explain = False, query = False)
+                self._run_tasks(tasks)
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions,
+                    create_index = False, drop_index = False,
+                    query_with_explain = False, query = self.run_query)
+                self._run_tasks(tasks)
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions,
+                    create_index = False, drop_index = False,
+                    query_with_explain = self.run_query_with_explain, query = False)
+                self._run_tasks(tasks)
+                # runs operations
+                self.run_doc_ops()
+                # verify results
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions,
+                    create_index = False, drop_index = False,
+                    query_with_explain = False, query = self.run_query)
+                self._run_tasks(tasks)
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions,
+                    create_index = False, drop_index = False,
+                    query_with_explain = self.run_query_with_explain, query = False)
+            except Exception, ex:
+                self.log.info(ex)
+                raise
+            finally:
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions,
+                    create_index = False, drop_index = self.run_drop_index,
+                    query_with_explain = False, query = False)
+                self._run_tasks(tasks)
+        else:
+            self.run_multi_operations(buckets = self.buckets,
+                query_definitions = self.query_definitions,
+                create_index = self.run_create_index, drop_index = self.run_drop_index,
+                query_with_explain = self.run_query_with_explain, query = self.run_query)
 
     def test_failure_query_with_non_existing_primary_index(self):
         self.indexes= self.input.param("indexes","").split(":")

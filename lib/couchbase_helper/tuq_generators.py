@@ -1,7 +1,6 @@
 from documentgenerator import  DocumentGenerator
 import re
 import datetime
-import uuid
 import logger
 import json
 import random
@@ -477,21 +476,24 @@ class TuqGenerators(object):
 
 class JsonGenerator:
 
-    def generate_docs_employee(self, docs_per_day = 1, start=0):
+    def generate_docs_employee(self, docs_per_day = 1, start=0, isShuffle = False):
         generators = []
-        types = ['Engineer', 'Sales', 'Support']
-        join_yr = [2010, 2011]
-        join_mo = xrange(1, 12 + 1)
-        join_day = xrange(1, 28 + 1)
+        types = self._shuffle(['Engineer', 'Sales', 'Support'],isShuffle)
+        join_yr = self._shuffle([2010, 2011],isShuffle)
+        join_mo = self._shuffle(xrange(1, 12 + 1),isShuffle)
+        join_day = self._shuffle(xrange(1, 28 + 1),isShuffle)
         template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
         template += ' "email":"{4}", "job_title":"{5}", "test_rate":{8}, "skills":{9},'
         template += '"VMs": {10},'
         template += ' "tasks_points" : {{"task1" : {6}, "task2" : {7}}}}}'
+        count = 1
         for info in types:
             for year in join_yr:
                 for month in join_mo:
                     for day in join_day:
-                        prefix = str(uuid.uuid4())[:7]
+                        random.seed(count)
+                        count+=1
+                        prefix = "employee"+str(random.random()*100000)
                         name = ["employee-%s" % (str(day))]
                         email = ["%s-mail@couchbase.com" % (str(day))]
                         vms = [{"RAM": month, "os": "ubuntu",
@@ -508,23 +510,26 @@ class JsonGenerator:
                                                start=start, end=docs_per_day))
         return generators
 
-    def generate_docs_sabre(self, docs_per_day = 1, start=0):
+    def generate_docs_sabre(self, docs_per_day = 1, start=0, isShuffle = False):
         generators = []
-        dests = ['BOS', 'MIA', 'SFO']
-        join_yr = [2010, 2011]
-        join_mo = xrange(1, 12 + 1)
-        join_day = xrange(1, 28 + 1)
+        dests = self._shuffle(['BOS', 'MIA', 'SFO'],isShuffle)
+        join_yr = self._shuffle([2010, 2011],isShuffle)
+        join_mo = self._shuffle(xrange(1, 12 + 1),isShuffle)
+        join_day = self._shuffle(xrange(1, 28 + 1),isShuffle)
         template = '{{ "Amount":{0}, "CurrencyCode":"{1}",'
         template += ' "TotalTax":{{"DecimalPlaces" : {2}, "Amount" : {3}, "CurrencyCode" : "{4}",}}, ,'
         template += ' "Tax":{5}, "FareBasisCode":{6}, "PassengerTypeQuantity":{7}, "TicketType":"{8}",'
         template += '"SequenceNumber": {9},'
         template += ' "DirectionInd" : "{10}",  "Itinerary" : {11}, "Destination" : "{12}",'
         template += '"join_yr":{13}, "join_mo":{14}, "join_day":{15}, "Codes" :{16}}}'
+        count = 1
         for dest in dests:
             for year in join_yr:
                 for month in join_mo:
                     for day in join_day:
-                        prefix = '%s_%s-%s-%s' % (dest, year, month, day)
+                        random.seed(count)
+                        count +=1
+                        prefix = '%s_%s-%s-%s' % (dest, year, month, day)+str(random.random()*1000000)
                         amount = [float("%s.%s" % (month, month))]
                         currency = [("USD", "EUR")[month in [1,3,5]]]
                         decimal_tax = [1,2]
@@ -628,30 +633,32 @@ class JsonGenerator:
                                                [[dest, dest]], start=start, end=docs_per_day))
         return generators
 
-    def generate_docs_sales(self, key_prefix = "sales_dataset", test_data_type = True, start=0, docs_per_day=None):
+    def generate_docs_sales(self, key_prefix = "sales_dataset", test_data_type = True, start=0, docs_per_day=None, isShuffle = False):
         generators = []
         if end is None:
             end = self.docs_per_day
-        join_yr = range(2008, 2008 + self.years)
-        join_mo = range(1, self.months + 1)
-        join_day = range(1, self.days + 1)
-
+        join_yr = self._shuffle(range(2008, 2008 + self.years),isShuffle)
+        join_mo = self._shuffle(range(1, self.months + 1),isShuffle)
+        join_day = self._shuffle(range(1, self.days + 1),isShuffle)
+        count = 1
         if test_data_type:
             template = '{{ "join_yr" : {0}, "join_mo" : {1}, "join_day" : {2},'
             template += ' "sales" : {3}, "delivery_date" : "{4}", "is_support_included" : {5},'
             template += ' "is_high_priority_client" : {6}, "client_contact" :  "{7}",'
             template += ' "client_name" : "{8}", "client_reclaims_rate" : {9}}}'
-            sales = [200000, 400000, 600000, 800000]
+            sales = self._shuffle([200000, 400000, 600000, 800000],isShuffle)
 
-            is_support = ['true', 'false']
-            is_priority = ['true', 'false']
-            contact = str(uuid.uuid4())[:10]
-            name = str(uuid.uuid4())[:10]
+            is_support = self._shuffle(['true', 'false'],isShuffle)
+            is_priority = self._shuffle(['true', 'false'],isShuffle)
+            contact = "contact_"+str(random.random()*10000000)
+            name ="name_"+str(random.random()*100000)
             rate = [x * 0.1 for x in range(0, 10)]
             for year in join_yr:
                 for month in join_mo:
                     for day in join_day:
-                        prefix = str(uuid.uuid4())[:7]
+                        random.seed(count)
+                        count +=1
+                        prefix = "prefix_"+str(random.random()*100000)
                         delivery = str(datetime.date(year, month, day))
                         generators.append(DocumentGenerator(key_prefix + prefix,
                                                   template,
@@ -666,11 +673,13 @@ class JsonGenerator:
                 for num in xrange(self.template_items_num - 2):
                     template += '"item_%s" : "value_%s",' % (num, num)
             template += ' "sales" : {3} }}'
-            sales = [200000, 400000, 600000, 800000]
+            sales = self._shuffle([200000, 400000, 600000, 800000],isShuffle)
             for year in join_yr:
                 for month in join_mo:
                     for day in join_day:
-                        prefix = str(uuid.uuid4())[:7]
+                        random.seed(count)
+                        count += 1
+                        prefix = str(random.random()*100000)
                         generators.append(DocumentGenerator(key_prefix + prefix,
                                                   template,
                                                   [year], [month], [day],
@@ -689,17 +698,17 @@ class JsonGenerator:
                                      end=end)
         return [gen_load]
 
-    def generate_docs_simple(self, key_prefix ="simple_dataset", start=0, docs_per_day = 1000):
+    def generate_docs_simple(self, key_prefix ="simple_dataset", start=0, docs_per_day = 1000, isShuffle = False):
         end = docs_per_day
-        age = range(start, end)
-        name = [key_prefix + '-' + str(i) for i in xrange(start, end)]
+        age = self._shuffle(range(start, end), isShuffle)
+        name = [key_prefix + '-' + str(i) for i in self._shuffle(xrange(start, end), isShuffle)]
         template = '{{ "age": {0}, "name": "{1}" }}'
-
         gen_load = DocumentGenerator(key_prefix, template, age, name, start=start, end=end)
         return [gen_load]
 
-    def generate_docs_employee_data(self, key_prefix ="employee_dataset", start=0, docs_per_day = 1):
+    def generate_docs_employee_data(self, key_prefix ="employee_dataset", start=0, docs_per_day = 1, isShuffle = False):
         generators = []
+        count = 1
         sys_admin_info = {"title" : "System Administrator and heliport manager",
                               "desc" : "...Last but not least, as the heliport manager, you will help maintain our growing fleet of remote controlled helicopters, that crash often due to inexperienced pilots.  As an independent thinker, you may be free to replace some of the technologies we currently use with ones you feel are better. If so, you should be prepared to discuss and debate the pros and cons of suggested technologies with other stakeholders",
                               "type" : "admin"}
@@ -709,12 +718,12 @@ class JsonGenerator:
         senior_arch_info = {"title" : "Senior Architect",
                                "desc" : "As a Member of Technical Staff, Senior Architect, you will design and implement cutting-edge distributed, scale-out data infrastructure software systems, which is a pillar for the growing cloud infrastructure. More specifically, you will bring Unix systems and server tech kung-fu to the team.",
                                "type" : "arch"}
-        data_sets = [sys_admin_info, ui_eng_info, senior_arch_info]
+        data_sets = self._shuffle([sys_admin_info, ui_eng_info, senior_arch_info],isShuffle)
         if end is None:
             end = self.docs_per_day
-        join_yr = range(2008, 2008 + self.years)
-        join_mo = range(1, self.months + 1)
-        join_day = range(1, self.days + 1)
+        join_yr = self._shuffle(range(2008, 2008 + self.years),isShuffle)
+        join_mo = self._shuffle(range(1, self.months + 1),isShuffle)
+        join_day = self._shuffle(range(1, self.days + 1),isShuffle)
         name = ["employee-%s-%s" % (key_prefix, str(i)) for i in xrange(start, end)]
         email = ["%s-mail@couchbase.com" % str(i) for i in xrange(start, end)]
         template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
@@ -723,7 +732,9 @@ class JsonGenerator:
             for year in join_yr:
                 for month in join_mo:
                     for day in join_day:
-                        prefix = str(uuid.uuid4())[:7]
+                        random.seed(count)
+                        count += 1
+                        prefix = str(random.random()*100000)
                         generators.append(DocumentGenerator(key_prefix + prefix,
                                                template,
                                                name, [year], [month], [day],
@@ -765,3 +776,12 @@ class JsonGenerator:
                 i+=1
         os.remove(dest_path)
         return list
+
+    def _shuffle(self, data, isShuffle):
+        if isShuffle:
+            if not isinstance(data, list):
+                data = [x for x in data]
+            random.shuffle(data)
+            return data
+        return data
+

@@ -1608,7 +1608,7 @@ class BaseTestCase(unittest.TestCase):
         self.verify_cluster_stats(self.servers[:self.nodes_init])
         self.log.info("LOAD IS FINISHED")
 
-    def generate_full_docs_list(self, gens_load, keys=[]):
+    def generate_full_docs_list(self, gens_load = [], keys=[], update = False):
         all_docs_list = []
         for gen_load in gens_load:
             doc_gen = copy.deepcopy(gen_load)
@@ -1616,7 +1616,13 @@ class BaseTestCase(unittest.TestCase):
                 key, val = doc_gen.next()
                 try:
                     val = json.loads(val)
-                    val['mutated'] = 0
+                    if 'mutated' not in val.keys():
+                        if update:
+                            val['mutated'] = 1
+                        else:
+                            val['mutated'] = 0
+                    else:
+                        val['mutated'] += val['mutated']
                 except TypeError:
                     pass
                 if keys:
@@ -1624,6 +1630,33 @@ class BaseTestCase(unittest.TestCase):
                         continue
                 all_docs_list.append(val)
         return all_docs_list
+
+    def calculate_data_change_distribution(self, create_per = 0 ,update_per = 0,
+     delete_per = 0, expiry_per = 0, start =0, end = 0):
+        count = end - start
+        change_dist_map = {}
+        create_count = count*create_per
+        start_pointer = start
+        end_pointer = start
+        if update_per != 0:
+            start_pointer = end_pointer
+            end_pointer = start_pointer+int(count*update_per)
+            change_dist_map["update"] = {"start":start_pointer,"end":end_pointer}
+        if expiry_per != 0:
+            start_pointer = end_pointer
+            end_pointer = start_pointer+int(count*expiry_per)
+            change_dist_map["expiry"] = {"start":start_pointer,"end":end_pointer}
+        if delete_per != 0:
+            start_pointer = end_pointer
+            end_pointer = start_pointer+int(count*delete_per)
+            change_dist_map["delete"] = {"start":start_pointer,"end":end_pointer}
+        if (1- (update_per+delete_per+expiry_per)) != 0:
+            start_pointer = end_pointer
+            end_pointer = end
+            change_dist_map["remaining"] = {"start":start_pointer,"end":end_pointer}
+        if create_per != 0:
+            change_dist_map["create"] = {"start":end,"end":create_count+end+1}
+        return change_dist_map
 
     def get_protocol_type(self):
         rest = RestConnection(self.master)
@@ -1638,6 +1671,17 @@ class BaseTestCase(unittest.TestCase):
         if self.testrunner_client != None:
             os.environ[testconstants.TESTRUNNER_CLIENT] = self.testrunner_client
 
+    def async_ops_all_buckets(self, docs_gen_map = {}):
+        for key in docs_gen_map.keys():
+            if key != "remaining":
+                op_type = key
+                if key == "expiry":
+                    op_type = "update"
+                self.load(docs_gen_map[key], op_type = op_type, exp = self.expiry)
+        if "expiry" in docs_gen_map.keys():
+            self._expiry_pager(self.master)
 
-
+    def _expiry_pager(self, master, val=10):
+        for bucket in self.buckets:
+            ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", val, bucket)
 
