@@ -782,7 +782,7 @@ class CouchbaseCluster:
         for server in self.__nodes:
             collect_data_files.cbdatacollectRunner(server, path).run()
 
-    def __collect_logs(self, cluster_run):
+    def collect_logs(self, cluster_run):
         """Grab cbcollect before we cleanup
         """
         self.__get_cbcollect_info()
@@ -792,8 +792,6 @@ class CouchbaseCluster:
     def cleanup_cluster(
             self,
             test_case,
-            collect_logs=False,
-            cluster_run=False,
             cluster_shutdown=True):
         """Cleanup cluster.
         1. Remove all remote cluster references.
@@ -805,9 +803,6 @@ class CouchbaseCluster:
         @param cluster_shutdown: True if Task (task.py) Scheduler needs to shutdown else False
         """
         try:
-            if collect_logs:
-                self.__log.info("Collecting logs @ {0}".format(self.__name))
-                self.__collect_logs(cluster_run)
             self.__log.info("removing xdcr/nodes settings")
             rest = RestConnection(self.__master_node)
             rest.remove_all_remote_clusters()
@@ -1841,10 +1836,13 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def tearDown(self):
         """Clusters cleanup"""
-        collect_logs = False
+
+        # collect logs before tearing down clusters
         if self._input.param("get-cbcollect-info", False) and \
             self.__is_test_failed():
-            collect_logs = True
+            for cb_cluster in self.__cb_clusters:
+                self.log.info("Collecting logs @ {0}".format(cb_cluster.get_name()))
+                cb_cluster.collect_logs(self.__is_cluster_run())
         try:
             if self.__is_cleanup_needed():
                 self.log.warn("CLEANUP WAS SKIPPED")
@@ -1854,9 +1852,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 .format(self.__case_number, self._testMethodName))
             for cb_cluster in self.__cb_clusters:
                 cb_cluster.cleanup_cluster(
-                    self,
-                    cluster_run=self.__is_cluster_run(),
-                    collect_logs=collect_logs)
+                    self)
             self.log.info(
                 "====  XDCRNewbasetests cleanup is finished for test #{0} {1} ==="
                 .format(self.__case_number, self._testMethodName))
