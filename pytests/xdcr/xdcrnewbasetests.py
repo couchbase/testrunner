@@ -785,16 +785,14 @@ class CouchbaseCluster:
     def __collect_logs(self, cluster_run):
         """Grab cbcollect before we cleanup
         """
-        if TestInputSingleton.input.param("get-cbcollect-info", False):
-            self.__get_cbcollect_info()
-
-        if not cluster_run and not self.__data_verified:
+        self.__get_cbcollect_info()
+        if not cluster_run:
             self.__collect_data_files()
 
     def cleanup_cluster(
             self,
             test_case,
-            test_failed=False,
+            collect_logs=False,
             cluster_run=False,
             cluster_shutdown=True):
         """Cleanup cluster.
@@ -807,7 +805,8 @@ class CouchbaseCluster:
         @param cluster_shutdown: True if Task (task.py) Scheduler needs to shutdown else False
         """
         try:
-            if test_failed:
+            if collect_logs:
+                self.__log.info("Collecting logs @ {0}".format(self.__name))
                 self.__collect_logs(cluster_run)
             self.__log.info("removing xdcr/nodes settings")
             rest = RestConnection(self.__master_node)
@@ -1842,6 +1841,10 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def tearDown(self):
         """Clusters cleanup"""
+        collect_logs = False
+        if self._input.param("get-cbcollect-info", False) and \
+            self.__is_test_failed():
+            collect_logs = True
         try:
             if self.__is_cleanup_needed():
                 self.log.warn("CLEANUP WAS SKIPPED")
@@ -1852,8 +1855,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             for cb_cluster in self.__cb_clusters:
                 cb_cluster.cleanup_cluster(
                     self,
-                    test_failed=self.__is_test_failed(),
-                    cluster_run=self.__is_cluster_run())
+                    cluster_run=self.__is_cluster_run(),
+                    collect_logs=collect_logs)
             self.log.info(
                 "====  XDCRNewbasetests cleanup is finished for test #{0} {1} ==="
                 .format(self.__case_number, self._testMethodName))
