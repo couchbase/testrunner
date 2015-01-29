@@ -10,9 +10,10 @@ from backuptests import BackupHelper
 class QueriesOpsTests(QueryTests):
     def setUp(self):
         super(QueriesOpsTests, self).setUp()
-        self.query_params = {'scan_consistency' : 'request_plus'}
+        self.query_params = {'scan_consistency' : 'statement_plus'}
         if self.nodes_init > 1 and not self._testMethodName == 'suite_setUp':
             self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
+        self.indx_type = self.input.param("indx_type", 'VIEWS')
 
     def suite_setUp(self):
         super(QueriesOpsTests, self).suite_setUp()
@@ -36,36 +37,56 @@ class QueriesOpsTests(QueryTests):
 
     def test_incr_rebalance_in(self):
         self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
-        self.test_min()
-        for i in xrange(1, self.nodes_in + 1):
-            rebalance = self.cluster.async_rebalance(self.servers[:i],
-                                                     self.servers[i:i+1], [])
+        index_field = self.input.param("index_field", 'job_title')
+        indexes = []
+        try:
+            indexes = self._create_multiple_indexes(index_field)
             self.test_min()
-            rebalance.result()
-            self.test_min()
+            for i in xrange(1, self.nodes_in + 1):
+                rebalance = self.cluster.async_rebalance(self.servers[:i],
+                                                         self.servers[i:i+1], [])
+                self.test_min()
+                rebalance.result()
+                self.test_min()
+        finally:
+            for bucket in self.buckets:
+                for index_name in set(indexes):
+                    self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
 
     def test_incr_rebalance_out(self):
         self.assertTrue(len(self.servers[:self.nodes_init]) > self.nodes_out,
                         "Servers are not enough")
-        self.test_min()
-        for i in xrange(1, self.nodes_out + 1):
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i-1)],
-                                    [],
-                                    self.servers[self.nodes_init - i:self.nodes_init - (i-1)])
+        index_field = self.input.param("index_field", 'job_title')
+        indexes = []
+        try:
+            indexes = self._create_multiple_indexes(index_field)
             self.test_min()
-            rebalance.result()
-            self.test_min()
+            for i in xrange(1, self.nodes_out + 1):
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i-1)],
+                                        [],
+                                        self.servers[self.nodes_init - i:self.nodes_init - (i-1)])
+                self.test_min()
+                rebalance.result()
+                self.test_min()
+        finally:
+            self._delete_multiple_indexes(indexes)
 
     def test_swap_rebalance(self):
         self.assertTrue(len(self.servers) >= self.nodes_init + self.nodes_in,
                         "Servers are not enough")
-        self.test_array_append()
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                               self.servers[self.nodes_init:self.nodes_init + self.nodes_in],
-                               self.servers[self.nodes_init - self.nodes_out:self.nodes_init])
-        self.test_array_append()
-        rebalance.result()
-        self.test_array_append()
+        index_field = self.input.param("index_field", 'name')
+        indexes = []
+        try:
+            indexes = self._create_multiple_indexes(index_field)
+            self.test_array_append()
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                   self.servers[self.nodes_init:self.nodes_init + self.nodes_in],
+                                   self.servers[self.nodes_init - self.nodes_out:self.nodes_init])
+            self.test_array_append()
+            rebalance.result()
+            self.test_array_append()
+        finally:
+            self._delete_multiple_indexes(indexes)
 
     def test_rebalance_with_server_crash(self):
         servr_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
@@ -86,31 +107,43 @@ class QueriesOpsTests(QueryTests):
         self.test_case()
 
     def test_failover(self):
-        servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
-        self.test_union()
-        self.cluster.failover(self.servers[:self.nodes_init], servr_out)
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                               [], servr_out)
-        self.test_union()
-        rebalance.result()
-        self.test_union()
+        index_field = self.input.param("index_field", 'name')
+        indexes = []
+        try:
+            indexes = self._create_multiple_indexes(index_field)
+            servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
+            self.test_union()
+            self.cluster.failover(self.servers[:self.nodes_init], servr_out)
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                   [], servr_out)
+            self.test_union()
+            rebalance.result()
+            self.test_union()
+        finally:
+            self._delete_multiple_indexes(indexes)
 
     def test_failover_add_back(self):
-        servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
-        self.test_union()
-
-        nodes_all = RestConnection(self.master).node_statuses()
-        nodes = []
-        for failover_node in servr_out:
-            nodes.extend([node for node in nodes_all
-                if node.ip != failover_node.ip or str(node.port) != failover_node.port])
-        self.cluster.failover(self.servers[:self.nodes_init], servr_out)
-        for node in nodes:
-            RestConnection(self.master).add_back_node(node.id)
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
-        self.test_union()
-        rebalance.result()
-        self.test_union()
+        index_field = self.input.param("index_field", 'name')
+        indexes = []
+        try:
+            indexes = self._create_multiple_indexes(index_field)
+            servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
+            self.test_union()
+    
+            nodes_all = RestConnection(self.master).node_statuses()
+            nodes = []
+            for failover_node in servr_out:
+                nodes.extend([node for node in nodes_all
+                    if node.ip != failover_node.ip or str(node.port) != failover_node.port])
+            self.cluster.failover(self.servers[:self.nodes_init], servr_out)
+            for node in nodes:
+                RestConnection(self.master).add_back_node(node.id)
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
+            self.test_union()
+            rebalance.result()
+            self.test_union()
+        finally:
+            self._delete_multiple_indexes(indexes)
 
     def test_autofailover(self):
         autofailover_timeout = 30
@@ -165,23 +198,29 @@ class QueriesOpsTests(QueryTests):
         self.test_union()
 
     def test_warmup(self):
-        num_srv_warm_up = self.input.param("srv_warm_up", self.nodes_init)
-        if self.input.tuq_client is None:
-            self.fail("For this test external tuq server is requiered. " +\
-                      "Please specify one in conf")
-        self.test_union_all()
-        for server in self.servers[self.nodes_init - num_srv_warm_up:self.nodes_init]:
-            remote = RemoteMachineShellConnection(server)
-            remote.stop_server()
-            remote.start_server()
-            remote.disconnect()
-        #run query, result may not be as expected, but tuq shouldn't fail
+        index_field = self.input.param("index_field", 'name')
+        indexes = []
         try:
+            indexes = self._create_multiple_indexes(index_field)
+            num_srv_warm_up = self.input.param("srv_warm_up", self.nodes_init)
+            if self.input.tuq_client is None:
+                self.fail("For this test external tuq server is requiered. " +\
+                          "Please specify one in conf")
             self.test_union_all()
-        except:
-            pass
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-        self.test_union_all()
+            for server in self.servers[self.nodes_init - num_srv_warm_up:self.nodes_init]:
+                remote = RemoteMachineShellConnection(server)
+                remote.stop_server()
+                remote.start_server()
+                remote.disconnect()
+            #run query, result may not be as expected, but tuq shouldn't fail
+            try:
+                self.test_union_all()
+            except:
+                pass
+            ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+            self.test_union_all()
+        finally:
+            self._delete_multiple_indexes(indexes)
 
     def test_with_backup(self):
         tmp_folder = "/tmp/backup"
@@ -267,6 +306,20 @@ class QueriesOpsTests(QueryTests):
             fn()
         finally:
             for bucket in self.buckets:
+                self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
+
+    def _create_multiple_indexes(self, index_field):
+        indexes = []
+        for bucket in self.bucket:
+            index_name = 'idx_%s_%s' % (bucket.name, index_field)
+            self.run_cbq_query(query="CREATE INDEX %s ON %s(%s)%s" % (index_name, bucket.name,
+                                                                      ','.join(index_field.split(';'))), self.indx_type)
+            indexes.append(index_name)
+        return indexes
+
+    def _delete_multiple_indexes(self, indexes):
+        for bucket in self.buckets:
+            for index_name in set(indexes):
                 self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
 
 
