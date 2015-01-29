@@ -269,6 +269,7 @@ class unidirectional(XDCRNewBaseTest):
         self.setup_xdcr_and_load()
         self.src_cluster.set_xdcr_param("xdcrFailureRestartInterval", 1)
         self.perform_update_delete()
+        self.sleep(self._wait_timeout / 2)
         rebooted_node = self.dest_cluster.reboot_one_node(self)
         NodeHelper.wait_node_restarted(rebooted_node, self, wait_time=self._wait_timeout * 4, wait_if_warmup=True)
 
@@ -369,8 +370,8 @@ class unidirectional(XDCRNewBaseTest):
     def verify_ssl_private_key_not_present_in_logs(self):
         zip_file = "%s.zip" % (self._input.param("file_name", "collectInfo"))
         try:
-            self.load_with_ops()
             self.shell = RemoteMachineShellConnection(self.src_master)
+            self.load_with_ops()
             self.shell.execute_cbcollect_info(zip_file)
             if self.shell.extract_remote_info().type.lower() != "windows":
                 command = "unzip %s" % (zip_file)
