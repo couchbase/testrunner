@@ -1892,6 +1892,9 @@ class RestConnection(object):
     def enable_xdcr_trace_logging(self):
         self.diag_eval('ale:set_loglevel(xdcr_trace, debug).')
 
+    def enable_goxdcr(self):
+        self.diag_eval('ns_config:set(goxdcr_enabled, true).')
+
     def get_recent_xdcr_vb_ckpt(self, src_bucket_name):
         command = 'ns_server_testrunner_api:grab_all_xdcr_checkpoints("%s", 10).' % src_bucket_name
         status, content = self.diag_eval(command)
