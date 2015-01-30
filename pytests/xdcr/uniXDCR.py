@@ -499,7 +499,7 @@ class unidirectional(XDCRNewBaseTest):
         bucket = self.dest_cluster.get_bucket_by_name(BUCKET_NAME.DEFAULT)
         self.dest_cluster.delete_bucket(BUCKET_NAME.DEFAULT)
 
-        self.dest_cluster.create_default_bucket(bucket.size, bucket.numReplicas, bucket.eviction_policy, bucket.bucket_priority)
+        self.dest_cluster.create_default_bucket(bucket.bucket_size)
 
         self.sleep(self._wait_timeout)
 
