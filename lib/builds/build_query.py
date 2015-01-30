@@ -70,7 +70,8 @@ class BuildQuery(object):
         pass
 
     def find_build(self, builds, product, type, arch, version, toy='', openssl='', \
-                   direct_build_url=None, distribution_version=None):
+                   direct_build_url=None, distribution_version=None, \
+                   distribution_type=""):
         if direct_build_url is None:
             if not isinstance(builds, list) and builds.url is not None:
                 return builds
@@ -179,14 +180,15 @@ class BuildQuery(object):
 
     def get_all_builds(self, version=None, timeout=None, direct_build_url=None, deliverable_type=None, \
                        architecture_type=None,edition_type=None, repo=None, toy="", \
-                       distribution_version=None):
+                       distribution_version=None, distribution_type=""):
         try:
             latestbuilds, latestchanges = \
                 self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds', version=version, \
                                            timeout=timeout, direct_build_url=direct_build_url, \
                                            deliverable_type=deliverable_type, architecture_type=architecture_type, \
                                            edition_type=edition_type,repo=repo, toy=toy, \
-                                           distribution_version=distribution_version)
+                                           distribution_version=distribution_version, \
+                                           distribution_type=distribution_type)
         except Exception as e:
             latestbuilds, latestchanges = \
                 self._get_and_parse_builds('http://packages.northscale.com.s3.amazonaws.com/latestbuilds', \
@@ -198,7 +200,7 @@ class BuildQuery(object):
     #baseurl = 'http://builds.hq.northscale.net/latestbuilds/'
     def _get_and_parse_builds(self, build_page, version=None, timeout=None, direct_build_url=None, \
                               deliverable_type=None, architecture_type=None, edition_type=None, \
-                              repo=None, toy="", distribution_version=None):
+                              repo=None, toy="", distribution_version=None, distribution_type=""):
         builds = []
         changes = []
         if direct_build_url is not None and direct_build_url != "":
@@ -209,7 +211,8 @@ class BuildQuery(object):
              architecture_type is not None and deliverable_type is not None:
             query = BuildQuery()
             build = query.create_build_url(version, deliverable_type, architecture_type, \
-                                           edition_type, repo, toy, distribution_version)
+                                           edition_type, repo, toy, distribution_version, \
+                                           distribution_type)
             return build, changes
         else:
             page = None
@@ -297,11 +300,13 @@ class BuildQuery(object):
                 debian7:  couchbase-server-enterprise_3.5.0-10-debian7_amd64.deb
                 ubuntu 12.04:
                     couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
+                mac:
+                    couchbase-server-enterprise_3.5.0-1120-macos_x86_64.zip
                 windows:
                     couchbase_server-enterprise-windows-amd64-3.5.0-926.exe
                     couchbase-server-enterprise_3.5.0-952-windows_amd64.exe"""
             if "3.5.0-" in build_info:
-                deb_words = ["debian7", "ubuntu12.04", "ubuntu14.04", "windows"]
+                deb_words = ["debian7", "ubuntu12.04", "ubuntu14.04", "windows", "macos"]
                 if "centos6" not in build_info:
                     tmp_str = build_info.split("_")
                     product_version = tmp_str[1].split("-")
@@ -318,7 +323,10 @@ class BuildQuery(object):
                         build_info = build_info.replace("-" + product_version,"")
                 if "x86_64" in build_info:
                     build.architecture_type = "x86_64"
-                    build_info = build_info.replace(".x86_64", "")
+                    if "centos6" in build_info:
+                        build_info = build_info.replace(".x86_64", "")
+                    elif "macos" in build_info:
+                        build_info = build_info.replace("_x86_64", "")
                 elif "x86" in build_info:
                     build.architecture_type = "x86"
                     build_info = build_info.replace(".x86", "")
@@ -329,7 +337,7 @@ class BuildQuery(object):
                     build.architecture_type = "x86_64"
                     build_info = build_info.replace("-amd64", "")
                 del_words = ["centos6", "debian7", "ubuntu12.04", "ubuntu14.04", \
-                             "windows"]
+                             "windows", "macos"]
                 if build_info.startswith("couchbase-server"):
                     build.product = build_info.split("-")
                     build.product = "-".join([i for i in build.product \
@@ -358,7 +366,7 @@ class BuildQuery(object):
             return build
 
     def create_build_url(self, version, deliverable_type, architecture_type, edition_type, \
-                         repo, toy, distribution_version):
+                         repo, toy, distribution_version, distribution_type):
         build = MembaseBuild()
         """
         version: 3.0.0-xx or 3.0.0-xx-rel
@@ -372,18 +380,21 @@ class BuildQuery(object):
                /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
                /723/couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
                /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb
+               /1120/couchbase-server-enterprise_3.5.0-1120-macos_x86_64.zip
         toy=Ce
         build.name = couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
         build.url = http://builds.hq.northscale.net/latestbuilds/couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
         For toy build: name  =  couchbase-server-community_cent58-3.0.0-toy-toyName-x86_64_3.0.0-xx-toy.rpm
         For windows build diff - and _ compare to unix build
                        name = couchbase_server-enterprise-windows-amd64-3.0.0-998.exe
+                              couchbase_server-enterprise-windows-amd64-3.0.2-1603.exe
                               couchbase-server-enterprise_3.5.0-952-windows_amd64.exe
         """
         build.toy = toy
         build.deliverable_type = deliverable_type
         build.architecture_type = architecture_type
         build.distribution_version = distribution_version
+        build.distribution_type = distribution_type
 
         os_name = ""
         setup = ""
@@ -437,7 +448,8 @@ class BuildQuery(object):
             /723/couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
             /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb
             /795/couchbase_server-enterprise-windows-amd64-3.5.0-795.exe
-            /952/couchbase-server-enterprise_3.5.0-952-windows_amd64.exe"""
+            /952/couchbase-server-enterprise_3.5.0-952-windows_amd64.exe
+            /1120/couchbase-server-enterprise_3.5.0-1120-macos_x86_64.zip"""
             build_number = build.product_version.replace(version[:6],"")
             if "centos" in distribution_version:
                 build.name = edition_type + "-" + build.product_version + \
@@ -456,6 +468,9 @@ class BuildQuery(object):
                     os_name = "debian7"
                 elif "windows" in distribution_version:
                     os_name = "windows"
+                elif "mac" in distribution_type:
+                    os_name = "macos"
+                    build.architecture_type = "x86_64"
                 build.name = edition_type + "_" + build.product_version + \
                    "-" + os_name + "_" +  build.architecture_type + \
                    "." + build.deliverable_type

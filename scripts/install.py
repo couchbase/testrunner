@@ -221,11 +221,13 @@ class Installer(object):
                                       architecture_type=info.architecture_type, \
                                       edition_type=name, \
                                       repo=build_repo, toy=toy, \
-                                      distribution_version=info.distribution_version.lower())
+                                      distribution_version=info.distribution_version.lower(), \
+                                      distribution_type=info.distribution_type.lower())
                     build = BuildQuery().find_build(builds, name, info.deliverable_type, \
                                                     info.architecture_type, version, toy=toy, \
                                                     openssl=openssl, direct_build_url=direct_build_url, \
-                                                    distribution_version=info.distribution_version.lower())
+                                                    distribution_version=info.distribution_version.lower(), \
+                                                    distribution_type=info.distribution_type.lower())
 
                 if build:
                     if 'amazon' in params:

@@ -1450,7 +1450,8 @@ class RemoteMachineShellConnection:
                                       edition_type=product_name, repo=build_repo, \
                                       distribution_version=self.info.distribution_version.lower())
                     build = query.find_build(builds, product_name, os_type, self.info.architecture_type, \
-                                      full_version, distribution_version=self.info.distribution_version.lower())
+                                      full_version, distribution_version=self.info.distribution_version.lower(), \
+                                      distribution_type=self.info.distribution_type.lower())
                     downloaded = self.download_binary_in_win(build.url, short_version)
                     if downloaded:
                         log.info('Successful download {0}.exe on {1} server'.format(short_version, self.ip))
