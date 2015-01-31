@@ -1895,8 +1895,17 @@ class RestConnection(object):
     def enable_goxdcr(self):
         self.diag_eval('ns_config:set(goxdcr_enabled, true).')
 
+    def is_goxdcr_enabled(self):
+        status, content = self.diag_eval('ns_config:read_key_fast(goxdcr_enabled, false)')
+        if content=="true":
+            return True
+        return False
+
     def get_recent_xdcr_vb_ckpt(self, src_bucket_name):
-        command = 'ns_server_testrunner_api:grab_all_xdcr_checkpoints("%s", 10).' % src_bucket_name
+        if not self.is_goxdcr_enabled():
+            command = 'ns_server_testrunner_api:grab_all_xdcr_checkpoints("%s", 10).' % src_bucket_name
+        else:
+            command = 'ns_server_testrunner_api:grab_all_goxdcr_checkpoints().'
         status, content = self.diag_eval(command)
         if not status:
             raise Exception("Unable to get recent XDCR checkpoint information")
@@ -1905,6 +1914,8 @@ class RestConnection(object):
         # convert string to dict using json
         chkpt_doc_string = json_parsed.values()[0].replace('"', '\"')
         chkpt_dict = json.loads(chkpt_doc_string)
+        if self.is_goxdcr_enabled():
+            chkpt_dict = chkpt_dict['checkpoints'][0]
         return chkpt_dict
 
     def set_reb_cons_view(self, disable):

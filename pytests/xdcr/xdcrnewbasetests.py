@@ -769,6 +769,11 @@ class CouchbaseCluster:
             else:
                 RestConnection(node).enable_xdcr_trace_logging()
 
+    def set_global_checkpt_interval(self, value):
+        RestConnection(self.__master_node).set_internalSetting(
+                        XDCR_PARAM.XDCR_CHECKPOINT_INTERVAL,
+                        value)
+
     def __get_cbcollect_info(self):
         """Collect cbcollectinfo logs for all the servers in the cluster.
         """
@@ -1922,9 +1927,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             REPLICATION_PROTOCOL.CAPI)
         self.__num_sasl_buckets = self._input.param("sasl_buckets", 0)
         self.__num_stand_buckets = self._input.param("standard_buckets", 0)
-        self.__create_default_bucket = self._input.param(
-            "default_bucket",
-            True)
+
         self.__num_replicas = self._input.param("replicas", 1)
         self.__eviction_policy = self._input.param(
             "eviction_policy",
@@ -1934,6 +1937,9 @@ class XDCRNewBaseTest(unittest.TestCase):
         # Public init parameters - Used in other tests too.
         # Move above private to this section if needed in future, but
         # Ensure to change other tests too.
+        self._create_default_bucket = self._input.param(
+            "default_bucket",
+            True)
         self._num_items = self._input.param("items", 1000)
         self._value_size = self._input.param("value_size", 256)
         self._poll_timeout = self._input.param("poll_timeout", 120)
@@ -1955,6 +1961,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._disable_compaction = self._input.param(
             "disable_compaction",
             "").split('-')
+        self._checkpoint_interval = self._input.param("checkpoint_interval", None)
 
     def __cleanup_previous(self):
         for cluster in self.__cb_clusters:
@@ -1969,6 +1976,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             None)
         for cluster in self.__cb_clusters:
             cluster.init_cluster(disabled_consistent_view)
+            if self._checkpoint_interval!=None:
+                cluster.set_global_checkpt_interval(self._checkpoint_interval)
 
     def __set_free_servers(self):
         total_servers = self._input.servers
@@ -2010,7 +2019,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         else:
             bucket_priority = None
         num_buckets = self.__num_sasl_buckets + \
-            self.__num_stand_buckets + int(self.__create_default_bucket)
+            self.__num_stand_buckets + int(self._create_default_bucket)
 
         for cb_cluster in self.__cb_clusters:
             total_quota = cb_cluster.get_mem_quota()
@@ -2018,7 +2027,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 total_quota,
                 num_buckets)
 
-            if self.__create_default_bucket:
+            if self._create_default_bucket:
                 cb_cluster.create_default_bucket(
                     bucket_size,
                     self.__num_replicas,
@@ -2045,7 +2054,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         else:
             bucket_priority = None
         num_buckets = self.__num_sasl_buckets + \
-            self.__num_stand_buckets + int(self.__create_default_bucket)
+            self.__num_stand_buckets + int(self._create_default_bucket)
 
         cb_cluster = self.get_cb_cluster_by_name(cluster_name)
         total_quota = cb_cluster.get_mem_quota()
@@ -2053,7 +2062,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             total_quota,
             num_buckets)
 
-        if self.__create_default_bucket:
+        if self._create_default_bucket:
             cb_cluster.create_default_bucket(
                 bucket_size,
                 self.__num_replicas,

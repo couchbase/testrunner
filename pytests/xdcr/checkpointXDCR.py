@@ -1,4 +1,4 @@
-from xdcrbasetests import XDCRReplicationBaseTest, XDCRConstants
+from xdcrnewbasetests import XDCRNewBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from lib.membase.api.rest_client import RestConnection
 from membase.api.exception import XDCRCheckpointException
@@ -6,12 +6,20 @@ from mc_bin_client import MemcachedClient, MemcachedError
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 
 
-class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
+class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def setUp(self):
         super(XDCRCheckpointUnitTest, self).setUp()
-        if not self._default_bucket:
+        self.src_cluster = self.get_cb_cluster_by_name('C1')
+        self.src_nodes = self.src_cluster.get_nodes()
+        self.src_master = self.src_cluster.get_master_node()
+        self.dest_cluster = self.get_cb_cluster_by_name('C2')
+        self.dest_nodes = self.dest_cluster.get_nodes()
+        self.dest_master = self.dest_cluster.get_master_node()
+        if not self._create_default_bucket:
             self.fail("Remove \'default_bucket=false\', these unit tests are designed to run on default bucket")
         self.init()
+        self.set_xdcr_topology()
+        self.setup_all_replications()
 
     def tearDown(self):
         self.log.info("Checkpoints recorded in this run -")
@@ -78,16 +86,24 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         raise XDCRCheckpointException("Error determining the node containing active vb0")
 
     """ Sample XDCR checkpoint record -
-      {u'total_docs_checked': 1,                        :
-       u'upr_snapshot_end_seqno': 1,                    : UPR snapshot end sequence number
-       u'upr_snapshot_seqno': 1,                        : UPR snapshot starting sequence number
-       u'seqno': 1,                                     : the sequence number we checkpointed at
-       u'start_time': u'Tue, 20 May 2014 22:17:51 GMT', : start time of ep_engine
-       u'total_data_replicated': 151,                   : number of bytes replicated to dest
-       u'commitopaque': [169224017468010, 2],           : remote failover log
-       u'total_docs_written': 1,                        : number of docs replicated to dest
-       u'end_time': u'Tue, 20 May 2014 22:18:56 GMT',   : time at checkpointing
-       u'failover_uuid': 77928303208376}                : local vb_uuid
+       {u'total_docs_checked': 1,                        :
+        u'upr_snapshot_end_seqno': 1,                    : UPR snapshot end sequence number
+        u'upr_snapshot_seqno': 1,                        : UPR snapshot starting sequence number
+        u'seqno': 1,                                     : the sequence number we checkpointed at
+        u'start_time': u'Tue, 20 May 2014 22:17:51 GMT', : start time of ep_engine
+        u'total_data_replicated': 151,                   : number of bytes replicated to dest
+        u'commitopaque': [169224017468010, 2],           : remote failover log
+        u'total_docs_written': 1,                        : number of docs replicated to dest
+        u'end_time': u'Tue, 20 May 2014 22:18:56 GMT',   : time at checkpointing
+        u'failover_uuid': 77928303208376}                : local vb_uuid
+
+    goXDCR checkpoint record-
+       {u'target_vb_uuid': 224170497411451,
+        u'failover_uuid': 278546667456896,
+        u'dcp_snapshot_seqno': 0,
+        u'seqno': 1,
+        u'commitopaque': 1,
+        u'dcp_snapshot_end_seqno': 0}
 
         Main method that validates a checkpoint record """
     def get_and_validate_latest_checkpoint(self):
@@ -105,7 +121,10 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
 
         self.log.info ("Verifying commitopaque/remote failover log ...")
         if seqno != 0:
-            self.validate_remote_failover_log(commit_opaque[0], commit_opaque[1])
+            if rest_con.is_goxdcr_enabled():
+                self.validate_remote_failover_log(checkpoint_record["target_vb_uuid"], checkpoint_record["commitopaque"])
+            else:
+                self.validate_remote_failover_log(commit_opaque[0], commit_opaque[1])
             self.log.info ("Verifying local failover uuid ...")
             local_vb_uuid, _ = self.get_failover_log(self.src_master)
             self.assertTrue(int(local_vb_uuid) == int(failover_uuid),
@@ -230,6 +249,10 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
             self.log.info("Remote failover log: [{}, {}]".format(remote_vbuuid,remote_highseqno))
             self.log.info("################ New mutation:{} ##################".format(self.key_counter+1))
             self.load_one_mutation_into_source_vb0(active_src_node)
+            if local_highseqno == 0:
+                # avoid checking very first/empty checkpoint record
+                count += 1
+                continue
             if self.was_checkpointing_successful():
                 self.log.info("Validating checkpoint record ...")
                 self.get_and_validate_latest_checkpoint()
@@ -379,6 +402,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         self.mutate_and_checkpoint()
         self.crash_node(self.dest_master)
         self.verify_next_checkpoint_fails_after_dest_uuid_change()
+        self.sleep(10)
         self.verify_revid()
 
     """ Tests if pre_replicate and commit_for_checkpoint following source crash is successful"""
@@ -396,6 +420,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
                 self.fail("Checkpointing failed once again after the last uuid change")
         else:
             self.fail("ERROR: _pre_replicate following source crash was unsuccessful")
+        self.sleep(10)
         self.verify_revid()
 
     """ Tests if vb_uuid changes after bucket flush, subsequent checkpoint fails indicating that and
@@ -404,6 +429,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         self.mutate_and_checkpoint()
         self.cluster.async_bucket_flush(self.dest_master, 'default')
         self.verify_next_checkpoint_fails_after_dest_uuid_change()
+        self.sleep(10)
         self.verify_revid()
 
     """ Tests if vb_uuid at destination changes, next checkpoint fails and then recovers eventually """
@@ -412,6 +438,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         self.cluster.bucket_delete(self.dest_master, 'default')
         self._create_buckets(self.dest_nodes)
         self.verify_next_checkpoint_fails_after_dest_uuid_change()
+        self.sleep(10)
         self.verify_revid()
 
     """ Checks if _pre_replicate and _commit_for_checkpoint are successful after source bucket recreate """
@@ -431,6 +458,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
             self.verify_next_checkpoint_passes()
         else:
             self.fail("ERROR: _pre_replicate following source bucket recreate was unsuccessful")
+        self.sleep(10)
         self.verify_revid()
 
     """ Test rebalance-out of vb0 node at source/destination and checkpointing behavior """
@@ -440,6 +468,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
             self.rebalance_out_activevb0_node(self.dest_master)
         elif "source" in self._rebalance :
             self.rebalance_out_activevb0_node(self.src_master)
+        self.sleep(10)
         self.verify_revid()
 
     """ Test failover of vb0 node at source/destination and checkpointing behavior """
@@ -455,6 +484,7 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         elif "source" in self._failover:
             self.failover_activevb0_node(self.src_master)
             self.verify_next_checkpoint_passes()
+        self.sleep(10)
         self.verify_revid()
 
     """ Checks if the subsequent _commit_for_checkpoint and _pre_replicate
@@ -489,9 +519,9 @@ class XDCRCheckpointUnitTest(XDCRReplicationBaseTest):
         src_client = MemcachedClient(src_node.ip, 11210)
         dest_client = MemcachedClient(dest_node.ip, 11210)
         for key in self.keys_loaded:
-            src_meta = src_client.getMeta(key)
-            dest_meta = dest_client.getMeta(key)
             try:
+                src_meta = src_client.getMeta(key)
+                dest_meta = dest_client.getMeta(key)
                 self.log.info("deleted, flags, exp, rev_id, cas for key from Source({0}) {1} = {2}"
                                .format(src_node.ip, key, src_meta))
                 self.log.info("deleted, flags, exp, rev_id, cas for key from Destination({0}) {1} = {2}"
