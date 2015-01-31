@@ -125,7 +125,7 @@ xunit reports in the newly generated folder.
 
 for instance if you run
 
-    $ ./testrunner -i resources/jenkins/single-node-centos-32.ini -t setgettests.MembaseBucket.value_100b
+    $ python testrunner.py -i resources/jenkins/single-node-centos-32.ini -t setgettests.MembaseBucket.value_100b -p your_first_parameter=x,your_second_parameter=y
 
 you will see this summary after each test is ran:
 
