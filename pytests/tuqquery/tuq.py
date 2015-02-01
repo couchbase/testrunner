@@ -84,7 +84,7 @@ class QueryTests(BaseTestCase):
 ##############################################################################################
     def test_escaped_identifiers(self):
         queries_errors = {'SELECT name FROM {0} as bucket' :
-                          'syntax error'}
+                          ('syntax error', 3000)} #execution phase
         self.negative_common_body(queries_errors)
         for bucket in self.buckets:
             self.query = 'SELECT name FROM %s as `bucket` ORDER BY name' % (bucket.name)
@@ -140,13 +140,13 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result, expected_result)
 
     def test_all_negative(self):
-        queries_errors = {'SELECT ALL * FROM %s' : 'syntax error'}
+        queries_errors = {'SELECT ALL * FROM %s' : ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
 
     def test_distinct_negative(self):
-        queries_errors = {'SELECT name FROM {0} ORDER BY DISTINCT name' : 'syntax error',
-                          'SELECT name FROM {0} GROUP BY DISTINCT name' : 'syntax error',
-                          'SELECT ANY tasks_points FROM {0}' : 'syntax error'}
+        queries_errors = {'SELECT name FROM {0} ORDER BY DISTINCT name' : ('syntax error', 3000),
+                          'SELECT name FROM {0} GROUP BY DISTINCT name' : ('syntax error', 3000),
+                          'SELECT ANY tasks_points FROM {0}' : ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
 
     def test_any(self):
@@ -244,10 +244,10 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_satisfy_negative(self):
-        queries_errors = {'SELECT name FROM %s WHERE ANY x IN 123 SATISFIES job_title = x END' : 'syntax error',
-                          'SELECT name FROM %s WHERE ANY x IN ["Sales"] SATISFIES job_title = x' : 'syntax error',
-                          'SELECT job_title FROM %s WHERE ANY job_title IN ["Sales"] SATISFIES job_title = job_title END' : 'syntax error',
-                          'SELECT job_title FROM %s WHERE EVERY ANY x IN ["Sales"] SATISFIES x = job_title END' : 'syntax error'}
+        queries_errors = {'SELECT name FROM %s WHERE ANY x IN 123 SATISFIES job_title = x END' : ('syntax error', 3000),
+                          'SELECT name FROM %s WHERE ANY x IN ["Sales"] SATISFIES job_title = x' : ('syntax error', 3000),
+                          'SELECT job_title FROM %s WHERE ANY job_title IN ["Sales"] SATISFIES job_title = job_title END' : ('syntax error', 3000),
+                          'SELECT job_title FROM %s WHERE EVERY ANY x IN ["Sales"] SATISFIES x = job_title END' : ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
 
     def test_array(self):
@@ -263,10 +263,10 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result, expected_result)
 
     def test_arrays_negative(self):
-        queries_errors = {'SELECT ARRAY vm.memory FOR vm IN 123 END AS vm_memories FROM %s' : 'syntax error',
-                          'SELECT job_title, array_agg(name)[:5] as names FROM %s' : 'syntax error',
-                          'SELECT job_title, array_agg(name)[-20:-5] as names FROM %s' : 'syntax error',
-                          'SELECT job_title, array_agg(name)[a:-b] as names FROM %s' : 'syntax error'}
+        queries_errors = {'SELECT ARRAY vm.memory FOR vm IN 123 END AS vm_memories FROM %s' : ('syntax error', 3000),
+                          'SELECT job_title, array_agg(name)[:5] as names FROM %s' : ('syntax error', 3000),
+                          'SELECT job_title, array_agg(name)[-20:-5] as names FROM %s' : ('syntax error', 3000),
+                          'SELECT job_title, array_agg(name)[a:-b] as names FROM %s' : ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
 
     def test_slicing(self):
@@ -345,7 +345,7 @@ class QueryTests(BaseTestCase):
 
     def test_like_negative(self):
         queries_errors = {"SELECT tasks_points FROM {0} WHERE tasks_points.* LIKE '_1%'" :
-                           'syntax error'}
+                           ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
 
     def test_like_any(self):
@@ -437,8 +437,8 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_between_negative(self):
-        queries_errors = {'SELECT name FROM %s WHERE join_mo BETWEEN 1 AND -10 ORDER BY name' : 'syntax error',
-                          'SELECT name FROM %s WHERE join_mo BETWEEN 1 AND a ORDER BY name' : 'syntax error'}
+        queries_errors = {'SELECT name FROM %s WHERE join_mo BETWEEN 1 AND -10 ORDER BY name' : ('syntax error', 3000),
+                          'SELECT name FROM %s WHERE join_mo BETWEEN 1 AND a ORDER BY name' : ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
 
 ##############################################################################################
@@ -534,10 +534,10 @@ class QueryTests(BaseTestCase):
     def test_group_by_negative(self):
         queries_errors = {"SELECT tasks_points from {0} WHERE tasks_points.task2>3" +\
                           " GROUP BY tasks_points.*" :
-                           "syntax error",
+                           ('syntax error', 3000),
                            "from {0} WHERE join_mo>7 GROUP BY tasks_points.task1 " +\
                            "SELECT tasks_points.task1 AS task HAVING COUNT(tasks_points.task1) > 0" :
-                           "syntax error"}
+                           ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
 
 ##############################################################################################
@@ -683,7 +683,7 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result, expected_result)
 
     def test_meta_negative(self):
-        queries_errors = {'SELECT distinct name FROM %s WHERE META().type = "json"' : 'syntax error'}
+        queries_errors = {'SELECT distinct name FROM %s WHERE META().type = "json"' : ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
 
     def test_length(self):
@@ -838,9 +838,9 @@ class QueryTests(BaseTestCase):
 
     def test_sum_negative(self):
         queries_errors = {'SELECT join_mo, SUM(job_title) as rate FROM %s as employees' +\
-                          ' WHERE job_title="Sales" GROUP BY join_mo' : 'syntax error',
+                          ' WHERE job_title="Sales" GROUP BY join_mo' : ('syntax error', 3000),
                           'SELECT join_mo, SUM(VMs) as rate FROM %s as employees' +\
-                          ' WHERE job_title="Sales" GROUP BY join_mo' : 'syntax error'}
+                          ' WHERE job_title="Sales" GROUP BY join_mo' : ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
 
     def test_avg(self):
@@ -2283,10 +2283,10 @@ class QueryTests(BaseTestCase):
         self.assertTrue('uuid' in actual_list['results'][0] and actual_list['results'][0]['uuid'], 'UUid is not working')
 
     def test_string_fn_negative(self):
-        queries_errors = {'select name from %s when contains(VMs, "Sale")' : 'syntax error',
-                          'select TITLE(test_rate) as OS from %s' : 'syntax error',
-                          'select REPEAT(name, -2) as name from %s' : 'syntax error',
-                          'select REPEAT(name, a) as name from %s' : 'syntax error',}
+        queries_errors = {'select name from %s when contains(VMs, "Sale")' : ('syntax error', 3000),
+                          'select TITLE(test_rate) as OS from %s' : ('syntax error', 3000),
+                          'select REPEAT(name, -2) as name from %s' : ('syntax error', 3000),
+                          'select REPEAT(name, a) as name from %s' : ('syntax error', 3000),}
         self.negative_common_body(queries_errors)
 
     def test_contains(self):
@@ -2486,7 +2486,8 @@ class QueryTests(BaseTestCase):
         if not queries_errors:
             self.fail("No queries to run!")
         for bucket in self.buckets:
-            for query, error in queries_errors.iteritems():
+            for query, value in queries_errors.iteritems():
+                error, code = value
                 try:
                     actual_result = self.run_cbq_query(query.format(bucket.name))
                 except CBQError as ex:
@@ -2494,6 +2495,9 @@ class QueryTests(BaseTestCase):
                     self.assertTrue(str(ex).find(error) != -1,
                                     "Error is incorrect.Actual %s.\n Expected: %s.\n" %(
                                                                 str(ex).split(':')[-1], error))
+                    self.assertTrue(str(ex).find(str(code)) != -1,
+                                    "Error code is incorrect.Actual %s.\n Expected: %s.\n" %(
+                                                                str(ex), code))
                 else:
                     self.fail("There was no errors. Error expected: %s" % error)
 

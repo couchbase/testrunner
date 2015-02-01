@@ -56,6 +56,7 @@ class ReadOnlyUserTests(QueryTests):
                 actual_result = self.run_cbq_query()
             except Exception, ex:
                 self.assertTrue(str(ex).find('request is read-only') != -1, 'Server is not readonly')
+                self.assertTrue(str(ex).find('10000') != -1, 'Error code is incorrect.')
                 self.log.info('Read only is on')
             else:
                 self.fail('server is not read-only')
