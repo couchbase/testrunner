@@ -2478,6 +2478,45 @@ class RestConnection(object):
                 currROAdmins = user[0] + "\n\r" + currROAdmins
         content = self.executeLDAPCommand(authOperation, currAdmins, currROAdmins)
 
+    '''LDAP Rest API '''
+    '''
+    clearLDAPSettings - Function to clear LDAP settings
+    Parameter - None
+    Returns -
+    status of LDAPAuth clear command
+    '''
+    def clearLDAPSettings (self):
+        api = self.baseUrl + '/settings/saslauthdAuth'
+        params = urllib.urlencode({'enabled':'false'})
+        status, content, header = self._http_request(api, 'POST', params)
+        return status, content, header
+
+    '''
+    ldapUserRestOperation - Execute LDAP REST API
+    Input Parameter -
+        authOperation - this is for auth need to be enabled or disabled - True or 0
+        currAdmmins - a list of username to add to full admin matching with ldap
+        currROAdmins - a list of username to add to RO Admin
+    Returns - status, content and header for the command executed
+    '''
+    def ldapUserRestOperation(self, authOperation, adminUser='', ROadminUser='', exclude=None):
+        if (authOperation):
+            authOperation = 'true'
+        else:
+            authOperation = 'false'
+
+        currAdmins = ''
+        currROAdmins = ''
+
+        if (adminUser != ''):
+            for user in adminUser:
+                currAdmins = user[0] + "\n\r" + currAdmins
+
+        if (ROadminUser != ''):
+            for user in ROadminUser:
+                currROAdmins = user[0] + "\n\r" + currROAdmins
+        content = self.executeLDAPCommand(authOperation, currAdmins, currROAdmins, exclude)
+
     '''
     executeLDAPCommand - Execute LDAP REST API
     Input Parameter -
@@ -2486,19 +2525,43 @@ class RestConnection(object):
         currROAdmins - a list of username to add to RO Admin
     Returns - status, content and header for the command executed
     '''
-    def executeLDAPCommand(self, authOperation, currAdmins, currROAdmins):
+    def executeLDAPCommand(self, authOperation, currAdmins, currROAdmins, exclude=None):
         log.info ("Executing LDAP command")
         api = self.baseUrl + "/settings/saslauthdAuth"
-        params = urllib.urlencode({
-                                        'enabled': authOperation,
-                                        'admins': '{0}'.format(currAdmins),
-                                        'roAdmins':'{0}'.format(currROAdmins),
-        #                                'username': '{0}'.format(self.username),
-        #                                'password': '{0}'.format(self.password)
-                                        })
-        log.info ("Value of LDAP command is {0}".format(params))
-        content = self._http_request(api, 'POST', params)
 
+        if (exclude is None):
+            log.info ("into execlude is None")
+            params = urllib.urlencode({
+                                            'enabled': authOperation,
+                                            'admins': '{0}'.format(currAdmins),
+                                            'roAdmins':'{0}'.format(currROAdmins),
+            #                                'username': '{0}'.format(self.username),
+            #                                'password': '{0}'.format(self.password)
+                                            })
+        else:
+            log.info ("Into execlude for value of fullAdmin {0}".format(exclude))
+            if (exclude == 'fullAdmin'):
+                params = urllib.urlencode({
+                                            'enabled': authOperation,
+                                            'roAdmins':'{0}'.format(currROAdmins),
+            #                                'username': '{0}'.format(self.username),
+            #                                'password': '{0}'.format(self.password)
+                                            })
+            else:
+                log.info ("Into execlude for value of fullAdmin {0}".format(exclude))
+                params = urllib.urlencode({
+                                            'enabled': authOperation,
+                                            'admins': '{0}'.format(currAdmins),
+            #                                'username': '{0}'.format(self.username),
+            #                                'password': '{0}'.format(self.password)
+                                            })
+
+
+        status, content, header = self._http_request(api, 'POST', params)
+        log.info (" Status of LDAP Command is - {0}".format(status))
+        log.info (" Content of LDAP Command is - {0}".format(content))
+        log.info (" Header of LDAP Command is - {0}".format(header))
+        return content
     '''
     validateLogin - Validate if user can login using a REST API
     Input Parameter - user and password to check for login. Also take a boolean to
@@ -2507,10 +2570,10 @@ class RestConnection(object):
     Returns - True of false based if user should login or login fail
     '''
     def validateLogin(self, user, password, login):
-        log.info ("Login using username-{0} and password-{0}".format(user, password))
         api = self.baseUrl + "uilogin"
         header = {'Content-type': 'application/x-www-form-urlencoded'}
         params = urllib.urlencode({'user':'{0}'.format(user), 'password':'{0}'.format(password)})
+        log.info ("value of param is {0}".format(params))
         http = httplib2.Http()
         status, content = http.request(api, 'POST', headers=header, body=params)
         log.info ("Status of login command - {0}".format(status))
