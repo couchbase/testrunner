@@ -1894,7 +1894,9 @@ class RemoteMachineShellConnection:
                     file.close()
                     # now remove this file
                     os.remove(filename)
-                """ for centos 7 only """
+                    break
+            """ for centos 7 only """
+            for name in filenames:
                 if name == "redhat-release":
                     filename = 'redhat-release-{0}'.format(uuid.uuid4())
                     sftp.get(localpath=filename, remotepath='/etc/redhat-release')
