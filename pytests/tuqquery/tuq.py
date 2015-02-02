@@ -31,7 +31,7 @@ class QueryTests(BaseTestCase):
         else:
             self.shell = RemoteMachineShellConnection(self.master)
         if self.input.param("start_cmd", True):
-            self._start_command_line_query(self.master)
+            self._start_command_line_query(self.master, user=self.master.rest_username, password=self.master.rest_password)
         self.use_rest = self.input.param("use_rest", True)
         self.max_verify = self.input.param("max_verify", None)
         self.buckets = RestConnection(self.master).get_buckets()
