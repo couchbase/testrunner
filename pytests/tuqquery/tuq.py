@@ -49,6 +49,7 @@ class QueryTests(BaseTestCase):
             self.full_list = self.generate_full_docs_list(self.gens_load)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
+        self.create_primary_index_for_3_0_and_greater()
 
     def suite_setUp(self):
         try:
@@ -2513,6 +2514,11 @@ class QueryTests(BaseTestCase):
            server = self.master
            if self.input.tuq_client and "client" in self.input.tuq_client:
                server = self.tuq_client
+        cred_params = {'creds': []}
+        for bucket in self.buckets:
+            if bucket.saslPassword:
+                cred_params['creds'].append({'user': bucket.name, 'pass': bucket.saslPassword})
+        query_params.update(cred_params)
         if self.use_rest:
             if hasattr(self, 'query_params') and self.query_params:
                 query_params = self.query_params
