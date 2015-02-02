@@ -307,7 +307,7 @@ class BuildQuery(object):
                     couchbase-server-enterprise_3.5.0-952-windows_amd64.exe"""
             if "3.5.0-" in build_info:
                 deb_words = ["debian7", "ubuntu12.04", "ubuntu14.04", "windows", "macos"]
-                if "centos6" not in build_info:
+                if "centos" not in build_info:
                     tmp_str = build_info.split("_")
                     product_version = tmp_str[1].split("-")
                     product_version = "-".join([i for i in product_version \
@@ -317,13 +317,13 @@ class BuildQuery(object):
                     product_version = product_version[3] + "-" + product_version[4]
                 if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
                     build.product_version = product_version
-                    if "centos6" not in build_info:
+                    if "centos" not in build_info:
                         build_info = build_info.replace("_" + product_version,"")
                     else:
                         build_info = build_info.replace("-" + product_version,"")
                 if "x86_64" in build_info:
                     build.architecture_type = "x86_64"
-                    if "centos6" in build_info:
+                    if "centos" in build_info:
                         build_info = build_info.replace(".x86_64", "")
                     elif "macos" in build_info:
                         build_info = build_info.replace("_x86_64", "")
@@ -337,7 +337,7 @@ class BuildQuery(object):
                     build.architecture_type = "x86_64"
                     build_info = build_info.replace("-amd64", "")
                 del_words = ["centos6", "debian7", "ubuntu12.04", "ubuntu14.04", \
-                             "windows", "macos"]
+                             "windows", "macos", "centos7"]
                 if build_info.startswith("couchbase-server"):
                     build.product = build_info.split("-")
                     build.product = "-".join([i for i in build.product \
@@ -445,15 +445,21 @@ class BuildQuery(object):
         if version[:3] == "3.5":
             """ format for sherlock build name
             /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
+            /1154/couchbase-server-enterprise-3.5.0-1154-centos7.x86_64.rpm
             /723/couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
             /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb
             /795/couchbase_server-enterprise-windows-amd64-3.5.0-795.exe
             /952/couchbase-server-enterprise_3.5.0-952-windows_amd64.exe
             /1120/couchbase-server-enterprise_3.5.0-1120-macos_x86_64.zip"""
             build_number = build.product_version.replace(version[:6],"")
+            """ distribution version:    centos linux release 7.0.1406 (core)
+                distribution version:    centos release 6.5 (final)  """
+            centos_version = "centos6"
             if "centos" in distribution_version:
+                if "centos 7" in distribution_version:
+                    centos_version = "centos7"
                 build.name = edition_type + "-" + build.product_version + \
-                   "-centos6." + build.architecture_type + \
+                   "-" + centos_version + "." + build.architecture_type + \
                    "." + build.deliverable_type
             else:
                 os_name = ""

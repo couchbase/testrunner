@@ -1894,7 +1894,25 @@ class RemoteMachineShellConnection:
                     file.close()
                     # now remove this file
                     os.remove(filename)
+                """ for centos 7 only """
+                if name == "redhat-release":
+                    filename = 'redhat-release-{0}'.format(uuid.uuid4())
+                    sftp.get(localpath=filename, remotepath='/etc/redhat-release')
+                    file = open(filename)
+                    redhat_release = ''
+                    for line in file.xreadlines():
+                        redhat_release = line
+                        break
+                    redhat_release = redhat_release.rstrip('\n').rstrip('\\l').rstrip('\\n')
+                    if redhat_release.lower().find('centos') != -1:
+                        if redhat_release.lower().find('release 7') != -1:
+                            os_distro = 'CentOS'
+                            os_version = "CentOS 7"
+                            is_linux_distro = True
+                    file.close()
+                    os.remove(filename)
                     break
+
         if not is_linux_distro:
             arch = ''
             os_version = 'unknown windows'
