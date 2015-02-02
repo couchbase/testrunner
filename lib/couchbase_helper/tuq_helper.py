@@ -275,7 +275,7 @@ class N1QLHelper():
             if 'keyspace_id' not in item['indexes']:
                 self.log.error(item)
                 continue
-            if item['indexes']['keyspace_id'] == bucket and item['indexes']['id'] == index_name:
+            if item['indexes']['keyspace_id'] == bucket and item['indexes']['name'] == index_name:
                 return True
         return False
 

@@ -47,6 +47,7 @@ class BaseTestCase(unittest.TestCase):
                             if server.ip != self.moxi_server.ip]
         self.buckets = []
         self.master = self.servers[0]
+        self.indexManager = self.servers[0]
         self.cluster = Cluster()
         self.pre_warmup_stats = {}
         self.cleanup = False
@@ -57,6 +58,8 @@ class BaseTestCase(unittest.TestCase):
         try:
             self.vbuckets = self.input.param("vbuckets", None)
             self.upr = self.input.param("upr", None)
+            self.targetIndexManager = self.input.param("targetIndexManager", False)
+            self.targetMaster = self.input.param("targetMaster", False)
             self.auth_mech = self.input.param("auth_mech", "PLAIN")
             self.wait_timeout = self.input.param("wait_timeout", 60)
             # number of case that is performed from testrunner( increment each time)
@@ -1555,7 +1558,15 @@ class BaseTestCase(unittest.TestCase):
             for node in self.services_map.keys():
                 if (service_type in self.services_map[node]) and (node not in [node.ip for node in self.service_failure_nodes]):
                     for server in self.servers:
-                        if server.ip == node.ip and self.master.ip != server.ip:
+                        addNode = False
+                        if (self.targetMaster and (not self.targetIndexManager)) and (server.ip == node.ip and self.master.ip == server.ip):
+                            addNode = True
+                            self.master = self.servers[1]
+                        elif ((not self.targetMaster) and (not self.targetIndexManager)) and (server.ip == node.ip and self.master.ip != server.ip and self.indexManager.ip != server.ip):
+                            addNode = True
+                        elif ((not self.targetMaster) and self.targetIndexManager) and (server.ip == node.ip and self.master.ip != server.ip and self.indexManager.ip == server.ip):
+                            addNode = True
+                        if addNode and (server not in self.nodes_out_list):
                             self.nodes_out_list.append(server)
 
     def generate_services_map(self, nodes, services = None):
