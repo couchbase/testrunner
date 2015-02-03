@@ -93,7 +93,7 @@ class XDCRTopologyTest(XDCRNewBaseTest):
 
         for rebalance_cluster in self.__get_rebalance_clusters():
             cb_cluster = self.get_cb_cluster_by_name(rebalance_cluster)
-            cb_cluster.failover_nodes(
+            cb_cluster.failover_and_rebalance_nodes(
                 num_nodes=num_rebalance,
                 graceful=graceful)
 
@@ -107,7 +107,7 @@ class XDCRTopologyTest(XDCRNewBaseTest):
 
         for rebalance_cluster in self.__get_rebalance_clusters():
             cb_cluster = self.get_cb_cluster_by_name(rebalance_cluster)
-            cb_cluster.failover_master(graceful=graceful)
+            cb_cluster.failover_and_rebalance_master(graceful=graceful)
 
         self.perform_update_delete()
 

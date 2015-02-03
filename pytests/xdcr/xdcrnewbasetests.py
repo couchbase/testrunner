@@ -54,6 +54,7 @@ class TOPOLOGY:
     CHAIN = "chain"
     STAR = "star"
     RING = "ring"
+    HYBRID = "hybrid"
 
 
 class REPLICATION_DIRECTION:
@@ -2150,6 +2151,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.__set_topology_star()
         elif self.__topology == TOPOLOGY.RING:
             self.__set_topology_ring()
+        elif self._input.param(TOPOLOGY.HYBRID, 0):
+            self.set_hybrid_topology()
         else:
             raise XDCRException(
                 'Unknown topology set: {0}'.format(
@@ -2216,6 +2219,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.__load_star()
         elif self.__topology == TOPOLOGY.RING:
             self.__load_ring()
+        elif self._input.param(TOPOLOGY.HYBRID, 0):
+            self.__load_star()
         else:
             raise XDCRException(
                 'Unknown topology set: {0}'.format(
