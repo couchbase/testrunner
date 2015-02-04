@@ -1957,12 +1957,14 @@ class XDCRNewBaseTest(unittest.TestCase):
             "wait_for_expiration",
             True)
         self._warmup = self._input.param("warm", "").split('-')
+        self._rebalance = self._input.param("rebalance", "").split('-')
         self._failover = self._input.param("failover", "").split('-')
         self._wait_timeout = self._input.param("timeout", 60)
         self._disable_compaction = self._input.param(
             "disable_compaction",
             "").split('-')
-        self._checkpoint_interval = self._input.param("checkpoint_interval", None)
+        # Default value needs to be changed to 60s after MB-13233 is resolved
+        self._checkpoint_interval = self._input.param("checkpoint_interval", 1800)
 
     def __cleanup_previous(self):
         for cluster in self.__cb_clusters:
@@ -1977,7 +1979,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             None)
         for cluster in self.__cb_clusters:
             cluster.init_cluster(disabled_consistent_view)
-            if self._checkpoint_interval!=None:
+            if self._checkpoint_interval != 1800:
                 cluster.set_global_checkpt_interval(self._checkpoint_interval)
 
     def __set_free_servers(self):

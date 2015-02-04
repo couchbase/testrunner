@@ -1,4 +1,4 @@
-from xdcrnewbasetests import XDCRNewBaseTest
+from xdcrnewbasetests import XDCRNewBaseTest, XDCR_PARAM
 from remote.remote_util import RemoteMachineShellConnection
 from lib.membase.api.rest_client import RestConnection
 from membase.api.exception import XDCRCheckpointException
@@ -17,15 +17,17 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.dest_master = self.dest_cluster.get_master_node()
         if not self._create_default_bucket:
             self.fail("Remove \'default_bucket=false\', these unit tests are designed to run on default bucket")
-        self.init()
         self.set_xdcr_topology()
         self.setup_all_replications()
+        self.init()
 
     def tearDown(self):
         self.log.info("Checkpoints recorded in this run -")
         for record in self.chkpt_records:
             self.log.info(record)
         super(XDCRCheckpointUnitTest, self).tearDown()
+        if len(self.chkpt_records) == 0:
+            self.fail("No checkpoints recorded in this test!")
 
     def init(self):
         self.keys_loaded = []
@@ -249,7 +251,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             self.log.info("Remote failover log: [{}, {}]".format(remote_vbuuid,remote_highseqno))
             self.log.info("################ New mutation:{} ##################".format(self.key_counter+1))
             self.load_one_mutation_into_source_vb0(active_src_node)
-            if local_highseqno == 0:
+            if local_highseqno == "0":
                 # avoid checking very first/empty checkpoint record
                 count += 1
                 continue
@@ -305,13 +307,11 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         # find which node contains vb0
         node = self.get_active_vb0_node(master)
         self.log.info("Node {} contains active vb0".format(node))
-        if master == self.src_master:
-            tasks = self._async_rebalance(self.src_nodes, [], [node])
-            for task in tasks:
-                task.result()
-            if master == node:
+        if node == self.src_master:
+            self.src_cluster.rebalance_out_master()
+            if master == node and node in self.src_nodes:
                 self.src_nodes.remove(self.src_master)
-                self.src_master = self.src_nodes[0]
+            self.src_master = self.src_nodes[0]
             post_rebalance_uuid, _= self.get_failover_log(self.get_active_vb0_node(self.src_master))
             self.log.info("Remote uuid before rebalance :{}, after rebalance : {}".
                       format(pre_rebalance_uuid, post_rebalance_uuid))
@@ -324,12 +324,10 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                           "Subsequent _commit_for_checkpoints are expected to pass")
             self.verify_next_checkpoint_passes()
         else:
-            tasks = self._async_rebalance(self.dest_nodes, [], [node])
-            for task in tasks:
-                task.result()
-            if master == node:
+            self.dest_cluster.rebalance_out_master()
+            if master == node and node in self.dest_nodes:
                 self.dest_nodes.remove(self.dest_master)
-                self.dest_master = self.dest_nodes[0]
+            self.dest_master = self.dest_nodes[0]
             post_rebalance_uuid, _= self.get_failover_log(self.get_active_vb0_node(self.dest_master))
             self.log.info("Remote uuid before rebalance :{}, after rebalance : {}".
                       format(pre_rebalance_uuid, post_rebalance_uuid))
@@ -345,7 +343,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                 self.read_chkpt_history_new_vb0node()
                 self.mutate_and_check_error404()
                 # the replicator might still be awake, ensure adequate time gap
-                self.sleep(self.wait_timeout * 2)
+                self.sleep(self._wait_timeout * 2)
                 self.verify_next_checkpoint_passes()
 
     """ Failover active vb0 node from a cluster """
@@ -355,20 +353,14 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         # find which node contains vb0, we will failover that node
         node = self.get_active_vb0_node(master)
         self.log.info("Node {} contains active vb0".format(node))
-        if master == self.src_master:
-            tasks = self._async_failover(self.src_nodes, [node])
-            tasks = self._async_rebalance(self.src_nodes, [], [])
-            for task in tasks:
-                task.result()
-            self.src_nodes.remove(node)
-            self.src_master = self.src_nodes[0]
+        if node == self.src_master:
+            self.src_cluster.failover_and_rebalance_master()
+            if node in self.src_nodes:
+                self.src_nodes.remove(node)
         else:
-            tasks = self._async_failover(self.dest_nodes, [node])
-            tasks = self._async_rebalance(self.dest_nodes, [], [])
-            for task in tasks:
-                task.result()
-            self.dest_nodes.remove(node)
-            self.dest_master = self.dest_nodes[0]
+            self.dest_cluster.failover_and_rebalance_master()
+            if node in self.dest_nodes:
+                self.dest_nodes.remove(node)
 
         if "source" in self._failover:
             post_failover_uuid, _= self.get_failover_log(self.get_active_vb0_node(self.src_master))
@@ -413,11 +405,8 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             self.log.info("_pre_replicate following the source crash was successful: {}".
                           format(self.num_successful_prereps_so_far))
             # the replicator might still be awake, ensure adequate time gap
-            self.sleep(self.wait_timeout * 2)
-            if self.mutate_and_checkpoint(n=1):
-                self.log.info("Checkpointing resumed normally after source crash")
-            else:
-                self.fail("Checkpointing failed once again after the last uuid change")
+            self.sleep(self._wait_timeout * 2)
+            self.verify_next_checkpoint_passes()
         else:
             self.fail("ERROR: _pre_replicate following source crash was unsuccessful")
         self.sleep(10)
@@ -427,7 +416,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         next checkpoint is successful"""
     def test_dest_bucket_flush(self):
         self.mutate_and_checkpoint()
-        self.cluster.async_bucket_flush(self.dest_master, 'default')
+        self.dest_cluster.async_bucket_flush(self.dest_master, 'default')
         self.verify_next_checkpoint_fails_after_dest_uuid_change()
         self.sleep(10)
         self.verify_revid()
@@ -435,8 +424,8 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     """ Tests if vb_uuid at destination changes, next checkpoint fails and then recovers eventually """
     def test_dest_bucket_delete_recreate(self):
         self.mutate_and_checkpoint()
-        self.cluster.bucket_delete(self.dest_master, 'default')
-        self._create_buckets(self.dest_nodes)
+        self.dest_cluster.delete_bucket('default')
+        self.create_buckets_on_cluster(self.dest_cluster.get_name())
         self.verify_next_checkpoint_fails_after_dest_uuid_change()
         self.sleep(10)
         self.verify_revid()
@@ -444,11 +433,10 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     """ Checks if _pre_replicate and _commit_for_checkpoint are successful after source bucket recreate """
     def test_source_bucket_delete_recreate(self):
         self.mutate_and_checkpoint(n=2)
-        self.cluster.bucket_delete(self.src_master, 'default')
-        self._create_buckets(self.src_nodes)
-        dest_cluster_name = self._get_cluster_names()[1]
+        self.src_cluster.delete_bucket('default')
+        self.create_buckets_on_cluster(self.src_cluster.get_name())
         RestConnection(self.src_master).start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
-                                                          'default', dest_cluster_name, self.rep_type)
+                                                          'default', self.src_cluster.get_name(), self.rep_type)
         self.sleep(5)
         self.key_counter = 0
         self.keys_loaded = []
@@ -466,7 +454,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.mutate_and_checkpoint(n=2)
         if "destination" in self._rebalance:
             self.rebalance_out_activevb0_node(self.dest_master)
-        elif "source" in self._rebalance :
+        elif "source" in self._rebalance:
             self.rebalance_out_activevb0_node(self.src_master)
         self.sleep(10)
         self.verify_revid()
@@ -479,7 +467,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             self.read_chkpt_history_new_vb0node()
             self.mutate_and_check_error404()
             # the replicator might still be awake, ensure adequate time gap
-            self.sleep(self.wait_timeout*2)
+            self.sleep(self._wait_timeout*2)
             self.verify_next_checkpoint_passes()
         elif "source" in self._failover:
             self.failover_activevb0_node(self.src_master)
@@ -507,7 +495,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     """
     def verify_next_checkpoint_passes(self):
         if self.mutate_and_checkpoint(n=1):
-            self.log.info ("Checkpointing was successful")
+            self.log.info("Checkpointing was successful")
         else:
             self.fail("Checkpointing failed unexpectedly")
 
