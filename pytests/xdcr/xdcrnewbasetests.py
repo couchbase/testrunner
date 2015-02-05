@@ -1912,6 +1912,9 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__init_clusters()
         self.__set_free_servers()
         self.__create_buckets()
+        if self._checkpoint_interval != 1800:
+            for cluster in self.__cb_clusters:
+                cluster.set_global_checkpt_interval(self._checkpoint_interval)
 
     def __init_parameters(self):
         self.__case_number = self._input.param("case_number", 0)
@@ -1979,8 +1982,6 @@ class XDCRNewBaseTest(unittest.TestCase):
             None)
         for cluster in self.__cb_clusters:
             cluster.init_cluster(disabled_consistent_view)
-            if self._checkpoint_interval != 1800:
-                cluster.set_global_checkpt_interval(self._checkpoint_interval)
 
     def __set_free_servers(self):
         total_servers = self._input.servers

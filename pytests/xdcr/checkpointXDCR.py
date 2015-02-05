@@ -143,8 +143,8 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         remote_uuid, remote_highseq = self.get_failover_log(self.dest_master)
         self.log.info("Remote failover log = [{},{}]".format(remote_uuid, remote_highseq))
         if int(remote_uuid) != int(vb_uuid):
-            raise XDCRCheckpointException("vb_uuid in commitopaque {} does not match remote vb_uuid {}"
-                                          .format(remote_uuid))
+            raise XDCRCheckpointException("vb_uuid in commitopaque is {0} while actual remote vb_uuid is {1}"
+                                          .format(vb_uuid, remote_uuid))
 
     """ Gets failover log [vb_uuid, high_seqno] from node containing vb0 """
     def get_failover_log(self, master):
@@ -337,6 +337,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                                 "vb_uuid of vb0 is same before and after TAP rebalance")
                 self.read_chkpt_history_new_vb0node()
                 self.verify_next_checkpoint_fails_after_dest_uuid_change()
+                self.verify_next_checkpoint_passes()
             else:
                 self.log.info("Current internal replication = UPR,hence destination vb_uuid did not change," \
                           "Subsequent _commit_for_checkpoints are expected to pass")
@@ -394,6 +395,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.mutate_and_checkpoint()
         self.crash_node(self.dest_master)
         self.verify_next_checkpoint_fails_after_dest_uuid_change()
+        self.verify_next_checkpoint_passes()
         self.sleep(10)
         self.verify_revid()
 
@@ -418,6 +420,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.mutate_and_checkpoint()
         self.dest_cluster.async_bucket_flush(self.dest_master, 'default')
         self.verify_next_checkpoint_fails_after_dest_uuid_change()
+        self.verify_next_checkpoint_passes()
         self.sleep(10)
         self.verify_revid()
 
@@ -427,6 +430,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.dest_cluster.delete_bucket('default')
         self.create_buckets_on_cluster(self.dest_cluster.get_name())
         self.verify_next_checkpoint_fails_after_dest_uuid_change()
+        self.verify_next_checkpoint_passes()
         self.sleep(10)
         self.verify_revid()
 
