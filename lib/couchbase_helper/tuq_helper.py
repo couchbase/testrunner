@@ -3,7 +3,7 @@ import json
 import uuid
 import math
 import re
-
+import time
 import testconstants
 import datetime
 import time
@@ -258,6 +258,9 @@ class N1QLHelper():
                     self.log.info(self.query)
                     try:
                         self.run_cbq_query()
+                        check = self.is_index_online_and_in_list(bucket.name, "#primary", server = self.master)
+                        if not check:
+                            raise Exception(" Primary index not build as expected in time {0}".format(" 2 mins"))
                     except Exception, ex:
                         self.log.error('ERROR during index creation %s' % str(ex))
 
@@ -265,6 +268,18 @@ class N1QLHelper():
         if index_name in str(actual_result):
             return True
         return False
+
+    def is_index_online_and_in_list(self, bucket, index_name, server = None, timeout = 120.0):
+        check = self._is_index_in_list(bucket, index_name, server = server)
+        init_time = time.time()
+        while not check:
+            time.sleep(10)
+            check = self._is_index_in_list(bucket, index_name, server = server)
+            next_time = time.time()
+            if check or ((next_time - init_time > timeout) and (not check)):
+                return check
+            init_time = next_time
+        return check
 
     def _is_index_in_list(self, bucket, index_name, server = None):
         query = "SELECT * FROM system:indexes"
@@ -275,7 +290,7 @@ class N1QLHelper():
             if 'keyspace_id' not in item['indexes']:
                 self.log.error(item)
                 continue
-            if item['indexes']['keyspace_id'] == bucket and item['indexes']['name'] == index_name:
+            if item['indexes']['keyspace_id'] == bucket and item['indexes']['name'] == index_name and item['indexes']['state'] != "pending":
                 return True
         return False
 

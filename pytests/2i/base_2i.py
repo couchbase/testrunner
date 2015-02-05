@@ -26,15 +26,13 @@ class BaseSecondaryIndexingTests(QueryTests):
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
 
-
     def create_index(self, bucket, query_definition, verifycreate = True):
         self.query = query_definition.generate_index_create_query(bucket = bucket,
          use_gsi_for_secondary = self.use_gsi_for_secondary)
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         if verifycreate:
-            check = self.n1ql_helper._is_index_in_list(bucket, query_definition.index_name, server = server)
-            self.log.info(" RESULT : {0}".format(check))
+            check = self.n1ql_helper.is_index_online_and_in_list(bucket, query_definition.index_name, server = server)
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
     def async_create_index(self, bucket, query_definition):

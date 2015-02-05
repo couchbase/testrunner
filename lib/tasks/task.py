@@ -1912,7 +1912,7 @@ class CreateIndexTask(Task):
     def check(self, task_manager):
         try:
            # Verify correctness of result set
-            check = self.n1ql_helper._is_index_in_list(self.bucket, self.index_name, server = self.server)
+            check = self.n1ql_helper.is_index_online_and_in_list(self.bucket, self.index_name, server = self.server)
             if not check:
                 self.state = FINISHED
                 raise CreateIndexException("Index {0} not created as expected ".format(self.index_name))
