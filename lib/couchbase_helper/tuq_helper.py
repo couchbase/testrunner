@@ -278,7 +278,6 @@ class N1QLHelper():
             next_time = time.time()
             if check or ((next_time - init_time > timeout) and (not check)):
                 return check
-            init_time = next_time
         return check
 
     def _is_index_in_list(self, bucket, index_name, server = None):
