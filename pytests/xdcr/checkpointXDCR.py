@@ -358,10 +358,12 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             self.src_cluster.failover_and_rebalance_master()
             if node in self.src_nodes:
                 self.src_nodes.remove(node)
+            self.src_master = self.src_nodes[0]
         else:
             self.dest_cluster.failover_and_rebalance_master()
             if node in self.dest_nodes:
                 self.dest_nodes.remove(node)
+            self.dest_master = self.dest_nodes[0]
 
         if "source" in self._failover:
             post_failover_uuid, _= self.get_failover_log(self.get_active_vb0_node(self.src_master))
