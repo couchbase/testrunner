@@ -20,6 +20,7 @@ JOIN = "join"
 EQUALS = "equals"
 NOTEQUALS ="notequals"
 NO_ORDERBY_GROUPBY="no_orderby_groupby"
+GREATER_THAN="greater_than"
 AND = "and"
 OR = "or"
 class QueryDefinition(object):
@@ -113,6 +114,12 @@ class SQLDefinitionGenerator:
 							 index_fields = ["join_yr"],
 							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "join_yr > 2010 and join_yr < 2014"),
 							 groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, AND,"employee"]))
+		definitions_list.append(
+			QueryDefinition(
+				index_name=index_name_prefix+"join_yr",
+							 index_fields = ["join_yr"],
+							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "join_yr > 1999"),
+							 groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, GREATER_THAN,"employee"]))
 		definitions_list.append(
 			QueryDefinition(
 				index_name=index_name_prefix+"job_title_join_yr",
