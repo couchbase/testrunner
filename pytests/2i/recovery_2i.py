@@ -160,13 +160,13 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         if self.doc_ops:
             self._run_aync_tasks_with_ops()
         else:
-            tasks = self.async_chck_and_run_operations(buckets = self.buckets, in_between = True)
+            tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
             for task in tasks:
                 task.result()
 
     def _run_aync_tasks_with_ops(self):
         # runs operations
         self.run_doc_ops()
-        tasks = self.async_chck_and_run_operations(buckets = self.buckets, in_between = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
         for task in tasks:
             task.result()
