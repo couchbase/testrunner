@@ -99,7 +99,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         except Exception, ex:
-            msg="Keyspace not_present_bucket name not found - cause: Bucket not_present_bucket not found. - cause: No bucket named not_present_bucket"
+            msg="Keyspace not_present_bucket name not found - cause: Bucket not_present_bucket not found"
             self.assertTrue(msg in str(ex),
                 " 5000 error not recived as expected {0}".format(ex))
 
@@ -116,7 +116,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     		server = self.get_nodes_from_services_map(service_type = "n1ql")
         	self.n1ql_helper.run_cbq_query(query = self.query, server = server)
     	except Exception, ex:
-    		msg="Keyspace not_present_bucket name not found - cause: Bucket not_present_bucket not found. - cause: No bucket named not_present_bucket"
+    		msg="Keyspace not found keyspace not_present_bucket - cause: No bucket named not_present_bucket"
     		self.assertTrue(msg in str(ex),
     			" 5000 error not recived as expected {0}".format(ex))
 
@@ -132,7 +132,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     		server = self.get_nodes_from_services_map(service_type = "n1ql")
         	self.n1ql_helper.run_cbq_query(query = self.query, server = server)
     	except Exception, ex:
-    		msg="Keyspace not_present_bucket name not found - cause: Bucket not_present_bucket not found. - cause: No bucket named not_present_bucket"
+    		msg="Keyspace not found keyspace not_present_bucket - cause: No bucket named not_present_bucket"
     		self.assertTrue(msg in str(ex),
     			" 5000 error not recived as expected {0}".format(ex))
 
@@ -148,7 +148,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     		server = self.get_nodes_from_services_map(service_type = "n1ql")
         	self.n1ql_helper.run_cbq_query(query = self.query, server = server)
     	except Exception, ex:
-    		msg="2i index test_failure_create_index_existing_index not found."
+    		msg="GSI index test_failure_create_index_existing_index not found"
     		self.assertTrue(msg in str(ex),
     			" 5000 error not recived as expected {0}".format(ex))
 
@@ -167,7 +167,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     		# create same index again
     		self.n1ql_helper.run_cbq_query(query = self.query, server = server)
     	except Exception, ex:
-    		self.assertTrue("Duplicate Index Name" in str(ex),
+    		self.assertTrue("Index test_failure_create_index_existing_index already exist" in str(ex),
     			" 5000 error not recived as expected {0}".format(ex))
     	finally:
     		self.query = query_definition.generate_index_drop_query(bucket = self.buckets[0].name)

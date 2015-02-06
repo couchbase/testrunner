@@ -106,7 +106,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 query_with_explain = False, query = self.run_query)
             self.fail(" querying without indexes and primary indexes is not allowed")
         except Exception, ex:
-            msg = "No indexes found for bucket"
+            msg = "No primary index on keyspace default. Use CREATE PRIMARY INDEX to create one."
             self.assertTrue(msg in str(ex),"did not recieve message as expected : {0}".format(ex))
 
 
