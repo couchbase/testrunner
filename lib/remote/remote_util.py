@@ -6,6 +6,7 @@ import time
 import logging
 from datetime import datetime
 import logger
+from subprocess import Popen, PIPE
 from builds.build_query import BuildQuery
 import testconstants
 from testconstants import WIN_REGISTER_ID
@@ -123,10 +124,12 @@ class RemoteMachineShellConnection:
         # let's create a connection
         self._ssh_client = paramiko.SSHClient()
         self.ip = ip
+        self.remote = (self.ip != "localhost" and self.ip != "127.0.0.1")
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         log.info('connecting to {0} with username : {1} pem key : {2}'.format(ip, username, pkey_location))
         try:
-            self._ssh_client.connect(hostname=ip, username=username, key_filename=pkey_location)
+            if self.remote:
+                self._ssh_client.connect(hostname=ip, username=username, key_filename=pkey_location)
         except paramiko.AuthenticationException:
             log.info("Authentication failed for {0}".format(self.ip))
             exit(1)
@@ -145,6 +148,7 @@ class RemoteMachineShellConnection:
            self.use_sudo = False
         self._ssh_client = paramiko.SSHClient()
         self.ip = serverInfo.ip
+        self.remote = (self.ip != "localhost" and self.ip != "127.0.0.1")
         self.port = serverInfo.port
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         msg = 'connecting to {0} with username : {1} password : {2} ssh_key: {3}'
@@ -155,11 +159,11 @@ class RemoteMachineShellConnection:
         attempt = 0
         while True:
             try:
-                if serverInfo.ssh_key == '':
+                if self.remote and serverInfo.ssh_key == '':
                     self._ssh_client.connect(hostname=serverInfo.ip,
                                              username=serverInfo.ssh_username,
                                              password=serverInfo.ssh_password)
-                else:
+                elif self.remote:
                     self._ssh_client.connect(hostname=serverInfo.ip,
                                              username=serverInfo.ssh_username,
                                              key_filename=serverInfo.ssh_key)
@@ -1740,7 +1744,11 @@ class RemoteMachineShellConnection:
                                 end_msg='', timeout=250):
         log.info("running command on {0}: {1}".format(self.ip, main_command))
 
-        stdin, stdout, stderro = self._ssh_client.exec_command(main_command)
+        if self.remote:
+            stdin, stdout, stderro = self._ssh_client.exec_command(main_command)
+        else:
+            p = Popen(main_command , shell=True, stdout=PIPE, stderr=PIPE)
+            stdout, stderro = p.communicate()
         time.sleep(1)
         for cmd in subcommands:
               log.info("running command {0} inside {1} ({2})".format(
@@ -1783,7 +1791,7 @@ class RemoteMachineShellConnection:
         output = []
         error = []
         temp = ''
-        if self.use_sudo or use_channel:
+        if self.remote and self.use_sudo or use_channel:
             channel = self._ssh_client.get_transport().open_session()
             channel.get_pty()
             channel.settimeout(900)
@@ -1796,21 +1804,27 @@ class RemoteMachineShellConnection:
                 temp += data
                 data = channel.recv(1024)
             channel.close()
-        else:
+            stdin.close()
+        elif self.remote:
             stdin, stdout, stderro = self._ssh_client.exec_command(command)
-        stdin.close()
+            stdin.close()
 
-        for line in stdout.read().splitlines():
-            output.append(line)
-        for line in stderro.read().splitlines():
-            error.append(line)
-        if temp:
-            line = temp.splitlines()
-            output.extend(line)
+        if not self.remote:
+            p = Popen(command , shell=True, stdout=PIPE, stderr=PIPE)
+            output, error = p.communicate()
+
+        if self.remote:
+            for line in stdout.read().splitlines():
+                output.append(line)
+            for line in stderro.read().splitlines():
+                error.append(line)
+            if temp:
+                line = temp.splitlines()
+                output.extend(line)
+            stdout.close()
+            stderro.close()
         if debug:
             log.info('command executed successfully')
-        stdout.close()
-        stderro.close()
         return output, error
 
     def execute_non_sudo_command(self, command, info=None, debug=True, use_channel=False):
@@ -1837,9 +1851,13 @@ class RemoteMachineShellConnection:
         if getattr(self, "info", None) is not None and isinstance(self.info, RemoteMachineInfo):
             return self.info
         mac_check_cmd = "sw_vers | grep ProductVersion | awk '{ print $2 }'"
-        stdin, stdout, stderro = self._ssh_client.exec_command(mac_check_cmd)
-        stdin.close()
-        ver, err = stdout.read(), stderro.read()
+        if self.remote:
+            stdin, stdout, stderro = self._ssh_client.exec_command(mac_check_cmd)
+            stdin.close()
+            ver, err = stdout.read(), stderro.read()
+        else:
+            p = Popen(mac_check_cmd , shell=True, stdout=PIPE, stderr=PIPE)
+            ver, err = p.communicate()
         if not err:
             os_distro = "Mac"
             os_version = ver
@@ -1936,10 +1954,15 @@ class RemoteMachineShellConnection:
             return info
         else:
             # now run uname -m to get the architechtre type
-            stdin, stdout, stderro = self._ssh_client.exec_command('uname -m')
-            stdin.close()
-            os_arch = ''
-            text = stdout.read().splitlines()
+            if self.remote:
+                stdin, stdout, stderro = self._ssh_client.exec_command('uname -m')
+                stdin.close()
+                os_arch = ''
+                text = stdout.read().splitlines()
+            else:
+                p = Popen('uname -m' , shell=True, stdout=PIPE, stderr=PIPE)
+                text, err = p.communicate()
+                os_arch = ''
             for line in text:
                 os_arch += line
                 # at this point we should know if its a linux or windows ditro
