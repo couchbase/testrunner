@@ -1392,10 +1392,13 @@ class RestConnection(object):
             op = json_parsed["op"]
             samples = op["samples"]
             for stat_name in samples:
-                if len(samples[stat_name]) == 0:
-                    stats[stat_name] = []
+                if stat_name not in stats:
+                    if len(samples[stat_name]) == 0:
+                        stats[stat_name] = []
+                    else:
+                        stats[stat_name] = samples[stat_name][-1]
                 else:
-                    stats[stat_name] = samples[stat_name][-1]
+                    raise Exception("Duplicate entry in the stats command {0}".format(stat_name))
         return stats
 
     def fetch_bucket_stats(self, bucket='default', zoom='minute'):
