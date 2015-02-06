@@ -491,39 +491,6 @@ class SpatialQueryTests(unittest.TestCase):
         else:
             self._check_view_intergrity(views)
 
-    ###
-    # load the data defined for this dataset.
-    # create views and query the data as it loads.
-    # verification is optional, and best practice is to
-    # set to False if you plan on running _query_all_views()
-    # later in the test case
-    ###
-    def _query_test_init_blah2(self, data_set, verify_results = True):
-        views = data_set.views
-        inserted_keys = data_set.load()
-        target_fn = ()
-
-        if self.helper.num_nodes_reboot >= 1:
-            target_fn = self._reboot_cluster(data_set)
-        elif self.helper.num_nodes_warmup >= 1:
-            target_fn = self._warmup_cluster(data_set)
-        elif self.helper.num_nodes_to_add >= 1 or self.helper.num_nodes_to_remove >= 1:
-            target_fn = self._rebalance_cluster(data_set)
-
-        t = Thread(target=target_fn)
-        t.start()
-        # run queries while loading data
-        while t.is_alive():
-            self._query_all_views(views, False)
-            time.sleep(5)
-        t.join()
-
-        # results will be verified if verify_results set
-        if verify_results:
-            self._query_all_views(views, verify_results)
-        else:
-            self._check_view_intergrity(views)
-
     def _query_test_init_integration(self, data_set, verify_results = True):
         views = data_set.views
         inserted_keys = data_set.load()
