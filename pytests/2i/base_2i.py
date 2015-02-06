@@ -108,6 +108,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                     self.sync_drop_index(bucket.name, query_definition)
 
     def drop_index(self, bucket, query_definition, verifydrop = True):
+        check = self.n1ql_helper._is_index_in_list(bucket, query_definition.index_name)
+        self.assertTrue(check," cannot drop index {0} as it does not exist ".format(query_definition.index_name))
         self.query = query_definition.generate_index_drop_query(bucket = bucket)
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)

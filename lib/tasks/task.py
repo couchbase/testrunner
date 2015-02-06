@@ -1946,6 +1946,9 @@ class DropIndexTask(Task):
     def execute(self, task_manager):
         try:
             # Query and get results
+            check = self.n1ql_helper._is_index_in_list(self.bucket, self.index_name)
+            if not check:
+                raise DropIndexException("index {0} does not exist will not drop".format(self.index_name))
             self.n1ql_helper.run_cbq_query(query = self.query, server = self.server)
             self.state = CHECKING
             task_manager.schedule(self)

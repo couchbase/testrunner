@@ -65,7 +65,7 @@ class CreateIndexException(MembaseHttpException):
     def __init__(self, index_name):
         self.parameters = dict()
         self.parameters['index_name'] = index_name
-        self.type = MembaseHttpExceptionTypes.CREATE_ONDEX_EXCEPTION
+        self.type = MembaseHttpExceptionTypes.CREATE_INDEX_EXCEPTION
         self._message = 'unable to create index {0}'.format(index_name)
 
 class DropIndexException(MembaseHttpException):
