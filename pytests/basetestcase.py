@@ -1482,6 +1482,20 @@ class BaseTestCase(unittest.TestCase):
         """ Method to start a server which is subject to failover """
         for server in self.servers:
             if server.ip == node.ip:
+                RemoteUtilHelper.enable_firewall(node)
+
+    def start_firewall_on_node(self, node):
+        """ Method to start a server which is subject to failover """
+        for server in self.servers:
+            if server.ip == node.ip:
+                RemoteUtilHelper.disable_firewall(node)
+                remote_client.kill_memcached()
+                remote_client.disconnect()
+
+    def stop_firewall_on_node(self, node):
+        """ Method to start a server which is subject to failover """
+        for server in self.servers:
+            if server.ip == node.ip:
                 remote_client = RemoteMachineShellConnection(server)
                 remote_client.kill_memcached()
                 remote_client.disconnect()

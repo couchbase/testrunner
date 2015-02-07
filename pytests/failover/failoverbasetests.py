@@ -39,6 +39,7 @@ class FailoverBaseTest(BaseTestCase):
         self.stopNodes = self.input.param("stopNodes", False)
         self.killNodes = self.input.param("killNodes", False)
         self.doc_ops = self.input.param("doc_ops", [])
+        self.firewallOnNodes = self.input.param("firewallOnNodes", False)
         self.deltaRecoveryBuckets = self.input.param("deltaRecoveryBuckets", None)
         if self.doc_ops:
             self.doc_ops = self.doc_ops.split(":")

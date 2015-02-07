@@ -142,7 +142,7 @@ class FailoverTests(FailoverBaseTest):
             self.run_mutation_operations_after_failover()
 
         # Kill or restart operations
-        if self.killNodes or self.stopNodes:
+        if self.killNodes or self.stopNodes or self.firewallOnNodes:
             self.victim_node_operations(node = chosen[0])
             self.log.info(" Start Rebalance Again !")
             self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[node.id for node in chosen])
@@ -217,7 +217,7 @@ class FailoverTests(FailoverBaseTest):
             self.run_mutation_operations_after_failover()
 
         # Kill or restart operations
-        if self.killNodes or self.stopNodes:
+        if self.killNodes or self.stopNodes or self.firewallOnNodes:
             self.victim_node_operations(node = chosen[0])
             self.log.info(" Start Rebalance Again !")
             self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[],deltaRecoveryBuckets = self.deltaRecoveryBuckets)
@@ -313,7 +313,7 @@ class FailoverTests(FailoverBaseTest):
             # define precondition check for failover
             success_failed_over = self.rest.fail_over(node.id, graceful=(self.graceful and graceful_failover))
             if self.graceful and graceful_failover:
-                if self.stopGracefulFailover or self.killNodes or self.stopNodes:
+                if self.stopGracefulFailover or self.killNodes or self.stopNodes or self.firewallOnNodes:
                     self.victim_node_operations(node)
                     # Start Graceful Again
                     self.log.info(" Start Graceful Failover Again !")
@@ -635,6 +635,13 @@ class FailoverTests(FailoverBaseTest):
             self.sleep(10)
             for start_node in stop_nodes:
                 self.start_server(start_node)
+        if self.firewallOnNodes:
+            self.log.info(" Enabling Firewall for Node ")
+            stop_nodes = self.get_victim_nodes(self.servers, self.master, node, self.victim_type, self.victim_count)
+            for stop_node in stop_nodes:
+                self.enable_firewall(stop_node)
+            self.sleep(120)
+            self.log.info(" Disable Firewall for Node ")
+            for start_node in stop_nodes:
+                self.disable_firewall(start_node)
         self.sleep(30)
-
-
