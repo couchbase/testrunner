@@ -1482,23 +1482,21 @@ class BaseTestCase(unittest.TestCase):
         """ Method to start a server which is subject to failover """
         for server in self.servers:
             if server.ip == node.ip:
-                RemoteUtilHelper.enable_firewall(node)
+                remote_client = RemoteMachineShellConnection(server)
+                remote_client.kill_memcached()
+                remote_client.disconnect()
 
     def start_firewall_on_node(self, node):
         """ Method to start a server which is subject to failover """
         for server in self.servers:
             if server.ip == node.ip:
-                RemoteUtilHelper.disable_firewall(node)
-                remote_client.kill_memcached()
-                remote_client.disconnect()
+                RemoteUtilHelper.enable_firewall(server)
 
     def stop_firewall_on_node(self, node):
         """ Method to start a server which is subject to failover """
         for server in self.servers:
             if server.ip == node.ip:
-                remote_client = RemoteMachineShellConnection(server)
-                remote_client.kill_memcached()
-                remote_client.disconnect()
+                RemoteUtilHelper.disable_firewall(server)
 
     def get_victim_nodes(self, nodes, master = None, chosen = None, victim_type = "master", victim_count = 1):
         victim_nodes = [master]

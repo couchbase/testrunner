@@ -639,9 +639,9 @@ class FailoverTests(FailoverBaseTest):
             self.log.info(" Enabling Firewall for Node ")
             stop_nodes = self.get_victim_nodes(self.servers, self.master, node, self.victim_type, self.victim_count)
             for stop_node in stop_nodes:
-                self.enable_firewall(stop_node)
+                self.start_firewall_on_node(stop_node)
             self.sleep(120)
             self.log.info(" Disable Firewall for Node ")
             for start_node in stop_nodes:
-                self.disable_firewall(start_node)
+                self.stop_firewall_on_node(start_node)
         self.sleep(30)
