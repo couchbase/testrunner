@@ -1496,7 +1496,9 @@ class BaseTestCase(unittest.TestCase):
         """ Method to start a server which is subject to failover """
         for server in self.servers:
             if server.ip == node.ip:
-                RemoteUtilHelper.disable_firewall(server)
+                remote_client = RemoteMachineShellConnection(server)
+                remote_client.disable_firewall()
+                remote_client.disconnect()
 
     def get_victim_nodes(self, nodes, master = None, chosen = None, victim_type = "master", victim_count = 1):
         victim_nodes = [master]
