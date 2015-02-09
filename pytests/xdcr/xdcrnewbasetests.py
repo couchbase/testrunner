@@ -1939,8 +1939,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         counter = 1
         for _, nodes in self._input.clusters.iteritems():
             cluster_nodes = copy.deepcopy(nodes)
-            if self.__chain_length and len(
-                    self.__cb_clusters) > self.__chain_length:
+            if len(self.__cb_clusters) > int(self.__chain_length):
                 break
             self.__cb_clusters.append(
                 CouchbaseCluster(
@@ -1959,7 +1958,8 @@ class XDCRNewBaseTest(unittest.TestCase):
     def __init_parameters(self):
         self.__case_number = self._input.param("case_number", 0)
         self.__topology = self._input.param("ctopology", TOPOLOGY.CHAIN)
-        self.__chain_length = self._input.param("chain_length", None)
+        # complex topology tests (> 2 clusters must specify chain_length >2)
+        self.__chain_length = self._input.param("chain_length", 2)
         self.__rdirection = self._input.param(
             "rdirection",
             REPLICATION_DIRECTION.UNIDIRECTION)
