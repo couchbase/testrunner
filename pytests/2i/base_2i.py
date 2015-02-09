@@ -110,7 +110,8 @@ class BaseSecondaryIndexingTests(QueryTests):
     def drop_index(self, bucket, query_definition, verifydrop = True):
         check = self.n1ql_helper._is_index_in_list(bucket, query_definition.index_name)
         self.assertTrue(check," cannot drop index {0} as it does not exist ".format(query_definition.index_name))
-        self.query = query_definition.generate_index_drop_query(bucket = bucket)
+        self.query = query_definition.generate_index_drop_query(bucket = bucket,
+          use_gsi_for_secondary = self.use_gsi_for_secondary)
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         if verifydrop:
@@ -118,7 +119,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.assertFalse(check, "index {0} failed to be deleted".format(query_definition.index_name))
 
     def async_drop_index(self, bucket, query_definition):
-        self.query = query_definition.generate_index_drop_query(bucket = bucket)
+        self.query = query_definition.generate_index_drop_query(bucket = bucket,
+          use_gsi_for_secondary = self.use_gsi_for_secondary)
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         drop_index_task = self.cluster.async_drop_index(
                  server = server, bucket = bucket,

@@ -40,8 +40,11 @@ class QueryDefinition(object):
 			query += "USING GSI"
 		return query
 
-	def generate_index_drop_query(self, bucket = "default"):
-		return "DROP INDEX %s.%s" % (bucket, self.index_name)
+	def generate_index_drop_query(self, bucket = "default", use_gsi_for_secondary = True):
+		query =  "DROP INDEX %s.%s" % (bucket, self.index_name)
+		if use_gsi_for_secondary:
+			query += " USING GSI"
+		return query
 
 	def generate_query(self, bucket):
 		if "join" in self.groups:
