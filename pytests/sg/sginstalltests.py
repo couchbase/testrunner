@@ -35,18 +35,99 @@ class SGInstallerTest(GatewayBaseTest):
             self.assertTrue(exist)
             shell.disconnect()
 
+    def serviceInstallNoSyncGatewayUser(self):
+        try:
+            for server in self.servers:
+                shell = RemoteMachineShellConnection(server)
+                self.assertTrue(self.service_clean(shell))
+                self.assertTrue(self.install_gateway(shell))
+                self.assertTrue(self.remove_user(shell,"sync_gateway"))
+                output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
+                self.assertEqual(error, [self.expected_error])
+                self.assertEqual(output, [])
+                self.assertFalse(self.is_sync_gateway_service_running(shell))
+                self.assertFalse(self.is_sync_gateway_process_running(shell))
+                self.assertFalse(shell.file_exists(self.logsdir, 'sync_gateway_error.log'))
+                self.assertFalse(shell.file_exists(self.datadir, 'data'))
+                self.assertFalse(shell.file_exists(self.configdir, self.configfile))
+        finally:
+            self.add_user(shell,"sync_gateway")
+
     def serviceInstallBasic(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             self.assertTrue(self.service_clean(shell))
             self.assertTrue(self.install_gateway(shell))
-            output, error = self.run_sync_gateway_service_install(shell, "")
-            self.assertEqual(error, [])
+            output, error = shell.execute_command_raw(
+                'rm -rf {0}/* {1}/* {2}/sync_gateway.json /tmp/test*; mkdir /tmp/test /tmp/test2'.
+                format(self.logsdir, self.datadir, self.configdir))
+            output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
+            self.check_normal_error_output(shell, output, error)
             self.assertTrue(self.is_sync_gateway_service_running(shell))
             self.assertTrue(self.is_sync_gateway_process_running(shell))
-            self.assertTrue(shell.file_exists("/home/sync_gateway", 'logs'))
-            self.assertTrue(shell.file_exists("/home/sync_gateway", 'data'))
-            self.assertTrue(shell.file_exists("/home/sync_gateway", 'sync_gateway.json'))
+            self.assertTrue(shell.file_exists(self.logsdir, 'sync_gateway_error.log'))
+            self.assertTrue(shell.file_exists(self.datadir, 'data'))
+            self.assertTrue(shell.file_exists(self.configdir, self.configfile))
+
+    def serviceInstallSGPath(self):
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            self.assertTrue(self.service_clean(shell))
+            self.assertTrue(self.install_gateway(shell))
+            shell.execute_command_raw('mv /opt/couchbase-sync-gateway/bin /opt/couchbase-sync-gateway/bin2 ')
+            output, error = self.run_sync_gateway_service_install(shell, '--sgpath=/opt/couchbase-sync-gateway/bin2/sync_gateway')
+            self.check_normal_error_output(shell, output, error)
+            self.assertTrue(self.is_sync_gateway_service_running(shell))
+            self.assertTrue(self.is_sync_gateway_process_running(shell))
+            self.assertTrue(shell.file_exists(self.logsdir, 'sync_gateway_error.log'))
+            self.assertTrue(shell.file_exists(self.datadir, 'data'))
+            self.assertTrue(shell.file_exists(self.configdir, self.configfile))
+
+    def serviceInstallMultipleTimes(self):
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            self.assertTrue(self.service_clean(shell))
+            self.assertTrue(self.install_gateway(shell))
+            output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
+            self.check_normal_error_output(shell, output, error)
+            self.assertTrue(self.is_sync_gateway_service_running(shell))
+            for i in range(3):
+                output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
+                self.assertTrue(self.check_job_already_running(shell, output, error))
+                self.assertTrue(self.is_sync_gateway_service_running(shell))
+                self.assertTrue(self.is_sync_gateway_process_running(shell))
+
+    def serviceInstallThenStartService(self):
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            self.assertTrue(self.service_clean(shell))
+            self.assertTrue(self.install_gateway(shell))
+            output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
+            self.check_normal_error_output(shell, output, error)
+            self.assertTrue(self.is_sync_gateway_service_running(shell))
+            self.assertTrue(self.is_sync_gateway_process_running(shell))
+            for i in range(3):
+                output, error = self.start_gateway_service(shell)
+                self.assertTrue(self.check_job_already_running(shell, output, error))
+                self.assertTrue(self.is_sync_gateway_service_running(shell))
+                self.assertTrue(self.is_sync_gateway_process_running(shell))
+
+    def serviceInstallStopStartServiceMultipleTimes(self):
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            self.assertTrue(self.service_clean(shell))
+            self.assertTrue(self.install_gateway(shell))
+            output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
+            self.check_normal_error_output(shell, output, error)
+            self.assertTrue(self.is_sync_gateway_service_running(shell))
+            self.assertTrue(self.is_sync_gateway_process_running(shell))
+            for i in range(2):
+                output, error = self.stop_gateway_service(shell)
+                self.assertFalse(self.is_sync_gateway_process_running(shell))
+                self.assertFalse(self.is_sync_gateway_service_running(shell))
+                output, error = self.start_gateway_service(shell)
+                self.assertTrue(self.is_sync_gateway_service_running(shell))
+                self.assertTrue(self.is_sync_gateway_process_running(shell))
 
     def serviceInstallHelp(self):
         shell = RemoteMachineShellConnection(self.master)
@@ -60,6 +141,47 @@ class SGInstallerTest(GatewayBaseTest):
         self.assertEqual(error, [])
         self.assertEqual(output, help_string)
         shell.disconnect()
+
+    def serviceInstallNegative(self):
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            self.assertTrue(self.service_clean(shell))
+            self.assertTrue(self.install_gateway(shell))
+            output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
+            self.assertEqual(error, [self.expected_error])
+            self.assertEqual(output, [])
+            self.assertFalse(self.is_sync_gateway_service_running(shell))
+            self.assertFalse(self.is_sync_gateway_process_running(shell))
+            self.assertFalse(shell.file_exists(self.logsdir, 'sync_gateway_error.log'))
+            self.assertFalse(shell.file_exists(self.datadir, 'data'))
+            self.assertFalse(shell.file_exists(self.configdir, self.configfile))
+
+    def serviceInstallNegativeCfgPath(self):
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            self.assertTrue(self.service_clean(shell))
+            self.assertTrue(self.install_gateway(shell))
+            output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
+            self.assertTrue(error[0].startswith(self.expected_error))
+            # self.assertEqual(output, [])
+            # self.assertFalse(shell.file_exists("/home/sync_gateway", 'logs'))
+            #self.assertFalse(shell.file_exists("/home/sync_gateway", 'data'))
+            self.assertFalse(shell.file_exists("/home/sync_gateway", 'sync_gateway.json'))
+            self.assertFalse(self.is_sync_gateway_service_running(shell))
+            self.assertFalse(self.is_sync_gateway_process_running(shell))
+
+    def serviceInstallLogsDirNotExist(self):
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            self.assertTrue(self.service_clean(shell))
+            self.assertTrue(self.install_gateway(shell))
+            output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
+            self.check_normal_error_output(shell, output, error)
+            self.assertTrue(self.is_sync_gateway_service_running(shell))
+            self.assertTrue(self.is_sync_gateway_process_running(shell))
+            self.assertTrue(shell.file_exists(self.logsdir, 'sync_gateway_error.log'))
+            self.assertTrue(shell.file_exists(self.datadir, 'data'))
+            self.assertTrue(shell.file_exists(self.configdir, self.configfile))
 
     def serviceInstallBadParameters(self):
         shell = RemoteMachineShellConnection(self.master)
@@ -98,12 +220,3 @@ class SGInstallerTest(GatewayBaseTest):
         shell.disconnect()
 
 
-    def testSGServiceInstallNoUser(self):
-        shell = RemoteMachineShellConnection(self.master)
-        self.kill_processes_gateway(shell)
-        self.uninstall_gateway(shell)
-        self.assertTrue(self.install_gateway(shell))
-        output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
-        self.assertEqual(error, [self.expected_error])
-        self.assertEqual(output, [])
-        shell.disconnect()
