@@ -78,8 +78,13 @@ class QueryTests(BaseTestCase):
     def suite_tearDown(self):
         if not self.input.param("skip_build_tuq", False):
             if hasattr(self, 'shell'):
-                self.shell.execute_command("killall cbq-engine")
-                self.shell.disconnect()
+               o = self.shell.execute_command("ps -aef| grep cbq-engine")
+               self.log.info(o)
+               if len(o):
+                   for cbq_engine in o[0]:
+                       if cbq_engine.find('grep') == -1:
+                           pid = [item for item in cbq_engine.split(' ') if item][1]
+                           self.shell.execute_command("kill -9 %s" % pid)
 
 
 ##############################################################################################
