@@ -2530,7 +2530,7 @@ class QueryTests(BaseTestCase):
         cred_params = {'creds': []}
         for bucket in self.buckets:
             if bucket.saslPassword:
-                cred_params['creds'].append({'user': bucket.name, 'pass': bucket.saslPassword})
+                cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
         query_params.update(cred_params)
         if self.use_rest:
             query_params.update({'scan_consistency': self.scan_consistency})
