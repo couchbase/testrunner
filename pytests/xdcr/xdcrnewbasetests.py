@@ -1939,7 +1939,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         counter = 1
         for _, nodes in self._input.clusters.iteritems():
             cluster_nodes = copy.deepcopy(nodes)
-            if len(self.__cb_clusters) > int(self.__chain_length):
+            if len(self.__cb_clusters) == int(self.__chain_length):
                 break
             self.__cb_clusters.append(
                 CouchbaseCluster(
