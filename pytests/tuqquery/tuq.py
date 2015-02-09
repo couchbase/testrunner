@@ -22,6 +22,9 @@ class QueryTests(BaseTestCase):
     def setUp(self):
         if not self._testMethodName == 'suite_setUp':
             self.skip_buckets_handle = True
+            os = self.shell.extract_remote_info().type.lower()
+            if os != 'windows':
+                self.sleep(10, 'sleep before load')
         super(QueryTests, self).setUp()
         self.version = self.input.param("cbq_version", "git_repo")
         self.flat_json = self.input.param("flat_json", False)
@@ -42,6 +45,7 @@ class QueryTests(BaseTestCase):
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.primary_indx_type = self.input.param("primary_indx_type", 'VIEWS')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
+        self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
         if self.input.param("reload_data", False):
             self.gens_load = self.generate_docs(self.docs_per_day)
             self.load(self.gens_load, flag=self.item_flag)
@@ -2524,6 +2528,7 @@ class QueryTests(BaseTestCase):
                 cred_params['creds'].append({'user': bucket.name, 'pass': bucket.saslPassword})
         query_params.update(cred_params)
         if self.use_rest:
+            query_params.update({'scan_consistency': self.scan_consistency})
             if hasattr(self, 'query_params') and self.query_params:
                 query_params = self.query_params
             self.log.info('RUN QUERY %s' % query)
@@ -2742,6 +2747,8 @@ class QueryTests(BaseTestCase):
                 shell.disconnect()
 
     def create_primary_index_for_3_0_and_greater(self):
+        if self.flat_json:
+                    return
         self.log.info("CHECK FOR PRIMARY INDEXES")
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
