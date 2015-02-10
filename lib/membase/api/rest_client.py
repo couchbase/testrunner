@@ -366,7 +366,7 @@ class RestConnection(object):
                           headers=self._create_capi_headers_with_auth(self.username, self.password))
             json_parsed = json.loads(content)
         except ValueError as e:
-            print( e )
+            print(e)
             return ""
         return json_parsed
 
@@ -811,12 +811,12 @@ class RestConnection(object):
         msg = "adding remote cluster hostname:{0}:{1} with username:password {2}:{3} name:{4} to source node: {5}:{6}"
         log.info(msg.format(remoteIp, remotePort, username, password, name, self.ip, self.port))
         api = self.baseUrl + 'pools/default/remoteClusters'
-        self.__remote_clusters(api, 'add', remoteIp, remotePort, username, password, name, demandEncryption, certificate)
+        return self.__remote_clusters(api, 'add', remoteIp, remotePort, username, password, name, demandEncryption, certificate)
 
     def modify_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=''):
         log.info("modifying remote cluster name:{0}".format(name))
         api = self.baseUrl + 'pools/default/remoteClusters/' + urllib.quote(name)
-        self.__remote_clusters(api, 'modify', remoteIp, remotePort, username, password, name, demandEncryption, certificate)
+        return self.__remote_clusters(api, 'modify', remoteIp, remotePort, username, password, name, demandEncryption, certificate)
 
     def get_remote_clusters(self):
         remote_clusters = []
@@ -1904,7 +1904,7 @@ class RestConnection(object):
 
     def is_goxdcr_enabled(self):
         status, content = self.diag_eval('ns_config:read_key_fast(goxdcr_enabled, false)')
-        if content=="true":
+        if content == "true":
             return True
         return False
 

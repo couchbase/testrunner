@@ -24,6 +24,9 @@ from tasks.future import TimeoutError
 from couchbase_helper.documentgenerator import BlobGenerator
 from lib.membase.api.exception import XDCRException
 
+# FIXME: Enable when Ritam's code is merged.
+# from security.AuditMain import audit
+
 
 class RenameNodeException(XDCRException):
 
@@ -116,6 +119,21 @@ class STATE:
     RUNNING = "running"
 
 
+class REPL_PARAM:
+    FAILURE_RESTART = "failureRestartInterval"
+    CHECKPOINT_INTERVAL = "checkpointInterval"
+    OPTIMISTIC_THRESHOLD = "optimisticReplicationThreshold"
+    FILTER_EXP = "filterExpression"
+    SOURCE_NOZZLES = "sourceNozzlePerNode"
+    TARGET_NOZZLES = "targetNozzlePerNode"
+    BATCH_COUNT = "workerBatchSize"
+    BATCH_SIZE = "docBatchSizeKb"
+    LOG_LEVEL = "logLevel"
+    MAX_REPLICATION_LAG = "maxExpectedReplicationLag"
+    TIMEOUT_PERC = "timeoutPercentageCap"
+    PAUSE_REQUESTED = "pauseRequested"
+
+
 class TEST_XDCR_PARAM:
     FAILURE_RESTART = "failure_restart_interval"
     CHECKPOINT_INTERVAL = "checkpoint_interval"
@@ -132,32 +150,18 @@ class TEST_XDCR_PARAM:
     @staticmethod
     def get_test_to_create_repl_param_map():
         return {
-            TEST_XDCR_PARAM.FAILURE_RESTART: CREATE_REPL_PARAM.FAILURE_RESTART,
-            TEST_XDCR_PARAM.CHECKPOINT_INTERVAL: CREATE_REPL_PARAM.CHECKPOINT_INTERVAL,
-            TEST_XDCR_PARAM.OPTIMISTIC_THRESHOLD: CREATE_REPL_PARAM.OPTIMISTIC_THRESHOLD,
-            TEST_XDCR_PARAM.FILTER_EXP: CREATE_REPL_PARAM.FILTER_EXP,
-            TEST_XDCR_PARAM.SOURCE_NOZZLES: CREATE_REPL_PARAM.SOURCE_NOZZLES,
-            TEST_XDCR_PARAM.TARGET_NOZZLES: CREATE_REPL_PARAM.TARGET_NOZZLES,
-            TEST_XDCR_PARAM.BATCH_COUNT: CREATE_REPL_PARAM.BATCH_COUNT,
-            TEST_XDCR_PARAM.BATCH_SIZE: CREATE_REPL_PARAM.BATCH_SIZE,
-            TEST_XDCR_PARAM.MAX_REPLICATION_LAG: CREATE_REPL_PARAM.MAX_REPLICATION_LAG,
-            TEST_XDCR_PARAM.TIMEOUT_PERC: CREATE_REPL_PARAM.TIMEOUT_PERC,
-            TEST_XDCR_PARAM.LOG_LEVEL: CREATE_REPL_PARAM.LOG_LEVEL
+            TEST_XDCR_PARAM.FAILURE_RESTART: REPL_PARAM.FAILURE_RESTART,
+            TEST_XDCR_PARAM.CHECKPOINT_INTERVAL: REPL_PARAM.CHECKPOINT_INTERVAL,
+            TEST_XDCR_PARAM.OPTIMISTIC_THRESHOLD: REPL_PARAM.OPTIMISTIC_THRESHOLD,
+            TEST_XDCR_PARAM.FILTER_EXP: REPL_PARAM.FILTER_EXP,
+            TEST_XDCR_PARAM.SOURCE_NOZZLES: REPL_PARAM.SOURCE_NOZZLES,
+            TEST_XDCR_PARAM.TARGET_NOZZLES: REPL_PARAM.TARGET_NOZZLES,
+            TEST_XDCR_PARAM.BATCH_COUNT: REPL_PARAM.BATCH_COUNT,
+            TEST_XDCR_PARAM.BATCH_SIZE: REPL_PARAM.BATCH_SIZE,
+            TEST_XDCR_PARAM.MAX_REPLICATION_LAG: REPL_PARAM.MAX_REPLICATION_LAG,
+            TEST_XDCR_PARAM.TIMEOUT_PERC: REPL_PARAM.TIMEOUT_PERC,
+            TEST_XDCR_PARAM.LOG_LEVEL: REPL_PARAM.LOG_LEVEL
         }
-
-
-class CREATE_REPL_PARAM:
-    FAILURE_RESTART = "failureRestartInterval"
-    CHECKPOINT_INTERVAL = "checkpointInterval"
-    OPTIMISTIC_THRESHOLD = "optimisticReplicationThreshold"
-    FILTER_EXP = "filterExpression"
-    SOURCE_NOZZLES = "sourceNozzlePerNode"
-    TARGET_NOZZLES = "targetNozzlePerNode"
-    BATCH_COUNT = "workerBatchSize"
-    BATCH_SIZE = "docBatchSizeKb"
-    LOG_LEVEL = "logLevel"
-    MAX_REPLICATION_LAG = "maxExpectedReplicationLag"
-    TIMEOUT_PERC = "timeoutPercentageCap"
 
 
 class XDCR_PARAM:
@@ -173,6 +177,39 @@ class XDCR_PARAM:
     XDCR_LOG_LEVEL = "xdcrLogLevel"
     XDCR_MAX_REPLICATION_LAG = "xdcrMaxExpectedReplicationLag"
     XDCR_TIMEOUT_PERC = "xdcrTimeoutPercentageCap"
+
+
+class CHECK_AUDIT_EVENT:
+    CHECK = False
+
+
+class GO_XDCR:
+    ENABLED = False
+
+# Event Definition:
+# https://github.com/couchbase/goxdcr/blob/master/etc/audit_descriptor.json
+
+
+class GO_XDCR_AUDIT_EVENT_ID:
+    CREATE_CLUSTER = 16384
+    MOD_CLUSTER = 16385
+    RM_CLUSTER = 16386
+    CREATE_REPL = 16387
+    PAUSE_REPL = 16388
+    RESUME_REPL = 16389
+    CAN_REPL = 16390
+    DEFAULT_SETT = 16391
+    IND_SETT = 16392
+
+
+class ERLANG_XDCR_AUDIT_EVENT_ID:
+    CREATE_CLUSTER = 8213
+    MOD_CLUSTER = 8214
+    RM_CLUSTER = 8215
+    CREATE_REPL = 8216
+    # EventID for Pause, Resume and Individual repl, settings.
+    UPDATE_REPL = 8217
+    CAN_REPL = 8218
 
 
 class NodeHelper:
@@ -229,7 +266,7 @@ class NodeHelper:
             [server],
             test_case,
             wait_if_warmup=True)
-        if TestInputSingleton.input.param("enable_goxdcr", False):
+        if GO_XDCR.ENABLED:
             RestConnection(server).enable_goxdcr()
         else:
             RestConnection(server).enable_xdcr_trace_logging()
@@ -256,7 +293,7 @@ class NodeHelper:
         time.sleep(5)
         shell.start_couchbase()
         shell.disconnect()
-        if TestInputSingleton.input.param("enable_goxdcr", False):
+        if GO_XDCR.ENABLED:
             RestConnection(server).enable_goxdcr()
         else:
             RestConnection(server).enable_xdcr_trace_logging()
@@ -277,7 +314,7 @@ class NodeHelper:
             output, _ = shell.execute_command(cmd)
             if str(output).lower().find("running") != -1:
                 # self.log.info("Couchbase service is running")
-                if TestInputSingleton.input.param("enable_goxdcr", False):
+                if GO_XDCR.ENABLED:
                     RestConnection(server).enable_goxdcr()
                 else:
                     RestConnection(server).enable_xdcr_trace_logging()
@@ -403,6 +440,22 @@ class NodeHelper:
         #    raise "NEED To SETUP DATE COMMAND FOR WINDOWS"
 
 
+class ValidateAuditEvent:
+
+    @staticmethod
+    def validate_audit_event(event_id, master_node, expected_results):
+        if CHECK_AUDIT_EVENT.CHECK:
+            audit_obj = audit(event_id, master_node)
+            field_verified, value_verified = audit_obj.validateEvents(
+                expected_results)
+            raise_if(
+                not field_verified,
+                XDCRException("One of the fields is not matching"))
+            raise_if(
+                not value_verified,
+                XDCRException("Values for one of the fields is not matching"))
+
+
 class FloatingServers:
 
     """Keep Track of free servers, For Rebalance-in
@@ -428,6 +481,7 @@ class XDCRRemoteClusterRef:
         self.__dest_cluster = dest_cluster
         self.__name = name
         self.__encryption = encryption
+        self.__rest_info = {}
 
         # List of XDCRepication objects
         self.__replications = []
@@ -449,6 +503,42 @@ class XDCRRemoteClusterRef:
     def get_replications(self):
         return self.__replications
 
+    def get_rest_info(self):
+        return self.__rest_info
+
+    def __get_event_expected_results(self):
+        if GO_XDCR.ENABLED:
+            expected_results = {
+                "real_userid:source": "internal",
+                "real_userid:user": self.__src_cluster.get_master_node().rest_username,
+                "cluster_name": self.__name,
+                "cluster_hostname": "%s:%s" % (self.__dest_cluster.get_master_node().ip, self.__dest_cluster.get_master_node().port),
+                "is_encrypted": str(self.__encryption).lower()
+            }
+        else:
+            expected_results = {
+                "uuid": self.__rest_info['uuid'],
+                "name": self.__rest_info['name'],
+                "username": self.__rest_info['username'],
+                "hostname": self.__rest_info['hostname'],
+                "demand_encryption": str(self.__encryption).lower(),
+                "real_userid:source": "ns_server",
+                "real_userid:user": self.__src_cluster.get_master_node().rest_username
+            }
+        return expected_results
+
+    def __validate_create_event(self):
+        if GO_XDCR.ENABLED:
+            ValidateAuditEvent.validate_audit_event(
+                GO_XDCR_AUDIT_EVENT_ID.CREATE_CLUSTER,
+                self.__src_cluster.get_master_node(),
+                self.__get_event_expected_results())
+        else:
+            ValidateAuditEvent.validate_audit_event(
+                ERLANG_XDCR_AUDIT_EVENT_ID.CREATE_CLUSTER,
+                self.__src_cluster.get_master_node(),
+                self.__get_event_expected_results())
+
     def add(self):
         """create cluster reference- add remote cluster
         """
@@ -458,30 +548,63 @@ class XDCRRemoteClusterRef:
         if self.__encryption:
             rest_conn_dest = RestConnection(dest_master)
             certificate = rest_conn_dest.get_cluster_ceritificate()
-        rest_conn_src.add_remote_cluster(
+        self.__rest_info = rest_conn_src.add_remote_cluster(
             dest_master.ip, dest_master.port,
             dest_master.rest_username,
             dest_master.rest_password, self.__name,
             demandEncryption=self.__encryption,
             certificate=certificate)
 
-    def set_encryption(self, encryption=True):
+        self.__validate_create_event()
+
+    def __validate_modify_event(self):
+        if GO_XDCR.ENABLED:
+            ValidateAuditEvent.validate_audit_event(
+                GO_XDCR_AUDIT_EVENT_ID.MOD_CLUSTER,
+                self.__src_cluster.get_master_node(),
+                self.__get_event_expected_results())
+        else:
+            ValidateAuditEvent.validate_audit_event(
+                ERLANG_XDCR_AUDIT_EVENT_ID.MOD_CLUSTER,
+                self.__src_cluster.get_master_node(),
+                self.__get_event_expected_results())
+
+    def modify(self, encryption=True):
         """Modify cluster reference to enable SSL encryption
         """
-        dest_master = self.__dest_cluster.get_dest_cluster(
-        ).get_master_node()
+        dest_master = self.__dest_cluster.get_master_node()
         rest_conn_src = RestConnection(self.__src_cluster.get_master_node())
         certificate = ""
         if encryption:
             rest_conn_dest = RestConnection(dest_master)
             certificate = rest_conn_dest.get_cluster_ceritificate()
-            rest_conn_src.modify_remote_cluster(
+            self.__rest_info = rest_conn_src.modify_remote_cluster(
                 dest_master.ip, dest_master.port,
                 dest_master.rest_username,
                 dest_master.rest_password, self.__name,
                 demandEncryption=encryption,
                 certificate=certificate)
         self.__encryption = encryption
+
+        self.__validate_modify_event()
+
+    def __validate_remove_event(self):
+        if GO_XDCR.ENABLED:
+            ValidateAuditEvent.validate_audit_event(
+                GO_XDCR_AUDIT_EVENT_ID.RM_CLUSTER,
+                self.__src_cluster.get_master_node(),
+                self.__get_event_expected_results())
+        else:
+            ValidateAuditEvent.validate_audit_event(
+                ERLANG_XDCR_AUDIT_EVENT_ID.RM_CLUSTER,
+                self.__src_cluster.get_master_node(),
+                self.__get_event_expected_results())
+
+    def remove(self):
+        RestConnection(
+            self.__src_cluster.get_master_node()).remove_remote_cluster(
+            self.__name)
+        self.__validate_remove_event()
 
     def create_replication(
             self, fromBucket,
@@ -516,6 +639,15 @@ class XDCRRemoteClusterRef:
         """
         [repl.resume() for repl in self.__replications]
 
+    def stop_all_replications(self):
+        rest = RestConnection(self.__src_cluster.get_master_node())
+        rest_all_repls = rest.get_replications()
+        for repl in self.__replications:
+            for rest_all_repl in rest_all_repls:
+                if repl.get_repl_id() == rest_all_repl['id']:
+                    repl.cancel(rest, rest_all_repl)
+        self.clear_all_replications()
+
 
 class XDCReplication:
 
@@ -535,6 +667,7 @@ class XDCReplication:
         self.__src_cluster_name = self.__src_cluster.get_name()
         self.__rep_type = rep_type
         self.__test_xdcr_params = {}
+        self.__updated_params = {}
 
         self.__parse_test_xdcr_params()
         self.log = logger.Logger.get_logger()
@@ -545,8 +678,8 @@ class XDCReplication:
     def __str__(self):
         return "Replication {0}:{1} -> {2}:{3}".format(
             self.__src_cluster.get_name(),
-            self.__from_bucket, self.__dest_cluster.get_name(),
-            self.__to_bucket)
+            self.__from_bucket.name, self.__dest_cluster.get_name(),
+            self.__to_bucket.name)
 
     # get per replication params specified as from_bucket@cluster_name=
     # eg. default@C1="xdcrFilterExpression:loadOne,xdcrCheckpointInterval:60,
@@ -585,6 +718,85 @@ class XDCReplication:
     def get_dest_cluster(self):
         return self.__dest_cluster
 
+    def get_repl_id(self):
+        return self.__rep_id
+
+    def __get_event_expected_results(self):
+        expected_results = {}
+        if GO_XDCR.ENABLED:
+            expected_results = {
+                "real_userid:source": "internal",
+                "real_userid:user": self.__src_cluster.get_master_node().rest_username,
+                "local_cluster_name": "",  # FIXME
+                "source_bucket_name": self.__from_bucket.name,
+                "remote_cluster_name": self.__remote_cluster_ref.get_name(),
+                "target_bucket_name": self.__to_bucket.name
+            }
+        return expected_results
+
+    def __validate_update_repl_event(self):
+        expected_results = {
+            "settings": {
+                "continuous": 'true',
+                "target": "",  # FIXME
+                "source": self.__from_bucket.name,
+                "type": "xdc-%s" % self.__rep_type
+            },
+            "id": self.__rep_id,
+            "real_userid:source": "ns_server",
+            "real_userid:user": self.__src_cluster.get_master_node().rest_username,
+        }
+        expected_results["settings"].update(self.__updated_params)
+        ValidateAuditEvent.validate_audit_event(
+            ERLANG_XDCR_AUDIT_EVENT_ID.UPDATE_REPL,
+            self.get_src_cluster().get_master_node(),
+            expected_results)
+
+    def __validate_set_param_event(self):
+        if GO_XDCR.ENABLED:
+            expected_results = self.__get_event_expected_results()
+            expected_results["updated_settings"] = self.__updated_params
+            ValidateAuditEvent.validate_audit_event(
+                GO_XDCR_AUDIT_EVENT_ID.IND_SETT,
+                self.get_src_cluster().get_master_node(), expected_results)
+        else:
+            self.__validate_update_repl_event()
+
+    def set_xdcr_param(self, param, value, verify_event=True):
+        src_master = self.__src_cluster.get_master_node()
+        RestConnection(src_master).set_xdcr_param(
+            self.__from_bucket.name,
+            self.__to_bucket.name,
+            param,
+            value)
+
+        self.__updated_params[param] = value
+        if verify_event:
+            self.__validate_set_param_event()
+
+    def __validate_start_audit_event(self):
+        if GO_XDCR.ENABLED:
+            ValidateAuditEvent.validate_audit_event(
+                GO_XDCR_AUDIT_EVENT_ID.CREATE_REPL,
+                self.get_src_cluster().get_master_node(),
+                self.__get_event_expected_results())
+        else:
+            expected_results = {
+                "to_bucket": self.__to_bucket.name,
+                "from_bucket": self.__from_bucket.name,
+                "settings": {
+                    'to_cluster': self.__remote_cluster_ref.get_name(),
+                    "replication_type": REPLICATION_TYPE.CONTINUOUS
+                },
+                "id": self.__rep_id,
+                "real_userid:source": "ns_server",
+                "real_userid:user": self.__src_cluster.get_master_node().rest_username,
+            }
+            ValidateAuditEvent.validate_audit_event(
+                ERLANG_XDCR_AUDIT_EVENT_ID.CREATE_REPL,
+                self.get_src_cluster().get_master_node(),
+                expected_results)
+
     def start(self):
         """Start replication"""
         src_master = self.__src_cluster.get_master_node()
@@ -596,6 +808,7 @@ class XDCReplication:
             rep_type=self.__rep_type,
             toBucket=self.__to_bucket,
             xdcr_params=self.__convert_test_to_xdcr_params())
+        self.__validate_start_audit_event()
 
     def __verify_pause(self):
         """Verify if replication is paused"""
@@ -609,16 +822,26 @@ class XDCReplication:
                 format(self.__from_bucket.name,
                        self.__to_bucket.name))
 
+    def __validate_pause_event(self):
+        if GO_XDCR.ENABLED:
+            ValidateAuditEvent.validate_audit_event(
+                GO_XDCR_AUDIT_EVENT_ID.PAUSE_REPL,
+                self.get_src_cluster().get_master_node(),
+                self.__get_event_expected_results())
+        else:
+            self.__validate_update_repl_event()
+
     def pause(self, verify=False):
         """Pause replication"""
         src_master = self.__src_cluster.get_master_node()
         if not RestConnection(src_master).is_replication_paused(
                 self.__from_bucket.name, self.__to_bucket.name):
-            RestConnection(src_master).set_xdcr_param(
-                self.__from_bucket.name,
-                self.__to_bucket.name,
-                'pauseRequested',
-                'true')
+            self.set_xdcr_param(
+                REPL_PARAM.PAUSE_REQUESTED,
+                'true',
+                verify_event=False)
+
+        self.__validate_pause_event()
 
         if verify:
             self.__verify_pause()
@@ -669,18 +892,54 @@ class XDCReplication:
         if not self.__is_cluster_replicating():
             self.log.info("XDCR completed on {0}".format(src_master.ip))
 
+    def __validate_resume_event(self):
+        if GO_XDCR.ENABLED:
+            ValidateAuditEvent.validate_audit_event(
+                GO_XDCR_AUDIT_EVENT_ID.RESUME_REPL,
+                self.get_src_cluster().get_master_node(),
+                self.__get_event_expected_results())
+        else:
+            self.__validate_update_repl_event()
+
     def resume(self, verify=False):
         """Resume replication if paused"""
         src_master = self.__src_cluster.get_master_node()
         if RestConnection(src_master).is_replication_paused(
                 self.__from_bucket.name, self.__to_bucket.name):
-            RestConnection(src_master).set_xdcr_param(self.__from_bucket.name,
-                                                      self.__to_bucket.name,
-                                                      'pauseRequested',
-                                                      'false')
+            self.set_xdcr_param(
+                REPL_PARAM.PAUSE_REQUESTED,
+                'false',
+                verify_event=False)
+
+        self.__validate_resume_event()
 
         if verify:
             self.__verify_resume()
+
+    def __validate_cancel_event(self):
+        if GO_XDCR.ENABLED:
+            ValidateAuditEvent.validate_audit_event(
+                GO_XDCR_AUDIT_EVENT_ID.CAN_REPL,
+                self.get_src_cluster().get_master_node(),
+                self.__get_event_expected_results())
+        else:
+            expected_results = {
+                "id": self.__rep_id,
+                "real_userid:source": "ns_server",
+                "real_userid:user": self.__src_cluster.get_master_node().rest_username,
+            }
+            ValidateAuditEvent.validate_audit_event(
+                ERLANG_XDCR_AUDIT_EVENT_ID.CAN_REPL,
+                self.get_src_cluster().get_master_node(),
+                expected_results)
+
+    def cancel(self, rest, rest_all_repl):
+        try:
+            rest.stop_replication(rest_all_repl["cancelURI"])
+        except:
+            rest.stop_replication("controller/cancelXDCR/%s" % self.__rep_id)
+
+        self.__validate_cancel_event()
 
 
 class CouchbaseCluster:
@@ -778,7 +1037,7 @@ class CouchbaseCluster:
             [],
             use_hostnames=self.__use_hostname).result()
         for node in self.__nodes:
-            if TestInputSingleton.input.param("enable_goxdcr", False):
+            if GO_XDCR.ENABLED:
                 RestConnection(node).enable_goxdcr()
             else:
                 RestConnection(node).enable_xdcr_trace_logging()
@@ -820,9 +1079,25 @@ class CouchbaseCluster:
         if not cluster_run:
             self.__collect_data_files()
 
+    def __remove_all_remote_clusters(self):
+        rest_remote_clusters = RestConnection(
+            self.__master_node).get_remote_clusters()
+        for remote_cluster_ref in self.__remote_clusters:
+            for rest_remote_cluster in rest_remote_clusters:
+                if remote_cluster_ref.get_name() == rest_remote_cluster[
+                        'name']:
+                    if not rest_remote_cluster.get('deleted', False):
+                        remote_cluster_ref.remove()
+        self.__remote_clusters = []
+
+    def __remove_all_replications(self):
+        for remote_cluster_ref in self.__remote_clusters:
+            remote_cluster_ref.stop_all_replications()
+
     def cleanup_cluster(
             self,
             test_case,
+            from_rest=False,
             cluster_shutdown=True):
         """Cleanup cluster.
         1. Remove all remote cluster references.
@@ -836,8 +1111,12 @@ class CouchbaseCluster:
         try:
             self.__log.info("removing xdcr/nodes settings")
             rest = RestConnection(self.__master_node)
-            rest.remove_all_remote_clusters()
-            rest.remove_all_replications()
+            if from_rest:
+                rest.remove_all_remote_clusters()
+                rest.remove_all_replications()
+            else:
+                self.__remove_all_replications()
+                self.__remove_all_remote_clusters()
             rest.remove_all_recoveries()
             self.__stop_rebalance()
             self.__log.info("cleanup {0}".format(self.__nodes))
@@ -1657,6 +1936,20 @@ class CouchbaseCluster:
         """
         RestConnection(self.__master_node).set_internalSetting(param, value)
 
+        expected_results = {
+            "real_userid:source": "internal",
+            "real_userid:user": self.__master_node.rest_username,
+            "local_cluster_name": "",  # TODO
+            "updated_settings": {param: value}
+        }
+
+        # In case of ns_server xdcr, no events generate for it.
+        if GO_XDCR.ENABLED:
+            ValidateAuditEvent.validate_audit_event(
+                GO_XDCR_AUDIT_EVENT_ID.DEFAULT_SETT,
+                self.get_master_node(),
+                expected_results)
+
     def get_xdcr_stat(self, bucket_name, stat):
         """ Return given XDCR stat for given bucket.
         @param bucket_name: name of bucket.
@@ -1705,7 +1998,7 @@ class CouchbaseCluster:
         """
         for remote_cluster in self.__remote_clusters:
             if remote_cluster_name == remote_cluster.get_name():
-                remote_cluster.set_encryption(require_encryption)
+                remote_cluster. modify(require_encryption)
                 break
         else:
             raise XDCRException(
@@ -1780,7 +2073,9 @@ class CouchbaseCluster:
             node_str += node.ip + ':11210'
         ssh_conn = RemoteMachineShellConnection(self.__master_node)
         for bucket in self.__buckets:
-            self.__log.info("Executing cbvdiff for bucket {0}".format(bucket.name))
+            self.__log.info(
+                "Executing cbvdiff for bucket {0}".format(
+                    bucket.name))
             ssh_conn.execute_cbvdiff(bucket, node_str)
         ssh_conn.disconnect()
 
@@ -1943,8 +2238,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 "====  XDCRNewbasetests cleanup is started for test #{0} {1} ===="
                 .format(self.__case_number, self._testMethodName))
             for cb_cluster in self.__cb_clusters:
-                cb_cluster.cleanup_cluster(
-                    self)
+                cb_cluster.cleanup_cluster(self)
             self.log.info(
                 "====  XDCRNewbasetests cleanup is finished for test #{0} {1} ==="
                 .format(self.__case_number, self._testMethodName))
@@ -2046,10 +2340,15 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._checkpoint_interval = self._input.param(
             "checkpoint_interval",
             1800)
+        CHECK_AUDIT_EVENT.CHECK = self._input.param("check-audit-event", 0)
+        GO_XDCR.ENABLED = self._input.param("enable_goxdcr", False)
 
     def __cleanup_previous(self):
         for cluster in self.__cb_clusters:
-            cluster.cleanup_cluster(self, cluster_shutdown=False)
+            cluster.cleanup_cluster(
+                self,
+                from_rest=True,
+                cluster_shutdown=False)
         # Remove once MB-12950 is fixed.
         RestConnection.replications = []
 
@@ -2424,8 +2723,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 for ip, values in task.keys_not_found.iteritems():
                     if values:
                         self.log.error("%s keys not found on %s, "
-                                       "printing first 100 keys: %s" %(len(values),
-                                                           ip, values[:100]))
+                                       "printing first 100 keys: %s" % (len(values),
+                                                                        ip, values[:100]))
         return error_count
 
     def __merge_keys(
