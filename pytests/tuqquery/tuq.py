@@ -22,9 +22,6 @@ class QueryTests(BaseTestCase):
     def setUp(self):
         if not self._testMethodName == 'suite_setUp':
             self.skip_buckets_handle = True
-            os = RemoteMachineShellConnection(self.master).extract_remote_info().type.lower()
-            if os != 'windows':
-                self.sleep(10, 'sleep before load')
         super(QueryTests, self).setUp()
         self.version = self.input.param("cbq_version", "git_repo")
         self.flat_json = self.input.param("flat_json", False)
@@ -57,6 +54,9 @@ class QueryTests(BaseTestCase):
 
     def suite_setUp(self):
         try:
+            os = self.shell.extract_remote_info().type.lower()
+            if os != 'windows':
+                self.sleep(10, 'sleep before load')
             if not self.skip_load:
                 if self.flat_json:
                     self.load_directory(self.gens_load)
