@@ -22,7 +22,7 @@ class QueryTests(BaseTestCase):
     def setUp(self):
         if not self._testMethodName == 'suite_setUp':
             self.skip_buckets_handle = True
-            os = self.shell.extract_remote_info().type.lower()
+            os = RemoteMachineShellConnection(self.master).extract_remote_info().type.lower()
             if os != 'windows':
                 self.sleep(10, 'sleep before load')
         super(QueryTests, self).setUp()
