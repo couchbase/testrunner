@@ -2157,7 +2157,7 @@ class RestConnection(object):
 
     def query_tool_stats(self):
         log.info('query n1ql stats')
-        api = "http://%s:8093/query/stats" % (self.ip)
+        api = "http://%s:8093/admin/stats" % (self.ip)
         status, content, header = self._http_request(api, 'GET')
         log.info(content)
         try:

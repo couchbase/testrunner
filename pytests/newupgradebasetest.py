@@ -89,6 +89,8 @@ class NewUpgradeBaseTest(BaseTestCase):
                 if self.input.param('BUGS', False):
                     self.log.warn("Test failed. Possible reason is: {0}".format(self.input.param('BUGS', False)))
         else:
+            if not hasattr(self, 'rest'):
+                return
             try:
                 # cleanup only nodes that are in cluster
                 # not all servers have been installed
