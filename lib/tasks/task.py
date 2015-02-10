@@ -1260,7 +1260,7 @@ class BatchedValidateDataTask(GenericLoadingTask):
 
 
 class VerifyRevIdTask(GenericLoadingTask):
-    def __init__(self, src_server, dest_server, bucket, kv_store, max_err_count=100):
+    def __init__(self, src_server, dest_server, bucket, kv_store, max_err_count=200000):
         GenericLoadingTask.__init__(self, src_server, bucket, kv_store)
         from memcached.helper.data_helper import VBucketAwareMemcached as SmartClient
         self.client_src = SmartClient(RestConnection(src_server), bucket)

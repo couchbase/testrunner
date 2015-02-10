@@ -2466,6 +2466,19 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
+    def execute_cbvdiff(self, bucket, node_str):
+        cbvdiff_command = "%scbvdiff" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            cbvdiff_command = "%scbvdiff.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        if self.info.distribution_type.lower() == 'mac':
+            cbvdiff_command = "%scbvdiff" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+
+        command = "%s -b %s %s " % (cbvdiff_command, bucket.name, node_str)
+        output, error = self.execute_command(command)
+        self.log_command_output(output, error)
+        return output, error
+
     def execute_cbstats(self, bucket, command, keyname="", vbid=0):
         cbstat_command = "%scbstats" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()

@@ -1732,6 +1732,9 @@ class CouchbaseCluster:
     def verify_items_count(self, timeout=60):
         """Wait for actual bucket items count reach to the count on bucket kv_store.
         """
+        ret_value = True
+
+        # Check active, curr key count
         stats_tasks = []
         for bucket in self.__buckets:
             items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
@@ -1739,6 +1742,18 @@ class CouchbaseCluster:
                 stats_tasks.append(self.__clusterop.async_wait_for_stats(
                     self.__nodes, bucket, '',
                     stat, '==', items))
+        try:
+            for task in stats_tasks:
+                task.result(timeout)
+        except TimeoutError:
+            self.__log.error(
+                "ERROR: Timed-out waiting for active item count to match")
+            ret_value = False
+
+        # Check replica key count
+        stats_tasks = []
+        for bucket in self.__buckets:
+            items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
             if bucket.numReplicas >= 1 and len(self.__nodes) > 1:
                 stats_tasks.append(self.__clusterop.async_wait_for_stats(
                     self.__nodes, bucket, '',
@@ -1747,8 +1762,27 @@ class CouchbaseCluster:
             for task in stats_tasks:
                 task.result(timeout)
         except TimeoutError:
+            self.run_cbvdiff()
             self.__log.error(
-                "ERROR: Timed-out waiting for item count to match")
+                "ERROR: Timed-out waiting for replica item count to match")
+            ret_value = False
+        return ret_value
+
+    def run_cbvdiff(self):
+        """ Run cbvdiff, a tool that compares active and replica vbucket keys
+        Eg. ./cbvdiff -b standardbucket  172.23.105.44:11210,172.23.105.45:11210
+             VBucket 232: active count 59476 != 59477 replica count
+        """
+        node_str = ""
+        for node in self.__nodes:
+            if node_str:
+                node_str += ','
+            node_str += node.ip + ':11210'
+        ssh_conn = RemoteMachineShellConnection(self.__master_node)
+        for bucket in self.__buckets:
+            self.__log.info("Executing cbvdiff for bucket {0}".format(bucket.name))
+            ssh_conn.execute_cbvdiff(bucket, node_str)
+        ssh_conn.disconnect()
 
     def verify_data(self, kv_store=1, timeout=None,
                     max_verify=None, only_store_hash=True, batch_size=1000):
@@ -2373,9 +2407,10 @@ class XDCRNewBaseTest(unittest.TestCase):
         error_count = 0
         tasks = []
         for repl in xdcr_replications:
-            self.log.info("Verifying RevIds for {0} -> {1}".format(
+            self.log.info("Verifying RevIds for {0} -> {1}, bucket {2}".format(
                 repl.get_src_cluster(),
-                repl.get_dest_cluster()))
+                repl.get_dest_cluster(),
+                repl.get_src_bucket))
             task_info = self.__cluster_op.async_verify_revid(
                 repl.get_src_cluster().get_master_node(),
                 repl.get_dest_cluster().get_master_node(),
@@ -2388,8 +2423,9 @@ class XDCRNewBaseTest(unittest.TestCase):
             if task.err_count:
                 for ip, values in task.keys_not_found.iteritems():
                     if values:
-                        self.log.error("%s keys not found on %s:%s" %
-                                       (len(values), ip, values))
+                        self.log.error("%s keys not found on %s, "
+                                       "printing first 100 keys: %s" %(len(values),
+                                                           ip, values[:100]))
         return error_count
 
     def __merge_keys(
@@ -2506,8 +2542,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     src_cluster.wait_for_outbound_mutations()
                     dest_cluster.wait_for_outbound_mutations()
 
-                    src_cluster.verify_items_count()
-                    dest_cluster.verify_items_count()
+                    src_key_count_ok = src_cluster.verify_items_count()
+                    dest_key_count_ok = dest_cluster.verify_items_count()
 
                     src_cluster.verify_data()
                     dest_cluster.verify_data()
@@ -2518,4 +2554,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.verify_rev_ids(remote_cluster_ref.get_replications())
                     if not verification_completed:
                         self.fail(
-                            "Verification failed for remote-cluster: {0}".format(remote_cluster_ref))
+                            "Verification failed for remote-cluster: {0}".
+                            format(remote_cluster_ref))
+                    if not (src_key_count_ok and dest_key_count_ok):
+                        self.fail("Active or replica key count is incorrect")
