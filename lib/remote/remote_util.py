@@ -303,6 +303,16 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         return o, r
 
+    def kill_goxdcr(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            o, r = self.execute_command("taskkill /F /T /IM goxdcr*")
+            self.log_command_output(o, r)
+        else:
+            o, r = self.execute_command("killall -9 goxdcr")
+            self.log_command_output(o, r)
+        return o, r
+
     def change_log_level(self, new_log_level):
         log.info("CHANGE LOG LEVEL TO %s".format(new_log_level))
         # ADD NON_ROOT user config_details
@@ -1420,7 +1430,7 @@ class RemoteMachineShellConnection:
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
                          "/opt/couchbase", "/data/"]
         terminate_process_list = ["beam.smp", "memcached", "moxi", "vbucketmigrator",
-                                  "couchdb", "epmd", "memsup", "cpu_sup"]
+                                  "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr"]
         version_file = "VERSION.txt"
         self.extract_remote_info()
         log.info(self.info.distribution_type)
