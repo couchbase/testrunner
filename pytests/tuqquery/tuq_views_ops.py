@@ -38,7 +38,7 @@ class QueriesViewsTests(QueryTests):
     def test_view_query(self):
         self.cluster.create_view(self.master, self.ddoc_name, self.default_view)
         self.test_array_agg()
-        full_list = self._generate_full_docs_list(self.gens_load)
+        full_list = self.generate_full_docs_list(self.gens_load)
         task = self.cluster.async_query_view(self.master, self.ddoc_name,
                                              self.default_view.name, {"stale" : "false"},
                                              len(full_list))

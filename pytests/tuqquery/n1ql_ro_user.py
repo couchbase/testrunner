@@ -1,6 +1,6 @@
 import math
 
-from tuqquery.tuq import QueryTests
+from tuq import QueryTests
 
 
 class ReadOnlyUserTests(QueryTests):

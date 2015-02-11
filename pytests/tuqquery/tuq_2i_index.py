@@ -1,6 +1,6 @@
 import math
 
-from tuqquery.tuq import QueryTests
+from tuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.api.exception import CBQError

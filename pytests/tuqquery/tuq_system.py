@@ -21,6 +21,8 @@ class SysCatalogTests(QueryTests):
         self.query = "SELECT * FROM system:datastores"
         result = self.run_cbq_query()
         host = (self.master.ip, self.input.tuq_client)[self.input.tuq_client and "client" in self.input.tuq_client]
+        if self.version == 'sherlock':
+            host ='127.0.0.1'
         for res in result['results']:
             self.assertEqual(res['datastores']['id'], res['datastores']['url'],
                              "Id and url don't match")
@@ -31,7 +33,7 @@ class SysCatalogTests(QueryTests):
         self.query = "SELECT * FROM system:namespaces"
         result = self.run_cbq_query()
 
-        host = 'localhost'
+        host = '127.0.0.1'
         if self.input.tuq_client and "client" in self.input.tuq_client:
             host = self.input.tuq_client.client
         for res in result['results']:
