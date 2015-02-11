@@ -74,9 +74,6 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
         #Flush bucket and recreate it
         self._bucket_creation()
         self.sleep(60)
-        #Query and bucket with empty result set
-        self.multi_query_using_index_with_emptyresult(
-            query_definitions = self.query_definitions, buckets = self.buckets)
         #Verify the result set is empty
         self.verify_index_absence(query_definitions = self.query_definitions, buckets = self.buckets)
 
