@@ -129,7 +129,8 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                 self.validate_remote_failover_log(commit_opaque[0], commit_opaque[1])
             self.log.info ("Verifying local failover uuid ...")
             local_vb_uuid, _ = self.get_failover_log(self.src_master)
-            self.assertTrue(int(local_vb_uuid) == int(failover_uuid),
+            self.assertTrue((int(failover_uuid) == int(local_vb_uuid)) or
+                            (int(failover_uuid) == 0),
                         "local failover_uuid is wrong in checkpoint record! Expected: {0} seen: {1}".
                         format(local_vb_uuid,failover_uuid))
             self.log.info("Checkpoint record verified")
