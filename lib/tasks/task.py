@@ -1846,7 +1846,10 @@ class N1QLQueryTask(Task):
     def execute(self, task_manager):
         try:
             # Query and get results
-            self.actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.server)
+            if not self.is_explain_query:
+                self.msg, self.isSuccess = self.n1ql_helper.run_query_and_verify_result(query = self.query, server = self.server, expected_result = self.expected_result)
+            else:
+                self.actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.server)
             self.state = CHECKING
             task_manager.schedule(self)
         except N1QLQueryException as e:
@@ -1864,7 +1867,8 @@ class N1QLQueryTask(Task):
            # Verify correctness of result set
            if self.verify_results:
             if not self.is_explain_query:
-                self.n1ql_helper._verify_results(sorted(self.actual_result['results']), sorted(self.expected_result))
+                if not self.isSuccess:
+                    raise N1QLQueryException(self.msg)
             else:
                 self.n1ql_helper.verify_index_with_explain(self.actual_result, self.index_name)
             self.set_result(True)

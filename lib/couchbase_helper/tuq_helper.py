@@ -242,9 +242,11 @@ class N1QLHelper():
             shell_connection = RemoteMachineShellConnection(self.master)
             shell_connection.execute_command(cmd)
 
-    def create_primary_index_for_3_0_and_greater(self, using_gsi = True):
+    def create_primary_index_for_3_0_and_greater(self, using_gsi = True, server = None):
+        if server == None:
+            server = self.master
         self.log.info("CHECK FOR PRIMARY INDEXES")
-        rest = RestConnection(self.master)
+        rest = RestConnection(server)
         versions = rest.get_nodes_versions()
         ddoc_name = 'ddl_#primary'
         if versions[0].startswith("3"):
@@ -268,6 +270,23 @@ class N1QLHelper():
         if index_name in str(actual_result):
             return True
         return False
+
+    def run_query_and_verify_result(self, server = None, query = None, timeout = 240.0, max_try = 20, expected_result = None):
+        check = False
+        init_time = time.time()
+        try_count = 0
+        while not check:
+            next_time = time.time()
+            try:
+                actual_result = self.run_cbq_query(query = query, server = server)
+                self._verify_results(sorted(actual_result['results']), sorted(expected_result))
+                check = True
+            except Exception, ex:
+                if (next_time - init_time > timeout or try_count >= max_try):
+                    return ex, False
+                time.sleep(30)
+                try_count += 1
+        return "ran query with success and validated results" , check
 
     def is_index_online_and_in_list(self, bucket, index_name, server = None, timeout = 120.0):
         check = self._is_index_in_list(bucket, index_name, server = server)

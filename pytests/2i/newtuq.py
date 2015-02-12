@@ -65,10 +65,12 @@ class QueryTests(BaseTestCase):
             buckets = self.buckets, item_flag = self.item_flag,
             n1ql_port = self.n1ql_port, full_docs_list = self.full_docs_list,
             log = self.log, input = self.input, master = self.master)
-        self.n1ql_helper._start_command_line_query(self.master)
+        n1ql_server = self.get_nodes_from_services_map(service_type = "n1ql")
+        self.n1ql_helper._start_command_line_query(n1ql_server)
         if self.create_primary_index:
             try:
-                self.n1ql_helper.create_primary_index_for_3_0_and_greater(using_gsi = self.use_gsi_for_primary)
+                self.n1ql_helper.create_primary_index_for_3_0_and_greater(using_gsi = self.use_gsi_for_primary,
+                 server = n1ql_server)
             except Exception, ex:
                 self.log.info(ex)
 

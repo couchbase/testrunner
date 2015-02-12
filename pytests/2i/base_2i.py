@@ -188,8 +188,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             expected_result = self.gen_results.generate_expected_result(print_expected_result = False)
         self.query = self.gen_results.query
         server = self.get_nodes_from_services_map(service_type = "n1ql")
-        actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        self._verify_results(sorted(actual_result['results']), sorted(expected_result))
+        msg, check = self.n1ql_helper.run_query_and_verify_result(query = self.query, server = server, timeout = 420, expected_result = expected_result)
+        self.assertTrue(check, msg)
 
     def async_query_using_index(self, bucket, query_definition, expected_result = None):
         self.gen_results.query = query_definition.generate_query(bucket = bucket)
