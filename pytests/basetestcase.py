@@ -417,6 +417,7 @@ class BaseTestCase(unittest.TestCase):
 
     def _verify_stats_all_buckets(self, servers, timeout=60):
         stats_tasks = []
+        servers = self.get_kv_nodes(servers)
         for bucket in self.buckets:
             items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
             if bucket.type == 'memcached':
@@ -562,6 +563,7 @@ class BaseTestCase(unittest.TestCase):
     def _wait_for_stats_all_buckets(self, servers, ep_queue_size=0, \
                                      ep_queue_size_cond='==', check_ep_items_remaining = False, timeout=360):
         tasks = []
+        servers = self.get_kv_nodes(servers)
         for server in servers:
             for bucket in self.buckets:
                 if bucket.type == 'memcached':
@@ -587,6 +589,7 @@ class BaseTestCase(unittest.TestCase):
                 servers  = self.get_nodes_in_cluster()
             else:
                 servers  = self.get_nodes_in_cluster(master_node)
+            servers = self.get_kv_nodes(servers)
             map =  self.data_collector.collect_compare_dcp_stats(self.buckets,servers, filter_list = filter_list)
             for bucket in map.keys():
                 self.assertTrue(map[bucket], " the bucket {0} has unacked bytes != 0".format(bucket))
@@ -670,6 +673,7 @@ class BaseTestCase(unittest.TestCase):
 
     def verify_cluster_stats(self, servers=None, master=None, max_verify=None, timeout=None, check_items=True,
                              only_store_hash=True, replica_to_read=None, batch_size=1000, check_bucket_stats = True, check_ep_items_remaining = False):
+        servers = self.get_kv_nodes(servers)
         if servers is None:
             servers = self.servers
         if master is None:
@@ -1012,6 +1016,7 @@ class BaseTestCase(unittest.TestCase):
                     self.log.error(e)
 
     def set_upr_flow_control(self,flow=True,servers=[]):
+        servers = self.get_kv_nodes(servers)
         for bucket in self.buckets:
             for server in servers:
                  rest = RestConnection(server)
@@ -1040,6 +1045,7 @@ class BaseTestCase(unittest.TestCase):
         """
             Method to get vbucket information from a cluster using cbstats
         """
+        servers = self.get_kv_nodes(servers)
         new_vbucket_stats = self.data_collector.collect_vbucket_stats(buckets, servers, collect_vbucket=False, collect_vbucket_seqno=True, collect_vbucket_details=False, perNode=True)
         self.compare_per_node_for_vbucket_consistency(new_vbucket_stats)
         return new_vbucket_stats
@@ -1134,17 +1140,20 @@ class BaseTestCase(unittest.TestCase):
 
     def get_data_set_all(self, servers, buckets, path=None, mode = "disk"):
         """ Method to get all data set for buckets and from the servers """
+        servers = self.get_kv_nodes(servers)
         info, dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
         return dataset
 
     def get_data_set_with_data_distribution_all(self, servers, buckets, path=None, mode = "disk"):
         """ Method to get all data set for buckets and from the servers """
+        servers = self.get_kv_nodes(servers)
         info, dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
         distribution  = self.data_analyzer.analyze_data_distribution(dataset)
         return dataset, distribution
 
     def get_vb_distribution_active_replica(self, servers = [], buckets = []):
         """ Method to distribution analysis for active and replica vbuckets """
+        servers = self.get_kv_nodes(servers)
         active, replica = self.data_collector.collect_vbucket_num_stats(servers, buckets)
         active_result, replica_result  = self.data_analyzer.compare_analyze_active_replica_vb_nums(active,replica)
         return active_result, replica_result
@@ -1156,6 +1165,7 @@ class BaseTestCase(unittest.TestCase):
            2)  Compare active and replica data in the cluster
            3)  Return active and replica data
         """
+        servers = self.get_kv_nodes(servers)
         info, disk_replica_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=True, mode = mode)
         info, disk_active_dataset = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, getReplica=False, mode = mode)
         self.log.info(" Begin Verification for Active Vs Replica ")
@@ -1180,6 +1190,7 @@ class BaseTestCase(unittest.TestCase):
             Method to check vbucket distribution analysis after rebalance
         """
         self.log.info(" Begin Verification for vb_distribution_analysis")
+        servers = self.get_kv_nodes(servers)
         if self.std_vbucket_dist != None:
             std = self.std_vbucket_dist
         if self.vbuckets != None and self.vbuckets != self.total_vbuckets:
@@ -1235,6 +1246,7 @@ class BaseTestCase(unittest.TestCase):
             This works at cluster level
         """
         self.log.info(" Begin Verification for data comparison ")
+        servers = self.get_kv_nodes(servers)
         info, curr_data_set = self.data_collector.collect_data(servers, buckets, data_path=path, perNode=False, mode = mode)
         comparison_result = self.data_analyzer.compare_all_dataset(info, prev_data_set, curr_data_set)
         logic, summary, output = self.result_analyzer.analyze_all_result(comparison_result, deletedItems=deletedItems, addedItems=addedItems, updatedItems=updatedItems)
@@ -1280,6 +1292,7 @@ class BaseTestCase(unittest.TestCase):
         """
             Method to get failovers logs from a cluster using cbstats
         """
+        servers = self.get_kv_nodes(servers)
         new_failovers_stats = self.data_collector.collect_failovers_stats(buckets, servers, perNode=True)
         new_failovers_stats = self.compare_per_node_for_failovers_consistency(new_failovers_stats)
         return new_failovers_stats
@@ -1294,6 +1307,7 @@ class BaseTestCase(unittest.TestCase):
         comp_map["num_entries"] = { 'type' : "string", 'operation' : "<="}
 
         self.log.info(" Begin Verification for failovers logs comparison ")
+        servers = self.get_kv_nodes(servers)
         new_failovers_stats = self.get_failovers_logs(servers, buckets)
         compare_failovers_result = self.data_analyzer.compare_stats_dataset(prev_failovers_stats, new_failovers_stats, "vbucket_id", comp_map)
         isNotSame, summary, result = self.result_analyzer.analyze_all_result(compare_failovers_result, addedItems=False, deletedItems=False, updatedItems=False)
@@ -1709,4 +1723,15 @@ class BaseTestCase(unittest.TestCase):
     def _expiry_pager(self, master, val=10):
         for bucket in self.buckets:
             ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", val, bucket)
+
+    def get_kv_nodes(self, servers = None):
+        if servers == None:
+            servers = self.servers
+        kv_servers = self.get_nodes_from_services_map(service_type ="kv", get_all_nodes = True)
+        new_servers = []
+        for server in servers:
+            for kv_server in kv_servers:
+                if kv_server.ip == server.ip and  kv_server.port == server.port and (server not in new_servers):
+                    new_servers.append(server)
+        return new_servers
 
