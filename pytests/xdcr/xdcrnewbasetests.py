@@ -1729,7 +1729,7 @@ class CouchbaseCluster:
         for task in tasks:
             task.result(timeout)
 
-    def verify_items_count(self, timeout=60):
+    def verify_items_count(self, timeout=180):
         """Wait for actual bucket items count reach to the count on bucket kv_store.
         """
         ret_value = True
