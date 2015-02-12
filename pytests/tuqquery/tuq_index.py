@@ -40,13 +40,11 @@ class QueriesViewsTests(QueryTests):
                     self._verify_results(actual_result['results'], [])
                     created_indexes.append(view_name)
                     self._verify_view_is_present(view_name, bucket)
-                    self.assertTrue(self._is_index_in_list(bucket, view_name), "Index is not in list")
             finally:
                 for view_name in created_indexes:
                     self.query = "DROP INDEX %s.%s" % (bucket.name, view_name)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
-                    self.assertFalse(self._is_index_in_list(bucket, view_name), "Index is in list")
 
     def test_primary_create_delete_index(self):
         for bucket in self.buckets:
@@ -56,8 +54,6 @@ class QueriesViewsTests(QueryTests):
                 self._verify_results(actual_result['results'], [])
             except Exception, ex:
                 self.assertTrue(str(ex).find('already exists') != -1)
-            finally:
-                self.assertTrue(self._is_index_in_list(bucket, "#primary"), "Index is not in list")
 
     def test_create_delete_index_with_query(self):
         for bucket in self.buckets:

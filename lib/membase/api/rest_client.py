@@ -680,6 +680,10 @@ class RestConnection(object):
                 'Authorization': 'Basic %s' % authorization,
                 'Accept': '*/*'}
 
+    def _create_headers_with_auth(self, username, password):
+        authorization = base64.encodestring('%s:%s' % (username, password))
+        return {'Authorization': 'Basic %s' % authorization}
+
     #authorization must be a base64 string of username:password
     def _create_headers(self):
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
@@ -2138,6 +2142,7 @@ class RestConnection(object):
 
     def query_tool(self, query, port=8093, timeout=650, query_params={}, is_prepared=False):
         key = 'prepared' if is_prepared else 'statement'
+        headers = None
         if is_prepared:
             prepared = json.dumps(query)
             prepared = str(prepared.encode('utf-8'))
@@ -2145,11 +2150,15 @@ class RestConnection(object):
             api = "http://%s:%s/query/service?%s" % (self.ip, port, params)
         else:
             params = {key : query}
+            if 'creds' in query_params:
+                headers = self._create_headers_with_auth(query_params['creds'][0]['user'].encode('utf-8'),
+                                                         query_params['creds'][0]['pass'].encode('utf-8'))
+                del query_params['creds']
             params.update(query_params)
             params = urllib.urlencode(params)
             log.info('query params : {0}'.format(params))
             api = "http://%s:%s/query?%s" % (self.ip, port, params)
-        status, content, header = self._http_request(api, 'POST', timeout=timeout)
+        status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
         try:
             return json.loads(content)
         except ValueError:
