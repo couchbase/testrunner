@@ -1725,6 +1725,11 @@ class BaseTestCase(unittest.TestCase):
             ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", val, bucket)
 
     def get_kv_nodes(self, servers = None):
+        rest = RestConnection(self.master)
+        versions = rest.get_nodes_versions()
+        for version in versions:
+            if "3.5" > version or "community" in version:
+                return servers
         if servers == None:
             servers = self.servers
         kv_servers = self.get_nodes_from_services_map(service_type ="kv", get_all_nodes = True)
