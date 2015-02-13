@@ -2383,14 +2383,14 @@ class MonitorActiveTask(Task):
         self.type = type  # indexer or bucket_compaction
         self.target_key = ""
         if self.type == "indexer":
-            self.target_key = "design_documents"
+            self.target_key = "designDocument"
             if target_value.lower() in ['true', 'false']:
                 # track initial_build indexer task
                 self.target_key = "initial_build"
         elif self.type == "bucket_compaction":
             self.target_key = "original_target"
         elif self.type == "view_compaction":
-            self.target_key = "design_documents"
+            self.target_key = "designDocument"
         else:
             raise Exception("type %s is not defined!" % self.type)
         self.target_value = target_value
@@ -2401,7 +2401,7 @@ class MonitorActiveTask(Task):
         self.rest = RestConnection(self.server)
         self.current_progress = None
         self.current_iter = 0
-        self.task_pid = None
+        self.task = None
 
 
     def execute(self, task_manager):
@@ -2409,11 +2409,11 @@ class MonitorActiveTask(Task):
         print tasks
         for task in tasks:
             if task["type"] == self.type and ((
-                        self.target_key == "design_documents" and task[self.target_key][0] == self.target_value) or (
+                        self.target_key == "designDocument" and task[self.target_key] == self.target_value) or (
                         self.target_key == "original_target" and task[self.target_key]["type"] == self.target_value) or (
                         self.target_key == "initial_build" and str(task[self.target_key]) == self.target_value)):
                 self.current_progress = task["progress"]
-                self.task_pid = task["pid"]
+                self.task = task
                 self.log.info("monitoring active task was found:" + str(task))
                 self.log.info("progress %s:%s - %s %%" % (self.type, self.target_value, task["progress"]))
                 if self.current_progress >= self.wait_progress:
@@ -2441,7 +2441,7 @@ class MonitorActiveTask(Task):
         tasks = self.rest.active_tasks()
         for task in tasks:
             # if task still exists
-            if task["pid"] == self.task_pid:
+            if task == self.task:
                 self.log.info("progress %s:%s - %s %%" % (self.type, self.target_value, task["progress"]))
                 # reached expected progress
                 if task["progress"] >= self.wait_progress:
