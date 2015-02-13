@@ -271,7 +271,7 @@ class N1QLHelper():
             return True
         return False
 
-    def run_query_and_verify_result(self, server = None, query = None, timeout = 240.0, max_try = 20, expected_result = None):
+    def run_query_and_verify_result(self, server = None, query = None, timeout = 120.0, max_try = 6, expected_result = None):
         check = False
         init_time = time.time()
         try_count = 0

@@ -5,6 +5,11 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def setUp(self):
         super(BaseSecondaryIndexingTests, self).setUp()
+        self.timeout_for_index_online= self.input.param("timeout_for_index_online",120)
+        self.max_attempts_check_index= self.input.param("max_attempts_check_index",10)
+        self.max_attempts_query_and_validate= self.input.param("max_attempts_query_and_validate",10)
+        self.index_present= self.input.param("index_present",True)
+        self.run_create_index= self.input.param("run_create_index",True)
         self.run_create_index= self.input.param("run_create_index",True)
         self.run_drop_index= self.input.param("run_drop_index",True)
         self.run_query_with_explain= self.input.param("run_query_with_explain",True)
@@ -201,7 +206,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         query_with_index_task = self.cluster.async_n1ql_query_verification(
                  server = server, bucket = bucket,
                  query = self.query, n1ql_helper = self.n1ql_helper,
-                 expected_result=expected_result)
+                 expected_result=expected_result, index_name = query_definition.index_name)
         return query_with_index_task
 
     def sync_query_using_index(self, bucket, query_definition, expected_result = None):
