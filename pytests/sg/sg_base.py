@@ -1,14 +1,12 @@
-import unittest
 import logging
 import logger
 from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper, RemoteMachineHelper
 import re
-import requests
 from requests.exceptions import ConnectionError
 
 
-class GatewayBaseTest(unittest.TestCase):
+class GatewayBaseTest(BaseTestCase):
 
     BUILDS = {
         'http://packages.couchbase.com.s3.amazonaws.com/builds/mobile/sync_gateway': (
@@ -17,6 +15,7 @@ class GatewayBaseTest(unittest.TestCase):
     }
 
     def setUp(self):
+        super(GatewayBaseTest, self).setUp()
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.version = self.input.param("version", "1.0.4-34")
@@ -56,7 +55,7 @@ class GatewayBaseTest(unittest.TestCase):
 
         for location, patterns in self.BUILDS.items():
             for pattern in patterns:
-                url = '{0}/{1}'.format(location, pattern.format(self.version,self.info.architecture_type,file_ext))
+                url = '{0}/{1}'.format(location, pattern.format(self.version, self.info.architecture_type, file_ext))
                 filename = url.split('/')[-1]
                 yield filename, url
 
@@ -101,7 +100,7 @@ class GatewayBaseTest(unittest.TestCase):
             elif distribution_type == 'ubuntu':
                 cmd = 'yes | dpkg -i /tmp/{0}'.format(filename)
             elif distribution_type == 'mac':
-                filename_tar = re.sub('\.gz$','',filename)
+                filename_tar = re.sub('\.gz$', '', filename)
                 cmd = 'cd /tmp; gunzip {0}; tar xopf {1}; cp -r couchbase-sync-gateway /opt'\
                     .format(filename, filename_tar, filename_tar)
                 wget_str = '/usr/local/bin/wget'
@@ -134,9 +133,9 @@ class GatewayBaseTest(unittest.TestCase):
         distribution_type = self.info.distribution_type.lower()
         if self.info.type.lower() == 'linux':
             if distribution_type == 'centos' or distribution_type == 'ubuntu':
-                if not self.check_user(shell,user_name):
+                if not self.check_user(shell, user_name):
                     output, error = shell.execute_command_raw('useradd -m {0}'.format(user_name))
-                return self.check_user(shell,user_name)
+                return self.check_user(shell, user_name)
             else:
                 self.log.info('add_user is not supported on Mac')
                 return False
@@ -151,9 +150,9 @@ class GatewayBaseTest(unittest.TestCase):
         distribution_type = self.info.distribution_type.lower()
         if type == 'linux':
             if distribution_type == 'centos' or distribution_type == 'ubuntu':
-                if self.check_user(shell,user_name):
+                if self.check_user(shell, user_name):
                     output, error = shell.execute_command_raw('userdel {0}'.format(user_name))
-                return not self.check_user(shell,user_name)
+                return not self.check_user(shell, user_name)
             else:
                 self.log.info('remove_user is only supported on centos and ubuntu')
                 return False
@@ -300,7 +299,7 @@ class GatewayBaseTest(unittest.TestCase):
         else:
             cmd = 'cd /opt/couchbase-sync-gateway/service;  echo {0} | sudo . ./sync_gateway_service_install.sh '\
                 .format(self.servers[0].ssh_password)
-        output, error = shell.execute_command( cmd + options)
+        output, error = shell.execute_command(cmd + options)
         shell.log_command_output(output, error)
         return output, error
 

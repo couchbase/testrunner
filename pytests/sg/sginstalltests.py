@@ -1,7 +1,4 @@
-
-
 from basetestcase import BaseTestCase
-
 from TestInput import TestInputSingleton
 from sg.sg_base import GatewayBaseTest
 from remote.remote_util import RemoteMachineShellConnection
@@ -19,8 +16,8 @@ help_string = ['This script creates an init service to run a sync_gateway instan
 
 class SGInstallerTest(GatewayBaseTest):
     def setUp(self):
-        TestInputSingleton.input.test_params["default_bucket"] = False
         super(SGInstallerTest, self).setUp()
+        TestInputSingleton.input.test_params["default_bucket"] = False
 
     def tearDown(self):
         super(SGInstallerTest, self).tearDown()
@@ -41,7 +38,7 @@ class SGInstallerTest(GatewayBaseTest):
                 shell = RemoteMachineShellConnection(server)
                 self.assertTrue(self.service_clean(shell))
                 self.assertTrue(self.install_gateway(shell))
-                self.assertTrue(self.remove_user(shell,"sync_gateway"))
+                self.assertTrue(self.remove_user(shell, "sync_gateway"))
                 output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
                 self.assertEqual(error, [self.expected_error])
                 self.assertEqual(output, [])
@@ -51,7 +48,7 @@ class SGInstallerTest(GatewayBaseTest):
                 self.assertFalse(shell.file_exists(self.datadir, 'data'))
                 self.assertFalse(shell.file_exists(self.configdir, self.configfile))
         finally:
-            self.add_user(shell,"sync_gateway")
+            self.add_user(shell, "sync_gateway")
 
     def serviceInstallBasic(self):
         for server in self.servers:
