@@ -2150,7 +2150,7 @@ class RestConnection(object):
             api = "http://%s:%s/query/service?%s" % (self.ip, port, params)
         else:
             params = {key : query}
-            if 'creds' in query_params:
+            if 'creds' in query_params and query_params['creds']:
                 headers = self._create_headers_with_auth(query_params['creds'][0]['user'].encode('utf-8'),
                                                          query_params['creds'][0]['pass'].encode('utf-8'))
                 del query_params['creds']
