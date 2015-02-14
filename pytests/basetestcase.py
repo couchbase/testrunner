@@ -1566,7 +1566,7 @@ class BaseTestCase(unittest.TestCase):
             else:
                 return None
         if tgt_services != None and "-" in tgt_services:
-            services = tgt_services.replace(":",",").split("-")
+            services = tgt_services.replace(":",",").split("-")[start_node:]
         elif tgt_services != None:
             for node in range(start_node,len(tgt_nodes)):
                 services.append(tgt_services.replace(":",","))
