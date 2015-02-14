@@ -1,12 +1,12 @@
-import logging
 import logger
+import unittest
 from TestInput import TestInputSingleton
-from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper, RemoteMachineHelper
+from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 import re
 from requests.exceptions import ConnectionError
 
 
-class GatewayBaseTest(BaseTestCase):
+class GatewayBaseTest(unittest.TestCase):
 
     BUILDS = {
         'http://packages.couchbase.com.s3.amazonaws.com/builds/mobile/sync_gateway': (

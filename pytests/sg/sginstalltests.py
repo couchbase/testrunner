@@ -1,5 +1,3 @@
-from basetestcase import BaseTestCase
-from TestInput import TestInputSingleton
 from sg.sg_base import GatewayBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 
@@ -17,7 +15,7 @@ help_string = ['This script creates an init service to run a sync_gateway instan
 class SGInstallerTest(GatewayBaseTest):
     def setUp(self):
         super(SGInstallerTest, self).setUp()
-        TestInputSingleton.input.test_params["default_bucket"] = False
+        self.input.test_params["default_bucket"] = False
 
     def tearDown(self):
         super(SGInstallerTest, self).tearDown()
