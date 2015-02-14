@@ -2540,7 +2540,7 @@ class QueryTests(BaseTestCase):
             result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared=is_prepared)
         else:
             if self.version == "git_repo":
-                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/query/" +\
+                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
                                                             "shell/cbq/cbq ",
                                                        subcommands=[query,],
                                                        min_output_size=20,
@@ -2616,11 +2616,11 @@ class QueryTests(BaseTestCase):
         if self.flat_json:
             if os == 'windows':
                 gopath = testconstants.WINDOWS_GOPATH
-                cmd = "cd %s/src/github.com/couchbaselabs/query/server/cbq-engine; " % (gopath) +\
+                cmd = "cd %s/src/github.com/couchbase/query/server/cbq-engine; " % (gopath) +\
                 "./cbq-engine.exe -datastore=dir:%sdata >/dev/null 2>&1 &" % (self.directory_flat_json)
             else:
                 gopath = testconstants.LINUX_GOPATH
-                cmd = "cd %s/src/github.com/couchbaselabs/query/server/cbq-engine; " % (gopath) +\
+                cmd = "cd %s/src/github.com/couchbase/query/server/cbq-engine; " % (gopath) +\
                 "./cbq-engine -datastore=dir:%s/data >n1ql.log 2>&1 &" %(self.directory_flat_json)
             out = self.shell.execute_command(cmd)
             self.log.info(out)
@@ -2632,11 +2632,11 @@ class QueryTests(BaseTestCase):
             if self.input.tuq_client and "gopath" in self.input.tuq_client:
                 gopath = self.input.tuq_client["gopath"]
             if os == 'windows':
-                cmd = "cd %s/src/github.com/couchbaselabs/query/server/cbq-engine; " % (gopath) +\
+                cmd = "cd %s/src/github.com/couchbase/query/server/cbq-engine; " % (gopath) +\
                 "./cbq-engine.exe -datastore http://%s%s:%s/ %s >/dev/null 2>&1 &" %(
                                                                 ('', auth_row)[auth_row is not None], server.ip, server.port, options)
             else:
-                cmd = "cd %s/src/github.com/couchbaselabs/query/server/cbq-engine; " % (gopath) +\
+                cmd = "cd %s/src/github.com/couchbase/query/server/cbq-engine; " % (gopath) +\
                 "./cbq-engine -datastore http://%s%s:%s/ %s >n1ql.log 2>&1 &" %(
                                                                 ('', auth_row)[auth_row is not None], server.ip, server.port, options)
             out = self.shell.execute_command(cmd)

@@ -479,11 +479,11 @@ class QueryTests(BaseTestCase):
             if self.input.tuq_client and "gopath" in self.input.tuq_client:
                 gopath = self.input.tuq_client["gopath"]
             if os == 'windows':
-                cmd = "cd %s/src/github.com/couchbaselabs/query/server/main; " % (gopath) +\
+                cmd = "cd %s/src/github.com/couchbase/query/server/main; " % (gopath) +\
                 "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
                                                                 server.ip, server.port)
             else:
-                cmd = "cd %s/src/github.com/couchbaselabs/query//server/main; " % (gopath) +\
+                cmd = "cd %s/src/github.com/couchbase/query//server/main; " % (gopath) +\
                 "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
                                                                 server.ip, server.port)
             self.shell.execute_command(cmd)

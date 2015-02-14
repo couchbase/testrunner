@@ -53,7 +53,7 @@ class Base64Tests(QueryTests):
                         gopath = testconstants.WINDOWS_GOPATH
                     if self.input.tuq_client and "gopath" in self.input.tuq_client:
                         gopath = self.input.tuq_client["gopath"]
-                    output = shell.execute_command('tail -10 %s/src/github.com/couchbaselabs/query/n1ql.log' % gopath)
+                    output = shell.execute_command('tail -10 %s/src/github.com/couchbase/query/n1ql.log' % gopath)
                     self.log.info('LAST LOG CBQ_ENGINE')
                     self.log.info(output)
                     self.fail('Cbq-engine is crashed')
