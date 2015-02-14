@@ -3,6 +3,7 @@ import unittest
 from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 import re
+import requests
 from requests.exceptions import ConnectionError
 
 
