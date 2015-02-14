@@ -1581,20 +1581,30 @@ class BaseTestCase(unittest.TestCase):
             return
         for service_fail_map in self.nodes_out_dist.split("-"):
             tokens = service_fail_map.split(":")
+            count = 0
             service_type = tokens[0]
             service_type_count = int(tokens[1])
-            for node in self.services_map.keys():
-                if (service_type in self.services_map[node]) and (node not in [node.ip for node in self.service_failure_nodes]):
+            compare_string_master = "{0}:{1}".format(self.master.ip,self.master.port)
+            compare_string_index_manager = "{0}:{1}".format(self.indexManager.ip,self.master.port)
+            if service_type in self.services_map.keys():
+                for node_info in self.services_map[service_type]:
                     for server in self.servers:
+                        compare_string_server = "{0}:{1}".format(server.ip,server.port)
                         addNode = False
-                        if (self.targetMaster and (not self.targetIndexManager)) and (server.ip == node.ip and self.master.ip == server.ip):
+                        if (self.targetMaster and (not self.targetIndexManager)) \
+                         and (compare_string_server == node_info and compare_string_master == compare_string_server):
                             addNode = True
                             self.master = self.servers[1]
-                        elif ((not self.targetMaster) and (not self.targetIndexManager)) and (server.ip == node.ip and self.master.ip != server.ip and self.indexManager.ip != server.ip):
+                        elif ((not self.targetMaster) and (not self.targetIndexManager)) \
+                         and (compare_string_server == node_info and compare_string_master != compare_string_server \
+                          and compare_string_index_manager != compare_string_server):
                             addNode = True
-                        elif ((not self.targetMaster) and self.targetIndexManager) and (server.ip == node.ip and self.master.ip != server.ip and self.indexManager.ip == server.ip):
+                        elif ((not self.targetMaster) and self.targetIndexManager) \
+                         and (compare_string_server == node_info and compare_string_master != compare_string_server
+                          and compare_string_index_manager == compare_string_server):
                             addNode = True
-                        if addNode and (server not in self.nodes_out_list):
+                        if addNode and (server not in self.nodes_out_list) and count < service_type_count:
+                            count+=1
                             self.nodes_out_list.append(server)
 
     def generate_services_map(self, nodes, services = None):
