@@ -2620,6 +2620,47 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         log.info ("Status of executeValidateCredentials command - {0}".format(status))
         return status, json.loads(content)
+    
+    '''
+    Audit Commands
+    '''
+    '''
+    getAuditSettings - API returns audit settings for Audit
+    Input - None
+    Returns -
+        [archive_path]:<path for archieve>
+        [auditd_enabled]:<enabled disabled status for auditd>
+        [log_path]:<path for logs>
+        [rotate_interval]:<log rotate interval>
+    '''
+    def getAuditSettings(self):
+        api = self.baseUrl + "settings/audit"
+        status, content, header = self._http_request(api, 'GET')
+        return json.loads(content)
+
+    '''
+    getAuditSettings - API returns audit settings for Audit
+    Input -
+        [archive_path]:<path for archieve>
+        [auditd_enabled]:<enabled disabled status for auditd>
+        [rotate_interval]:<log rotate interval in seconds>
+    '''
+    def setAuditSettings(self, enabled='true', rotateInterval=86400, archivePath='/opt/couchbase/var/lib/couchbase/logs', logPath='/opt/couchbase/var/lib/couchbase/logs'):
+        api = self.baseUrl + "settings/audit"
+        params = urllib.urlencode({
+                                    'rotate_interval':'{0}'.format(rotateInterval),
+                                    'auditd_enabled':'{0}'.format(enabled),
+                                    'archive_path':'{0}'.format(archivePath),
+                                    'log_path':'{0}'.format(logPath)
+                                    })
+        status, content, header = self._http_request(api, 'POST', params)
+        log.info ("Value os status is {0}".format(status))
+        log.info ("Value of content is {0}".format(content))
+        if (status):
+            return status
+        else:
+            return status, json.loads(content)
+
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
