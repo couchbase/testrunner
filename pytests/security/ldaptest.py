@@ -68,7 +68,7 @@ class ldaptest(BaseTestCase):
                     'objectClass: ' + self.ldapObjectClass + "\n" \
                     "userPassword :" + user[1] + "\n" \
                     "uid: " + user[0] + "\n"
-                fileName = user[0] + 'name.ldif'
+                fileName = 'name.ldif'
                 #Execute ldapadd command to add users to the system
                 shell = RemoteMachineShellConnection(self.master)
                 try:
@@ -657,3 +657,41 @@ class ldaptest(BaseTestCase):
         rest = RestConnection(self.master)
         content = rest.ldapRestOperationGetResponse()
         self.assertEqual(content['enabled'], False)
+        
+        
+    '''Test case to add admins to the system and validate response and login'''
+    def test_addNegativeTC(self):
+
+        loginState = self.input.param("loginState")
+        #Create a REST connection
+        rest = RestConnection(self.master)
+        self._setupLDAPAuth(rest, self.authRole, self.authState, self.fullAdmin, self.ROAdmin)
+
+        #Get the response and then parse the JSON object to convert it to list of users
+        roAdmins, Admins = self._parseRestResponse(rest.ldapRestOperationGetResponse())
+
+        #Validate the response and try to login as user added to ldapauth (Multiple verifications here)
+        self._funcValidateResLogin(rest, self.authRole, self.authState, self.fullAdmin, self.ROAdmin, Admins, roAdmins, loginState)
+    
+    def test_stopLDAPServer(self):
+        loginState = self.input.param("loginState")
+        shell = RemoteMachineShellConnection(self.master)
+        try:
+            
+            rest = RestConnection(self.master)
+            self._setupLDAPAuth(rest, self.authRole, self.authState, self.fullAdmin, self.ROAdmin)
+
+            #Get the response and then parse the JSON object to convert it to list of users
+            roAdmins, Admins = self._parseRestResponse(rest.ldapRestOperationGetResponse())
+
+            command = "service slapd stop"
+            o, r = shell.execute_command(command)
+            shell.log_command_output(o, r)
+            
+            #Validate the response and try to login as user added to ldapauth (Multiple verifications here)
+            self._funcValidateResLogin(rest, self.authRole, self.authState, self.fullAdmin, self.ROAdmin, Admins, roAdmins, loginState)
+        finally:
+            command = "service slapd start"
+            o, r = shell.execute_command(command)
+            shell.log_command_output(o, r)
+            

@@ -31,8 +31,11 @@ class audit:
         self.method = method
         self.host = host
         self.pathDescriptor = self.getAuditConfigElement("descriptors_path")
-        self.pathLogFile = self.getAuditConfigElement('log_path')
-        self.archiveFilePath = self.getAuditConfigElement('archive_path')
+        # self.pathLogFile = self.getAuditConfigElement('log_path')
+        # self.archiveFilePath = self.getAuditConfigElement('archive_path')
+        self.pathLogFile = self.getAuditLogPath()
+        self.archiveFilePath = self.getArchivePath()
+        
         self.defaultFields = ['id', 'name', 'description']
         if (eventID is not None):
             self.eventID = eventID
@@ -224,7 +227,7 @@ class audit:
     '''
     def setAuditRotateInterval(self, rotateInterval):
         rest = RestConnection(self.host)
-        status = rest.setAuditSettings(rotate_interval=rotateInterval)
+        status = rest.setAuditSettings(rotateInterval=rotateInterval)
         return status
 
     '''
@@ -406,11 +409,16 @@ class audit:
                 currHourMin = shell.execute_command('date +"%H:%M"')
             finally:
                 shell.disconnect()
+            log.info (" Matching expected date - currDate {0}; actual Date - {1}".format(currDate[0][0], date))
+            log.info (" Matching expected time - currDate {0} ; actual Date - {1}".format(currHourMin[0][0], hourMin))
             if ((date == currDate[0][0]) and (hourMin == currHourMin[0][0])):
+                log.info ("Matching values found for timestamp")
                 return True
             else:
+                log.info ("Mis-match in values for timestamp")
                 return False
         except:
+            log.info ("Into Exception")
             return False
 
 
