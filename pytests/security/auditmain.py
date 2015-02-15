@@ -398,11 +398,15 @@ class audit:
     '''
     def validateTimeStamp(self, actualTime=None):
         try:
-            actualTime = datetime.strptime(actualTime[:-6], "%Y-%m-%dT%H:%M:%S.%f")
-            currentTime = datetime.now()
-            diffTime = currentTime - actualTime
-            log.info ("Difference in timestamp b/w acutal and expected {0}".format(diffTime))
-            if (diffTime.seconds < 30):
+            date = actualTime[:10]
+            hourMin = actualTime[11:16]
+            shell = RemoteMachineShellConnection(self.host)
+            try:
+                currDate = shell.execute_command('date +"%Y-%m-%d"')
+                currHourMin = shell.execute_command('date +"%H:%M"')
+            finally:
+                shell.disconnect()
+            if ((date == currDate[0][0]) and (hourMin == currHourMin[0][0])):
                 return True
             else:
                 return False
