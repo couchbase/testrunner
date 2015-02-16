@@ -875,7 +875,7 @@ class RestConnection(object):
             json_parsed = json.loads(content)
             log.info("Replication created with id: {0}".format(json_parsed['id']))
             RestConnection.replications.append(urllib.quote_plus(json_parsed['id']))
-            return json_parsed['id']
+            return urllib.quote_plus(json_parsed['id'])
         else:
             log.error("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
             raise Exception("create replication failed : status:{0},content:{1}".format(status, content))
@@ -906,6 +906,7 @@ class RestConnection(object):
                     pass
 
     def stop_replication(self, uri):
+        log.info("Deleting replication {0}".format(uri))
         api = self.baseUrl + uri
         self._http_request(api, 'DELETE')
 

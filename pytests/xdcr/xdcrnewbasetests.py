@@ -643,9 +643,12 @@ class XDCRRemoteClusterRef:
         rest = RestConnection(self.__src_cluster.get_master_node())
         rest_all_repls = rest.get_replications()
         for repl in self.__replications:
-            for rest_all_repl in rest_all_repls:
-                if repl.get_repl_id() == rest_all_repl['id']:
-                    repl.cancel(rest, rest_all_repl)
+            if rest.is_goxdcr_enabled():
+                rest.stop_replication("controller/cancelXDCR/%s" % repl.get_repl_id())
+            else:
+                for rest_all_repl in rest_all_repls:
+                    if repl.get_repl_id() == rest_all_repl['id']:
+                        repl.cancel(rest, rest_all_repl)
         self.clear_all_replications()
 
 
