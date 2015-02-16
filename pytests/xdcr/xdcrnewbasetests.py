@@ -23,9 +23,7 @@ from tasks.future import TimeoutError
 
 from couchbase_helper.documentgenerator import BlobGenerator
 from lib.membase.api.exception import XDCRException
-
-# FIXME: Enable when Ritam's code is merged.
-# from security.AuditMain import audit
+from security.auditmain import audit
 
 
 class RenameNodeException(XDCRException):
