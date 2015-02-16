@@ -272,7 +272,7 @@ class SpatialHelper:
     def get_results(self, spatial, limit=None, extra_params={},
                     num_expected=None):
         start = time.time()
-        for i in range(0, 4):
+        for i in range(0, 10):
             try:
                 #full_set=true&connection_timeout=60000&limit=10&skip=0
                 params = {"connection_timeout": 60000}

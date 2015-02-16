@@ -115,7 +115,7 @@ class SpatialQueryTests(unittest.TestCase):
         data_set.add_skip_queries()
         self._rebalance_cluster(data_set)
 
-    def test_rebalance_with_simple_dataset_bbox_queries(self):
+    def test_rebalance_in_simple_dataset_bbox_queries(self):
         num_docs = self.helper.input.param("num-docs")
         self.log.info("description : Rebalance In and bounding box queries on a simple "
                       "dataset with {0} docs".format(num_docs))
