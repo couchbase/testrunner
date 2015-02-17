@@ -37,6 +37,9 @@ class QueryTests(BaseTestCase):
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.dataset = self.input.param("dataset", "default")
+        self.primary_indx_type = self.input.param("primary_indx_type", 'VIEWS')
+        self.primary_indx_drop = self.input.param("primary_indx_drop", False)
+        self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
         self.gens_load = self.generate_docs(self.docs_per_day)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
@@ -387,8 +390,16 @@ class QueryTests(BaseTestCase):
             if not self.n1ql_port:
                 self.log.info(" n1ql_port is not defined, processing will not proceed further")
                 raise Exception("n1ql_port is not defined, processing will not proceed further")
+        query_params = {}
+        cred_params = {'creds': []}
+        for bucket in self.buckets:
+            if bucket.saslPassword:
+                cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
+        query_params.update(cred_params)
         if self.use_rest:
-            result = RestConnection(server).query_tool(query, self.n1ql_port)
+            query_params.update({'scan_consistency': self.scan_consistency})
+            self.log.info('RUN QUERY %s' % query)
+            result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params)
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/" +\
@@ -550,8 +561,7 @@ class QueryTests(BaseTestCase):
 
     def generate_docs_bigdata(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_bigdata(docs_per_day = docs_per_day * 1000,
-            start = start, value_size = self.value_size)
+        return json_generator.generate_docs_bigdata(end=(1000*docs_per_day), start=start, value_size=self.value_size)
 
 
     def _verify_results(self, actual_result, expected_result, missing_count = 1, extra_count = 1):
@@ -610,9 +620,15 @@ class QueryTests(BaseTestCase):
                 rest.get_ddoc(self.buckets[0], ddoc_name)
             except ReadDocumentException:
                 for bucket in self.buckets:
+                    if self.primary_indx_drop:
+                        self.log.info("Dropping primary index for %s ..." % bucket.name)
+                        self.query = "DROP PRIMARY INDEX ON %s" % (bucket.name)
+                        self.sleep(3, 'Sleep for some time after index drop')
                     self.log.info("Creating primary index for %s ..." % bucket.name)
-                    self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
+                    self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
+                    if self.primary_indx_type.lower() == 'views':
+                        self.query = "CREATE PRIMARY INDEX ON %s" % (bucket.name)
                     try:
                         self.run_cbq_query()
                     except Exception, ex:
-                        self.log.error('ERROR during index creation %s' % str(ex))
+                        self.log.info(str(ex))
