@@ -74,9 +74,7 @@ class bidirectional(XDCRNewBaseTest):
     Verifying whether XDCR replication is successful on subsequent destination clusters. """
     def load_with_async_ops_and_joint_sets(self):
         self.setup_xdcr_and_load()
-
-        self.__perform_ops_joint_sets()
-
+        self.async_perform_update_delete()
         self.verify_results()
 
     def load_with_async_ops_with_warmup(self):
@@ -120,7 +118,7 @@ class bidirectional(XDCRNewBaseTest):
             warmupnodes.append(self.dest_cluster.warmup_node())
 
         self.sleep(self._wait_timeout)
-        self.__perform_ops_joint_sets()
+        self.async_perform_update_delete()
         self.sleep(self._wait_timeout / 2)
 
         NodeHelper.wait_warmup_completed(warmupnodes)
@@ -136,7 +134,7 @@ class bidirectional(XDCRNewBaseTest):
             warmupnodes.append(self.dest_cluster.warmup_node(master=True))
 
         self.sleep(self._wait_timeout)
-        self.__perform_ops_joint_sets()
+        self.async_perform_update_delete()
         self.sleep(self._wait_timeout / 2)
 
         NodeHelper.wait_warmup_completed(warmupnodes)
