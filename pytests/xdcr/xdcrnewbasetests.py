@@ -999,6 +999,8 @@ class CouchbaseCluster:
         if self.__use_hostname:
             self.__hostnames.update(NodeHelper.rename_nodes(self.__nodes))
 
+
+
     def get_host_names(self):
         return self.__hostnames
 
@@ -1042,6 +1044,14 @@ class CouchbaseCluster:
                 RestConnection(node).enable_goxdcr()
             else:
                 RestConnection(node).enable_xdcr_trace_logging()
+        if CHECK_AUDIT_EVENT.CHECK:
+            rest = RestConnection(self.__master_node)
+            status = rest.getAuditSettings()['auditd_enabled']
+            self.__log.info("Audit status on {0} is {1}".
+                            format(self.__name, status))
+            if not status:
+                self.__log.info("Enabling audit ...")
+                rest.setAuditSettings(enabled="true")
 
     def set_global_checkpt_interval(self, value):
         RestConnection(self.__master_node).set_internalSetting(
@@ -2341,7 +2351,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._checkpoint_interval = self._input.param(
             "checkpoint_interval",
             1800)
-        CHECK_AUDIT_EVENT.CHECK = self._input.param("check-audit-event", 0)
+        CHECK_AUDIT_EVENT.CHECK = self._input.param("audit", 0)
         GO_XDCR.ENABLED = self._input.param("enable_goxdcr", False)
 
     def __cleanup_previous(self):
