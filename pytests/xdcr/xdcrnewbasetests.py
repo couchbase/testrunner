@@ -2738,6 +2738,9 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def __merge_keys(
             self, kv_src_bucket, kv_dest_bucket, kvs_num=1, filter_exp=None):
+        """ Will merge kv_src_bucket keys that match the filter_expression
+            if any into kv_dest_bucket.
+        """
         valid_keys_src, deleted_keys_src = kv_src_bucket[
             kvs_num].key_set()
         valid_keys_dest, deleted_keys_dest = kv_dest_bucket[
@@ -2786,35 +2789,26 @@ class XDCRNewBaseTest(unittest.TestCase):
                 kv_src_bucket[kvs_num].release_partition(key)
                 kv_dest_bucket[kvs_num].release_partition(key)
 
+        valid_keys_dest, deleted_keys_dest = kv_dest_bucket[
+            kvs_num].key_set()
+        self.log.info("Destination bucket's kv_store now has {0}"
+                      " valid keys and {1} deleted keys".
+                      format(len(valid_keys_dest), len(deleted_keys_dest)))
+
     def __merge_all_buckets(self):
         """Merge bucket data between source and destination bucket
         for data verification. This method should be called after replication started.
         """
-        # In case of ring topology first merging keys from last and first
-        # cluster e.g. A -> B -> C -> A then merging C-> A then A-> B and B-> C
-        # and C->A (to merge keys from B ->C).
         # TODO need to be tested for Hybrid Topology
-        if self.__topology == TOPOLOGY.RING and len(
-                self.__cb_clusters) > 2:
-            for remote_cluster_ref in self.__cb_clusters[-1].get_remote_clusters():
-                for repl in remote_cluster_ref.get_replications():
-                    self.__merge_keys(
-                        repl.get_src_bucket().kvs,
-                        repl.get_dest_bucket().kvs,
-                        kvs_num=1
-                    )
-
         for cb_cluster in self.__cb_clusters:
             for remote_cluster_ref in cb_cluster.get_remote_clusters():
                 for repl in remote_cluster_ref.get_replications():
-                    self.log.info(
-                        "Merging keys for replication {0}".format(repl))
+                    self.log.info("Merging keys for replication {0}".format(repl))
                     self.__merge_keys(
                         repl.get_src_bucket().kvs,
                         repl.get_dest_bucket().kvs,
                         kvs_num=1,
-                        filter_exp=repl.get_filter_exp()
-                    )
+                        filter_exp=repl.get_filter_exp())
 
     # Interface for other tests.
     def merge_all_buckets(self):
