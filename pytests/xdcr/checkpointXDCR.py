@@ -421,7 +421,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         next checkpoint is successful"""
     def test_dest_bucket_flush(self):
         self.mutate_and_checkpoint()
-        self.dest_cluster.flush_buckets(self.dest_cluster.get_bucket_by_name('default'))
+        self.dest_cluster.flush_buckets([self.dest_cluster.get_bucket_by_name('default')])
         self.verify_next_checkpoint_fails_after_dest_uuid_change()
         self.verify_next_checkpoint_passes()
         self.sleep(10)
@@ -443,9 +443,8 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.src_cluster.delete_bucket('default')
         self.create_buckets_on_cluster(self.src_cluster.get_name())
         RestConnection(self.src_master).start_replication(REPLICATION_TYPE.CONTINUOUS,
-                                                          'default',
-                                                          self.src_cluster.get_name(),
-                                                          self.__rep_type)
+            'default',
+            "remote_cluster_%s-%s" % (self.src_cluster.get_name(), self.dest_cluster.get_name()))
         self.sleep(5)
         self.key_counter = 0
         self.keys_loaded = []

@@ -897,7 +897,6 @@ class RestConnection(object):
         if not replications:
             for replication in RestConnection.replications:
                 try:
-                    log.info("Deleting replication {0}".format(replication))
                     self.stop_replication("controller/cancelXDCR/%s" % replication)
                 except:
                     # we are not logging replication on per cluster basis
