@@ -74,7 +74,7 @@ class auditcheckconfig(BaseTestCase):
         expectedResult - dictionary of fields and value for event
     '''
     def checkConfig(self, eventID, host, expectedResults):
-        Audit = audit(eventID=eventID, host=self.master)
+        Audit = audit(eventID=eventID, host=host)
         fieldVerification, valueVerification = Audit.validateEvents(expectedResults)
         self.assertTrue(fieldVerification, "One of the fields is not matching")
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
@@ -503,9 +503,3 @@ class auditcheckconfig(BaseTestCase):
             self.checkConfig(self.eventID, self.servers[0], expectedResults)
         except:
             auditNodeFirst.setAuditLogPath(origLogPath)
-
-
-
-
-
-

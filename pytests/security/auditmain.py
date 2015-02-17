@@ -219,6 +219,16 @@ class audit:
         return status
 
     '''
+    checkConfig - Wrapper around audit class
+    Parameters:
+        expectedResult - dictionary of fields and value for event
+    '''
+    def checkConfig(self, expectedResults):
+        fieldVerification, valueVerification = self.validateEvents(expectedResults)
+        self.assertTrue(fieldVerification, "One of the fields is not matching")
+        self.assertTrue(valueVerification, "Values for one of the fields is not matching")
+
+    '''
     setAuditRotateInterval - set rotate_internval via REST API
     Parameter:
         rotate_internval - log rotate interval

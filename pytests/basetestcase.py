@@ -7,6 +7,7 @@ import string
 import random
 import logging
 import json
+import commands
 from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.document import View
@@ -1750,3 +1751,9 @@ class BaseTestCase(unittest.TestCase):
                     new_servers.append(server)
         return new_servers
 
+    '''
+    Returns ip address of the requesting machine
+    '''
+    def getLocalIPAddress(self):
+        status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
+        return ipAddress

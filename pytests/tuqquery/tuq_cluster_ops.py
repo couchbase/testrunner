@@ -1,5 +1,6 @@
 import math
 import time
+from security.auditmain import audit
 from tuqquery.tuq import QueryTests
 from tuqquery.tuq_join import JoinTests
 from remote.remote_util import RemoteMachineShellConnection
@@ -306,12 +307,63 @@ class QueriesOpsTests(QueryTests):
             for bucket in self.buckets:
                 self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
 
+    
+    def test_audit_add_node(self):
+        eventID = 8196 #add node
+        server = self.master
+        if self.input.tuq_client and "client" in self.input.tuq_client:
+            server = self.input.tuq_client["client"]
+        index_field = self.input.param("index_field", 'job_title')
+        indexes = []
+        try:
+            audit_reb_in = audit(eventID=eventID, host=server)
+            indexes = self._create_multiple_indexes(index_field)
+            servers_in = self.servers[1:self.nodes_in]
+            rebalance = self.cluster.async_rebalance(self.servers[:1],
+                                                     servers_in, [], services=self.services_in)
+            expected_result = {"services": self.services_in, 'port':8091, 'hostname': servers_in[0].ip, 'groupUUID':"0",
+                               'node':'ns_1@' + servers_in[0].ip, 'source':'ns_server', 'user': self.master.rest_username,
+                               "ip": self.getLocalIPAddress(), "port": 57457}
+            self.test_min()
+            audit_reb_in.checkConfig(expected_result)
+            rebalance.result()
+        finally:
+            for bucket in self.buckets:
+                for index_name in set(indexes):
+                    self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
+
+    def test_audit_rm_node(self):
+        eventID = 8197 #add node
+        server = self.master
+        if self.input.tuq_client and "client" in self.input.tuq_client:
+            server = self.input.tuq_client["client"]
+        index_field = self.input.param("index_field", 'job_title')
+        indexes = []
+        try:
+            audit_reb_out = audit(eventID=eventID, host=server)
+            indexes = self._create_multiple_indexes(index_field)
+            servers_in = self.servers[1:self.nodes_in]
+            self.cluster.rebalance(self.servers[:1], servers_in, [], services=self.services_in)
+            rebalance = self.cluster.rebalance(self.servers[:1], [], servers_in)
+            expected_result = {"services": self.services_in, 'port':8091, 'hostname': servers_in[0].ip, 'groupUUID':"0",
+                               'node':'ns_1@' + servers_in[0].ip, 'source':'ns_server', 'user': self.master.rest_username,
+                               "ip": self.getLocalIPAddress(), "port": 57457}
+            self.test_min()
+            audit_reb_out.checkConfig(expected_result)
+            rebalance.result()
+        finally:
+            for bucket in self.buckets:
+                for index_name in set(indexes):
+                    self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
+
     def _create_multiple_indexes(self, index_field):
         indexes = []
         for bucket in self.buckets:
             index_name = 'idx_%s_%s' % (bucket.name, index_field)
             self.run_cbq_query(query="CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name,
                                                                       ','.join(index_field.split(';')), self.indx_type))
+            if self.indx_type.lower() == 'gsi':
+                self._wait_for_index_online(bucket, index_name)
             indexes.append(index_name)
         return indexes
 
