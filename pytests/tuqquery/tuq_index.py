@@ -1,5 +1,5 @@
 import math
-
+import time
 from tuq import QueryTests
 from tuq_join import JoinTests
 from remote.remote_util import RemoteMachineShellConnection
@@ -473,6 +473,7 @@ class QueriesViewsTests(QueryTests):
                     index_name = '%s%s' % (index_name_prefix, field)
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, ','.join(field.split(';')), self.index_type)
                     self.run_cbq_query()
+                    self._wait_for_index_online(bucket, index_name)
                     indexes.append(index_name)
                 fn = getattr(self, method_name)
                 fn()
@@ -531,6 +532,7 @@ class QueriesJoinViewsTests(JoinTests):
                     index_name = '%s%s' % (index_name_prefix, field)
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, ','.join(field.split(';')), self.index_type)
                     self.run_cbq_query()
+                    self._wait_for_index_online(bucket, index_name)
                     indexes.append(index_name)
                 fn = getattr(self, method_name)
                 fn()

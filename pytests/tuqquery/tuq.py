@@ -2773,5 +2773,22 @@ class QueryTests(BaseTestCase):
                         self.query = "CREATE PRIMARY INDEX ON %s" % (bucket.name)
                     try:
                         self.run_cbq_query()
+                        if self.primary_indx_type.lower() == 'gsi':
+                            self._wait_for_index_online(bucket, '#primary')
                     except Exception, ex:
                         self.log.info(str(ex))
+
+    def _wait_for_index_online(self, bucket, index_name, timeout=300):
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            query = "SELECT * FROM system:indexes"
+            res = self.run_cbq_query(query)
+            for item in res['results']:
+                if 'keyspace_id' not in item['indexes']:
+                    self.log.error(item)
+                    continue
+                if item['indexes']['keyspace_id'] == bucket.name and item['indexes']['name'] == index_name:
+                    return
+            self.sleep(5, 'index is pending or not in the list. sleeping...')
+        raise Exception('index %s is not online. last response is %s' % (index_name, res))
+
