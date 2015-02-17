@@ -564,11 +564,12 @@ class SpatialQueryTests(unittest.TestCase):
         failover_nodes = self.servers[1 : self.helper.failover_factor + 1]
         try:
             # failover and verify loaded data
-            self.cluster.failover(self.servers, failover_nodes)
+            #self.cluster.failover(self.servers, failover_nodes)
+            self.cluster.failover(self.servers, self.servers[1:2])
             self.log.info("10 seconds sleep after failover before invoking rebalance...")
             time.sleep(10)
             rebalance = self.cluster.async_rebalance(self.servers,
-                [], failover_nodes)
+                [], self.servers[1:2])
 
             self._query_test_init(data_set)
 
@@ -578,11 +579,7 @@ class SpatialQueryTests(unittest.TestCase):
             #verify queries after failover
             self._query_test_init(data_set)
         finally:
-            for server in failover_nodes:
-                shell = RemoteMachineShellConnection(server)
-                shell.start_couchbase()
-                time.sleep(10)
-                shell.disconnect()
+            self.log.info("Completed the failover testing for spatial querying")
 
     ###
     # Warmup
