@@ -2601,8 +2601,6 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def __load_ring(self):
         self.__load_chain()
-        cluster = self.__cb_clusters[-1]
-        cluster.load_all_buckets(self._num_items, self._value_size)
 
     def load_data_topology(self):
         """load data as per ctopology test parameter
