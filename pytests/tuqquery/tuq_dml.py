@@ -58,6 +58,7 @@ class DMLQueryTests(QueryTests):
                 if len(keys) == num_docs:
                     break
                 key, value = gen.next()
+                key = "insert_json" + key
                 for bucket in self.buckets:
                     self.query = 'INSERT into %s (key, value) VALUES ("%s", %s)' % (bucket.name, key, value)
                     actual_result = self.run_cbq_query()
@@ -78,7 +79,7 @@ class DMLQueryTests(QueryTests):
 
     def test_insert_with_select(self):
         num_docs = self.input.param('num_docs', 10)
-        keys, values = self._insert_gen_keys(num_docs)
+        keys, values = self._insert_gen_keys(num_docs, prefix="select_i")
         prefix = 'insert%s' % str(uuid.uuid4())[:5]
         for bucket in self.buckets:
             for i in xrange(num_docs):
@@ -156,6 +157,7 @@ class DMLQueryTests(QueryTests):
                 if len(keys) == num_docs:
                     break
                 key, value = gen.next()
+                key = "upsert_json" + key
                 for bucket in self.buckets:
                     self.query = 'upsert into %s (key, value) values  ("%s", %s)' % (bucket.name, key, value)
                     actual_result = self.run_cbq_query()
@@ -218,7 +220,7 @@ class DMLQueryTests(QueryTests):
         self._keys_are_deleted(keys_to_delete)
 
     def test_delete_where_clause_json(self):
-        keys, values = self._insert_gen_keys(self.num_items)
+        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
         keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_title"] == 'Engineer']
         for bucket in self.buckets:
             self.query = 'delete from %s where job_title="Engineer"'  % (bucket.name)
@@ -227,7 +229,7 @@ class DMLQueryTests(QueryTests):
         self._keys_are_deleted(keys_to_delete)
 
     def test_delete_where_satisfy_clause_json(self):
-        keys, values = self._insert_gen_keys(self.num_items)
+        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_sat')
         keys_to_delete = [keys[i] for i in xrange(len(keys))
                           if len([vm for vm in values[i]["VMs"] if vm["RAM"] == 1]) > 0 ]
         for bucket in self.buckets:
@@ -237,7 +239,7 @@ class DMLQueryTests(QueryTests):
         self._keys_are_deleted(keys_to_delete)
 
     def test_delete_limit_keys(self):
-        keys, values = self._insert_gen_keys(self.num_items)
+        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_limit')
         for bucket in self.buckets:
             self.query = 'select count(*) as actual from %s where job_title="Engineer"'  % (bucket.name)
             self.run_cbq_query()
@@ -254,7 +256,7 @@ class DMLQueryTests(QueryTests):
             self.assertEqual(actual_result['results'][0]['actual'], current_docs - 1, 'Item was not deleted')
 
     def test_delete_limit_where(self):
-        keys, values = self._insert_gen_keys(self.num_items)
+        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_limitwhere')
         for bucket in self.buckets:
             self.query = 'select count(*) as actual from %s where job_title="Engineer"'  % (bucket.name)
             self.run_cbq_query()
@@ -278,7 +280,7 @@ class DMLQueryTests(QueryTests):
 
     def test_merge_delete_match(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
-        keys, _ = self._insert_gen_keys(self.num_items)
+        keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete')
         self.query = 'MERGE INTO %s USING %s on key "%s" when matched then delete'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
@@ -288,7 +290,7 @@ class DMLQueryTests(QueryTests):
 
     def test_merge_delete_match_limit(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
-        keys, _ = self._insert_gen_keys(self.num_items)
+        keys, _ = self._insert_gen_keys(self.num_items, prefix='delete_match')
         self.query = 'MERGE INTO %s USING %s on key "%s" when matched then delete limit 1'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
@@ -298,7 +300,7 @@ class DMLQueryTests(QueryTests):
 
     def test_merge_delete_where_match(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
-        keys, _ = self._insert_gen_keys(self.num_items)
+        keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete_where')
         self.query = 'MERGE INTO %s USING %s on key "%s" when matched then delete where name LIKE "empl%"'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
@@ -308,7 +310,7 @@ class DMLQueryTests(QueryTests):
 
     def test_merge_update_match_set(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
-        keys, _ = self._insert_gen_keys(self.num_items)
+        keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_update')
         new_name = 'edited'
         self.query = 'MERGE INTO %s USING %s on key "%s" when matched then update set name="%s"'  % (self.buckets[0].name, self.buckets[1].name, keys[0], new_name)
         actual_result = self.run_cbq_query()
@@ -319,7 +321,7 @@ class DMLQueryTests(QueryTests):
 
     def test_merge_update_match_unset(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
-        keys, _ = self._insert_gen_keys(self.num_items)
+        keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_unset')
         self.query = 'MERGE INTO %s USING %s on key "%s" when matched then update unset name'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
@@ -352,7 +354,7 @@ class DMLQueryTests(QueryTests):
     def test_update_keys_clause(self):
         num_docs_update = self.input.param('docs_to_update', 3)
         num_docs = self.input.param('num_docs', 10)
-        keys, _ = self._insert_gen_keys(num_docs)
+        keys, _ = self._insert_gen_keys(num_docs, prefix='update_keys')
         keys_to_update = keys[:num_docs_update]
         updated_value = 'new_name'
         for bucket in self.buckets:
@@ -368,7 +370,7 @@ class DMLQueryTests(QueryTests):
     def test_update_where(self):
         num_docs_update = self.input.param('docs_to_update', 3)
         num_docs = self.input.param('num_docs', 10)
-        _, values = self._insert_gen_keys(num_docs)
+        _, values = self._insert_gen_keys(num_docs, prefix='update_where')
         updated_value = 'new_name'
         for bucket in self.buckets:
             self.query = 'update %s set name="%s" where join_day=1 returning name'  % (bucket.name, updated_value)
@@ -383,7 +385,7 @@ class DMLQueryTests(QueryTests):
     def test_update_where_limit(self):
         num_docs_update = self.input.param('docs_to_update', 3)
         num_docs = self.input.param('num_docs', 10)
-        _, values = self._insert_gen_keys(num_docs)
+        _, values = self._insert_gen_keys(num_docs, prefix='update_wherelimit')
         updated_value = 'new_name'
         for bucket in self.buckets:
             self.query = 'update %s set name="%s" where join_day=1 limit 1'  % (bucket.name, updated_value)
@@ -398,7 +400,7 @@ class DMLQueryTests(QueryTests):
     def test_update_keys_for(self):
         num_docs_update = self.input.param('docs_to_update', 3)
         num_docs = self.input.param('num_docs', 10)
-        keys, _ = self._insert_gen_keys(num_docs)
+        keys, _ = self._insert_gen_keys(num_docs, prefix='update_for')
         keys_to_update = keys[:-num_docs_update]
         updated_value = 'new_name'
         for bucket in self.buckets:
@@ -416,7 +418,7 @@ class DMLQueryTests(QueryTests):
     def test_update_keys_for_where(self):
         num_docs_update = self.input.param('docs_to_update', 3)
         num_docs = self.input.param('num_docs', 10)
-        keys, _ = self._insert_gen_keys(num_docs)
+        keys, _ = self._insert_gen_keys(num_docs, prefix='updatefor_where')
         keys_to_update = keys[:num_docs_update]
         updated_value = 'new_name'
         for bucket in self.buckets:
@@ -431,7 +433,7 @@ class DMLQueryTests(QueryTests):
 
 ############################################################################################################################
 
-    def _insert_gen_keys(self, num_docs):
+    def _insert_gen_keys(self, num_docs, prefix='a1_'):
         def convert(data):
             if isinstance(data, basestring):
                 return str(data)
@@ -451,6 +453,7 @@ class DMLQueryTests(QueryTests):
                 if len(keys) == num_docs:
                     break
                 key, value = gen.next()
+                key = prefix + key
                 value = convert(json.loads(value))  
                 for bucket in self.buckets:
                     self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (bucket.name, key, value)
