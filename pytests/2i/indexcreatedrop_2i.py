@@ -10,8 +10,99 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
         super(SecondaryIndexingCreateDropTests, self).tearDown()
 
     def test_multi_create_drop_index(self):
-        self.log.info("test_multi_create_drop_index")
-        self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = True, drop_index = True)
+        if self.run_async:
+            tasks = self.async_run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = True, drop_index = False)
+            for task in tasks:
+                task.result()
+            tasks = self.async_run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = True)
+            for task in tasks:
+                task.result()
+        else:
+            self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = True, drop_index = True)
+
+    def test_deployment_plan_with_defer_build_plan_create_drop_index(self):
+        self.run_async = True
+        self.test_multi_create_drop_index()
+
+    def test_deployment_plan_with_nodes_only_plan_create_drop_index_for_secondary_index(self):
+        query_definitions = []
+        tasks = []
+        servers = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
+        try:
+            for server in servers:
+                index_name = "index_name_ip_{0}_port_{1}".format(server.ip.replace(".","_"),server.port)
+                query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_yr"], \
+                    query_template = "", groups = [])
+                query_definitions.append(query_definition)
+                deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
+                tasks.append(self.async_create_index(self.buckets[0], query_definition, deploy_node_info = deploy_node_info))
+            for task in tasks:
+                task.result()
+        except Exception, ex:
+            self.log.info(ex)
+            raise
+        finally:
+            self.run_multi_operations(buckets = [self.buckets[0]], query_definitions = query_definitions, drop_index = True)
+
+    def test_fail_deployment_plan_defer_build_same_name_index(self):
+        query_definitions = []
+        tasks = []
+        index_name = "test_deployment_plan_defer_build_same_name_index"
+        servers = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
+        try:
+            for server in servers:
+                self.defer_build=True
+                query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_yr"], \
+                    query_template = "", groups = [])
+                query_definitions.append(query_definition)
+                deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
+                tasks.append(self.async_create_index(self.buckets[0], query_definition, deploy_node_info = deploy_node_info))
+            for task in tasks:
+                task.result()
+        except Exception, ex:
+            msg =  "Index test_deployment_plan_defer_build_same_name_index already exist"
+            self.assertTrue(msg in str(ex),ex)
+
+    def test_failure_concurrent_create_index(self):
+        try:
+            self.run_async = True
+            self.test_multi_create_drop_index()
+            self.assertTrue(False, " Created indexes concurrently, should have failed! ")
+        except Exception, ex:
+            msg = "Build Already In Progress"
+            self.assertTrue(msg in str(ex),ex)
+
+    def test_deployment_plan_with_nodes_only_plan_create_drop_index_for_primary_index(self):
+        server = self.get_nodes_from_services_map(service_type = "n1ql")
+        self.query = "DROP PRIMARY INDEX ON {0} using gsi".format(self.buckets[0].name)
+        try:
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        except Exception, ex:
+            self.log.info(ex)
+        query_definitions = []
+        servers = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
+        deploy_node_info = ["{0}:{1}".format(servers[0].ip,servers[0].port)]
+        self.query = "CREATE PRIMARY INDEX ON {0} using gsi".format(self.buckets[0].name)
+        deployment_plan = {}
+        if deploy_node_info  != None:
+            deployment_plan["nodes"] = deploy_node_info
+        if self.defer_build != None:
+            deployment_plan["defer_build"] = self.defer_build
+        if len(deployment_plan) != 0:
+            self.query += " WITH "+ str(deployment_plan)
+        try:
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+            if self.defer_build:
+                build_index_task = self.async_build_index(self.buckets[0], ["`#primary`"])
+                build_index_task.result()
+            check = self.n1ql_helper.is_index_online_and_in_list(self.buckets[0], "#primary", server = server)
+            self.assertTrue(check, "index primary failed to be created")
+
+            self.query = "DROP PRIMARY INDEX ON {0} using gsi".format(self.buckets[0].name)
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        except Exception, ex:
+            self.log.info(ex)
+            raise
 
     def test_create_primary_using_views_with_existing_primary_index_gsi(self):
     	query_definition = QueryDefinition(

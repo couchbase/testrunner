@@ -1891,12 +1891,65 @@ class CreateIndexTask(Task):
     def __init__(self,
                  server, bucket, index_name,
                  query, n1ql_helper = None,
-                 retry_time=2):
+                 retry_time=2, defer_build = False):
         Task.__init__(self, "create_index_task")
         self.server = server
         self.bucket = bucket
+        self.defer_build = defer_build
         self.query = query
         self.index_name = index_name
+        self.n1ql_helper = n1ql_helper
+        self.retry_time = 2
+
+    def execute(self, task_manager):
+        try:
+            # Query and get results
+            print self.query
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.server)
+            print "done running query"
+            self.state = CHECKING
+            task_manager.schedule(self)
+        except CreateIndexException as e:
+            # initial query failed, try again
+            task_manager.schedule(self, self.retry_time)
+
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)
+
+    def check(self, task_manager):
+        try:
+           # Verify correctness of result set
+            check = True
+            if not self.defer_build:
+                check = self.n1ql_helper.is_index_online_and_in_list(self.bucket, self.index_name, server = self.server)
+            if not check:
+                self.state = FINISHED
+                raise CreateIndexException("Index {0} not created as expected ".format(self.index_name))
+            self.set_result(True)
+            self.state = FINISHED
+        except CreateIndexException as e:
+            # subsequent query failed! exit
+            self.state = FINISHED
+            self.set_exception(e)
+
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)
+
+class BuildIndexTask(Task):
+    def __init__(self,
+                 server, bucket,
+                 query, n1ql_helper = None,
+                 retry_time=2):
+        Task.__init__(self, "build_index_task")
+        self.server = server
+        self.bucket = bucket
+        self.query = query
         self.n1ql_helper = n1ql_helper
         self.retry_time = 2
 
@@ -1919,10 +1972,51 @@ class CreateIndexTask(Task):
     def check(self, task_manager):
         try:
            # Verify correctness of result set
+            self.set_result(True)
+            self.state = FINISHED
+        except CreateIndexException as e:
+            # subsequent query failed! exit
+            self.state = FINISHED
+            self.set_exception(e)
+
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)
+
+class MonitorIndexTask(Task):
+    def __init__(self,
+                 server, bucket, index_name,
+                 n1ql_helper = None,
+                 retry_time=2):
+        Task.__init__(self, "build_index_task")
+        self.server = server
+        self.bucket = bucket
+        self.index_name = index_name
+        self.n1ql_helper = n1ql_helper
+        self.retry_time = 2
+
+    def execute(self, task_manager):
+        try:
             check = self.n1ql_helper.is_index_online_and_in_list(self.bucket, self.index_name, server = self.server)
             if not check:
                 self.state = FINISHED
                 raise CreateIndexException("Index {0} not created as expected ".format(self.index_name))
+            self.state = CHECKING
+            task_manager.schedule(self)
+        except CreateIndexException as e:
+            # initial query failed, try again
+            task_manager.schedule(self, self.retry_time)
+
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.log.error("Unexpected Exception Caught")
+            self.set_exception(e)
+
+    def check(self, task_manager):
+        try:
             self.set_result(True)
             self.state = FINISHED
         except CreateIndexException as e:

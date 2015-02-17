@@ -271,7 +271,7 @@ class N1QLHelper():
             return True
         return False
 
-    def run_query_and_verify_result(self, server = None, query = None, timeout = 120.0, max_try = 6, expected_result = None):
+    def run_query_and_verify_result(self, server = None, query = None, timeout = 120.0, max_try = 1, expected_result = None):
         check = False
         init_time = time.time()
         try_count = 0
@@ -295,9 +295,12 @@ class N1QLHelper():
             time.sleep(10)
             check = self._is_index_in_list(bucket, index_name, server = server)
             next_time = time.time()
-            if check or ((next_time - init_time > timeout) and (not check)):
+            if check or (next_time - init_time > timeout):
                 return check
         return check
+
+    def gen_build_index_query(self, bucket = "default", index_list = []):
+        return "BUILD INDEX on {0}({1}) USING GSI".format(bucket,",".join(index_list))
 
     def _is_index_in_list(self, bucket, index_name, server = None):
         query = "SELECT * FROM system:indexes"
@@ -306,9 +309,8 @@ class N1QLHelper():
         res = self.run_cbq_query(query = query, server = server)
         for item in res['results']:
             if 'keyspace_id' not in item['indexes']:
-                self.log.error(item)
-                continue
-            if item['indexes']['keyspace_id'] == bucket and item['indexes']['name'] == index_name and item['indexes']['state'] != "pending":
+                return False
+            if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] != "pending":
                 return True
         return False
 

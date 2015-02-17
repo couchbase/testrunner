@@ -34,10 +34,18 @@ class QueryDefinition(object):
 		self.query_template = query_template
 		self.groups = groups
 
-	def generate_index_create_query(self, bucket = "default", use_gsi_for_secondary = True):
+	def generate_index_create_query(self, bucket = "default", use_gsi_for_secondary = True,
+	 deploy_node_info = None, defer_build = None ):
 		query = "CREATE INDEX %s ON %s(%s)" % (self.index_name,bucket, ",".join(self.index_fields))
 		if use_gsi_for_secondary:
-			query += "USING GSI"
+			query += " USING GSI "
+		deployment_plan = {}
+		if deploy_node_info  != None:
+			deployment_plan["nodes"] = deploy_node_info
+		if defer_build != None:
+			deployment_plan["defer_build"] = defer_build
+		if len(deployment_plan) != 0:
+			query += " WITH " + str(deployment_plan)
 		return query
 
 	def generate_index_drop_query(self, bucket = "default", use_gsi_for_secondary = True):

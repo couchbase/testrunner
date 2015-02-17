@@ -676,6 +676,32 @@ class Cluster(object):
                  server, bucket,
                  query, n1ql_helper = None,
                  index_name = None,
+                 defer_build = False,
+                 retry_time=2):
+        """Asynchronously runs create index task
+
+        Parameters:
+            server - The server to handle query verification task. (TestInputServer)
+            query - Query params being used with the query.
+            bucket - The name of the bucket containing items for this view. (String)
+            index_name - Name of the index to be created
+            defer_build - build is defered
+            retry_time - The time in seconds to wait before retrying failed queries (int)
+            n1ql_helper - n1ql helper object
+        Returns:
+            CreateIndexTask - A task future that is a handle to the scheduled task."""
+        _task = CreateIndexTask(n1ql_helper = n1ql_helper,
+                 server = server, bucket = bucket,
+                 defer_build = defer_build,
+                 index_name = index_name,
+                 query = query,
+                 retry_time= retry_time)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_monitor_index(self,
+                 server, bucket, n1ql_helper = None,
+                 index_name = None,
                  retry_time=2):
         """Asynchronously runs create index task
 
@@ -687,10 +713,30 @@ class Cluster(object):
             retry_time - The time in seconds to wait before retrying failed queries (int)
             n1ql_helper - n1ql helper object
         Returns:
-            CreateIndexTask - A task future that is a handle to the scheduled task."""
-        _task = CreateIndexTask(n1ql_helper = n1ql_helper,
+            MonitorIndexTask - A task future that is a handle to the scheduled task."""
+        _task = MonitorIndexTask(n1ql_helper = n1ql_helper,
                  server = server, bucket = bucket,
                  index_name = index_name,
+                 retry_time= retry_time)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_build_index(self,
+                 server, bucket,
+                 query, n1ql_helper = None,
+                 retry_time=2):
+        """Asynchronously runs create index task
+
+        Parameters:
+            server - The server to handle query verification task. (TestInputServer)
+            query - Query params being used with the query.
+            bucket - The name of the bucket containing items for this view. (String)
+            retry_time - The time in seconds to wait before retrying failed queries (int)
+            n1ql_helper - n1ql helper object
+        Returns:
+            BuildIndexTask - A task future that is a handle to the scheduled task."""
+        _task = BuildIndexTask(n1ql_helper = n1ql_helper,
+                 server = server, bucket = bucket,
                  query = query,
                  retry_time= retry_time)
         self.task_manager.schedule(_task)
@@ -700,6 +746,7 @@ class Cluster(object):
                  server, bucket,
                  query, n1ql_helper = None,
                  index_name = None,
+                 defer_build = False,
                  retry_time=2, timeout= 60):
         """Asynchronously runs drop index task
 
@@ -710,6 +757,7 @@ class Cluster(object):
             index_name - Name of the index to be created
             retry_time - The time in seconds to wait before retrying failed queries (int)
             n1ql_helper - n1ql helper object
+            defer_build - defer the build
             timeout - timeout for the task
         Returns:
             N1QLQueryTask - A task future that is a handle to the scheduled task."""
@@ -717,6 +765,7 @@ class Cluster(object):
                  server = server, bucket = bucket,
                  query = query,
                  index_name = index_name,
+                 defer_build = defer_build,
                  retry_time= retry_time)
         return _task.result(timeout)
 

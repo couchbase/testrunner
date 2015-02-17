@@ -10,7 +10,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.max_attempts_query_and_validate= self.input.param("max_attempts_query_and_validate",10)
         self.index_present= self.input.param("index_present",True)
         self.run_create_index= self.input.param("run_create_index",True)
-        self.run_create_index= self.input.param("run_create_index",True)
+        self.defer_build= self.input.param("defer_build",None)
+        self.deploy_on_particular_node= self.input.param("deploy_on_particular_node",None)
         self.run_drop_index= self.input.param("run_drop_index",True)
         self.run_query_with_explain= self.input.param("run_query_with_explain",True)
         self.run_query= self.input.param("run_query",True)
@@ -31,32 +32,53 @@ class BaseSecondaryIndexingTests(QueryTests):
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
 
-    def create_index(self, bucket, query_definition, verifycreate = True):
+    def create_index(self, bucket, query_definition, deploy_node_info = None):
         self.query = query_definition.generate_index_create_query(bucket = bucket,
-         use_gsi_for_secondary = self.use_gsi_for_secondary)
+         use_gsi_for_secondary = self.use_gsi_for_secondary, deploy_node_info= deploy_node_info,
+         defer_build = self.defer_build)
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        if verifycreate:
+        if not self.defer_build:
             check = self.n1ql_helper.is_index_online_and_in_list(bucket, query_definition.index_name, server = server)
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
-    def async_create_index(self, bucket, query_definition):
+    def async_create_index(self, bucket, query_definition, deploy_node_info = None):
         self.query = query_definition.generate_index_create_query(bucket = bucket,
-            use_gsi_for_secondary = self.use_gsi_for_secondary)
+            use_gsi_for_secondary = self.use_gsi_for_secondary, deploy_node_info = deploy_node_info,
+            defer_build = self.defer_build)
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         create_index_task = self.cluster.async_create_index(
                  server = server, bucket = bucket,
                  query = self.query , n1ql_helper = self.n1ql_helper,
-                 index_name = query_definition.index_name)
+                 index_name = query_definition.index_name, defer_build = self.defer_build)
         return create_index_task
 
-    def sync_create_index(self, bucket, query_definition):
-        self.query = query_definition.generate_index_drop_query(bucket = bucket)
+    def async_monitor_index(self, bucket, index_name = None):
+        server = self.get_nodes_from_services_map(service_type = "n1ql")
+        monitor_index_task = self.cluster.async_monitor_index(
+                 server = server, bucket = bucket,
+                 n1ql_helper = self.n1ql_helper,
+                 index_name = index_name)
+        return monitor_index_task
+
+    def async_build_index(self, bucket = "default", index_list = []):
+        self.query = self.n1ql_helper.gen_build_index_query(bucket = bucket, index_list = index_list)
+        self.log.info(self.query)
+        server = self.get_nodes_from_services_map(service_type = "n1ql")
+        build_index_task = self.cluster.async_build_index(
+                 server = server, bucket = bucket,
+                 query = self.query , n1ql_helper = self.n1ql_helper)
+        return build_index_task
+
+    def sync_create_index(self, bucket, query_definition, deploy_node_info = None):
+        self.query = query_definition.generate_index_create_query(bucket = bucket,
+            use_gsi_for_secondary = self.use_gsi_for_secondary, deploy_node_info = deploy_node_info,
+            defer_build = self.defer_build)
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         create_index_task = self.cluster.create_index(self,
                  server = server, bucket = bucket,
                  query = self.query , n1ql_helper = self.n1ql_helper,
-                 index_name = query_definition.index_name)
+                 index_name = query_definition.index_name,  defer_build = self.defer_build)
         return create_index_task
 
     def multi_create_index(self, buckets = [], query_definitions =[]):
@@ -75,7 +97,21 @@ class BaseSecondaryIndexingTests(QueryTests):
                 if index_info not in self.memory_create_list:
                     self.memory_create_list.append(index_info)
                     create_index_tasks.append(self.async_create_index(bucket.name, query_definition))
-        return create_index_tasks
+        if self.defer_build:
+            index_list = []
+            for task in create_index_tasks:
+                task.result()
+            for query_definition in query_definitions:
+                if query_definition.index_name not in index_list:
+                    index_list.append(query_definition.index_name)
+            build_index_task = self.async_build_index(bucket, index_list)
+            build_index_task.result()
+            monitor_index_tasks = []
+            for index_name in index_list:
+                monitor_index_tasks.append(self.async_monitor_index(bucket, index_name))
+            return monitor_index_tasks
+        else:
+            return create_index_tasks
 
     def sync_multi_create_index(self, buckets = [], query_definitions =[]):
         for bucket in buckets:
