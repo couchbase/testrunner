@@ -2147,6 +2147,9 @@ class RestConnection(object):
             prepared = json.dumps(query)
             prepared = str(prepared.encode('utf-8'))
             params = 'prepared=' + urllib.quote(prepared, '~()')
+            if 'creds' in query_params and query_params['creds']:
+                headers = self._create_headers_with_auth(query_params['creds'][0]['user'].encode('utf-8'),
+                                                         query_params['creds'][0]['pass'].encode('utf-8'))
             api = "http://%s:%s/query/service?%s" % (self.ip, port, params)
         else:
             params = {key : query}
