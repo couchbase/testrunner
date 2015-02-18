@@ -49,8 +49,11 @@ class cbcollectRunner(object):
         print "\n".join(error)
 
         user_path = "/home/"
-        if self.server.ssh_username == "root":
-            user_path = "/"
+        if remote_client.info.distribution_type.lower() == 'mac':
+            user_path = "/Users/"
+	else:
+            if self.server.ssh_username == "root":
+                user_path = "/"
         remote_path = "%s%s" % (user_path, self.server.ssh_username)
         status = remote_client.file_exists(remote_path, file_name)
         if not status:
