@@ -312,7 +312,7 @@ class QueriesOpsTests(QueryTests):
         indexes = []
         for bucket in self.buckets:
             index_name = 'idx_%s_%s' % (bucket.name, index_field)
-            self.run_cbq_query(query="CREATE INDEX %s ON %s(%s)%s" % (index_name, bucket.name,
+            self.run_cbq_query(query="CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name,
                                                                       ','.join(index_field.split(';')), self.indx_type))
             indexes.append(index_name)
         return indexes

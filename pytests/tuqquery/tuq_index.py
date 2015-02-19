@@ -486,6 +486,8 @@ class QueriesViewsTests(QueryTests):
                     pass
 
     def _verify_view_is_present(self, view_name, bucket):
+        if self.primary_indx_type.lower() == 'gsi':
+            return
         ddoc, _ = RestConnection(self.master).get_ddoc(bucket.name, "ddl_%s" % view_name)
         self.assertTrue(view_name in ddoc["views"], "View %s wasn't created" % view_name)
 
