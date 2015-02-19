@@ -310,7 +310,7 @@ class QueriesOpsTests(QueryTests):
 
     def _create_multiple_indexes(self, index_field):
         indexes = []
-        for bucket in self.bucket:
+        for bucket in self.buckets:
             index_name = 'idx_%s_%s' % (bucket.name, index_field)
             self.run_cbq_query(query="CREATE INDEX %s ON %s(%s)%s" % (index_name, bucket.name,
                                                                       ','.join(index_field.split(';')), self.indx_type))
