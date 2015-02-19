@@ -37,7 +37,7 @@ class QueryTests(BaseTestCase):
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.dataset = self.input.param("dataset", "default")
-        self.primary_indx_type = self.input.param("primary_indx_type", 'VIEWS')
+        self.primary_indx_type = self.input.param("primary_indx_type", 'VIEW')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
         self.gens_load = self.generate_docs(self.docs_per_day)
@@ -626,7 +626,7 @@ class QueryTests(BaseTestCase):
                         self.sleep(3, 'Sleep for some time after index drop')
                     self.log.info("Creating primary index for %s ..." % bucket.name)
                     self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
-                    if self.primary_indx_type.lower() == 'views':
+                    if self.primary_indx_type.lower() == 'view':
                         self.query = "CREATE PRIMARY INDEX ON %s" % (bucket.name)
                     try:
                         self.run_cbq_query()

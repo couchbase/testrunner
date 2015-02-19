@@ -13,7 +13,7 @@ class QueriesOpsTests(QueryTests):
         self.query_params = {'scan_consistency' : 'statement_plus'}
         if self.nodes_init > 1 and not self._testMethodName == 'suite_setUp':
             self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
-        self.indx_type = self.input.param("indx_type", 'VIEWS')
+        self.indx_type = self.input.param("indx_type", 'VIEW')
 
     def suite_setUp(self):
         super(QueriesOpsTests, self).suite_setUp()
