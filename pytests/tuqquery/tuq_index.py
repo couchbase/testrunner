@@ -467,7 +467,6 @@ class QueriesViewsTests(QueryTests):
         method_name = self.input.param('to_run', 'test_any')
         index_fields = self.input.param("index_fields", '').split(';')
         for bucket in self.buckets:
-            indexes[bucket.name] = []
             try:
                 for field in index_fields:
                     index_name = '%s%s' % (index_name_prefix, field)
@@ -480,10 +479,10 @@ class QueriesViewsTests(QueryTests):
             finally:
                 for indx in indexes:
                     self.query = "DROP INDEX %s.%s" % (bucket.name, indx)
-                try:
-                    self.run_cbq_query()
-                except:
-                    pass
+                    try:
+                        self.run_cbq_query()
+                    except:
+                        pass
 
     def _verify_view_is_present(self, view_name, bucket):
         if self.primary_indx_type.lower() == 'gsi':
