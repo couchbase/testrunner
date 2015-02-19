@@ -503,14 +503,11 @@ class QueriesViewsTests(QueryTests):
 
 class QueriesJoinViewsTests(JoinTests):
 
+
     def setUp(self):
         super(QueriesJoinViewsTests, self).setUp()
         self.num_indexes = self.input.param('num_indexes', 1)
         self.index_type = self.input.param('index_type', 'VIEW')
-        if self.num_indexes > len(self.FIELDS_TO_INDEX):
-            self.input.test_params["stop-on-failure"] = True
-            self.log.error("MAX NUMBER OF INDEXES IS 3. ALL TESTS WILL BE SKIPPED")
-            self.fail('MAX NUMBER OF INDEXES IS 3. ALL TESTS WILL BE SKIPPED')
 
     def suite_setUp(self):
         super(QueriesJoinViewsTests, self).suite_setUp()

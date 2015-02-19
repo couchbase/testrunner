@@ -49,9 +49,7 @@ class QueriesOpsTests(QueryTests):
                 rebalance.result()
                 self.test_min()
         finally:
-            for bucket in self.buckets:
-                for index_name in set(indexes):
-                    self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
+            self._delete_multiple_indexes(indexes)
 
     def test_incr_rebalance_out(self):
         self.assertTrue(len(self.servers[:self.nodes_init]) > self.nodes_out,
@@ -320,7 +318,10 @@ class QueriesOpsTests(QueryTests):
     def _delete_multiple_indexes(self, indexes):
         for bucket in self.buckets:
             for index_name in set(indexes):
-                self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
+                try:
+                    self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
+                except:
+                    pass
 
 
 class QueriesOpsJoinsTests(JoinTests):
