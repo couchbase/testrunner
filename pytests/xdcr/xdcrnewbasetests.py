@@ -511,7 +511,7 @@ class XDCRRemoteClusterRef:
                 "real_userid:user": self.__src_cluster.get_master_node().rest_username,
                 "cluster_name": self.__name,
                 "cluster_hostname": "%s:%s" % (self.__dest_cluster.get_master_node().ip, self.__dest_cluster.get_master_node().port),
-                "is_encrypted": str(self.__encryption).lower()
+                "is_encrypted": str(self.__encryption)
             }
         else:
             expected_results = {
