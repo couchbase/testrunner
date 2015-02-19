@@ -1703,7 +1703,7 @@ class RestConnection(object):
                                    'emailUser': email_username,
                                    'emailPass': email_password,
                                    'emailHost': email_host,
-                                   'emailPrt': email_port,
+                                   'emailPort': email_port,
                                    'emailEncrypt': email_encrypt,
                                    'alerts': alerts})
         log.info('settings/alerts params : {0}'.format(params))
@@ -2138,6 +2138,14 @@ class RestConnection(object):
         params = urllib.urlencode({'username' : username, 'password' : password})
         log.info('settings/readOnlyUser params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)
+        return status
+
+    #Change password for readonly user
+    def changePass_ro_user(self, username, password):
+        api = self.baseUrl + 'settings/readOnlyUser'
+        params = urllib.urlencode({'username' : username, 'password' : password})
+        log.info('settings/readOnlyUser params : {0}'.format(params))
+        status, content, header = self._http_request(api, 'PUT', params)
         return status
 
     def query_tool(self, query, port=8093, timeout=650, query_params={}, is_prepared=False):
@@ -2584,7 +2592,7 @@ class RestConnection(object):
     false
     Returns - True of false based if user should login or login fail
     '''
-    def validateLogin(self, user, password, login):
+    def validateLogin(self, user, password, login, getContent=False):
         api = self.baseUrl + "uilogin"
         header = {'Content-type': 'application/x-www-form-urlencoded'}
         params = urllib.urlencode({'user':'{0}'.format(user), 'password':'{0}'.format(password)})
@@ -2592,6 +2600,8 @@ class RestConnection(object):
         http = httplib2.Http()
         status, content = http.request(api, 'POST', headers=header, body=params)
         log.info ("Status of login command - {0}".format(status))
+        if (getContent):
+            return status, content
         if ((status['status'] == "200" and login == True) or (status ['status'] == "400" and login == False)):
             return True
         else:
@@ -2623,7 +2633,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         log.info ("Status of executeValidateCredentials command - {0}".format(status))
         return status, json.loads(content)
-    
+
     '''
     Audit Commands
     '''
