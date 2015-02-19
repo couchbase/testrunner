@@ -5,6 +5,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def setUp(self):
         super(BaseSecondaryIndexingTests, self).setUp()
+        self.index_lost_during_move_out =[]
         self.timeout_for_index_online= self.input.param("timeout_for_index_online",120)
         self.max_attempts_check_index= self.input.param("max_attempts_check_index",10)
         self.max_attempts_query_and_validate= self.input.param("max_attempts_query_and_validate",10)
@@ -82,21 +83,37 @@ class BaseSecondaryIndexingTests(QueryTests):
         return create_index_task
 
     def multi_create_index(self, buckets = [], query_definitions =[]):
+        self.index_lost_during_move_out =[]
         for bucket in buckets:
+            index_node_count = 0
             for query_definition in query_definitions:
-                index_info = query_definition.generate_index_create_query(bucket = bucket.name)
+                index_info = "{0}:{1}".format(bucket.name, query_definition.index_name)
                 if index_info not in self.memory_create_list:
                     self.memory_create_list.append(index_info)
-                    self.create_index(bucket.name, query_definition)
+                    self.deploy_node_info = None
+                    if index_node_count < len(self.index_nodes_out):
+                        self.deploy_node_info = "{0}:{1}".format(self.index_nodes_out[bucket.name][index_node_count].ip,
+                        self.index_nodes_out[bucket.name][index_node_count].port)
+                        self.index_lost_during_move_out.append(query_definition.index_name)
+                        index_node_count += 1
+                    self.create_index(bucket.name, query_definition, deploy_node_info = self.deploy_node_info)
 
     def async_multi_create_index(self, buckets = [], query_definitions =[]):
         create_index_tasks = []
+        self.index_lost_during_move_out =[]
         for bucket in buckets:
+            index_node_count = 0
             for query_definition in query_definitions:
-                index_info = query_definition.generate_index_create_query(bucket = bucket.name)
+                index_info = "{0}:{1}".format(bucket.name, query_definition.index_name)
                 if index_info not in self.memory_create_list:
                     self.memory_create_list.append(index_info)
-                    create_index_tasks.append(self.async_create_index(bucket.name, query_definition))
+                    self.deploy_node_info = None
+                    if index_node_count < len(self.index_nodes_out):
+                        self.deploy_node_info = "{0}:{1}".format(self.index_nodes_out[bucket.name][index_node_count].ip,
+                        self.index_nodes_out[bucket.name][index_node_count].port)
+                        self.index_lost_during_move_out.append(query_definition.index_name)
+                        index_node_count += 1
+                    create_index_tasks.append(self.async_create_index(bucket.name, query_definition, deploy_node_info = self.deploy_node_info))
         if self.defer_build:
             index_list = []
             for task in create_index_tasks:
@@ -108,7 +125,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             build_index_task.result()
             monitor_index_tasks = []
             for index_name in index_list:
-                monitor_index_tasks.append(self.async_monitor_index(bucket, index_name))
+                for bucket in self.buckets:
+                    monitor_index_tasks.append(self.async_monitor_index(bucket.name, index_name))
             return monitor_index_tasks
         else:
             return create_index_tasks

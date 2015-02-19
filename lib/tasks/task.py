@@ -1846,9 +1846,6 @@ class N1QLQueryTask(Task):
     def execute(self, task_manager):
         try:
             # Query and get results
-            check = self.n1ql_helper.is_index_online_and_in_list(self.bucket, self.index_name, server = self.server)
-            if not check:
-                raise N1QLQueryException(" Index {0} not online ".format(self.index_name))
             if not self.is_explain_query:
                 self.msg, self.isSuccess = self.n1ql_helper.run_query_and_verify_result(query = self.query, server = self.server, expected_result = self.expected_result)
             else:

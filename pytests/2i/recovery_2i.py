@@ -2,6 +2,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from base_2i import BaseSecondaryIndexingTests
+import copy
 
 class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
@@ -12,33 +13,47 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         super(SecondaryIndexingRecoveryTests, self).tearDown()
 
     def test_rebalance_in(self):
-        self.check_and_run_operations(buckets = self.buckets, before = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
+        for task in tasks:
+            task.result()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],self.nodes_in_list, [], services = self.services_in)
         self.sleep(3)
         self._run_aync_tasks()
         rebalance.result()
-        self.check_and_run_operations(buckets = self.buckets, after = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
+        for task in tasks:
+            task.result()
 
     def test_rebalance_out(self):
-        self.check_and_run_operations(buckets = self.buckets, before = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
+        for task in tasks:
+            task.result()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
         self.sleep(3)
         self._run_aync_tasks()
         rebalance.result()
-        self.check_and_run_operations(buckets = self.buckets, after = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
+        for task in tasks:
+            task.result()
 
     def test_rebalance_in_out(self):
-        self.check_and_run_operations(buckets = self.buckets, before = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
+        for task in tasks:
+            task.result()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                 self.nodes_in_list,
                                self.nodes_out_list, services = self.services_in)
         self.sleep(3)
         self._run_aync_tasks()
         rebalance.result()
-        self.check_and_run_operations(buckets = self.buckets, after = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
+        for task in tasks:
+            task.result()
 
     def test_rebalance_with_stop_start(self):
-        self.check_and_run_operations(buckets = self.buckets, before = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
+        for task in tasks:
+            task.result()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                 self.nodes_in_list,
                                self.nodes_out_list, services = self.services_in)
@@ -54,55 +69,70 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                                 self.nodes_in_list,
                                self.nodes_out_list, services = self.services_in)
         rebalance.result()
-        self.check_and_run_operations(buckets = self.buckets, after = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
+        for task in tasks:
+            task.result()
 
 
     def test_server_crash(self):
         self.targetProcess= self.input.param("targetProcess",'memcached')
-        self.check_and_run_operations(buckets = self.buckets, before = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
+        for task in tasks:
+            task.result()
         self.sleep(5, "Wait some time for rebalance process and then kill {0}".format(self.targetProcess))
         for node in self.nodes_out_list:
             remote = RemoteMachineShellConnection(node)
             remote.terminate_process(process_name=self.targetProcess)
         self.sleep(3)
         self._run_aync_tasks()
-        self.check_and_run_operations(buckets = self.buckets, after = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
+        for task in tasks:
+            task.result()
 
     def test_server_retstart(self):
-        self.check_and_run_operations(buckets = self.buckets, before = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
+        for task in tasks:
+            task.result()
         self.sleep(5, "Wait some time for rebalance process and then restart server")
         for node in self.nodes_out_list:
             remote = RemoteMachineShellConnection(node)
             remote.stop_server()
         self.sleep(3)
-        self.check_and_run_operations(buckets = self.buckets, in_between = True)
+        self._run_aync_tasks()
         for node in self.nodes_out_list:
             remote = RemoteMachineShellConnection(node)
             remote.start_server()
-        self._run_aync_tasks()
-        self.check_and_run_operations(buckets = self.buckets, after = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
+        for task in tasks:
+            task.result()
 
     def test_failover(self):
-        self.check_and_run_operations(buckets = self.buckets, before = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
+        for task in tasks:
+            task.result()
         servr_out = self.nodes_out_list
         failover_task = self.cluster.async_failover([self.master],
                 failover_nodes = servr_out, graceful=self.graceful)
-        self.check_and_run_operations(buckets = self.buckets, in_between = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
         failover_task.result()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                [], servr_out)
         self._run_aync_tasks()
         rebalance.result()
-        self.check_and_run_operations(buckets = self.buckets, after = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
+        for task in tasks:
+            task.result()
 
     def test_failover_add_back(self):
         recoveryType = self.input.param("recoveryType", "full")
         servr_out = self.nodes_out_list
         nodes_all = RestConnection(self.master).node_statuses()
-        self.check_and_run_operations(buckets = self.buckets, before = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
+        for task in tasks:
+            task.result()
         failover_task =self.cluster.async_failover([self.master],
                 failover_nodes = servr_out, graceful=self.graceful)
-        self.check_and_run_operations(buckets = self.buckets, in_between = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
         failover_task.result()
         self.log.info(servr_out)
         rest = RestConnection(self.master)
@@ -117,13 +147,17 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
         self._run_aync_tasks()
         rebalance.result()
-        self.check_and_run_operations(buckets = self.buckets, after = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
+        for task in tasks:
+            task.result()
 
     def test_autofailover(self):
         autofailover_timeout = 30
         status = RestConnection(self.master).update_autofailover_settings(True, autofailover_timeout)
         self.assertTrue(status, 'failed to change autofailover_settings!')
-        self.check_and_run_operations(buckets = self.buckets, before = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
+        for task in tasks:
+            task.result()
         servr_out = self.nodes_out_list
         remote = RemoteMachineShellConnection(servr_out[0])
         try:
@@ -135,14 +169,18 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rebalance.result()
         finally:
             remote.start_server()
-            self.check_and_run_operations(buckets = self.buckets, after = True)
+            tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
+            for task in tasks:
+                task.result()
 
     def test_warmup(self):
         num_srv_warm_up = self.input.param("srv_warm_up", self.nodes_init)
         if self.input.tuq_client is None:
             self.fail("For this test external tuq server is requiered. " +\
                       "Please specify one in conf")
-        self.check_and_run_operations(buckets = self.buckets, before = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
+        for task in tasks:
+            task.result()
         for server in self.servers[self.nodes_init - num_srv_warm_up:self.nodes_init]:
             remote = RemoteMachineShellConnection(server)
             remote.stop_server()
@@ -154,17 +192,20 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         except:
             pass
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-        self.check_and_run_operations(buckets = self.buckets, after = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
+        for task in tasks:
+            task.result()
 
     def _run_aync_tasks(self):
         if self.doc_ops:
             self._run_async_tasks_with_ops()
         else:
-            if self.ops_map["in_between"]["query_ops"] and not self.index_present:
-                qdfs = []
+            qdfs = []
+            if self.ops_map["in_between"]["query_ops"]:
                 for query_definition in self.query_definitions:
-                    query_definition.index_name = "#primary"
-                    self.qdfs.append(query_definition)
+                    if query_definition.index_name in self.index_lost_during_move_out:
+                        query_definition.index_name = "#primary"
+                        qdfs.append(query_definition)
                 self.query_definitions = qdfs
             tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
             for task in tasks:
