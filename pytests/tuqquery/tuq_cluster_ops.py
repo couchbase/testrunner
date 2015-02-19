@@ -44,7 +44,7 @@ class QueriesOpsTests(QueryTests):
             self.test_min()
             for i in xrange(1, self.nodes_in + 1):
                 rebalance = self.cluster.async_rebalance(self.servers[:i],
-                                                         self.servers[i:i+1], [])
+                                                         self.servers[i:i + 1], [])
                 self.test_min()
                 rebalance.result()
                 self.test_min()
@@ -62,9 +62,9 @@ class QueriesOpsTests(QueryTests):
             indexes = self._create_multiple_indexes(index_field)
             self.test_min()
             for i in xrange(1, self.nodes_out + 1):
-                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i-1)],
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i - 1)],
                                         [],
-                                        self.servers[self.nodes_init - i:self.nodes_init - (i-1)])
+                                        self.servers[self.nodes_init - i:self.nodes_init - (i - 1)])
                 self.test_min()
                 rebalance.result()
                 self.test_min()
@@ -96,7 +96,7 @@ class QueriesOpsTests(QueryTests):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                      servr_in, servr_out)
             self.sleep(5, "Wait some time for rebalance process and then kill memcached")
-            remote = RemoteMachineShellConnection(self.servers[self.nodes_init -1])
+            remote = RemoteMachineShellConnection(self.servers[self.nodes_init - 1])
             remote.terminate_process(process_name='memcached')
             self.test_case()
             try:
@@ -129,7 +129,7 @@ class QueriesOpsTests(QueryTests):
             indexes = self._create_multiple_indexes(index_field)
             servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
             self.test_union()
-    
+
             nodes_all = RestConnection(self.master).node_statuses()
             nodes = []
             for failover_node in servr_out:
@@ -151,7 +151,7 @@ class QueriesOpsTests(QueryTests):
         self.assertTrue(status, 'failed to change autofailover_settings!')
         servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
         self.test_union()
-        remote = RemoteMachineShellConnection(self.servers[self.nodes_init -1])
+        remote = RemoteMachineShellConnection(self.servers[self.nodes_init - 1])
         try:
             remote.stop_server()
             self.sleep(autofailover_timeout + 10, "Wait for autofailover")
@@ -165,7 +165,7 @@ class QueriesOpsTests(QueryTests):
 
     def test_cancel_query_mb_9223(self):
         for bucket in self.buckets:
-            self.query = 'SELECT tasks_points.task1 AS points FROM %s AS test ' %(bucket.name) +\
+            self.query = 'SELECT tasks_points.task1 AS points FROM %s AS test ' % (bucket.name) + \
                          'GROUP BY test.tasks_points.task1 ORDER BY points'
             self.log.info("run query to cancel")
             try:
@@ -204,7 +204,7 @@ class QueriesOpsTests(QueryTests):
             indexes = self._create_multiple_indexes(index_field)
             num_srv_warm_up = self.input.param("srv_warm_up", self.nodes_init)
             if self.input.tuq_client is None:
-                self.fail("For this test external tuq server is requiered. " +\
+                self.fail("For this test external tuq server is requiered. " + \
                           "Please specify one in conf")
             self.test_union_all()
             for server in self.servers[self.nodes_init - num_srv_warm_up:self.nodes_init]:
@@ -313,7 +313,7 @@ class QueriesOpsTests(QueryTests):
         for bucket in self.bucket:
             index_name = 'idx_%s_%s' % (bucket.name, index_field)
             self.run_cbq_query(query="CREATE INDEX %s ON %s(%s)%s" % (index_name, bucket.name,
-                                                                      ','.join(index_field.split(';'))), self.indx_type)
+                                                                      ','.join(index_field.split(';')), self.indx_type))
             indexes.append(index_name)
         return indexes
 
@@ -356,7 +356,7 @@ class QueriesOpsJoinsTests(JoinTests):
         fn()
         for i in xrange(1, self.nodes_in + 1):
             rebalance = self.cluster.async_rebalance(self.servers[:i],
-                                                     self.servers[i:i+1], [])
+                                                     self.servers[i:i + 1], [])
             fn()
             rebalance.result()
             fn()
@@ -366,7 +366,7 @@ class QueriesOpsJoinsTests(JoinTests):
         self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
         fn = getattr(self, self.test_to_run)
         fn()
-        rebalance = self.cluster.async_rebalance(self.servers[:1], self.servers[1:self.nodes_in+1], [])
+        rebalance = self.cluster.async_rebalance(self.servers[:1], self.servers[1:self.nodes_in + 1], [])
         i = 0
         end_time = time.time() + timeout
         while rebalance.state != "FINISHED" or time.time() > end_time:
@@ -381,9 +381,9 @@ class QueriesOpsJoinsTests(JoinTests):
         fn = getattr(self, self.test_to_run)
         fn()
         for i in xrange(1, self.nodes_out + 1):
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i-1)],
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i - 1)],
                                     [],
-                                    self.servers[self.nodes_init - i:self.nodes_init - (i-1)])
+                                    self.servers[self.nodes_init - i:self.nodes_init - (i - 1)])
             fn()
             rebalance.result()
             fn()
@@ -432,7 +432,7 @@ class QueriesOpsJoinsTests(JoinTests):
     def test_warmup(self):
         num_srv_warm_up = self.input.param("srv_warm_up", self.nodes_init)
         if self.input.tuq_client is None:
-            self.fail("For this test external tuq server is requiered. " +\
+            self.fail("For this test external tuq server is requiered. " + \
                       "Please specify one in conf")
         fn = getattr(self, self.test_to_run)
         fn()
