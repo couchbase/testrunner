@@ -105,6 +105,7 @@ class BaseTestCase(unittest.TestCase):
             self.log_location = self.input.param("log_location", None)
             self.stat_info = self.input.param("stat_info", None)
             self.port_info = self.input.param("port_info", None)
+            self.skip_buckets_handle = self.input.param("skip_buckets_handle", False)
             self.nodes_out_dist = self.input.param("nodes_out_dist", None)
             self.eviction_policy = self.input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
             self.absolute_path = self.input.param("absolute_path", True)
@@ -121,6 +122,8 @@ class BaseTestCase(unittest.TestCase):
 
             self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
                           .format(self.case_number, self._testMethodName))
+            if not self.skip_buckets_handle:
+                self._cluster_cleanup()
             # avoid any cluster operations in setup for new upgrade & upgradeXDCR tests
             if str(self.__class__).find('newupgradetests') != -1 or \
                     str(self.__class__).find('upgradeXDCR') != -1 or \
@@ -130,7 +133,7 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
                 return
             # avoid clean up if the previous test has been tear down
-            if not self.input.param("skip_cleanup", True) or self.case_number == 1 or self.case_number > 1000:
+            if self.case_number == 1 or self.case_number > 1000:
                 if self.case_number > 1000:
                     self.log.warn("teardDown for previous test failed. will retry..")
                     self.case_number -= 1000
@@ -289,6 +292,19 @@ class BaseTestCase(unittest.TestCase):
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
+
+    def _cluster_cleanup(self):
+        rest = RestConnection(self.master)
+        alerts = rest.get_alerts()
+        if rest._rebalance_progress_status() == 'running':
+            self.kill_memcached()
+            self.log.warning("rebalancing is still running, test should be verified")
+            stopped = rest.stop_rebalance()
+            self.assertTrue(stopped, msg="unable to stop rebalance")
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+        ClusterOperationHelper.cleanup_cluster(self.servers, master = self.master)
+        self.sleep(10)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
 
     def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None, rebalanceIndexWaitingDisabled=None,
                           rebalanceIndexPausingDisabled=None, maxParallelIndexers=None, maxParallelReplicaIndexers=None,
