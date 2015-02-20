@@ -18,7 +18,6 @@ import logger
 log = logger.Logger.get_logger()
 
 class audit:
-    AUDIGCONFIGPATH = "/opt/couchbase/var/lib/couchbase/config/"
     AUDITLOGFILENAME = 'audit.log'
     AUDITCONFIGFILENAME = 'audit.json'
     AUDITDESCFILE = 'audit_events.json'
@@ -30,16 +29,27 @@ class audit:
 
         self.method = method
         self.host = host
-        self.pathDescriptor = self.getAuditConfigElement("descriptors_path")
+        self.pathDescriptor = self.getAuditConfigElement("descriptors_path") + "/"
         # self.pathLogFile = self.getAuditConfigElement('log_path')
         # self.archiveFilePath = self.getAuditConfigElement('archive_path')
         self.pathLogFile = self.getAuditLogPath()
         self.archiveFilePath = self.getArchivePath()
-        
+        self.auditConfigPath = self.getAuditConfigPathInitial()
         self.defaultFields = ['id', 'name', 'description']
         if (eventID is not None):
             self.eventID = eventID
             self.eventDef = self.returnEventsDef()
+
+
+    def getAuditConfigPathInitial(self):
+        shell = RemoteMachineShellConnection(self.host)
+        os_type = shell.extract_remote_info().distribution_type
+        log.info ("OS type is {0}".format(os_type))
+        if os_type.lower() == 'linux':
+            auditconfigpath = "/opt/couchbase/var/lib/couchbase/config/"
+        else:
+            auditconfigpath = "C:/Program Files/Couchbase/Server/var/lib/couchbase/config/"
+        return auditconfigpath
 
     '''
     setAuditConfigPath - External function to set configPATH
@@ -48,14 +58,14 @@ class audit:
     Returns : None
     '''
     def setAuditConfigPath(self, configPath):
-        audit.AUDIGCONFIGPATH = configPath
+        self.auditConfigPath = configPath
 
     '''
     getAuditConfigPath
     Returns - Path to audit config file
     '''
     def getAuditConfigPath(self):
-        return audit.AUDIGCONFIGPATH
+        return self.auditConfigPath
 
     '''
     readFile - copy file to local '/tmp' directory
@@ -68,7 +78,9 @@ class audit:
     def readFile(self, pathAuditFile, fileName):
         shell = RemoteMachineShellConnection(self.host)
         try:
-            result = shell.get_file(pathAuditFile, fileName, "/tmp/" + fileName)
+            filePath = pathAuditFile + fileName
+            log.info (" Printing filename to download {0}".format(filePath))
+            result = shell.copy_file_remote_to_local(filePath, "/tmp/" + fileName)
             log.info (result)
         finally:
             shell.disconnect()
@@ -84,7 +96,7 @@ class audit:
     '''
     def writeFile(self, pathAuditFile=None, fileName=None, lines=None):
         if (pathAuditFile is None):
-            pathAuditFile = audit.AUDIGCONFIGPATH
+            pathAuditFile = self.getAuditConfigPathInitial()
         if (fileName is None):
             fileName = audit.AUDITCONFIGFILENAME
         shell = RemoteMachineShellConnection(self.host)
@@ -121,7 +133,7 @@ class audit:
     '''
     def getAuditConfigElement(self, element):
         data = []
-        self.readFile(audit.AUDIGCONFIGPATH, audit.AUDITCONFIGFILENAME)
+        self.readFile(self.getAuditConfigPathInitial(), audit.AUDITCONFIGFILENAME)
         json_data = open ("/tmp/" + audit.AUDITCONFIGFILENAME)
         data = json.load(json_data)
         if (element == 'all'):
@@ -150,7 +162,7 @@ class audit:
     def getAuditLogPath(self):
         rest = RestConnection(self.host)
         content = rest.getAuditSettings()
-        return content['log_path']
+        return content['log_path'] + "/"
 
     '''
     getArchivePath - return value of archive_path from REST API
@@ -160,7 +172,7 @@ class audit:
     def getArchivePath(self):
         rest = RestConnection(self.host)
         content = rest.getAuditSettings()
-        return content['archive_path']
+        return content['archive_path'] + "/"
 
     '''
     getAuditStatus - return value of audit status from REST API
@@ -369,6 +381,7 @@ class audit:
     '''
 
     def validateData(self, data, expectedResult):
+        log.info (" Event from audit.log -- {0}".format(data))
         flag = True
         for items in data:
             if items == 'timestamp':
@@ -384,7 +397,7 @@ class audit:
                         if (seclevel == 'port' and data[items][seclevel] >= 49152 and data[items][seclevel] <= 65535):
                             log.info ("Matching port is an ephemeral port -- actual port is {0}".format(data[items][seclevel]))
                         else:
-                            log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(tempValue, data[items][seclevel], seclevel))
+                            #log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(tempValue, data[items][seclevel], seclevel))
                             if data[items][seclevel] == tempValue:
                                 log.info ('Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(tempValue, data[items][seclevel], seclevel))
                             else:
@@ -394,7 +407,7 @@ class audit:
                     if (items == 'port' and data[items] >= 49152 and data[items] <= 65535):
                         log.info ("Matching port is an ephemeral port -- actual port is {0}".format(data[items]))
                     else:
-                        log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
+                        #log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
                         if (data[items] == expectedResult[items]):
                             log.info ('Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
                         else:
