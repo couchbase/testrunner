@@ -108,16 +108,20 @@ class auditcheckconfig(BaseTestCase):
     Check enabled disable and reload of config
     '''
     def test_AuditEvent(self):
+        auditIns = audit(host=self.master)
         ops = self.input.param("ops", None)
         source = 'internal'
         user = 'couchbase'
         rest = RestConnection(self.master)
-        status = rest.setAuditSettings(enabled='true')
+        #status = rest.setAuditSettings(enabled='true')
+        auditIns.setAuditEnable('true')
         if (ops in ['enable', 'disable']):
             if ops == 'disable':
-                status = rest.setAuditSettings(enabled='false')
+                #status = rest.setAuditSettings(enabled='false')
+                auditIns.setAuditEnable('false')
             else:
-                status = rest.setAuditSettings(enabled='true')
+                #status = rest.setAuditSettings(enabled='true')
+                auditIns.setAuditEnable('true')
         expectedResults = {'source':source, 'user':user}
 
         self.checkConfig(self.eventID, self.master, expectedResults)
@@ -482,7 +486,7 @@ class auditcheckconfig(BaseTestCase):
                 self.checkConfig(self.eventID, server, expectedResults)
 
             #Remove one node from the cluser
-            self.cluster.rebalance(self.server, [], self.servers[1])
+            self.cluster.rebalance(self.server, [], self.servers[1:self.nodes_out + 1])
 
             #Change path on first cluster + Create Bucket Event
             newPath = auditNodeFirst.getAuditLogPath() + "changeClusterLogPath"
@@ -493,7 +497,9 @@ class auditcheckconfig(BaseTestCase):
 
             #Add one node to the cluster
             self.createRemoteFolder(self.server[1], newPath)
-            self.cluster.rebalance(self.server, self.servers[1], [])
+
+            self.cluster.rebalance(self.server, self.servers[1:self.nodes_out + 1], [])
+
             expectedResults = self.createBucketAudit(self.server[1], "TestBucketSecondNode")
             self.checkConfig(self.eventID, self.servers[1], expectedResults)
 

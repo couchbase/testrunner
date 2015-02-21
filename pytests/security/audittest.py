@@ -299,6 +299,7 @@ class auditTest(BaseTestCase):
 
     def test_createBucketClusterNodeOut(self):
         ops = self.input.param("ops", None)
+        nodesOut = self.input.param("nodes_out")
         source = 'ns_server'
 
         firstNode = self.servers[0]
@@ -312,7 +313,7 @@ class auditTest(BaseTestCase):
         origRotateInterval = auditFirstNode.getAuditRotateInterval()
 
         #Remove the first node from cluster
-        self.cluster.rebalance(self.servers, [], firstNode)
+        self.cluster.rebalance(self.servers, [], self.servers[1:nodesOut + 1])
         self.assertEqual(auditSecondNode.getAuditStatus(), origState, "Issues with audit state after removing node")
         self.assertEqual(auditSecondNode.getAuditLogPath(), origLogPath, "Issues with audit log path after removing node")
         self.assertEqual(auditSecondNode.getArchivePath(), origArchivePath, "Issues with audit archive path after removing node")
@@ -331,7 +332,7 @@ class auditTest(BaseTestCase):
             self.checkConfig(self.eventID, server, expectedResults)
 
         #Add back the first Node in Cluster
-        self.cluster.rebalance(self.servers, firstNode, [])
+        self.cluster.rebalance(self.servers, self.servers[1:nodesOut + 1], [])
         self.assertEqual(auditFirstNode.getAuditStatus(), origState, "Issues with audit state after adding node")
         self.assertEqual(auditFirstNode.getAuditLogPath(), origLogPath, "Issues with audit log path after adding node")
         self.assertEqual(auditFirstNode.getArchivePath(), origArchivePath, "Issues with audit archive path after adding node")

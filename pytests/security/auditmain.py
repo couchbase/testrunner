@@ -21,6 +21,10 @@ class audit:
     AUDITLOGFILENAME = 'audit.log'
     AUDITCONFIGFILENAME = 'audit.json'
     AUDITDESCFILE = 'audit_events.json'
+    WINLOGFILEPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs"
+    LINLOGFILEPATH = "/opt/couchbase/var/lib/couchbase/logs"
+    WINCONFIFFILEPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/config/"
+    LINCONFIGFILEPATH = "/opt/couchbase/var/lib/couchbase/config/"
 
     def __init__(self,
                  eventID=None,
@@ -45,10 +49,12 @@ class audit:
         shell = RemoteMachineShellConnection(self.host)
         os_type = shell.extract_remote_info().distribution_type
         log.info ("OS type is {0}".format(os_type))
-        if os_type.lower() == 'linux':
-            auditconfigpath = "/opt/couchbase/var/lib/couchbase/config/"
+        if os_type == 'CentOS':
+            auditconfigpath = audit.LINCONFIGFILEPATH
+            self.currentLogFile = audit.LINLOGFILEPATH
         else:
-            auditconfigpath = "C:/Program Files/Couchbase/Server/var/lib/couchbase/config/"
+            auditconfigpath = audit.WINCONFIFFILEPATH
+            self.currentLogFile = audit.WINLOGFILEPATH
         return auditconfigpath
 
     '''
@@ -75,15 +81,30 @@ class audit:
     Returns:
         None
     '''
-    def readFile(self, pathAuditFile, fileName):
-        shell = RemoteMachineShellConnection(self.host)
+    def getRemoteFile(self, host, remotepath, filename):
+        shell = RemoteMachineShellConnection(host)
         try:
-            filePath = pathAuditFile + fileName
-            log.info (" Printing filename to download {0}".format(filePath))
-            result = shell.copy_file_remote_to_local(filePath, "/tmp/" + fileName)
-            log.info (result)
-        finally:
+            log.info ("Value of filename and remotepath is {0}".format(remotepath + filename))
+            sftp = shell._ssh_client.open_sftp()
+            sftp.get('{0}/{1}'.format(remotepath, filename), '/tmp/' + filename)
+            sftp.close()
+        except Exception, e:
+            log.info (" Value of e is {0}".format(e))
             shell.disconnect()
+
+
+    def readFile(self, pathAuditFile, fileName):
+        #shell = RemoteMachineShellConnection(self.host)
+        self.getRemoteFile(self.host, pathAuditFile, fileName)
+        #=======================================================================
+        # try:
+        #     filePath = pathAuditFile + fileName
+        #     log.info (" Printing filename to download {0}".format(filePath))
+        #     result = shell.copy_file_remote_to_local(filePath, "/tmp/" + fileName)
+        #     log.info (result)
+        # finally:
+        #     shell.disconnect()
+        #=======================================================================
 
     '''
     writeFile - writing the config file
@@ -203,7 +224,7 @@ class audit:
     '''
     def setAuditLogPath(self, auditLogPath):
         rest = RestConnection(self.host)
-        status = rest.setAuditSettings(logPath=auditLogPath)
+        status = rest.setAuditSettings(logPath=auditLogPath, archivePath=self.currentLogFile)
         return status
 
     '''
@@ -215,7 +236,7 @@ class audit:
     '''
     def setAuditArchivePath(self, archivePath):
         rest = RestConnection(self.host)
-        status = rest.setAuditSettings(archivePath=archivePath)
+        status = rest.setAuditSettings(archivePath=archivePath, logPath=self.currentLogFile)
         return status
 
     '''
@@ -227,7 +248,7 @@ class audit:
     '''
     def setAuditEnable(self, auditEnable):
         rest = RestConnection(self.host)
-        status = rest.setAuditSettings(enabled=auditEnable)
+        status = rest.setAuditSettings(enabled=auditEnable, archivePath=self.currentLogFile, logPath=self.currentLogFile)
         return status
 
     '''
@@ -249,7 +270,7 @@ class audit:
     '''
     def setAuditRotateInterval(self, rotateInterval):
         rest = RestConnection(self.host)
-        status = rest.setAuditSettings(rotateInterval=rotateInterval)
+        status = rest.setAuditSettings(rotateInterval=rotateInterval, archivePath=self.archiveFilePath, logPath=self.currentLogFile)
         return status
 
     '''
@@ -438,8 +459,12 @@ class audit:
                 log.info ("Matching values found for timestamp")
                 return True
             else:
-                log.info ("Mis-match in values for timestamp")
-                return False
+                #Compare time and minutes, will fail if time is 56 mins or above
+                if ((int((hourMin.split(":"))[0])) == (int((currHourMin.split(":"))[0]))) and ((int((hourMin.split(":"))[1])) < (int((currHourMin.split(":"))[1]) + 4)):
+                       log.info ("Matching values found for timestamp")
+                else:
+                    log.info ("Mis-match in values for timestamp")
+                    return False
         except:
             log.info ("Into Exception")
             return False
