@@ -174,24 +174,18 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 task.result()
 
     def test_warmup(self):
-        num_srv_warm_up = self.input.param("srv_warm_up", self.nodes_init)
-        if self.input.tuq_client is None:
-            self.fail("For this test external tuq server is requiered. " +\
-                      "Please specify one in conf")
         tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
         for task in tasks:
             task.result()
-        for server in self.servers[self.nodes_init - num_srv_warm_up:self.nodes_init]:
+        for server in self.nodes_out_list:
             remote = RemoteMachineShellConnection(server)
             remote.stop_server()
             remote.start_server()
             remote.disconnect()
-        #run query, result may not be as expected, but tuq shouldn't fail
-        try:
-            self._run_aync_tasks()
-        except:
-            pass
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+        for task in tasks:
+            task.result()
         tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
         for task in tasks:
             task.result()
