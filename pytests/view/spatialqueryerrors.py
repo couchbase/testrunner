@@ -19,6 +19,7 @@ class SpatialQueryErrorsTests(BaseTestCase):
             if 'first_case' not in TestInputSingleton.input.test_params:
                 TestInputSingleton.input.test_params['default_bucket'] = False
                 TestInputSingleton.input.test_params['skip_cleanup'] = True
+                TestInputSingleton.input.test_params['skip_buckets_handle'] = True
             self.default_bucket_name = 'default'
             super(SpatialQueryErrorsTests, self).setUp()
             if 'first_case' in TestInputSingleton.input.test_params:
@@ -44,6 +45,7 @@ class SpatialQueryErrorsTests(BaseTestCase):
         # clean up will only performed on the last run
         if 'last_case' in TestInputSingleton.input.test_params:
             TestInputSingleton.input.test_params['skip_cleanup'] = False
+            TestInputSingleton.input.test_params['skip_buckets_handle'] = False
             super(SpatialQueryErrorsTests, self).tearDown()
         else:
             self.cluster.shutdown(force=True)
