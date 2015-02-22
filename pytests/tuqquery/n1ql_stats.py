@@ -33,8 +33,8 @@ class StatsTests(QueryTests):
             " join_mo < 3 OR join_mo > 11 THEN 'winter' ELSE 'other' END LIKE 'win%'"
             self.run_cbq_query()
         new_stats = self.rest.query_tool_stats()
-        self.assertTrue(new_stats['requests.Count'] == stats['requests.Count']+len(self.buckets), 'Request were not increased')
-        self.assertTrue(new_stats['selects.Count'] == stats['selects.Count']+len(self.buckets), 'Selects count were not increased')
+        self.assertTrue(new_stats['requests.count'] == stats['requests.count']+len(self.buckets), 'Request were not increased')
+        self.assertTrue(new_stats['selects.count'] == stats['selects.count']+len(self.buckets), 'Selects count were not increased')
         self.log.info('select count is checked')
 
     def test_errors(self):
@@ -46,8 +46,8 @@ class StatsTests(QueryTests):
             except:
                 pass
         new_stats = self.rest.query_tool_stats()
-        self.assertTrue(new_stats['requests.Count'] == stats['requests.Count']+len(self.buckets), 'Request were not increased')
-        self.assertTrue(new_stats['errors.Count'] == stats['errors.Count']+len(self.buckets), 'Selects count were not increased')
+        self.assertTrue(new_stats['requests.count'] == stats['requests.count']+len(self.buckets), 'Request were not increased')
+        self.assertTrue(new_stats['errors.count'] == stats['errors.count']+len(self.buckets), 'Selects count were not increased')
         self.log.info('errors count is checked')
 
     def test_requests_insert(self):
@@ -56,8 +56,8 @@ class StatsTests(QueryTests):
             self.query = 'INSERT into %s key "%s" VALUES %s' % (bucket.name, 'key', 'value')
             self.run_cbq_query()
         new_stats = self.rest.query_tool_stats()
-        self.assertTrue(new_stats['requests.Count'] == stats['requests.Count']+len(self.buckets), 'Request were not increased')
-        self.assertTrue(new_stats['inserts.Count'] == stats['inserts.Count']+len(self.buckets), 'Inserts count were not increased')
+        self.assertTrue(new_stats['requests.count'] == stats['requests.count']+len(self.buckets), 'Request were not increased')
+        self.assertTrue(new_stats['inserts.count'] == stats['inserts.count']+len(self.buckets), 'Inserts count were not increased')
         self.log.info('insert count is checked')
 
     def test_requests_update(self):
@@ -67,8 +67,8 @@ class StatsTests(QueryTests):
             self.query = "update %s use keys ['%s'] set name='new'" % (bucket.name, 'key')
             self.run_cbq_query()
         new_stats = self.rest.query_tool_stats()
-        self.assertTrue(new_stats['requests.Count'] == stats['requests.Count']+len(self.buckets), 'Request were not increased')
-        self.assertTrue(new_stats['updates.Count'] == stats['updates.Count']+len(self.buckets), 'Updates count were not increased')
+        self.assertTrue(new_stats['requests.count'] == stats['requests.count']+len(self.buckets), 'Request were not increased')
+        self.assertTrue(new_stats['updates.count'] == stats['updates.count']+len(self.buckets), 'Updates count were not increased')
         self.log.info('update count is checked')
 
     def test_requests_delete(self):
@@ -78,8 +78,8 @@ class StatsTests(QueryTests):
             self.query = "delete from %s use keys ['%s']" % (bucket.name, 'key')
             self.run_cbq_query()
         new_stats = self.rest.query_tool_stats()
-        self.assertTrue(new_stats['requests.Count'] == stats['requests.Count']+len(self.buckets), 'Request were not increased')
-        self.assertTrue(new_stats['deletes.Count'] == stats['deletes.Count']+len(self.buckets), 'Deletes count were not increased')
+        self.assertTrue(new_stats['requests.count'] == stats['requests.count']+len(self.buckets), 'Request were not increased')
+        self.assertTrue(new_stats['deletes.count'] == stats['deletes.count']+len(self.buckets), 'Deletes count were not increased')
         self.log.info('delete count is checked')
 
     
