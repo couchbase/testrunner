@@ -84,9 +84,11 @@ class audit:
     def getRemoteFile(self, host, remotepath, filename):
         shell = RemoteMachineShellConnection(host)
         try:
-            log.info ("Value of filename and remotepath is {0}".format(remotepath + filename))
             sftp = shell._ssh_client.open_sftp()
-            sftp.get('{0}/{1}'.format(remotepath, filename), '/tmp/' + filename)
+            tempfile = str(remotepath + filename)
+            tmpfile = "/" + filename
+            log.info ("Value of remotepath is {0} and current Path - {1}".format(tempfile, tmpfile))
+            sftp.get('{0}'.format(tempfile), '{0}'.format(tmpfile))
             sftp.close()
         except Exception, e:
             log.info (" Value of e is {0}".format(e))
@@ -94,17 +96,7 @@ class audit:
 
 
     def readFile(self, pathAuditFile, fileName):
-        #shell = RemoteMachineShellConnection(self.host)
         self.getRemoteFile(self.host, pathAuditFile, fileName)
-        #=======================================================================
-        # try:
-        #     filePath = pathAuditFile + fileName
-        #     log.info (" Printing filename to download {0}".format(filePath))
-        #     result = shell.copy_file_remote_to_local(filePath, "/tmp/" + fileName)
-        #     log.info (result)
-        # finally:
-        #     shell.disconnect()
-        #=======================================================================
 
     '''
     writeFile - writing the config file
@@ -138,7 +130,7 @@ class audit:
     def returnEvent(self, eventNumber):
         data = []
         self.readFile(self.pathLogFile, audit.AUDITLOGFILENAME)
-        with open('/tmp/' + audit.AUDITLOGFILENAME) as f:
+        with open('/' + audit.AUDITLOGFILENAME) as f:
             for line in f:
                 tempJson = json.loads(line)
                 if (tempJson['id'] == eventNumber):
@@ -155,7 +147,7 @@ class audit:
     def getAuditConfigElement(self, element):
         data = []
         self.readFile(self.getAuditConfigPathInitial(), audit.AUDITCONFIGFILENAME)
-        json_data = open ("/tmp/" + audit.AUDITCONFIGFILENAME)
+        json_data = open ("/" + audit.AUDITCONFIGFILENAME)
         data = json.load(json_data)
         if (element == 'all'):
             return data
@@ -171,7 +163,7 @@ class audit:
     def returnEventsDef(self):
         data = []
         self.readFile(self.pathDescriptor, audit.AUDITDESCFILE)
-        json_data = open ("/tmp/" + audit.AUDITDESCFILE)
+        json_data = open ("/" + audit.AUDITDESCFILE)
         data = json.load(json_data)
         return data
 
@@ -415,7 +407,7 @@ class audit:
                             tempValue = expectedResult[tempLevel]
                         else:
                             tempValue = expectedResult[seclevel]
-                        if (seclevel == 'port' and data[items][seclevel] >= 49152 and data[items][seclevel] <= 65535):
+                        if (seclevel == 'port' and data[items][seclevel] >= 30000 and data[items][seclevel] <= 65535):
                             log.info ("Matching port is an ephemeral port -- actual port is {0}".format(data[items][seclevel]))
                         else:
                             #log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(tempValue, data[items][seclevel], seclevel))
@@ -425,7 +417,7 @@ class audit:
                                 log.info ('Mis-Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(tempValue, data[items][seclevel], seclevel))
                                 flag = False
                 else:
-                    if (items == 'port' and data[items] >= 49152 and data[items] <= 65535):
+                    if (items == 'port' and data[items] >= 30000 and data[items] <= 65535):
                         log.info ("Matching port is an ephemeral port -- actual port is {0}".format(data[items]))
                     else:
                         #log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
