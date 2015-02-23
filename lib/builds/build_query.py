@@ -425,8 +425,11 @@ class BuildQuery(object):
             if "couchbase-server" in edition_type and version[:5] in WIN_CB_VERSION_3 \
                 and "3.5" != version[:3]:
                 edition_type = edition_type.replace("couchbase-", "couchbase_")
-            if "x86_64" in architecture_type and version[:5] in WIN_CB_VERSION_3:
-                build.architecture_type = "amd64"
+            if version[:5] in WIN_CB_VERSION_3:
+                if "x86_64" in architecture_type:
+                    build.architecture_type = "amd64"
+                elif "x86" in architecture_type:
+                    build.architecture_type = "x86"
 
         if "toy" in version and toy != "":
             edition_type += "-" + version[:5] + "-toy-" + toy
@@ -474,6 +477,7 @@ class BuildQuery(object):
                     os_name = "debian7"
                 elif "windows" in distribution_version:
                     os_name = "windows"
+                    build.architecture_type = architecture_type
                 elif "mac" in distribution_type:
                     os_name = "macos"
                     build.architecture_type = "x86_64"
