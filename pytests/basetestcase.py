@@ -1555,8 +1555,7 @@ class BaseTestCase(unittest.TestCase):
                 self.services_map[service].append(key)
 
     def get_nodes_from_services_map(self, service_type ="n1ql", get_all_nodes = False):
-        if self.services_map is None:
-            self.get_services_map()
+        self.get_services_map()
         if (service_type not in self.services_map):
             self.log.info("cannot find service node {0} in cluster ".format(service_type))
         else:
