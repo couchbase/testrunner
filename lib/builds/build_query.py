@@ -477,7 +477,6 @@ class BuildQuery(object):
                     os_name = "debian7"
                 elif "windows" in distribution_version:
                     os_name = "windows"
-                    build.architecture_type = architecture_type
                 elif "mac" in distribution_type:
                     os_name = "macos"
                     build.architecture_type = "x86_64"
