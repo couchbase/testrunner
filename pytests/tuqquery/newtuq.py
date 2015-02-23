@@ -40,6 +40,12 @@ class QueryTests(BaseTestCase):
         self.primary_indx_type = self.input.param("primary_indx_type", 'VIEW')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
+        if self.input.param("reload_data", False):
+            for bucket in self.buckets:
+                self.cluster.bucket_flush(self.master, bucket=bucket,
+                                          timeout=self.wait_timeout * 5)
+            self.gens_load = self.generate_docs(self.docs_per_day)
+            self.load(self.gens_load, flag=self.item_flag)
         self.gens_load = self.generate_docs(self.docs_per_day)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
