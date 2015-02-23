@@ -299,8 +299,9 @@ class auditTest(BaseTestCase):
 
     def test_createBucketClusterNodeOut(self):
         ops = self.input.param("ops", None)
-        nodesOut = self.input.param("nodes_out")
+        nodesOut = self.input.param("nodes_out", 1)
         source = 'ns_server'
+        user = self.master.rest_username
 
         firstNode = self.servers[0]
         secondNode = self.servers[1]
@@ -312,31 +313,31 @@ class auditTest(BaseTestCase):
         origArchivePath = auditFirstNode.getArchivePath()
         origRotateInterval = auditFirstNode.getAuditRotateInterval()
 
-        #Remove the first node from cluster
+        #Remove the node from cluster & check if there are any change to cluster
         self.cluster.rebalance(self.servers, [], self.servers[1:nodesOut + 1])
-        self.assertEqual(auditSecondNode.getAuditStatus(), origState, "Issues with audit state after removing node")
-        self.assertEqual(auditSecondNode.getAuditLogPath(), origLogPath, "Issues with audit log path after removing node")
-        self.assertEqual(auditSecondNode.getArchivePath(), origArchivePath, "Issues with audit archive path after removing node")
-        self.assertEqual(auditSecondNode.getAuditRotateInterval(), origRotateInterval, "Issues with audit rotate interval after removing node")
+        self.assertEqual(auditFirstNode.getAuditStatus(), origState, "Issues with audit state after removing node")
+        self.assertEqual(auditFirstNode.getAuditLogPath(), origLogPath, "Issues with audit log path after removing node")
+        self.assertEqual(auditFirstNode.getArchivePath(), origArchivePath, "Issues with audit archive path after removing node")
+        self.assertEqual(auditFirstNode.getAuditRotateInterval(), origRotateInterval, "Issues with audit rotate interval after removing node")
 
-        restSecNode = RestConnection(secondNode)
+        restFirstNode = RestConnection(firstNode)
         if (ops in ['create']):
-            expectedResults = {'name':'TestBucket Rem Node', 'ram_quota':536870912, 'num_replicas':1,
+            expectedResults = {'name':'TestBucketRemNode', 'ram_quota':536870912, 'num_replicas':0,
                                 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                 'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":source, \
                                 "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'' }
-            rest.create_bucket(expectedResults['name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
+            restFirstNode.create_bucket(expectedResults['name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                 '11211', 'membase', 0, expectedResults['num_threads'], expectedResults['flush_enabled'], 'valueOnly')
 
-            self.checkConfig(self.eventID, server, expectedResults)
+            self.checkConfig(self.eventID, firstNode, expectedResults)
 
-        #Add back the first Node in Cluster
+        #Add back the Node in Cluster
         self.cluster.rebalance(self.servers, self.servers[1:nodesOut + 1], [])
-        self.assertEqual(auditFirstNode.getAuditStatus(), origState, "Issues with audit state after adding node")
-        self.assertEqual(auditFirstNode.getAuditLogPath(), origLogPath, "Issues with audit log path after adding node")
-        self.assertEqual(auditFirstNode.getArchivePath(), origArchivePath, "Issues with audit archive path after adding node")
-        self.assertEqual(auditFirstNode.getAuditRotateInterval(), origRotateInterval, "Issues with audit rotate interval after adding node")
+        self.assertEqual(auditSecondNode.getAuditStatus(), origState, "Issues with audit state after adding node")
+        self.assertEqual(auditSecondNode.getAuditLogPath(), origLogPath, "Issues with audit log path after adding node")
+        self.assertEqual(auditSecondNode.getArchivePath(), origArchivePath, "Issues with audit archive path after adding node")
+        self.assertEqual(auditSecondNode.getAuditRotateInterval(), origRotateInterval, "Issues with audit rotate interval after adding node")
 
         for server in self.servers:
             user = server.rest_username
@@ -350,4 +351,4 @@ class auditTest(BaseTestCase):
                 rest.create_bucket(expectedResults['name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                    '11211', 'membase', 0, expectedResults['num_threads'], expectedResults['flush_enabled'], 'valueOnly')
 
-                self.checkConfig(self.eventID, server, expectedResults)
+                self.checkConfig(self.eventID, secondNode, expectedResults)

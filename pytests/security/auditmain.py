@@ -25,6 +25,7 @@ class audit:
     LINLOGFILEPATH = "/opt/couchbase/var/lib/couchbase/logs"
     WINCONFIFFILEPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/config/"
     LINCONFIGFILEPATH = "/opt/couchbase/var/lib/couchbase/config/"
+    DOWNLOADPATH = "/"
 
     def __init__(self,
                  eventID=None,
@@ -86,7 +87,7 @@ class audit:
         try:
             sftp = shell._ssh_client.open_sftp()
             tempfile = str(remotepath + filename)
-            tmpfile = "/" + filename
+            tmpfile = audit.DOWNLOADPATH + filename
             log.info ("Value of remotepath is {0} and current Path - {1}".format(tempfile, tmpfile))
             sftp.get('{0}'.format(tempfile), '{0}'.format(tmpfile))
             sftp.close()
@@ -130,7 +131,7 @@ class audit:
     def returnEvent(self, eventNumber):
         data = []
         self.readFile(self.pathLogFile, audit.AUDITLOGFILENAME)
-        with open('/' + audit.AUDITLOGFILENAME) as f:
+        with open(audit.DOWNLOADPATH + audit.AUDITLOGFILENAME) as f:
             for line in f:
                 tempJson = json.loads(line)
                 if (tempJson['id'] == eventNumber):
@@ -147,7 +148,7 @@ class audit:
     def getAuditConfigElement(self, element):
         data = []
         self.readFile(self.getAuditConfigPathInitial(), audit.AUDITCONFIGFILENAME)
-        json_data = open ("/" + audit.AUDITCONFIGFILENAME)
+        json_data = open (audit.DOWNLOADPATH + audit.AUDITCONFIGFILENAME)
         data = json.load(json_data)
         if (element == 'all'):
             return data
@@ -163,7 +164,7 @@ class audit:
     def returnEventsDef(self):
         data = []
         self.readFile(self.pathDescriptor, audit.AUDITDESCFILE)
-        json_data = open ("/" + audit.AUDITDESCFILE)
+        json_data = open (audit.DOWNLOADPATH + audit.AUDITDESCFILE)
         data = json.load(json_data)
         return data
 
@@ -272,7 +273,7 @@ class audit:
     '''
     def getTimeStampFirstEvent(self):
         self.readFile(self.pathLogFile, audit.AUDITLOGFILENAME)
-        with open('/tmp/' + audit.AUDITLOGFILENAME) as f:
+        with open(audit.DOWNLOADPATH + audit.AUDITLOGFILENAME) as f:
             data = line = f.readline()
         data = ((json.loads(line))['timestamp'])[:19]
         return data
@@ -426,6 +427,7 @@ class audit:
                         else:
                             log.info ('Mis - Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
                             flag = False
+        log.info ("Value of flag is {0}".format(flag))
         return flag
 
     '''
@@ -449,16 +451,15 @@ class audit:
             log.info (" Matching expected time - currDate {0} ; actual Date - {1}".format(currHourMin[0][0], hourMin))
             if ((date == currDate[0][0]) and (hourMin == currHourMin[0][0])):
                 log.info ("Matching values found for timestamp")
-                return True
             else:
                 #Compare time and minutes, will fail if time is 56 mins or above
-                if ((int((hourMin.split(":"))[0])) == (int((currHourMin.split(":"))[0]))) and ((int((hourMin.split(":"))[1])) < (int((currHourMin.split(":"))[1]) + 4)):
+                if ((int((hourMin.split(":"))[0])) == (int((currHourMin[0][0].split(":"))[0]))) and ((int((hourMin.split(":"))[1]) + 10) > (int((currHourMin[0][0].split(":"))[1]))):
                        log.info ("Matching values found for timestamp")
                 else:
                     log.info ("Mis-match in values for timestamp")
                     return False
-        except:
-            log.info ("Into Exception")
+        except Exception, e:
+            log.info ("Value of execption is {0}".format(e))
             return False
 
 

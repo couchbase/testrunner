@@ -12,13 +12,14 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 import commands
 from security.auditmain import audit
+from twisted.web.test.test_http import Expect100ContinueServerTests
 
 
 class auditcheckconfig(BaseTestCase):
     AUDITCONFIGRELOAD = 4096
     AUDITCONFIGEDISABLED = 4098
     AUDITCONFIGENABLED = 4097
-    AUDITSHUTDOWN = 4099
+    AUDITSHUTDOWN = 4097
 
     def setUp(self):
         super(auditcheckconfig, self).setUp()
@@ -122,9 +123,6 @@ class auditcheckconfig(BaseTestCase):
             else:
                 #status = rest.setAuditSettings(enabled='true')
                 auditIns.setAuditEnable('true')
-        expectedResults = {'source':source, 'user':user}
-
-        self.checkConfig(self.eventID, self.master, expectedResults)
 
         auditIns = audit(host=self.master)
         expectedResults = {"archive_path":auditIns.getArchivePath(), "auditd_enabled":auditIns.getAuditStatus(),
@@ -209,10 +207,9 @@ class auditcheckconfig(BaseTestCase):
     #Check file rollover for different Server operations
     def test_cbServerOps(self):
         ops = self.input.param("ops", None)
-        auditIns = audit(host=self.master)
-
+        auditTemp = audit(host=self.master)
         #Capture timestamp from first event for filename
-        firstEventTime = self.getTimeStampForFile(auditIns)
+        firstEventTime = self.getTimeStampForFile(auditTemp)
 
         shell = RemoteMachineShellConnection(self.master)
 
@@ -224,10 +221,9 @@ class auditcheckconfig(BaseTestCase):
         #Stop CB Server to check for file roll over and new audit.log
         if (ops == 'shutdown'):
             try:
+                auditIns = audit(self.AUDITSHUTDOWN, host=self.master)
                 result = shell.stop_couchbase()
-                if (result):
-                    expectedResults = {'source':'internal', 'user':'couchbase'}
-                    self.checkConfig(self.AUDITSHUTDOWN, self.master, expectedResults)
+                self.sleep(120, 'Waiting for server to shutdown')
             finally:
                 result = shell.start_couchbase()
 
@@ -240,9 +236,34 @@ class auditcheckconfig(BaseTestCase):
         result = shell.file_exists(auditIns.archiveFilePath, archiveFile)
         self.assertTrue(result, "Archive Audit.log is not created when memcached server is killed or stopped")
 
-        #check for events of config enabled and config reload
-        expectedResults = {'source':'internal', 'user':'couchbase'}
-        self.checkConfig(self.AUDITCONFIGENABLED, self.master, expectedResults)
+        archiveFile = auditTemp.currentLogFile + "/" + archiveFile
+
+        if (ops == 'shutdown'):
+            expectedResult = {"source":"internal", "user":"couchbase", "id":4097, "name":"shutting down audit daemon", "description":"The audit daemon is being shutdown"}
+            command = "cat " + archiveFile + " | grep " + str(self.AUDITSHUTDOWN)
+            output = shell.execute_command(command)
+            print output
+            data = json.loads(output[0][0])
+            print data
+            for items in data:
+                if (items == 'timestamp'):
+                    flag = auditIns.validateTimeStamp(data['timestamp'])
+                else:
+                    if (isinstance(data[items], dict)):
+                        for seclevel in data[items]:
+                            tempValue = expectedResult[seclevel]
+                            if data[items][seclevel] == tempValue:
+                                self.log.info ('Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(tempValue, data[items][seclevel], seclevel))
+                            else:
+                                self.log.info ('Mis-Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(tempValue, data[items][seclevel], seclevel))
+                                flag = False
+                    else:
+                        if (data[items] == expectedResult[items]):
+                            self.log.info ('Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
+                        else:
+                            self.log.info ('Mis - Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
+                            flag = False
+            self.assertTrue(flag, "Shutdown event is not printed")
 
         expectedResults = {"archive_path":auditIns.getAuditConfigElement('archive_path'),
                            "auditd_enabled":auditIns.getAuditConfigElement('auditd_enabled'),
@@ -361,6 +382,7 @@ class auditcheckconfig(BaseTestCase):
                 self.log.info ("Archive File Name is {0}".format(archiveFile))
                 result = shell.file_exists(auditIns.archiveFilePath, archiveFile)
                 self.assertTrue(result, "Archive Audit.log is not created on time interval")
+                self.log.info ("Validation of archive File created is True, Audit archive File is created {0}".format(archiveFile))
                 result = shell.file_exists(auditIns.pathLogFile, auditIns.AUDITLOGFILENAME)
                 self.assertTrue(result, "Audit.log is not created when memcached server is killed")
             finally:
@@ -392,9 +414,11 @@ class auditcheckconfig(BaseTestCase):
                     hostname = shell.execute_command("hostname")
                     self.log.info ("print firstEventTime {0}".format(firstEventTime[i]))
                     archiveFile = hostname[0][0] + '-' + firstEventTime[i] + "-audit.log"
+                    self.log.info ("Archive File Name is {0}".format(archiveFile))
                     result = shell.file_exists(auditIns.archiveFilePath, archiveFile)
                     self.assertTrue(result, "Archive Audit.log is not created on time interval")
-                    result = shell.file_exists(auditMaster.pathLogFile, auditIns.AUDITLOGFILENAME)
+                    self.log.info ("Validation of archive File created is True, Audit archive File is created {0}".format(archiveFile))
+                    result = shell.file_exists(auditIns.pathLogFile, auditIns.AUDITLOGFILENAME)
                     self.assertTrue(result, "Audit.log is not created when memcached server is killed")
                 finally:
                     shell.disconnect()
