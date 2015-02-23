@@ -105,7 +105,8 @@ class BaseTestCase(unittest.TestCase):
             self.log_location = self.input.param("log_location", None)
             self.stat_info = self.input.param("stat_info", None)
             self.port_info = self.input.param("port_info", None)
-            self.skip_buckets_handle = self.input.param("skip_buckets_handle", False)
+            if not hasattr(self, 'skip_buckets_handle'):
+                self.skip_buckets_handle = self.input.param("skip_buckets_handle", False)
             self.nodes_out_dist = self.input.param("nodes_out_dist", None)
             self.eviction_policy = self.input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
             self.absolute_path = self.input.param("absolute_path", True)
