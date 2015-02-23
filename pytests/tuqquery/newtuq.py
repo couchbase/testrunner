@@ -145,14 +145,10 @@ class QueryTests(BaseTestCase):
                                         actual_result['results'], expected_result))
 
     def test_limit_offset_negative_check(self):
-        queries_errors = {'SELECT DISTINCT $str0 FROM {0} LIMIT -1' :
-                          'Parse Error - syntax error',
-                          'SELECT DISTINCT $str0 FROM {0} LIMIT 1.1' :
-                          'Parse Error - syntax error',
-                          'SELECT DISTINCT $str0 FROM {0} OFFSET -1' :
-                          'Parse Error - syntax error',
+        queries_errors = {'SELECT DISTINCT $str0 FROM {0} LIMIT 1.1' :
+                          'syntax error',
                           'SELECT DISTINCT $str0 FROM {0} OFFSET 1.1' :
-                          'Parse Error - syntax error'}
+                          'syntax error'}
         self.negative_common_body(queries_errors)
 
 ##############################################################################################
