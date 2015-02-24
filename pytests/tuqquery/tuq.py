@@ -42,6 +42,7 @@ class QueryTests(BaseTestCase):
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.primary_indx_type = self.input.param("primary_indx_type", 'VIEW')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
+        self.index_type = self.input.param("index_type", 'VIEW')
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
         if self.input.param("reload_data", False):
             self.gens_load = self.generate_docs(self.docs_per_day)
