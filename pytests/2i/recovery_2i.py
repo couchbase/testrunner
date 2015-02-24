@@ -190,7 +190,14 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for task in tasks:
             task.result()
 
+    def _calculate_scan_vector(self):
+        self.scan_vectors = None
+        if self.scan_vectors != None:
+            self.scan_vectors = self.gen_scan_vector(use_percentage = self.scan_vector_per_values,
+             use_random = self.random_scan_vector)
+
     def _run_aync_tasks(self):
+        self._calculate_scan_vector()
         if self.doc_ops:
             self._run_async_tasks_with_ops()
         else:
@@ -201,13 +208,15 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                         query_definition.index_name = "#primary"
                         qdfs.append(query_definition)
                 self.query_definitions = qdfs
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
+            tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True,
+             scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
             for task in tasks:
                 task.result()
 
     def _run_async_tasks_with_ops(self):
         # runs operations
         self.run_doc_ops()
-        tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True,
+             scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
         for task in tasks:
             task.result()

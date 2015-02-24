@@ -57,7 +57,7 @@ class BaseTestCase(unittest.TestCase):
         self.result_analyzer = DataAnalysisResultAnalyzer()
         self.set_testrunner_client()
         try:
-            self.vbuckets = self.input.param("vbuckets", None)
+            self.vbuckets = self.input.param("vbuckets", 1024)
             self.upr = self.input.param("upr", None)
             self.targetIndexManager = self.input.param("targetIndexManager", False)
             self.targetMaster = self.input.param("targetMaster", False)
@@ -961,7 +961,7 @@ class BaseTestCase(unittest.TestCase):
                     break
 
     def change_env_variables(self):
-        if self.vbuckets != None or self.upr != None:
+        if self.vbuckets != 1024 or self.upr != None:
             for server in self.servers:
                 dict = {}
                 if self.vbuckets:
@@ -978,7 +978,7 @@ class BaseTestCase(unittest.TestCase):
             self.log.info("========= CHANGED ENVIRONMENT SETTING ===========")
 
     def reset_env_variables(self):
-        if self.vbuckets != None or self.upr != None:
+        if self.vbuckets != 1024 or self.upr != None:
             for server in self.servers:
                 if self.upr or self.vbuckets:
                     remote_client = RemoteMachineShellConnection(server)

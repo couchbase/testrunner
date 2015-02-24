@@ -614,7 +614,9 @@ class Cluster(object):
                  is_explain_query = False,
                  index_name = None,
                  verify_results = True,
-                 retry_time=2):
+                 retry_time=2,
+                 scan_consistency = None,
+                 scan_vector = None):
         """Asynchronously runs n1ql querya and verifies result if required
 
         Parameters:
@@ -627,6 +629,8 @@ class Cluster(object):
             verify_results -  Verify results after query runs successfully
             retry_time - The time in seconds to wait before retrying failed queries (int)
             n1ql_helper - n1ql helper object
+            scan_consistency - consistency value for querying
+            scan_vector - scan vector used for consistency
         Returns:
             N1QLQueryTask - A task future that is a handle to the scheduled task."""
         _task = N1QLQueryTask(n1ql_helper = n1ql_helper,
@@ -635,7 +639,9 @@ class Cluster(object):
                  verify_results = verify_results,
                  is_explain_query = is_explain_query,
                  index_name = index_name,
-                 retry_time= retry_time)
+                 retry_time= retry_time,
+                 scan_consistency = scan_consistency,
+                 scan_vector = scan_vector)
         self.task_manager.schedule(_task)
         return _task
 
@@ -646,6 +652,8 @@ class Cluster(object):
                  is_explain_query = False,
                  index_name = None,
                  verify_results = True,
+                 scan_consistency = None,
+                 scan_vector = None,
                  retry_time=2,
                  timeout = 60):
         """Synchronously runs n1ql querya and verifies result if required
@@ -660,6 +668,8 @@ class Cluster(object):
             verify_results -  Verify results after query runs successfully
             retry_time - The time in seconds to wait before retrying failed queries (int)
             n1ql_helper - n1ql helper object
+            scan_consistency - consistency used during querying
+            scan_vector - vector used during querying
             timeout - timeout for task
         Returns:
             N1QLQueryTask - A task future that is a handle to the scheduled task."""
@@ -669,7 +679,9 @@ class Cluster(object):
                  is_explain_query = is_explain_query,
                  index_name = index_name,
                  verify_results = verify_results,
-                 retry_time= retry_time)
+                 retry_time= retry_time,
+                 scan_consistency = scan_consistency,
+                 scan_vector = scan_vector)
         return _task.result(timeout)
 
     def async_create_index(self,

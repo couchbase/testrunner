@@ -1,4 +1,5 @@
 from newtuq import QueryTests
+import random
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 
 class BaseSecondaryIndexingTests(QueryTests):
@@ -6,6 +7,8 @@ class BaseSecondaryIndexingTests(QueryTests):
     def setUp(self):
         super(BaseSecondaryIndexingTests, self).setUp()
         self.index_lost_during_move_out =[]
+        self.scan_consistency= self.input.param("scan_consistency",None)
+        self.scan_vector_percentage= self.input.param("scan_vector_per_values",None)
         self.timeout_for_index_online= self.input.param("timeout_for_index_online",120)
         self.max_attempts_check_index= self.input.param("max_attempts_check_index",10)
         self.max_attempts_query_and_validate= self.input.param("max_attempts_query_and_validate",10)
@@ -240,17 +243,18 @@ class BaseSecondaryIndexingTests(QueryTests):
             for query_definition in query_definitions:
                 self.sync_query_using_index_with_explain(bucket.name,query_definition)
 
-    def query_using_index(self, bucket, query_definition, expected_result = None):
+    def query_using_index(self, bucket, query_definition, expected_result = None, scan_consistency = None, scan_vector = None):
         self.gen_results.query = query_definition.generate_query(bucket = bucket)
         self.log.info("Query : {0}".format(self.gen_results.query))
         if expected_result == None:
             expected_result = self.gen_results.generate_expected_result(print_expected_result = False)
         self.query = self.gen_results.query
         server = self.get_nodes_from_services_map(service_type = "n1ql")
-        msg, check = self.n1ql_helper.run_query_and_verify_result(query = self.query, server = server, timeout = 420, expected_result = expected_result)
+        msg, check = self.n1ql_helper.run_query_and_verify_result(query = self.query, server = server, timeout = 420,
+         expected_result = expected_result,scan_consistency = scan_consistency, scan_vector = scan_vector)
         self.assertTrue(check, msg)
 
-    def async_query_using_index(self, bucket, query_definition, expected_result = None):
+    def async_query_using_index(self, bucket, query_definition, expected_result = None, scan_consistency = None, scan_vector = None):
         self.gen_results.query = query_definition.generate_query(bucket = bucket)
         self.log.info("Query : {0}".format(self.gen_results.query))
         if expected_result == None:
@@ -260,10 +264,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         query_with_index_task = self.cluster.async_n1ql_query_verification(
                  server = server, bucket = bucket,
                  query = self.query, n1ql_helper = self.n1ql_helper,
-                 expected_result=expected_result, index_name = query_definition.index_name)
+                 expected_result=expected_result, index_name = query_definition.index_name,
+                  scan_consistency = scan_consistency, scan_vector = scan_vector)
         return query_with_index_task
 
-    def sync_query_using_index(self, bucket, query_definition, expected_result = None):
+    def sync_query_using_index(self, bucket, query_definition, expected_result = None, scan_consistency = None, scan_vector = None):
         self.gen_results.query = query_definition.generate_query(bucket = bucket)
         self.log.info("Query : {0}".format(self.gen_results.query))
         if expected_result == None:
@@ -273,7 +278,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.cluster.n1ql_query_verification(
                  server = server, bucket = bucket.name,
                  query = self.query, n1ql_helper = self.n1ql_helper,
-                 expected_result=expected_result)
+                 expected_result=expected_result, scan_consistency = scan_consistency, scan_vector = scan_vector)
 
     def query_using_index_with_emptyset(self, bucket, query_definition):
         self.gen_results.query = query_definition.generate_query(bucket = bucket)
@@ -288,35 +293,48 @@ class BaseSecondaryIndexingTests(QueryTests):
             for query_definition in query_definitions:
                 self.query_using_index_with_emptyset(bucket.name, query_definition)
 
-    def multi_query_using_index(self, buckets =[], query_definitions = [], expected_results = {}):
+    def multi_query_using_index(self, buckets =[], query_definitions = [],
+     expected_results = {}, scan_consistency = None, scan_vectors = None):
         for bucket in buckets:
+            scan_vector = None
+            if scan_vectors != None:
+                scan_vector = scan_vectors[bucket.name]
             for query_definition in query_definitions:
                 if expected_results:
-                    self.query_using_index(bucket.name,
-                        query_definition, expected_results[query_definition.index_name])
+                    self.query_using_index(bucket.name, query_definition, expected_results[query_definition.index_name],
+                     scan_consistency = scan_consistency, scan_vector = scan_vector)
                 else:
-                     self.query_using_index(bucket.name,query_definition, None)
+                     self.query_using_index(bucket.name,query_definition, None,
+                      scan_consistency = scan_consistency, scan_vector = scan_vector)
 
-    def async_multi_query_using_index(self, buckets =[], query_definitions = [], expected_results = {}):
+    def async_multi_query_using_index(self, buckets =[], query_definitions = [], expected_results = {}, scan_consistency = None, scan_vectors = None):
         multi_query_tasks = []
         for bucket in buckets:
+            scan_vector = None
+            if scan_vectors != None:
+                scan_vector = scan_vectors[bucket.name]
             for query_definition in query_definitions:
                 if expected_results:
-                    multi_query_tasks.append(self.async_query_using_index(bucket.name,
-                        query_definition, expected_results[query_definition.index_name]))
+                    multi_query_tasks.append(self.async_query_using_index(bucket.name, query_definition, expected_results[query_definition.index_name],
+                     scan_consistency = scan_consistency, scan_vector = scan_vector))
                 else:
-                     multi_query_tasks.append(self.async_query_using_index(bucket.name,query_definition, None))
+                    multi_query_tasks.append(self.async_query_using_index(bucket.name,query_definition, None,
+                     scan_consistency = scan_consistency, scan_vector = scan_vector))
         return multi_query_tasks
 
-    def sync_multi_query_using_index(self, buckets =[], query_definitions = [], expected_results = {}):
+    def sync_multi_query_using_index(self, buckets =[], query_definitions = [], expected_results = {}, scan_consistency = None, scan_vector = None):
         for bucket in buckets:
+            scan_vector = None
+            if scan_vectors != None:
+                scan_vector = scan_vectors[bucket.name]
             for query_definition in query_definitions:
                 if expected_results:
                     self.sync_query_using_index(bucket.name,
-                        query_definition, expected_results[query_definition.index_name])
+                        query_definition, expected_results[query_definition.index_name],
+                        scan_consistency = scan_consistency, scan_vector = scan_vector)
                 else:
-                     self.sync_query_using_index(bucket.name,query_definition, None)
-
+                     self.sync_query_using_index(bucket.name,query_definition, None,
+                        scan_consistency = scan_consistency, scan_vector = scan_vector)
 
     def check_and_run_operations(self, buckets = [], before = False, after = False, in_between = False):
         if before:
@@ -332,27 +350,31 @@ class BaseSecondaryIndexingTests(QueryTests):
                 drop_index = self.ops_map["in_between"]["drop_index"],
                 run_queries = self.ops_map["in_between"]["query_ops"])
 
-    def async_check_and_run_operations(self, buckets = [], before = False, after = False, in_between = False):
+    def async_check_and_run_operations(self, buckets = [], before = False, after = False, in_between = False,
+     scan_consistency = None, scan_vectors = None):
         if before:
             return self._async_run_operations(buckets = buckets, create_index = self.ops_map["before"]["create_index"],
                 drop_index = self.ops_map["before"]["drop_index"],
-                run_queries = self.ops_map["before"]["query_ops"])
+                run_queries = self.ops_map["before"]["query_ops"], scan_consistency = scan_consistency, scan_vectors = scan_vectors)
         if after:
             return self._async_run_operations(buckets = buckets, create_index = self.ops_map["after"]["create_index"],
                 drop_index = self.ops_map["after"]["drop_index"],
-                run_queries = self.ops_map["after"]["query_ops"])
+                run_queries = self.ops_map["after"]["query_ops"], scan_consistency = None, scan_vectors = None)
         if in_between:
             return self._async_run_operations(buckets = buckets, create_index = self.ops_map["in_between"]["create_index"],
                 drop_index = self.ops_map["in_between"]["drop_index"],
-                run_queries = self.ops_map["in_between"]["query_ops"])
+                run_queries = self.ops_map["in_between"]["query_ops"], scan_consistency = None, scan_vectors = None)
 
     def run_multi_operations(self, buckets = [], query_definitions = [], expected_results = {},
-        create_index = False, drop_index = False, query_with_explain = False, query = False):
+        create_index = False, drop_index = False, query_with_explain = False, query = False,
+         scan_consistency = None, scan_vectors = None):
         try:
             if create_index:
                 self.multi_create_index(buckets, query_definitions)
             if query:
-                self.multi_query_using_index(buckets, query_definitions, expected_results)
+                self.multi_query_using_index(buckets, query_definitions,
+                 expected_results, scan_consistency = scan_consistency,
+                 scan_vectors = scan_vectors)
             if query_with_explain:
                 self.multi_query_using_index_with_explain(buckets, query_definitions)
         except Exception, ex:
@@ -363,13 +385,15 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.multi_drop_index(self.buckets,query_definitions)
 
     def async_run_multi_operations(self, buckets = [], query_definitions = [], expected_results = {},
-        create_index = False, drop_index = False, query_with_explain = False, query = False):
+        create_index = False, drop_index = False, query_with_explain = False, query = False,
+         scan_consistency = None, scan_vectors = None):
         tasks = []
         try:
             if create_index:
                 tasks += self.async_multi_create_index(buckets, query_definitions)
             if query:
-                tasks  += self.async_multi_query_using_index(buckets, query_definitions, expected_results)
+                tasks  += self.async_multi_query_using_index(buckets, query_definitions, expected_results,
+                 scan_consistency = scan_consistency, scan_vectors = scan_vectors)
             if query_with_explain:
                 tasks += self.async_multi_query_using_index_with_explain(buckets, query_definitions)
             if drop_index:
@@ -384,10 +408,12 @@ class BaseSecondaryIndexingTests(QueryTests):
             create_index = create_index, drop_index = drop_index,
             query_with_explain = run_queries, query = run_queries)
 
-    def _async_run_operations(self, buckets = [], create_index = False, run_queries = False, drop_index = False):
+    def _async_run_operations(self, buckets = [], create_index = False, run_queries = False, drop_index = False,
+     scan_consistency = None, scan_vectors = None):
         return self.async_run_multi_operations(buckets, query_definitions = self.query_definitions,
             create_index = create_index, drop_index = drop_index,
-            query_with_explain = run_queries, query = run_queries)
+            query_with_explain = run_queries, query = run_queries,
+            scan_consistency = scan_consistency, scan_vectors = scan_vectors)
 
     def run_operations(self, bucket, query_definition, expected_results,
         create_index = False, drop_index = False, query_with_explain = False, query = False):
@@ -396,21 +422,35 @@ class BaseSecondaryIndexingTests(QueryTests):
             create_index = create_index, drop_index = drop_index,
             query_with_explain = query_with_explain, query = query)
 
-    def negative_common_body(self, queries_errors={}):
-        if not queries_errors:
-            self.fail("No queries to run!")
-        for bucket in self.buckets:
-            for query_template, error in queries_errors.iteritems():
-                try:
-                    query = self.gen_results.generate_query(query_template)
-                    actual_result = self.run_cbq_query(query.format(bucket.name))
-                except CBQError as ex:
-                    self.log.error(ex)
-                    self.assertTrue(str(ex).find(error) != -1,
-                                    "Error is incorrect.Actual %s.\n Expected: %s.\n" %(
-                                                                str(ex).split(':')[-1], error))
-                else:
-                    self.fail("There was no errors. Error expected: %s" % error)
+    def gen_scan_vector(self, use_percentage = 1.0, use_random = False):
+        servers = self.get_kv_nodes(servers= self.servers[:self.nodes_init])
+        sequence_bucket_map = self.get_vbucket_seqnos(servers,self.buckets)
+        scan_vectors ={}
+        if use_percentage == 1.0:
+            for bucket in self.buckets:
+                scan_vector = []
+                self.log.info("analyzing for bucket {0}".format(bucket.name))
+                map = sequence_bucket_map[bucket.name]
+                for key in map.keys():
+                    value = {"seqno":map[key]["abs_high_seqno"],"guard":map[key]["uuid"]}
+                    scan_vector.append(value)
+                scan_vectors[bucket.name] = scan_vector
+        else:
+            for bucket in self.buckets:
+                scan_vector = {}
+                total = int(self.vbuckets*use_percentage)
+                vbuckets_number_list = range(0,total)
+                if use_random:
+                    vbuckets_number_list  =  random.sample(xrange(0,self.vbuckets), total)
+                self.log.info("analyzing for bucket {0}".format(bucket.name))
+                map = sequence_bucket_map[bucket.name]
+                for key in map.keys():
+                    vb = int(key.split("vb_")[1])
+                    if vb in vbuckets_number_list:
+                        value = {"seqno":map[key]["abs_high_seqno"],"guard":map[key]["uuid"]}
+                        scan_vector[str(vb)] = value
+                scan_vectors[bucket.name] = scan_vector
+        return scan_vectors
 
     def check_missing_and_extra(self, actual, expected):
         missing = []

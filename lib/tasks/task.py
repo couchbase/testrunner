@@ -1830,7 +1830,9 @@ class N1QLQueryTask(Task):
                  verify_results = True,
                  is_explain_query = False,
                  index_name = None,
-                 retry_time=2):
+                 retry_time=2,
+                 scan_consistency = None,
+                 scan_vector = None):
         Task.__init__(self, "query_n1ql_task")
         self.server = server
         self.bucket = bucket
@@ -1842,6 +1844,8 @@ class N1QLQueryTask(Task):
         self.is_explain_query = is_explain_query
         self.index_name = index_name
         self.retry_time = 2
+        self.scan_consistency = scan_consistency
+        self.scan_vector = scan_vector
 
     def execute(self, task_manager):
         try:
@@ -1849,7 +1853,8 @@ class N1QLQueryTask(Task):
             if not self.is_explain_query:
                 self.msg, self.isSuccess = self.n1ql_helper.run_query_and_verify_result(query = self.query, server = self.server, expected_result = self.expected_result)
             else:
-                self.actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.server)
+                self.actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.server,
+                 scan_consistency = self.scan_consistency, scan_vector = self.scan_vector)
             self.state = CHECKING
             task_manager.schedule(self)
         except N1QLQueryException as e:

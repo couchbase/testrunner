@@ -40,7 +40,56 @@ class N1QLHelper():
         actual_result = self.run_cbq_query()
         return actual_result, expected_result
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None):
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params = {}, is_prepared=False, scan_consistency = None, scan_vector = None):
+        if query is None:
+            query = self.query
+        if server is None:
+           server = self.master
+           if server.ip == "127.0.0.1":
+            self.n1ql_port = server.n1ql_port
+        else:
+            if server.ip == "127.0.0.1":
+                self.n1ql_port = server.n1ql_port
+            if self.input.tuq_client and "client" in self.input.tuq_client:
+                server = self.tuq_client
+        if self.n1ql_port == None or self.n1ql_port == '':
+            self.n1ql_port = self.input.param("n1ql_port", 8093)
+            if not self.n1ql_port:
+                self.log.info(" n1ql_port is not defined, processing will not proceed further")
+                raise Exception("n1ql_port is not defined, processing will not proceed further")
+        cred_params = {'creds': []}
+        for bucket in self.buckets:
+            if bucket.saslPassword:
+                cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
+        query_params.update(cred_params)
+        if self.use_rest:
+            query_params = {}
+            if scan_consistency:
+                query_params['scan_consistency']=  scan_consistency
+            if scan_vector:
+                query_params['scan_vector']=  scan_vector
+            self.log.info('RUN QUERY %s' % query)
+            result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared = is_prepared)
+        else:
+            if self.version == "git_repo":
+                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/" +\
+                                                            "tuq_client/tuq_client " +\
+                                                            "-engine=http://%s:8093/" % server.ip,
+                                                       subcommands=[query,],
+                                                       min_output_size=20,
+                                                       end_msg='tuq_client>')
+            else:
+                output = self.shell.execute_commands_inside("/tmp/tuq/cbq -engine=http://%s:8093/" % server.ip,
+                                                           subcommands=[query,],
+                                                           min_output_size=20,
+                                                           end_msg='cbq>')
+            result = self._parse_query_output(output)
+        if isinstance(result, str) or 'errors' in result:
+            raise CBQError(result, server.ip)
+        self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
+        return result
+
+    def run_cbq_query_old(self, query=None, min_output_size=10, server=None):
         if query is None:
             query = self.query
         if server is None:
@@ -271,14 +320,16 @@ class N1QLHelper():
             return True
         return False
 
-    def run_query_and_verify_result(self, server = None, query = None, timeout = 120.0, max_try = 1, expected_result = None):
+    def run_query_and_verify_result(self, server = None, query = None, timeout = 120.0, max_try = 1,
+     expected_result = None, scan_consistency = None, scan_vector = None):
         check = False
         init_time = time.time()
         try_count = 0
         while not check:
             next_time = time.time()
             try:
-                actual_result = self.run_cbq_query(query = query, server = server)
+                actual_result = self.run_cbq_query(query = query, server = server,
+                 scan_consistency = scan_consistency, scan_vector = scan_vector)
                 self._verify_results(sorted(actual_result['results']), sorted(expected_result))
                 check = True
             except Exception, ex:
@@ -301,6 +352,14 @@ class N1QLHelper():
 
     def gen_build_index_query(self, bucket = "default", index_list = []):
         return "BUILD INDEX on {0}({1}) USING GSI".format(bucket,",".join(index_list))
+
+    def gen_query_parameter(self, scan_vector = None, scan_consistency = None):
+        query_params = {}
+        if scan_vector:
+            query_params.update("scan_vector", scan_vector)
+        if scan_consistency:
+            query_params.update("scan_consistency", scan_consistency)
+        return query_params
 
     def _is_index_in_list(self, bucket, index_name, server = None):
         query = "SELECT * FROM system:indexes"

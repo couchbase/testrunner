@@ -82,6 +82,130 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 create_index = self.run_create_index, drop_index = self.run_drop_index,
                 query_with_explain = self.run_query_with_explain, query = self.run_query)
 
+    def test_multi_create_query_explain_drop_index_scan_consistency(self):
+        self.random_scan_vector= self.input.param("random_scan_vector",False)
+        scan_vector_ranges = []
+        scan_vectors = None
+        if self.scan_vector_per_values:
+            scan_vector_ranges = generate_scan_vector_ranges(self.scan_vector_per_values)
+        try:
+            tasks = self.async_run_multi_operations(buckets = self.buckets,
+                query_definitions = self.query_definitions,
+                create_index = self.run_create_index, drop_index = False,
+                query_with_explain = False, query = False)
+            self._run_tasks(tasks)
+            if len(scan_vector_ranges) > 0:
+                for use_percentage in scan_vector_ranges:
+                    scan_vectors = self.gen_scan_vector(use_percentage = use_percentage,
+                        use_random = self.random_scan_vector)
+                    tasks = self.async_run_multi_operations(buckets = self.buckets,
+                        query_definitions = self.query_definitions,
+                        create_index = False, drop_index = False,
+                        query_with_explain = False, query = self.run_query,
+                        scan_consistency = self.scan_consistency,
+                        scan_vectors = scan_vectors)
+                    self._run_tasks(tasks)
+            else:
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                        query_definitions = self.query_definitions,
+                        create_index = False, drop_index = False,
+                        query_with_explain = False, query = self.run_query,
+                        scan_consistency = self.scan_consistency,
+                        scan_vectors = scan_vectors)
+                self._run_tasks(tasks)
+            tasks = self.async_run_multi_operations(buckets = self.buckets,
+                query_definitions = self.query_definitions,
+                create_index = False, drop_index = False,
+                query_with_explain = self.run_query_with_explain, query = False)
+            self._run_tasks(tasks)
+            # runs operations
+            self.run_doc_ops()
+            # verify results
+            if len(scan_vector_ranges) > 0:
+                for use_percentage in scan_vector_ranges:
+                    scan_vectors = self.gen_scan_vector(use_percentage = use_percentage,
+                    use_random = self.random_scan_vector)
+                    tasks = self.async_run_multi_operations(buckets = self.buckets,
+                        query_definitions = self.query_definitions,
+                        create_index = False, drop_index = False,
+                        query_with_explain = False, query = self.run_query,
+                        scan_consistency = self.scan_consistency,
+                        scan_vectors = scan_vectors)
+                    self._run_tasks(tasks)
+            else:
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                        query_definitions = self.query_definitions,
+                        create_index = False, drop_index = False,
+                        query_with_explain = False, query = self.run_query,
+                        scan_consistency = self.scan_consistency,
+                        scan_vectors = scan_vectors)
+                self._run_tasks(tasks)
+            tasks = self.async_run_multi_operations(buckets = self.buckets,
+                query_definitions = self.query_definitions,
+                create_index = False, drop_index = False,
+                query_with_explain = self.run_query_with_explain, query = False)
+        except Exception, ex:
+            self.log.info(ex)
+            raise
+        finally:
+            tasks = self.async_run_multi_operations(buckets = self.buckets,
+                query_definitions = self.query_definitions,
+                create_index = False, drop_index = self.run_drop_index,
+                query_with_explain = False, query = False)
+            self._run_tasks(tasks)
+
+    def test_primary_query_scan_consistency(self):
+        self.random_scan_vector= self.input.param("random_scan_vector",False)
+        scan_vector_ranges = []
+        scan_vectors = None
+        if self.scan_vector_per_values:
+            scan_vector_ranges = generate_scan_vector_ranges(self.scan_vector_per_values)
+        try:
+            if len(scan_vector_ranges) > 0:
+                for use_percentage in scan_vector_ranges:
+                    scan_vectors = self.gen_scan_vector(use_percentage = use_percentage,
+                    use_random = self.random_scan_vector)
+                    tasks = self.async_run_multi_operations(buckets = self.buckets,
+                        query_definitions = self.query_definitions,
+                        create_index = False, drop_index = False,
+                        query_with_explain = False, query = self.run_query,
+                        scan_consistency = self.scan_consistency,
+                        scan_vectors = scan_vectors)
+                    self._run_tasks(tasks)
+            else:
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                        query_definitions = self.query_definitions,
+                        create_index = False, drop_index = False,
+                        query_with_explain = False, query = self.run_query,
+                        scan_consistency = self.scan_consistency,
+                        scan_vectors = scan_vectors)
+                self._run_tasks(tasks)
+            # runs operations
+            self.run_doc_ops()
+            # verify results
+            if len(scan_vector_ranges) > 0:
+                for use_percentage in scan_vector_ranges:
+                    scan_vectors = self.gen_scan_vector(use_percentage = use_percentage,
+                    use_random = self.random_scan_vector)
+                    tasks = self.async_run_multi_operations(buckets = self.buckets,
+                        query_definitions = self.query_definitions,
+                        create_index = False, drop_index = False,
+                        query_with_explain = False, query = self.run_query,
+                        scan_consistency = self.scan_consistency,
+                        scan_vectors = scan_vectors)
+                    self._run_tasks(tasks)
+            else:
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                        query_definitions = self.query_definitions,
+                        create_index = False, drop_index = False,
+                        query_with_explain = False, query = self.run_query,
+                        scan_consistency = self.scan_consistency,
+                        scan_vectors = scan_vectors)
+                self._run_tasks(tasks)
+        except Exception, ex:
+            self.log.info(ex)
+            raise
+
     def test_failure_query_with_non_existing_primary_index(self):
         self.indexes= self.input.param("indexes","").split(":")
         self.emitFields= self.input.param("emitFields","*").split(":")
@@ -109,6 +233,12 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             msg = "No primary index on keyspace default. Use CREATE PRIMARY INDEX to create one."
             self.assertTrue(msg in str(ex),"did not recieve message as expected : {0}".format(ex))
 
+    def _generate_scan_vector_ranges(self, scan_vector_per_values = None):
+        values = scan_vector_per_values.split(":")
+        new_values = []
+        for val in values:
+            new_values.append(float(val))
+        return new_values
 
     def _run_tasks(self, tasks):
     	for task in tasks:
