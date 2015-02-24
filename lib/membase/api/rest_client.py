@@ -874,7 +874,6 @@ class RestConnection(object):
         if status:
             json_parsed = json.loads(content)
             log.info("Replication created with id: {0}".format(json_parsed['id']))
-            RestConnection.replications.append(urllib.quote_plus(json_parsed['id']))
             return urllib.quote_plus(json_parsed['id'])
         else:
             log.error("/controller/createReplication failed : status:{0},content:{1}".format(status, content))
@@ -892,17 +891,6 @@ class RestConnection(object):
         replications = self.get_replications()
         for replication in replications:
             self.stop_replication(replication["cancelURI"])
-        # temporary hack since goxdcr replications are
-        # not listed in /pools/default/tasks yet
-        if not replications:
-            for replication in RestConnection.replications:
-                try:
-                    self.stop_replication("controller/cancelXDCR/%s" % replication)
-                except:
-                    # we are not logging replication on per cluster basis
-                    # so it is possible the replication does not belong to
-                    # this cluster in which case, just ignore the exception
-                    pass
 
     def stop_replication(self, uri):
         log.info("Deleting replication {0}".format(uri))
@@ -1826,12 +1814,6 @@ class RestConnection(object):
 
     def get_replication_for_buckets(self, src_bucket_name, dest_bucket_name):
         replications = self.get_replications()
-        # temporary hack for goxdcr testing
-        if not replications:
-            for replication in RestConnection.replications:
-                if (self.get_pools_info()['uuid'] not in replication) and \
-                   (src_bucket_name in replication):
-                    return replication
         for replication in replications:
             if src_bucket_name in replication['source'] and \
                 replication['target'].endswith(dest_bucket_name):
@@ -1851,10 +1833,7 @@ class RestConnection(object):
     def set_xdcr_param(self, src_bucket_name,
                                          dest_bucket_name, param, value):
         replication = self.get_replication_for_buckets(src_bucket_name, dest_bucket_name)
-        if not isinstance(replication, dict):
-            api = self.baseUrl + 'settings/replications/' + replication
-        else:
-            api = self.baseUrl + replication['settingsURI']
+        api = self.baseUrl[:-1] + replication['settingsURI']
         value = str(value).lower()
         params = urllib.urlencode({param: value})
         status, _, _ = self._http_request(api, "POST", params)
@@ -1867,10 +1846,7 @@ class RestConnection(object):
     def get_xdcr_param(self, src_bucket_name,
                                     dest_bucket_name, param):
         replication = self.get_replication_for_buckets(src_bucket_name, dest_bucket_name)
-        if not isinstance(replication, dict):
-            api = self.baseUrl + 'settings/replications/' + replication
-        else:
-            api = self.baseUrl + replication['settingsURI']
+        api = self.baseUrl[:-1] + replication['settingsURI']
         status, content, _ = self._http_request(api)
         if not status:
             raise XDCRException("Unable to get replication setting {0} on bucket {1} on node {2}".
