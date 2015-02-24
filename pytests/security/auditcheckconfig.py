@@ -12,7 +12,6 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 import commands
 from security.auditmain import audit
-from twisted.web.test.test_http import Expect100ContinueServerTests
 
 
 class auditcheckconfig(BaseTestCase):
