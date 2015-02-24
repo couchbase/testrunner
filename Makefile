@@ -20,13 +20,10 @@ clean:
 test:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini $(TESTNAME)
 
-simple-test:
-	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr.ini conf/simple.conf $(VERBOSE)
-
 dcp-test:
 	python testrunner.py -i b/resources/dev-4-nodes.ini -c conf/py-dcp.conf -p skip_cleanup=False,dev=True,test=$(TEST)
 
-simple-test-ng:
+simple-test:
 	python scripts/start_cluster_and_run_tests.py $(MAKE) b/resources/dev-4-nodes-xdcr.ini conf/simple.conf $(VERBOSE)
 
 #test-views:
