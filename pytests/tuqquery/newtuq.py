@@ -148,7 +148,7 @@ class QueryTests(BaseTestCase):
         queries_errors = {'SELECT DISTINCT $str0 FROM {0} LIMIT 1.1' :
                           'Invalid LIMIT value 1.1',
                           'SELECT DISTINCT $str0 FROM {0} OFFSET 1.1' :
-                          'Invalid LIMIT value 1.1'}
+                          'Invalid OFFSET value 1.1'}
         self.negative_common_body(queries_errors)
 
 ##############################################################################################

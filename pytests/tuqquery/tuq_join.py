@@ -244,6 +244,31 @@ class JoinTests(QueryTests):
                                if doc['tasks_ids'][0] in tasks_ids and doc['join_mo']>5]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+
+    def test_subquery_from(self):
+        for bucket in self.buckets:
+            self.query = "SELECT TASKS.task_name FROM (SELECT task_name, project FROM %s WHERE project = 'CB') as TASKS" % bucket.name
+            all_docs_list = self.generate_full_docs_list(self.gens_tasks)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'])
+            expected_result = [{'task_name' : doc['task_name']}
+                               for doc in all_docs_list
+                               if doc['project'] == 'CB']
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_subquery_from_join(self):
+        for bucket in self.buckets:
+            self.query = "SELECT EMP.name Name, TASK.project proj FROM (SELECT tasks_ids, name FROM "+\
+            "%s WHERE join_mo>10) as EMP %s JOIN %s TASK ON KEYS EMP.tasks_ids" % (bucket.name, self.type_join, bucket.name)
+            all_docs_list = self._generate_full_joined_docs_list(join_type=self.type_join)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'])
+            expected_result = [{'Name' : doc['name'], 'proj' : doc['project']}
+                               for doc in all_docs_list
+                               if doc['join_mo'] > 10]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
 ##############################################################################################
 #
 #   KEY
