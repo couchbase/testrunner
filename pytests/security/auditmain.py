@@ -25,7 +25,7 @@ class audit:
     LINLOGFILEPATH = "/opt/couchbase/var/lib/couchbase/logs"
     WINCONFIFFILEPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/config/"
     LINCONFIGFILEPATH = "/opt/couchbase/var/lib/couchbase/config/"
-    DOWNLOADPATH = "/"
+    DOWNLOADPATH = "/tmp/"
 
     def __init__(self,
                  eventID=None,
@@ -88,7 +88,7 @@ class audit:
             sftp = shell._ssh_client.open_sftp()
             tempfile = str(remotepath + filename)
             tmpfile = audit.DOWNLOADPATH + filename
-            log.info ("Value of remotepath is {0} and current Path - {1}".format(tempfile, tmpfile))
+            log.info("Value of remotepath is {0} and current Path - {1}".format(tempfile, tmpfile))
             sftp.get('{0}'.format(tempfile), '{0}'.format(tmpfile))
             sftp.close()
         except Exception, e:
@@ -97,6 +97,7 @@ class audit:
 
 
     def readFile(self, pathAuditFile, fileName):
+        pass
         self.getRemoteFile(self.host, pathAuditFile, fileName)
 
     '''
@@ -452,10 +453,12 @@ class audit:
             log.info (" Matching expected time - currDate {0} ; actual Date - {1}".format(currHourMin[0][0], hourMin))
             if ((date == currDate[0][0]) and (hourMin == currHourMin[0][0])):
                 log.info ("Matching values found for timestamp")
+                return True
             else:
                 #Compare time and minutes, will fail if time is 56 mins or above
-                if ((int((hourMin.split(":"))[0])) == (int((currHourMin[0][0].split(":"))[0]))) and ((int((hourMin.split(":"))[1]) + 10) > (int((currHourMin[0][0].split(":"))[1]))):
-                    log.info ("Matching values found for timestamp")
+                if ((int((hourMin.split(":"))[0])) == (int((currHourMin[0][0].split(":"))[0])))\
+                    and ((int((hourMin.split(":"))[1]) + 10) > (int((currHourMin[0][0].split(":"))[1]))):
+                    log.info("Matching values found for timestamp")
                     return True
                 else:
                     log.info ("Mis-match in values for timestamp")
