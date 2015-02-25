@@ -25,7 +25,7 @@ class audit:
     LINLOGFILEPATH = "/opt/couchbase/var/lib/couchbase/logs"
     WINCONFIFFILEPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/config/"
     LINCONFIGFILEPATH = "/opt/couchbase/var/lib/couchbase/config/"
-    DOWNLOADPATH = "/tmp/"
+    DOWNLOADPATH = "/"
 
     def __init__(self,
                  eventID=None,
@@ -97,7 +97,6 @@ class audit:
 
 
     def readFile(self, pathAuditFile, fileName):
-        pass
         self.getRemoteFile(self.host, pathAuditFile, fileName)
 
     '''
