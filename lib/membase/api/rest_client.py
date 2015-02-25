@@ -208,9 +208,6 @@ class RestHelper(object):
 
 class RestConnection(object):
 
-    # a dirty hack for MB-12950
-    # to be removed once MB is resolved
-    replications = []
     def __new__(self, serverInfo={}):
 
 

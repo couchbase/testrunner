@@ -511,8 +511,7 @@ class XDCRRemoteClusterRef:
                 "real_userid:user": self.__src_cluster.get_master_node().rest_username,
                 "cluster_name": self.__name,
                 "cluster_hostname": "%s:%s" % (self.__dest_cluster.get_master_node().ip, self.__dest_cluster.get_master_node().port),
-                "is_encrypted": str(self.__encryption)
-            }
+                "is_encrypted": self.__encryption}
         else:
             expected_results = {
                 "uuid": self.__rest_info['uuid'],
@@ -728,18 +727,21 @@ class XDCReplication:
             expected_results = {
                 "real_userid:source": "internal",
                 "real_userid:user": self.__src_cluster.get_master_node().rest_username,
-                "local_cluster_name": "",  # FIXME
+                "local_cluster_name": "%s:%s" % (self.__src_cluster.get_master_node().ip, self.__src_cluster.get_master_node().port),
                 "source_bucket_name": self.__from_bucket.name,
                 "remote_cluster_name": self.__remote_cluster_ref.get_name(),
                 "target_bucket_name": self.__to_bucket.name
             }
+            # optional audit param
+            if self.get_filter_exp():
+                expected_results["filter_expression"] = self.get_filter_exp()
         return expected_results
 
     def __validate_update_repl_event(self):
         expected_results = {
             "settings": {
                 "continuous": 'true',
-                "target": "",  # FIXME
+                "target": self.__to_bucket.name,
                 "source": self.__from_bucket.name,
                 "type": "xdc-%s" % self.__rep_type
             },
@@ -1044,7 +1046,6 @@ class CouchbaseCluster:
                 RestConnection(node).enable_goxdcr()
             else:
                 RestConnection(node).enable_xdcr_trace_logging()
-        if CHECK_AUDIT_EVENT.CHECK:
             rest = RestConnection(self.__master_node)
             status = rest.getAuditSettings()['auditd_enabled']
             self.__log.info("Audit status on {0} is {1}".
@@ -2256,8 +2257,6 @@ class XDCRNewBaseTest(unittest.TestCase):
         finally:
             self.__cluster_op.shutdown(force=True)
             unittest.TestCase.tearDown(self)
-            # Remove once MB-12950 is fixed.
-            RestConnection.replications = []
 
     def __init_logger(self):
         if self._input.param("log_level", None):
@@ -2347,11 +2346,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._disable_compaction = self._input.param(
             "disable_compaction",
             "").split('-')
-        # Default value needs to be changed to 60s after MB-13233 is resolved
-        self._checkpoint_interval = self._input.param(
-            "checkpoint_interval",
-            1800)
-        CHECK_AUDIT_EVENT.CHECK = self._input.param("audit", 0)
+        self._checkpoint_interval = self._input.param("checkpoint_interval",60)
+        CHECK_AUDIT_EVENT.CHECK = self._input.param("verify_audit", 0)
         GO_XDCR.ENABLED = self._input.param("enable_goxdcr", False)
 
     def __cleanup_previous(self):
@@ -2360,8 +2356,6 @@ class XDCRNewBaseTest(unittest.TestCase):
                 self,
                 from_rest=True,
                 cluster_shutdown=False)
-        # Remove once MB-12950 is fixed.
-        RestConnection.replications = []
 
     def __init_clusters(self):
         self.log.info("Initializing all clusters...")

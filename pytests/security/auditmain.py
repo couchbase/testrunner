@@ -301,6 +301,7 @@ class audit:
         for items in data['modules']:
             for particulars in items['events']:
                 if particulars['id'] == eventNumber:
+                    log.info("Audit Descriptor :{0}".format(particulars.items()))
                     for key, value in particulars.items():
                         if (key not in fields):
                             defaultFields[key] = value
@@ -344,10 +345,11 @@ class audit:
     '''
     def validateFieldActualLog(self, data, eventNumber, module, defaultFields, mandatoryFields, manFieldSecLevel=None, optionalFields=None, optFieldSecLevel=None, method="Rest"):
         flag = True
+        log.info("Audit Record :{0}".format(data))
         for items in defaultFields:
             log.info ("Default Value getting checked is - {0}".format(items))
             if items not in data:
-                log.info (" Default value not matching with expected expected value is - {0}".format(items))
+                log.info (" Default value not matching with expected value is - {0}".format(items))
                 flag = False
         for items in mandatoryFields:
             log.info ("Top Level Mandatory Field Default getting checked is - {0}".format(items))
@@ -359,13 +361,13 @@ class audit:
                             for items in data[items]:
                                 log.info ("Second Level Mandatory Field Default getting checked is - {0}".format(items))
                                 if (items not in tempStr and method is not 'REST'):
-                                    log.info (" Second level Mandatory field not matching with expected expected value is - {0}".format(items))
+                                    log.error (" Second level Mandatory field not matching with expected value is - {0}".format(items))
                                     flag = False
             else:
                 flag = False
                 if (method == 'REST' and items == 'sessionid'):
                     flag = True
-                log.info (" Top level Mandatory field not matching with expected expected value is - {0}".format(items))
+                log.error (" Top level Mandatory field not matching with expected value is - {0}".format(items))
         for items in optionalFields:
             log.info ("Top Level Optional Field Default getting checked is - {0}".format(items))
             if items in data:
@@ -376,13 +378,14 @@ class audit:
                             for items in data[items]:
                                 log.info ("Second Level Optional Field Default getting checked is - {0}".format(items))
                                 if (items not in tempStr and method is not 'REST'):
-                                    log.info (" Second level Optional field not matching with expected expected value is - {0}".format(items))
+                                    log.error (" Second level Optional field not matching with expected value is - {0}".format(items))
                                     flag = False
             else:
-                flag = False
+                # if optional field is not present, it isn't an error
+                flag = True
                 if (method == 'REST' and items == "sessionid"):
                     flag = True
-                log.info (" Top level Optional field not matching with expected expected value is - {0}".format(items))
+                log.info ("Top level Optional field {0} is not present".format(items))
         return flag
 
     '''
