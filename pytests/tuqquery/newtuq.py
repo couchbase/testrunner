@@ -146,9 +146,9 @@ class QueryTests(BaseTestCase):
 
     def test_limit_offset_negative_check(self):
         queries_errors = {'SELECT DISTINCT $str0 FROM {0} LIMIT 1.1' :
-                          'syntax error',
+                          'Invalid LIMIT value 1.1',
                           'SELECT DISTINCT $str0 FROM {0} OFFSET 1.1' :
-                          'syntax error'}
+                          'Invalid LIMIT value 1.1'}
         self.negative_common_body(queries_errors)
 
 ##############################################################################################

@@ -3,6 +3,7 @@ import testconstants
 import gc
 import sys
 import traceback
+import Queue
 from threading import Thread
 from basetestcase import BaseTestCase
 from mc_bin_client import MemcachedError
@@ -76,6 +77,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.is_linux = True
         if type.lower() == "ubuntu":
             self.is_ubuntu = True
+        self.queue = Queue.Queue()
 
     def tearDown(self):
         test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
