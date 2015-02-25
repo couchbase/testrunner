@@ -301,7 +301,6 @@ class audit:
         for items in data['modules']:
             for particulars in items['events']:
                 if particulars['id'] == eventNumber:
-                    log.info("Audit Descriptor :{0}".format(particulars.items()))
                     for key, value in particulars.items():
                         if (key not in fields):
                             defaultFields[key] = value
@@ -345,7 +344,6 @@ class audit:
     '''
     def validateFieldActualLog(self, data, eventNumber, module, defaultFields, mandatoryFields, manFieldSecLevel=None, optionalFields=None, optFieldSecLevel=None, method="Rest"):
         flag = True
-        log.info("Audit Record :{0}".format(data))
         for items in defaultFields:
             log.info ("Default Value getting checked is - {0}".format(items))
             if items not in data:
@@ -457,7 +455,8 @@ class audit:
             else:
                 #Compare time and minutes, will fail if time is 56 mins or above
                 if ((int((hourMin.split(":"))[0])) == (int((currHourMin[0][0].split(":"))[0]))) and ((int((hourMin.split(":"))[1]) + 10) > (int((currHourMin[0][0].split(":"))[1]))):
-                       log.info ("Matching values found for timestamp")
+                    log.info ("Matching values found for timestamp")
+                    return True
                 else:
                     log.info ("Mis-match in values for timestamp")
                     return False
