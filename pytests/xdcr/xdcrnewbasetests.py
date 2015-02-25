@@ -1044,15 +1044,17 @@ class CouchbaseCluster:
         for node in self.__nodes:
             if GO_XDCR.ENABLED:
                 RestConnection(node).enable_goxdcr()
+                # enable audit by default in all goxdcr tests
+                rest = RestConnection(self.__master_node)
+                status = rest.getAuditSettings()['auditd_enabled']
+                self.__log.info("Audit status on {0} is {1}".
+                            format(self.__name, status))
+                if not status:
+                    self.__log.info("Enabling audit ...")
+                    rest.setAuditSettings(enabled="true")
             else:
                 RestConnection(node).enable_xdcr_trace_logging()
-            rest = RestConnection(self.__master_node)
-            status = rest.getAuditSettings()['auditd_enabled']
-            self.__log.info("Audit status on {0} is {1}".
-                            format(self.__name, status))
-            if not status:
-                self.__log.info("Enabling audit ...")
-                rest.setAuditSettings(enabled="true")
+
 
     def set_global_checkpt_interval(self, value):
         RestConnection(self.__master_node).set_internalSetting(
