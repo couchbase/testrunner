@@ -341,13 +341,22 @@ class CouchbaseCliTest(CliBaseTest):
         remote_client = RemoteMachineShellConnection(self.master)
 
         cli_command = "server-list"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                  cluster_host="localhost", user="Administrator", password="password")
         server_info = self._get_cluster_info(remote_client)
-        result = server_info["otpNode"] + " " + server_info["hostname"] + " " + server_info["status"] + " " + server_info["clusterMembership"]
-        self.assertEqual(result, "ns_1@{0} {0}:8091 healthy active".format(remote_client.ip))
+        """ In new single node not join any cluster yet,
+            IP of node will be 127.0.0.1 """
+        if "127.0.0.1" in server_info["otpNode"]:
+            server_info["otpNode"] = "ns_1@{0}".format(remote_client.ip)
+            server_info["hostname"] = "{0}:8091".format(remote_client.ip)
+        result = server_info["otpNode"] + " " + server_info["hostname"] + " " \
+               + server_info["status"] + " " + server_info["clusterMembership"]
+        self.assertEqual(result, "ns_1@{0} {0}:8091 healthy active" \
+                                           .format(remote_client.ip))
 
         cli_command = "bucket-list"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                  cluster_host="localhost", user="Administrator", password="password")
         self.assertEqual([], output)
         remote_client.disconnect()
 
