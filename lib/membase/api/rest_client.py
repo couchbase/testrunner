@@ -318,6 +318,21 @@ class RestConnection(object):
                  return True
             return False
 
+    def is_cluster_compat_mode_greater_than(self, version):
+        """
+        curl -v -X POST -u Administrator:welcome http://10.3.4.186:8091/diag/eval
+        -d 'cluster_compat_mode:get_compat_version().'
+        Returns : [3,2] if version = 3.2.0
+        """
+        status, content = self.diag_eval('cluster_compat_mode:get_compat_version().')
+        if status:
+            json_parsed = json.loads(content)
+            cluster_ver = float("%s.%s" %(json_parsed[0], json_parsed[1]))
+            log.info("Cluster version: {0}".format(cluster_ver))
+            if cluster_ver > version:
+                return True
+        return False
+
     def is_enterprise_edition(self):
         http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
         if http_res == u'unknown pool':

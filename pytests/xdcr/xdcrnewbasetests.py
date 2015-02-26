@@ -264,7 +264,7 @@ class NodeHelper:
             [server],
             test_case,
             wait_if_warmup=True)
-        if GO_XDCR.ENABLED:
+        if GO_XDCR.ENABLED and RestConnection(server).is_cluster_compat_mode_greater_than(3.1):
             RestConnection(server).enable_goxdcr()
         else:
             RestConnection(server).enable_xdcr_trace_logging()
@@ -291,7 +291,7 @@ class NodeHelper:
         time.sleep(5)
         shell.start_couchbase()
         shell.disconnect()
-        if GO_XDCR.ENABLED:
+        if GO_XDCR.ENABLED and RestConnection(server).is_cluster_compat_mode_greater_than(3.1):
             RestConnection(server).enable_goxdcr()
         else:
             RestConnection(server).enable_xdcr_trace_logging()
@@ -312,7 +312,7 @@ class NodeHelper:
             output, _ = shell.execute_command(cmd)
             if str(output).lower().find("running") != -1:
                 # self.log.info("Couchbase service is running")
-                if GO_XDCR.ENABLED:
+                if GO_XDCR.ENABLED and RestConnection(server).is_cluster_compat_mode_greater_than(3.1):
                     RestConnection(server).enable_goxdcr()
                 else:
                     RestConnection(server).enable_xdcr_trace_logging()
@@ -1001,8 +1001,6 @@ class CouchbaseCluster:
         if self.__use_hostname:
             self.__hostnames.update(NodeHelper.rename_nodes(self.__nodes))
 
-
-
     def get_host_names(self):
         return self.__hostnames
 
@@ -1035,6 +1033,8 @@ class CouchbaseCluster:
         2. Add all nodes to the cluster.
         3. Enable xdcr trace logs to easy debug for xdcr items mismatch issues.
         """
+        master = RestConnection(self.__master_node)
+        is_master_sherlock_or_greater = master.is_cluster_compat_mode_greater_than(3.1)
         self.__init_nodes(disabled_consistent_view)
         self.__clusterop.async_rebalance(
             self.__nodes,
@@ -1042,19 +1042,19 @@ class CouchbaseCluster:
             [],
             use_hostnames=self.__use_hostname).result()
         for node in self.__nodes:
-            if GO_XDCR.ENABLED:
+            if GO_XDCR.ENABLED and is_master_sherlock_or_greater:
                 RestConnection(node).enable_goxdcr()
-                # enable audit by default in all goxdcr tests
-                rest = RestConnection(self.__master_node)
-                status = rest.getAuditSettings()['auditd_enabled']
-                self.__log.info("Audit status on {0} is {1}".
-                            format(self.__name, status))
-                if not status:
-                    self.__log.info("Enabling audit ...")
-                    rest.setAuditSettings(enabled="true")
             else:
                 RestConnection(node).enable_xdcr_trace_logging()
 
+        if master.is_enterprise_edition() and is_master_sherlock_or_greater:
+            # enable audit by default in all goxdcr tests
+            status = master.getAuditSettings()['auditd_enabled']
+            self.__log.info("Audit status on {0} is {1}".
+                            format(self.__name, status))
+            if not status:
+                self.__log.info("Enabling audit ...")
+                master.setAuditSettings(enabled="true")
 
     def set_global_checkpt_interval(self, value):
         RestConnection(self.__master_node).set_internalSetting(
@@ -1544,6 +1544,8 @@ class CouchbaseCluster:
             raise XDCRException("Unknown op_type passed: %s" % op_type)
         tasks = []
         for bucket in self.__buckets:
+            self.__log.info("At bucket '{0}' @ {1}: operation: {2}, key range {3} - {4}".
+                       format(bucket.name, self.__name, op_type, gen.start, gen.end))
             tasks.append(
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node,
@@ -2693,7 +2695,7 @@ class XDCRNewBaseTest(unittest.TestCase):
     def setup_xdcr_and_load(self):
         self.setup_xdcr()
         self.load_data_topology()
-        self.sleep(60)
+        self.sleep(10)
 
     def load_and_setup_xdcr(self):
         """Initial xdcr
