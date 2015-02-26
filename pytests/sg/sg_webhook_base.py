@@ -1,0 +1,294 @@
+import logger
+import unittest
+import json
+from TestInput import TestInputSingleton
+from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
+import re
+import requests
+from requests.exceptions import ConnectionError
+import time
+
+
+class GatewayWebhookBaseTest(unittest.TestCase):
+
+    def setUp(self):
+        super(GatewayWebhookBaseTest, self).setUp()
+        self.log = logger.Logger.get_logger()
+        self.input = TestInputSingleton.input
+        self.version = self.input.param("version", "0.0.0-358")
+        self.extra_param = self.input.param("extra_param", "")
+        self.configfile = self.input.param("config", "config_webhook_basic.json")
+        self.doc_id = self.input.param("doc_id", "doc1")
+        self.doc_content = self.input.param("doc_content", "{'a':1}")
+        self.expected_error = self.input.param("expected_error", "")
+        self.servers = self.input.servers
+        self.master = self.servers[0]
+
+    def start_sync_gateway(self, shell, config_filename):
+        self.log.info('=== start_sync_gateway with config file {0}.'.format(config_filename))
+        shell.execute_command('killall -9 sync_gateway')
+        output, error = shell.execute_command_raw('nohup /opt/couchbase-sync-gateway/bin/sync_gateway'
+                                                  ' /root/{0} >/root/gateway.log 2>&1 &'.format(config_filename))
+        shell.log_command_output(output, error)
+        obj = RemoteMachineHelper(shell).is_process_running('sync_gateway')
+        if obj and obj.pid:
+            self.log.info('start_sync_gateway - Sync Gateway is running with pid of {0}'.format(obj.pid))
+            if not shell.file_exists('/root/', 'gateway.log'):
+                self.log.info('start_sync_gateway - Fail to find gateway.log')
+                return False
+            else:
+                return True
+        else:
+            self.log.info('start_sync_gateway - Sync Gateway is NOT running')
+            return False
+
+    def send_request(self, shell, method, doc_name, content):
+        self.info = shell.extract_remote_info()
+        cmd = 'curl -X {0} http://{1}:4985/db/{2}{3}'.format(method, self.info.ip, doc_name, content)
+        output, error = shell.execute_command_raw(cmd)
+        if not output:
+            self.log.info('No output from issuing {0}'.format(cmd))
+            return None
+        else:
+            self.log.info('Output - {0}'.format(output[0]))
+            dic = json.loads(output[0])
+            return dic
+
+    def check_status_in_gateway_log(self, shell):
+        output, error = shell.execute_command_raw('tail -1 ~/gateway.log')
+        shell.log_command_output(output, error)
+        status = re.search(".* got status (\w+)", output[0])
+        if not status:
+            self.log.info('check_status_in_gateway_log failed, sync_gateway log has - {0}'.format(output[0]))
+            return ''
+        else:
+            return status.group(1)
+
+    def check_message_in_gatewaylog(self, shell, expected_error):
+        output, error = shell.execute_command_raw('grep \'{0}\' ~/gateway.log'.format(expected_error))
+        shell.log_command_output(output, error)
+        if not output or not output[0]:
+            self.log.info('check_message_in_gatewaylog did not find expected error - {0}'.format(expected_error))
+            return False
+        else:
+            return True
+
+    def check_post_contents(self, doc_content, post_dic):
+        doc_content_dic = json.loads(doc_content)
+        if not doc_content_dic:
+            return True
+        for key, value in doc_content_dic.items():
+            if not post_dic[key]:
+                self.log.info('check_post_contents found missing key {0}'.format(key))
+                return False
+            else:
+                if post_dic[key] != doc_content_dic[key]:
+                    self.log.info('check_post_contents found unmatched value - post_dic({0}), doc_content_dic({1})'
+                                  .format(post_dic[key], doc_content_dic[key]))
+                    return False
+                else:
+                    return True
+
+    def check_post_attachment(self, attachment_filename, post_dic):
+        if not post_dic['_attachments']:
+            self.log.info('check_post_attachment found missing key - \'_attachments\'')
+            return False
+        else:
+            if not post_dic['_attachments'][attachment_filename]:
+                self.log.info('check_post_attachment does not have the attachment for {0}'
+                              .format(attachment_filename))
+                return False
+            else:
+                return True
+
+    def check_post_deleted(self, post_dic):
+        if not post_dic['_deleted']:
+            self.log.info('check_post_deleted found missing key - \'_deleted\'')
+            return False
+        else:
+            return True
+
+    def check_http_server(self, shell, doc_id, revision, doc_content, attachment_filename, deleted, go_logfiles, silent):
+        if not go_logfiles:
+            go_logfiles = ['/opt/gocode/simpleServe.txt']
+        for go_logfile in go_logfiles:
+            output, error = shell.execute_command_raw('tail -1 {0}'.format(go_logfile))
+            if not silent:
+                self.log.info("check_http_server - checking {0} - {1}".format(go_logfile, output[0]))
+            else:
+                self.log.info("check_http_server - checking {0} - {1} ...".format(go_logfile, output[0][:10]))
+            simple_string = re.split(' ', output[0])
+            try:
+                post_dic = json.loads(simple_string[2])
+            except ValueError as ex:
+                self.log.info("check_http_server - log({0}) does not have a valid json format- {1}"
+                              .format(go_logfile, simple_string[2]))
+                return False
+            if not post_dic:
+                self.log.info('check_http_server - log({0}) indicates did not get the post for rev '
+                              .format(go_logfile, revision))
+                return False
+            elif post_dic['_rev'] != revision:
+                self.log.info('check_http_server - log({0}) indicates post revision is {1}, but expecting {2}'
+                              .format(go_logfile, post_dic['_rev'], revision))
+                return False
+            elif post_dic['_id'] != doc_id:
+                self.log.info('check_http_server - log({0}) indicates post id is {1}, but expecting {2}'
+                              .format(go_logfile, post_dic['_id'], doc_id))
+                return False
+            elif doc_content and ( not self.check_post_contents(doc_content, post_dic)):
+                self.log.info('check_http_server - log({0}) indicates post content is {1}, '
+                              'but expecting {2}'
+                              .format(go_logfile, post_dic, doc_content))
+                return False
+            elif attachment_filename and ( not self.check_post_attachment(attachment_filename, post_dic)):
+                self.log.info('check_http_server - log({0}) indicates post content is {1}, '
+                              'but expecting {2}'
+                              .format(go_logfile, post_dic, doc_content))
+                return False
+            elif deleted and ( not self.check_post_deleted(post_dic)):
+                self.log.info('check_http_server - log({0}) indicates post content does not have '
+                              'correct value for _deleted {1}'
+                              .format(go_logfile, post_dic))
+                return False
+        return True
+
+    def create_doc_internal(self, shell, doc_id, doc_content, go_logfiles, should_post, sleep_seconds,
+                            expect_status, silent):
+        if not silent:
+            self.log.info('=== Creating a doc({0}) - {1}'.format(doc_id, doc_content))
+        else:
+            self.log.info('=== Creating a doc({0}) - {1}...'.format(doc_id, doc_content[:5]))
+        send_requst_dic = self.send_request(shell, 'PUT', doc_id,  ' -d \'{0}\' -H "Content-Type: application/json"'
+                                            .format(doc_content))
+        if not send_requst_dic or not send_requst_dic['rev']:
+             self.log.info('create_doc - create_doc failed - {0}'.format(send_requst_dic))
+             return False, '', ''
+        else:
+            revision = send_requst_dic['rev']
+            if not revision:
+                self.log.info('create_doc - create_doc failed - {0}'.format(send_requst_dic))
+                return False, '', ''
+            else:
+                if sleep_seconds:
+                    self.log.info('create_doc - start sleep for {0} seconds'.format(sleep_seconds))
+                    time.sleep(sleep_seconds)
+                    self.log.info('create_doc - end sleep for {0} seconds'.format(sleep_seconds))
+                status = self.check_status_in_gateway_log(shell)
+                if expect_status and status != '200' and should_post:
+                    self.log.info('create_doc - gateway log shows status code of {0}, but expecting status code of 200 '
+                                  .format(status))
+                    return False, revision, status
+                elif not self.check_http_server(shell, doc_id, revision, doc_content, None, False, go_logfiles, silent):
+                    if should_post:
+                        self.log.info('create_doc - Document {0} is created successfully with rev = {1} '
+                                      'but NOT posted as expected'.format(doc_id, revision))
+                        return False, revision, status
+                    else:
+                        self.log.info('create_doc - Document {0} is created successfully with rev = {1} '
+                                      'and not posted as expected'.format(doc_id, revision))
+                        return True, revision, status
+                elif should_post:
+                    self.log.info('create_doc - Document {0} is created successfully with rev = {1} '
+                                  'and posted as expected'.format(doc_id, revision))
+                    return True, revision, status
+                else:
+                    self.log.info('create_doc - Document {0} is created successfully with rev = {1} '
+                                  'but is posted when it is NOT supposed to be posted'.format(doc_id, revision))
+                    return False, revision, status
+
+    def create_doc(self, shell, doc_id, doc_content):
+        self.log.info('=== create_doc id({0}), content({1})'.format(doc_id, doc_content))
+        return self.create_doc_internal(shell, doc_id, doc_content, None, True, None, True, False)
+
+    def create_doc_logfiles(self, shell, doc_id, doc_content, go_logfiles):
+        self.log.info('=== create_doc_logfile_to_check id({0}), content({1}) logs({2})'
+                      .format(doc_id, doc_content, go_logfiles))
+        return self.create_doc_internal(shell, doc_id, doc_content, go_logfiles, True, None, True, False)
+
+    def create_doc_no_post(self, shell, doc_id, doc_content):
+        self.log.info('=== create_doc_logfile_to_check id({0}), content({1})'
+                      .format(doc_id, doc_content))
+        return self.create_doc_internal(shell, doc_id, doc_content, None, False, None, True, False)
+
+    def create_doc_delay(self, shell, doc_id, doc_content, timeout):
+        self.log.info('=== create_doc_delay id({0}), content({1})'
+                      .format(doc_id, doc_content))
+        a = doc_content.split(":")
+        delay = int(a[1][:-1])
+        if delay <= timeout:
+            self.log.info('create_doc_delay http server response before timeout and gateload log status should be ok')
+            return self.create_doc_internal(shell, doc_id, doc_content, None, True, delay, True, False)
+        else:
+            self.log.info('create_doc_delay http server response pass timeout and gateload log status should not be ok')
+            return self.create_doc_internal(shell, doc_id, doc_content, None, True, delay, False, False)
+
+    def create_doc_silent(self, shell, doc_id, doc_content):
+        self.log.info('=== create_doc_silent id({0}), content({1}...)'.format(doc_id, doc_content[:10]))
+        return self.create_doc_internal(shell, doc_id, doc_content, None, True, None, True, True)
+
+    def update_doc(self, shell, doc_id, doc_content, revision):
+        self.log.info('=== Updating a doc({0}) - {1}'.format(doc_id, doc_content))
+        send_requst_dic = self.send_request(shell, 'PUT', doc_id,  '?rev=\'{0}\' -d \'{1}\' -H "Content-Type: '
+                                                                   'application/json"'.format(revision, doc_content))
+        revision = send_requst_dic['rev']
+        if not revision:
+            self.log.info('update_doc failed - {0}'.format(send_requst_dic))
+            return False, '', ''
+        else:
+            status = self.check_status_in_gateway_log(shell)
+            if status != '200':
+                self.log.info('update_doc - gateway log shows status code of {0}, but expecting status code of 200 '
+                              .format(status))
+                return False, revision, status
+            else:
+                if not self.check_http_server(shell, doc_id, revision, doc_content, None, False, None, False):
+                    return False, revision, status
+                else:
+                    self.log.info('update_doc - Document {0} is updated successfully with rev = {1}'
+                                  .format(doc_id, revision))
+                    return True, revision, status
+
+    def update_attachment(self, shell, doc_id, doc_content, attachment_filename, revision):
+        self.log.info('=== update_doc_with_attachment a doc({0}) - {1}'.format(doc_id, attachment_filename))
+        send_requst_dic = self.send_request(shell, 'PUT', doc_id,  '/{0}?rev={1}'
+                                            .format(attachment_filename, revision, ))
+        revision = send_requst_dic['rev']
+        if not revision:
+            self.log.info('update_doc_with_attachment failed - {0}'.format(send_requst_dic))
+            return False, '', ''
+        else:
+            status = self.check_status_in_gateway_log(shell)
+            if status != '200':
+                self.log.info('update_doc_with_attachment - gateway log shows status code of {0}, but expecting '
+                              'status code of 200 '
+                              .format(status))
+                return False, revision, status
+            else:
+                if not self.check_http_server(shell, doc_id, revision, doc_content, attachment_filename,
+                                              False, None, False):
+                    return False, revision, status
+                else:
+                    self.log.info('update_doc_with_attachment - Document {0} is updated successfully with rev = {1}'
+                                  .format(doc_id, revision))
+                    return True, revision, status
+
+    def delete_doc(self, shell, doc_id, revision):
+        self.log.info('=== delete_doc a doc({0})'.format(doc_id))
+        send_requst_dic = self.send_request(shell, 'DELETE', doc_id,  '?rev={0}'.format(revision))
+        revision = send_requst_dic['rev']
+        if not revision:
+            self.log.info('delete_doc failed - {0}'.format(send_requst_dic))
+            return False, '', ''
+        else:
+            status = self.check_status_in_gateway_log(shell)
+            if status != '200':
+                self.log.info('delete_doc - gateway log shows status code of {0}, but expecting status code of 200 '
+                              .format(status))
+                return False, revision, status
+            elif not self.check_http_server(shell, doc_id, revision, None, None, True, None, False):
+                return False, revision, status
+            else:
+                self.log.info('delete_doc - Document {0} is updated successfully with rev = {1}'
+                              .format(doc_id, revision))
+                return True, revision, status

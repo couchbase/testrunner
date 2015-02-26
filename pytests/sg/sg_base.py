@@ -10,16 +10,18 @@ from requests.exceptions import ConnectionError
 class GatewayBaseTest(unittest.TestCase):
 
     BUILDS = {
-        'http://packages.couchbase.com.s3.amazonaws.com/builds/mobile/sync_gateway': (
-            '1.0.4/{0}/couchbase-sync-gateway-community_{0}_{1}.{2}',
+        'http://latestbuilds.hq.couchbase.com/couchbase-sync-gateway': (
+            '0.0.0/{0}/couchbase-sync-gateway-community_{0}_x86_64.rpm',
+            '1.1.0/{0}/couchbase-sync-gateway-community_{0}_x86_64.rpm',
         ),
     }
+
 
     def setUp(self):
         super(GatewayBaseTest, self).setUp()
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
-        self.version = self.input.param("version", "1.0.4-34")
+        self.version = self.input.param("version", "0.0.0-358")
         self.extra_param = self.input.param("extra_param", "").replace("$", "=")  # '=' is a delimiter in conf file
         self.logsdir = self.input.param("logsdir", "/home/sync_gateway/logs")
         self.datadir = self.input.param("datadir", "/home/sync_gateway")
