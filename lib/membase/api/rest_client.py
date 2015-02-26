@@ -239,6 +239,9 @@ class RestConnection(object):
             self.username = serverInfo["username"]
             self.password = serverInfo["password"]
             self.port = serverInfo["port"]
+            self.index_port = 9102
+            if "index_port" in serverInfo.keys():
+                self.index_port = serverInfo["index_port"]
             self.hostname = ''
             if "hostname" in serverInfo:
                 self.hostname = serverInfo["hostname"]
@@ -248,10 +251,14 @@ class RestConnection(object):
             self.password = serverInfo.rest_password
             self.port = serverInfo.port
             self.hostname = ''
+            self.index_port = 9102
+            if hasattr(serverInfo, 'index_port'):
+                self.index_port = serverInfo.index_port
             if hasattr(serverInfo, 'hostname') and serverInfo.hostname and\
                serverInfo.hostname.find(self.ip) == -1:
                 self.hostname = serverInfo.hostname
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
+        self.index_baseUrl = "http://{0}:{1}/".format(self.ip, self.index_port)
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
         if self.hostname:
             self.baseUrl = "http://{0}:{1}/".format(self.hostname, self.port)
@@ -1284,6 +1291,36 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', post)
         if not status:
             log.error('unable to logClientError')
+
+    def trigger_index_compaction(self, timeout=120):
+        node = None
+        api = self.index_baseUrl + 'triggerCompaction'
+        status, content, header = self._http_request(api, timeout=timeout)
+        if not status:
+            raise Exception(content)
+
+    def set_index_setting(self, setting_json, timeout=120):
+        node = None
+        api = self.index_baseUrl + 'settings -d @settings:{0} '.format(setting_json)
+        status, content, header = self._http_request(api, timeout=timeout)
+        if not status:
+            raise Exception(content)
+
+    def get_index_settings(self,timeout=120):
+        node = None
+        api = self.index_baseUrl + 'settings'
+        status, content, header = self._http_request(api, timeout=timeout)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    def get_index_stats(self,timeout=120, index_map = None):
+        api = self.index_baseUrl + 'stats'
+        status, content, header = self._http_request(api, timeout=timeout)
+        if status:
+            json_parsed = json.loads(content)
+            index_map = RestParser().parse_index_stats_response(json_parsed, index_map =index_map)
+        return index_map
 
     #returns node data for this host
     def get_nodes_self(self, timeout=120):
@@ -2801,6 +2838,23 @@ class vBucket(object):
 
 
 class RestParser(object):
+    def parse_index_stats_response(self, parsed, index_map = None):
+        if index_map == None:
+            index_map = {}
+        for key in parsed.keys():
+            tokens = key.split(":")
+            val = parsed[key]
+            if len(tokens) > 2:
+                bucket = tokens[0]
+                index_name = tokens[1]
+                stats_name = tokens[2]
+                if bucket not in index_map.keys():
+                    index_map[bucket] = {}
+                if index_name not in index_map[bucket].keys():
+                    index_map[bucket][index_name] = {}
+                index_map[bucket][index_name][stats_name] = val
+        return index_map
+
     def parse_get_nodes_response(self, parsed):
         node = Node()
         node.uptime = parsed['uptime']
