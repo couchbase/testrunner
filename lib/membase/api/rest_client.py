@@ -328,7 +328,6 @@ class RestConnection(object):
         if status:
             json_parsed = json.loads(content)
             cluster_ver = float("%s.%s" %(json_parsed[0], json_parsed[1]))
-            log.info("Cluster version: {0}".format(cluster_ver))
             if cluster_ver > version:
                 return True
         return False
