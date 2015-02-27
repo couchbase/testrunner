@@ -15,6 +15,7 @@ class CliBaseTest(BaseTestCase):
         self.r = random.Random()
         self.vbucket_count = 1024
         self.shell = RemoteMachineShellConnection(self.master)
+        self.force_failover = self.input.param("force_failover", False)
         info = self.shell.extract_remote_info()
         type = info.type.lower()
         self.excluded_commands = self.input.param("excluded_commands", None)
