@@ -131,6 +131,11 @@ class ViewMergingTests(BaseTestCase):
         self.verify_keys_are_sorted(results)
 
     def test_stale_update_after_alternated_docs(self):
+        # update_after requests use a stats cache for performance reasons.
+        # This means that the sequence number you get might be outdated for
+        # up to 0.3 seconds. Hence sleep for 0.4 seconds to make sure we
+        # see all changes.
+        time.sleep(0.4)
         results = self.merged_query(self.map_view_name, {'stale': 'update_after'})
         self.assertEquals(results.get(u'total_rows', None), self.num_docs)
         self.assertEquals(len(results.get(u'rows', None)), self.num_docs)
