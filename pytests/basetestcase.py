@@ -1762,7 +1762,7 @@ class BaseTestCase(unittest.TestCase):
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
         for version in versions:
-            if "3.5" > version or "community" in version:
+            if "3.5" > version:
                 return servers
         if servers == None:
             servers = self.servers
