@@ -1280,7 +1280,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         return int(RestConnection(server).fetch_bucket_stats(bucket_name)
                    ['op']['samples'][param][-1])
 
-    def _verify_revIds(self, src_server, dest_server, kv_store=1):
+    def _verify_revIds(self, src_server, dest_server, kv_store=1, timeout=600):
         error_count = 0
         tasks = []
         for bucket in self._get_cluster_buckets(src_server):
@@ -1291,7 +1291,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
                                                         bucket.kvs[kv_store])
             tasks.append(task_info)
         for task in tasks:
-            task.result()
+            task.result(timeout)
             error_count += task.err_count
             if task.err_count:
                 for ip, values in task.keys_not_found.iteritems():
