@@ -626,15 +626,15 @@ class XDCRRemoteClusterRef:
         """
         [repl.start() for repl in self.__replications]
 
-    def pause_all_replications(self):
+    def pause_all_replications(self, verify=False):
         """Pause all created replication
         """
-        [repl.pause() for repl in self.__replications]
+        [repl.pause(verify) for repl in self.__replications]
 
-    def resume_all_replications(self):
+    def resume_all_replications(self, verify=False):
         """Resume all created replication
         """
-        [repl.resume() for repl in self.__replications]
+        [repl.resume(verify) for repl in self.__replications]
 
     def stop_all_replications(self):
         rest = RestConnection(self.__src_cluster.get_master_node())
@@ -849,13 +849,12 @@ class XDCReplication:
         if verify:
             self.__verify_pause()
 
-    def __is_cluster_replicating(self):
+    def _is_cluster_replicating(self):
         count = 0
         src_master = self.__src_cluster.get_master_node()
         while count < 3:
             outbound_mutations = self.__src_cluster.get_xdcr_stat(
-                src_master,
-                self.__from_bucket,
+                self.__from_bucket.name,
                 'replication_changes_left')
             if outbound_mutations == 0:
                 self.log.info(
@@ -892,7 +891,7 @@ class XDCReplication:
                 "Replication is not resumed for SrcBucket: {0}, \
                 Target Bucket: {1}".format(self.__from_bucket, self.__to_bucket))
 
-        if not self.__is_cluster_replicating():
+        if not self._is_cluster_replicating():
             self.log.info("XDCR completed on {0}".format(src_master.ip))
 
     def __validate_resume_event(self):
@@ -2161,13 +2160,13 @@ class CouchbaseCluster:
             return False
         return True
 
-    def pause_all_replications(self):
+    def pause_all_replications(self, verify=False):
         for remote_cluster_ref in self.__remote_clusters:
-            remote_cluster_ref.pause_all_replications()
+            remote_cluster_ref.pause_all_replications(verify)
 
-    def resume_all_replications(self):
+    def resume_all_replications(self, verify=False):
         for remote_cluster_ref in self.__remote_clusters:
-            remote_cluster_ref.resume_all_replications()
+            remote_cluster_ref.resume_all_replications(verify)
 
     def enable_time_sync(self, enable):
         """
@@ -2302,9 +2301,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__topology = self._input.param("ctopology", TOPOLOGY.CHAIN)
         # complex topology tests (> 2 clusters must specify chain_length >2)
         self.__chain_length = self._input.param("chain_length", 2)
-        self.__rdirection = self._input.param(
-            "rdirection",
-            REPLICATION_DIRECTION.UNIDIRECTION)
+
         self.__demand_encryption = self._input.param(
             "demand_encryption",
             False)
@@ -2328,6 +2325,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._create_default_bucket = self._input.param(
             "default_bucket",
             True)
+        self._rdirection = self._input.param("rdirection",
+                            REPLICATION_DIRECTION.UNIDIRECTION)
         self._num_items = self._input.param("items", 1000)
         self._value_size = self._input.param("value_size", 256)
         self._poll_timeout = self._input.param("poll_timeout", 120)
@@ -2487,7 +2486,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.__cb_clusters[i + 1].get_name()),
                 self.__demand_encryption
             )
-            if self.__rdirection == REPLICATION_DIRECTION.BIDIRECTION:
+            if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
                 self.__cb_clusters[i + 1].add_remote_cluster(
                     cb_cluster,
                     Utility.get_rc_name(
@@ -2506,7 +2505,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 Utility.get_rc_name(hub.get_name(), cb_cluster.get_name()),
                 self.__demand_encryption
             )
-            if self.__rdirection == REPLICATION_DIRECTION.BIDIRECTION:
+            if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
                 cb_cluster.add_remote_cluster(
                     hub,
                     Utility.get_rc_name(cb_cluster.get_name(), hub.get_name()),
@@ -2525,7 +2524,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 self.__cb_clusters[0].get_name()),
             self.__demand_encryption
         )
-        if self.__rdirection == REPLICATION_DIRECTION.BIDIRECTION:
+        if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
             self.__cb_clusters[0].add_remote_cluster(
                 self.__cb_clusters[-1],
                 Utility.get_rc_name(
@@ -2585,7 +2584,7 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def __load_chain(self):
         for i, cluster in enumerate(self.__cb_clusters):
-            if self.__rdirection == REPLICATION_DIRECTION.BIDIRECTION:
+            if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
                 if i > len(self.__cb_clusters) - 1:
                     break
             else:
@@ -2704,7 +2703,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.load_data_topology()
         self.setup_xdcr()
 
-    def verify_rev_ids(self, xdcr_replications, kv_store=1):
+    def verify_rev_ids(self, xdcr_replications, kv_store=1, timeout=600):
         """Verify RevId (sequence number, cas, flags value) for each item on
         every source and destination bucket.
         @param xdcr_replications: list of XDCRReplication objects.
@@ -2724,7 +2723,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 repl.get_src_bucket().kvs[kv_store])
             tasks.append(task_info)
         for task in tasks:
-            task.result()
+            task.result(timeout)
             error_count += task.err_count
             if task.err_count:
                 for ip, values in task.keys_not_found.iteritems():
@@ -2811,6 +2810,35 @@ class XDCRNewBaseTest(unittest.TestCase):
     # Interface for other tests.
     def merge_all_buckets(self):
         self.__merge_all_buckets()
+
+    def _wait_for_replication_to_catchup(self, timeout=1200):
+
+        for cb_cluster in self.__cb_clusters:
+            cb_cluster.run_expiry_pager()
+
+        # 20 minutes by default
+        end_time = time.time() + timeout
+        self.sleep(15)
+
+        for cb_cluster in self.__cb_clusters:
+            rest1 = RestConnection(cb_cluster.get_master_node())
+            for remote_cluster in cb_cluster.get_remote_clusters():
+                rest2 = RestConnection(remote_cluster.get_dest_cluster.get_master_node())
+                for bucket in cb_cluster.get_buckets():
+                    _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+                    _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+                    while _count1 != _count2 and (time.time() - end_time) < 0:
+                        self.sleep(60, "Expected: {0} items, found: {1}. "
+                                       "Waiting for replication to catch up ..".
+                                   format(_count1, _count2))
+                    _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+                    _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+                    if _count1 != _count2:
+                        self.fail("not all items replicated in {0} sec for {1} "
+                                  "bucket. on source cluster:{2}, on dest:{3}".\
+                          format(timeout, bucket.name, _count1, _count2))
+                    self.log.info("Replication caught up for bucket {0}: {1}"
+                          .format(bucket.name, _count1))
 
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
