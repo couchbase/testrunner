@@ -398,7 +398,7 @@ class CouchbaseCliTest(CliBaseTest):
         """ when no bucket, have to add option --force to failover
             since no data => no graceful failover.  Need to add test
             to detect no graceful failover if no bucket """
-        self._create_bucket(remote_client)
+        self._create_bucket(remote_client,bucket_replica=self.num_replicas)
         cli_command = "failover"
         for num in xrange(nodes_failover):
             self.log.info("failover node {0}" \
