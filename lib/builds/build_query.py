@@ -389,6 +389,7 @@ class BuildQuery(object):
                        name = couchbase_server-enterprise-windows-amd64-3.0.0-998.exe
                               couchbase_server-enterprise-windows-amd64-3.0.2-1603.exe
                               couchbase-server-enterprise_3.5.0-952-windows_amd64.exe
+                              couchbase-server-enterprise_3.5.0-1390-windows_x86.exe
         """
         build.toy = toy
         build.deliverable_type = deliverable_type
@@ -453,6 +454,7 @@ class BuildQuery(object):
             /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb
             /795/couchbase_server-enterprise-windows-amd64-3.5.0-795.exe
             /952/couchbase-server-enterprise_3.5.0-952-windows_amd64.exe
+            /1390/couchbase-server-enterprise_3.5.0-1390-windows_x86.exe
             /1120/couchbase-server-enterprise_3.5.0-1120-macos_x86_64.zip"""
             build_number = build.product_version.replace(version[:6],"")
             """ distribution version:    centos linux release 7.0.1406 (core)
@@ -477,6 +479,8 @@ class BuildQuery(object):
                     os_name = "debian7"
                 elif "windows" in distribution_version:
                     os_name = "windows"
+                    if "x86_64" not in architecture_type:
+                        build.architecture_type = "x86"
                 elif "mac" in distribution_type:
                     os_name = "macos"
                     build.architecture_type = "x86_64"
