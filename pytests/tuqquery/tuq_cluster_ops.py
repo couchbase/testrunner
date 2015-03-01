@@ -133,7 +133,7 @@ class QueriesOpsTests(QueryTests):
             nodes = []
             for failover_node in servr_out:
                 nodes.extend([node for node in nodes_all
-                    if node.ip != failover_node.ip or str(node.port) != failover_node.port])
+                    if node.ip == failover_node.ip and str(node.port) == failover_node.port])
             self.cluster.failover(self.servers[:self.nodes_init], servr_out)
             for node in nodes:
                 RestConnection(self.master).add_back_node(node.id)
@@ -171,7 +171,7 @@ class QueriesOpsTests(QueryTests):
                 RestConnection(self.master).query_tool(self.query, timeout=5)
             except:
                 self.log.info("query is cancelled")
-            full_list = self._generate_full_docs_list(self.gens_load)
+            full_list = self.generate_full_docs_list(self.gens_load)
             expected_result = [{"points" : doc["tasks_points"]["task1"]} for doc in full_list]
             expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             expected_result = sorted(expected_result, key=lambda doc: doc['points'])
@@ -201,7 +201,7 @@ class QueriesOpsTests(QueryTests):
         indexes = []
         try:
             indexes = self._create_multiple_indexes(index_field)
-            num_srv_warm_up = self.input.param("srv_warm_up", self.nodes_init)
+            num_srv_warm_up = self.input.param("srv_warm_up", 1)
             if self.input.tuq_client is None:
                 self.fail("For this test external tuq server is requiered. " + \
                           "Please specify one in conf")
@@ -364,7 +364,7 @@ class QueriesOpsTests(QueryTests):
                                                                       ','.join(index_field.split(';')), self.indx_type))
             if self.indx_type.lower() == 'gsi':
                 self._wait_for_index_online(bucket, index_name)
-            indexes.append(index_name)
+        indexes.append(index_name)
         return indexes
 
     def _delete_multiple_indexes(self, indexes):
