@@ -22,7 +22,7 @@ from membase.api.exception import BucketCreationException, ServerSelfJoinExcepti
     BucketFlushFailed, CBRecoveryFailedException, XDCRException, SetRecoveryTypeFailed, BucketCompactionException
 log = logger.Logger.get_logger()
 
-#helper library methods built on top of RestConnection interface
+# helper library methods built on top of RestConnection interface
 
 class RestHelper(object):
     def __init__(self, rest_connection):
@@ -48,7 +48,7 @@ class RestHelper(object):
         return False
 
     def is_cluster_healthy(self, timeout=120):
-        #get the nodes and verify that all the nodes.status are healthy
+        # get the nodes and verify that all the nodes.status are healthy
         nodes = self.rest.node_statuses(timeout)
         return all(node.status == 'healthy' for node in nodes)
 
@@ -58,7 +58,7 @@ class RestHelper(object):
         previous_progress = 0
         retry = 0
         while progress is not -1 and progress < percentage and retry < 40:
-            #-1 is error , -100 means could not retrieve progress
+            # -1 is error , -100 means could not retrieve progress
             progress = self.rest._rebalance_progress()
             if progress == -100:
                 log.error("unable to retrieve rebalanceProgress.try again in 2 seconds")
@@ -69,7 +69,7 @@ class RestHelper(object):
                 else:
                     retry = 0
                     previous_progress = progress
-            #sleep for 2 seconds
+            # sleep for 2 seconds
             time.sleep(2)
         if progress <= 0:
             log.error("rebalance progress code : {0}".format(progress))
@@ -82,7 +82,7 @@ class RestHelper(object):
             log.info('rebalance reached >{0}% in {1} seconds '.format(progress, duration))
             return True
 
-    #return true if cluster balanced, false if it needs rebalance
+    # return true if cluster balanced, false if it needs rebalance
     def is_cluster_rebalanced(self):
         command = "ns_orchestrator:needs_rebalance()"
         status, content = self.rest.diag_eval(command)
@@ -92,8 +92,8 @@ class RestHelper(object):
         return None
 
 
-    #this method will rebalance the cluster by passing the remote_node as
-    #ejected node
+    # this method will rebalance the cluster by passing the remote_node as
+    # ejected node
     def remove_nodes(self, knownNodes, ejectedNodes, wait_for_rebalance=True):
         if len(ejectedNodes) == 0:
             return False
@@ -233,7 +233,7 @@ class RestConnection(object):
         return obj
 
     def __init__(self, serverInfo):
-        #serverInfo can be a json object
+        # serverInfo can be a json object
         if isinstance(serverInfo, dict):
             self.ip = serverInfo["ip"]
             self.username = serverInfo["username"]
@@ -263,7 +263,7 @@ class RestConnection(object):
         if self.hostname:
             self.baseUrl = "http://{0}:{1}/".format(self.hostname, self.port)
             self.capiBaseUrl = "http://{0}:{1}/".format(self.hostname, 8092)
-        #for Node is unknown to this cluster error
+        # for Node is unknown to this cluster error
         for iteration in xrange(5):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
             if not success and type(http_res) == unicode and\
@@ -276,8 +276,8 @@ class RestConnection(object):
                 continue
             else:
                 break
-        #determine the real couchApiBase for cluster_run
-        #couchApiBase appeared in version 2.*
+        # determine the real couchApiBase for cluster_run
+        # couchApiBase appeared in version 2.*
         if not http_res or http_res["version"][0:2] == "1.":
             self.capiBaseUrl = self.baseUrl + "/couchBase"
         else:
@@ -334,7 +334,7 @@ class RestConnection(object):
         status, content = self.diag_eval('cluster_compat_mode:get_compat_version().')
         if status:
             json_parsed = json.loads(content)
-            cluster_ver = float("%s.%s" %(json_parsed[0], json_parsed[1]))
+            cluster_ver = float("%s.%s" % (json_parsed[0], json_parsed[1]))
             if cluster_ver > version:
                 return True
         return False
@@ -508,7 +508,7 @@ class RestConnection(object):
             raise ReadDocumentException(ddoc_name, json)
         return json, meta
 
-    #the same as Preview a Random Document on UI
+    # the same as Preview a Random Document on UI
     def get_random_key(self, bucket):
         api = self.baseUrl + 'pools/default/buckets/%s/localRandomKey' % (bucket)
         status, content, header = self._http_request(api, headers=self._create_capi_headers())
@@ -617,7 +617,7 @@ class RestConnection(object):
         json_parsed = json.loads(content)
         meta_parsed = ""
         if status:
-            #in dp4 builds meta data is in content, not in header
+            # in dp4 builds meta data is in content, not in header
             if 'x-couchbase-meta' in header:
                 meta = header['x-couchbase-meta']
                 meta_parsed = json.loads(meta)
@@ -702,7 +702,7 @@ class RestConnection(object):
         authorization = base64.encodestring('%s:%s' % (username, password))
         return {'Authorization': 'Basic %s' % authorization}
 
-    #authorization must be a base64 string of username:password
+    # authorization must be a base64 string of username:password
     def _create_headers(self):
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         return {'Content-Type': 'application/x-www-form-urlencoded',
@@ -751,15 +751,15 @@ class RestConnection(object):
     def init_node_services(self, username='Administrator', password='password', hostname='127.0.0.1', port='8091', services=None):
         api = self.baseUrl + '/node/controller/setupServices'
         if services == None:
-            log.info(" servces are marked as None, will not work")
+            log.info(" services are marked as None, will not work")
             return False
         if hostname == "127.0.0.1":
             hostname = "{0}:{1}".format(hostname, port)
-        params = urllib.urlencode({ 'hostname':hostname,
+        params = urllib.urlencode({ 'hostname': hostname,
                                     'user': username,
                                     'password': password,
-                                    'services':",".join(services)})
-        log.info('/node/controller/setupServices params on {0}:{1}:{2}'.format(self.ip, self.port, params))
+                                    'services': ",".join(services)})
+        log.info('/node/controller/setupServices params on {0}: {1}:{2}'.format(self.ip, self.port, params))
         status, content, header = self._http_request(api, 'POST', params)
         error_message = "cannot change node services after cluster is provisioned"
         if not status and content == error_message:
@@ -815,7 +815,7 @@ class RestConnection(object):
             param_map['certificate'] = certificate
         params = urllib.urlencode(param_map)
         status, content, _ = self._http_request(api, 'POST', params)
-        #sample response :
+        # sample response :
         # [{"name":"two","uri":"/pools/default/remoteClusters/two","validateURI":"/pools/default/remoteClusters/two?just_validate=1","hostname":"127.0.0.1:9002","username":"Administrator"}]
         if status:
             remoteCluster = json.loads(content)
@@ -825,7 +825,7 @@ class RestConnection(object):
         return remoteCluster
 
     def add_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=''):
-        #example : password:password username:Administrator hostname:127.0.0.1:9002 name:two
+        # example : password:password username:Administrator hostname:127.0.0.1:9002 name:two
         msg = "adding remote cluster hostname:{0}:{1} with username:password {2}:{3} name:{4} to source node: {5}:{6}"
         log.info(msg.format(remoteIp, remotePort, username, password, name, self.ip, self.port))
         api = self.baseUrl + 'pools/default/remoteClusters'
@@ -856,13 +856,13 @@ class RestConnection(object):
                 self.remove_remote_cluster(remote_cluster["name"])
 
     def remove_remote_cluster(self, name):
-        #example : name:two
+        # example : name:two
         msg = "removing remote cluster name:{0}".format(urllib.quote(name))
         log.info(msg)
         api = self.baseUrl + 'pools/default/remoteClusters/{0}'.format(urllib.quote(name))
         params = urllib.urlencode({})
         status, content, header = self._http_request(api, 'DELETE', params)
-        #sample response : "ok"
+        # sample response : "ok"
         if not status:
             log.error("failed to remove remote cluster: status:{0},content:{1}".format(status, content))
             raise Exception("remoteCluster API 'remove cluster' failed")
@@ -888,7 +888,7 @@ class RestConnection(object):
         param_map.update(xdcr_params)
         params = urllib.urlencode(param_map)
         status, content, _ = self._http_request(api, 'POST', params)
-        #response : {"id": "replication_id"}
+        # response : {"id": "replication_id"}
         if status:
             json_parsed = json.loads(content)
             log.info("Replication created with id: {0}".format(json_parsed['id']))
@@ -928,13 +928,13 @@ class RestConnection(object):
                 raise CBRecoveryFailedException("impossible to stop cbrecovery by {0}".format(api))
             log.info("recovery stopped by {0}".format(api))
 
-    #params serverIp : the server to add to this cluster
-    #raises exceptions when
-    #unauthorized user
-    #server unreachable
-    #can't add the node to itself ( TODO )
-    #server already added
-    #returns otpNode
+    # params serverIp : the server to add to this cluster
+    # raises exceptions when
+    # unauthorized user
+    # server unreachable
+    # can't add the node to itself ( TODO )
+    # server already added
+    # returns otpNode
     def add_node(self, user='', password='', remoteIp='', port='8091', zone_name='', services=None):
         otpNode = None
         log.info('adding remote node @{0}:{1} to this cluster @{2}:{3}'\
@@ -969,7 +969,7 @@ class RestConnection(object):
         else:
             self.print_UI_logs()
             try:
-                #print logs from node that we want to add
+                # print logs from node that we want to add
                 wanted_node = deepcopy(self)
                 wanted_node.ip = remoteIp
                 wanted_node.print_UI_logs()
@@ -988,13 +988,13 @@ class RestConnection(object):
                                           reason=content)
         return otpNode
 
-        #params serverIp : the server to add to this cluster
-    #raises exceptions when
-    #unauthorized user
-    #server unreachable
-    #can't add the node to itself ( TODO )
-    #server already added
-    #returns otpNode
+        # params serverIp : the server to add to this cluster
+    # raises exceptions when
+    # unauthorized user
+    # server unreachable
+    # can't add the node to itself ( TODO )
+    # server already added
+    # returns otpNode
     def do_join_cluster(self, user='', password='', remoteIp='', port='8091', zone_name='', services=None):
         otpNode = None
         log.info('adding remote node @{0}:{1} to this cluster @{2}:{3}'\
@@ -1019,7 +1019,7 @@ class RestConnection(object):
         else:
             self.print_UI_logs()
             try:
-                #print logs from node that we want to add
+                # print logs from node that we want to add
                 wanted_node = deepcopy(self)
                 wanted_node.ip = remoteIp
                 wanted_node.print_UI_logs()
@@ -1163,7 +1163,7 @@ class RestConnection(object):
             log.info('rebalance operation started')
         else:
             log.error('rebalance operation failed: {0}'.format(content))
-            #extract the error
+            # extract the error
             raise InvalidArgumentException('controller/rebalance with error message {0}'.format(content),
                                            parameters=params)
         return status
@@ -1204,7 +1204,7 @@ class RestConnection(object):
         same_progress_count = 0
         previous_progress = 0
         while progress != -1 and (progress != 100 or self._rebalance_progress_status() == 'running') and retry < 20:
-            #-1 is error , -100 means could not retrieve progress
+            # -1 is error , -100 means could not retrieve progress
             progress = self._rebalance_progress()
             if progress == -100:
                 log.error("unable to retrieve rebalanceProgress.try again in 1 second")
@@ -1212,8 +1212,8 @@ class RestConnection(object):
             else:
                 retry = 0
             if stop_if_loop:
-                #reset same_progress_count if get a different result, or progress is still O
-                #(it may take a long time until the results are different from 0)
+                # reset same_progress_count if get a different result, or progress is still O
+                # (it may take a long time until the results are different from 0)
                 if previous_progress != progress or progress == 0:
                     previous_progress = progress
                     same_progress_count = 0
@@ -1222,7 +1222,7 @@ class RestConnection(object):
                 if same_progress_count > 50:
                     log.error("apparently rebalance progress code in infinite loop: {0}".format(progress))
                     return False
-            #sleep for 5 seconds
+            # sleep for 5 seconds
             time.sleep(5)
         if progress < 0:
             log.error("rebalance progress code : {0}".format(progress))
@@ -1306,7 +1306,7 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
 
-    def get_index_settings(self,timeout=120):
+    def get_index_settings(self, timeout=120):
         node = None
         api = self.index_baseUrl + 'settings'
         status, content, header = self._http_request(api, timeout=timeout)
@@ -1314,15 +1314,15 @@ class RestConnection(object):
             raise Exception(content)
         return json.loads(content)
 
-    def get_index_stats(self,timeout=120, index_map = None):
+    def get_index_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'stats'
         status, content, header = self._http_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
-            index_map = RestParser().parse_index_stats_response(json_parsed, index_map =index_map)
+            index_map = RestParser().parse_index_stats_response(json_parsed, index_map=index_map)
         return index_map
 
-    #returns node data for this host
+    # returns node data for this host
     def get_nodes_self(self, timeout=120):
         node = None
         api = self.baseUrl + 'nodes/self'
@@ -1339,9 +1339,9 @@ class RestConnection(object):
         json_parsed = json.loads(content)
         if status:
             for key in json_parsed:
-                #each key contain node info
+                # each key contain node info
                 value = json_parsed[key]
-                #get otp,get status
+                # get otp,get status
                 node = OtpNode(id=value['otpNode'],
                                status=value['status'])
                 if node.ip == '127.0.0.1':
@@ -1408,7 +1408,7 @@ class RestConnection(object):
         return version
 
     def get_buckets(self):
-        #get all the buckets
+        # get all the buckets
         buckets = []
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets?basic_stats=true')
         status, content, header = self._http_request(api)
@@ -1598,7 +1598,7 @@ class RestConnection(object):
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.urlencode({})
 
-        #this only works for default bucket ?
+        # this only works for default bucket ?
         if bucket == 'default':
             params = urllib.urlencode({'name': bucket,
                                        'authType': 'sasl',
@@ -1697,7 +1697,7 @@ class RestConnection(object):
         log.info("bucket %s updated" % bucket)
         return status
 
-    #return AutoFailoverSettings
+    # return AutoFailoverSettings
     def get_autofailover_settings(self):
         settings = None
         api = self.baseUrl + 'settings/autoFailover'
@@ -2164,7 +2164,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
-    #Change password for readonly user
+    # Change password for readonly user
     def changePass_ro_user(self, username, password):
         api = self.baseUrl + 'settings/readOnlyUser'
         params = urllib.urlencode({'username' : username, 'password' : password})
@@ -2704,7 +2704,7 @@ class MembaseServerVersion:
         self.componentsVersion = componentsVersion
 
 
-#this class will also contain more node related info
+# this class will also contain more node related info
 class OtpNode(object):
     def __init__(self, id='', status=''):
         self.id = id
@@ -2712,8 +2712,8 @@ class OtpNode(object):
         self.replication = ''
         self.port = 8091
         self.gracefulFailoverPossible = 'true'
-        #extract ns ip from the otpNode string
-        #its normally ns_1@10.20.30.40
+        # extract ns ip from the otpNode string
+        # its normally ns_1@10.20.30.40
         if id.find('@') >= 0:
             self.ip = id[id.index('@') + 1:]
         self.status = status
@@ -2727,11 +2727,11 @@ class NodeInfo(object):
 
 class NodeDataStorage(object):
     def __init__(self):
-        self.type = ''  #hdd or ssd
+        self.type = ''  # hdd or ssd
         self.path = ''
         self.index_path = ''
         self.quotaMb = ''
-        self.state = ''  #ok
+        self.state = ''  # ok
 
     def __str__(self):
         return '{0}'.format({'type': self.type,
@@ -2837,7 +2837,7 @@ class vBucket(object):
 
 
 class RestParser(object):
-    def parse_index_stats_response(self, parsed, index_map = None):
+    def parse_index_stats_response(self, parsed, index_map=None):
         if index_map == None:
             index_map = {}
         for key in parsed.keys():
@@ -2887,7 +2887,7 @@ class RestParser(object):
         if 'availableStorage' in parsed:
             availableStorage = parsed['availableStorage']
             for key in availableStorage:
-                #let's assume there is only one disk in each noce
+                # let's assume there is only one disk in each noce
                 dict_parsed = parsed['availableStorage']
                 if 'path' in dict_parsed and 'sizeKBytes' in dict_parsed and 'usagePercent' in dict_parsed:
                     diskStorage = NodeDiskStorage()
@@ -2939,13 +2939,13 @@ class RestParser(object):
             bucket.servers.extend(serverList)
             if "numReplicas" in vBucketServerMap:
                 bucket.numReplicas = vBucketServerMap["numReplicas"]
-            #vBucketMapForward
+            # vBucketMapForward
             if 'vBucketMapForward' in vBucketServerMap:
-                #let's gather the forward map
+                # let's gather the forward map
                 vBucketMapForward = vBucketServerMap['vBucketMapForward']
                 counter = 0
                 for vbucket in vBucketMapForward:
-                    #there will be n number of replicas
+                    # there will be n number of replicas
                     vbucketInfo = vBucket()
                     vbucketInfo.master = serverList[vbucket[0]]
                     if vbucket:
@@ -2958,7 +2958,7 @@ class RestParser(object):
             vBucketMap = vBucketServerMap['vBucketMap']
             counter = 0
             for vbucket in vBucketMap:
-                #there will be n number of replicas
+                # there will be n number of replicas
                 vbucketInfo = vBucket()
                 vbucketInfo.master = serverList[vbucket[0]]
                 if vbucket:
@@ -2968,12 +2968,12 @@ class RestParser(object):
                 vbucketInfo.id = counter
                 counter += 1
                 bucket.vbuckets.append(vbucketInfo)
-                #now go through each vbucket and populate the info
-            #who is master , who is replica
+                # now go through each vbucket and populate the info
+            # who is master , who is replica
         # get the 'storageTotals'
         log.debug('read {0} vbuckets'.format(len(bucket.vbuckets)))
         stats = parsed['basicStats']
-        #vBucketServerMap
+        # vBucketServerMap
         bucketStats = BucketStats()
         log.debug('stats:{0}'.format(stats))
         bucketStats.opsPerSec = stats['opsPerSec']
