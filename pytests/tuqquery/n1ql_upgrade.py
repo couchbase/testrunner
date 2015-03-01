@@ -35,7 +35,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         for upgrade_thread in upgrade_threads:
             upgrade_thread.join()
         out = self._start_command_line_query(self.master)
-        self.assertTrue(out.find('ERROR') != -1, 'N1ql started')
+        self.assertFalse(out[0], 'N1ql started')
 
     def test_upgrade(self):
         method_name = self.input.param('to_run', 'test_any')
