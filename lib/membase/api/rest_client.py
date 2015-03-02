@@ -861,8 +861,8 @@ class RestConnection(object):
         log.info(msg)
         api = self.baseUrl + 'pools/default/remoteClusters/{0}'.format(urllib.quote(name))
         params = urllib.urlencode({})
-        status, content, header = self._http_request(api, 'DELETE', params)
-        # sample response : "ok"
+        status, content, header = self._http_request(api, 'DELETE', params, timeout=10000)
+        #sample response : "ok"
         if not status:
             log.error("failed to remove remote cluster: status:{0},content:{1}".format(status, content))
             raise Exception("remoteCluster API 'remove cluster' failed")
@@ -901,6 +901,9 @@ class RestConnection(object):
         replications = []
         content = self.ns_server_tasks()
         for item in content:
+            if not isinstance(item, dict):
+                log.error("Unexpected error while retrieving pools/default/tasks : {0}".format(content))
+                raise Exception("Unexpected error while retrieving pools/default/tasks : {0}".format(content))
             if item["type"] == "xdcr":
                 replications.append(item)
         return replications
