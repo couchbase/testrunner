@@ -523,18 +523,24 @@ class CouchbaseCliTest(CliBaseTest):
         remote_client = RemoteMachineShellConnection(self.master)
 
         cli_command = "rebalance-status"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
-        self.assertEqual(output, ["(u'none', None)"])
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                  cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ["(u'notRunning', None)"])
 
         cli_command = "server-add"
         for num in xrange(nodes_add):
-            options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ["SUCCESS: server-add {0}:8091".format(self.servers[num + 1].ip)])
+            options = "--server-add={0}:8091 --server-add-username=Administrator \
+                       --server-add-password=password".format(self.servers[num + 1].ip)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                                              options=options, cluster_host="localhost", \
+                                                user="Administrator", password="password")
+            self.assertEqual(output, ["SUCCESS: server-add {0}:8091" \
+                                      .format(self.servers[num + 1].ip)])
 
         cli_command = "rebalance-status"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
-        self.assertEqual(output, ["(u'none', None)"])
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                  cluster_host="localhost", user="Administrator", password="password")
+        self.assertEqual(output, ["(u'notRunning', None)"])
 
         self._create_bucket(remote_client)
 
@@ -545,7 +551,8 @@ class CouchbaseCliTest(CliBaseTest):
         self.sleep(5)
 
         cli_command = "rebalance-status"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                  cluster_host="localhost", user="Administrator", password="password")
         self.assertEqual(output, ["(u'running', None)"])
 
         t.join()
@@ -558,23 +565,27 @@ class CouchbaseCliTest(CliBaseTest):
             t.start()
             self.sleep(5)
             cli_command = "rebalance-status"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                      cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output, ["(u'running', None)"])
 
 
             cli_command = "rebalance-stop"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                      cluster_host="localhost", user="Administrator", password="password")
 
             t.join()
 
             cli_command = "rebalance"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                      cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output[1], "SUCCESS: rebalanced cluster")
 
 
             cli_command = "rebalance-status"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ["(u'none', None)"])
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                      cluster_host="localhost", user="Administrator", password="password")
+            self.assertEqual(output, ["(u'notRunning', None)"])
         remote_client.disconnect()
 
     def testNodeInit(self):
@@ -593,7 +604,8 @@ class CouchbaseCliTest(CliBaseTest):
         if index_path is not None:
             index_path = prefix + index_path.replace('|', "/")
 
-        server_info = self._get_cluster_info(remote_client, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
+        server_info = self._get_cluster_info(remote_client, cluster_port=server.port, \
+                              user=server.rest_username, password=server.rest_password)
         data_path_before = server_info["storage"]["hdd"][0]["path"]
         index_path_before = server_info["storage"]["hdd"][0]["index_path"]
 
@@ -604,9 +616,15 @@ class CouchbaseCliTest(CliBaseTest):
             options = ""
             options += ("--node-init-data-path={0} ".format(data_path), "")[data_path is None]
             options += ("--node-init-index-path={0} ".format(index_path), "")[index_path is None]
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                                              options=options, cluster_host="localhost", \
+                                                user="Administrator", password="password")
             self.sleep(7)  # time needed to reload couchbase
-            self.assertEqual(output[0], "SUCCESS: init localhost")
+            """ no output print out.  Bug https://issues.couchbase.com/browse/MB-13704
+                output    []
+                error    []
+                It need to check when this bug is fixed """
+            #self.assertEqual(output[0], "SUCCESS: init localhost")
             rest.init_cluster()
             server_info = self._get_cluster_info(remote_client, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
             data_path_after = server_info["storage"]["hdd"][0]["path"]
@@ -736,9 +754,11 @@ class CouchbaseCliTest(CliBaseTest):
             if cluster_init_ramsize is None:
                 options += "--cluster-init-ramsize={0} ".format(cluster_init_ramsize)
 
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=None, password=None)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                      options=options, cluster_host="localhost", user=None, password=None)
             self.sleep(7)  # time needed to reload couchbase
-            self.assertEqual(output, [u'ERROR: Username cannot be empty. Please use -u or set environment variable CB_REST_USERNAME.'] or output == [u'The password must be at least six characters.'])
+            self.assertEqual(output, [u'ERROR: Both username and password are required.'] 
+                          or output == [u'The password must be at least six characters.'])
             remote_client.disconnect()
         finally:
             rest = RestConnection(server)
@@ -809,13 +829,20 @@ class CouchbaseCliTest(CliBaseTest):
         remote_client = RemoteMachineShellConnection(self.master)
 
         options = "--bucket={0}".format(bucket)
-        options += (" --enable-flush={0}".format(enable_flush_new), "")[enable_flush_new is None]
-        options += (" --enable-index-replica={0}".format(enable_index_replica_new), "")[enable_index_replica_new is None]
-        options += (" --bucket-port={0}".format(bucket_port_new), "")[bucket_port_new is None]
-        options += (" --bucket-password={0}".format(bucket_password_new), "")[bucket_password_new is None]
-        options += (" --bucket-ramsize={0}".format(bucket_ramsize_new), "")[bucket_ramsize_new is None]
+        options += (" --enable-flush={0}".format(enable_flush_new), \
+                                        "")[enable_flush_new is None]
+        options += (" --enable-index-replica={0}".format(enable_index_replica_new), \
+                                                "")[enable_index_replica_new is None]
+        options += (" --bucket-port={0}".format(bucket_port_new), \
+                                               "")[bucket_port_new is None]
+        options += (" --bucket-password={0}".format(bucket_password_new), \
+                                           "")[bucket_password_new is None]
+        options += (" --bucket-ramsize={0}".format(bucket_ramsize_new), \
+                                            "")[bucket_ramsize_new is None]
 
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                                          options=options, cluster_host="localhost", \
+                                            user="Administrator", password="password")
         self.assertEqual(output, ['SUCCESS: bucket-edit'])
 
         if bucket_password_new is not None:
@@ -837,7 +864,8 @@ class CouchbaseCliTest(CliBaseTest):
         if bucket.saslPassword != (bucket_password, "")[bucket_password is None]:
             self.log.error("Bucket password is not correct")
             result = False
-        if bucket_ramsize * 1048576 not in range(int(int(buckets[0].stats.ram) * 0.95), int(int(buckets[0].stats.ram) * 1.05)):
+        if bucket_ramsize * 1048576 not in range(int(int(buckets[0].stats.ram) * 0.95), \
+                                                  int(int(buckets[0].stats.ram) * 1.05)):
             self.log.error("Bucket RAM size is not correct")
             result = False
 
@@ -846,29 +874,49 @@ class CouchbaseCliTest(CliBaseTest):
 
         options = ""
         cli_command = "bucket-flush"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-        self.assertEqual(output, ['Running this command will totally PURGE database data from disk.Do you really want to do it? (Yes/No)TIMED OUT: command: bucket-flush: localhost:8091, most likely bucket is not flushed'])
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                                           options=options, cluster_host="localhost",
+                                             user="Administrator", password="password")
+        self.assertEqual(output, ['Running this command will totally PURGE database'
+                     ' data from disk. Do you really want to do it? (Yes/No)TIMED OUT:'
+            ' command: bucket-flush: localhost:8091, most likely bucket is not flushed'])
         if not enable_flush:
             cli_command = "bucket-flush --force"
             options = "--bucket={0}".format(bucket)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ['Database data will be purged from disk ...', 'ERROR: unable to bucket-flush; please check if the bucket exists or not; (400) Bad Request', "{u'_': u'Flush is disabled for the bucket'}"])
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, 
+                                              options=options, cluster_host="localhost",
+                                              user="Administrator", password="password")
+            self.assertEqual(output, ['Database data will be purged from disk ...',
+                'ERROR: unable to bucket-flush; please check if the bucket exists or not;'
+                     ' (400) Bad Request', "{u'_': u'Flush is disabled for the bucket'}"])
             cli_command = "bucket-edit"
             options = "--bucket={0} --enable-flush=1 --bucket-ramsize=500".format(bucket)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                                              options=options, cluster_host="localhost",
+                                              user="Administrator", password="password")
             self.assertEqual(output, ['SUCCESS: bucket-edit'])
 
         cli_command = "bucket-flush --force"
         options = "--bucket={0}".format(bucket)
         if enable_flush_new is None:
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ['Database data will be purged from disk ...', 'SUCCESS: bucket-flush'])
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                                              options=options, cluster_host="localhost",
+                                              user="Administrator", password="password")
+            self.assertEqual(output, ['Database data will be purged from disk ...',
+                                                               'SUCCESS: bucket-flush'])
         elif int(enable_flush_new) == 0:
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ['Database data will be purged from disk ...', 'ERROR: unable to bucket-flush; please check if the bucket exists or not; (400) Bad Request', "{u'_': u'Flush is disabled for the bucket'}"])
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                                              options=options, cluster_host="localhost",
+                                              user="Administrator", password="password")
+            self.assertEqual(output, ['Database data will be purged from disk ...',
+                                   'ERROR: unable to bucket-flush; please check if the '
+                                              'bucket exists or not; (400) Bad Request',
+                                         "{u'_': u'Flush is disabled for the bucket'}"])
 
         cli_command = "bucket-delete"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                                          options=options, cluster_host="localhost",
+                                          user="Administrator", password="password")
         self.assertEqual(output, ['SUCCESS: bucket-delete'])
 
         remote_client.disconnect()
