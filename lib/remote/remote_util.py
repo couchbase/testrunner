@@ -760,7 +760,7 @@ class RemoteMachineShellConnection:
 
     def find_windows_info(self):
         found = self.find_file("/cygdrive/c/tmp", "windows_info.txt")
-        if isinstance(found, str):
+        if isinstance(found, basestring):
             sftp = self._ssh_client.open_sftp()
             try:
                 f = sftp.open(found)
