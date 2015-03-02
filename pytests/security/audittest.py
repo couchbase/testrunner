@@ -35,7 +35,7 @@ class auditTest(BaseTestCase):
 
     #Wrapper around auditmain
     def checkConfig(self, eventID, host, expectedResults):
-        Audit = audit(eventID=self.eventID, host=self.master)
+        Audit = audit(eventID=self.eventID, host=host)
         fieldVerification, valueVerification = Audit.validateEvents(expectedResults)
         self.assertTrue(fieldVerification, "One of the fields is not matching")
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
@@ -48,41 +48,42 @@ class auditTest(BaseTestCase):
         rest = RestConnection(self.master)
 
         if (ops in ['create']):
-            expectedResults = {'name':'TestBucket', 'ram_quota':2147483648, 'num_replicas':1,
+            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':2147483648, 'num_replicas':1,
                                'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'' }
-            rest.create_bucket(expectedResults['name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
+            rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                '11211', 'membase', 0, expectedResults['num_threads'], expectedResults['flush_enabled'], 'valueOnly')
 
         elif (ops in ['update']):
-            expectedResults = {'name':'TestBucket', 'ram_quota':2147483648, 'num_replicas':1, 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
-                               'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":'false', "num_threads":3, "source":source, \
+            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':2147483648, 'num_replicas':1, 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
+                               'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":'true', "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457 , 'sessionid':''}
-            rest.create_bucket(expectedResults['name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], '11211', 'membase', \
+            rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], '11211', 'membase', \
                                0, expectedResults['num_threads'], expectedResults['flush_enabled'], 'valueOnly')
-            expectedResults = {'name':'TestBucket', 'ram_quota':536870912, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
-                               'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":True, "num_threads":3, "source":source, \
+            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':536870912, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
+                               'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":'false', "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457}
-            rest.change_bucket_props(expectedResults['name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
+            rest.change_bucket_props(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                      '11211', 1, expectedResults['flush_enabled'])
 
         elif (ops in ['delete']):
-            expectedResults = {'name':'TestBucket', 'ram_quota':536870912, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
+            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':536870912, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":'false', "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457}
-            rest.create_bucket(expectedResults['name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
+            rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                '11211', 'membase', 1, expectedResults['num_threads'], expectedResults['flush_enabled'], 'valueOnly')
-            rest.delete_bucket(expectedResults['name'])
+            rest.delete_bucket(expectedResults['bucket_name'])
 
         elif (ops in ['flush']):
-            expectedResults = {'name':'TestBucket', 'ram_quota':512, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
+            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':512, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":'true', "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457}
-            rest.create_bucket(expectedResults['name'], expectedResults['ram_quota'], expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
+            rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'], expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                '11211', 'membase', 1, expectedResults['num_threads'], 1, 'valueOnly')
-            rest.flush_bucket(expectedResults['name'])
+            self.sleep(10)
+            rest.flush_bucket(expectedResults['bucket_name'])
 
         self.checkConfig(self.eventID, self.master, expectedResults)
 
@@ -95,12 +96,13 @@ class auditTest(BaseTestCase):
 
         if (ops in ['addNode']):
             self.cluster.rebalance(self.servers, servs_inout, [])
-            expectedResults = {"services":"[u'kv']", 'port':8091, 'hostname':servs_inout[0].ip,
+            print servs_inout
+            print servs_inout[0].ip
+            expectedResults = {"services":['kv'], 'port':8091, 'hostname':servs_inout[0].ip,
                                'groupUUID':"0", 'node':'ns_1@' + servs_inout[0].ip, 'source':source,
                                'user':self.master.rest_username, "ip":self.ipAddress, "remote:port":57457}
 
         if (ops in ['removeNode']):
-            self.cluster.rebalance(self.servers, [], servs_inout)
             expectedResults = {'node':'ns_1@' + servs_inout[0].ip, 'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
 
         if (ops in ['rebalanceIn']):
@@ -166,7 +168,7 @@ class auditTest(BaseTestCase):
             expectedResults = {'source':source, "user":user, 'ip':self.ipAddress, 'port':1234}
             rest.disable_alerts()
 
-        elif (ops == 'modifyCompactionSettings'):
+        elif (ops == 'modifyCompactionSettingsPercentage'):
             expectedResults = {"parallel_db_and_view_compaction":False,
                                "database_fragmentation_threshold:percentage":50,
                                "view_fragmentation_threshold:percentage":50,
@@ -179,41 +181,89 @@ class auditTest(BaseTestCase):
                                'port':1234}
             rest.set_auto_compaction(dbFragmentThresholdPercentage=50, viewFragmntThresholdPercentage=50)
 
+        elif (ops == 'modifyCompactionSettingsPercentSize'):
+            expectedResults = {"parallel_db_and_view_compaction":False,
+                               "database_fragmentation_threshold:percentage":50,
+                               "database_fragmentation_threshold:size":10,
+                               "view_fragmentation_threshold:percentage":50,
+                               "view_fragmentation_threshold:size":10,
+                               "purge_interval":3,
+                               "source":"ns_server",
+                               "user":"Administrator",
+                               'source':source,
+                               "user":user,
+                               'ip':self.ipAddress,
+                               'port':1234}
+            rest.set_auto_compaction(dbFragmentThresholdPercentage=50,
+                                     viewFragmntThresholdPercentage=50,
+                                     dbFragmentThreshold=10,
+                                     viewFragmntThreshold=10)
+
+        elif (ops == 'modifyCompactionSettingsTime'):
+            expectedResults = {"parallel_db_and_view_compaction":False,
+                               "database_fragmentation_threshold:percentage":50,
+                               "database_fragmentation_threshold:size":10,
+                               "view_fragmentation_threshold:percentage":50,
+                               "view_fragmentation_threshold:size":10,
+                               "allowed_time_period:abort_outside":True,
+                               "allowed_time_period:to_minute":15,
+                               "allowed_time_period:from_minute":12,
+                               "allowed_time_period:to_hour":1,
+                               "allowed_time_period:from_hour":1,
+                               "purge_interval":3,
+                               "source":"ns_server",
+                               "user":"Administrator",
+                               'source':source,
+                               "user":user,
+                               'ip':self.ipAddress,
+                               'port':1234,
+                               }
+            rest.set_auto_compaction(dbFragmentThresholdPercentage=50,
+                                     viewFragmntThresholdPercentage=50,
+                                     dbFragmentThreshold=10,
+                                     viewFragmntThreshold=10,
+                                     allowedTimePeriodFromHour=1,
+                                     allowedTimePeriodFromMin=12,
+                                     allowedTimePeriodToHour=1,
+                                     allowedTimePeriodToMin=15,
+                                     allowedTimePeriodAbort='true')
+
         elif (ops == "AddGroup"):
-            expectedResults = {'name':'add group', 'source':source, 'user':user, 'ip':self.ipAddress, 'port':1234}
-            rest.add_zone(expectedResults['name'])
-            tempStr = rest.get_zone_uri()[expectedResults['name']]
+            expectedResults = {'group_name':'add group', 'source':source, 'user':user, 'ip':self.ipAddress, 'port':1234}
+            rest.add_zone(expectedResults['group_name'])
+            tempStr = rest.get_zone_uri()[expectedResults['group_name']]
             tempStr = (tempStr.split("/"))[4]
             expectedResults['uuid'] = tempStr
 
         elif (ops == "UpdateGroup"):
-            expectedResults = {'name':'upGroup', 'source':source, 'user':user, 'ip':self.ipAddress, 'port':1234, 'nodes':[]}
-            rest.add_zone(expectedResults['name'])
-            rest.rename_zone(expectedResults['name'], 'update group')
-            expectedResults['name'] = 'update group'
-            tempStr = rest.get_zone_uri()[expectedResults['name']]
+            expectedResults = {'group_name':'upGroup', 'source':source, 'user':user, 'ip':self.ipAddress, 'port':1234, 'nodes':[]}
+            rest.add_zone(expectedResults['group_name'])
+            rest.rename_zone(expectedResults['group_name'], 'update group')
+            expectedResults['group_name'] = 'update group'
+            tempStr = rest.get_zone_uri()[expectedResults['group_name']]
             tempStr = (tempStr.split("/"))[4]
             expectedResults['uuid'] = tempStr
 
         elif (ops == "UpdateGroupAddNodes"):
-            sourceGroup = "sourceGroup"
+            sourceGroup = "Group 1"
             destGroup = 'destGroup'
-            expectedResults = {'name':destGroup, 'source':source, 'user':user, 'ip':self.ipAddress, 'port':1234, 'nodes':self.master.ip, 'port':1234}
-            rest.add_zone(sourceGroup)
+            expectedResults = {'group_name':destGroup, 'source':source, 'user':user, 'ip':self.ipAddress, 'port':1234, 'nodes':['ns_1@' + self.master.ip], 'port':1234}
+            #rest.add_zone(sourceGroup)
             rest.add_zone(destGroup)
+            self.sleep(20)
             rest.shuffle_nodes_in_zones([self.master.ip], sourceGroup, destGroup)
-            tempStr = rest.get_zone_uri()[expectedResults['name']]
+            tempStr = rest.get_zone_uri()[expectedResults['group_name']]
             tempStr = (tempStr.split("/"))[4]
             expectedResults['uuid'] = tempStr
 
 
         elif (ops == "DeleteGroup"):
-            expectedResults = {'name':'delete group', 'source':source, 'user':user, 'ip':self.ipAddress, 'port':1234}
-            rest.add_zone(expectedResults['name'])
-            tempStr = rest.get_zone_uri()[expectedResults['name']]
+            expectedResults = {'group_name':'delete group', 'source':source, 'user':user, 'ip':self.ipAddress, 'port':1234}
+            rest.add_zone(expectedResults['group_name'])
+            tempStr = rest.get_zone_uri()[expectedResults['group_name']]
             tempStr = (tempStr.split("/"))[4]
             expectedResults['uuid'] = tempStr
-            rest.delete_zone(expectedResults['name'])
+            rest.delete_zone(expectedResults['group_name'])
 
         elif (ops == "regenCer"):
             expectedResults = {'source':source, 'user':user, 'ip':self.ipAddress, 'port':1234}
@@ -287,14 +337,14 @@ class auditTest(BaseTestCase):
             user = server.rest_username
             rest = RestConnection(server)
             if (ops in ['create']):
-                expectedResults = {'name':'TestBucket' + server.ip, 'ram_quota':536870912, 'num_replicas':1,
+                expectedResults = {'bucket_name':'TestBucket' + server.ip, 'ram_quota':536870912, 'num_replicas':1,
                                    'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                    'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                     "flush_enabled":False, "num_threads":3, "source":source, \
                                    "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'' }
-                rest.create_bucket(expectedResults['name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
+                rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                    '11211', 'membase', 0, expectedResults['num_threads'], expectedResults['flush_enabled'], 'valueOnly')
-
+                self.log.info ("value of server is {0}".format(server))
                 self.checkConfig(self.eventID, server, expectedResults)
 
     def test_createBucketClusterNodeOut(self):
@@ -310,24 +360,22 @@ class auditTest(BaseTestCase):
 
         origState = auditFirstNode.getAuditStatus()
         origLogPath = auditFirstNode.getAuditLogPath()
-        origArchivePath = auditFirstNode.getArchivePath()
         origRotateInterval = auditFirstNode.getAuditRotateInterval()
 
         #Remove the node from cluster & check if there are any change to cluster
         self.cluster.rebalance(self.servers, [], self.servers[1:nodesOut + 1])
         self.assertEqual(auditFirstNode.getAuditStatus(), origState, "Issues with audit state after removing node")
         self.assertEqual(auditFirstNode.getAuditLogPath(), origLogPath, "Issues with audit log path after removing node")
-        self.assertEqual(auditFirstNode.getArchivePath(), origArchivePath, "Issues with audit archive path after removing node")
         self.assertEqual(auditFirstNode.getAuditRotateInterval(), origRotateInterval, "Issues with audit rotate interval after removing node")
 
         restFirstNode = RestConnection(firstNode)
         if (ops in ['create']):
-            expectedResults = {'name':'TestBucketRemNode', 'ram_quota':536870912, 'num_replicas':0,
+            expectedResults = {'bucket_name':'TestBucketRemNode', 'ram_quota':536870912, 'num_replicas':0,
                                 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                 'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":source, \
                                 "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'' }
-            restFirstNode.create_bucket(expectedResults['name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
+            restFirstNode.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                 '11211', 'membase', 0, expectedResults['num_threads'], expectedResults['flush_enabled'], 'valueOnly')
 
             self.checkConfig(self.eventID, firstNode, expectedResults)
@@ -336,19 +384,18 @@ class auditTest(BaseTestCase):
         self.cluster.rebalance(self.servers, self.servers[1:nodesOut + 1], [])
         self.assertEqual(auditSecondNode.getAuditStatus(), origState, "Issues with audit state after adding node")
         self.assertEqual(auditSecondNode.getAuditLogPath(), origLogPath, "Issues with audit log path after adding node")
-        self.assertEqual(auditSecondNode.getArchivePath(), origArchivePath, "Issues with audit archive path after adding node")
         self.assertEqual(auditSecondNode.getAuditRotateInterval(), origRotateInterval, "Issues with audit rotate interval after adding node")
 
         for server in self.servers:
             user = server.rest_username
             rest = RestConnection(server)
             if (ops in ['create']):
-                expectedResults = {'name':'TestBucket' + server.ip, 'ram_quota':536870912, 'num_replicas':1,
+                expectedResults = {'bucket_name':'TestBucket' + server.ip, 'ram_quota':536870912, 'num_replicas':1,
                                    'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                    'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                     "flush_enabled":False, "num_threads":3, "source":source, \
                                    "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'' }
-                rest.create_bucket(expectedResults['name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
+                rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                    '11211', 'membase', 0, expectedResults['num_threads'], expectedResults['flush_enabled'], 'valueOnly')
 
-                self.checkConfig(self.eventID, secondNode, expectedResults)
+                self.checkConfig(self.eventID, server, expectedResults)

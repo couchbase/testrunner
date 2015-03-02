@@ -2682,12 +2682,11 @@ class RestConnection(object):
         [auditd_enabled]:<enabled disabled status for auditd>
         [rotate_interval]:<log rotate interval in seconds>
     '''
-    def setAuditSettings(self, enabled='true', rotateInterval=86400, archivePath='/opt/couchbase/var/lib/couchbase/logs', logPath='/opt/couchbase/var/lib/couchbase/logs'):
+    def setAuditSettings(self, enabled='true', rotateInterval=86400, logPath='/opt/couchbase/var/lib/couchbase/logs'):
         api = self.baseUrl + "settings/audit"
         params = urllib.urlencode({
                                     'rotate_interval':'{0}'.format(rotateInterval),
                                     'auditd_enabled':'{0}'.format(enabled),
-                                    'archive_path':'{0}'.format(archivePath),
                                     'log_path':'{0}'.format(logPath)
                                     })
         status, content, header = self._http_request(api, 'POST', params)

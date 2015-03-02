@@ -16,8 +16,6 @@ from security.auditmain import audit
 
 class auditcheckconfig(BaseTestCase):
     AUDITCONFIGRELOAD = 4096
-    AUDITCONFIGEDISABLED = 4098
-    AUDITCONFIGENABLED = 4097
     AUDITSHUTDOWN = 4097
 
     def setUp(self):
@@ -93,17 +91,6 @@ class auditcheckconfig(BaseTestCase):
             tempStatus = False
         self.assertFalse(tempStatus, "Audit is not disabled by default")
 
-        #Validate that initial configuration is loaded with audit false
-        expectedResults = {"archive_path":auditIns.getArchivePath(), "auditd_enabled":auditIns.getAuditStatus(),
-                           "descriptors_path":auditIns.getAuditConfigElement('descriptors_path'),
-                           "log_path":auditIns.getAuditLogPath(), "source":"internal",
-                           "user":"couchbase", "rotate_interval":86400, "version":1, 'hostname':self.getHostName(self.master)}
-        self.checkConfig(self.AUDITCONFIGRELOAD, self.master, expectedResults)
-
-        #Validate event for event disabled for default
-        expectedResults = {"source":"internal", "user":"couchbase"}
-        self.checkConfig(self.AUDITCONFIGEDISABLED, self.master, expectedResults)
-
     '''
     Check enabled disable and reload of config
     '''
@@ -124,9 +111,9 @@ class auditcheckconfig(BaseTestCase):
                 auditIns.setAuditEnable('true')
 
         auditIns = audit(host=self.master)
-        expectedResults = {"archive_path":auditIns.getArchivePath(), "auditd_enabled":auditIns.getAuditStatus(),
+        expectedResults = {"auditd_enabled":auditIns.getAuditStatus(),
                            "descriptors_path":auditIns.getAuditConfigElement('descriptors_path'),
-                           "log_path":auditIns.getAuditLogPath(), "source":"internal",
+                           "log_path":(auditIns.getAuditLogPath())[:-1], "source":"internal",
                            "user":"couchbase", "rotate_interval":86400, "version":1, 'hostname':self.getHostName(self.master)}
         self.checkConfig(self.AUDITCONFIGRELOAD, self.master, expectedResults)
 
@@ -138,15 +125,6 @@ class auditcheckconfig(BaseTestCase):
         status, content = rest.setAuditSettings(logPath=newPath)
         self.assertFalse(status, "Audit is able to set invalid path")
         self.assertEqual(content['errors']['log_path'], 'The value of log_path must be a valid directory', 'No error or error changed')
-
-    #Test error on setting on Invalid archive path
-    def test_invalidArchivePath(self):
-        auditIns = audit(host=self.master)
-        newPath = auditIns.getArchivePath() + 'test'
-        rest = RestConnection(self.master)
-        status, content = rest.setAuditSettings(archivePath=newPath)
-        self.assertFalse(status, "Audit is able to set invalid path")
-        self.assertEqual(content['errors']['archive_path'], 'The value of archive_path must be a valid directory', 'No error or error changed')
 
     #Test error on setting of Invalid log file in cluster
     def test_invalidLogPathCluster(self):
@@ -166,7 +144,7 @@ class auditcheckconfig(BaseTestCase):
 
         #Create folders on CB server machines and change permission
         try:
-            newPath = auditMaster.getAuditLogPath() + "/folder"
+            newPath = auditMaster.getAuditLogPath() + "folder"
 
             for server in self.servers:
                 shell = RemoteMachineShellConnection(server)
@@ -195,9 +173,7 @@ class auditcheckconfig(BaseTestCase):
                 finally:
                     shell.disconnect()
 
-                if (result):
-                    self.checkConfig(8220, server, expectedResults)
-                else:
+                if (result is False):
                     self.assertTrue(result, 'Issue with file getting create in new directory')
 
         finally:
@@ -206,9 +182,9 @@ class auditcheckconfig(BaseTestCase):
     #Check file rollover for different Server operations
     def test_cbServerOps(self):
         ops = self.input.param("ops", None)
-        auditTemp = audit(host=self.master)
+        auditIns = audit(host=self.master)
         #Capture timestamp from first event for filename
-        firstEventTime = self.getTimeStampForFile(auditTemp)
+        firstEventTime = self.getTimeStampForFile(auditIns)
 
         shell = RemoteMachineShellConnection(self.master)
 
@@ -220,7 +196,6 @@ class auditcheckconfig(BaseTestCase):
         #Stop CB Server to check for file roll over and new audit.log
         if (ops == 'shutdown'):
             try:
-                auditIns = audit(self.AUDITSHUTDOWN, host=self.master)
                 result = shell.stop_couchbase()
                 self.sleep(120, 'Waiting for server to shutdown')
             finally:
@@ -231,11 +206,13 @@ class auditcheckconfig(BaseTestCase):
         result = shell.file_exists(auditIns.pathLogFile, audit.AUDITLOGFILENAME)
         self.assertTrue(result, "Audit.log is not created when memcached server is killed or stopped")
         hostname = shell.execute_command("hostname")
+
         archiveFile = hostname[0][0] + '-' + firstEventTime + "-audit.log"
-        result = shell.file_exists(auditIns.archiveFilePath, archiveFile)
+        self.log.info ("Archive File expected is {0}".format(auditIns.pathLogFile + archiveFile))
+        result = shell.file_exists(auditIns.pathLogFile, archiveFile)
         self.assertTrue(result, "Archive Audit.log is not created when memcached server is killed or stopped")
 
-        archiveFile = auditTemp.currentLogFile + "/" + archiveFile
+        archiveFile = auditIns.currentLogFile + "/" + archiveFile
 
         if (ops == 'shutdown'):
             expectedResult = {"source":"internal", "user":"couchbase", "id":4097, "name":"shutting down audit daemon", "description":"The audit daemon is being shutdown"}
@@ -244,9 +221,12 @@ class auditcheckconfig(BaseTestCase):
             print output
             data = json.loads(output[0][0])
             print data
+            flag = True
             for items in data:
                 if (items == 'timestamp'):
-                    flag = auditIns.validateTimeStamp(data['timestamp'])
+                    tempFlag = auditIns.validateTimeStamp(data['timestamp'])
+                    if (tempFlag is False):
+                        flag = False
                 else:
                     if (isinstance(data[items], dict)):
                         for seclevel in data[items]:
@@ -264,8 +244,7 @@ class auditcheckconfig(BaseTestCase):
                             flag = False
             self.assertTrue(flag, "Shutdown event is not printed")
 
-        expectedResults = {"archive_path":auditIns.getAuditConfigElement('archive_path'),
-                           "auditd_enabled":auditIns.getAuditConfigElement('auditd_enabled'),
+        expectedResults = {"auditd_enabled":auditIns.getAuditConfigElement('auditd_enabled'),
                            "descriptors_path":auditIns.getAuditConfigElement('descriptors_path'),
                            "log_path":auditIns.getAuditConfigElement('log_path'),
                            'source':'internal', 'user':'couchbase',
@@ -286,81 +265,6 @@ class auditcheckconfig(BaseTestCase):
         status = auditIns.checkLastEvent()
         self.assertFalse(status, "Event still getting printed after getting disabled")
 
-    #Check change to archive_log and checking for file roll over
-    def test_ArchiveLogChangePath(self):
-        auditIns = audit(host=self.master)
-        origArchivePath = auditIns.getArchivePath()
-        newPath = origArchivePath + "/archiveFolder"
-
-        try:
-            shell = RemoteMachineShellConnection(self.servers[0])
-            try:
-                shell.create_directory(newPath)
-                command = 'chown couchbase:couchbase ' + newPath
-                shell.execute_command(command)
-            finally:
-                shell.disconnect()
-
-            auditIns.setAuditArchivePath(newPath)
-            shell = RemoteMachineShellConnection(self.master)
-
-            try:
-                firstEventTime = self.getTimeStampForFile(auditIns)
-                result = shell.kill_memcached()
-                self.sleep(10)
-                result = shell.file_exists(auditIns.pathLogFile, audit.AUDITLOGFILENAME)
-                self.assertTrue(result, "Audit.log is not created when memcached server is killed")
-                hostname = shell.execute_command("hostname")
-                archiveFile = hostname[0][0] + '-' + firstEventTime + "-audit.log"
-                result = shell.file_exists(newPath, archiveFile)
-                self.assertTrue(result, "Archive Audit.log is not created when memcached server is killed")
-            finally:
-                shell.disconnect()
-
-        finally:
-            auditIns.setAuditArchivePath(origArchivePath)
-
-    #Check change to archive_log in cluster and check on each node in the cluster
-    def test_ArchiveLogChangePathCluster(self):
-        auditMaster = audit(host=self.servers[0])
-        auditSecNode = audit(host=self.servers[1])
-        originalPath = auditMaster.getArchivePath()
-
-        try:
-            newPath = auditMaster.getAuditLogPath() + "/archivefoldercluster"
-
-            for servers in self.servers:
-                shell = RemoteMachineShellConnection(servers)
-                try:
-                    shell.create_directory(newPath)
-                    command = 'chown couchbase:couchbase ' + newPath
-                    shell.execute_command(command)
-                finally:
-                    shell.disconnect()
-
-            source = 'ns_server'
-            user = self.master.rest_username
-
-            auditMaster.setAuditArchivePath(newPath)
-
-            for server in self.servers:
-                shell = RemoteMachineShellConnection(server)
-                try:
-                    tempAudit = audit(host=server)
-                    firstEventTime = self.getTimeStampForFile(tempAudit)
-                    result = shell.kill_memcached()
-                    self.sleep(120)
-                    result = shell.file_exists(auditMaster.pathLogFile, audit.AUDITLOGFILENAME)
-                    self.assertTrue(result, "Audit.log is not created when memcached server is killed")
-                    hostname = shell.execute_command("hostname")
-                    archiveFile = hostname[0][0] + '-' + firstEventTime + "-audit.log"
-                    result = shell.file_exists(newPath, archiveFile)
-                    self.assertTrue(result, "Archive Audit.log is not created when memcached server is killed")
-                finally:
-                    shell.disconnect()
-        finally:
-            auditMaster.setAuditArchivePath(originalPath)
-
     '''Test roll over of audit.log as per rotate interval'''
     def test_rotateInterval(self):
         intervalSec = self.input.param("intervalSec", None)
@@ -379,7 +283,7 @@ class auditcheckconfig(BaseTestCase):
                 hostname = shell.execute_command("hostname")
                 archiveFile = hostname[0][0] + '-' + firstEventTime + "-audit.log"
                 self.log.info ("Archive File Name is {0}".format(archiveFile))
-                result = shell.file_exists(auditIns.archiveFilePath, archiveFile)
+                result = shell.file_exists(auditIns.pathLogFile, archiveFile)
                 self.assertTrue(result, "Archive Audit.log is not created on time interval")
                 self.log.info ("Validation of archive File created is True, Audit archive File is created {0}".format(archiveFile))
                 result = shell.file_exists(auditIns.pathLogFile, auditIns.AUDITLOGFILENAME)
@@ -414,7 +318,7 @@ class auditcheckconfig(BaseTestCase):
                     self.log.info ("print firstEventTime {0}".format(firstEventTime[i]))
                     archiveFile = hostname[0][0] + '-' + firstEventTime[i] + "-audit.log"
                     self.log.info ("Archive File Name is {0}".format(archiveFile))
-                    result = shell.file_exists(auditIns.archiveFilePath, archiveFile)
+                    result = shell.file_exists(auditIns.pathLogFile, archiveFile)
                     self.assertTrue(result, "Archive Audit.log is not created on time interval")
                     self.log.info ("Validation of archive File created is True, Audit archive File is created {0}".format(archiveFile))
                     result = shell.file_exists(auditIns.pathLogFile, auditIns.AUDITLOGFILENAME)
@@ -479,14 +383,14 @@ class auditcheckconfig(BaseTestCase):
         filePath = auditIns.pathLogFile() + auditIns.AUDITLOGFILENAME
         fileSize = int(shell.get_data_file_size(filePath))
         originalFileSize = int (shell.get_data_file_size(filePath))
-        while (number < 19922944):
+        while (number < 20761804):
             for i in range(1, 50):
                 status, content = rest.validateLogin("Administrator", "password", True, getContent=True)
             number = int (shell.get_data_file_size(filePath))
 
         hostname = shell.execute_command("hostname")
         archiveFile = hostname[0][0] + '-' + firstEventTime + "-audit.log"
-        result = shell.file_exists(auditIns.archiveFilePath, archiveFile)
+        result = shell.file_exists(auditIns.pathLogFile, archiveFile)
         self.assertTrue(result, "Archive Audit.log is not created on reaching 20MB threshhold")
 
     def test_clusterEndToEnd(self):
@@ -496,8 +400,8 @@ class auditcheckconfig(BaseTestCase):
             restNode1 = RestConnection(node1)
             rest.append(restNode1)
 
-        auditNodeFirst = audit(host=server[0])
-        auditNodeSec = audit (host=server[1])
+        auditNodeFirst = audit(host=self.servers[0])
+        auditNodeSec = audit (host=self.servers[1])
         origLogPath = auditNodeFirst.getAuditLogPath()
 
         try:
