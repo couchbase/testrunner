@@ -861,12 +861,11 @@ class RestConnection(object):
         log.info(msg)
         api = self.baseUrl + 'pools/default/remoteClusters/{0}'.format(urllib.quote(name))
         params = urllib.urlencode({})
-        status, content, header = self._http_request(api, 'DELETE', params, timeout=10000)
+        status, content, header = self._http_request(api, 'DELETE', params, timeout=60000)
         #sample response : "ok"
         if not status:
             log.error("failed to remove remote cluster: status:{0},content:{1}".format(status, content))
             raise Exception("remoteCluster API 'remove cluster' failed")
-
 
 
     # replicationType:continuous toBucket:default toCluster:two fromBucket:default
