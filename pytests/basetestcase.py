@@ -167,7 +167,8 @@ class BaseTestCase(unittest.TestCase):
                     (str(self.__class__).find('memorysanitytests.MemorySanity') != -1) or \
                     str(self.__class__).find('negativetests.NegativeTests') != -1 or \
                     str(self.__class__).find('warmuptest.WarmUpTests') != -1 or \
-                    str(self.__class__).find('failover.failovertests.FailoverTests') != -1:
+                    str(self.__class__).find('failover.failovertests.FailoverTests') != -1 or \
+                    str(self.__class__).find('observe.observeseqnotests.ObserveSeqNoTests') != -1:
                     self.services = self.get_services(self.servers,self.services_init)
                     # rebalance all nodes into the cluster before each test
                     self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers],
@@ -455,7 +456,6 @@ class BaseTestCase(unittest.TestCase):
                 available_replicas = len(servers) - 1
             elif len(servers) <= self.num_replicas:
                 available_replicas = len(servers) - 1
-
             stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
                                    'vb_replica_curr_items', '==', items * available_replicas))
             stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',

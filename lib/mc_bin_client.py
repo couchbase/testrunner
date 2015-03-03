@@ -15,7 +15,7 @@ import zlib
 
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
-from memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT
+from memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT, INCRDECR_RES_WITH_UUID_AND_SEQNO_FMT, META_CMD_FMT
 from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT, GETL_PKT_FMT
 import memcacheConstants
 
@@ -89,6 +89,7 @@ class MemcachedClient(object):
                 response += data
             else:
                 raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
+
         assert len(response) == MIN_RECV_PACKET
         magic, cmd, keylen, extralen, dtype, errcode, remaining, opaque, cas = \
             struct.unpack(RES_PKT_FMT, response)
@@ -104,7 +105,6 @@ class MemcachedClient(object):
                 remaining -= len(data)
             else:
                 raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
-
         assert (magic in (RES_MAGIC_BYTE, REQ_MAGIC_BYTE)), "Got magic: %d" % magic
         return cmd, errcode, opaque, cas, keylen, extralen, rv
 
@@ -145,7 +145,14 @@ class MemcachedClient(object):
     def __incrdecr(self, cmd, key, amt, init, exp):
         something, cas, val = self._doCmd(cmd, key, '',
             struct.pack(memcacheConstants.INCRDECR_PKT_FMT, amt, init, exp))
-        return struct.unpack(INCRDECR_RES_FMT, val)[0], cas
+        if len(val) == 8:
+           return struct.unpack(INCRDECR_RES_FMT, val)[0], cas
+        elif len(val) == 24:
+           # new format <vbucket uuid> <seqno> <incr/decr value>
+           # for compatibility, putting the uuid and seqno at the end
+           res = struct.unpack(INCRDECR_RES_WITH_UUID_AND_SEQNO_FMT, val)
+           return res[2], cas, res[0], res[1]
+
 
     def incr(self, key, amt=1, init=0, exp=0, vbucket= -1):
         """Increment or create the named counter."""
@@ -161,6 +168,29 @@ class MemcachedClient(object):
         """Set a value in the memcached server."""
         self._set_vbucket(key, vbucket)
         return self._mutate(memcacheConstants.CMD_SET, key, exp, flags, 0, val)
+
+    def set_with_meta(self, key, exp, flags, seqno, cas, val, vbucket= -1):
+        """Set a value in the memcached server."""
+        self._set_vbucket(key, vbucket)
+        return self._doCmd(memcacheConstants.CMD_SET_WITH_META, key, val,
+                   struct.pack(META_CMD_FMT, flags, exp, seqno, cas) )
+
+    def del_with_meta(self, key, exp, flags, seqno, old_cas, new_cas, vbucket= -1):
+        """Set a value in the memcached server."""
+        self._set_vbucket(key, vbucket)
+        return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
+                   struct.pack(META_CMD_FMT, flags, exp, seqno, new_cas), old_cas )
+
+
+
+
+    def hello(self, feature_flag): #, key, exp, flags, val, vbucket= -1):
+        resp = self._doCmd(memcacheConstants.CMD_HELLO, '', struct.pack(">H", feature_flag))
+        result = struct.unpack('>H', resp[2])
+        if result[0] != feature_flag:
+            raise MemcachedError(0, 'Unable to enable the feature {0}'.format( feature_flag))
+
+
 
     def send_set(self, key, exp, flags, val, vbucket= -1):
         """Set a value in the memcached server without handling the response"""
@@ -187,6 +217,29 @@ class MemcachedClient(object):
         persist_time = (cas >> 32) & 0xFFFFFFFF
         persisted = struct.unpack('>B', data[4 + len(key)])[0]
         return opaque, rep_time, persist_time, persisted, cas
+
+
+    def observe_seqno(self, key, vbucket_uuid, vbucket= -1):
+        """Observe a key for persistence and replication."""
+        self._set_vbucket(key, vbucket)
+
+        value = struct.pack('>Q', vbucket_uuid)
+        opaque, cas, data = self._doCmd(memcacheConstants.CMD_OBSERVE_SEQNO, '', value)
+        format_type = struct.unpack('>B', data[0])[0]
+        vbucket_id = struct.unpack('>H', data[1:3])[0]
+        r_vbucket_uuid = struct.unpack('>Q', data[3:11])[0]
+        last_persisted_seq_no = struct.unpack('>Q', data[11:19])[0]
+        current_seqno = struct.unpack('>Q', data[19:27])[0]
+
+        if format_type == 1:
+            old_vbucket_uuid = struct.unpack('>Q', data[27:35])[0]
+            last_seqno_received = struct.unpack('>Q', data[35:43])[0]
+        else:
+            old_vbucket_uuid = None
+            last_seqno_received = None
+
+        return opaque, format_type, vbucket_id, r_vbucket_uuid, last_persisted_seq_no,current_seqno, old_vbucket_uuid ,last_seqno_received
+
 
     def __parseGet(self, data, klen=0):
         flags = struct.unpack(memcacheConstants.GET_RES_FMT, data[-1][:4])[0]
