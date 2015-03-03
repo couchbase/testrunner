@@ -860,8 +860,8 @@ class RestConnection(object):
         msg = "removing remote cluster name:{0}".format(urllib.quote(name))
         log.info(msg)
         api = self.baseUrl + 'pools/default/remoteClusters/{0}'.format(urllib.quote(name))
-        params = urllib.urlencode({})
-        status, content, header = self._http_request(api, 'DELETE', params, timeout=60000)
+        params = urllib.urlencode({'connection_timeout': 60000})
+        status, content, header = self._http_request(api, 'DELETE', params)
         #sample response : "ok"
         if not status:
             log.error("failed to remove remote cluster: status:{0},content:{1}".format(status, content))
