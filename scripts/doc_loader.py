@@ -7,6 +7,7 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import Bucket
+from couchbase_helper.documentgenerator import Base64Generator
 import TestInput
 import logger
 import json
@@ -179,6 +180,16 @@ class JoinDocLoader(DocLoaderCouchbase):
         return generators
 
 
+class Base64DocLoader(DocLoaderCouchbase):
+    def __init__(self, servers, cluster):
+        super(Base64DocLoader, self).__init__(servers, cluster)
+
+    def generate_docs(self, docs_per_day, years):
+        values = ['Engineer', 'Sales', 'Support']
+        generators = [Base64Generator('title-', values, start=0, end=docs_per_day)]
+        return generators
+
+
 def initialize_bucket(name, port=None, saslPassword=None):
     if saslPassword:
        return Bucket(name=name, authType="sasl", saslPassword=saslPassword)
@@ -253,6 +264,8 @@ def main():
                 loader = DocLoaderCouchbase(input.servers, cluster)
             elif loader_type == 'join':
                 loader = JoinDocLoader(input.servers, cluster)
+            elif loader_type == 'base64':
+                loader = Base64DocLoader(input.servers, cluster)
             generators_load = loader.generate_docs(docs_per_day, years)
             loader.load(generators_load, bucket, flag=flag)
         finally:
