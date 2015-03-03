@@ -87,7 +87,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         scan_vector_ranges = []
         scan_vectors = None
         if self.scan_vector_per_values:
-            scan_vector_ranges = generate_scan_vector_ranges(self.scan_vector_per_values)
+            scan_vector_ranges = self._generate_scan_vector_ranges(self.scan_vector_per_values)
         try:
             tasks = self.async_run_multi_operations(buckets = self.buckets,
                 query_definitions = self.query_definitions,
@@ -159,7 +159,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         scan_vector_ranges = []
         scan_vectors = None
         if self.scan_vector_per_values:
-            scan_vector_ranges = generate_scan_vector_ranges(self.scan_vector_per_values)
+            scan_vector_ranges = self._generate_scan_vector_ranges(self.scan_vector_per_values)
         try:
             if len(scan_vector_ranges) > 0:
                 for use_percentage in scan_vector_ranges:
