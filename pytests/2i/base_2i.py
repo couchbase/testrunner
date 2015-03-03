@@ -203,6 +203,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.query = query_definition.generate_query_with_explain(bucket = bucket)
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        self.log.info(actual_result)
         check = self.n1ql_helper.verify_index_with_explain(actual_result, query_definition.index_name)
         self.assertTrue(check, "Index %s not found" % (query_definition.index_name))
 
@@ -371,12 +372,12 @@ class BaseSecondaryIndexingTests(QueryTests):
         try:
             if create_index:
                 self.multi_create_index(buckets, query_definitions)
+            if query_with_explain:
+                self.multi_query_using_index_with_explain(buckets, query_definitions)
             if query:
                 self.multi_query_using_index(buckets, query_definitions,
                  expected_results, scan_consistency = scan_consistency,
                  scan_vectors = scan_vectors)
-            if query_with_explain:
-                self.multi_query_using_index_with_explain(buckets, query_definitions)
         except Exception, ex:
             self.log.info(ex)
             raise

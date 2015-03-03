@@ -1301,10 +1301,9 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
 
-    def set_index_setting(self, setting_json, timeout=120):
-        node = None
-        api = self.index_baseUrl + 'settings -d @settings:{0} '.format(setting_json)
-        status, content, header = self._http_request(api, timeout=timeout)
+    def set_index_settings(self, setting_json, timeout=120):
+        api = self.index_baseUrl + 'settings'
+        status, content, header = self._http_request(api, 'POST', json.dumps(setting_json))
         if not status:
             raise Exception(content)
 
@@ -1725,7 +1724,7 @@ class RestConnection(object):
         if not status:
             log.error('''failed to change autofailover_settings!
                          See MB-7282. Workaround:
-                         wget --user=Administrator --password=asdasd --post-data='rpc:call(mb_master:master_node(), erlang, apply ,[fun () -> erlang:exit(erlang:whereis(mb_master), kill) end, []]).' http://localhost:8091/diag/eval''')
+                         wget --user=Administrator --password=asdasd --postindexata='rpc:call(mb_master:master_node(), erlang, apply ,[fun () -> erlang:exit(erlang:whereis(mb_master), kill) end, []]).' http://localhost:8091/diag/eval''')
         return status
 
     def reset_autofailover(self):

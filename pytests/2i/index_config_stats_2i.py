@@ -40,6 +40,8 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
     def test_set_index_settings(self):
         #Check Index Settings
         map1 = self._set_settings_map()
+        self.log.info(map1)
+        self.set_index_settings(map1)
         map = self.get_index_settings()
         for node in map.keys():
             val = map[node]
@@ -86,16 +88,17 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
     def _set_settings_map(self):
         map = {
         "indexer.settings.compaction.check_period":120,
-        "indexer.settings.compaction.interval":"00:00,00:00",
+        "indexer.settings.compaction.interval":"10:10,20:00",
         "indexer.settings.compaction.min_frag":3,
         "indexer.settings.compaction.min_size":1048,
         "indexer.settings.inmemory_snapshot.interval":2,
         "indexer.settings.log_level":"info",
         "indexer.settings.log_override":"",
         "indexer.settings.max_cpu_percent":40,
-        "indexer.settings.memory_quota":0,
+        "indexer.settings.memory_quota":100,
         "indexer.settings.persisted_snapshot.interval":300,
         "indexer.settings.recovery.max_rollbacks":1,
         "projector.settings.log_level":"info",
-        "projector.settings.log_override":""}
+        "projector.settings.log_override":""
+        }
         return map
