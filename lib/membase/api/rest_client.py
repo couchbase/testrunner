@@ -859,8 +859,8 @@ class RestConnection(object):
         # example : name:two
         msg = "removing remote cluster name:{0}".format(urllib.quote(name))
         log.info(msg)
-        api = self.baseUrl + 'pools/default/remoteClusters/{0}'.format(urllib.quote(name))
-        params = urllib.urlencode({'connection_timeout': 60000})
+        api = self.baseUrl + 'pools/default/remoteClusters/{0}?connection_timeout=60000'.format(urllib.quote(name))
+        params = urllib.urlencode({})
         status, content, header = self._http_request(api, 'DELETE', params)
         #sample response : "ok"
         if not status:
