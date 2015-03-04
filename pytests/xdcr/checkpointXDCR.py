@@ -100,12 +100,12 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         u'failover_uuid': 77928303208376}                : local vb_uuid
 
     goXDCR checkpoint record-
-       {u'target_vb_uuid': 224170497411451,
-        u'failover_uuid': 278546667456896,
-        u'dcp_snapshot_seqno': 0,
-        u'seqno': 1,
-        u'commitopaque': 1,
-        u'dcp_snapshot_end_seqno': 0}
+        {u'target_vb_uuid': 253238405904748,
+         u'failover_uuid': 274630499466225,
+         u'target_seqno': 1,
+         u'dcp_snapshot_seqno': 0,
+         u'seqno': 1,
+         u'dcp_snapshot_end_seqno': 0}
 
         Main method that validates a checkpoint record """
     def get_and_validate_latest_checkpoint(self):
@@ -117,16 +117,12 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         except Exception as e:
             raise XDCRCheckpointException("Error retrieving last checkpoint document - {}".format(e))
 
-        commit_opaque = checkpoint_record["commitopaque"]
         failover_uuid = checkpoint_record["failover_uuid"]
         seqno = checkpoint_record["seqno"]
 
         self.log.info ("Verifying commitopaque/remote failover log ...")
         if seqno != 0:
-            if rest_con.is_goxdcr_enabled():
-                self.validate_remote_failover_log(checkpoint_record["target_vb_uuid"], checkpoint_record["commitopaque"])
-            else:
-                self.validate_remote_failover_log(commit_opaque[0], commit_opaque[1])
+            self.validate_remote_failover_log(checkpoint_record["target_vb_uuid"], checkpoint_record["target_seqno"])
             self.log.info ("Verifying local failover uuid ...")
             local_vb_uuid, _ = self.get_failover_log(self.src_master)
             self.assertTrue((int(failover_uuid) == int(local_vb_uuid)) or
@@ -138,7 +134,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             self.log.info("Skipping checkpoint record checks for checkpoint-0")
         return True
 
-    """ Checks if commitopaque in a checkpoint record matches remote failover log """
+    """ Checks if target_seqno in a checkpoint record matches remote failover log """
     def validate_remote_failover_log(self, vb_uuid, high_seqno):
         # TAP based validation
         remote_uuid, remote_highseq = self.get_failover_log(self.dest_master)
