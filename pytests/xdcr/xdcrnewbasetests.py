@@ -1296,7 +1296,7 @@ class CouchbaseCluster:
                 bucket))
         [task.result() for task in tasks]
 
-    def async_load_bucket(self, bucket, num_items, value_size=256, exp=0,
+    def async_load_bucket(self, bucket, num_items, value_size=512, exp=0,
                           kv_store=1, flag=0, only_store_hash=True,
                           batch_size=1000, pause_secs=1, timeout_secs=30):
         """Load data asynchronously on given bucket. Function don't wait for
@@ -1328,7 +1328,7 @@ class CouchbaseCluster:
             timeout_secs)
         return task
 
-    def load_bucket(self, bucket, num_items, value_size=256, exp=0,
+    def load_bucket(self, bucket, num_items, value_size=512, exp=0,
                     kv_store=1, flag=0, only_store_hash=True,
                     batch_size=1000, pause_secs=1, timeout_secs=30):
         """Load data synchronously on given bucket. Function wait for
@@ -1349,7 +1349,7 @@ class CouchbaseCluster:
                                       batch_size, pause_secs, timeout_secs)
         task.result()
 
-    def async_load_all_buckets(self, num_items, value_size=256, exp=0,
+    def async_load_all_buckets(self, num_items, value_size=512, exp=0,
                                kv_store=1, flag=0, only_store_hash=True,
                                batch_size=1000, pause_secs=1, timeout_secs=30):
         """Load data asynchronously on all buckets of the cluster.
@@ -1383,7 +1383,7 @@ class CouchbaseCluster:
             )
         return tasks
 
-    def load_all_buckets(self, num_items, value_size=256, exp=0,
+    def load_all_buckets(self, num_items, value_size=512, exp=0,
                          kv_store=1, flag=0, only_store_hash=True,
                          batch_size=1000, pause_secs=1, timeout_secs=30):
         """Load data synchronously on all buckets. Function wait for
@@ -1464,7 +1464,7 @@ class CouchbaseCluster:
         return tasks
 
     def load_all_buckets_till_dgm(self, active_resident_threshold,
-                                  value_size=256, exp=0, kv_store=1, flag=0,
+                                  value_size=512, exp=0, kv_store=1, flag=0,
                                   only_store_hash=True, batch_size=1000,
                                   pause_secs=1, timeout_secs=30):
         """Load data synchronously on all buckets till dgm (Data greater than memory)
@@ -1693,7 +1693,7 @@ class CouchbaseCluster:
         @param expected_rows: number of rows expected returned in query.
         @param bucket: bucket name.
         @param retry_time: retry to perform view query
-        @param timeout: None if wait for query result untill returned
+        @param timeout: None if wait for query result until returned
         else pass timeout value.
         """
 
@@ -2328,7 +2328,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._rdirection = self._input.param("rdirection",
                             REPLICATION_DIRECTION.UNIDIRECTION)
         self._num_items = self._input.param("items", 1000)
-        self._value_size = self._input.param("value_size", 256)
+        self._value_size = self._input.param("value_size", 512)
         self._poll_timeout = self._input.param("poll_timeout", 120)
         self._perc_upd = self._input.param("upd", 30)
         self._perc_del = self._input.param("del", 30)
