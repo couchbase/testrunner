@@ -360,7 +360,7 @@ class QueriesOpsTests(QueryTests):
     def _create_multiple_indexes(self, index_field):
         indexes = []
         for bucket in self.buckets:
-            index_name = 'idx_%s_%s_%s' % (bucket.name, index_field, str(uuid.uuid4()[:4]))
+            index_name = 'idx_%s_%s_%s' % (bucket.name, index_field, str(uuid.uuid4())[:4])
             self.run_cbq_query(query="CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name,
                                                                       ','.join(index_field.split(';')), self.indx_type))
             if self.indx_type.lower() == 'gsi':

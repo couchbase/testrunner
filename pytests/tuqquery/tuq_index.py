@@ -460,7 +460,7 @@ class QueriesViewsTests(QueryTests):
 
     def test_run_query(self):
         indexes = []
-        index_name_prefix = "my_index_%" + str(uuid.uuid4()[:4])
+        index_name_prefix = "my_index_%" + str(uuid.uuid4())[:4]
         method_name = self.input.param('to_run', 'test_any')
         index_fields = self.input.param("index_field", '').split(';')
         for bucket in self.buckets:
