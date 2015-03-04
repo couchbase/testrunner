@@ -41,7 +41,7 @@ def time_stamp():
     return date_time
 
 class cbcollectRunner(object):
-    def __init__(self, server, path, local):
+    def __init__(self, server, path):
         self.server = server
         self.path = path
 
