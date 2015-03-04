@@ -169,7 +169,7 @@ class N1QLHelper():
 
     def _build_tuq(self, server):
         if self.version == "git_repo":
-            os = "linux"
+            os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':
                 goroot = testconstants.LINUX_GOROOT
                 gopath = testconstants.LINUX_GOPATH
@@ -211,7 +211,7 @@ class N1QLHelper():
     def _start_command_line_query(self, server):
         self._set_env_variable(server)
         if self.version == "git_repo":
-            os = "linux"
+            os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':
                 gopath = testconstants.LINUX_GOPATH
             else:
@@ -228,7 +228,7 @@ class N1QLHelper():
                                                                 server.ip, server.port)
             self.shell.execute_command(cmd)
         elif self.version == "sherlock":
-            os = "linux"
+            os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':
                 couchbase_path = testconstants.LINUX_COUCHBASE_BIN_PATH
             else:
