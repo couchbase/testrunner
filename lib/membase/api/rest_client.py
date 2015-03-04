@@ -916,6 +916,8 @@ class RestConnection(object):
         log.info("Deleting replication {0}".format(uri))
         api = self.baseUrl + uri
         self._http_request(api, 'DELETE')
+        # temp workaround for delete replication timeout
+        time.sleep(60)
 
     def remove_all_recoveries(self):
         recoveries = []
