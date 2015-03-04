@@ -1876,8 +1876,12 @@ class RemoteMachineShellConnection:
             self.use_sudo = False
         else:
             is_mac = False
-            sftp = self._ssh_client.open_sftp()
-            filenames = sftp.listdir('/etc/')
+            if self.remote:
+                sftp = self._ssh_client.open_sftp()
+                filenames = sftp.listdir('/etc/')
+            else:
+                p = Popen("ls /etc" , shell=True, stdout=PIPE, stderr=PIPE)
+                filenames, err = p.communicate()
             os_distro = ""
             os_version = ""
             is_linux_distro = False
@@ -1886,7 +1890,11 @@ class RemoteMachineShellConnection:
                     # it's a linux_distro . let's downlaod this file
                     # format Ubuntu 10.04 LTS \n \l
                     filename = 'etc-issue-{0}'.format(uuid.uuid4())
-                    sftp.get(localpath=filename, remotepath='/etc/issue')
+                    if self.remote:
+                        sftp.get(localpath=filename, remotepath='/etc/issue')
+                    else:
+                        p = Popen("cat /etc/issue > {0}".format(filename) , shell=True, stdout=PIPE, stderr=PIPE)
+                        var, err = p.communicate()
                     file = open(filename)
                     etc_issue = ''
                     # let's only read the first line
@@ -1927,7 +1935,11 @@ class RemoteMachineShellConnection:
             for name in filenames:
                 if name == "redhat-release":
                     filename = 'redhat-release-{0}'.format(uuid.uuid4())
-                    sftp.get(localpath=filename, remotepath='/etc/redhat-release')
+                    if self.remote:
+                        sftp.get(localpath=filename, remotepath='/etc/redhat-release')
+                    else:
+                        p = Popen("cat /etc/redhat-release > {0}".format(filename) , shell=True, stdout=PIPE, stderr=PIPE)
+                        var, err = p.communicate()
                     file = open(filename)
                     redhat_release = ''
                     for line in file.xreadlines():
