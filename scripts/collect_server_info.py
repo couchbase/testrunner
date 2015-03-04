@@ -41,13 +41,14 @@ def time_stamp():
     return date_time
 
 class cbcollectRunner(object):
-    def __init__(self, server, path):
+    def __init__(self, server, path, local=False):
         self.server = server
         self.path = path
+        self.local = local
 
-    def run(self, local):
+    def run(self):
         file_name = "%s-%s-diag.zip" % (self.server.ip, time_stamp())
-        if not local:
+        if not self.local:
             from lib.remote.remote_util import RemoteMachineShellConnection
             remote_client = RemoteMachineShellConnection(self.server)
             print "Collecting logs from %s\n" % self.server.ip
@@ -102,8 +103,8 @@ def main():
     if not local:
         file_path = input.param("path", ".")
         remotes = (cbcollectRunner(server, file_path, local) for server in input.servers)
-        remote_threads = [Thread(target=remote.run(local)) for remote in remotes]
 
+        remote_threads = [Thread(target=remote.run()) for remote in remotes]
         for remote_thread in remote_threads:
             remote_thread.daemon = True
             remote_thread.start()
