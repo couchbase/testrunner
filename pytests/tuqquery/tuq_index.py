@@ -1,5 +1,6 @@
 import math
 import time
+import uuid
 from tuq import QueryTests
 from tuq_join import JoinTests
 from remote.remote_util import RemoteMachineShellConnection
@@ -60,7 +61,7 @@ class QueriesViewsTests(QueryTests):
             created_indexes = []
             try:
                 for ind in xrange(self.num_indexes):
-                    view_name = "tuq_index%s" % ind
+                    view_name = "tuq_index_%s%s" % (bucket.name, ind)
                     self.query = "CREATE INDEX %s ON %s(%s) " % (view_name, bucket.name, self.FIELDS_TO_INDEX[ind - 1])
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
@@ -73,7 +74,7 @@ class QueriesViewsTests(QueryTests):
                 raise ex
             finally:
                 for view_name in created_indexes:
-                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, view_name)
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, view_name, self.index_type)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                 self.test_case()
@@ -459,7 +460,7 @@ class QueriesViewsTests(QueryTests):
 
     def test_run_query(self):
         indexes = []
-        index_name_prefix = "my_index_"
+        index_name_prefix = "my_index_%" + str(uuid.uuid4()[:4])
         method_name = self.input.param('to_run', 'test_any')
         index_fields = self.input.param("index_field", '').split(';')
         for bucket in self.buckets:
