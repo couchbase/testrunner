@@ -138,9 +138,8 @@ class PauseResumeTest(XDCRNewBaseTest):
                                             self.is_dev_ddoc)
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[self.is_dev_ddoc]
-
         query = {"full_set": "true", "stale": "false"}
-        tasks = self.dest_cluster.async_create_views(self.dest_master, ddoc_name, views)
+        tasks = self.dest_cluster.async_create_views(ddoc_name, views)
 
         [task.result(self._poll_timeout) for task in tasks]
         # Wait for load data to finish if asynchronous
