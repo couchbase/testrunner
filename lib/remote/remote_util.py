@@ -1892,6 +1892,9 @@ class RemoteMachineShellConnection:
         self._ssh_client.close()
 
     def extract_remote_info(self):
+        os_distro = "linux"
+        os_version = "default"
+        is_linux_distro = True
         # use ssh to extract remote machine info
         # use sftp to if certain types exists or not
         if getattr(self, "info", None) is not None and isinstance(self.info, RemoteMachineInfo):
