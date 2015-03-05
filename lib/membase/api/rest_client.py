@@ -2501,7 +2501,7 @@ class RestConnection(object):
     status of LDAPAuth clear command
     '''
     def clearLDAPSettings (self):
-        api = self.baseUrl + '/settings/saslauthdAuth'
+        api = self.baseUrl + 'settings/saslauthdAuth'
         params = urllib.urlencode({'enabled':'false'})
         status, content, header = self._http_request(api, 'POST', params)
         return status, content, header
@@ -2577,7 +2577,7 @@ class RestConnection(object):
     '''
     def executeLDAPCommand(self, authOperation, currAdmins, currROAdmins, exclude=None):
         log.info ("Executing LDAP command")
-        api = self.baseUrl + "/settings/saslauthdAuth"
+        api = self.baseUrl + "settings/saslauthdAuth"
 
         if (exclude is None):
             log.info ("into execlude is None")
@@ -2640,7 +2640,7 @@ class RestConnection(object):
     '''
     def ldapRestOperationGetResponse(self):
         log.info ("GET command for LDAP Auth")
-        api = self.baseUrl + "/settings/saslauthdAuth"
+        api = self.baseUrl + "settings/saslauthdAuth"
         status, content, header = self._http_request(api, 'GET')
         return json.loads(content)
 
