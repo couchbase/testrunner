@@ -1487,7 +1487,7 @@ class RemoteMachineShellConnection:
             if exist:
                 log.info("VERSION file exists.  Start to uninstall {0} on {1} server".format(product, self.ip))
                 build_name, short_version, full_version = self.find_build_version(version_path, version_file, product)
-                if full_version[:3] == "3.5":
+                if full_version[:3] == "3.5" or full_version[:3] == "4.0":
                     build_repo = SHERLOCK_BUILD_REPO
                 log.info('Build name: {0}'.format(build_name))
                 build_name = build_name.rstrip() + ".exe"

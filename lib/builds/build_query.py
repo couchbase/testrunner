@@ -402,7 +402,7 @@ class BuildQuery(object):
         build_number = ""
         unix_deliverable_type = ["deb", "rpm", "zip"]
         if deliverable_type in unix_deliverable_type:
-            if version[:3] == "3.5":
+            if version[:3] == "3.5" or version[:3] == "4.0":
                 if "rel" not in version and toy == "":
                     build.product_version = version
                 elif "-rel" in version:
@@ -446,7 +446,7 @@ class BuildQuery(object):
         if "exe" in deliverable_type and version[:5] in WIN_CB_VERSION_3:
             joint_char = "-"
             version_join_char = "-"
-        if version[:3] == "3.5":
+        if version[:3] == "3.5" or version[:3] == "4.0":
             """ format for sherlock build name
             /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
             /1154/couchbase-server-enterprise-3.5.0-1154-centos7.x86_64.rpm

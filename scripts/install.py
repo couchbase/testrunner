@@ -201,7 +201,7 @@ class Installer(object):
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
             cb_releases_version = ["1.8.1", "2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0", "2.5.0", "2.5.1"]
             build_repo = MV_LATESTBUILD_REPO
-            if version[:3] == "3.5":
+            if version[:3] == "3.5" or version[:3] == "4.0":
                 build_repo = SHERLOCK_BUILD_REPO
             for name in names:
                 if version in releases_version:
