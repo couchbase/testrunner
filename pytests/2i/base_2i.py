@@ -117,6 +117,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                         self.index_lost_during_move_out.append(query_definition.index_name)
                         index_node_count += 1
                     create_index_tasks.append(self.async_create_index(bucket.name, query_definition, deploy_node_info = self.deploy_node_info))
+                    self.sleep(3)
         if self.defer_build:
             index_list = []
             for task in create_index_tasks:

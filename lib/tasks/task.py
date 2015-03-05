@@ -1913,8 +1913,8 @@ class CreateIndexTask(Task):
             task_manager.schedule(self)
         except CreateIndexException as e:
             # initial query failed, try again
+            self.state = FINISHED
             task_manager.schedule(self, self.retry_time)
-
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
@@ -1936,7 +1936,6 @@ class CreateIndexTask(Task):
             # subsequent query failed! exit
             self.state = FINISHED
             self.set_exception(e)
-
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
@@ -1963,6 +1962,7 @@ class BuildIndexTask(Task):
             task_manager.schedule(self)
         except CreateIndexException as e:
             # initial query failed, try again
+            self.state = FINISHED
             task_manager.schedule(self, self.retry_time)
 
         # catch and set all unexpected exceptions
@@ -2009,8 +2009,8 @@ class MonitorIndexTask(Task):
             task_manager.schedule(self)
         except CreateIndexException as e:
             # initial query failed, try again
+            self.state = FINISHED
             task_manager.schedule(self, self.retry_time)
-
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
@@ -2057,8 +2057,8 @@ class DropIndexTask(Task):
             task_manager.schedule(self)
         except N1QLQueryException as e:
             # initial query failed, try again
+            self.state = FINISHED
             task_manager.schedule(self, self.retry_time)
-
         # catch and set all unexpected exceptions
         except DropIndexException as e:
             self.state = FINISHED
@@ -2078,7 +2078,6 @@ class DropIndexTask(Task):
             # subsequent query failed! exit
             self.state = FINISHED
             self.set_exception(e)
-
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
