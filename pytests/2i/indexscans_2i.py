@@ -89,11 +89,10 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         if self.scan_vector_per_values:
             scan_vector_ranges = self._generate_scan_vector_ranges(self.scan_vector_per_values)
         try:
-            tasks = self.async_run_multi_operations(buckets = self.buckets,
+            self.run_multi_operations(buckets = self.buckets,
                 query_definitions = self.query_definitions,
                 create_index = self.run_create_index, drop_index = False,
                 query_with_explain = False, query = False)
-            self._run_tasks(tasks)
             if len(scan_vector_ranges) > 0:
                 for use_percentage in scan_vector_ranges:
                     scan_vectors = self.gen_scan_vector(use_percentage = use_percentage,
