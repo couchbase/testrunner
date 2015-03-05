@@ -577,28 +577,35 @@ class RemoteMachineShellConnection:
 
     def get_file(self, remotepath, filename, todir):
         if self.file_exists(remotepath, filename):
-            sftp = self._ssh_client.open_sftp()
-            try:
-                filenames = sftp.listdir(remotepath)
-                for name in filenames:
-                    if name == filename:
-                        sftp.get('{0}/{1}'.format(remotepath, filename), todir)
-                        sftp.close()
-                        return True
-                sftp.close()
-                return False
-            except IOError:
-                return False
+            if self.remote:
+                sftp = self._ssh_client.open_sftp()
+                try:
+                    filenames = sftp.listdir(remotepath)
+                    for name in filenames:
+                        if name == filename:
+                            sftp.get('{0}/{1}'.format(remotepath, filename), todir)
+                            sftp.close()
+                            return True
+                    sftp.close()
+                    return False
+                except IOError:
+                    return False
+        else:
+            os.system("cp {0} {1}".format('{0}/{1}'.format(remotepath, filename), todir))
 
     def read_remote_file(self, remote_path, filename):
         if self.file_exists(remote_path, filename):
-            sftp = self._ssh_client.open_sftp()
-            remote_file = sftp.open('{0}/{1}'.format(remote_path, filename))
-            try:
-                out = remote_file.readlines()
-            finally:
-                remote_file.close()
-            return out
+            if self.remote:
+                sftp = self._ssh_client.open_sftp()
+                remote_file = sftp.open('{0}/{1}'.format(remote_path, filename))
+                try:
+                    out = remote_file.readlines()
+                finally:
+                    remote_file.close()
+                return out
+            else:
+                txt = open('{0}/{1}'.format(remote_path, filename))
+                return txt.read()
         return None
 
     def write_remote_file(self, remote_path, filename, lines):
@@ -606,27 +613,40 @@ class RemoteMachineShellConnection:
         self.execute_command(cmd)
 
     def remove_directory(self, remote_path):
-        sftp = self._ssh_client.open_sftp()
-        try:
-            log.info("removing {0} directory...".format(remote_path))
-            sftp.rmdir(remote_path)
-        except IOError:
-            return False
-        finally:
-            sftp.close()
+        if self.remote:
+            sftp = self._ssh_client.open_sftp()
+            try:
+                log.info("removing {0} directory...".format(remote_path))
+                sftp.rmdir(remote_path)
+            except IOError:
+                return False
+            finally:
+                sftp.close()
+        else:
+            try:
+                p = Popen("rm -rf {0}".format(remote_path) , shell=True, stdout=PIPE, stderr=PIPE)
+                stdout, stderro = p.communicate()
+            except IOError:
+                return False
         return True
 
     def list_files(self, remote_path):
-        sftp = self._ssh_client.open_sftp()
-        files = []
-        try:
-            file_names = sftp.listdir(remote_path)
-            for name in file_names:
-                files.append({'path': remote_path, 'file': name})
-            sftp.close()
-        except IOError:
-            return []
-        return files
+        if self.remote:
+            sftp = self._ssh_client.open_sftp()
+            files = []
+            try:
+                file_names = sftp.listdir(remote_path)
+                for name in file_names:
+                    files.append({'path': remote_path, 'file': name})
+                sftp.close()
+            except IOError:
+                return []
+            return files
+        else:
+            p = Popen("ls {0}".format(remote_path) , shell=True, stdout=PIPE, stderr=PIPE)
+            files, stderro = p.communicate()
+            return files
+
 
     # check if this file exists in the remote
     # machine or not
@@ -759,14 +779,33 @@ class RemoteMachineShellConnection:
         sftp.close()
 
     def find_windows_info(self):
-        found = self.find_file("/cygdrive/c/tmp", "windows_info.txt")
-        if isinstance(found, basestring):
-            sftp = self._ssh_client.open_sftp()
+        if self.remote:
+            found = self.find_file("/cygdrive/c/tmp", "windows_info.txt")
+            if isinstance(found, basestring):
+                if self.remote:
+
+                    sftp = self._ssh_client.open_sftp()
+                    try:
+                        f = sftp.open(found)
+                        log.info("get windows information")
+                        info = {}
+                        for line in f:
+                            (key, value) = line.split('=')
+                            key = key.strip(' \t\n\r')
+                            value = value.strip(' \t\n\r')
+                            info[key] = value
+                        return info
+                    except IOError:
+                        log.error("can not find windows info file")
+                    sftp.close()
+            else:
+                return self.create_windows_info()
+        else:
             try:
-                f = sftp.open(found)
+                txt = open("{0}/{1}".format("/cygdrive/c/tmp", "windows_info.txt"))
                 log.info("get windows information")
                 info = {}
-                for line in f:
+                for line in txt.read():
                     (key, value) = line.split('=')
                     key = key.strip(' \t\n\r')
                     value = value.strip(' \t\n\r')
@@ -774,9 +813,6 @@ class RemoteMachineShellConnection:
                 return info
             except IOError:
                 log.error("can not find windows info file")
-            sftp.close()
-        else:
-            return self.create_windows_info()
 
     def create_windows_info(self):
             systeminfo = self.get_windows_system_info()
@@ -1874,14 +1910,10 @@ class RemoteMachineShellConnection:
             is_linux_distro = True
             is_mac = True
             self.use_sudo = False
-        else:
+        elif self.remote:
             is_mac = False
-            if self.remote:
-                sftp = self._ssh_client.open_sftp()
-                filenames = sftp.listdir('/etc/')
-            else:
-                p = Popen("ls /etc" , shell=True, stdout=PIPE, stderr=PIPE)
-                filenames, err = p.communicate()
+            sftp = self._ssh_client.open_sftp()
+            filenames = sftp.listdir('/etc/')
             os_distro = ""
             os_version = ""
             is_linux_distro = False
@@ -1890,11 +1922,7 @@ class RemoteMachineShellConnection:
                     # it's a linux_distro . let's downlaod this file
                     # format Ubuntu 10.04 LTS \n \l
                     filename = 'etc-issue-{0}'.format(uuid.uuid4())
-                    if self.remote:
-                        sftp.get(localpath=filename, remotepath='/etc/issue')
-                    else:
-                        p = Popen("cat /etc/issue > {0}".format(filename) , shell=True, stdout=PIPE, stderr=PIPE)
-                        var, err = p.communicate()
+                    sftp.get(localpath=filename, remotepath='/etc/issue')
                     file = open(filename)
                     etc_issue = ''
                     # let's only read the first line
@@ -1931,6 +1959,11 @@ class RemoteMachineShellConnection:
                     # now remove this file
                     os.remove(filename)
                     break
+            else:
+                is_linux_distro = True
+                os_distro = 'local'
+                os_version = 'local'
+                filenames = []
             """ for centos 7 only """
             for name in filenames:
                 if name == "redhat-release":
