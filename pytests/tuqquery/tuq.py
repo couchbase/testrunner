@@ -2760,7 +2760,7 @@ class QueryTests(BaseTestCase):
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
         ddoc_name = 'ddl_#primary'
-        if versions[0].startswith("3"):
+        if versions[0].startswith("4"):
             try:
                 rest.get_ddoc(self.buckets[0], ddoc_name)
             except ReadDocumentException:
