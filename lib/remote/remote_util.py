@@ -2701,7 +2701,8 @@ class RemoteMachineShellConnection:
         return success
 
     def check_openssl_version(self, deliverable_type, openssl, version):
-        if not version.startswith("3.5"):
+        sherlock = ["3.5", "4.0"]
+        if version[:3] not in sherlock:
             if self.info.deliverable_type == "deb":
                 ubuntu_version = ["12.04", "13.04"]
                 o, r = self.execute_command("lsb_release -r")

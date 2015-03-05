@@ -305,7 +305,7 @@ class BuildQuery(object):
                 windows:
                     couchbase_server-enterprise-windows-amd64-3.5.0-926.exe
                     couchbase-server-enterprise_3.5.0-952-windows_amd64.exe"""
-            if "3.5.0-" in build_info:
+            if "3.5.0-" in build_info or "4.0.0-" in build_info:
                 deb_words = ["debian7", "ubuntu12.04", "ubuntu14.04", "windows", "macos"]
                 if "centos" not in build_info:
                     tmp_str = build_info.split("_")
@@ -378,6 +378,7 @@ class BuildQuery(object):
         sherlock repo: http://latestbuilds.hq.couchbase.com/couchbase-server/sherlock
         sherlock build name with extra build number:
                /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
+               /1454/couchbase-server-enterprise-4.0.0-1454-centos6.x86_64.rpm
                /723/couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
                /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb
                /1120/couchbase-server-enterprise_3.5.0-1120-macos_x86_64.zip
@@ -450,6 +451,7 @@ class BuildQuery(object):
             """ format for sherlock build name
             /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
             /1154/couchbase-server-enterprise-3.5.0-1154-centos7.x86_64.rpm
+            /1454/couchbase-server-enterprise-4.0.0-1454-centos6.x86_64.rpm
             /723/couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
             /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb
             /795/couchbase_server-enterprise-windows-amd64-3.5.0-795.exe
