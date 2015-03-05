@@ -2536,7 +2536,7 @@ class RestConnection(object):
     status of LDAPAuth clear command
     '''
     def clearLDAPSettings (self):
-        api = self.baseUrl + '/settings/saslauthdAuth'
+        api = self.baseUrl + 'settings/saslauthdAuth'
         params = urllib.urlencode({'enabled':'false'})
         status, content, header = self._http_request(api, 'POST', params)
         return status, content, header
