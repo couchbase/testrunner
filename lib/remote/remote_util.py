@@ -1892,9 +1892,14 @@ class RemoteMachineShellConnection:
         self._ssh_client.close()
 
     def extract_remote_info(self):
+        # initialize params
         os_distro = "linux"
         os_version = "default"
         is_linux_distro = True
+        self.use_sudo = False
+        is_mac = False
+        arch = "local"
+        ext = "local"
         # use ssh to extract remote machine info
         # use sftp to if certain types exists or not
         if getattr(self, "info", None) is not None and isinstance(self.info, RemoteMachineInfo):
@@ -1963,9 +1968,13 @@ class RemoteMachineShellConnection:
                     os.remove(filename)
                     break
             else:
+                os_distro = "linux"
+                os_version = "default"
                 is_linux_distro = True
-                os_distro = 'local'
-                os_version = 'local'
+                self.use_sudo = False
+                is_mac = False
+                arch = "local"
+                ext = "local"
                 filenames = []
             """ for centos 7 only """
             for name in filenames:
@@ -2093,7 +2102,7 @@ class RemoteMachineShellConnection:
         elif mac:
             o, r = self.execute_command_raw('/sbin/sysctl -n machdep.cpu.brand_string')
         else:
-            o, r = self.execute_command_raw('sudo cat /proc/cpuinfo')
+            o, r = self.execute_command_raw('cat /proc/cpuinfo')
         if o:
             return o
 
@@ -2107,7 +2116,7 @@ class RemoteMachineShellConnection:
         elif mac:
             o, r = self.execute_command_raw('/sbin/sysctl -n hw.memsize')
         else:
-            o, r = self.execute_command_raw('sudo cat /proc/meminfo')
+            o, r = self.execute_command_raw('cat /proc/meminfo')
         if o:
             return o
 
