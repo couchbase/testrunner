@@ -12,6 +12,8 @@ import logger
 import traceback
 import sys
 from testconstants import WIN_CB_VERSION_3
+from testconstants import SHERLOCK_VERSION
+from testconstants import COUCHBASE_VERSION_2
 
 
 class MembaseBuild(object):
@@ -414,20 +416,20 @@ class BuildQuery(object):
                 else:
                     build.product_version = version
         if "exe" in deliverable_type:
-            if version[:5] not in WIN_CB_VERSION_3:
+            if version[:5] in COUCHBASE_VERSION_2:
                 setup = "setup."
             else:
                 os_name= "windows-"
-            if "rel" in version and version[:5] in WIN_CB_VERSION_3:
+            if "rel" in version and version[:5] not in COUCHBASE_VERSION_2:
                 build.product_version = version.replace("-rel", "")
-            elif "rel" not in version and version[:5] not in WIN_CB_VERSION_3:
+            elif "rel" not in version and version[:5] in COUCHBASE_VERSION_2:
                 build.product_version = version + "-rel"
             else:
                 build.product_version = version
             if "couchbase-server" in edition_type and version[:5] in WIN_CB_VERSION_3 \
-                and "3.5" != version[:3]:
+                and version[:5] not in SHERLOCK_VERSION:
                 edition_type = edition_type.replace("couchbase-", "couchbase_")
-            if version[:5] in WIN_CB_VERSION_3:
+            if version[:5] not in COUCHBASE_VERSION_2:
                 if "x86_64" in architecture_type:
                     build.architecture_type = "amd64"
                 elif "x86" in architecture_type:
@@ -444,7 +446,7 @@ class BuildQuery(object):
         version_join_char = "_"
         if toy is not "":
             joint_char = "-"
-        if "exe" in deliverable_type and version[:5] in WIN_CB_VERSION_3:
+        if "exe" in deliverable_type and version[:5] not in COUCHBASE_VERSION_2:
             joint_char = "-"
             version_join_char = "-"
         if version[:3] == "3.5" or version[:3] == "4.0":

@@ -2000,6 +2000,10 @@ class RemoteMachineShellConnection:
                     os.remove(filename)
                     break
 
+        if self.remote:
+            if self.find_file("/cygdrive/c/Windows", "win.ini"):
+                log.info("This is windows server!")
+                is_linux_distro = False
         if not is_linux_distro:
             arch = ''
             os_version = 'unknown windows'
