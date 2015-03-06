@@ -292,7 +292,7 @@ class BuildQuery(object):
 
             """ Remove the code below when cb name is standardlized (MB-11372) """
             if "windows" in direct_build_url and build.deliverable_type == "exe" \
-                and "3.5.0" not in build_info:
+                and build_info not in SHERLOCK_VERSION:
                 build_info = build_info.replace("-windows-amd64-","_x86_64_")
                 build_info = build_info.replace("couchbase_server","couchbase-server")
             """ End remove here """
@@ -351,8 +351,8 @@ class BuildQuery(object):
                 build.product_version = product_version
                 build_info = build_info.replace("_" + product_version,"")
             else:
-                raise Exception('Check your url. Couchbase server does not have version %s yet' \
-                                % (product_version[:5]))
+                raise Exception("Check your url. Couchbase server does not have "
+                                       "version %s yet " % (product_version[:5]))
 
             if "x86_64" in build_info:
                 build.architecture_type = "x86_64"
@@ -367,8 +367,9 @@ class BuildQuery(object):
                 self.fail("unknown server name")
             return build
 
-    def create_build_url(self, version, deliverable_type, architecture_type, edition_type, \
-                         repo, toy, distribution_version, distribution_type):
+    def create_build_url(self, version, deliverable_type, architecture_type,
+                              edition_type, repo, toy, distribution_version,
+                                                         distribution_type):
         build = MembaseBuild()
         """
         version: 3.0.0-xx or 3.0.0-xx-rel
@@ -386,8 +387,10 @@ class BuildQuery(object):
                /1120/couchbase-server-enterprise_3.5.0-1120-macos_x86_64.zip
         toy=Ce
         build.name = couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
-        build.url = http://builds.hq.northscale.net/latestbuilds/couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
-        For toy build: name  =  couchbase-server-community_cent58-3.0.0-toy-toyName-x86_64_3.0.0-xx-toy.rpm
+        build.url = http://builds.hq.northscale.net/latestbuilds/
+                              couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
+        For toy build: name  =
+            couchbase-server-community_cent58-3.0.0-toy-toyName-x86_64_3.0.0-xx-toy.rpm
         For windows build diff - and _ compare to unix build
                        name = couchbase_server-enterprise-windows-amd64-3.0.0-998.exe
                               couchbase_server-enterprise-windows-amd64-3.0.2-1603.exe

@@ -522,8 +522,8 @@ class RemoteMachineShellConnection:
             exist = self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
             if not exist:
                 output, error = self.execute_command(
-                     "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q \
-                                                     {0} -O {1}.exe';ls -lh;".format(url, version))
+                     "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q"
+                                                    " {0} -O {1}.exe';ls -lh;".format(url, version))
                 self.log_command_output(output, error)
                 return self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
             else:
@@ -696,8 +696,8 @@ class RemoteMachineShellConnection:
         exist = self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
         if not exist:
             output, error = self.execute_command(
-                 "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q \
-                                                     {0} -O {1}.exe';ls -lh;".format(url, version))
+                 "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q"
+                                            " {0} -O {1}.exe';ls -lh;".format(url, version))
             self.log_command_output(output, error)
         else:
             log.info('File {0}.exe exist in tmp directory'.format(version))
