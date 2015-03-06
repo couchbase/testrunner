@@ -182,7 +182,8 @@ class BaseTestCase(unittest.TestCase):
                     self.services = self.get_services(self.servers,self.services_init)
                     self.cluster.rebalance(self.servers, self.servers[1:],
                         [], services = self.services)
-
+                self.setDebugLevel(service_type="kv")
+                self.setDebugLevel(service_type="index")
             except BaseException, e:
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
@@ -1817,6 +1818,20 @@ class BaseTestCase(unittest.TestCase):
                 if kv_server.ip == server.ip and  kv_server.port == server.port and (server not in new_servers):
                     new_servers.append(server)
         return new_servers
+
+    def setDebugLevel(self, index_servers = None, service_type="kv"):
+        index_debug_level = self.input.param("index_debug_level", None)
+        if index_debug_level:
+            return
+        if index_servers == None:
+            index_servers = self.get_nodes_from_services_map(service_type =service_type, get_all_nodes = True)
+        json = {
+        "indexer.settings.log_level":"debug",
+        "projector.settings.log_level":"debug",
+        }
+        for server in index_servers:
+            RestConnection(server).set_index_settings(json)
+
 
     '''
     Returns ip address of the requesting machine
