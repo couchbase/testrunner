@@ -179,7 +179,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             task.result()
         try:
             for node in self.nodes_out_list:
-                self.start_firewall_on_node(servr_out[0])
+                self.start_firewall_on_node(node)
             self.sleep(autofailover_timeout + 10, "Wait for autofailover")
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                    [], servr_out)
@@ -187,7 +187,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rebalance.result()
         finally:
             for node in self.nodes_out_list:
-                self.stop_firewall_on_node(servr_out[0])
+                self.stop_firewall_on_node(node)
             tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
             for task in tasks:
                 task.result()
