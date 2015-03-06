@@ -173,6 +173,25 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             for task in tasks:
                 task.result()
 
+    def test_network_partitioning(self):
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
+        for task in tasks:
+            task.result()
+        try:
+            for node in self.nodes_out_list:
+                self.start_firewall_on_node(servr_out[0])
+            self.sleep(autofailover_timeout + 10, "Wait for autofailover")
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                   [], servr_out)
+            self._run_aync_tasks()
+            rebalance.result()
+        finally:
+            for node in self.nodes_out_list:
+                self.stop_firewall_on_node(servr_out[0])
+            tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
+            for task in tasks:
+                task.result()
+
     def test_warmup(self):
         tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
         for task in tasks:
