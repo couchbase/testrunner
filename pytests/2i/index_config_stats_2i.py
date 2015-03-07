@@ -92,13 +92,13 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
         "indexer.settings.compaction.min_frag":3,
         "indexer.settings.compaction.min_size":1048,
         "indexer.settings.inmemory_snapshot.interval":2,
-        "indexer.settings.log_level":"info",
+        "indexer.settings.log_level":"debug",
         "indexer.settings.log_override":"",
         "indexer.settings.max_cpu_percent":40,
         "indexer.settings.memory_quota":100,
         "indexer.settings.persisted_snapshot.interval":300,
         "indexer.settings.recovery.max_rollbacks":1,
-        "projector.settings.log_level":"info",
+        "projector.settings.log_level":"debug",
         "projector.settings.log_override":""
         }
         return map

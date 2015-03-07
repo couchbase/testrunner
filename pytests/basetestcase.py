@@ -182,7 +182,6 @@ class BaseTestCase(unittest.TestCase):
                     self.services = self.get_services(self.servers,self.services_init)
                     self.cluster.rebalance(self.servers, self.servers[1:],
                         [], services = self.services)
-                self.setDebugLevel(service_type="kv")
                 self.setDebugLevel(service_type="index")
             except BaseException, e:
                 # increase case_number to retry tearDown in setup for the next test
@@ -1821,7 +1820,7 @@ class BaseTestCase(unittest.TestCase):
 
     def setDebugLevel(self, index_servers = None, service_type="kv"):
         index_debug_level = self.input.param("index_debug_level", None)
-        if index_debug_level:
+        if index_debug_level == None:
             return
         if index_servers == None:
             index_servers = self.get_nodes_from_services_map(service_type =service_type, get_all_nodes = True)
