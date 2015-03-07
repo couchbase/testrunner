@@ -49,7 +49,10 @@ class QueryDefinition(object):
 		return query
 
 	def generate_index_drop_query(self, bucket = "default", use_gsi_for_secondary = True):
-		query =  "DROP INDEX %s.%s" % (bucket, self.index_name)
+		if "primary" in self.index_name:
+			query =  "DROP PRIMARY INDEX ON {0}".format(bucket)
+		else:
+			query =  "DROP INDEX %s.%s" % (bucket, self.index_name.replace("#primary","PRIMARY"))
 		if use_gsi_for_secondary:
 			query += " USING GSI"
 		return query

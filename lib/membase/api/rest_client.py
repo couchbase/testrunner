@@ -1726,7 +1726,7 @@ class RestConnection(object):
         if not status:
             log.error('''failed to change autofailover_settings!
                          See MB-7282. Workaround:
-                         wget --user=Administrator --password=asdasd --postindexata='rpc:call(mb_master:master_node(), erlang, apply ,[fun () -> erlang:exit(erlang:whereis(mb_master), kill) end, []]).' http://localhost:8091/diag/eval''')
+                         wget --user=Administrator --password=asdasd --post-data='rpc:call(mb_master:master_node(), erlang, apply ,[fun () -> erlang:exit(erlang:whereis(mb_master), kill) end, []]).' http://localhost:8091/diag/eval''')
         return status
 
     def reset_autofailover(self):
