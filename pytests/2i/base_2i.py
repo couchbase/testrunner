@@ -6,7 +6,10 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def setUp(self):
         super(BaseSecondaryIndexingTests, self).setUp()
+        self.initial_stats = None
+        self.final_stats = None
         self.index_lost_during_move_out =[]
+        self.check_stats= self.input.param("check_stats",True)
         self.scan_consistency= self.input.param("scan_consistency",None)
         self.scan_vector_per_values= self.input.param("scan_vector_per_values",None)
         self.timeout_for_index_online= self.input.param("timeout_for_index_online",120)
@@ -174,7 +177,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         check = self.n1ql_helper._is_index_in_list(bucket, query_definition.index_name)
         self.assertTrue(check," cannot drop index {0} as it does not exist ".format(query_definition.index_name))
         self.query = query_definition.generate_index_drop_query(bucket = bucket,
-          use_gsi_for_secondary = self.use_gsi_for_secondary)
+          use_gsi_for_secondary = self.use_gsi_for_secondary, use_gsi_for_primary = self.use_gsi_for_primary)
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         if verifydrop:
@@ -183,7 +186,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def async_drop_index(self, bucket, query_definition):
         self.query = query_definition.generate_index_drop_query(bucket = bucket,
-          use_gsi_for_secondary = self.use_gsi_for_secondary)
+          use_gsi_for_secondary = self.use_gsi_for_secondary, use_gsi_for_primary = self.use_gsi_for_primary)
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         drop_index_task = self.cluster.async_drop_index(
                  server = server, bucket = bucket,
@@ -192,7 +195,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         return drop_index_task
 
     def sync_drop_index(self, bucket, query_definition):
-        self.query = query_definition.generate_index_drop_query(bucket = bucket)
+        self.query = query_definition.generate_index_drop_query(bucket = bucket,
+          use_gsi_for_secondary = self.use_gsi_for_secondary, use_gsi_for_primary = self.use_gsi_for_primary)
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         self.cluster.drop_index(self,
                  server = server, bucket = bucket,
@@ -354,6 +358,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def async_check_and_run_operations(self, buckets = [], before = False, after = False, in_between = False,
      scan_consistency = None, scan_vectors = None):
+        # verify the stats
         if before:
             return self._async_run_operations(buckets = buckets, create_index = self.ops_map["before"]["create_index"],
                 drop_index = self.ops_map["before"]["drop_index"],
@@ -373,12 +378,14 @@ class BaseSecondaryIndexingTests(QueryTests):
         try:
             if create_index:
                 self.multi_create_index(buckets, query_definitions)
+                self.initial_stats = self.get_index_stats(perNode=True)
             if query_with_explain:
                 self.multi_query_using_index_with_explain(buckets, query_definitions)
             if query:
                 self.multi_query_using_index(buckets, query_definitions,
                  expected_results, scan_consistency = scan_consistency,
                  scan_vectors = scan_vectors)
+                self._get_final_stats_snap_shot()
         except Exception, ex:
             self.log.info(ex)
             raise
@@ -402,7 +409,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 tasks += self.async_multi_drop_index(self.buckets, query_definitions)
         except Exception, ex:
             self.log.info(ex)
-            raise Exception(ex)
+            raise
         return tasks
 
     def _run_operations(self, buckets = [], create_index = False, run_queries = False, drop_index = False):
@@ -500,6 +507,23 @@ class BaseSecondaryIndexingTests(QueryTests):
                 for key in val.keys():
                     result_set.append(val[key])
         return result_set
+
+    def _get_stats_snap_shot_after_create_index(self):
+        self.initial_stats = self.get_index_stats(perNode=True)
+
+    def _get_final_stats_snap_shot(self):
+        if self.initial_stats != None:
+            self.final_stats = self.get_index_stats(perNode=True)
+
+    def _verify_stats_before_after(self):
+        if self.check_stats and self.initial_stats and self.final_stats:
+            for node in self.final_stats.keys():
+                for bucket_name in self.final_stats[node]:
+                    for index_name in self.final_stats[node][bucket_name].keys():
+                        final_stats = self.final_stats[node][bucket_name][index_name]
+                        initial_stats = self.final_stats[node][bucket_name][index_name]
+                        self.assertTrue(final_stats["items_count"] ==  initial_stats["items_count"], \
+                            " expect items_count mismatch, expected {0} != actual {1}".format(final_stats["items_count"] ,initial_stats["items_count"]))
 
     def _create_operation_map(self):
         map_before = {"create_index":False, "query_ops": False, "drop_index": False}
