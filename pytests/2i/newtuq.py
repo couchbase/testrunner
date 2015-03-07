@@ -30,7 +30,7 @@ class QueryTests(BaseTestCase):
             self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
         else:
             self.shell = RemoteMachineShellConnection(self.master)
-        self.use_gsi_for_primary = self.input.param("use_gsi_for_primary", True)
+        self.use_gsi_for_primary = self.input.param("use_gsi_for_primary", False)
         self.use_gsi_for_secondary = self.input.param("use_gsi_for_secondary", True)
         self.create_primary_index = self.input.param("create_primary_index", True)
         self.use_rest = self.input.param("use_rest", True)
