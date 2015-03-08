@@ -70,12 +70,14 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
         #Remove bucket and recreate it
         for bucket in self.buckets:
         	self.rest.delete_bucket(bucket.name)
-        self.sleep(60)
+        self.sleep(30)
         #Flush bucket and recreate it
         self._bucket_creation()
-        self.sleep(60)
+        self.sleep(30)
         #Verify the result set is empty
         self.verify_index_absence(query_definitions = self.query_definitions, buckets = self.buckets)
+        index_map = self.get_index_stats()
+        self.assertTrue(len(index_map) == 0, "Index Stats still show {0}".format(index_map))
 
 
 
