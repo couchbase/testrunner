@@ -195,6 +195,10 @@ class Control():
         self.highlightElement()
         self.web_element.click()
 
+    def click_native(self):
+        ActionChains(self.selenium).move_to_element(self.web_element).perform()
+        ActionChains(self.selenium).click(self.web_element).perform()
+
     def type(self, message):
         if message:
             self.highlightElement()

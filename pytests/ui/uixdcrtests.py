@@ -80,6 +80,7 @@ class XDCRTests(BaseUITestCase):
         helper = XDCRHelper(self)
         NavigationHelper(self).navigate('XDCR')
         helper.create_cluster_reference(name, ip, user, passwd)
+        self.sleep(3)
         try:
             helper.create_replication(dest_cluster, src_bucket, dest_bucket, advanced_settings=advanced_settings)
         except Exception, ex:

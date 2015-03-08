@@ -1302,7 +1302,7 @@ class ServerHelper():
                 self.controls.failover_confirmation().confirm_failover_option.check()
                 self.tc.log.info("Hard Failover Enabled with warnings")
         if confirm:
-            self.controls.failover_confirmation().failover_conf_submit_btn.click()
+            self.controls.failover_confirmation().failover_conf_submit_btn.click_native()
             self.wait.until(lambda fn: not self.is_confirmation_failover_opened() or\
                                        self.is_error_present_failover(),
                         "No reaction for failover btn click in %d sec" % (self.wait._timeout))
