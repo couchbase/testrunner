@@ -8,6 +8,7 @@ from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import Bucket
 from couchbase_helper.documentgenerator import Base64Generator
+from couchbase_helper.documentgenerator import JSONNonDocGenerator
 import TestInput
 import logger
 import json
@@ -190,6 +191,16 @@ class Base64DocLoader(DocLoaderCouchbase):
         return generators
 
 
+class NonDocLoader(DocLoaderCouchbase):
+    def __init__(self, servers, cluster):
+        super(NonDocLoader, self).__init__(servers, cluster)
+
+    def generate_docs(self, docs_per_day, years):
+        values = ['Engineer', 'Sales', 'Support']
+        generators = [JSONNonDocGenerator('nondoc-', values, start=0,end=docs_per_day)]
+        return generators
+
+
 def initialize_bucket(name, port=None, saslPassword=None):
     if saslPassword:
        return Bucket(name=name, authType="sasl", saslPassword=saslPassword)
@@ -266,6 +277,8 @@ def main():
                 loader = JoinDocLoader(input.servers, cluster)
             elif loader_type == 'base64':
                 loader = Base64DocLoader(input.servers, cluster)
+            elif loader_type== 'nondoc':
+                loader = NonDocLoader(input.servers, cluster)
             generators_load = loader.generate_docs(docs_per_day, years)
             loader.load(generators_load, bucket, flag=flag)
         finally:
