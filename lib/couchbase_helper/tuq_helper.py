@@ -291,28 +291,41 @@ class N1QLHelper():
             shell_connection = RemoteMachineShellConnection(self.master)
             shell_connection.execute_command(cmd)
 
-    def create_primary_index_for_3_0_and_greater(self, using_gsi = True, server = None):
+    def drop_primary_index(self, using_gsi = True, server = None):
         if server == None:
             server = self.master
         self.log.info("CHECK FOR PRIMARY INDEXES")
-        rest = RestConnection(server)
-        versions = rest.get_nodes_versions()
-        ddoc_name = 'ddl_#primary'
-        try:
-            rest.get_ddoc(self.buckets[0], ddoc_name)
-        except ReadDocumentException:
-            for bucket in self.buckets:
-                self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
-                if using_gsi:
-                    self.query += " USING GSI"
-                self.log.info(self.query)
-                try:
+        for bucket in self.buckets:
+            self.query = "DROP PRIMARY INDEX ON {0}".format(bucket.name)
+            if using_gsi:
+                self.query += " USING GSI"
+            self.log.info(self.query)
+            try:
+                check = self._is_index_in_list(bucket.name, "#primary", server = server)
+                if check:
                     self.run_cbq_query()
-                    check = self.is_index_online_and_in_list(bucket.name, "#primary", server = self.master)
+            except Exception, ex:
+                self.log.error('ERROR during index creation %s' % str(ex))
+
+    def create_primary_index(self, using_gsi = True, server = None):
+        if server == None:
+            server = self.master
+        for bucket in self.buckets:
+            self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
+            if using_gsi:
+                self.query += " USING GSI"
+            self.log.info(self.query)
+            try:
+                check = self._is_index_in_list(bucket.name, "#primary", server = server)
+                if not check:
+                    self.run_cbq_query()
+                    check = self.is_index_online_and_in_list(bucket.name, "#primary", server = server)
                     if not check:
-                        raise Exception(" Primary index not build as expected in time {0}".format(" 2 mins"))
-                except Exception, ex:
-                    self.log.error('ERROR during index creation %s' % str(ex))
+                        raise Exception(" Timed-out Exception while building primary index for bucket {0} !!!".format(bucket.name))
+                else:
+                    raise Exception(" Primary Index Already present, This looks like a bug !!!")
+            except Exception, ex:
+                self.log.error('ERROR during index creation %s' % str(ex))
 
     def verify_index_with_explain(self, actual_result, index_name):
         if index_name in str(actual_result):
