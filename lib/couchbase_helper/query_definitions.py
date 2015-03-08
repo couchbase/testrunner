@@ -52,10 +52,10 @@ class QueryDefinition(object):
 		if "primary" in self.index_name:
 			query =  "DROP PRIMARY INDEX ON {0}".format(bucket)
 		else:
-			query =  "DROP INDEX %s.%s" % (bucket, self.index_name.replace("#primary","PRIMARY"))
+			query =  "DROP INDEX %s.%s" % (bucket, self.index_name)
 		if use_gsi_for_secondary and "primary" not in self.index_name:
 			query += " USING GSI"
-		elif use_gsi_for_primary and "primary" not in self.index_name:
+		elif use_gsi_for_primary and "primary" in self.index_name:
 			query += " USING GSI"
 		return query
 
