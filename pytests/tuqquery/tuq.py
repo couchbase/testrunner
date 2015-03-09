@@ -2754,29 +2754,25 @@ class QueryTests(BaseTestCase):
     def create_primary_index_for_3_0_and_greater(self):
         if self.flat_json:
                     return
-        self.log.info("CHECK FOR PRIMARY INDEXES")
+        self.log.info("CREATE PRIMARY INDEX")
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
-        ddoc_name = 'ddl_#primary'
-        if versions[0].startswith("4"):
-            try:
-                rest.get_ddoc(self.buckets[0], ddoc_name)
-            except ReadDocumentException:
-                for bucket in self.buckets:
-                    if self.primary_indx_drop:
-                        self.log.info("Dropping primary index for %s ..." % bucket.name)
-                        self.query = "DROP PRIMARY INDEX ON %s" % (bucket.name)
-                        self.sleep(3, 'Sleep for some time after index drop')
-                    self.log.info("Creating primary index for %s ..." % bucket.name)
-                    self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
-                    if self.primary_indx_type.lower() == 'view':
-                        self.query = "CREATE PRIMARY INDEX ON %s" % (bucket.name)
-                    try:
-                        self.run_cbq_query()
-                        if self.primary_indx_type.lower() == 'gsi':
-                            self._wait_for_index_online(bucket, '#primary')
-                    except Exception, ex:
-                        self.log.info(str(ex))
+        if versions[0].startswith("4") or versions[0].startswith("3"):
+            for bucket in self.buckets:
+                if self.primary_indx_drop:
+                    self.log.info("Dropping primary index for %s ..." % bucket.name)
+                    self.query = "DROP PRIMARY INDEX ON %s" % (bucket.name)
+                    self.sleep(3, 'Sleep for some time after index drop')
+                self.log.info("Creating primary index for %s ..." % bucket.name)
+                self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
+                if self.primary_indx_type.lower() == 'view':
+                    self.query = "CREATE PRIMARY INDEX ON %s" % (bucket.name)
+                try:
+                    self.run_cbq_query()
+                    if self.primary_indx_type.lower() == 'gsi':
+                        self._wait_for_index_online(bucket, '#primary')
+                except Exception, ex:
+                    self.log.info(str(ex))
 
     def _wait_for_index_online(self, bucket, index_name, timeout=300):
         end_time = time.time() + timeout
