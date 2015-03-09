@@ -201,3 +201,49 @@ class MemorySanity(BaseTestCase):
         shell = RemoteMachineShellConnection(self.master)
         shell.execute_cbstats("", "raw", keyname="allocator", vbid="")
         shell.disconnect()
+
+    def check_memory_stats(self):
+        rest = RestConnection(self.servers[0])
+        mem_stats_init = {}
+        self.log.info("***   Check mem_used and mem_total before load data   ***")
+        for bucket in self.buckets:
+            mem_stats_init[bucket.name] = {}
+            mem_stats_init[bucket.name]["mem_used"] = \
+                rest.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["mem_used"][-1]
+            mem_stats_init[bucket.name]["mem_total"] = \
+                rest.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["mem_total"][-1]
+            if int(mem_stats_init[bucket.name]["mem_used"]) <= 0:
+                self.fail("Memory used should be greater than 0. "
+                              "Memory used of this bucket is {0}"
+                              .format(mem_stats_init[bucket.name]["mem_used"]))
+            elif int(mem_stats_init[bucket.name]["mem_total"]) <= 0:
+                self.fail("Memory total should be greater than 0. "
+                              "Memory total of this bucket is {0}"
+                               .format(mem_stats_init[bucket.name]["mem_total"]))
+        self.log.info("***   Load data to buckets   ***")
+        self._load_all_buckets(self.master, self.gen_create, "create", 0,
+                               batch_size=1000, pause_secs=5, timeout_secs=100)
+        self._wait_for_stats_all_buckets(self.servers)
+        mem_stats_load = {}
+        self.log.info("***   Check mem_used and mem_total after load data   ***")
+        for bucket in self.buckets:
+            mem_stats_load[bucket.name] = {}
+            mem_stats_load[bucket.name]["mem_used"] = \
+                rest.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["mem_used"][-1]
+            mem_stats_load[bucket.name]["mem_total"] = \
+                rest.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["mem_total"][-1]
+            if int(mem_stats_load[bucket.name]["mem_used"]) <= 0:
+                self.fail("Memory used should be greater than 0. "
+                              "Memory used of this bucket is {0}"
+                              .format(mem_stats_load[bucket.name]["mem_used"]))
+            elif int(mem_stats_load[bucket.name]["mem_total"]) <= 0:
+                self.fail("Memory total should be greater than 0. "
+                              "Memory total of this bucket is {0}"
+                               .format(mem_stats_load[bucket.name]["mem_total"]))
+            if int(mem_stats_load[bucket.name]["mem_used"]) - \
+               int(mem_stats_init[bucket.name]["mem_used"]) <= 0:
+                self.log.info("Initial memory used {0}"
+                              .format(mem_stats_init[bucket.name]["mem_used"]))
+                self.log.info("Memory after loaded {0}"
+                              .format(mem_stats_load[bucket.name]["mem_used"]))
+                self.fail("Memory used should be greater than 0 since data is loaded.")
