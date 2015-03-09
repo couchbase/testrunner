@@ -468,10 +468,6 @@ class QueryTests(BaseTestCase):
             self.shell.execute_command(cmd)
 
     def _start_command_line_query(self, server):
-        self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip,server.port))
-        self.shell.execute_command("export NS_SERVER_CBAUTH_USER=\"{0}\"".format(server.rest_username))
-        self.shell.execute_command("export NS_SERVER_CBAUTH_PWD=\"{0}\"".format(server.rest_password))
-        self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip,server.port))
         if self.version == "git_repo":
             os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':
@@ -490,6 +486,8 @@ class QueryTests(BaseTestCase):
                                                                 server.ip, server.port)
             self.shell.execute_command(cmd)
         elif self.version == "sherlock":
+            if self.services_init.find('n1ql') != -1:
+                return
             os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':
                 couchbase_path = testconstants.LINUX_COUCHBASE_BIN_PATH

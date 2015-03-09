@@ -2611,10 +2611,6 @@ class QueryTests(BaseTestCase):
         if user and password:
             auth_row = '%s:%s@' % (user, password)
         os = self.shell.extract_remote_info().type.lower()
-        self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip,server.port))
-        self.shell.execute_command("export NS_SERVER_CBAUTH_USER=\"{0}\"".format(server.rest_username))
-        self.shell.execute_command("export NS_SERVER_CBAUTH_PWD=\"{0}\"".format(server.rest_password))
-        self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip,server.port))
         if self.flat_json:
             if os == 'windows':
                 gopath = testconstants.WINDOWS_GOPATH
@@ -2643,6 +2639,8 @@ class QueryTests(BaseTestCase):
                                                                 ('', auth_row)[auth_row is not None], server.ip, server.port, options)
             out = self.shell.execute_command(cmd)
         elif self.version == "sherlock":
+            if self.services_init.find('n1ql') != -1:
+                return
             if os == 'windows':
                 couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
                 cmd = "cd %s; " % (couchbase_path) +\
