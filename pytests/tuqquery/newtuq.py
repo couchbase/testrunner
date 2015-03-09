@@ -611,8 +611,6 @@ class QueryTests(BaseTestCase):
             shell_connection.execute_command(cmd)
 
     def create_primary_index_for_3_0_and_greater(self):
-        if self.flat_json:
-                    return
         self.log.info("CREATE PRIMARY INDEX")
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
