@@ -859,7 +859,7 @@ class RestConnection(object):
         # example : name:two
         msg = "removing remote cluster name:{0}".format(urllib.quote(name))
         log.info(msg)
-        api = self.baseUrl + 'pools/default/remoteClusters/{0}?connection_timeout=60000'.format(urllib.quote(name))
+        api = self.baseUrl + 'pools/default/remoteClusters/{0}?connection_timeout=120000'.format(urllib.quote(name))
         params = urllib.urlencode({})
         status, content, header = self._http_request(api, 'DELETE', params)
         #sample response : "ok"
@@ -917,7 +917,9 @@ class RestConnection(object):
         api = self.baseUrl + uri
         self._http_request(api, 'DELETE')
         # temp workaround for delete replication timeout
-        time.sleep(60)
+        log.info("Workaround for MB:13683 : sleeping for 2 mins after bucket deletion")
+        time.sleep(120)
+
 
     def remove_all_recoveries(self):
         recoveries = []
