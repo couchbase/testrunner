@@ -88,13 +88,50 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
             create_index = True, drop_index = False,
             query_with_explain = False, query = False)
         self._verify_items_count()
-        servr_out = self.servers[1:self.nodes_init]
-        failover_task = self.cluster.async_failover([self.master],
-                    failover_nodes = servr_out, graceful=False)
-        failover_task.result()
-        rebalance = self.cluster.async_rebalance(self.servers[:1],
-                                [], servr_out)
-        rebalance.result()
-        # get the items in the index and check if the data loss is reflected correctly
-        self.sleep(180)
+        try:
+            servr_out = self.servers[1:self.nodes_init]
+            failover_task = self.cluster.async_failover([self.master],
+                        failover_nodes = servr_out, graceful=False)
+            failover_task.result()
+            rebalance = self.cluster.async_rebalance(self.servers[:1],
+                                    [], servr_out)
+            rebalance.result()
+            # get the items in the index and check if the data loss is reflected correctly
+            self.sleep(180)
+            self._verify_items_count()
+        except Exception, ex:
+            raise
+        finally:
+            self.run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
+            create_index = False, drop_index = True,
+            query_with_explain = False, query = False)
+
+    def test_tombstone_removal_impact(self):
+        #Initialization operation
+        self.run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
+            create_index = True, drop_index = False,
+            query_with_explain = False, query = False)
         self._verify_items_count()
+        try:
+            # Run operations expiry and deletion
+            self.run_doc_ops()
+            tasks = []
+            # Run auto-compaction to remove the tomb stones
+            for bucket in self.buckets:
+                tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
+            for task in tasks:
+                task.result()
+            self.sleep(60)
+            # run compaction and analyze results
+            self._verify_items_count()
+            self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions,
+                create_index = True, drop_index = False, query_with_explain = True, query = True)
+        except Exception, ex:
+            raise
+        finally:
+            self.run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
+            create_index = False, drop_index = True,
+            query_with_explain = False, query = False)
