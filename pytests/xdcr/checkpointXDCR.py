@@ -188,6 +188,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
 
     """ From destination couchdb log tells if checkpointing was successful """
     def was_checkpointing_successful(self):
+        self.sleep(30)
         node = self.get_active_vb0_node(self.dest_master)
         total_commit_calls, success, failures = self.get_checkpoint_call_history(node)
         if success > self.num_successful_chkpts_so_far :
@@ -206,6 +207,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
 
     """ Tells if pre-replicate was successful based on source->dest _pre_replicate CAPI posts """
     def was_pre_rep_successful(self):
+        self.sleep(30)
         node = self.get_active_vb0_node(self.dest_master)
         total_commit_calls, success, failures = self.get_pre_replicate_call_history(node)
         if success > self.num_successful_prereps_so_far :
