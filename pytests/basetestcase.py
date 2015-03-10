@@ -1571,6 +1571,10 @@ class BaseTestCase(unittest.TestCase):
                     self.services_map[service] = []
                 self.services_map[service].append(key)
 
+    def get_buckets_itemCount(self):
+        server = self.get_nodes_from_services_map(service_type = "kv")
+        return RestConnection(server).get_buckets_itemCount()
+
     def get_index_stats(self, perNode = False):
         servers = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
         index_map = None

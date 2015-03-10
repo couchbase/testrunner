@@ -515,6 +515,16 @@ class BaseSecondaryIndexingTests(QueryTests):
         if self.initial_stats != None:
             self.final_stats = self.get_index_stats(perNode=True)
 
+    def _verify_items_count(self):
+        index_map = self.get_index_stats()
+        bucketMap = self.get_buckets_itemCount()
+        for bucket_name in index_map.keys():
+            for index_name in index_map[bucket_name].keys():
+                actual_item_count = index_map[bucket_name][index_name]["items_count"]
+                expected_item_count = bucketMap[bucket_name]
+                self.assertTrue(str(actual_item_count) == str(expected_item_count), "Bucket {0}, mismatch in item count for index :{1} : expected {2} != actual {3} ".format
+                    (bucket_name, index_name, expected_item_count, actual_item_count))
+
     def _verify_stats_before_after(self):
         if self.check_stats and self.initial_stats and self.final_stats:
             for node in self.final_stats.keys():

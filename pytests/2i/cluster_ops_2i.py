@@ -1,5 +1,7 @@
 from base_2i import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection, RestHelper
+from remote.remote_util import RemoteMachineShellConnection
+from membase.helper.cluster_helper import ClusterOperationHelper
 
 class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
 
@@ -79,5 +81,20 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
         index_map = self.get_index_stats()
         self.assertTrue(len(index_map) == 0, "Index Stats still show {0}".format(index_map))
 
-
-
+    def test_data_loss(self):
+        #Initialization operation
+        self.run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
+            create_index = True, drop_index = False,
+            query_with_explain = False, query = False)
+        self._verify_items_count()
+        servr_out = self.servers[1:self.nodes_init]
+        failover_task = self.cluster.async_failover([self.master],
+                    failover_nodes = servr_out, graceful=False)
+        failover_task.result()
+        rebalance = self.cluster.async_rebalance(self.servers[:1],
+                                [], servr_out)
+        rebalance.result()
+        # get the items in the index and check if the data loss is reflected correctly
+        self.sleep(180)
+        self._verify_items_count()

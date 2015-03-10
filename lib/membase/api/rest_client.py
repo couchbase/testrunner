@@ -1424,6 +1424,18 @@ class RestConnection(object):
                 buckets.append(bucketInfo)
         return buckets
 
+    def get_buckets_itemCount(self):
+        # get all the buckets
+        map = {}
+        api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets?basic_stats=true')
+        status, content, header = self._http_request(api)
+        json_parsed = json.loads(content)
+        if status:
+            for item in json_parsed:
+                bucketInfo = RestParser().parse_get_bucket_json(item)
+                map[bucketInfo.name] = bucketInfo.stats.itemCount
+        return map
+
     def get_bucket_stats_for_node(self, bucket='default', node=None):
         if not node:
             log.error('node_ip not specified')
