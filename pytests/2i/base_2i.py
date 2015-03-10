@@ -1,6 +1,7 @@
 from newtuq import QueryTests
 import random
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
+from couchbase_helper.query_definitions import QueryDefinition
 
 class BaseSecondaryIndexingTests(QueryTests):
 
@@ -9,6 +10,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.initial_stats = None
         self.final_stats = None
         self.index_lost_during_move_out =[]
+        self.use_where_clause_in_index= self.input.param("use_where_clause_in_index",False)
         self.check_stats= self.input.param("check_stats",True)
         self.scan_consistency= self.input.param("scan_consistency",None)
         self.scan_vector_per_values= self.input.param("scan_vector_per_values",None)
@@ -40,9 +42,12 @@ class BaseSecondaryIndexingTests(QueryTests):
         super(BaseSecondaryIndexingTests, self).tearDown()
 
     def create_index(self, bucket, query_definition, deploy_node_info = None):
+        index_where_clause = None
+        if self.use_where_clause_in_index:
+            index_where_clause = query_definition.index_where_clause
         self.query = query_definition.generate_index_create_query(bucket = bucket,
          use_gsi_for_secondary = self.use_gsi_for_secondary, deploy_node_info= deploy_node_info,
-         defer_build = self.defer_build)
+         defer_build = self.defer_build, index_where_clause = index_where_clause )
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         if not self.defer_build:
@@ -50,9 +55,12 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
     def async_create_index(self, bucket, query_definition, deploy_node_info = None):
+        index_where_clause = None
+        if self.use_where_clause_in_index:
+            index_where_clause = query_definition.index_where_clause
         self.query = query_definition.generate_index_create_query(bucket = bucket,
             use_gsi_for_secondary = self.use_gsi_for_secondary, deploy_node_info = deploy_node_info,
-            defer_build = self.defer_build)
+            defer_build = self.defer_build, index_where_clause = index_where_clause)
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         create_index_task = self.cluster.async_create_index(
                  server = server, bucket = bucket,
@@ -552,4 +560,58 @@ class BaseSecondaryIndexingTests(QueryTests):
             if op_type != '':
                 map_after[op_type] = True
         return {"before":map_before, "in_between": map_in_between, "after": map_after}
+
+    def _generate_employee_data_query_definitions_for_index_where_clause(self):
+        definitions_list = []
+        emit_fields = "*"
+        and_conditions = ["job_title == \"Sales\"","job_title != \"Sales\""]
+        definitions_list.append(
+            QueryDefinition(
+                index_name="index_0",
+                             index_fields = ["job_title"],
+                             query_template = QueryDefinition.RANGE_SCAN_ORDER_BY_TEMPLATE.format(emit_fields,"job_title IS NOT NULL","job_title"),
+                             groups = [SIMPLE_INDEX, FULL_SCAN, ORDER_BY, "employee","isnotnull"], index_where_clause = " job_title IS NOT NULL "))
+        definitions_list.append(
+            QueryDefinition(
+                index_name="index_1",
+                             index_fields = ["job_title"],
+                             query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title != \"Sales\""),
+                             groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,"employee"], index_where_clause = " job_title != \"Sales\" "))
+        definitions_list.append(
+            QueryDefinition(
+                index_name="index_2",
+                             index_fields = ["job_title"],
+                             query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % " job_title == \"Sales\" "),
+                             groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, NOTEQUALS,"employee"], index_where_clause = " job_title == \"Sales\" "))
+        definitions_list.append(
+            QueryDefinition(
+                index_name="index_3",
+                             index_fields = ["job_title"],
+                             query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" or job_title == \"Engineer\""),
+                             groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, OR,"employee"], index_where_clause = " job_title == \"Sales\" or job_title == \"Engineer\" "))
+        definitions_list.append(
+            QueryDefinition(
+                index_name="index_4",
+                             index_fields = ["join_yr"],
+                             query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "join_yr > 2010 and join_yr < 2014"),
+                             groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, AND,"employee"], index_where_clause = " join_yr > 2010 and join_yr < 2014 "))
+        definitions_list.append(
+            QueryDefinition(
+                index_name="index_5",
+                             index_fields = ["join_yr"],
+                             query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "join_yr > 1999"),
+                             groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, GREATER_THAN,"employee"], index_where_clause = " join_yr > 1999 "))
+        definitions_list.append(
+            QueryDefinition(
+                index_name="index_6",
+                             index_fields = ["join_yr","job_title"],
+                             query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" and join_yr > 2010 and join_yr < 2014"),
+                             groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,AND,"employee"], index_where_clause = " job_title == \"Sales\" and join_yr > 2010 and join_yr < 2014 "))
+        definitions_list.append(
+            QueryDefinition(
+                index_name="index_7",
+                             index_fields = ["join_yr","job_title"],
+                             query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" or join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
+                             groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,OR,"employee"], index_where_clause = "job_title == \"Sales\" or join_yr > 2010 and join_yr < 2014"))
+        return definitions_list
 

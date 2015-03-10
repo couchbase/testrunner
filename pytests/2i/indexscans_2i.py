@@ -1,7 +1,9 @@
 from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
+from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from couchbase_helper.tuq_generators import TuqGenerators
 QUERY_TEMPLATE = "SELECT {0} FROM %s "
+
 class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
 
     def setUp(self):
@@ -81,6 +83,27 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 query_definitions = self.query_definitions,
                 create_index = self.run_create_index, drop_index = self.run_drop_index,
                 query_with_explain = self.run_query_with_explain, query = self.run_query)
+
+    def test_multi_create_query_explain_drop_index_with_index_where_clause(self):
+        query_definition_generator = SQLDefinitionGenerator()
+        self.query_definitions = query_definition_generator.generate_employee_data_query_definitions_for_index_where_clause()
+        self.use_where_clause_in_index = True
+        self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
+        self.run_async = False
+        self.run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
+            create_index = True, drop_index = False,
+            query_with_explain = True, query = True)
+        if self.doc_ops:
+            self.run_doc_ops()
+            self.run_multi_operations(buckets = self.buckets,
+                query_definitions = self.query_definitions,
+                create_index = False, drop_index = False,
+                query_with_explain = True, query = True)
+        self.run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
+            create_index = False, drop_index = True,
+            query_with_explain = False, query = False)
 
     def test_multi_create_query_explain_drop_index_scan_consistency(self):
         self.random_scan_vector= self.input.param("random_scan_vector",False)
