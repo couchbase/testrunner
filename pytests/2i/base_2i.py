@@ -33,7 +33,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.query_definitions = query_definition_generator.generate_simple_data_query_definitions()
         if self.dataset == "sabre":
             self.query_definitions = query_definition_generator.generate_sabre_data_query_definitions()
-        if self.dataset == "big_data":
+        if self.dataset == "bigdata":
             self.query_definitions = query_definition_generator.generate_big_data_query_definitions()
         self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
         self.ops_map = self._create_operation_map()

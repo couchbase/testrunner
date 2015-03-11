@@ -106,15 +106,15 @@ class QueryTests(BaseTestCase):
         try:
             json_generator = JsonGenerator()
             if self.dataset == "simple":
-                return self.generate_docs_simple(num_items, start)
+                return self.generate_ops(num_items, start,json_generator.generate_docs_simple)
             if self.dataset == "sales":
-                return self.generate_docs_sales(num_items, start)
+                return self.generate_ops(num_items, start,json_generator.generate_docs_sales)
             if self.dataset == "employee" or self.dataset == "default":
-                return self.generate_docs_default(num_items, start)
+                return self.generate_ops(num_items, start,json_generator.generate_docs_employee)
             if self.dataset == "sabre":
-                return self.generate_docs_sabre(num_items, start)
-            if self.dataset == "big_data":
-                return self.generate_docs_bigdata(num_items, start)
+                return self.generate_ops(num_items, start,json_generator.generate_docs_sabre)
+            if self.dataset == "bigdata":
+                return self.generate_ops(num_items, start,json_generator.generate_docs_bigdata)
         except Exception, ex:
             self.log.info(ex)
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
@@ -150,8 +150,13 @@ class QueryTests(BaseTestCase):
             isShuffle = False
             if key == "update":
                 isShuffle = True
-            gen_docs_map[key] = method(self.ops_dist_map[key]["end"],
-             self.ops_dist_map[key]["start"], isShuffle = isShuffle)
+            if self.dataset != "bigdata":
+                gen_docs_map[key] = method(self.ops_dist_map[key]["end"],
+                    self.ops_dist_map[key]["start"], isShuffle = isShuffle)
+            else:
+                gen_docs_map[key] = method(value_size = self.value_size,
+                    end = self.ops_dist_map[key]["end"],
+                    start = self.ops_dist_map[key]["start"])
         return gen_docs_map
 
     def generate_full_docs_list_after_ops(self, gen_docs_map):
