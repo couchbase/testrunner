@@ -242,7 +242,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         try:
             for node in self.nodes_out_list:
                 self.start_firewall_on_node(node)
-            self.sleep(autofailover_timeout + 10, "Wait for autofailover")
+            self.sleep(30, "Wait for autofailover")
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                    [], servr_out)
             self._run_aync_tasks()
