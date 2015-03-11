@@ -86,11 +86,9 @@ class bidirectional(XDCRNewBaseTest):
             warmupnodes.append(self.dest_cluster.warmup_node())
 
         self.sleep(self._wait_timeout)
+        NodeHelper.wait_warmup_completed(warmupnodes)
         self.async_perform_update_delete()
         self.sleep(self._wait_timeout / 2)
-
-        NodeHelper.wait_warmup_completed(warmupnodes)
-
         self.verify_results()
 
     def load_with_async_ops_with_warmup_master(self):
@@ -102,11 +100,9 @@ class bidirectional(XDCRNewBaseTest):
             warmupnodes.append(self.dest_cluster.warmup_node(master=True))
 
         self.sleep(self._wait_timeout)
+        NodeHelper.wait_warmup_completed(warmupnodes)
         self.async_perform_update_delete()
         self.sleep(self._wait_timeout / 2)
-
-        NodeHelper.wait_warmup_completed(warmupnodes)
-
         self.verify_results()
 
     def load_with_async_ops_and_joint_sets_with_warmup(self):

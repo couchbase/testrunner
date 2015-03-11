@@ -333,13 +333,13 @@ class NodeHelper:
                 while time.time() - start < 150:
                     if mc.stats()["ep_warmup_thread"] == "complete":
                         NodeHelper._log.info(
-                            "Warmed up: %s items " %
-                            (mc.stats()["curr_items_tot"]))
+                            "Warmed up: %s items on %s on %s" %
+                            (mc.stats("warmup")["ep_warmup_key_count"], bucket, server))
                         time.sleep(10)
                         break
                     elif mc.stats()["ep_warmup_thread"] == "running":
                         NodeHelper._log.info(
-                            "Still warming up .. curr_items_tot : %s" % (mc.stats()["curr_items_tot"]))
+                            "Still warming up .. ep_warmup_key_count : %s" % (mc.stats("warmup")["ep_warmup_key_count"]))
                         continue
                     else:
                         NodeHelper._log.info(
@@ -1552,7 +1552,8 @@ class CouchbaseCluster:
                     gen,
                     bucket.kvs[kv_store],
                     op_type,
-                    expiration)
+                    expiration,
+                    batch_size=1000)
             )
         return tasks
 
