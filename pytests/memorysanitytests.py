@@ -222,7 +222,7 @@ class MemorySanity(BaseTestCase):
                                .format(mem_stats_init[bucket.name]["mem_total"]))
         self.log.info("***   Load data to buckets   ***")
         self._load_all_buckets(self.master, self.gen_create, "create", 0,
-                               batch_size=1000, pause_secs=5, timeout_secs=100)
+                               batch_size=20000, pause_secs=5, timeout_secs=100)
         self._wait_for_stats_all_buckets(self.servers)
         mem_stats_load = {}
         self.log.info("***   Check mem_used and mem_total after load data   ***")
