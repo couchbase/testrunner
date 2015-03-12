@@ -205,6 +205,7 @@ class MemorySanity(BaseTestCase):
     def check_memory_stats(self):
         rest = RestConnection(self.servers[0])
         mem_stats_init = {}
+        self.sleep(5)
         self.log.info("***   Check mem_used and mem_total before load data   ***")
         for bucket in self.buckets:
             mem_stats_init[bucket.name] = {}
@@ -221,7 +222,8 @@ class MemorySanity(BaseTestCase):
                               "Memory total of this bucket is {0}"
                                .format(mem_stats_init[bucket.name]["mem_total"]))
         self.log.info("***   Load data to buckets   ***")
-        self._load_doc_data_all_buckets(data_op="create", batch_size=5000)
+        self._load_all_buckets(self.master, self.gen_create, "create", 0,
+                               batch_size=5000, pause_secs=2, timeout_secs=100)
         self._wait_for_stats_all_buckets(self.servers)
         mem_stats_load = {}
         self.log.info("***   Check mem_used and mem_total after load data   ***")
