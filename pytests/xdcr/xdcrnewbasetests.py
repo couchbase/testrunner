@@ -2309,7 +2309,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             False)
         self.__rep_type = self._input.param(
             "replication_type",
-            REPLICATION_PROTOCOL.CAPI)
+            REPLICATION_PROTOCOL.XMEM)
         self.__num_sasl_buckets = self._input.param("sasl_buckets", 0)
         self.__num_stand_buckets = self._input.param("standard_buckets", 0)
 
