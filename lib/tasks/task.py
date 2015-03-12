@@ -790,14 +790,18 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
         self.batch_size = batch_size
         self.pause = pause_secs
         self.timeout = timeout_secs
+        self.bucket = bucket
+        self.server = server
 
     def has_next(self):
         has = self.batch_generator.has_next()
         if math.fmod(self.batch_generator._doc_gen.itr, 50000) == 0.0 or not has:
-            self.log.info("Batch {0} documents done #: {1} with exp:{2}".\
+            self.log.info("Batch {0} documents done #: {1} with exp:{2} @ {3}, bucket {4}".\
                           format(self.op_type,
                                  (self.batch_generator._doc_gen.itr - self.batch_generator._doc_gen.start),
-                                 self.exp))
+                                 self.exp,
+                                 self.server.ip,
+                                 self.bucket))
         return has
 
     def next(self):

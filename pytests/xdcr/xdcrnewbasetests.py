@@ -1522,27 +1522,28 @@ class CouchbaseCluster:
             XDCRException(
                 "Data is not loaded in cluster.Load data before update/delete")
         )
-        if op_type == OPS.UPDATE:
-            self.__kv_gen[OPS.UPDATE] = BlobGenerator(
-                self.__kv_gen[OPS.CREATE].name,
-                self.__kv_gen[OPS.CREATE].seed,
-                self.__kv_gen[OPS.CREATE].value_size,
-                start=0,
-                end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
-            gen = copy.deepcopy(self.__kv_gen[OPS.UPDATE])
-        elif op_type == OPS.DELETE:
-            self.__kv_gen[OPS.DELETE] = BlobGenerator(
-                self.__kv_gen[OPS.CREATE].name,
-                self.__kv_gen[OPS.CREATE].seed,
-                self.__kv_gen[OPS.CREATE].value_size,
-                start=int((self.__kv_gen[OPS.CREATE].end) * (float)(
-                    100 - perc) / 100),
-                end=self.__kv_gen[OPS.CREATE].end)
-            gen = copy.deepcopy(self.__kv_gen[OPS.DELETE])
-        else:
-            raise XDCRException("Unknown op_type passed: %s" % op_type)
         tasks = []
         for bucket in self.__buckets:
+            if op_type == OPS.UPDATE:
+                self.__kv_gen[OPS.UPDATE] = BlobGenerator(
+                    self.__kv_gen[OPS.CREATE].name,
+                    self.__kv_gen[OPS.CREATE].seed,
+                    self.__kv_gen[OPS.CREATE].value_size,
+                    start=0,
+                    end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
+                gen = copy.deepcopy(self.__kv_gen[OPS.UPDATE])
+            elif op_type == OPS.DELETE:
+                self.__kv_gen[OPS.DELETE] = BlobGenerator(
+                    self.__kv_gen[OPS.CREATE].name,
+                    self.__kv_gen[OPS.CREATE].seed,
+                    self.__kv_gen[OPS.CREATE].value_size,
+                    start=int((self.__kv_gen[OPS.CREATE].end) * (float)(
+                        100 - perc) / 100),
+                    end=self.__kv_gen[OPS.CREATE].end)
+                gen = copy.deepcopy(self.__kv_gen[OPS.DELETE])
+            else:
+                raise XDCRException("Unknown op_type passed: %s" % op_type)
+
             self.__log.info("At bucket '{0}' @ {1}: operation: {2}, key range {3} - {4}".
                        format(bucket.name, self.__name, op_type, gen.start, gen.end))
             tasks.append(
