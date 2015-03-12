@@ -1118,7 +1118,10 @@ class RemoteMachineShellConnection:
         log.info("installed version:")
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
         """   """
-        self.wait_till_process_ended(full_version[:10])
+        ended = self.wait_till_process_ended(full_version[:10])
+        if not ended:
+            self.fail("*****  Node {0} failed to upgrade  *****"
+                                               .format(self.ip))
         self.sleep(10, "wait for server to start up completely")
         ct = time.time()
         while time.time() - ct < 10800:
@@ -1167,7 +1170,10 @@ class RemoteMachineShellConnection:
         self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
         log.info("installed version: {0}".format(version))
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
-        self.wait_till_process_ended(version[:10])
+        ended = self.wait_till_process_ended(version[:10])
+        if not ended:
+            self.fail("*****  Node {0} failed to upgrade  *****"
+                                               .format(self.ip))
         self.sleep(10, "wait for server to start up completely")
         ct = time.time()
         while time.time() - ct < 10800:
@@ -1213,7 +1219,9 @@ class RemoteMachineShellConnection:
                                           timeout_in_seconds=600)
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN installme /V")
             self.log_command_output(output, error)
-            self.wait_till_process_ended(build.product_version[:10])
+            ended = self.wait_till_process_ended(build.product_version[:10])
+            if not ended:
+                self.fail("*****  Node {0} failed to install  *****".format(self.ip))
             self.sleep(10, "wait for server to start up completely")
             if vbuckets:
                 self.set_vbuckets_win(vbuckets)
@@ -1338,7 +1346,9 @@ class RemoteMachineShellConnection:
             success &= self.log_command_output(output, error, track_words)
             file_check = 'VERSION.txt'
             self.wait_till_file_added(remote_path, file_check, timeout_in_seconds=600)
-            self.wait_till_process_ended(build.product_version[:10])
+            ended = self.wait_till_process_ended(build.product_version[:10])
+            if not ended:
+                self.fail("*****  Node {0} failed to install  *****".format(self.ip))
             self.sleep(10, "wait for server to start up completely")
             output, error = self.execute_command("rm \
                        /cygdrive/c/automation/{0}_install.iss".format(self.ip))
@@ -1533,7 +1543,10 @@ class RemoteMachineShellConnection:
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
-                self.wait_till_process_ended(full_version[:10])
+                ended = self.wait_till_process_ended(full_version[:10])
+                if not ended:
+                    self.fail("*****  Node {0} failed to uninstall  *****"
+                                                         .format(self.ip))
                 self.sleep(10, "next step is to install")
                 """ delete binary after uninstall """
                 output, error = self.execute_command("rm /cygdrive/c/tmp/{0}".format(build_name))
@@ -1638,7 +1651,10 @@ class RemoteMachineShellConnection:
             if not deleted:
                 log.error("Uninstall was failed at node {0}".format(self.ip))
                 sys.exit()
-            self.wait_till_process_ended(build_name[:10])
+            ended = self.wait_till_process_ended(build_name[:10])
+            if not ended:
+                self.fail("*****  Node {0} failed to uninstall  *****"
+                                                     .format(self.ip))
             self.sleep(10, "next step is to install")
             output, error = self.execute_command("rm \
                        /cygdrive/c/automation/{0}_uninstall.iss".format(self.ip))
@@ -1709,7 +1725,10 @@ class RemoteMachineShellConnection:
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
-                self.wait_till_process_ended(full_version[:10])
+                ended = self.wait_till_process_ended(full_version[:10])
+                if not ended:
+                    self.fail("*****  Node {0} failed to uninstall  *****"
+                                                         .format(self.ip))
                 self.sleep(10, "next step is to install")
                 output, error = self.execute_command("rm \
                        /cygdrive/c/automation/{0}_uninstall.iss".format(self.ip))
