@@ -1637,6 +1637,7 @@ class RemoteMachineShellConnection:
             self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
             # modify bat file to run uninstall schedule task
             self.modify_bat_file('/cygdrive/c/automation', bat_file, product, rm_version, task)
+            self.stop_couchbase()
 
             """ the code below need to remove when bug MB-11328 is fixed in 3.0.1 """
             output, error = self.kill_erlang(os="windows")
