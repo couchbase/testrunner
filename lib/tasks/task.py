@@ -796,7 +796,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
     def has_next(self):
         has = self.batch_generator.has_next()
         if math.fmod(self.batch_generator._doc_gen.itr, 50000) == 0.0 or not has:
-            self.log.info("Batch {0} documents done #: {1} with exp:{2} @ {3}, bucket {4}".\
+            self.log.info("Batch {0} documents queued #: {1} with exp:{2} @ {3}, bucket {4}".\
                           format(self.op_type,
                                  (self.batch_generator._doc_gen.itr - self.batch_generator._doc_gen.start),
                                  self.exp,

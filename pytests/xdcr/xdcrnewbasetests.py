@@ -2645,6 +2645,10 @@ class XDCRNewBaseTest(unittest.TestCase):
                 perc=self._perc_upd,
                 expiration=self._expires))
 
+        [task.result() for task in tasks]
+        self.log.info("Batched updates loaded to cluster(s)")
+        tasks = []
+
         # DELETES
         for doc_ops_cluster in self._del_clusters:
             cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)
@@ -2655,6 +2659,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                     perc=self._perc_del))
 
         [task.result() for task in tasks]
+        self.log.info("Batched deletes sent to cluster(s)")
 
         if self._wait_for_expiration and self._expires:
             self.sleep(
