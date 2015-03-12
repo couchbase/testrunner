@@ -1424,7 +1424,7 @@ class RemoteMachineShellConnection:
         log.error("auto compaction is not started in {0} sec.".format(str(timeout_in_seconds)))
         return False
 
-    def wait_till_process_ended(self, process_name, timeout_in_seconds=240):
+    def wait_till_process_ended(self, process_name, timeout_in_seconds=360):
         if process_name[-1:] == "-":
             process_name = process_name[:-1]
         end_time = time.time() + float(timeout_in_seconds)
@@ -1445,6 +1445,9 @@ class RemoteMachineShellConnection:
                 else:
                     log.error("{1}: process {0} may not run" \
                               .format(process_name, self.ip))
+        if time.time() >= end_time and not process_ended:
+            log.info("Process {0} on node {1} is still running even"
+                     " after 9 minutes".format(process_name, self.ip))
         return process_ended
 
     def terminate_processes(self, info, list):
