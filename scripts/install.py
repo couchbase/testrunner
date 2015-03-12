@@ -401,9 +401,8 @@ class CouchbaseServerInstaller(Installer):
                         rest.init_node_services(username=server.rest_username,
                                                 password=server.rest_password,
                                                 services=server.services.split(','))
-                    else:
-                        rest.init_cluster(username=server.rest_username,
-                                          password=server.rest_password)
+                    rest.init_cluster(username=server.rest_username,
+                                      password=server.rest_password)
                     memory_quota = rest.get_nodes_self().mcdMemoryReserved
                     rest.init_cluster_memoryQuota(memoryQuota=memory_quota)
 
