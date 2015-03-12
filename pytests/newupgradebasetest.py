@@ -177,7 +177,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         if info is None:
             info = remote.extract_remote_info()
         build_repo = MV_LATESTBUILD_REPO
-        if version[:3] == "3.5":
+        if version[:3] == "3.5" or version[:3] == "4.0":
             build_repo = SHERLOCK_BUILD_REPO
         builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5, \
                     deliverable_type=info.deliverable_type, architecture_type=info.architecture_type, \
