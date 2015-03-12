@@ -41,6 +41,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.generate_map_nodes_out_dist()
         self.memory_create_list = []
         self.memory_drop_list = []
+        self.n1ql_node = self.get_nodes_from_services_map(service_type = "n1ql")
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
@@ -52,10 +53,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.query = query_definition.generate_index_create_query(bucket = bucket,
          use_gsi_for_secondary = self.use_gsi_for_secondary, deploy_node_info= deploy_node_info,
          defer_build = self.defer_build, index_where_clause = index_where_clause )
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
-        actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
         if not self.defer_build:
-            check = self.n1ql_helper.is_index_online_and_in_list(bucket, query_definition.index_name, server = server)
+            check = self.n1ql_helper.is_index_online_and_in_list(bucket, query_definition.index_name, server = self.n1ql_node)
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
     def async_create_index(self, bucket, query_definition, deploy_node_info = None):
@@ -73,9 +73,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         return create_index_task
 
     def async_monitor_index(self, bucket, index_name = None):
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
         monitor_index_task = self.cluster.async_monitor_index(
-                 server = server, bucket = bucket,
+                 server = self.n1ql_node, bucket = bucket,
                  n1ql_helper = self.n1ql_helper,
                  index_name = index_name)
         return monitor_index_task
@@ -83,9 +82,8 @@ class BaseSecondaryIndexingTests(QueryTests):
     def async_build_index(self, bucket = "default", index_list = []):
         self.query = self.n1ql_helper.gen_build_index_query(bucket = bucket, index_list = index_list)
         self.log.info(self.query)
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
         build_index_task = self.cluster.async_build_index(
-                 server = server, bucket = bucket,
+                 server = self.n1ql_node, bucket = bucket,
                  query = self.query , n1ql_helper = self.n1ql_helper)
         return build_index_task
 
@@ -93,9 +91,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.query = query_definition.generate_index_create_query(bucket = bucket,
             use_gsi_for_secondary = self.use_gsi_for_secondary, deploy_node_info = deploy_node_info,
             defer_build = self.defer_build)
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
         create_index_task = self.cluster.create_index(self,
-                 server = server, bucket = bucket,
+                 server = self.n1ql_node, bucket = bucket,
                  query = self.query , n1ql_helper = self.n1ql_helper,
                  index_name = query_definition.index_name,  defer_build = self.defer_build)
         return create_index_task
@@ -190,8 +187,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.assertTrue(check," cannot drop index {0} as it does not exist ".format(query_definition.index_name))
         self.query = query_definition.generate_index_drop_query(bucket = bucket,
           use_gsi_for_secondary = self.use_gsi_for_secondary, use_gsi_for_primary = self.use_gsi_for_primary)
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
-        actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
         if verifydrop:
             check = self.n1ql_helper._is_index_in_list(bucket, query_definition.index_name)
             self.assertFalse(check, "index {0} failed to be deleted".format(query_definition.index_name))
@@ -199,9 +195,8 @@ class BaseSecondaryIndexingTests(QueryTests):
     def async_drop_index(self, bucket, query_definition):
         self.query = query_definition.generate_index_drop_query(bucket = bucket,
           use_gsi_for_secondary = self.use_gsi_for_secondary, use_gsi_for_primary = self.use_gsi_for_primary)
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
         drop_index_task = self.cluster.async_drop_index(
-                 server = server, bucket = bucket,
+                 server = self.n1ql_node, bucket = bucket,
                  query = self.query , n1ql_helper = self.n1ql_helper,
                  index_name = query_definition.index_name)
         return drop_index_task
@@ -209,35 +204,31 @@ class BaseSecondaryIndexingTests(QueryTests):
     def sync_drop_index(self, bucket, query_definition):
         self.query = query_definition.generate_index_drop_query(bucket = bucket,
           use_gsi_for_secondary = self.use_gsi_for_secondary, use_gsi_for_primary = self.use_gsi_for_primary)
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
         self.cluster.drop_index(self,
-                 server = server, bucket = bucket,
+                 server = self.n1ql_node, bucket = bucket,
                  query = self.query , n1ql_helper = self.n1ql_helper,
                  index_name = query_definition.index_name)
         return drop_index_task
 
     def query_using_index_with_explain(self, bucket, query_definition):
         self.query = query_definition.generate_query_with_explain(bucket = bucket)
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
-        actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
         self.log.info(actual_result)
         check = self.n1ql_helper.verify_index_with_explain(actual_result, query_definition.index_name)
         self.assertTrue(check, "Index %s not found" % (query_definition.index_name))
 
     def async_query_using_index_with_explain(self, bucket, query_definition):
         self.query = query_definition.generate_query_with_explain(bucket = bucket)
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
         query_with_index_task = self.cluster.async_n1ql_query_verification(
-                 server = server, bucket = bucket,
+                 server = self.n1ql_node, bucket = bucket,
                  query = self.query, n1ql_helper = self.n1ql_helper,
                  is_explain_query=True, index_name = query_definition.index_name)
         return query_with_index_task
 
     def sync_query_using_index_with_explain(self, bucket, query_definition):
         self.query = query_definition.generate_query_with_explain(bucket = bucket)
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
         self.cluster.sync_n1ql_query_verification(
-                 server = server, bucket = bucket.name,
+                 server = self.n1ql_node, bucket = bucket.name,
                  query = self.query, n1ql_helper = self.n1ql_helper,
                  is_explain_query=True, index_name = query_definition.index_name)
 
@@ -267,8 +258,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         if expected_result == None:
             expected_result = self.gen_results.generate_expected_result(print_expected_result = False)
         self.query = self.gen_results.query
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
-        msg, check = self.n1ql_helper.run_query_and_verify_result(query = self.query, server = server, timeout = 420,
+        msg, check = self.n1ql_helper.run_query_and_verify_result(query = self.query, server = self.n1ql_node, timeout = 420,
          expected_result = expected_result,scan_consistency = scan_consistency, scan_vector = scan_vector)
         self.assertTrue(check, msg)
 
@@ -278,9 +268,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         if expected_result == None:
             expected_result = self.gen_results.generate_expected_result(print_expected_result = False)
         self.query = self.gen_results.query
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
         query_with_index_task = self.cluster.async_n1ql_query_verification(
-                 server = server, bucket = bucket,
+                 server = self.n1ql_node, bucket = bucket,
                  query = self.query, n1ql_helper = self.n1ql_helper,
                  expected_result=expected_result, index_name = query_definition.index_name,
                   scan_consistency = scan_consistency, scan_vector = scan_vector)
@@ -292,9 +281,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         if expected_result == None:
             expected_result = self.gen_results.generate_expected_result(print_expected_result = False)
         self.query = self.gen_results.query
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
         self.cluster.n1ql_query_verification(
-                 server = server, bucket = bucket.name,
+                 server = self.n1ql_node, bucket = bucket.name,
                  query = self.query, n1ql_helper = self.n1ql_helper,
                  expected_result=expected_result, scan_consistency = scan_consistency, scan_vector = scan_vector)
 
@@ -302,8 +290,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.gen_results.query = query_definition.generate_query(bucket = bucket)
         self.log.info("Query : {0}".format(self.gen_results.query))
         self.query = self.gen_results.query
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
-        actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
         self.verify_result_set_isempty(actual_result["results"])
 
     def multi_query_using_index_with_emptyresult(self, buckets =[], query_definitions = []):
@@ -370,7 +357,6 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def async_check_and_run_operations(self, buckets = [], before = False, after = False, in_between = False,
      scan_consistency = None, scan_vectors = None):
-        # verify the stats
         if before:
             return self._async_run_operations(buckets = buckets, create_index = self.ops_map["before"]["create_index"],
                 drop_index = self.ops_map["before"]["drop_index"],
@@ -390,14 +376,12 @@ class BaseSecondaryIndexingTests(QueryTests):
         try:
             if create_index:
                 self.multi_create_index(buckets, query_definitions)
-                self.initial_stats = self.get_index_stats(perNode=True)
             if query_with_explain:
                 self.multi_query_using_index_with_explain(buckets, query_definitions)
             if query:
                 self.multi_query_using_index(buckets, query_definitions,
                  expected_results, scan_consistency = scan_consistency,
                  scan_vectors = scan_vectors)
-                self._get_final_stats_snap_shot()
         except Exception, ex:
             self.log.info(ex)
             raise
@@ -564,58 +548,3 @@ class BaseSecondaryIndexingTests(QueryTests):
             if op_type != '':
                 map_after[op_type] = True
         return {"before":map_before, "in_between": map_in_between, "after": map_after}
-
-    def _generate_employee_data_query_definitions_for_index_where_clause(self):
-        definitions_list = []
-        emit_fields = "*"
-        and_conditions = ["job_title == \"Sales\"","job_title != \"Sales\""]
-        definitions_list.append(
-            QueryDefinition(
-                index_name="index_0",
-                             index_fields = ["job_title"],
-                             query_template = QueryDefinition.RANGE_SCAN_ORDER_BY_TEMPLATE.format(emit_fields,"job_title IS NOT NULL","job_title"),
-                             groups = [SIMPLE_INDEX, FULL_SCAN, ORDER_BY, "employee","isnotnull"], index_where_clause = " job_title IS NOT NULL "))
-        definitions_list.append(
-            QueryDefinition(
-                index_name="index_1",
-                             index_fields = ["job_title"],
-                             query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title != \"Sales\""),
-                             groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,"employee"], index_where_clause = " job_title != \"Sales\" "))
-        definitions_list.append(
-            QueryDefinition(
-                index_name="index_2",
-                             index_fields = ["job_title"],
-                             query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % " job_title == \"Sales\" "),
-                             groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, NOTEQUALS,"employee"], index_where_clause = " job_title == \"Sales\" "))
-        definitions_list.append(
-            QueryDefinition(
-                index_name="index_3",
-                             index_fields = ["job_title"],
-                             query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" or job_title == \"Engineer\""),
-                             groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, OR,"employee"], index_where_clause = " job_title == \"Sales\" or job_title == \"Engineer\" "))
-        definitions_list.append(
-            QueryDefinition(
-                index_name="index_4",
-                             index_fields = ["join_yr"],
-                             query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "join_yr > 2010 and join_yr < 2014"),
-                             groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, AND,"employee"], index_where_clause = " join_yr > 2010 and join_yr < 2014 "))
-        definitions_list.append(
-            QueryDefinition(
-                index_name="index_5",
-                             index_fields = ["join_yr"],
-                             query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "join_yr > 1999"),
-                             groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, GREATER_THAN,"employee"], index_where_clause = " join_yr > 1999 "))
-        definitions_list.append(
-            QueryDefinition(
-                index_name="index_6",
-                             index_fields = ["join_yr","job_title"],
-                             query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" and join_yr > 2010 and join_yr < 2014"),
-                             groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,AND,"employee"], index_where_clause = " job_title == \"Sales\" and join_yr > 2010 and join_yr < 2014 "))
-        definitions_list.append(
-            QueryDefinition(
-                index_name="index_7",
-                             index_fields = ["join_yr","job_title"],
-                             query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" or join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
-                             groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,OR,"employee"], index_where_clause = "job_title == \"Sales\" or join_yr > 2010 and join_yr < 2014"))
-        return definitions_list
-
