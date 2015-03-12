@@ -98,7 +98,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         except Exception, ex:
             raise
 
-    def test_server_retstart(self):
+    def test_server_restart(self):
         try:
             tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
             for task in tasks:
