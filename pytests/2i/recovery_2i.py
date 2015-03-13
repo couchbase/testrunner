@@ -201,18 +201,15 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 self.start_firewall_on_node(node)
             self.sleep(30, "Wait for autofailover")
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                   [], servr_out)
+                                   [], self.nodes_out_list)
             self._run_aync_tasks()
             rebalance.result()
             self.run_after_operations()
+        except Exception, ex:
+            raise
         finally:
             for node in self.nodes_out_list:
                 self.stop_firewall_on_node(node)
-            self._get_final_stats_snap_shot()
-            self._verify_stats_before_after()
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
-            for task in tasks:
-                task.result()
 
     def test_warmup(self):
         tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)

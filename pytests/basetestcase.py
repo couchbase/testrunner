@@ -61,6 +61,7 @@ class BaseTestCase(unittest.TestCase):
             self.upr = self.input.param("upr", None)
             self.targetIndexManager = self.input.param("targetIndexManager", False)
             self.targetMaster = self.input.param("targetMaster", False)
+            self.reset_services = self.input.param("reset_services", False)
             self.auth_mech = self.input.param("auth_mech", "PLAIN")
             self.wait_timeout = self.input.param("wait_timeout", 60)
             # number of case that is performed from testrunner( increment each time)
@@ -143,6 +144,7 @@ class BaseTestCase(unittest.TestCase):
                 self.cluster = Cluster()
             self.change_checkpoint_params()
             self.log.info("initializing cluster")
+            self.reset_cluster()
             master_services = self.get_services(self.servers[:1],self.services_init, start_node = 0)
             if master_services != None:
                 master_services = master_services[0].split(",")
@@ -1526,6 +1528,24 @@ class BaseTestCase(unittest.TestCase):
                     self.log.info("Membase started")
                 shell.disconnect()
                 break
+
+    def reset_cluster(self):
+        if self.targetMaster or self.reset_services:
+            try:
+                for node in self.servers:
+                    shell = RemoteMachineShellConnection(node)
+                    # Start node
+                    rest = RestConnection(node)
+                    data_path = rest.get_data_path()
+                    # Stop node
+                    self.stop_server(node)
+                    # Delete Path
+                    shell.execute_command("rm -rf {0}/*".format(data_path))
+                    shell.execute_command("rm -rf {0}/*".format(data_path.replace("data","config")))
+                    self.start_server(node)
+                self.sleep(30)
+            except Exception, ex:
+                self.log.info(ex)
 
     def kill_server_memcached(self, node):
         """ Method to start a server which is subject to failover """

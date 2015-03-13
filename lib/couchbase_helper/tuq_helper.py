@@ -209,6 +209,7 @@ class N1QLHelper():
         self.shell.execute_command(cmd)
 
     def _start_command_line_query(self, server):
+        self.shell = RemoteMachineShellConnection(server)
         self._set_env_variable(server)
         if self.version == "git_repo":
             os = self.shell.extract_remote_info().type.lower()
@@ -303,7 +304,7 @@ class N1QLHelper():
             try:
                 check = self._is_index_in_list(bucket.name, "#primary", server = server)
                 if check:
-                    self.run_cbq_query()
+                    self.run_cbq_query(server = server)
             except Exception, ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
 
@@ -318,7 +319,7 @@ class N1QLHelper():
             try:
                 check = self._is_index_in_list(bucket.name, "#primary", server = server)
                 if not check:
-                    self.run_cbq_query()
+                    self.run_cbq_query(server = server)
                     check = self.is_index_online_and_in_list(bucket.name, "#primary", server = server)
                     if not check:
                         raise Exception(" Timed-out Exception while building primary index for bucket {0} !!!".format(bucket.name))
@@ -347,7 +348,7 @@ class N1QLHelper():
             except Exception, ex:
                 if (next_time - init_time > timeout or try_count >= max_try):
                     return ex, False
-                time.sleep(30)
+            finally:
                 try_count += 1
         return "ran query with success and validated results" , check
 

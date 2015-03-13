@@ -396,11 +396,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         try:
             if create_index:
                 tasks += self.async_multi_create_index(buckets, query_definitions)
+            if query_with_explain:
+                tasks += self.async_multi_query_using_index_with_explain(buckets, query_definitions)
             if query:
                 tasks  += self.async_multi_query_using_index(buckets, query_definitions, expected_results,
                  scan_consistency = scan_consistency, scan_vectors = scan_vectors)
-            if query_with_explain:
-                tasks += self.async_multi_query_using_index_with_explain(buckets, query_definitions)
             if drop_index:
                 tasks += self.async_multi_drop_index(self.buckets, query_definitions)
         except Exception, ex:

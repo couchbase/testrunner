@@ -67,9 +67,9 @@ class QueryTests(BaseTestCase):
             n1ql_port = self.n1ql_port, full_docs_list = self.full_docs_list,
             log = self.log, input = self.input, master = self.master)
         n1ql_server = self.get_nodes_from_services_map(service_type = "n1ql")
-        self.n1ql_helper._start_command_line_query(n1ql_server)
+        self.log.info(n1ql_server)
+        #self.n1ql_helper._start_command_line_query(n1ql_server)
         # sleep to avoid race condition during bootstrap
-        self.sleep(10)
         if self.create_primary_index:
             try:
                 self.n1ql_helper.create_primary_index(using_gsi = self.use_gsi_for_primary,
