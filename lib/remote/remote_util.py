@@ -1549,7 +1549,7 @@ class RemoteMachineShellConnection:
                                                          .format(self.ip))
                 self.sleep(10, "next step is to install")
                 """ delete binary after uninstall """
-                output, error = self.execute_command("rm /cygdrive/c/tmp/{0}".format(build_name))
+                output, error = self.execute_command("rm -f /cygdrive/c/tmp/{0}".format(build_name))
                 self.log_command_output(output, error)
                 output, error = self.execute_command("rm \
                        /cygdrive/c/automation/{0}_uninstall.iss".format(self.ip))
@@ -1662,7 +1662,7 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
             self.log_command_output(output, error)
-            output, error = self.execute_command("rm /cygdrive/c/tmp/{0}".format(build_name))
+            output, error = self.execute_command("rm -f /cygdrive/c/tmp/{0}".format(build_name))
             self.log_command_output(output, error)
 
             """ the code below need to remove when bug MB-11328 is fixed in 3.0.1 """
