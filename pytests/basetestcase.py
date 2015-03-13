@@ -144,7 +144,6 @@ class BaseTestCase(unittest.TestCase):
                 self.cluster = Cluster()
             self.change_checkpoint_params()
             self.log.info("initializing cluster")
-            self.reset_cluster()
             master_services = self.get_services(self.servers[:1],self.services_init, start_node = 0)
             if master_services != None:
                 master_services = master_services[0].split(",")
@@ -216,6 +215,7 @@ class BaseTestCase(unittest.TestCase):
                         or self.input.param("skip_cleanup", False):
                     self.log.warn("CLEANUP WAS SKIPPED")
                 else:
+
                     if test_failed and TestInputSingleton.input.param('get_trace', None):
                         for server in self.servers:
                             try:
@@ -248,6 +248,7 @@ class BaseTestCase(unittest.TestCase):
                     ClusterOperationHelper.cleanup_cluster(self.servers, master = self.master)
                     self.sleep(10)
                     ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+                    self.reset_cluster()
                     self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
             except BaseException:
