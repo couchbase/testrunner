@@ -11,10 +11,14 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def tearDown(self):
         if hasattr(self, 'query_definitions'):
-            self.log.info("<<<<<< WILL DROP THE INDEXES >>>>>")
-            tasks = self.async_run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions)
-            for task in tasks:
-                task.result()
+            check = True
+            try:
+                self.log.info("<<<<<< WILL DROP THE INDEXES >>>>>")
+                tasks = self.async_run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions)
+                for task in tasks:
+                    task.result()
+            except Exception, ex:
+                self.log.info(ex)
         super(SecondaryIndexingRecoveryTests, self).tearDown()
 
     def test_rebalance_in(self):
@@ -71,7 +75,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             # runs operations
             for task in tasks:
                 task.result()
-            stopped = self.rest.stop_rebalance(wait_timeout=self.wait_timeout / 3)
+            stopped = RestConnection(self.master).stop_rebalance(wait_timeout=self.wait_timeout / 3)
             self.assertTrue(stopped, msg="unable to stop rebalance")
             rebalance.result()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
@@ -137,9 +141,10 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_failover_add_back(self):
         try:
+            rest = RestConnection(self.master)
             recoveryType = self.input.param("recoveryType", "full")
             servr_out = self.nodes_out_list
-            nodes_all = RestConnection(self.master).node_statuses()
+            nodes_all = rest.node_statuses()
             tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
             for task in tasks:
                 task.result()
@@ -148,7 +153,6 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
             failover_task.result()
             self.log.info(servr_out)
-            rest = RestConnection(self.master)
             nodes_all = rest.node_statuses()
             nodes = []
             for failover_node in servr_out:
@@ -185,8 +189,6 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             raise
         finally:
             remote.start_server()
-            self._get_final_stats_snap_shot()
-            self._verify_stats_before_after()
             tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
             for task in tasks:
                 task.result()
@@ -195,7 +197,6 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
         for task in tasks:
             task.result()
-        self._get_stats_snap_shot_after_create_index()
         try:
             for node in self.nodes_out_list:
                 self.start_firewall_on_node(node)
@@ -215,7 +216,6 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
         for task in tasks:
             task.result()
-        self._get_stats_snap_shot_after_create_index()
         for server in self.nodes_out_list:
             remote = RemoteMachineShellConnection(server)
             remote.stop_server()

@@ -2055,8 +2055,9 @@ class DropIndexTask(Task):
     def execute(self, task_manager):
         try:
             # Query and get results
-            check = self.n1ql_helper.is_index_online_and_in_list(self.bucket, self.index_name, server = self.server)
+            check = self.n1ql_helper._is_index_in_list(self.bucket, self.index_name, server = self.server)
             if not check:
+                self.state = FINISHED
                 raise DropIndexException("index {0} does not exist will not drop".format(self.index_name))
             self.n1ql_helper.run_cbq_query(query = self.query, server = self.server)
             self.state = CHECKING
@@ -2074,7 +2075,7 @@ class DropIndexTask(Task):
     def check(self, task_manager):
         try:
         # Verify correctness of result set
-            check = self.n1ql_helper._is_index_in_list(self.bucket, self.index_name)
+            check = self.n1ql_helper._is_index_in_list(self.bucket, self.index_name, server = self.server)
             if check:
                 self.state = FINISHED
                 raise Exception("Index {0} not dropped as expected ".format(self.index_name))
