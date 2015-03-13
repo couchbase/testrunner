@@ -38,13 +38,6 @@ class PauseResumeTest(XDCRNewBaseTest):
         self.sleep(20)
         return load_tasks
 
-    def __update_deletes(self):
-        for cluster_name in self._upd_clusters:
-            self.get_cb_cluster_by_name(cluster_name).async_update_delete(OPS.UPDATE)
-        for cluster_name in self._del_clusters:
-            self.get_cb_cluster_by_name(cluster_name).async_update_delete(OPS.DELETE)
-        self.sleep(self._wait_timeout / 2)
-
     def pause_xdcr(self):
         self.src_cluster.pause_all_replications(verify=True)
         self.dest_cluster.pause_all_replications(verify=True)
@@ -125,7 +118,7 @@ class PauseResumeTest(XDCRNewBaseTest):
             self.log.info("Waiting for loading to complete...")
             task.result()
 
-        self.__update_deletes()
+        self.perform_update_delete()
         self.verify_results()
 
     def view_query_pause_resume(self):
