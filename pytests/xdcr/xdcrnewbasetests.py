@@ -1861,6 +1861,9 @@ class CouchbaseCluster:
         """
         task = self.__async_failover(master=True, graceful=graceful)
         task.result()
+        if graceful:
+            # use rebalance stats to monitor failover
+            RestConnection(self.__master_node).monitorRebalance()
         if rebalance:
             self.rebalance_failover_nodes()
         self.__master_node = self.__nodes[0]
@@ -1877,6 +1880,9 @@ class CouchbaseCluster:
             num_nodes=num_nodes,
             graceful=graceful)
         task.result()
+        if graceful:
+            # use rebalance stats to monitor failover
+            RestConnection(self.__master_node).monitorRebalance()
         if rebalance:
             self.rebalance_failover_nodes()
 
