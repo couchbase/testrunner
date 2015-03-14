@@ -65,9 +65,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.query = query_definition.generate_index_create_query(bucket = bucket,
             use_gsi_for_secondary = self.use_gsi_for_secondary, deploy_node_info = deploy_node_info,
             defer_build = self.defer_build, index_where_clause = index_where_clause)
-        server = self.get_nodes_from_services_map(service_type = "n1ql")
         create_index_task = self.cluster.async_create_index(
-                 server = server, bucket = bucket,
+                 server = self.n1ql_node, bucket = bucket,
                  query = self.query , n1ql_helper = self.n1ql_helper,
                  index_name = query_definition.index_name, defer_build = self.defer_build)
         return create_index_task
@@ -124,8 +123,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                     self.memory_create_list.append(index_info)
                     self.deploy_node_info = None
                     if index_node_count < len(self.index_nodes_out):
-                        self.deploy_node_info = "{0}:{1}".format(self.index_nodes_out[bucket.name][index_node_count].ip,
-                        self.index_nodes_out[bucket.name][index_node_count].port)
+                        self.deploy_node_info = ["{0}:{1}".format(self.index_nodes_out[bucket.name][index_node_count].ip,
+                        self.index_nodes_out[bucket.name][index_node_count].port)]
                         self.index_lost_during_move_out.append(query_definition.index_name)
                         index_node_count += 1
                     create_index_tasks.append(self.async_create_index(bucket.name, query_definition, deploy_node_info = self.deploy_node_info))

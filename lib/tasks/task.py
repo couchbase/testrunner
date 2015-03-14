@@ -1912,9 +1912,7 @@ class CreateIndexTask(Task):
     def execute(self, task_manager):
         try:
             # Query and get results
-            print self.query
             self.n1ql_helper.run_cbq_query(query = self.query, server = self.server)
-            print "done running query"
             self.state = CHECKING
             task_manager.schedule(self)
         except CreateIndexException as e:
@@ -1924,7 +1922,7 @@ class CreateIndexTask(Task):
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
+            self.log.error(e)
             self.set_exception(e)
 
     def check(self, task_manager):
@@ -1934,18 +1932,18 @@ class CreateIndexTask(Task):
             if not self.defer_build:
                 check = self.n1ql_helper.is_index_online_and_in_list(self.bucket, self.index_name, server = self.server)
             if not check:
-                self.state = FINISHED
                 raise CreateIndexException("Index {0} not created as expected ".format(self.index_name))
             self.set_result(True)
             self.state = FINISHED
         except CreateIndexException as e:
             # subsequent query failed! exit
             self.state = FINISHED
+            self.log.error(e)
             self.set_exception(e)
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.log.error("Unexpected Exception Caught")
+            self.log.error(e)
             self.set_exception(e)
 
 class BuildIndexTask(Task):
@@ -2057,7 +2055,6 @@ class DropIndexTask(Task):
             # Query and get results
             check = self.n1ql_helper._is_index_in_list(self.bucket, self.index_name, server = self.server)
             if not check:
-                self.state = FINISHED
                 raise DropIndexException("index {0} does not exist will not drop".format(self.index_name))
             self.n1ql_helper.run_cbq_query(query = self.query, server = self.server)
             self.state = CHECKING
@@ -2077,7 +2074,6 @@ class DropIndexTask(Task):
         # Verify correctness of result set
             check = self.n1ql_helper._is_index_in_list(self.bucket, self.index_name, server = self.server)
             if check:
-                self.state = FINISHED
                 raise Exception("Index {0} not dropped as expected ".format(self.index_name))
             self.set_result(True)
             self.state = FINISHED
