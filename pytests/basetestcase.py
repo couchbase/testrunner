@@ -248,7 +248,6 @@ class BaseTestCase(unittest.TestCase):
                     ClusterOperationHelper.cleanup_cluster(self.servers, master = self.master)
                     self.sleep(10)
                     ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-                    self.reset_cluster()
                     self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
             except BaseException:
@@ -257,6 +256,7 @@ class BaseTestCase(unittest.TestCase):
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
             finally:
+                self.reset_cluster()
                 # stop all existing task manager threads
                 if self.cleanup:
                     self.cleanup = False
