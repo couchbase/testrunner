@@ -142,8 +142,8 @@ class BaseTestCase(unittest.TestCase):
                 self.cleanup = True
                 self.tearDown()
                 self.cluster = Cluster()
-            self.change_checkpoint_params()
             self.log.info("initializing cluster")
+            self.reset_cluster()
             master_services = self.get_services(self.servers[:1],self.services_init, start_node = 0)
             if master_services != None:
                 master_services = master_services[0].split(",")
@@ -152,6 +152,7 @@ class BaseTestCase(unittest.TestCase):
                                             self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port, self.quota_percent, services = master_services)
 
             self.change_env_variables()
+            self.change_checkpoint_params()
             self.log.info("done initializing cluster")
             if self.input.param("log_info", None):
                 self.change_log_info()
