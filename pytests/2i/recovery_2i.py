@@ -181,7 +181,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             remote.stop_server()
             self.sleep(autofailover_timeout + 10, "Wait for autofailover")
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                   [], servr_out)
+                                   [], [servr_out[0]])
             self._run_aync_tasks()
             rebalance.result()
             self.run_after_operations()
