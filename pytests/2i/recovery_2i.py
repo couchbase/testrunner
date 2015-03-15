@@ -150,7 +150,6 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 task.result()
             failover_task =self.cluster.async_failover([self.master],
                     failover_nodes = servr_out, graceful=self.graceful)
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
             failover_task.result()
             nodes_all = rest.node_statuses()
             nodes = []
@@ -241,7 +240,9 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._run_async_tasks_with_ops()
         else:
             qdfs = []
-            if self.ops_map["in_between"]["query_ops"] or self.ops_map["after"]["query_ops"]:
+            if self.ops_map["in_between"]["create_index"]:
+                self.index_nodes_out = {}
+            if self.ops_map["in_between"]["query_ops"]:
                 for query_definition in self.query_definitions:
                     if query_definition.index_name in self.index_lost_during_move_out:
                         query_definition.index_name = "#primary"
@@ -261,6 +262,13 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             task.result()
 
     def run_after_operations(self):
+        qdfs = []
+        if self.ops_map["after"]["query_ops"]:
+            for query_definition in self.query_definitions:
+                if query_definition.index_name in self.index_lost_during_move_out:
+                    query_definition.index_name = "#primary"
+                    qdfs.append(query_definition)
+            self.query_definitions = qdfs
         tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
         for task in tasks:
             task.result()
