@@ -152,13 +152,18 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                     failover_nodes = servr_out, graceful=self.graceful)
             tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
             failover_task.result()
-            self.log.info(servr_out)
             nodes_all = rest.node_statuses()
             nodes = []
-            for failover_node in servr_out:
-                nodes.extend([node for node in nodes_all
-                    if node.ip == failover_node.ip or (node.ip == "127.0.0.1" and str(node.port) != failover_node.port)])
+            if servr_out[0].ip == "127.0.0.1":
+                for failover_node in servr_out:
+                    nodes.extend([node for node in nodes_all
+                        if (str(node.port) == failover_node.port)])
+            else:
+                for failover_node in servr_out:
+                    nodes.extend([node for node in nodes_all
+                        if node.ip == failover_node.ip])
             for node in nodes:
+                self.log.info(node)
                 rest.add_back_node(node.id)
                 rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])

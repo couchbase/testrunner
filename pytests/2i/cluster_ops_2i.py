@@ -98,7 +98,6 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
             rebalance.result()
             # get the items in the index and check if the data loss is reflected correctly
             self.sleep(180)
-            self._verify_items_count()
         except Exception, ex:
             raise
         finally:
@@ -125,7 +124,6 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
                 task.result()
             self.sleep(60)
             # run compaction and analyze results
-            self._verify_items_count()
             self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions,
                 create_index = True, drop_index = False, query_with_explain = True, query = True)
         except Exception, ex:
