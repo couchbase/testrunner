@@ -1,4 +1,5 @@
 from base_2i import BaseSecondaryIndexingTests
+from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.query_definitions import QueryDefinition
 
 class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
@@ -278,3 +279,43 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     	finally:
     		self.query = query_definition.generate_index_drop_query(bucket = self.buckets[0].name)
     		self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+
+    def test_fail_drop_index_node_down(self):
+        try:
+            self.run_multi_operations(buckets = self.buckets,
+                query_definitions = self.query_definitions, create_index = True, drop_index = False)
+            servr_out = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
+            failover_task = self.cluster.async_failover([self.master],
+                    failover_nodes = servr_out, graceful=self.graceful)
+            failover_task.result()
+            self.sleep(10)
+            self.query = self.query_definitions[0].generate_index_drop_query(bucket = self.buckets[0].name, use_gsi_for_secondary = self.use_gsi_for_secondary, use_gsi_for_primary = self.use_gsi_for_primary)
+            self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
+            self.log.info(" non-existant indexes cannot be dropped ")
+        except Exception, ex:
+            self.log.info(ex)
+            self.assertTrue("Index does not exist" in str(ex), ex)
+            raise
+
+    def test_ambiguity_in_gsi_indexes_due_to_node_down(self):
+        servr_out = self.get_nodes_from_services_map(service_type = "index")
+        query_definitions = []
+        tasks = []
+        try:
+            query_definition = QueryDefinition(index_name="test_ambiguity_in_gsi_indexes_due_to_node_down", index_fields = ["join_yr"], \
+                    query_template = "SELECT * from %s WHERE join_yr > 1999", groups = [])
+            query_definitions.append(query_definition)
+            deploy_node_info = ["{0}:{1}".format(servr_out.ip,servr_out.port)]
+            task = self.async_create_index(self.buckets[0].name, query_definition, deploy_node_info = deploy_node_info)
+            task.result()
+            remote = RemoteMachineShellConnection(servr_out)
+            remote.stop_server()
+            self.sleep(10)
+            task = self.async_create_index(self.buckets[0].name, query_definition)
+            task.result()
+            self.assertTrue(False, "Duplicate index should not be allowed when index node is down")
+        except Exception, ex:
+            self.log.info(ex)
+            remote = RemoteMachineShellConnection(servr_out)
+            remote.start_server()
+            self.assertTrue("Index test_ambiguity_in_gsi_indexes_due_to_node_down already exist" in str(ex),ex)
