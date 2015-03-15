@@ -267,7 +267,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             for query_definition in self.query_definitions:
                 if query_definition.index_name in self.index_lost_during_move_out:
                     query_definition.index_name = "#primary"
-                    qdfs.append(query_definition)
+                qdfs.append(query_definition)
             self.query_definitions = qdfs
         tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
         for task in tasks:
