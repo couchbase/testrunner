@@ -236,28 +236,19 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def _run_aync_tasks(self):
         self._calculate_scan_vector()
+        qdfs = []
+        if self.ops_map["in_between"]["create_index"]:
+            self.index_nodes_out = {}
+        if self.ops_map["in_between"]["query_ops"]:
+            for query_definition in self.query_definitions:
+                if query_definition.index_name in self.index_lost_during_move_out:
+                    query_definition.index_name = "#primary"
+                qdfs.append(query_definition)
+            self.query_definitions = qdfs
         if self.doc_ops:
-            self._run_async_tasks_with_ops()
-        else:
-            qdfs = []
-            if self.ops_map["in_between"]["create_index"]:
-                self.index_nodes_out = {}
-            if self.ops_map["in_between"]["query_ops"]:
-                for query_definition in self.query_definitions:
-                    if query_definition.index_name in self.index_lost_during_move_out:
-                        query_definition.index_name = "#primary"
-                    qdfs.append(query_definition)
-                self.query_definitions = qdfs
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True,
-             scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
-            for task in tasks:
-                task.result()
-
-    def _run_async_tasks_with_ops(self):
-        # runs operations
-        self.run_doc_ops()
+            self.run_doc_ops()
         tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True,
-             scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
+            scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
         for task in tasks:
             task.result()
 

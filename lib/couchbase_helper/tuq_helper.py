@@ -89,44 +89,6 @@ class N1QLHelper():
         self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
         return result
 
-    def run_cbq_query_old(self, query=None, min_output_size=10, server=None):
-        if query is None:
-            query = self.query
-        if server is None:
-           server = self.master
-           if server.ip == "127.0.0.1":
-            self.n1ql_port = server.n1ql_port
-        else:
-            if server.ip == "127.0.0.1":
-                self.n1ql_port = server.n1ql_port
-            if self.input.tuq_client and "client" in self.input.tuq_client:
-                server = self.tuq_client
-        if self.n1ql_port == None or self.n1ql_port == '':
-            self.n1ql_port = self.input.param("n1ql_port", 8093)
-            if not self.n1ql_port:
-                self.log.info(" n1ql_port is not defined, processing will not proceed further")
-                raise Exception("n1ql_port is not defined, processing will not proceed further")
-        if self.use_rest:
-            result = RestConnection(server).query_tool(query, self.n1ql_port)
-        else:
-            if self.version == "git_repo":
-                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/" +\
-                                                            "tuq_client/tuq_client " +\
-                                                            "-engine=http://%s:8093/" % server.ip,
-                                                       subcommands=[query,],
-                                                       min_output_size=20,
-                                                       end_msg='tuq_client>')
-            else:
-                output = self.shell.execute_commands_inside("/tmp/tuq/cbq -engine=http://%s:8093/" % server.ip,
-                                                           subcommands=[query,],
-                                                           min_output_size=20,
-                                                           end_msg='cbq>')
-            result = self._parse_query_output(output)
-        if isinstance(result, str) or 'errors' in result:
-            raise CBQError(result, server.ip)
-        self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
-        return result
-
     def _verify_results(self, actual_result, expected_result, missing_count = 1, extra_count = 1):
         actual_result = self._gen_dict(actual_result)
         expected_result = self._gen_dict(expected_result)
@@ -138,13 +100,9 @@ class N1QLHelper():
         if self.max_verify is not None:
             actual_result = actual_result[:self.max_verify]
             expected_result = expected_result[:self.max_verify]
-
-        msg = "Results are incorrect.\n Actual first and last 100:  %s.\n ... \n %s" +\
-        "Expected first and last 100: %s.\n  ... \n %s"
-        error_message = msg % (actual_result[:10],actual_result[-10:],
-                                 expected_result[:10],expected_result[-10:])
+        msg = "The number of rows match but the results mismatch, please check"
         if actual_result != expected_result:
-            raise Exception(error_message)
+            raise Exception(msg)
 
     def check_missing_and_extra(self, actual, expected):
         missing = []
@@ -166,42 +124,6 @@ class N1QLHelper():
                                 version, info.architecture_type)
         #TODO for windows
         return url
-
-    def _build_tuq(self, server):
-        if self.version == "git_repo":
-            os = self.shell.extract_remote_info().type.lower()
-            if os != 'windows':
-                goroot = testconstants.LINUX_GOROOT
-                gopath = testconstants.LINUX_GOPATH
-            else:
-                goroot = testconstants.WINDOWS_GOROOT
-                gopath = testconstants.WINDOWS_GOPATH
-            if self.input.tuq_client and "gopath" in self.input.tuq_client:
-                gopath = self.input.tuq_client["gopath"]
-            if self.input.tuq_client and "goroot" in self.input.tuq_client:
-                goroot = self.input.tuq_client["goroot"]
-            cmd = "rm -rf {0}/src/github.com".format(gopath)
-            self.shell.execute_command(cmd)
-            cmd= 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) +\
-                ' export PATH=$PATH:$GOROOT/bin && ' +\
-                'go get github.com/couchbaselabs/tuqtng;' +\
-                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; ' +\
-                'go get -d -v ./...; cd .'
-            self.shell.execute_command(cmd)
-            cmd = 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) +\
-                ' export PATH=$PATH:$GOROOT/bin && ' +\
-                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go build; cd .'
-            self.shell.execute_command(cmd)
-            cmd = 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) +\
-                ' export PATH=$PATH:$GOROOT/bin && ' +\
-                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng/tuq_client; go build; cd .'
-            self.shell.execute_command(cmd)
-        else:
-            cbq_url = self.build_url(self.version)
-            #TODO for windowsself.shell.execute_command(cmd)
-            cmd = "cd /tmp; mkdir tuq;cd tuq; wget {0} -O tuq.tar.gz;".format(cbq_url)
-            cmd += "tar -xvf tuq.tar.gz;rm -rf tuq.tar.gz"
-            self.shell.execute_command(cmd)
 
     def _restart_indexer(self):
         couchbase_path = "/opt/couchbase/var/lib/couchbase"
