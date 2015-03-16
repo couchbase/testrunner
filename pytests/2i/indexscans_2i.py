@@ -256,6 +256,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self.assertTrue(msg in str(ex),"did not recieve message as expected : {0}".format(ex))
 
     def _generate_scan_vector_ranges(self, scan_vector_per_values = None):
+        scan_vector_per_values = str(scan_vector_per_values)
         values = scan_vector_per_values.split(":")
         new_values = []
         for val in values:
