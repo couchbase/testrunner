@@ -147,6 +147,7 @@ class BaseTestCase(unittest.TestCase):
             master_services = self.get_services(self.servers[:1],self.services_init, start_node = 0)
             if master_services != None:
                 master_services = master_services[0].split(",")
+
             self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
                                             self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port, self.quota_percent, services = master_services)
@@ -170,7 +171,9 @@ class BaseTestCase(unittest.TestCase):
                     str(self.__class__).find('negativetests.NegativeTests') != -1 or \
                     str(self.__class__).find('warmuptest.WarmUpTests') != -1 or \
                     str(self.__class__).find('failover.failovertests.FailoverTests') != -1 or \
-                    str(self.__class__).find('observe.observeseqnotests.ObserveSeqNoTests') != -1:
+                    str(self.__class__).find('observe.observeseqnotests.ObserveSeqNoTests') != -1 or \
+                    str(self.__class__).find('epengine.lwwepengine.LWW_EP_Engine') != -1:
+
                     self.services = self.get_services(self.servers,self.services_init)
                     # rebalance all nodes into the cluster before each test
                     self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers],
@@ -212,6 +215,8 @@ class BaseTestCase(unittest.TestCase):
                     return
                 test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
                     or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
+
+
                 if test_failed and TestInputSingleton.input.param("stop-on-failure", False)\
                         or self.input.param("skip_cleanup", False):
                     self.log.warn("CLEANUP WAS SKIPPED")

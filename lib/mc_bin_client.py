@@ -62,19 +62,19 @@ class MemcachedClient(object):
     def __del__(self):
         self.close()
 
-    def _sendCmd(self, cmd, key, val, opaque, extraHeader='', cas=0):
+    def _sendCmd(self, cmd, key, val, opaque, extraHeader='', cas=0, extended_meta_data=''):
         self._sendMsg(cmd, key, val, opaque, extraHeader=extraHeader, cas=cas,
-                      vbucketId=self.vbucketId)
+                      vbucketId=self.vbucketId, extended_meta_data=extended_meta_data)
 
     def _sendMsg(self, cmd, key, val, opaque, extraHeader='', cas=0,
                  dtype=0, vbucketId=0,
-                 fmt=REQ_PKT_FMT, magic=REQ_MAGIC_BYTE):
+                 fmt=REQ_PKT_FMT, magic=REQ_MAGIC_BYTE, extended_meta_data=''):
         msg = struct.pack(fmt, magic,
             cmd, len(key), len(extraHeader), dtype, vbucketId,
-                len(key) + len(extraHeader) + len(val), opaque, cas)
+                len(key) + len(extraHeader) + len(val) + len(extended_meta_data), opaque, cas)
         _, w, _ = select.select([], [self.s], [], self.timeout)
         if w:
-            self.s.send(msg + extraHeader + key + val)
+            self.s.send(msg + extraHeader + key + val + extended_meta_data)
         else:
             raise exceptions.EOFError("Timeout waiting for socket send. from {0}".format(self.host))
 
@@ -121,10 +121,10 @@ class MemcachedClient(object):
         cmd, opaque, cas, keylen, extralen, data = self._handleKeyedResponse(myopaque)
         return opaque, cas, data
 
-    def _doCmd(self, cmd, key, val, extraHeader='', cas=0):
+    def _doCmd(self, cmd, key, val, extraHeader='', cas=0,extended_meta_data=''):
         """Send a command and await its response."""
         opaque = self.r.randint(0, 2 ** 32)
-        self._sendCmd(cmd, key, val, opaque, extraHeader, cas)
+        self._sendCmd(cmd, key, val, opaque, extraHeader, cas, extended_meta_data=extended_meta_data)
         return self._handleSingleResponse(opaque)
 
     def _mutate(self, cmd, key, exp, flags, cas, val):
@@ -169,18 +169,44 @@ class MemcachedClient(object):
         self._set_vbucket(key, vbucket)
         return self._mutate(memcacheConstants.CMD_SET, key, exp, flags, 0, val)
 
-    def set_with_meta(self, key, exp, flags, seqno, cas, val, vbucket= -1):
+    def pack_the_extended_meta_data(self, adjusted_time, conflict_resolution_mode):
+        return struct.pack(memcacheConstants.EXTENDED_META_DATA_FMT,
+                    memcacheConstants.EXTENDED_META_DATA_VERSION,
+                    memcacheConstants.META_DATA_ID_ADJUSTED_TIME,
+                    memcacheConstants.META_DATA_ID_ADJUSTED_TIME_SIZE, adjusted_time,
+                    memcacheConstants.META_DATA_ID_CONFLICT_RESOLUTION_MODE,
+                    memcacheConstants.META_DATA_ID_CONFLICT_RESOLUTION_MODE_SIZE, conflict_resolution_mode)
+
+
+    def set_with_meta(self, key, exp, flags, seqno, cas, val, vbucket= -1, add_extended_meta_data=False,
+                      adjusted_time=0, conflict_resolution_mode=0):
         """Set a value in the memcached server."""
         self._set_vbucket(key, vbucket)
-        return self._doCmd(memcacheConstants.CMD_SET_WITH_META, key, val,
+
+        if add_extended_meta_data:
+            extended_meta_data =  self.pack_the_extended_meta_data( adjusted_time, conflict_resolution_mode)
+            return self._doCmd(memcacheConstants.CMD_SET_WITH_META, key, val,
+                   struct.pack(memcacheConstants.EXTENDED_META_CMD_FMT, flags, exp, seqno, cas, len(extended_meta_data)),
+                   extended_meta_data=extended_meta_data)
+        else:
+            return self._doCmd(memcacheConstants.CMD_SET_WITH_META, key, val,
                    struct.pack(META_CMD_FMT, flags, exp, seqno, cas) )
 
-    def del_with_meta(self, key, exp, flags, seqno, old_cas, new_cas, vbucket= -1):
+
+
+    def del_with_meta(self, key, exp, flags, seqno, old_cas, new_cas, vbucket= -1,
+                      add_extended_meta_data=False,
+                      adjusted_time=0, conflict_resolution_mode=0):
         """Set a value in the memcached server."""
         self._set_vbucket(key, vbucket)
-        return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
+        if add_extended_meta_data:
+            extended_meta_data =  self.pack_the_extended_meta_data( adjusted_time, conflict_resolution_mode)
+            return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
+                   struct.pack(memcacheConstants.EXTENDED_META_CMD_FMT, flags, exp, seqno, 0, len(extended_meta_data)),
+                   extended_meta_data=extended_meta_data)
+        else:
+            return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
                    struct.pack(META_CMD_FMT, flags, exp, seqno, new_cas), old_cas )
-
 
 
 
@@ -272,15 +298,38 @@ class MemcachedClient(object):
         return self.__parseGet(parts, len(key))
 
 
-    def getMeta(self, key):
+    def getMeta(self, key, request_extended_meta_data=False):
         """Get the metadata for a given key within the memcached server."""
         self._set_vbucket(key)
-        opaque, cas, data = self._doCmd(memcacheConstants.CMD_GET_META, key, '')
+        if request_extended_meta_data:
+            extras = struct.pack('>B', 1)
+        else:
+            extras = ''
+        opaque, cas, data = self._doCmd(memcacheConstants.CMD_GET_META, key, '', extras)
         deleted = struct.unpack('>I', data[0:4])[0]
         flags = struct.unpack('>I', data[4:8])[0]
         exp = struct.unpack('>I', data[8:12])[0]
         seqno = struct.unpack('>Q', data[12:20])[0]
-        return (deleted, flags, exp, seqno, cas)
+
+        if request_extended_meta_data:
+            conflict_res = struct.unpack('>B', data[20:21])[0]
+        else:
+            conflict_res = 0
+        return (deleted, flags, exp, seqno, cas, conflict_res)
+
+
+    def get_adjusted_time(self, vbucket):
+        """Get the value for a given key within the memcached server."""
+        self.vbucketId = vbucket
+        return self._doCmd(memcacheConstants.CMD_GET_ADJUSTED_TIME, '', '')
+
+
+    def set_time_drift_counter_state(self, vbucket, drift, state):
+        """Get the value for a given key within the memcached server."""
+        self.vbucketId = vbucket
+        extras = struct.pack(memcacheConstants.SET_DRIFT_COUNTER_STATE_REQ_FMT, drift, state)
+        return self._doCmd(memcacheConstants.CMD_SET_DRIFT_COUNTER_STATE, '', '', extras)
+
 
     def cas(self, key, exp, flags, oldVal, val, vbucket= -1):
         """CAS in a new value for the given key and comparison value."""

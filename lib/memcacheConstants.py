@@ -87,6 +87,11 @@ CMD_GETQ_META = 0xa1
 CMD_SET_WITH_META = 0xa2
 CMD_DEL_WITH_META = 0xa8
 
+
+
+CMD_SET_DRIFT_COUNTER_STATE = 0xc1
+CMD_GET_ADJUSTED_TIME = 0xc2
+
 # Replication
 CMD_TAP_CONNECT = 0x40
 CMD_TAP_MUTATION = 0x41
@@ -165,6 +170,23 @@ CMD_GET_CLUSTER_CONFIG = 0xb5
 # Flags, expiration
 SET_PKT_FMT = ">II"
 META_CMD_FMT = '>IIQQ'
+
+META_CMD_FMT = '>IIQQ'
+EXTENDED_META_CMD_FMT = '>IIQQH'
+
+SET_DRIFT_COUNTER_STATE_REQ_FMT = '>qB'
+GET_ADJUSTED_TIME_RES_FMT = '>Q'
+
+# version - 1 byte [id, length, field]+ id is 1 byte, length is 2 bytes, field length is given by length
+# for now we only support field ids adjusted time and conflict resolution mode and I am going to assume this:
+# version=1, id_1= 1 (adjusted time), adjusted time length = 8 and then 8 bytes
+#  and tthen id_2 = 2 (conflict resolution mode), length = 1 or 2? and then t conflict resolution mode
+EXTENDED_META_DATA_FMT = '>BBHQBHB'
+EXTENDED_META_DATA_VERSION = 0x1
+META_DATA_ID_ADJUSTED_TIME = 0x1
+META_DATA_ID_ADJUSTED_TIME_SIZE = 8
+META_DATA_ID_CONFLICT_RESOLUTION_MODE = 0x2
+META_DATA_ID_CONFLICT_RESOLUTION_MODE_SIZE = 1
 
 # flags
 GET_RES_FMT = ">I"

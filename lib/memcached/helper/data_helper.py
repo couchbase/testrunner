@@ -1295,6 +1295,42 @@ class VBucketAwareMemcached(object):
     def done(self):
         [self.memcacheds[ip].close() for ip in self.memcacheds]
 
+         # This saves a lot of repeated code - the func is the mc bin client function
+
+    def generic_request(self, func, *args):
+        key = args[0]
+        vb_error = 0
+        while True:
+            try:
+                return self._send_op(func, *args)
+            except MemcachedError as error:
+                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
+                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]),
+                                        forward_map=self._parse_not_my_vbucket_error(error))
+                    vb_error += 1
+                else:
+                    raise error
+            except (EOFError, socket.error), error:
+                if "Got empty data (remote died?)" in error.message or \
+                   "Timeout waiting for socket" in error.message or \
+                   "Broken pipe" in error.message or "Connection reset by peer" in error.message \
+                    and vb_error < 5:
+                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
+                    vb_error += 1
+                    if vb_error >= 5:
+                        raise error
+                else:
+                    raise error
+            except BaseException as error:
+                if vb_error < 5:
+                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
+                    self.log.info("***************resetting vbucket id***********")
+                    vb_error += 1
+                else:
+                    raise error
+
+
+
     def _parse_not_my_vbucket_error(self, error):
         error_msg = error.msg
         if "Connection reset with error:" in error_msg:
