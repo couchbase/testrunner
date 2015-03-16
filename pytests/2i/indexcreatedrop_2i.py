@@ -295,7 +295,6 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
         except Exception, ex:
             self.log.info(ex)
             self.assertTrue("Index does not exist" in str(ex), ex)
-            raise
 
     def test_ambiguity_in_gsi_indexes_due_to_node_down(self):
         servr_out = self.get_nodes_from_services_map(service_type = "index")
