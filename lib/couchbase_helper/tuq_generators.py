@@ -517,11 +517,11 @@ class JsonGenerator:
         join_mo = self._shuffle(xrange(1, 12 + 1),isShuffle)
         join_day = self._shuffle(xrange(1, 28 + 1),isShuffle)
         template = '{{ "Amount":{0}, "CurrencyCode":"{1}",'
-        template += ' "TotalTax":{{"DecimalPlaces" : {2}, "Amount" : {3}, "CurrencyCode" : "{4}",}}, ,'
+        template += ' "TotalTax":{{"DecimalPlaces" : {2}, "Amount" : {3}, "CurrencyCode" : "{4}"}},'
         template += ' "Tax":{5}, "FareBasisCode":{6}, "PassengerTypeQuantity":{7}, "TicketType":"{8}",'
         template += '"SequenceNumber": {9},'
         template += ' "DirectionInd" : "{10}",  "Itinerary" : {11}, "Destination" : "{12}",'
-        template += '"join_yr":{13}, "join_mo":{14}, "join_day":{15}, "Codes" :{16}}}'
+        template += '"join_yr":{13}, "join_mo":{14}, "join_day":{15}, "Codes":{16}}}'
         count = 1
         for dest in dests:
             for year in join_yr:
@@ -535,12 +535,12 @@ class JsonGenerator:
                         decimal_tax = [1,2]
                         amount_tax = [day]
                         currency_tax = currency
-                        taxes = [{"DecimalPlaces": 2, "Amount": float(amount_tax)/3,
+                        taxes = [{"DecimalPlaces": 2, "Amount": float(amount_tax[0])/3,
                                   "TaxCode": "US1", "CurrencyCode": currency},
-                                 {"DecimalPlaces": 2, "Amount": float(amount_tax)/4,
+                                 {"DecimalPlaces": 2, "Amount": float(amount_tax[0])/4,
                                   "TaxCode": "US2", "CurrencyCode": currency},
-                                 {"DecimalPlaces": 2, "Amount": amount_tax - float(amount_tax)/4-\
-                                  float(amount_tax)/3,
+                                 {"DecimalPlaces": 2, "Amount": amount_tax[0] - float(amount_tax[0])/4-\
+                                  float(amount_tax[0])/3,
                                   "TaxCode": "US2", "CurrencyCode": currency}]
 
                         fare_basis = [{"content": "XA21A0NY", "DepartureAirportCode": dest,
@@ -629,7 +629,7 @@ class JsonGenerator:
                         generators.append(DocumentGenerator(prefix, template,
                                                amount, currency, decimal_tax, amount_tax, currency_tax,
                                                [taxes], [fare_basis], pass_amount, ticket_type, sequence,
-                                               direction, itinerary, [dest], [year], [month], [day],
+                                               direction, [itinerary], [dest], [year], [month], [day],
                                                [[dest, dest]], start=start, end=docs_per_day))
         return generators
 
