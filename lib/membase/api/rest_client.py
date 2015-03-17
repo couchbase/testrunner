@@ -1535,6 +1535,13 @@ class RestConnection(object):
             map[key] = node.services
         return map
 
+    # Check node version
+    def check_node_versions(self, check_version = "4.0"):
+        versions = self.get_nodes_versions()
+        if versions[0] < check_version:
+            return False
+        return True
+
     def get_bucket_stats(self, bucket='default'):
         stats = {}
         status, json_parsed = self.get_bucket_stats_json(bucket)

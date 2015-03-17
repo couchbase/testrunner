@@ -290,6 +290,7 @@ class RebalanceTask(Task):
         self.to_remove = to_remove
         self.start_time = None
         self.services = services
+        self.monitor_vbuckets_shuffling = False
 
         try:
             self.rest = RestConnection(self.servers[0])
@@ -305,9 +306,24 @@ class RebalanceTask(Task):
     def execute(self, task_manager):
         try:
             if len(self.to_add) and len(self.to_add) == len(self.to_remove):
-                self.log.info("This is swap rebalance and we will monitor vbuckets shuffling")
+                node_version_check = self.rest.check_node_versions()
                 non_swap_servers = set(self.servers) - set(self.to_remove) - set(self.to_add)
                 self.old_vbuckets = RestHelper(self.rest)._get_vbuckets(non_swap_servers, None)
+                if self.old_vbuckets:
+                    self.monitor_vbuckets_shuffling = True
+                if self.monitor_vbuckets_shuffling and node_version_check and self.services:
+                    for service_group in self.services:
+                        if "kv" not in service_group:
+                            self.monitor_vbuckets_shuffling = False
+                if self.monitor_vbuckets_shuffling and node_version_check:
+                    services_map = self.rest.get_nodes_services()
+                    for remove_node in self.to_remove:
+                         key = "{0}:{1}".format(remove_node.ip,remove_node.port)
+                         services = services_map[key]
+                         if "kv" not in services:
+                            self.monitor_vbuckets_shuffling = False
+                if self.monitor_vbuckets_shuffling:
+                    self.log.info("This is swap rebalance and we will monitor vbuckets shuffling")
             self.add_nodes(task_manager)
             self.start_rebalance(task_manager)
             self.state = CHECKING
@@ -370,7 +386,8 @@ class RebalanceTask(Task):
     def check(self, task_manager):
         progress = -100
         try:
-            if self.old_vbuckets:
+            if self.monitor_vbuckets_shuffling:
+                self.log.info("This is swap rebalance and we will monitor vbuckets shuffling")
                 non_swap_servers = set(self.servers) - set(self.to_remove) - set(self.to_add)
                 new_vbuckets = RestHelper(self.rest)._get_vbuckets(non_swap_servers, None)
                 for vb_type in ["active_vb", "replica_vb"]:
