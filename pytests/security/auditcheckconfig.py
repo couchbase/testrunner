@@ -297,6 +297,7 @@ class auditcheckconfig(BaseTestCase):
     def test_rotateIntervalCluster(self):
         intervalSec = self.input.param("intervalSec", None)
         auditIns = audit(host=self.master)
+	auditIns.setAuditEnable('true')
         originalInt = auditIns.getAuditRotateInterval()
         auditIns.setAuditRotateInterval(intervalSec)
         firstEventTime = []

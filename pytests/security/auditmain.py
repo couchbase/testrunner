@@ -43,17 +43,16 @@ class audit:
             self.eventID = eventID
             self.eventDef = self.returnEventsDef()
 
-
     def getAuditConfigPathInitial(self):
         shell = RemoteMachineShellConnection(self.host)
         os_type = shell.extract_remote_info().distribution_type
         log.info ("OS type is {0}".format(os_type))
-        if os_type == 'CentOS':
-            auditconfigpath = audit.LINCONFIGFILEPATH
-            self.currentLogFile = audit.LINLOGFILEPATH
-        else:
+        if os_type == 'windows':
             auditconfigpath = audit.WINCONFIFFILEPATH
             self.currentLogFile = audit.WINLOGFILEPATH
+        else:
+            auditconfigpath = audit.LINCONFIGFILEPATH
+            self.currentLogFile = audit.LINLOGFILEPATH
         return auditconfigpath
 
     '''
@@ -127,14 +126,17 @@ class audit:
         dictionary of actual event from audit.log
     '''
     def returnEvent(self, eventNumber):
-        data = []
-        self.readFile(self.pathLogFile, audit.AUDITLOGFILENAME)
-        with open(audit.DOWNLOADPATH + audit.AUDITLOGFILENAME) as f:
-            for line in f:
-                tempJson = json.loads(line)
-                if (tempJson['id'] == eventNumber):
-                    data.append(json.loads(line))
-        return data[len(data) - 1]
+        try:
+            data = []
+            self.readFile(self.pathLogFile, audit.AUDITLOGFILENAME)
+            with open(audit.DOWNLOADPATH + audit.AUDITLOGFILENAME) as f:
+                for line in f:
+                    tempJson = json.loads(line)
+                    if (tempJson['id'] == eventNumber):
+                        data.append(json.loads(line))
+            return data[len(data) - 1]
+        except:
+            log.info ("ERROR ---- Event Not Found in audit.log file. Please check the log file")
 
     '''
     getAuditConfigElement - get element of a configuration file
@@ -394,14 +396,19 @@ class audit:
                                 log.info ('Mis-Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(tempValue, data[items][seclevel], seclevel))
                                 flag = False
                 else:
-                    if (items == 'port' and data[items] >= 30000 and data[items] <= 65535):
+		    if (items == 'port' and data[items] >= 30000 and data[items] <= 65535):
                         log.info ("Matching port is an ephemeral port -- actual port is {0}".format(data[items]))
-                    else:
-                        log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
-                        if (data[items] != expectedResult[items]):
-                            log.info ('Mis - Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
-                            flag = False
-        #log.info ("Value of flag is {0}".format(flag))
+		    else:
+		        log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
+		        if (items == 'peername'):
+		             if (expectedResult[items] not in data[items]):
+		                  flag = False
+		             else:
+		                  log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
+		                  if (data[items] != expectedResult[items]):
+		                      log.info ('Mis - Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
+		                      flag = False
+	#log.info ("Value of flag is {0}".format(flag))
         return flag
 
     '''
