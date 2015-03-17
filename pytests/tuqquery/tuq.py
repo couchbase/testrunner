@@ -23,7 +23,10 @@ class QueryTests(BaseTestCase):
         if not self._testMethodName == 'suite_setUp':
             self.skip_buckets_handle = True
         super(QueryTests, self).setUp()
-        self.version = self.input.param("cbq_version", "git_repo")
+        if self.input.param("force_clean", False):
+            self.skip_buckets_handle = False
+            super(QueryTests, self).setUp()
+        self.version = self.input.param("cbq_version", "sherlock")
         self.flat_json = self.input.param("flat_json", False)
         self.directory_flat_json = self.input.param("directory_flat_json", "/tmp/")
         if self.input.tuq_client and "client" in self.input.tuq_client:
@@ -2639,7 +2642,9 @@ class QueryTests(BaseTestCase):
                                                                 ('', auth_row)[auth_row is not None], server.ip, server.port, options)
             out = self.shell.execute_command(cmd)
         elif self.version == "sherlock":
-            if self.services_init.find('n1ql') != -1:
+            if self.services_init and self.services_init.find('n1ql') != -1:
+                return
+            if self.master.services and self.master.services.find('n1ql') !=-1:
                 return
             if os == 'windows':
                 couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
