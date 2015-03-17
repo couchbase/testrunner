@@ -84,6 +84,45 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 create_index = self.run_create_index, drop_index = self.run_drop_index,
                 query_with_explain = self.run_query_with_explain, query = self.run_query)
 
+    def test_multi_create_query_explain_drop_index_primary(self):
+        qdfs = []
+        for query_definition in self.query_definitions:
+            query_definition.index_name = "#primary"
+            qdfs.append(query_definition)
+        self.query_definitions = qdfs
+        if self.run_async:
+            try:
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions,
+                    create_index = False, drop_index = False,
+                    query_with_explain = self.run_query_with_explain, query = False)
+                self._run_tasks(tasks)
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions,
+                    create_index = False, drop_index = False,
+                    query_with_explain = False, query = self.run_query)
+                self._run_tasks(tasks)
+                # runs operations
+                self.run_doc_ops()
+                # verify results
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions,
+                    create_index = False, drop_index = False,
+                    query_with_explain = False, query = self.run_query)
+                self._run_tasks(tasks)
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions,
+                    create_index = False, drop_index = False,
+                    query_with_explain = self.run_query_with_explain, query = False)
+            except Exception, ex:
+                self.log.info(ex)
+                raise
+        else:
+            self.run_multi_operations(buckets = self.buckets,
+                query_definitions = self.query_definitions,
+                create_index = False, drop_index = False,
+                query_with_explain = self.run_query_with_explain, query = self.run_query)
+
     def test_multi_create_query_explain_drop_index_with_index_where_clause(self):
         query_definition_generator = SQLDefinitionGenerator()
         self.query_definitions = query_definition_generator.generate_employee_data_query_definitions_for_index_where_clause()
