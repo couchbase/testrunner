@@ -15,6 +15,7 @@ class TuqGenerators(object):
         self.full_set = full_set
         self.query = None
         self.type_args = {}
+        self.nests = self._all_nested_objects(full_set[0])
         self.type_args['str'] = [attr[0] for attr in full_set[0].iteritems()
                             if isinstance(attr[1], unicode)]
         self.type_args['int'] = [attr[0] for attr in full_set[0].iteritems()
@@ -39,6 +40,10 @@ class TuqGenerators(object):
                                                                                     if isinstance(attr[1], str) or isinstance(attr[1], unicode)]
             self.type_args['_list_obj%s_int'% (self.type_args['list_obj'].index(obj))] = [attr[0] for attr in full_set[0][obj][0].iteritems()
                                                                                     if isinstance(attr[1], int)]
+        for i in xrange(2, 5):
+            self.type_args['nested_%sl' % i] = [attr for attr in self.nests if len(attr.split('.')) == i]
+        for i in xrange(2, 5):
+            self.type_args['nested_list_%sl' % i] = [attr[0] for attr in self.nests.iteritems() if len(attr[0].split('.')) == i and isinstance(attr[1], list)]
         self._clear_current_query()
 
     def generate_query(self, template):
@@ -72,6 +77,16 @@ class TuqGenerators(object):
             return result
         finally:
             self._clear_current_query()
+
+    def _all_nested_objects(self, d):
+        def items():
+            for key, value in d.items():
+                if isinstance(value, dict):
+                    for subkey, subvalue in self._all_nested_objects(value).items():
+                        yield key + "." + subkey, subvalue
+                else:
+                    yield key, value
+        return dict(items())
 
     def _create_alias_map(self):
         query_dict = self.query.split()
@@ -138,6 +153,14 @@ class TuqGenerators(object):
         elif len(attr) == 2:
             attributes = self.get_all_attributes()
             if attr[0].find('.') != -1:
+                splitted = attr[0].split('.')
+                if splitted[0] not in attributes:
+                    alias = [attr[0].split('.')[1],]
+                    clause = 'doc["%s"]' % attr[1]
+                    for inner in splitted[2:]:
+                        alias.append(inner)
+                    self.aliases[attr[1]] = tuple(alias)
+                    return clause
                 parent, child = attr[0].split('.')
                 if parent in attributes:
                     clause = 'doc["%s"]["%s"]' % (parent, child)
@@ -181,6 +204,8 @@ class TuqGenerators(object):
         select_clause = re.sub(r'ORDER BY.*', '', re.sub(r'.*SELECT', '', self.query)).strip()
         select_clause = re.sub(r'WHERE.*', '', re.sub(r'FROM.*', '', select_clause)).strip()
         select_attrs = select_clause.split(',')
+        if from_clause and from_clause.find('UNNEST') != -1:
+            from_clause = re.sub(r'UNNEST.*', '', from_clause).strip()
         condition = '{'
         #handle aliases
         for attr_s in select_attrs:
@@ -214,13 +239,26 @@ class TuqGenerators(object):
                         condition = 'doc["%s"]' % (attr[0].split('.')[0])
                         return condition
                     else:
-                        condition += '"%s" : {%s : doc["%s"]["%s"]},' % (attr[0].split('.')[0], attr[0].split('.')[1],
-                                                                         attr[0].split('.')[0], attr[0].split('.')[1])
+                        if attr[0].split('.')[0] not in self.get_all_attributes() and\
+                                        from_clause.find(attr[0].split('.')[0]) != -1:
+                            condition += '"%s" : doc["%s"],' % (attr[0].split('.')[1], attr[0].split('.')[1])
+                            continue
+                        else:
+                            condition += '"%s" : {%s : doc["%s"]["%s"]},' % (attr[0].split('.')[0], attr[0].split('.')[1],
+                                                                          attr[0].split('.')[0], attr[0].split('.')[1])
                 else:
                     if attr[0].find('[') != -1:
                         condition += '"%s" : doc["%s"]%s,' % (attr[0], attr[0][:attr[0].find('[')], attr[0][attr[0].find('['):])
                     else:
-                        condition += '"%s" : doc["%s"],' % (attr[0], attr[0])
+                        if attr[0] in self.aliases:
+                            value = self.aliases[attr[0]]
+                            if len(value) > 1:
+                                condition += '"%s" : doc["%s"]' % (attr[0], value[0])
+                                for inner in value[1:]:
+                                    condition += '["%s"]' % (inner)
+                                condition += ','
+                        else:
+                            condition += '"%s" : doc["%s"],' % (attr[0], attr[0])
             elif len(attr) == 2:
                 if attr[0].find('.') != -1:
                     condition += '"%s" : doc["%s"]["%s"],' % (attr[1], attr[0].split('.')[0], attr[0].split('.')[1])
@@ -263,7 +301,7 @@ class TuqGenerators(object):
         if self.distict:
             result = [dict(y) for y in set(tuple(x.items()) for x in result)]
         if unnest_clause:
-            result = [item for doc in self.full_set for item in eval(unnest_clause)]
+            result = [item for doc in result for item in eval(unnest_clause)]
         if self._create_groups()[0]:
             result = self._group_results(result)
         if self.aggr_fns:

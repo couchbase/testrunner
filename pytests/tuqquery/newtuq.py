@@ -20,6 +20,7 @@ from memcached.helper.data_helper import MemcachedClientHelper
 
 class QueryTests(BaseTestCase):
     def setUp(self):
+
         if not self._testMethodName == 'suite_setUp':
             self.skip_buckets_handle = True
         super(QueryTests, self).setUp()
@@ -36,6 +37,7 @@ class QueryTests(BaseTestCase):
         self.docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
+        self.dataset = self.input.param("dataset", "default")
         self.dataset = self.input.param("dataset", "default")
         self.primary_indx_type = self.input.param("primary_indx_type", 'VIEW')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
@@ -94,6 +96,11 @@ class QueryTests(BaseTestCase):
                           'SELECT *.* FROM {0} ... ERROR' : 'syntax error',
                           'FROM %s SELECT $str0 WHERE id=null' : 'syntax error',}
         self.negative_common_body(queries_errors)
+
+    def test_unnest(self):
+        query_template = 'SELECT emp.$int0, task FROM bucket0 emp UNNEST emp.$nested_list_3l0 task'
+        actual_result, expected_result = self.run_query_from_template(query_template)
+        self._verify_results(actual_result['results'], expected_result)
 
     def test_consistent_simple_check(self):
         queries = [self.gen_results.generate_query('SELECT $str0, $int0, $int1 FROM %s ' +\
