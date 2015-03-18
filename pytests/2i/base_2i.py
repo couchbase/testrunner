@@ -510,6 +510,18 @@ class BaseSecondaryIndexingTests(QueryTests):
         if self.initial_stats != None:
             self.final_stats = self.get_index_stats(perNode=True)
 
+    def _verify_primary_index_count(self):
+        bucket_map = self.get_buckets_itemCount()
+        index_bucket_map = self.n1ql_helper.get_index_count_using_primary_index(self.buckets, self.n1ql_node)
+        self.log.info(bucket_map)
+        self.log.info(index_bucket_map)
+        for bucket_name in bucket_map.keys():
+            actual_item_count = index_bucket_map[bucket_name]
+            expected_item_count = bucket_map[bucket_name]
+            self.assertTrue(str(actual_item_count) == str(expected_item_count),
+                "Bucket {0}, mismatch in item count for index :{1} : expected {2} != actual {3} ".format
+                    (bucket_name, "primary", expected_item_count, actual_item_count))
+
     def _verify_items_count(self):
         index_map = self.get_index_stats()
         bucketMap = self.get_buckets_itemCount()

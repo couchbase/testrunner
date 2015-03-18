@@ -1731,7 +1731,7 @@ class BaseTestCase(unittest.TestCase):
 
     def load(self, generators_load, exp=0, flag=0,
              kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
-             timeout_secs=30, op_type='create', start_items=0):
+             timeout_secs=30, op_type='create', start_items=0, verify_data = True):
         gens_load = {}
         for bucket in self.buckets:
             tmp_gen = []
@@ -1753,8 +1753,33 @@ class BaseTestCase(unittest.TestCase):
         for task in tasks:
             task.result()
         self.num_items = items + start_items
-        self.verify_cluster_stats(self.servers[:self.nodes_init])
+        if verify_data:
+            self.verify_cluster_stats(self.servers[:self.nodes_init])
         self.log.info("LOAD IS FINISHED")
+
+    def async_load(self, generators_load, exp=0, flag=0,
+             kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
+             timeout_secs=30, op_type='create', start_items=0):
+        gens_load = {}
+        for bucket in self.buckets:
+            tmp_gen = []
+            for generator_load in generators_load:
+                tmp_gen.append(copy.deepcopy(generator_load))
+            gens_load[bucket] = copy.deepcopy(tmp_gen)
+        tasks = []
+        items = 0
+        for gen_load in gens_load[self.buckets[0]]:
+                items += (gen_load.end - gen_load.start)
+
+        for bucket in self.buckets:
+            self.log.info("%s %s to %s documents..." % (op_type, items, bucket.name))
+            tasks.append(self.cluster.async_load_gen_docs(self.master, bucket.name,
+                                             gens_load[bucket],
+                                             bucket.kvs[kv_store], op_type, exp, flag,
+                                             only_store_hash, batch_size, pause_secs,
+                                             timeout_secs))
+        self.num_items = items + start_items
+        return tasks
 
     def generate_full_docs_list(self, gens_load = [], keys=[], update = False):
         all_docs_list = []
@@ -1819,15 +1844,31 @@ class BaseTestCase(unittest.TestCase):
         if self.testrunner_client != None:
             os.environ[testconstants.TESTRUNNER_CLIENT] = self.testrunner_client
 
+    def sync_ops_all_buckets(self, docs_gen_map = {}):
+        for key in docs_gen_map.keys():
+            verify_data = True
+            if key != "remaining":
+                op_type = key
+                if key == "expiry":
+                    op_type = "update"
+                    verify_data = False
+                    self.expiry = 3
+                self.load(docs_gen_map[key], op_type = op_type, exp = self.expiry, verify_data = verify_data)
+        if "expiry" in docs_gen_map.keys():
+            self._expiry_pager(self.master)
+
     def async_ops_all_buckets(self, docs_gen_map = {}):
+        tasks = []
+        if "expiry" in docs_gen_map.keys():
+            self._expiry_pager(self.master)
         for key in docs_gen_map.keys():
             if key != "remaining":
                 op_type = key
                 if key == "expiry":
                     op_type = "update"
-                self.load(docs_gen_map[key], op_type = op_type, exp = self.expiry)
-        if "expiry" in docs_gen_map.keys():
-            self._expiry_pager(self.master)
+                    self.expiry = 3
+                tasks +=self.async_load(docs_gen_map[key], op_type = op_type, exp = self.expiry)
+        return tasks
 
     def _expiry_pager(self, master, val=10):
         for bucket in self.buckets:

@@ -171,9 +171,17 @@ class QueryTests(BaseTestCase):
                     docs.append(doc)
         return docs
 
+    def async_run_doc_ops(self):
+        if self.doc_ops:
+            tasks = self.async_ops_all_buckets(self.docs_gen_map)
+            self.n1ql_helper.full_docs_list = self.full_docs_list_after_ops
+            self.gen_results = TuqGenerators(self.log, self.n1ql_helper.full_docs_list)
+            return tasks
+        return []
+
     def run_doc_ops(self):
         if self.doc_ops:
-            self.async_ops_all_buckets(self.docs_gen_map)
+            self.sync_ops_all_buckets(self.docs_gen_map)
             self.n1ql_helper.full_docs_list = self.full_docs_list_after_ops
             self.gen_results = TuqGenerators(self.log, self.n1ql_helper.full_docs_list)
             self.sleep(60)

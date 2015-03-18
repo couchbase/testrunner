@@ -294,6 +294,7 @@ class N1QLHelper():
             query_params.update("scan_vector", scan_vector)
         if scan_consistency:
             query_params.update("scan_consistency", scan_consistency)
+
         return query_params
 
     def _is_index_in_list(self, bucket, index_name, server = None):
@@ -307,6 +308,16 @@ class N1QLHelper():
             if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] != "pending":
                 return True
         return False
+
+    def get_index_count_using_primary_index(self, buckets, server = None):
+        query = "SELECT COUNT(*) FROM {0}"
+        map= {}
+        if server == None:
+            server = self.master
+        for bucket in buckets:
+            res = self.run_cbq_query(query = query.format(bucket.name), server = server)
+            map[bucket.name] = int(res["results"][0]["$1"])
+        return map
 
     def _gen_dict(self, result):
         result_set = []

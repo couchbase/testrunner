@@ -45,7 +45,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions,
                     create_index = self.run_create_index, drop_index = False,
-                    query_with_explain = False, query = False)
+                    query_with_explain = False, query = False, scan_consistency = self.scan_consistency)
                 self._run_tasks(tasks)
                 tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions,
@@ -55,7 +55,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions,
                     create_index = False, drop_index = False,
-                    query_with_explain = self.run_query_with_explain, query = False)
+                    query_with_explain = self.run_query_with_explain, query = False, scan_consistency = self.scan_consistency)
                 self._run_tasks(tasks)
                 # runs operations
                 self.run_doc_ops()
@@ -63,12 +63,12 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions,
                     create_index = False, drop_index = False,
-                    query_with_explain = False, query = self.run_query)
+                    query_with_explain = False, query = self.run_query, scan_consistency = self.scan_consistency)
                 self._run_tasks(tasks)
                 tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions,
                     create_index = False, drop_index = False,
-                    query_with_explain = self.run_query_with_explain, query = False)
+                    query_with_explain = self.run_query_with_explain, query = False, scan_consistency = self.scan_consistency)
             except Exception, ex:
                 self.log.info(ex)
                 raise
@@ -82,7 +82,37 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self.run_multi_operations(buckets = self.buckets,
                 query_definitions = self.query_definitions,
                 create_index = self.run_create_index, drop_index = self.run_drop_index,
-                query_with_explain = self.run_query_with_explain, query = self.run_query)
+                query_with_explain = self.run_query_with_explain, query = self.run_query, scan_consistency = self.scan_consistency)
+
+    def test_multi_create_query_explain_drop_index_with_concurrent_mutations(self):
+        try:
+            kvops_tasks = self.async_run_doc_ops()
+            tasks = self.async_run_multi_operations(buckets = self.buckets,
+                query_definitions = self.query_definitions,
+                create_index = self.run_create_index, drop_index = False,
+                query_with_explain = False, query = False, scan_consistency = self.scan_consistency)
+            # runs operations
+            self._run_tasks(kvops_tasks)
+            self._run_tasks(tasks)
+            tasks = self.async_run_multi_operations(buckets = self.buckets,
+                query_definitions = self.query_definitions,
+                create_index = False, drop_index = False,
+                query_with_explain = False, query = self.run_query, scan_consistency = self.scan_consistency)
+            self._run_tasks(tasks)
+            tasks = self.async_run_multi_operations(buckets = self.buckets,
+                query_definitions = self.query_definitions,
+                create_index = False, drop_index = False,
+                query_with_explain = self.run_query_with_explain, query = False)
+            self._run_tasks(tasks)
+        except Exception, ex:
+            self.log.info(ex)
+            raise
+        finally:
+            tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions,
+                    create_index = False, drop_index = self.run_drop_index,
+                    query_with_explain = False, query = False, scan_consistency = self.scan_consistency)
+            self._run_tasks(tasks)
 
     def test_multi_create_query_explain_drop_index_primary(self):
         qdfs = []
@@ -92,28 +122,30 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         self.query_definitions = qdfs
         if self.run_async:
             try:
+                self._verify_primary_index_count()
                 tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions,
                     create_index = False, drop_index = False,
-                    query_with_explain = self.run_query_with_explain, query = False)
+                    query_with_explain = self.run_query_with_explain, query = False, scan_consistency = self.scan_consistency)
                 self._run_tasks(tasks)
                 tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions,
                     create_index = False, drop_index = False,
-                    query_with_explain = False, query = self.run_query)
+                    query_with_explain = False, query = self.run_query, scan_consistency = self.scan_consistency)
                 self._run_tasks(tasks)
                 # runs operations
                 self.run_doc_ops()
+                self._verify_primary_index_count()
                 # verify results
                 tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions,
                     create_index = False, drop_index = False,
-                    query_with_explain = False, query = self.run_query)
+                    query_with_explain = False, query = self.run_query, scan_consistency = self.scan_consistency)
                 self._run_tasks(tasks)
                 tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions,
                     create_index = False, drop_index = False,
-                    query_with_explain = self.run_query_with_explain, query = False)
+                    query_with_explain = self.run_query_with_explain, query = False, scan_consistency = self.scan_consistency)
             except Exception, ex:
                 self.log.info(ex)
                 raise
@@ -138,7 +170,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self.run_multi_operations(buckets = self.buckets,
                 query_definitions = self.query_definitions,
                 create_index = False, drop_index = False,
-                query_with_explain = True, query = True)
+                query_with_explain = True, query = True, scan_consistency = self.scan_consistency)
         self.run_multi_operations(buckets = self.buckets,
             query_definitions = self.query_definitions,
             create_index = False, drop_index = True,
@@ -181,6 +213,8 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self._run_tasks(tasks)
             # runs operations
             self.run_doc_ops()
+            if self.scan_vector_per_values:
+                scan_vector_ranges = self._generate_scan_vector_ranges(self.scan_vector_per_values)
             # verify results
             if len(scan_vector_ranges) > 0:
                 for use_percentage in scan_vector_ranges:
@@ -243,6 +277,9 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 self._run_tasks(tasks)
             # runs operations
             self.run_doc_ops()
+            if self.scan_vector_per_values:
+                scan_vector_ranges = self._generate_scan_vector_ranges(self.scan_vector_per_values)
+            self._verify_primary_index_count()
             # verify results
             if len(scan_vector_ranges) > 0:
                 for use_percentage in scan_vector_ranges:
@@ -304,7 +341,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
 
     def _run_tasks(self, tasks):
     	for task in tasks:
-    		task.result()
+            task.result()
 
     def _translate_where_clause(self, query):
     	query = query.replace("EQUALS","==")
