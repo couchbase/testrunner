@@ -1862,6 +1862,8 @@ class CouchbaseCluster:
         task = self.__async_failover(master=True, graceful=graceful)
         task.result()
         if graceful:
+            # wait for replica update
+            self.sleep(60)
             # use rebalance stats to monitor failover
             RestConnection(self.__master_node).monitorRebalance()
         if rebalance:
@@ -1881,6 +1883,7 @@ class CouchbaseCluster:
             graceful=graceful)
         task.result()
         if graceful:
+            self.sleep(60)
             # use rebalance stats to monitor failover
             RestConnection(self.__master_node).monitorRebalance()
         if rebalance:
@@ -2048,7 +2051,8 @@ class CouchbaseCluster:
     def verify_items_count(self, timeout=180):
         """Wait for actual bucket items count reach to the count on bucket kv_store.
         """
-        ret_value = True
+        active_key_count_passed = True
+        replica_key_count_passed = True
 
         # Check active, curr key count
         stats_tasks = []
@@ -2064,7 +2068,7 @@ class CouchbaseCluster:
         except TimeoutError:
             self.__log.error(
                 "ERROR: Timed-out waiting for active item count to match")
-            ret_value = False
+            active_key_count_passed = False
 
         # Check replica key count
         stats_tasks = []
@@ -2081,8 +2085,8 @@ class CouchbaseCluster:
             self.run_cbvdiff()
             self.__log.error(
                 "ERROR: Timed-out waiting for replica item count to match")
-            ret_value = False
-        return ret_value
+            replica_key_count_passed = False
+        return active_key_count_passed,replica_key_count_passed
 
     def run_cbvdiff(self):
         """ Run cbvdiff, a tool that compares active and replica vbucket keys
@@ -2871,7 +2875,6 @@ class XDCRNewBaseTest(unittest.TestCase):
         for cb_cluster in self.__cb_clusters:
             for remote_cluster_ref in cb_cluster.get_remote_clusters():
                 try:
-                    verification_completed = False
                     src_cluster = remote_cluster_ref.get_src_cluster()
                     dest_cluster = remote_cluster_ref.get_dest_cluster()
                     src_cluster.run_expiry_pager()
@@ -2882,20 +2885,24 @@ class XDCRNewBaseTest(unittest.TestCase):
 
                     src_cluster.wait_for_outbound_mutations()
                     dest_cluster.wait_for_outbound_mutations()
-
-                    src_key_count_ok = src_cluster.verify_items_count()
-                    dest_key_count_ok = dest_cluster.verify_items_count()
+                except Exception as e:
+                    # just log any exception thrown, do not fail test
+                    self.log.error(e)
+                try:
+                    src_active_passed, src_replica_passed = src_cluster.verify_items_count()
+                    dest_active_passed, dest_replica_passed = dest_cluster.verify_items_count()
 
                     src_cluster.verify_data()
                     dest_cluster.verify_data()
-                    verification_completed = True
                 except Exception as e:
                     self.log.error(e)
                 finally:
-                    self.verify_rev_ids(remote_cluster_ref.get_replications())
-                    if not verification_completed:
-                        self.fail(
-                            "Verification failed for remote-cluster: {0}".
+                    rev_err_count = self.verify_rev_ids(remote_cluster_ref.get_replications())
+                    if not (src_active_passed or dest_active_passed):
+                        self.fail("Incomplete replication: Active key count is incorrect")
+                    if not (src_replica_passed or dest_replica_passed):
+                        self.fail("Incomplete intra-cluster replication: "
+                                  "replica count did not match active count")
+                    if rev_err_count > 0:
+                        self.fail("RevID verification failed for remote-cluster: {0}".
                             format(remote_cluster_ref))
-                    if not (src_key_count_ok and dest_key_count_ok):
-                        self.fail("Active or replica key count is incorrect")
