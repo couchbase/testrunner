@@ -859,7 +859,7 @@ class RestConnection(object):
         # example : name:two
         msg = "removing remote cluster name:{0}".format(urllib.quote(name))
         log.info(msg)
-        api = self.baseUrl + 'pools/default/remoteClusters/{0}?connection_timeout=120000'.format(urllib.quote(name))
+        api = self.baseUrl + 'pools/default/remoteClusters/{0}?'.format(urllib.quote(name))
         params = urllib.urlencode({})
         status, content, header = self._http_request(api, 'DELETE', params)
         #sample response : "ok"
@@ -867,9 +867,6 @@ class RestConnection(object):
             log.error("failed to remove remote cluster: status:{0},content:{1}".format(status, content))
             raise Exception("remoteCluster API 'remove cluster' failed")
 
-
-    # replicationType:continuous toBucket:default toCluster:two fromBucket:default
-    # defaults at https://github.com/couchbase/goxdcr/metadata/replication_settings.go#L20-L33
     # replicationType:continuous toBucket:default toCluster:two fromBucket:default
     # defaults at https://github.com/couchbase/goxdcr/metadata/replication_settings.go#L20-L33
     def start_replication(self, replicationType, fromBucket, toCluster, rep_type="xmem", toBucket=None, xdcr_params={}):
@@ -916,10 +913,6 @@ class RestConnection(object):
         log.info("Deleting replication {0}".format(uri))
         api = self.baseUrl + uri
         self._http_request(api, 'DELETE')
-        # temp workaround for delete replication timeout
-        log.info("Workaround for MB:13683 : sleeping for 2 mins after bucket deletion")
-        time.sleep(120)
-
 
     def remove_all_recoveries(self):
         recoveries = []
@@ -1942,25 +1935,8 @@ class RestConnection(object):
     def is_replication_paused(self, src_bucket_name, dest_bucket_name):
         return self.get_xdcr_param(src_bucket_name, dest_bucket_name, 'pauseRequested')
 
-    """ Enable master trace logging for xdcr
-    wget -O- --post-data='ale:set_loglevel(xdcr_trace, debug).' http://Administrator:asdasd@127.0.0.1:8091/diag/eval"""
-    def enable_xdcr_trace_logging(self):
-        self.diag_eval('ale:set_loglevel(xdcr_trace, debug).')
-
-    def enable_goxdcr(self):
-        self.diag_eval('ns_config:set(goxdcr_enabled, true).')
-
-    def is_goxdcr_enabled(self):
-        status, content = self.diag_eval('ns_config:read_key_fast(goxdcr_enabled, false)')
-        if content == "true":
-            return True
-        return False
-
     def get_recent_xdcr_vb_ckpt(self, src_bucket_name):
-        if not self.is_goxdcr_enabled():
-            command = 'ns_server_testrunner_api:grab_all_xdcr_checkpoints("%s", 10).' % src_bucket_name
-        else:
-            command = 'ns_server_testrunner_api:grab_all_goxdcr_checkpoints().'
+        command = 'ns_server_testrunner_api:grab_all_goxdcr_checkpoints().'
         status, content = self.diag_eval(command)
         if not status:
             raise Exception("Unable to get recent XDCR checkpoint information")
@@ -1969,8 +1945,7 @@ class RestConnection(object):
         # convert string to dict using json
         chkpt_doc_string = json_parsed.values()[0].replace('"', '\"')
         chkpt_dict = json.loads(chkpt_doc_string)
-        if self.is_goxdcr_enabled():
-            chkpt_dict = chkpt_dict['checkpoints'][0]
+        chkpt_dict = chkpt_dict['checkpoints'][0]
         return chkpt_dict
 
     def set_reb_cons_view(self, disable):

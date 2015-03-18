@@ -264,10 +264,6 @@ class NodeHelper:
             [server],
             test_case,
             wait_if_warmup=True)
-        if GO_XDCR.ENABLED and RestConnection(server).is_cluster_compat_mode_greater_than(3.1):
-            RestConnection(server).enable_goxdcr()
-        else:
-            RestConnection(server).enable_xdcr_trace_logging()
 
     @staticmethod
     def enable_firewall(
@@ -291,10 +287,6 @@ class NodeHelper:
         time.sleep(5)
         shell.start_couchbase()
         shell.disconnect()
-        if GO_XDCR.ENABLED and RestConnection(server).is_cluster_compat_mode_greater_than(3.1):
-            RestConnection(server).enable_goxdcr()
-        else:
-            RestConnection(server).enable_xdcr_trace_logging()
 
     @staticmethod
     def wait_service_started(server, wait_time=120):
@@ -312,10 +304,6 @@ class NodeHelper:
             output, _ = shell.execute_command(cmd)
             if str(output).lower().find("running") != -1:
                 # self.log.info("Couchbase service is running")
-                if GO_XDCR.ENABLED and RestConnection(server).is_cluster_compat_mode_greater_than(3.1):
-                    RestConnection(server).enable_goxdcr()
-                else:
-                    RestConnection(server).enable_xdcr_trace_logging()
                 return
             time.sleep(10)
         raise Exception(
@@ -640,12 +628,9 @@ class XDCRRemoteClusterRef:
         rest = RestConnection(self.__src_cluster.get_master_node())
         rest_all_repls = rest.get_replications()
         for repl in self.__replications:
-            if rest.is_goxdcr_enabled():
-                rest.stop_replication("controller/cancelXDCR/%s" % repl.get_repl_id())
-            else:
-                for rest_all_repl in rest_all_repls:
-                    if repl.get_repl_id() == rest_all_repl['id']:
-                        repl.cancel(rest, rest_all_repl)
+            for rest_all_repl in rest_all_repls:
+                if repl.get_repl_id() == rest_all_repl['id']:
+                    repl.cancel(rest, rest_all_repl)
         self.clear_all_replications()
 
 
@@ -1040,11 +1025,6 @@ class CouchbaseCluster:
             self.__nodes[1:],
             [],
             use_hostnames=self.__use_hostname).result()
-        for node in self.__nodes:
-            if GO_XDCR.ENABLED and is_master_sherlock_or_greater:
-                RestConnection(node).enable_goxdcr()
-            else:
-                RestConnection(node).enable_xdcr_trace_logging()
 
         if master.is_enterprise_edition() and is_master_sherlock_or_greater:
             # enable audit by default in all goxdcr tests
@@ -2363,7 +2343,6 @@ class XDCRNewBaseTest(unittest.TestCase):
             "").split('-')
         self._checkpoint_interval = self._input.param("checkpoint_interval",60)
         CHECK_AUDIT_EVENT.CHECK = self._input.param("verify_audit", 0)
-        GO_XDCR.ENABLED = self._input.param("enable_goxdcr", False)
 
     def __cleanup_previous(self):
         for cluster in self.__cb_clusters:
