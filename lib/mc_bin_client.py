@@ -315,7 +315,7 @@ class MemcachedClient(object):
             conflict_res = struct.unpack('>B', data[20:21])[0]
             return (deleted, flags, exp, seqno, cas, conflict_res)
         else:
-            return (deleted, flags, exp, seqno)
+            return (deleted, flags, exp, seqno, cas)
 
 
     def get_adjusted_time(self, vbucket):
