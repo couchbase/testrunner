@@ -695,7 +695,7 @@ def teardown_xdcr(xdcrClusters, rest = None):
         pass # xdcr done
 
 def perform_cli_task(ssh_command, rest = None):
-
+    command = ""
     hosts = ssh_command.get('hosts') or ['127.0.0.1']
     username = ssh_command.get('username') or cfg.COUCHBASE_SSH_USER
     password = ssh_command.get('password') or cfg.COUCHBASE_SSH_PASSWORD
