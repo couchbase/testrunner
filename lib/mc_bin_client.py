@@ -313,9 +313,9 @@ class MemcachedClient(object):
 
         if request_extended_meta_data:
             conflict_res = struct.unpack('>B', data[20:21])[0]
+            return (deleted, flags, exp, seqno, cas, conflict_res)
         else:
-            conflict_res = 0
-        return (deleted, flags, exp, seqno, cas, conflict_res)
+            return (deleted, flags, exp, seqno)
 
 
     def get_adjusted_time(self, vbucket):
