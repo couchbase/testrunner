@@ -190,7 +190,9 @@ class bidirectional(XDCRNewBaseTest):
     a full verification: wait for the disk queues to drain
     and then verify that there has been no data loss on both clusters."""
     def replication_with_ddoc_compaction(self):
-        self.setup_xdcr_and_load()
+        self.setup_xdcr()
+        self.src_cluster.load_all_buckets(self._num_items)
+        self.dest_cluster.load_all_buckets(self._num_items)
 
         num_views = self._input.param("num_views", 5)
         is_dev_ddoc = self._input.param("is_dev_ddoc", True)
@@ -229,7 +231,9 @@ class bidirectional(XDCRNewBaseTest):
     def replication_with_view_queries_and_ops(self):
         tasks = []
         try:
-            self.setup_xdcr_and_load()
+            self.setup_xdcr()
+            self.src_cluster.load_all_buckets(self._num_items)
+            self.dest_cluster.load_all_buckets(self._num_items)
 
             num_views = self._input.param("num_views", 5)
             is_dev_ddoc = self._input.param("is_dev_ddoc", True)
@@ -301,7 +305,9 @@ class bidirectional(XDCRNewBaseTest):
     a full verification: wait for the disk queues to drain
     and then verify that there has been no data loss on both clusters."""
     def replication_with_disabled_ddoc_compaction(self):
-        self.setup_xdcr_and_load()
+        self.setup_xdcr()
+        self.src_cluster.load_all_buckets(self._num_items)
+        self.dest_cluster.load_all_buckets(self._num_items)
 
         if "C1" in self._disable_compaction:
             self.src_cluster.disable_compaction()
@@ -311,17 +317,28 @@ class bidirectional(XDCRNewBaseTest):
         # perform doc's ops 3 times to increase rev number
         for _ in range(3):
             self.async_perform_update_delete()
+            # wait till deletes have been sent to recreate
+            self.sleep(60)
             # restore(re-creating) deleted items
             if 'C1' in self._del_clusters:
                 c1_kv_gen = self.src_cluster.get_kv_gen()
-                gen_delete = copy.deepcopy(c1_kv_gen[OPS.DELETE])
-                self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_delete)
-                self.sleep(5)
+
+                c1_gen_delete = copy.deepcopy(c1_kv_gen[OPS.DELETE])
+                if self._expires:
+                    # if expiration set, recreate those keys before
+                    # trying to update
+                    c1_gen_update = copy.deepcopy(c1_kv_gen[OPS.UPDATE])
+                    self.src_cluster.load_all_buckets_from_generator(kv_gen=c1_gen_update)
+                self.src_cluster.load_all_buckets_from_generator(kv_gen=c1_gen_delete)
             if 'C2' in self._del_clusters:
                 c2_kv_gen = self.dest_cluster.get_kv_gen()
-                gen_delete = copy.deepcopy(c2_kv_gen[OPS.DELETE])
-                self.dest_cluster.load_all_buckets_from_generator(kv_gen=gen_delete)
-                self.sleep(5)
+                c2_gen_delete = copy.deepcopy(c2_kv_gen[OPS.DELETE])
+                if self._expires:
+                    c2_gen_update = copy.deepcopy(c2_kv_gen[OPS.UPDATE])
+                    self.dest_cluster.load_all_buckets_from_generator(kv_gen=c2_gen_update)
+                self.dest_cluster.load_all_buckets_from_generator(kv_gen=c2_gen_delete)
+            # wait till we recreate deleted keys before we can delete/update
+            self.sleep(60)
 
         self.verify_results()
 

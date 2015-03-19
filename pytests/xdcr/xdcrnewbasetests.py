@@ -1405,6 +1405,7 @@ class CouchbaseCluster:
 
         tasks = []
         for bucket in self.__buckets:
+            kv_gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
             tasks.append(
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, kv_gen,
@@ -1435,6 +1436,7 @@ class CouchbaseCluster:
 
         tasks = []
         for bucket in self.__buckets:
+            kv_gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
             tasks.append(
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, kv_gen,
