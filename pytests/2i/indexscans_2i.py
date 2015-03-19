@@ -50,25 +50,27 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions,
                     create_index = False, drop_index = False,
+                    query_with_explain = self.run_query_with_explain, query = False, scan_consistency = self.scan_consistency)
+                self._run_tasks(tasks)
+                tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions,
+                    create_index = False, drop_index = False,
                     query_with_explain = False, query = self.run_query)
                 self._run_tasks(tasks)
-                tasks = self.async_run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.query_definitions,
-                    create_index = False, drop_index = False,
-                    query_with_explain = self.run_query_with_explain, query = False, scan_consistency = self.scan_consistency)
-                self._run_tasks(tasks)
                 # runs operations
-                self.run_doc_ops()
-                # verify results
-                tasks = self.async_run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.query_definitions,
-                    create_index = False, drop_index = False,
-                    query_with_explain = False, query = self.run_query, scan_consistency = self.scan_consistency)
-                self._run_tasks(tasks)
-                tasks = self.async_run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.query_definitions,
-                    create_index = False, drop_index = False,
-                    query_with_explain = self.run_query_with_explain, query = False, scan_consistency = self.scan_consistency)
+                if self.doc_ops:
+                    self.run_doc_ops()
+                    # verify results
+                    tasks = self.async_run_multi_operations(buckets = self.buckets,
+                        query_definitions = self.query_definitions,
+                        create_index = False, drop_index = False,
+                        query_with_explain = self.run_query_with_explain, query = False, scan_consistency = self.scan_consistency)
+                    self._run_tasks(tasks)
+                    tasks = self.async_run_multi_operations(buckets = self.buckets,
+                        query_definitions = self.query_definitions,
+                        create_index = False, drop_index = False,
+                        query_with_explain = False, query = self.run_query, scan_consistency = self.scan_consistency)
+                    self._run_tasks(tasks)
             except Exception, ex:
                 self.log.info(ex)
                 raise
@@ -97,12 +99,12 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             tasks = self.async_run_multi_operations(buckets = self.buckets,
                 query_definitions = self.query_definitions,
                 create_index = False, drop_index = False,
-                query_with_explain = False, query = self.run_query, scan_consistency = self.scan_consistency)
+                query_with_explain = self.run_query_with_explain, query = False)
             self._run_tasks(tasks)
             tasks = self.async_run_multi_operations(buckets = self.buckets,
                 query_definitions = self.query_definitions,
                 create_index = False, drop_index = False,
-                query_with_explain = self.run_query_with_explain, query = False)
+                query_with_explain = False, query = self.run_query, scan_consistency = self.scan_consistency)
             self._run_tasks(tasks)
         except Exception, ex:
             self.log.info(ex)
@@ -140,12 +142,13 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions,
                     create_index = False, drop_index = False,
-                    query_with_explain = False, query = self.run_query, scan_consistency = self.scan_consistency)
+                    query_with_explain = self.run_query_with_explain, query = False, scan_consistency = self.scan_consistency)
                 self._run_tasks(tasks)
                 tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions,
                     create_index = False, drop_index = False,
-                    query_with_explain = self.run_query_with_explain, query = False, scan_consistency = self.scan_consistency)
+                    query_with_explain = False, query = self.run_query, scan_consistency = self.scan_consistency)
+                self._run_tasks(tasks)
             except Exception, ex:
                 self.log.info(ex)
                 raise
@@ -216,6 +219,11 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             if self.scan_vector_per_values:
                 scan_vector_ranges = self._generate_scan_vector_ranges(self.scan_vector_per_values)
             # verify results
+            tasks = self.async_run_multi_operations(buckets = self.buckets,
+                query_definitions = self.query_definitions,
+                create_index = False, drop_index = False,
+                query_with_explain = self.run_query_with_explain, query = False)
+            self._run_tasks(tasks)
             if len(scan_vector_ranges) > 0:
                 for use_percentage in scan_vector_ranges:
                     scan_vectors = self.gen_scan_vector(use_percentage = use_percentage,
@@ -235,10 +243,6 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                         scan_consistency = self.scan_consistency,
                         scan_vectors = scan_vectors)
                 self._run_tasks(tasks)
-            tasks = self.async_run_multi_operations(buckets = self.buckets,
-                query_definitions = self.query_definitions,
-                create_index = False, drop_index = False,
-                query_with_explain = self.run_query_with_explain, query = False)
         except Exception, ex:
             self.log.info(ex)
             raise

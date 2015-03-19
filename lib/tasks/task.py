@@ -1880,6 +1880,7 @@ class N1QLQueryTask(Task):
             self.state = CHECKING
             task_manager.schedule(self)
         except N1QLQueryException as e:
+            self.state = FINISHED
             # initial query failed, try again
             task_manager.schedule(self, self.retry_time)
 
