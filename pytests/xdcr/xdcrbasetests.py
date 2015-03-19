@@ -284,7 +284,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._dgm_run = self._input.param("dgm_run", False)
         self.active_resident_threshold = int(self._input.param("active_resident_threshold", 0))
 
-        self.rep_type = self._input.param("replication_type", "capi")
+        self.rep_type = self._input.param("replication_type", "xmem")
 
         self._poll_interval = self._input.param(XDCRConstants.INPUT_PARAM_POLL_INTERVAL, 5)
         self._poll_timeout = self._input.param(XDCRConstants.INPUT_PARAM_POLL_TIMEOUT, 120)
