@@ -2120,6 +2120,36 @@ class CouchbaseCluster:
 
         self.__data_verified = True
 
+    def wait_for_dcp_queue_drain(self, timeout=180):
+        """Wait for ep_dcp_xdcr_items_remaining to reach 0.
+        @return: True if reached 0 else False.
+        """
+        self.__log.info(
+            "Waiting for dcp queue to drain on cluster node: %s" %
+            self.__master_node.ip)
+        curr_time = time.time()
+        end_time = curr_time + timeout
+        rest = RestConnection(self.__master_node)
+        buckets = self.get_buckets()
+        for bucket in buckets:
+            try:
+                mutations = int(rest.get_dcp_queue_size(bucket.name))
+                self.__log.info(
+                    "Current dcp queue size on %s for %s is %s" %
+                    (self.__name, bucket.name, mutations))
+                if mutations == 0:
+                    buckets.remove(bucket)
+                else:
+                    time.sleep(5)
+                    end_time = end_time - 5
+            except Exception as e:
+                self.__log.error(e)
+            if curr_time > end_time:
+                self.__log.error(
+                "Timeout occurs while waiting for dcp queue to drain")
+                return False
+        return True
+
     def wait_for_outbound_mutations(self, timeout=180):
         """Wait for Outbound mutations to reach 0.
         @return: True if mutations reached to 0 else False.
@@ -2141,13 +2171,13 @@ class CouchbaseCluster:
                     mutations = -1
                 self.__log.info(
                     "Current Outbound mutations on cluster node: %s for bucket %s is %s" %
-                    (self.__master_node.ip, bucket.name, mutations))
+                    (self.__name, bucket.name, mutations))
                 if mutations == 0:
                     found = found + 1
             if found == len(self.__buckets):
                 break
-            time.sleep(10)
-            end_time = end_time - 10
+            time.sleep(5)
+            end_time = end_time - 5
         else:
             # MB-9707: Updating this code from fail to warning to avoid test
             # to abort, as per this
@@ -2867,6 +2897,9 @@ class XDCRNewBaseTest(unittest.TestCase):
                     src_cluster.wait_for_flusher_empty()
                     dest_cluster.wait_for_flusher_empty()
 
+                    src_dcp_queue_drained = src_cluster.wait_for_dcp_queue_drain()
+                    dest_dcp_queue_drained = dest_cluster.wait_for_dcp_queue_drain()
+
                     src_cluster.wait_for_outbound_mutations()
                     dest_cluster.wait_for_outbound_mutations()
                 except Exception as e:
@@ -2882,6 +2915,10 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.log.error(e)
                 finally:
                     rev_err_count = self.verify_rev_ids(remote_cluster_ref.get_replications())
+                    # we're done with the test, now report specific errors
+                    if (not(src_active_passed or dest_active_passed)) and \
+                        (not(src_dcp_queue_drained or dest_dcp_queue_drained)):
+                        self.fail("Incomplete replication: Keys stuck in dcp queue")
                     if not (src_active_passed or dest_active_passed):
                         self.fail("Incomplete replication: Active key count is incorrect")
                     if not (src_replica_passed or dest_replica_passed):
