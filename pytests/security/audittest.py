@@ -36,6 +36,7 @@ class auditTest(BaseTestCase):
 	if not currentState:
 	    self.log.info ("Enabling Audit ")
             auditTemp.setAuditEnable('true')
+            self.sleep(30)
 
     def tearDown(self):
         super(auditTest, self).tearDown()
