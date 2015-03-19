@@ -49,7 +49,8 @@ class BaseTestCase(unittest.TestCase):
         self.buckets = []
         self.master = self.servers[0]
         self.indexManager = self.servers[0]
-        self.cluster = Cluster()
+        if not hasattr(self, 'cluster'):
+            self.cluster = Cluster()
         self.pre_warmup_stats = {}
         self.cleanup = False
         self.data_collector = DataCollector()
