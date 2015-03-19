@@ -2085,7 +2085,10 @@ class CouchbaseCluster:
             self.__log.info(
                 "Executing cbvdiff for bucket {0}".format(
                     bucket.name))
-            ssh_conn.execute_cbvdiff(bucket, node_str)
+            if bucket.saslPassword:
+                ssh_conn.execute_cbvdiff(bucket, node_str, bucket.saslPassword)
+            else:
+                ssh_conn.execute_cbvdiff(bucket, node_str)
         ssh_conn.disconnect()
 
     def verify_data(self, kv_store=1, timeout=None,
