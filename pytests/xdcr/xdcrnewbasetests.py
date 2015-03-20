@@ -180,13 +180,8 @@ class XDCR_PARAM:
 class CHECK_AUDIT_EVENT:
     CHECK = False
 
-
-class GO_XDCR:
-    ENABLED = False
-
 # Event Definition:
 # https://github.com/couchbase/goxdcr/blob/master/etc/audit_descriptor.json
-
 
 class GO_XDCR_AUDIT_EVENT_ID:
     CREATE_CLUSTER = 16384
@@ -198,16 +193,6 @@ class GO_XDCR_AUDIT_EVENT_ID:
     CAN_REPL = 16390
     DEFAULT_SETT = 16391
     IND_SETT = 16392
-
-
-class ERLANG_XDCR_AUDIT_EVENT_ID:
-    CREATE_CLUSTER = 8213
-    MOD_CLUSTER = 8214
-    RM_CLUSTER = 8215
-    CREATE_REPL = 8216
-    # EventID for Pause, Resume and Individual repl, settings.
-    UPDATE_REPL = 8217
-    CAN_REPL = 8218
 
 
 class NodeHelper:
@@ -469,7 +454,7 @@ class XDCRRemoteClusterRef:
         self.__encryption = encryption
         self.__rest_info = {}
 
-        # List of XDCRepication objects
+        # List of XDCReplication objects
         self.__replications = []
 
     def __str__(self):
@@ -493,34 +478,18 @@ class XDCRRemoteClusterRef:
         return self.__rest_info
 
     def __get_event_expected_results(self):
-        if GO_XDCR.ENABLED:
-            expected_results = {
+        expected_results = {
                 "real_userid:source": "internal",
                 "real_userid:user": self.__src_cluster.get_master_node().rest_username,
                 "cluster_name": self.__name,
                 "cluster_hostname": "%s:%s" % (self.__dest_cluster.get_master_node().ip, self.__dest_cluster.get_master_node().port),
                 "is_encrypted": self.__encryption}
-        else:
-            expected_results = {
-                "uuid": self.__rest_info['uuid'],
-                "name": self.__rest_info['name'],
-                "username": self.__rest_info['username'],
-                "hostname": self.__rest_info['hostname'],
-                "demand_encryption": str(self.__encryption).lower(),
-                "real_userid:source": "ns_server",
-                "real_userid:user": self.__src_cluster.get_master_node().rest_username
-            }
+
         return expected_results
 
     def __validate_create_event(self):
-        if GO_XDCR.ENABLED:
             ValidateAuditEvent.validate_audit_event(
                 GO_XDCR_AUDIT_EVENT_ID.CREATE_CLUSTER,
-                self.__src_cluster.get_master_node(),
-                self.__get_event_expected_results())
-        else:
-            ValidateAuditEvent.validate_audit_event(
-                ERLANG_XDCR_AUDIT_EVENT_ID.CREATE_CLUSTER,
                 self.__src_cluster.get_master_node(),
                 self.__get_event_expected_results())
 
@@ -543,16 +512,11 @@ class XDCRRemoteClusterRef:
         self.__validate_create_event()
 
     def __validate_modify_event(self):
-        if GO_XDCR.ENABLED:
-            ValidateAuditEvent.validate_audit_event(
-                GO_XDCR_AUDIT_EVENT_ID.MOD_CLUSTER,
-                self.__src_cluster.get_master_node(),
-                self.__get_event_expected_results())
-        else:
-            ValidateAuditEvent.validate_audit_event(
-                ERLANG_XDCR_AUDIT_EVENT_ID.MOD_CLUSTER,
-                self.__src_cluster.get_master_node(),
-                self.__get_event_expected_results())
+        ValidateAuditEvent.validate_audit_event(
+            GO_XDCR_AUDIT_EVENT_ID.MOD_CLUSTER,
+            self.__src_cluster.get_master_node(),
+            self.__get_event_expected_results())
+
 
     def modify(self, encryption=True):
         """Modify cluster reference to enable SSL encryption
@@ -574,16 +538,11 @@ class XDCRRemoteClusterRef:
         self.__validate_modify_event()
 
     def __validate_remove_event(self):
-        if GO_XDCR.ENABLED:
-            ValidateAuditEvent.validate_audit_event(
-                GO_XDCR_AUDIT_EVENT_ID.RM_CLUSTER,
-                self.__src_cluster.get_master_node(),
-                self.__get_event_expected_results())
-        else:
-            ValidateAuditEvent.validate_audit_event(
-                ERLANG_XDCR_AUDIT_EVENT_ID.RM_CLUSTER,
-                self.__src_cluster.get_master_node(),
-                self.__get_event_expected_results())
+        ValidateAuditEvent.validate_audit_event(
+            GO_XDCR_AUDIT_EVENT_ID.RM_CLUSTER,
+            self.__src_cluster.get_master_node(),
+            self.__get_event_expected_results())
+
 
     def remove(self):
         RestConnection(
@@ -707,9 +666,7 @@ class XDCReplication:
         return self.__rep_id
 
     def __get_event_expected_results(self):
-        expected_results = {}
-        if GO_XDCR.ENABLED:
-            expected_results = {
+        expected_results = {
                 "real_userid:source": "internal",
                 "real_userid:user": self.__src_cluster.get_master_node().rest_username,
                 "local_cluster_name": "%s:%s" % (self.__src_cluster.get_master_node().ip, self.__src_cluster.get_master_node().port),
@@ -717,9 +674,9 @@ class XDCReplication:
                 "remote_cluster_name": self.__remote_cluster_ref.get_name(),
                 "target_bucket_name": self.__to_bucket.name
             }
-            # optional audit param
-            if self.get_filter_exp():
-                expected_results["filter_expression"] = self.get_filter_exp()
+        # optional audit param
+        if self.get_filter_exp():
+            expected_results["filter_expression"] = self.get_filter_exp()
         return expected_results
 
     def __validate_update_repl_event(self):
@@ -735,20 +692,14 @@ class XDCReplication:
             "real_userid:user": self.__src_cluster.get_master_node().rest_username,
         }
         expected_results["settings"].update(self.__updated_params)
-        ValidateAuditEvent.validate_audit_event(
-            ERLANG_XDCR_AUDIT_EVENT_ID.UPDATE_REPL,
-            self.get_src_cluster().get_master_node(),
-            expected_results)
 
     def __validate_set_param_event(self):
-        if GO_XDCR.ENABLED:
-            expected_results = self.__get_event_expected_results()
-            expected_results["updated_settings"] = self.__updated_params
-            ValidateAuditEvent.validate_audit_event(
-                GO_XDCR_AUDIT_EVENT_ID.IND_SETT,
-                self.get_src_cluster().get_master_node(), expected_results)
-        else:
-            self.__validate_update_repl_event()
+        expected_results = self.__get_event_expected_results()
+        expected_results["updated_settings"] = self.__updated_params
+        ValidateAuditEvent.validate_audit_event(
+            GO_XDCR_AUDIT_EVENT_ID.IND_SETT,
+            self.get_src_cluster().get_master_node(), expected_results)
+
 
     def set_xdcr_param(self, param, value, verify_event=True):
         src_master = self.__src_cluster.get_master_node()
@@ -763,27 +714,10 @@ class XDCReplication:
             self.__validate_set_param_event()
 
     def __validate_start_audit_event(self):
-        if GO_XDCR.ENABLED:
-            ValidateAuditEvent.validate_audit_event(
-                GO_XDCR_AUDIT_EVENT_ID.CREATE_REPL,
+        ValidateAuditEvent.validate_audit_event(
+            GO_XDCR_AUDIT_EVENT_ID.CREATE_REPL,
                 self.get_src_cluster().get_master_node(),
                 self.__get_event_expected_results())
-        else:
-            expected_results = {
-                "to_bucket": self.__to_bucket.name,
-                "from_bucket": self.__from_bucket.name,
-                "settings": {
-                    'to_cluster': self.__remote_cluster_ref.get_name(),
-                    "replication_type": REPLICATION_TYPE.CONTINUOUS
-                },
-                "id": self.__rep_id,
-                "real_userid:source": "ns_server",
-                "real_userid:user": self.__src_cluster.get_master_node().rest_username,
-            }
-            ValidateAuditEvent.validate_audit_event(
-                ERLANG_XDCR_AUDIT_EVENT_ID.CREATE_REPL,
-                self.get_src_cluster().get_master_node(),
-                expected_results)
 
     def start(self):
         """Start replication"""
@@ -811,13 +745,10 @@ class XDCReplication:
                        self.__to_bucket.name))
 
     def __validate_pause_event(self):
-        if GO_XDCR.ENABLED:
-            ValidateAuditEvent.validate_audit_event(
-                GO_XDCR_AUDIT_EVENT_ID.PAUSE_REPL,
-                self.get_src_cluster().get_master_node(),
-                self.__get_event_expected_results())
-        else:
-            self.__validate_update_repl_event()
+        ValidateAuditEvent.validate_audit_event(
+            GO_XDCR_AUDIT_EVENT_ID.PAUSE_REPL,
+            self.get_src_cluster().get_master_node(),
+            self.__get_event_expected_results())
 
     def pause(self, verify=False):
         """Pause replication"""
@@ -880,13 +811,10 @@ class XDCReplication:
             self.log.info("XDCR completed on {0}".format(src_master.ip))
 
     def __validate_resume_event(self):
-        if GO_XDCR.ENABLED:
-            ValidateAuditEvent.validate_audit_event(
-                GO_XDCR_AUDIT_EVENT_ID.RESUME_REPL,
-                self.get_src_cluster().get_master_node(),
-                self.__get_event_expected_results())
-        else:
-            self.__validate_update_repl_event()
+        ValidateAuditEvent.validate_audit_event(
+            GO_XDCR_AUDIT_EVENT_ID.RESUME_REPL,
+            self.get_src_cluster().get_master_node(),
+            self.__get_event_expected_results())
 
     def resume(self, verify=False):
         """Resume replication if paused"""
@@ -904,28 +832,14 @@ class XDCReplication:
             self.__verify_resume()
 
     def __validate_cancel_event(self):
-        if GO_XDCR.ENABLED:
-            ValidateAuditEvent.validate_audit_event(
-                GO_XDCR_AUDIT_EVENT_ID.CAN_REPL,
-                self.get_src_cluster().get_master_node(),
-                self.__get_event_expected_results())
-        else:
-            expected_results = {
-                "id": self.__rep_id,
-                "real_userid:source": "ns_server",
-                "real_userid:user": self.__src_cluster.get_master_node().rest_username,
-            }
-            ValidateAuditEvent.validate_audit_event(
-                ERLANG_XDCR_AUDIT_EVENT_ID.CAN_REPL,
-                self.get_src_cluster().get_master_node(),
-                expected_results)
+        ValidateAuditEvent.validate_audit_event(
+            GO_XDCR_AUDIT_EVENT_ID.CAN_REPL,
+            self.get_src_cluster().get_master_node(),
+            self.__get_event_expected_results())
+
 
     def cancel(self, rest, rest_all_repl):
-        try:
-            rest.stop_replication(rest_all_repl["cancelURI"])
-        except:
-            rest.stop_replication("controller/cancelXDCR/%s" % self.__rep_id)
-
+        rest.stop_replication(rest_all_repl["cancelURI"])
         self.__validate_cancel_event()
 
 
@@ -1952,11 +1866,10 @@ class CouchbaseCluster:
         }
 
         # In case of ns_server xdcr, no events generate for it.
-        if GO_XDCR.ENABLED:
-            ValidateAuditEvent.validate_audit_event(
-                GO_XDCR_AUDIT_EVENT_ID.DEFAULT_SETT,
-                self.get_master_node(),
-                expected_results)
+        ValidateAuditEvent.validate_audit_event(
+            GO_XDCR_AUDIT_EVENT_ID.DEFAULT_SETT,
+            self.get_master_node(),
+            expected_results)
 
     def get_xdcr_stat(self, bucket_name, stat):
         """ Return given XDCR stat for given bucket.
