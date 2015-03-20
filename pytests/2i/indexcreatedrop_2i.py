@@ -32,28 +32,30 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
         servers = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
         try:
             servers.reverse()
-            for server in servers:
-                index_name = "index_name_ip_{0}_port_{1}".format(server.ip.replace(".","_"),server.port)
-                query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_yr"], \
-                    query_template = "", groups = [])
-                query_definitions.append(query_definition)
-                deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
-                verification_map["{0}:{1}".format(server.ip,server.port)] = {}
-                verification_map["{0}:{1}".format(server.ip,server.port)][self.buckets[0].name]=index_name
-                tasks.append(self.async_create_index(self.buckets[0].name, query_definition, deploy_node_info = deploy_node_info))
-            for task in tasks:
-                task.result()
+            for bucket in self.buckets:
+                for server in servers:
+                    index_name = "index_name_ip_{0}_port_{1}_{2}".format(server.ip.replace(".","_"),server.port,bucket.name)
+                    query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_yr"], \
+                        query_template = "", groups = [])
+                    query_definitions.append(query_definition)
+                    deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
+                    verification_map["{0}:{1}".format(server.ip,server.port)] = {}
+                    verification_map["{0}:{1}".format(server.ip,server.port)][bucket.name]=index_name
+                    tasks.append(self.async_create_index(bucket.name, query_definition, deploy_node_info = deploy_node_info))
+                for task in tasks:
+                    task.result()
             index_map = self.get_index_stats(perNode=True)
             self.log.info(index_map)
-            for node in index_map.keys():
-                self.log.info(" verifying node {0}".format(node))
-                self.assertTrue(verification_map[node][self.buckets[0].name] in index_map[node][self.buckets[0].name].keys(), \
-                    "for bucket {0} and node {1}, could not find key {2} in {3}".format(self.buckets[0].name, node, verification_map[node][self.buckets[0].name],index_map))
+            for bucket in self.buckets:
+                for node in index_map.keys():
+                    self.log.info(" verifying node {0}".format(node))
+                    self.assertTrue(verification_map[node][bucket.name] in index_map[node][bucket.name].keys(), \
+                        "for bucket {0} and node {1}, could not find key {2} in {3}".format(bucket.name, node, verification_map[node][bucket.name],index_map))
         except Exception, ex:
             self.log.info(ex)
             raise
         finally:
-            self.run_multi_operations(buckets = [self.buckets[0]], query_definitions = query_definitions, drop_index = True)
+            self.run_multi_operations(buckets = self.buckets, query_definitions = query_definitions, drop_index = True)
 
     def test_fail_deployment_plan_defer_build_same_name_index(self):
         query_definitions = []
