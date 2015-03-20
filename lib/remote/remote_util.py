@@ -1571,13 +1571,13 @@ class RemoteMachineShellConnection:
                 """ end remove code """
             else:
                 log.info("No couchbase server on {0} server. Free to install".format(self.ip))
-        elif type in ["ubuntu", "centos", "red hat"]:
+        elif type in ["ubuntu", "centos", "red hat", "opensuse"]:
             # uninstallation command is different
             if type == "ubuntu":
                 uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("couchbase-server", "couchbase-server")
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
-            elif type in ["centos", "red hat"]:
+            elif type in ["centos", "red hat", "opensuse"]:
                 """ Sometimes, vm left with unfinish uninstall/install process.
                     We need to kill them before doing uninstall """
                 output, error = self.execute_command("killall -9 rpm")
@@ -1935,7 +1935,7 @@ class RemoteMachineShellConnection:
         else:
             p = Popen(mac_check_cmd , shell=True, stdout=PIPE, stderr=PIPE)
             ver, err = p.communicate()
-        if not err:
+        if not err and ver:
             os_distro = "Mac"
             os_version = ver
             is_linux_distro = True
@@ -1986,6 +1986,13 @@ class RemoteMachineShellConnection:
                         os_distro = 'Red Hat'
                         os_version = etc_issue
                         is_linux_distro = True
+                    elif etc_issue.lower().find('opensuse') != -1:
+                        os_distro = 'openSUSE'
+                        os_version = etc_issue
+                        is_linux_distro = True
+                    else:
+                        print "error not found"
+                        log.error("Error should not land here")
                     file.close()
                     # now remove this file
                     os.remove(filename)
@@ -2060,10 +2067,15 @@ class RemoteMachineShellConnection:
             for line in text:
                 os_arch += line
                 # at this point we should know if its a linux or windows ditro
-            ext = {'Ubuntu': 'deb', 'CentOS': 'rpm',
-                   'Red Hat': 'rpm', "Mac": "zip",
-                   "Debian": "deb"}.get(os_distro, '')
-            arch = {'i686': 'x86', 'i386': 'x86'}.get(os_arch, os_arch)
+            ext = { 'Ubuntu' : "deb",
+                   'CentOS'  : "rpm",
+                   'Red Hat' : "rpm",
+                   "Mac"     : "zip",
+                   "Debian"  : "deb",
+                   "openSUSE": "rpm"}.get(os_distro, '')
+            arch = {'i686': 'x86',
+                    'i386': 'x86'}.get(os_arch, os_arch)
+
             info = RemoteMachineInfo()
             info.type = "Linux"
             info.distribution_type = os_distro
@@ -2731,6 +2743,18 @@ class RemoteMachineShellConnection:
         return success
 
     def check_openssl_version(self, deliverable_type, openssl, version):
+
+        if self.info.distribution_type == "openSUSE":
+            o, r = self.execute_command("zypper -n if openssl 2>/dev/null| grep -i \"Installed: Yes\"")
+            self.log_command_output(o, r)
+
+            if o == "":
+                o, r = self.execute_command("zypper -n in openssl")
+                self.log_command_output(o, r)
+                o, r = self.execute_command("zypper -n if openssl 2>/dev/null| grep -i \"Installed: Yes\"")
+                self.log_command_output(o, r)
+                if o == "":
+                    log.error("Could not install openssl in opensuse")
         sherlock = ["3.5", "4.0"]
         if version[:3] not in sherlock:
             if self.info.deliverable_type == "deb":
@@ -2807,31 +2831,50 @@ class RemoteMachineShellConnection:
                                     self.log_command_output(o, r)
 
     def check_pkgconfig(self, deliverable_type, openssl):
-        if self.info.deliverable_type == "rpm":
-            centos_version = ["6.4"]
-            o, r = self.execute_command("cat /etc/redhat-release")
+
+        if self.info.distribution_type == "openSUSE":
+            o, r = self.execute_command("zypper -n if pkg-config 2>/dev/null| grep -i \"Installed: Yes\"")
             self.log_command_output(o, r)
-            if o[0] != "":
-                o = o[0].split(" ")
-                if o[2] in centos_version and "1" in openssl:
-                    o, r = self.execute_command("rpm -qa | grep pkgconfig")
+            if o == "":
+                o, r = self.execute_command("zypper -n in pkg-config")
+                self.log_command_output(o, r)
+                o, r = self.execute_command("zypper -n if pkg-config 2>/dev/null| grep -i \"Installed: Yes\"")
+                self.log_command_output(o, r)
+                if o == "":
+                    log.error("Could not install pkg-config in opensuse")
+
+
+        else:
+            if self.info.deliverable_type == "rpm":
+                centos_version = ["6.4"]
+                o, r = self.execute_command("cat /etc/redhat-release")
+                self.log_command_output(o, r)
+
+                if o is None:
+                    # This must be opensuse, hack for now....
+                    o, r = self.execute_command("cat /etc/SuSE-release")
                     self.log_command_output(o, r)
-                    if not o:
-                        o, r = self.execute_command("yum install -y pkgconfig")
-                        self.log_command_output(o, r)
+                if o[0] != "":
+                    o = o[0].split(" ")
+                    if o[2] in centos_version and "1" in openssl:
                         o, r = self.execute_command("rpm -qa | grep pkgconfig")
-                        log.info("package pkgconfig should appear below")
                         self.log_command_output(o, r)
-                    elif o:
-                        for s in o:
-                            if "pkgconfig" not in s:
-                                o, r = self.execute_command("yum install -y pkgconfig")
-                                self.log_command_output(o, r)
-                                o, r = self.execute_command("rpm -qa | grep pkgconfig")
-                                log.info("package pkgconfig should appear below")
-                                self.log_command_output(o, r)
-                elif openssl == "":
-                    log.info("no need to install pkgconfig on couchbase binary using openssl 0.9.8")
+                        if not o:
+                            o, r = self.execute_command("yum install -y pkgconfig")
+                            self.log_command_output(o, r)
+                            o, r = self.execute_command("rpm -qa | grep pkgconfig")
+                            log.info("package pkgconfig should appear below")
+                            self.log_command_output(o, r)
+                        elif o:
+                            for s in o:
+                                if "pkgconfig" not in s:
+                                    o, r = self.execute_command("yum install -y pkgconfig")
+                                    self.log_command_output(o, r)
+                                    o, r = self.execute_command("rpm -qa | grep pkgconfig")
+                                    log.info("package pkgconfig should appear below")
+                                    self.log_command_output(o, r)
+                    elif openssl == "":
+                        log.info("no need to install pkgconfig on couchbase binary using openssl 0.9.8")
 
     def install_missing_lib(self):
         if self.info.deliverable_type == "deb":

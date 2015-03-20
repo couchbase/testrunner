@@ -492,11 +492,18 @@ class BuildQuery(object):
             """ distribution version:    centos linux release 7.0.1406 (core)
                 distribution version:    centos release 6.5 (final)  """
             centos_version = "centos6"
+
             if "centos" in distribution_version:
                 if "centos 7" in distribution_version:
                     centos_version = "centos7"
                 build.name = edition_type + "-" + build.product_version + \
                    "-" + centos_version + "." + build.architecture_type + \
+                   "." + build.deliverable_type
+            elif "opensuse" in distribution_version:
+                build.distribution_version = "opensuse11.3"
+                os_name = "opensuse11.3"
+                build.name = edition_type + "-" + build.product_version + \
+                   "-" + os_name + "." + build.architecture_type + \
                    "." + build.deliverable_type
             else:
                 os_name = ""
