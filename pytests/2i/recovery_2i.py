@@ -1,5 +1,6 @@
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
+from couchbase_helper.query_definitions import QueryDefinition
 from membase.helper.cluster_helper import ClusterOperationHelper
 from base_2i import BaseSecondaryIndexingTests
 import copy
@@ -8,6 +9,17 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def setUp(self):
         super(SecondaryIndexingRecoveryTests, self).setUp()
+        self.load_query_definitions = []
+        self.initial_index_number = self.input.param("initial_index_number", 6)
+        for x in range(1,self.initial_index_number):
+            index_name = "index_name_"+str(x)
+            query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_mo"], \
+                        query_template = "", groups = ["simple"])
+            self.load_query_definitions.append(query_definition)
+        self.run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.load_query_definitions,
+                    create_index = True, drop_index = False,
+                    query_with_explain = False, query = False)
 
     def tearDown(self):
         if hasattr(self, 'query_definitions'):
@@ -17,6 +29,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 tasks = self.async_run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions)
                 for task in tasks:
                     task.result()
+                self.run_multi_operations(buckets = self.buckets, query_definitions = self.load_query_definitions)
             except Exception, ex:
                 self.log.info(ex)
         super(SecondaryIndexingRecoveryTests, self).tearDown()
