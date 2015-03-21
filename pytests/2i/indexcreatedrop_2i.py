@@ -282,6 +282,25 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     		self.query = query_definition.generate_index_drop_query(bucket = self.buckets[0].name)
     		self.n1ql_helper.run_cbq_query(query = self.query, server = server)
 
+    def test_fail_create_kv_node_down(self):
+        servr_out =[]
+        try:
+            servr_out = self.get_nodes_from_services_map(service_type = "kv", get_all_nodes = True)
+            remote = RemoteMachineShellConnection(servr_out[0])
+            remote.stop_server()
+            self.sleep(10)
+            self.query = self.query_definitions[0].generate_index_create_query(bucket = self.buckets[0].name)
+            res = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
+            self.log.info(res)
+            self.assertTrue(False," Index cannot be created when KV node is down and not failed over ")
+        except Exception, ex:
+            msg ="Failure to create index"
+            self.log.info(ex)
+            self.assertTrue(msg in str(ex), ex)
+        finally:
+            remote = RemoteMachineShellConnection(servr_out[0])
+            remote.start_server()
+
     def test_fail_drop_index_node_down(self):
         try:
             self.run_multi_operations(buckets = self.buckets,
