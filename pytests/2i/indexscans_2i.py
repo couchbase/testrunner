@@ -163,21 +163,58 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         self.query_definitions = query_definition_generator.generate_employee_data_query_definitions_for_index_where_clause()
         self.use_where_clause_in_index = True
         self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
-        self.run_async = False
         self.run_multi_operations(buckets = self.buckets,
             query_definitions = self.query_definitions,
             create_index = True, drop_index = False,
             query_with_explain = True, query = True)
-        if self.doc_ops:
-            self.run_doc_ops()
-            self.run_multi_operations(buckets = self.buckets,
-                query_definitions = self.query_definitions,
-                create_index = False, drop_index = False,
-                query_with_explain = True, query = True, scan_consistency = self.scan_consistency)
-        self.run_multi_operations(buckets = self.buckets,
+        self.run_doc_ops()
+        tasks = self.async_run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
+            create_index = False, drop_index = False,
+            query_with_explain = True, query = True, scan_consistency = self.scan_consistency)
+        for task in tasks:
+            task.result()
+        tasks = self.async_run_multi_operations(buckets = self.buckets,
             query_definitions = self.query_definitions,
             create_index = False, drop_index = True,
             query_with_explain = False, query = False)
+        for task in tasks:
+            task.result()
+
+    def test_multi_create_query_explain_drop_index_with_index_expressions(self):
+        query_definition_generator = SQLDefinitionGenerator()
+        self.query_definitions = query_definition_generator.generate_employee_data_query_definitions_for_index_expressions()
+        self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
+        self.run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
+            create_index = True, drop_index = False,
+            query_with_explain = True, query = True)
+        self.run_doc_ops()
+        tasks = self.async_run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
+            create_index = False, drop_index = False,
+            query_with_explain = True, query = True, scan_consistency = self.scan_consistency)
+        for task in tasks:
+            task.result()
+        tasks = self.async_run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
+            create_index = False, drop_index = True,
+            query_with_explain = False, query = False)
+        for task in tasks:
+            task.result()
+
+    def test_multi_create_query_explain_drop_index_scan_consistency_with_index_expressions(self):
+        query_definition_generator = SQLDefinitionGenerator()
+        self.query_definitions = query_definition_generator.generate_employee_data_query_definitions_for_index_expressions()
+        self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
+        self.test_multi_create_query_explain_drop_index_scan_consistency()
+
+    def test_multi_create_query_explain_drop_index_scan_consistency_with_where_clause(self):
+        query_definition_generator = SQLDefinitionGenerator()
+        self.query_definitions = query_definition_generator.generate_employee_data_query_definitions_for_index_where_clause()
+        self.use_where_clause_in_index = True
+        self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
+        self.test_multi_create_query_explain_drop_index_scan_consistency()
 
     def test_multi_create_query_explain_drop_index_scan_consistency(self):
         self.random_scan_vector= self.input.param("random_scan_vector",False)
@@ -355,3 +392,4 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
     	query = query.replace("GREATER_THAN",">")
     	query = query.replace("GREATER_THAN_EQUALS",">=")
     	return query
+

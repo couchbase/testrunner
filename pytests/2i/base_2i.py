@@ -12,6 +12,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.index_lost_during_move_out =[]
         self.use_where_clause_in_index= self.input.param("use_where_clause_in_index",False)
         self.check_stats= self.input.param("check_stats",True)
+        self.create_index_usage= self.input.param("create_index_usage","no_usage")
         self.scan_consistency= self.input.param("scan_consistency",None)
         self.scan_vector_per_values= self.input.param("scan_vector_per_values",None)
         self.timeout_for_index_online= self.input.param("timeout_for_index_online",120)
@@ -25,7 +26,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.run_query_with_explain= self.input.param("run_query_with_explain",True)
         self.run_query= self.input.param("run_query",True)
         self.graceful = self.input.param("graceful",False)
-        self.groups = self.input.param("groups", "simple").split(":")
+        self.groups = self.input.param("groups", "all").split(":")
         query_definition_generator = SQLDefinitionGenerator()
         if self.dataset == "default" or self.dataset == "employee":
             self.query_definitions = query_definition_generator.generate_employee_data_query_definitions()
@@ -559,3 +560,14 @@ class BaseSecondaryIndexingTests(QueryTests):
             if op_type != '':
                 map_after[op_type] = True
         return {"before":map_before, "in_between": map_in_between, "after": map_after}
+
+    def _pick_query_definitions_employee(self):
+        query_definition_generator = SQLDefinitionGenerator()
+        if self.create_index_usage == "where":
+            self.query_definitions = query_definition_generator.generate_employee_data_query_definitions_for_where_clause()
+            self.use_where_clause_in_index = True
+        elif self.create_index_usage == "expressions":
+            self.query_definitions = query_definition_generator.generate_employee_data_query_definitions_for_index_expressions()
+            self.use_where_clause_in_index = True
+        else:
+            self.query_definitions =  query_definition_generator.generate_employee_data_query_definitions()
