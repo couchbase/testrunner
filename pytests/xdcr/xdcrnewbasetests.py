@@ -925,6 +925,14 @@ class CouchbaseCluster:
                 self))
         return self.__kv_gen
 
+    def get_remote_cluster_ref_by_name(self, cluster_name):
+        for remote_cluster_ref in self.__remote_clusters:
+            if remote_cluster_ref.get_name() == cluster_name:
+                return remote_cluster_ref
+        self.__log.info("Remote cluster reference by name %s does not exist on %s"
+                        % (cluster_name, self.__name))
+        return None
+
     def init_cluster(self, disabled_consistent_view=None):
         """Initialize cluster.
         1. Initialize all nodes.
@@ -1161,7 +1169,7 @@ class CouchbaseCluster:
                 return bucket
 
         raise Exception(
-            "Bucket with name: %s no found on the cluster" %
+            "Bucket with name: %s not found on the cluster" %
             bucket_name)
 
     def delete_bucket(self, bucket_name):
@@ -2231,7 +2239,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__cleanup_previous()
         self.__init_clusters()
         self.__set_free_servers()
-        self.__create_buckets()
+        if str(self.__class__).find('upgradeXDCR') == -1:
+            self.__create_buckets()
         if self._checkpoint_interval != 1800:
             for cluster in self.__cb_clusters:
                 cluster.set_global_checkpt_interval(self._checkpoint_interval)
@@ -2241,17 +2250,12 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__topology = self._input.param("ctopology", TOPOLOGY.CHAIN)
         # complex topology tests (> 2 clusters must specify chain_length >2)
         self.__chain_length = self._input.param("chain_length", 2)
-
-        self.__demand_encryption = self._input.param(
-            "demand_encryption",
-            False)
         self.__rep_type = self._input.param(
             "replication_type",
             REPLICATION_PROTOCOL.XMEM)
         self.__num_sasl_buckets = self._input.param("sasl_buckets", 0)
         self.__num_stand_buckets = self._input.param("standard_buckets", 0)
 
-        self.__num_replicas = self._input.param("replicas", 1)
         self.__eviction_policy = self._input.param(
             "eviction_policy",
             'valueOnly')
@@ -2262,6 +2266,10 @@ class XDCRNewBaseTest(unittest.TestCase):
         # Public init parameters - Used in other tests too.
         # Move above private to this section if needed in future, but
         # Ensure to change other tests too.
+        self._demand_encryption = self._input.param(
+            "demand_encryption",
+            False)
+        self._num_replicas = self._input.param("replicas", 1)
         self._create_default_bucket = self._input.param(
             "default_bucket",
             True)
@@ -2361,19 +2369,19 @@ class XDCRNewBaseTest(unittest.TestCase):
             if self._create_default_bucket:
                 cb_cluster.create_default_bucket(
                     bucket_size,
-                    self.__num_replicas,
+                    self._num_replicas,
                     eviction_policy=self.__eviction_policy,
                     bucket_priority=bucket_priority)
 
             cb_cluster.create_sasl_buckets(
                 bucket_size, num_buckets=self.__num_sasl_buckets,
-                num_replicas=self.__num_replicas,
+                num_replicas=self._num_replicas,
                 eviction_policy=self.__eviction_policy,
                 bucket_priority=bucket_priority)
 
             cb_cluster.create_standard_buckets(
                 bucket_size, num_buckets=self.__num_stand_buckets,
-                num_replicas=self.__num_replicas,
+                num_replicas=self._num_replicas,
                 eviction_policy=self.__eviction_policy,
                 bucket_priority=bucket_priority)
 
@@ -2396,19 +2404,19 @@ class XDCRNewBaseTest(unittest.TestCase):
         if self._create_default_bucket:
             cb_cluster.create_default_bucket(
                 bucket_size,
-                self.__num_replicas,
+                self._num_replicas,
                 eviction_policy=self.__eviction_policy,
                 bucket_priority=bucket_priority)
 
         cb_cluster.create_sasl_buckets(
             bucket_size, num_buckets=self.__num_sasl_buckets,
-            num_replicas=self.__num_replicas,
+            num_replicas=self._num_replicas,
             eviction_policy=self.__eviction_policy,
             bucket_priority=bucket_priority)
 
         cb_cluster.create_standard_buckets(
             bucket_size, num_buckets=self.__num_stand_buckets,
-            num_replicas=self.__num_replicas,
+            num_replicas=self._num_replicas,
             eviction_policy=self.__eviction_policy,
             bucket_priority=bucket_priority)
 
@@ -2423,7 +2431,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 Utility.get_rc_name(
                     cb_cluster.get_name(),
                     self.__cb_clusters[i + 1].get_name()),
-                self.__demand_encryption
+                self._demand_encryption
             )
             if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
                 self.__cb_clusters[i + 1].add_remote_cluster(
@@ -2431,7 +2439,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                     Utility.get_rc_name(
                         self.__cb_clusters[i + 1].get_name(),
                         cb_cluster.get_name()),
-                    self.__demand_encryption
+                    self._demand_encryption
                 )
 
     def __set_topology_star(self):
@@ -2442,13 +2450,13 @@ class XDCRNewBaseTest(unittest.TestCase):
             hub.add_remote_cluster(
                 cb_cluster,
                 Utility.get_rc_name(hub.get_name(), cb_cluster.get_name()),
-                self.__demand_encryption
+                self._demand_encryption
             )
             if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
                 cb_cluster.add_remote_cluster(
                     hub,
                     Utility.get_rc_name(cb_cluster.get_name(), hub.get_name()),
-                    self.__demand_encryption
+                    self._demand_encryption
                 )
 
     def __set_topology_ring(self):
@@ -2461,7 +2469,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             Utility.get_rc_name(
                 self.__cb_clusters[-1].get_name(),
                 self.__cb_clusters[0].get_name()),
-            self.__demand_encryption
+            self._demand_encryption
         )
         if self._rdirection == REPLICATION_DIRECTION.BIDIRECTION:
             self.__cb_clusters[0].add_remote_cluster(
@@ -2469,7 +2477,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 Utility.get_rc_name(
                     self.__cb_clusters[0].get_name(),
                     self.__cb_clusters[-1].get_name()),
-                self.__demand_encryption
+                self._demand_encryption
             )
 
     def set_xdcr_topology(self):
@@ -2510,14 +2518,14 @@ class XDCRNewBaseTest(unittest.TestCase):
                     Utility.get_rc_name(
                         src_cluster.get_name(),
                         dest_cluster.get_name()),
-                    self.__demand_encryption
+                    self._demand_encryption
                 )
             if "<" in tokens[counter + 1]:
                 dest_cluster.add_remote_cluster(
                     src_cluster,
                     Utility.get_rc_name(
                         dest_cluster.get_name(), src_cluster.get_name()),
-                    self.__demand_encryption
+                    self._demand_encryption
                 )
             counter += 2
 

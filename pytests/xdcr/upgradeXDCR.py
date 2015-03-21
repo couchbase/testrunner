@@ -5,8 +5,7 @@ import Queue
 from datetime import datetime
 from membase.api.rest_client import RestConnection, Bucket
 from newupgradebasetest import NewUpgradeBaseTest
-from xdcrbasetests import XDCRConstants
-from pauseResumeXDCR import PauseResumeXDCRBaseTest
+from xdcrnewbasetests import XDCRNewBaseTest, REPLICATION_TYPE
 from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
@@ -16,9 +15,10 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.document import DesignDocument, View
 
-class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
+class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
     def setUp(self):
         super(UpgradeTests, self).setUp()
+        self.pause_xdcr_cluster = self.input.param("pause", "")
         self.bucket_topology = self.input.param("bucket_topology", "default:1><2").split(";")
         self.src_init = self.input.param('src_init', 2)
         self.dest_init = self.input.param('dest_init', 2)
@@ -28,8 +28,8 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         self.repl_buckets_from_dest = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if bucket_repl.find("<2") != -1 ]
         self._override_clusters_structure(self)
         self.queue = Queue.Queue()
-        self.rep_type = self.input.param("rep_type", "capi")
-        self.upgrade_versions = self.input.param('upgrade_version', '2.2.0-821-rel')
+        self.rep_type = self.input.param("rep_type", "xmem")
+        self.upgrade_versions = self.input.param('upgrade_version', '2.5.0-1059-rel')
         self.upgrade_versions = self.upgrade_versions.split(";")
         self.ddocs_num_src = self.input.param("ddocs-num-src", 0)
         self.views_num_src = self.input.param("view-per-ddoc-src", 2)
@@ -38,13 +38,29 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         self.post_upgrade_ops = self.input.param("post-upgrade-actions", None)
         self._use_encryption_after_upgrade = self.input.param("use_encryption_after_upgrade", 0)
         self.upgrade_same_version = self.input.param("upgrade_same_version", 0)
-
         self.ddocs_src = []
         self.ddocs_dest = []
 
+    def xdcr_setup(self):
+        XDCRNewBaseTest.setUp(self)
+        self.src_cluster = self.get_cb_cluster_by_name('C1')
+        self.src_master = self.src_cluster.get_master_node()
+        self.src_nodes = self.src_cluster.get_nodes()
+        self.dest_cluster = self.get_cb_cluster_by_name('C2')
+        self.dest_master = self.dest_cluster.get_master_node()
+        self.dest_nodes = self.dest_cluster.get_nodes()
+        self.gen_create = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self.num_items)
+        self.gen_delete = BlobGenerator('loadOne', 'loadOne-', self._value_size,
+            start=int((self.num_items) * (float)(100 - self._perc_del) / 100), end=self.num_items)
+        self.gen_update = BlobGenerator('loadOne', 'loadOne-', self._value_size, start=0,
+            end=int(self.num_items * (float)(self._perc_upd) / 100))
+        self._create_buckets(self.src_cluster)
+        self._create_buckets(self.dest_cluster)
+        self._join_all_clusters()
+
     def tearDown(self):
         try:
-            PauseResumeXDCRBaseTest.tearDown(self)
+            XDCRNewBaseTest.tearDown(self)
         finally:
             self.cluster.shutdown(force=True)
 
@@ -53,89 +69,60 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         TestInputSingleton.input.clusters[0] = self.servers[:self.src_init]
         TestInputSingleton.input.clusters[1] = self.servers[self.src_init: self.src_init + self.dest_init ]
 
-    @staticmethod
-    def _create_buckets(self, nodes):
-        master_node = nodes[0]
-        if self.src_master.ip in [node.ip for node in nodes]:
+
+    def _create_buckets(self, cluster):
+        if cluster == self.src_cluster:
             buckets = self.buckets_on_src
-        elif self.dest_master.ip in [node.ip for node in nodes]:
+        else:
             buckets = self.buckets_on_dest
+        bucket_size = self._get_bucket_size(cluster.get_mem_quota(), len(buckets))
 
-        bucket_size = self._get_bucket_size(self._mem_quota_int, len(buckets))
-        rest = RestConnection(master_node)
-        master_id = rest.get_nodes_self().id
-
-        sasl_buckets = len([bucket for bucket in buckets if bucket.startswith("bucket")])
-        self._create_sasl_buckets(master_node, sasl_buckets, master_id, bucket_size)
-        standard_buckets = len([bucket for bucket in buckets if bucket.startswith("standard_bucket")])
-        self._create_standard_buckets(master_node, standard_buckets, master_id, bucket_size)
         if "default" in buckets:
-            self.cluster.create_default_bucket(master_node, bucket_size, self._num_replicas)
-            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
-                num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id))
-        self.sleep(30)
+            cluster.create_default_bucket(bucket_size,
+                                          num_replicas=self._num_replicas)
 
-    @staticmethod
-    def _setup_topology_chain(self):
-        ord_keys = self._clusters_keys_olst
-        ord_keys_len = len(ord_keys)
-        dest_key_index = 1
-        for src_key in ord_keys:
-            if dest_key_index == ord_keys_len:
-                break
-            dest_key = ord_keys[dest_key_index]
-            src_cluster_name = self._cluster_names_dic[src_key]
-            dest_cluster_name = self._cluster_names_dic[dest_key]
-            UpgradeTests._join_clusters(self, src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
-            dest_key_index += 1
+        sasl_buckets = len([bucket for bucket in buckets if bucket.startswith("sasl")])
+        if sasl_buckets > 0:
+            cluster.create_sasl_buckets(bucket_size, num_buckets=sasl_buckets)
 
-    @staticmethod
-    def _set_toplogy_star(self):
-        src_master_identified = False
-        for key in self._clusters_keys_olst:
-            nodes = self._clusters_dic[key]
-            if not src_master_identified:
-                src_cluster_name = self._cluster_names_dic[key]
-                self.src_master = nodes[0]
-                src_master_identified = True
-                continue
-            dest_cluster_name = self._cluster_names_dic[key]
-            self.dest_master = nodes[0]
-            UpgradeTests._join_clusters(self, src_cluster_name, self.src_master, dest_cluster_name, self.dest_master)
-            self.sleep(30)
+        standard_buckets = len([bucket for bucket in buckets if bucket.startswith("standard")])
+        if standard_buckets > 0:
+            cluster.create_standard_buckets(bucket_size, num_buckets=standard_buckets)
 
-    @staticmethod
-    def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
+
+    def _join_all_clusters(self):
         if len(self.repl_buckets_from_src):
-            self._link_clusters(src_master, dest_cluster_name, dest_master)
+            self.src_cluster.add_remote_cluster(self.dest_cluster,
+                                                name='remote_cluster_C1-C2',
+                                                encryption=self._demand_encryption)
         if len(self.repl_buckets_from_dest):
-            self._link_clusters(dest_master, src_cluster_name, src_master)
+            self.dest_cluster.add_remote_cluster(self.src_cluster,
+                                                name='remote_cluster_C2-C1',
+                                                encryption =self._demand_encryption)
+        self._replicate_clusters(
+            self.src_cluster,
+            self.src_cluster.get_remote_cluster_ref_by_name("remote_cluster_C1-C2"),
+            self.repl_buckets_from_src)
+        self._replicate_clusters(
+            self.dest_cluster,
+            self.dest_cluster.get_remote_cluster_ref_by_name("remote_cluster_C2-C1"),
+            self.repl_buckets_from_dest)
 
-        UpgradeTests._replicate_clusters(self, src_master, dest_cluster_name, self.repl_buckets_from_src)
-        UpgradeTests._replicate_clusters(self, dest_master, src_cluster_name, self.repl_buckets_from_dest)
 
-    @staticmethod
-    def _replicate_clusters(self, src_master, dest_cluster_name, buckets):
-        rest_conn_src = RestConnection(src_master)
+    def _replicate_clusters(self, cluster, remote_cluster_ref, buckets):
         for bucket in buckets:
-            rep_id = rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
-                bucket, dest_cluster_name, self.rep_type)
-            self._start_replication_time[bucket] = datetime.now()
-            self.sleep(5)
-        if self._get_cluster_buckets(src_master):
-            self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_id))
+            remote_cluster_ref.create_replication(
+                    cluster.get_bucket_by_name(bucket),
+                    toBucket=remote_cluster_ref.get_dest_cluster().get_bucket_by_name(
+                            bucket))
+        remote_cluster_ref.start_all_replications()
 
-    @staticmethod
     def _get_bucket(self, bucket_name, server):
             server_id = RestConnection(server).get_nodes_self().id
             for bucket in self.buckets:
                 if bucket.name == bucket_name and bucket.master_id == server_id:
                     return bucket
             return None
-
-    def _enable_xdcr_trace_logging(self, nodes):
-        for node in nodes:
-            RestConnection(node).enable_xdcr_trace_logging()
 
     def _online_upgrade(self, update_servers, extra_servers, check_newmaster=True):
         RestConnection(update_servers[0]).get_nodes_versions()
@@ -159,23 +146,20 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
                 raise Exception("After rebalance in {0} Nodes, one of them doesn't become the master".format(added_versions[0]))
         self.log.info("Rebalanced out all old version nodes")
         self.cluster.rebalance(update_servers + extra_servers, [], update_servers)
-        if self.upgrade_versions[0] >= "3.0.0":
-            self._enable_xdcr_trace_logging(extra_servers)
 
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.src_init + self.dest_init ])
         upgrade_nodes = self.input.param('upgrade_nodes', "src").split(";")
-        PauseResumeXDCRBaseTest.setUp(self)
-        self.set_xdcr_param('xdcrFailureRestartInterval', 1)
+        self.xdcr_setup()
         if self.initial_version < "3.0.0":
-            self.pause_xdcr_cluster = ""
+            self.pause_xdcr_cluster = None
         self.sleep(60)
-        bucket = self._get_bucket(self, 'default', self.src_master)
+        bucket = self.src_cluster.get_bucket_by_name('default')
         self._operations()
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
-        bucket = self._get_bucket(self, 'bucket0', self.src_master)
+        bucket = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
-        bucket = self._get_bucket(self, 'bucket0', self.dest_master)
+        bucket = self.dest_cluster.get_bucket_by_name('standard_bucket_1')
         gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self.num_items)
         self._load_bucket(bucket, self.dest_master, gen_create2, 'create', exp=0)
         nodes_to_upgrade = []
@@ -186,48 +170,47 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
 
         self.sleep(60)
         self._wait_for_replication_to_catchup()
-        if self.pause_xdcr_cluster != "":
-            self.pause_xdcr()
+        if self.pause_xdcr_cluster:
+            for cluster in self.get_cb_clusters():
+                for remote_cluster in cluster.get_remote_clusters():
+                    remote_cluster.pause_all_replications()
         self._offline_upgrade(nodes_to_upgrade)
 
         if self._use_encryption_after_upgrade and "src" in upgrade_nodes and "dest" in upgrade_nodes and self.upgrade_versions[0] >= "2.5.0":
             if "src" in self._use_encryption_after_upgrade:
-                src_remote_clusters = RestConnection(self.src_master).get_remote_clusters()
-                for remote_cluster in src_remote_clusters:
-                    self._modify_clusters(None, self.src_master, remote_cluster['name'], self.dest_master, require_encryption=1)
+                for remote_cluster in self.src_cluster.get_remote_clusters():
+                    remote_cluster._modify()
             if "dest" in self._use_encryption_after_upgrade:
-                dest_remote_clusters = RestConnection(self.dest_master).get_remote_clusters()
-                for remote_cluster in dest_remote_clusters:
-                    self._modify_clusters(None, self.dest_master, remote_cluster['name'], self.src_master, require_encryption=1)
-
-        self.set_xdcr_param('xdcrFailureRestartInterval', 1)
+                for remote_cluster in self.dest_cluster.get_remote_clusters():
+                    remote_cluster._modify()
         self.sleep(60)
-        bucket = self._get_bucket(self, 'bucket0', self.src_master)
+        bucket = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
         gen_create3 = BlobGenerator('loadThree', 'loadThree', self._value_size, end=self.num_items)
         self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
-        bucket = self._get_bucket(self, 'bucket0', self.dest_master)
+        bucket = self.dest_cluster.get_bucket_by_name('sasl_bucket_1')
         gen_create4 = BlobGenerator('loadFour', 'loadFour', self._value_size, end=self.num_items)
         self._load_bucket(bucket, self.dest_master, gen_create4, 'create', exp=0)
-        if self.pause_xdcr_cluster != "":
-            self.resume_xdcr()
-        self.do_merge_bucket(self.src_master, self.dest_master, True, bucket)
-        bucket = self._get_bucket(self, 'default', self.src_master)
+        if self.pause_xdcr_cluster:
+            for cluster in self.get_cb_clusters():
+                for remote_cluster in cluster.get_remote_clusters():
+                    remote_cluster.resume_all_replications()
+        bucket = self.src_cluster.get_bucket_by_name('default')
         self._load_bucket(bucket, self.src_master, gen_create2, 'create', exp=0)
-        self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
+        self.merge_all_buckets()
         self.sleep(60)
         self._post_upgrade_ops()
         self.sleep(60)
-        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes)
+        self.verify_results()
         self.max_verify = None
         if self.ddocs_src:
             for bucket_name in self.buckets_on_src:
-                bucket = self._get_bucket(self, bucket_name, self.src_master)
+                bucket = self.src_cluster.get_bucket_by_name(bucket_name)
                 expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_src, self.src_master)
 
         if self.ddocs_dest:
             for bucket_name in self.buckets_on_dest:
-                bucket = self._get_bucket(self, bucket_name, self.dest_master)
+                bucket = self.dest_cluster.get_bucket_by_name(bucket_name)
                 expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_dest, self.dest_master)
 
@@ -236,19 +219,21 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         prev_initial_version = self.initial_version
         self.initial_version = self.upgrade_versions[0]
         self._install(self.servers[self.src_init + self.dest_init:])
-        PauseResumeXDCRBaseTest.setUp(self)
+        self.xdcr_setup()
         if prev_initial_version < "3.0.0":
-            self.pause_xdcr_cluster = ""
-        bucket_default = self._get_bucket(self, 'default', self.src_master)
-        bucket_sasl = self._get_bucket(self, 'bucket0', self.src_master)
-        bucket_standard = self._get_bucket(self, 'standard_bucket0', self.dest_master)
+            self.pause_xdcr_cluster = None
+        bucket_default = self.src_cluster.get_bucket_by_name('default')
+        bucket_sasl = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
+        bucket_standard = self.dest_cluster.get_bucket_by_name('standard_bucket_1')
         self._load_bucket(bucket_default, self.src_master, self.gen_create, 'create', exp=0)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_create, 'create', exp=0)
         self._load_bucket(bucket_standard, self.dest_master, self.gen_create, 'create', exp=0)
         gen_create2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, end=self.num_items)
         self._load_bucket(bucket_sasl, self.dest_master, gen_create2, 'create', exp=0)
-        if self.pause_xdcr_cluster != "":
-            self.pause_xdcr()
+        if self.pause_xdcr_cluster:
+            for cluster in self.get_cb_clusters():
+                for remote_cluster in cluster.get_remote_clusters():
+                    remote_cluster.pause_all_replications()
         self._online_upgrade(self.src_nodes, self.servers[self.src_init + self.dest_init:])
         self._install(self.src_nodes)
         self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.src_nodes, False)
@@ -268,50 +253,47 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
 
         self._load_bucket(bucket_standard, self.dest_master, self.gen_delete, 'delete', exp=0)
         self._load_bucket(bucket_standard, self.dest_master, self.gen_update, 'create', exp=self._expires)
-        if self.pause_xdcr_cluster != "":
-            self.resume_xdcr()
-        self.do_merge_bucket(self.src_master, self.dest_master, True, bucket_sasl)
-        bucket_sasl = self._get_bucket(self, 'bucket0', self.dest_master)
+        if self.pause_xdcr_cluster:
+            for cluster in self.get_cb_clusters():
+                for remote_cluster in cluster.get_remote_clusters():
+                    remote_cluster.resume_all_replications()
+        self.merge_all_buckets()
+        bucket_sasl = self.dest_cluster.get_bucket_by_name('sasl_bucket_1')
         gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size,
-            start=int((self.num_items) * (float)(100 - self._percent_delete) / 100), end=self.num_items)
+            start=int((self.num_items) * (float)(100 - self._perc_del) / 100), end=self.num_items)
         gen_update2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, start=0,
-            end=int(self.num_items * (float)(self._percent_update) / 100))
+            end=int(self.num_items * (float)(self._perc_upd) / 100))
         self._load_bucket(bucket_sasl, self.dest_master, gen_delete2, 'delete', exp=0)
         self._load_bucket(bucket_sasl, self.dest_master, gen_update2, 'create', exp=self._expires)
 
-        self.do_merge_bucket(self.dest_master, self.src_master, False, bucket_sasl)
-        self.do_merge_bucket(self.src_master, self.dest_master, False, bucket_default)
-        self.do_merge_bucket(self.dest_master, self.src_master, False, bucket_standard)
+        self.merge_all_buckets()
         self.sleep(120)
         self._post_upgrade_ops()
         self.sleep(120)
-        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes)
+        self.verify_results()
         self.max_verify = None
         if self.ddocs_src:
             for bucket_name in self.buckets_on_src:
-                bucket = self._get_bucket(self, bucket_name, self.src_master)
+                bucket = self.src_cluster.get_bucket_by_name(bucket_name)
                 expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_src, self.src_master)
 
         if self.ddocs_dest:
             for bucket_name in self.buckets_on_dest:
-                bucket = self._get_bucket(self, bucket_name, self.dest_master)
+                bucket = self.dest_cluster.get_bucket_by_name(bucket_name)
                 expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_dest, self.dest_master)
 
     def incremental_offline_upgrade(self):
         upgrade_seq = self.input.param("upgrade_seq", "src>dest")
-
         self._install(self.servers[:self.src_init + self.dest_init ])
-
-        PauseResumeXDCRBaseTest.setUp(self)
-        self.set_xdcr_param('xdcrFailureRestartInterval', 1)
+        self.xdcr_setup()
         self.sleep(60)
-        bucket = self._get_bucket(self, 'default', self.src_master)
+        bucket = self.src_cluster.get_bucket_by_name('default')
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
-        bucket = self._get_bucket(self, 'bucket0', self.src_master)
+        bucket = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
-        bucket = self._get_bucket(self, 'bucket0', self.dest_master)
+        bucket = self.dest_cluster.get_bucket_by_name('sasl_bucket_1')
         gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self.num_items)
         self._load_bucket(bucket, self.dest_master, gen_create2, 'create', exp=0)
         self.sleep(self.wait_timeout)
@@ -331,22 +313,18 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
 
         for _seq, node in enumerate(nodes_to_upgrade):
             self._offline_upgrade([node])
-            self.set_xdcr_param('xdcrFailureRestartInterval', 1)
             self.sleep(60)
-            bucket = self._get_bucket(self, 'bucket0', self.src_master)
+            bucket = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
             itemPrefix = "loadThree" + _seq * 'a'
             gen_create3 = BlobGenerator(itemPrefix, itemPrefix, self._value_size, end=self.num_items)
             self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
-            bucket = self._get_bucket(self, 'default', self.src_master)
+            bucket = self.src_cluster.get_bucket_by_name('default')
             itemPrefix = "loadFour" + _seq * 'a'
             gen_create4 = BlobGenerator(itemPrefix, itemPrefix, self._value_size, end=self.num_items)
             self._load_bucket(bucket, self.src_master, gen_create4, 'create', exp=0)
             self.sleep(60)
-        bucket = self._get_bucket(self, 'bucket0', self.src_master)
-        self.do_merge_bucket(self.src_master, self.dest_master, True, bucket)
-        bucket = self._get_bucket(self, 'default', self.src_master)
-        self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
-        self.verify_xdcr_stats(self.src_nodes, self.dest_nodes)
+        self.src_cluster.merge_all_buckets()
+        self.verify_results()
         self.sleep(self.wait_timeout * 5, "Let clusters work for some time")
 
     def _operations(self):
@@ -376,7 +354,7 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
                     views = self.make_default_views(self.default_view_name, views_num,
                                                     self.is_dev_ddoc, different_map=True)
                     ddoc = DesignDocument(self.default_view_name + str(i), views)
-                    bucket_server = self._get_bucket(self, bucket, server)
+                    bucket_server = self._get_bucket(bucket, server)
                     tasks = self.async_create_views(server, ddoc.name, views, bucket=bucket_server)
                     for task in tasks:
                         task.result(timeout=90)
@@ -391,7 +369,7 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
         for bucket in buckets:
             for ddoc in ddocs:
                 prefix = ("", "dev_")[ddoc.views[0].dev_view]
-                bucket_server = self._get_bucket(self, bucket, server)
+                bucket_server = self._get_bucket(bucket, server)
                 self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name, query, bucket=bucket_server,
                                            wait_time=self.wait_timeout * 5, expected_rows=expected_rows,
                                            retry_time=10, server=server)
@@ -454,5 +432,3 @@ class UpgradeTests(NewUpgradeBaseTest, PauseResumeXDCRBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed!")
             self.sleep(self.expire_time)
-        if self.upgrade_versions[0] >= "3.0.0":
-            self._enable_xdcr_trace_logging(servers)
