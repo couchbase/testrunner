@@ -138,15 +138,40 @@ class BuildQuery(object):
         build.product = product
         build.name = '{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)
         build.build_number = 0
+        cb_release_version_3 = ["3.0.1","3.0.2"]
         if deliverable_type == "exe":
             build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{4}.setup.{3}'.format(build_version, product, os_architecture, deliverable_type, build_details)
             build.url_latest_build = 'http://builds.hq.northscale.net/latestbuilds/{0}_{1}_{3}.setup.{2}'.format(product, os_architecture, deliverable_type, build_details)
         else:
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
-                build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{4}.{3}'.format(build_version[:build_version.find('-')],
+                """  in release folder
+                        /3.0.1/couchbase-server-enterprise-3.0.1-centos6.x86_64.rpm
+                        /3.0.2/couchbase-server-enterprise-3.0.2-centos6.x86_64.rpm
+                      build release url:
+                               http://builds.hq.northscale.net/releases/3.0.1/
+                      build latestbuilds url:
+                               http://builds.hq.northscale.net/latestbuilds/
+                                  couchbase-server-enterprise_x86_64_3.0.1-1444.rpm
+                """
+                if build_version[:5] in cb_release_version_3:
+                    build.url = "http://builds.hq.northscale.net/releases/{0}/"\
+                                "{1}-{4}-centos6.{2}.{3}"\
+                                .format(build_version[:build_version.find('-')],
+                                product, os_architecture, deliverable_type,
+                                                              build_details[:5])
+                else:
+                    build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{4}.{3}'.format(build_version[:build_version.find('-')],
                                                                                                   product, os_architecture, deliverable_type, build_details)
             else:
-                build.url = 'http://builds.hq.northscale.net/releases/{0}/{1}_{2}_{4}.{3}'.format(build_version, product, os_architecture, deliverable_type, build_details)
+                if build_version[:5] in cb_release_version_3:
+                    build.url = "http://builds.hq.northscale.net/releases/{0}/"\
+                                "{1}-{4}-centos6.{2}.{3}".format(build_version,
+                                 product, os_architecture, deliverable_type,
+                                                             build_details[:5])
+                else:
+                    build.url = "http://builds.hq.northscale.net/releases/{0}/"\
+                                "{1}_{2}_{4}.{3}".format(build_version, product,
+                                 os_architecture, deliverable_type, build_details)
             build.url_latest_build = 'http://builds.hq.northscale.net/latestbuilds/{0}_{1}_{3}.{2}'.format(product, os_architecture, deliverable_type, build_details)
         # This points to the Internal s3 account to look for release builds
         if is_amazon:
