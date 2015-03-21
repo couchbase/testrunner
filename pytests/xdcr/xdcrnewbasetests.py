@@ -2051,7 +2051,7 @@ class CouchbaseCluster:
         curr_time = time.time()
         end_time = curr_time + timeout
         rest = RestConnection(self.__master_node)
-        buckets = self.get_buckets()
+        buckets = copy.copy(self.get_buckets())
         for bucket in buckets:
             try:
                 mutations = int(rest.get_dcp_queue_size(bucket.name))
