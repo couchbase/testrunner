@@ -567,7 +567,7 @@ class JsonGenerator:
                     for day in join_day:
                         random.seed(count)
                         count +=1
-                        prefix = '%s_%s-%s-%s' % (dest, year, month, day)+str(random.random()*1000000)
+                        prefix = '%s_%s-%s-%s' % (dest, year, month, day)
                         amount = [float("%s.%s" % (month, month))]
                         currency = [("USD", "EUR")[month in [1,3,5]]]
                         decimal_tax = [1,2]

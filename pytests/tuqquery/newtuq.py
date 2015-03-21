@@ -20,7 +20,6 @@ from memcached.helper.data_helper import MemcachedClientHelper
 
 class QueryTests(BaseTestCase):
     def setUp(self):
-
         if not self._testMethodName == 'suite_setUp':
             self.skip_buckets_handle = True
         super(QueryTests, self).setUp()
@@ -38,7 +37,6 @@ class QueryTests(BaseTestCase):
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.dataset = self.input.param("dataset", "default")
-        self.dataset = self.input.param("dataset", "default")
         self.primary_indx_type = self.input.param("primary_indx_type", 'VIEW')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
@@ -52,7 +50,7 @@ class QueryTests(BaseTestCase):
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
         self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
-         # temporary for MB-12848
+        # temporary for MB-12848
         self.create_primary_index_for_3_0_and_greater()
 
     def suite_setUp(self):
@@ -101,6 +99,19 @@ class QueryTests(BaseTestCase):
         query_template = 'SELECT emp.$int0, task FROM bucket0 emp UNNEST emp.$nested_list_3l0 task'
         actual_result, expected_result = self.run_query_from_template(query_template)
         self._verify_results(actual_result['results'], expected_result)
+
+    def test_subquery_select(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT $str0, $subquery(SELECT COUNT($str0) cn FROM %s d USE KEYS $5) as names FROM %s' % (bucket.name,
+                                                                                                                     bucket.name)
+            actual_result, expected_result = self.run_query_with_subquery_select_from_template(self.query)
+            self._verify_results(actual_result['results'], expected_result)
+
+    def test_subquery_from(self):
+        for bucket in self.buckets:
+            self.query = 'SELECT tasks.$str0 FROM $subquery(SELECT $str0, $int0 FROM %s) as tasks' % (bucket.name)
+            actual_result, expected_result = self.run_query_with_subquery_from_template(self.query)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_consistent_simple_check(self):
         queries = [self.gen_results.generate_query('SELECT $str0, $int0, $int1 FROM %s ' +\
@@ -361,6 +372,44 @@ class QueryTests(BaseTestCase):
 ##############################################################################################
 
     def run_query_from_template(self, query_template):
+        self.query = self.gen_results.generate_query(query_template)
+        expected_result = self.gen_results.generate_expected_result()
+        actual_result = self.run_cbq_query()
+        return actual_result, expected_result
+
+    def run_query_with_subquery_select_from_template(self, query_template):
+        subquery_template = re.sub(r'.*\$subquery\(', '', query_template)
+        subquery_template = subquery_template[:subquery_template.rfind(')')]
+        keys_num = int(re.sub(r'.*KEYS \$', '', subquery_template).replace('KEYS $', ''))
+        subquery_full_list = self.generate_full_docs_list(gens_load=self.gens_load,keys=self._get_keys(keys_num))
+        subquery_template = re.sub(r'USE KEYS.*', '', subquery_template)
+        sub_results = TuqGenerators(self.log, subquery_full_list)
+        self.query = sub_results.generate_query(subquery_template)
+        expected_sub = sub_results.generate_expected_result()
+        alias = re.sub(r',.*', '', re.sub(r'.*\$subquery\(.*\)', '', query_template))
+        alias = re.sub(r'.*as','', re.sub(r'FROM.*', '', alias)).strip()
+        if not alias:
+            alias = '$1'
+        for item in self.gen_results.full_set:
+            item[alias] = expected_sub[0]
+        query_template = re.sub(r',.*\$subquery\(.*\).*%s' % alias, ',%s' % alias, query_template)
+        self.query = self.gen_results.generate_query(query_template)
+        expected_result = self.gen_results.generate_expected_result()
+        actual_result = self.run_cbq_query()
+        return actual_result, expected_result
+
+    def run_query_with_subquery_from_template(self, query_template):
+        #select tasks.join_mo from (select join_mo From default) as tasks
+        subquery_template = re.sub(r'.*\$subquery\(', '', query_template)
+        subquery_template = subquery_template[:subquery_template.rfind(')')]
+        subquery_full_list = self.generate_full_docs_list(gens_load=self.gens_load)
+        sub_results = TuqGenerators(self.log, subquery_full_list)
+        self.query = sub_results.generate_query(subquery_template)
+        expected_sub = sub_results.generate_expected_result()
+        alias = re.sub(r',.*', '', re.sub(r'.*\$subquery\(.*\)', '', query_template))
+        alias = re.sub(r'.*as ', '', alias).strip()
+        self.gen_results = TuqGenerators(self.log, expected_sub)
+        query_template = re.sub(r'\$subquery\(.*\).*%s' % alias, ' %s' % alias, query_template)
         self.query = self.gen_results.generate_query(query_template)
         expected_result = self.gen_results.generate_expected_result()
         actual_result = self.run_cbq_query()
@@ -637,3 +686,14 @@ class QueryTests(BaseTestCase):
                         self._wait_for_index_online(bucket, '#primary')
                 except Exception, ex:
                     self.log.info(str(ex))
+
+    def _get_keys(self, key_num):
+        keys = []
+        for gen in self.gens_load:
+            gen_copy = copy.deepcopy(gen)
+            for i in xrange(gen_copy.end):
+                key, _ = gen_copy.next()
+                keys.append(key)
+                if len(keys) == key_num:
+                    return keys
+        return keys
