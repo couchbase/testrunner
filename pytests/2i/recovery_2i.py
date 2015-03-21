@@ -230,6 +230,22 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 self.stop_firewall_on_node(node)
             self.sleep(10)
 
+    def test_couchbase_bucket_compaction(self):
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
+        for task in tasks:
+            task.result()
+        # Run Compaction Here
+        # Run auto-compaction to remove the tomb stones
+            compact_tasks = []
+            for bucket in self.buckets:
+                compact_tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
+            tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
+            for task in tasks:
+                task.result()
+            for task in compact_tasks:
+                task.result()
+        self.run_after_operations()
+
     def test_warmup(self):
         tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
         for task in tasks:
