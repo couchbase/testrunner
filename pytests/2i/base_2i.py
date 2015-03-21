@@ -561,6 +561,46 @@ class BaseSecondaryIndexingTests(QueryTests):
                 map_after[op_type] = True
         return {"before":map_before, "in_between": map_in_between, "after": map_after}
 
+    def _create_index_in_async(self, query_definitions = None, buckets = None, index_nodes = None):
+        refer_index = []
+        if buckets == None:
+            buckets = self.buckets
+        if query_definitions == None:
+            query_definitions = self.query_definitions
+        if index_nodes == None:
+            index_nodes = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
+        check = True
+        x =  len(query_definitions)-1
+        while x > -1:
+            tasks = []
+            for server in index_nodes:
+                for bucket in buckets:
+                    key = "{0}:{1}".format(bucket.name, query_definitions[x].index_name)
+                    if key not in refer_index:
+                        refer_index.append(key)
+                        refer_index.append(query_definitions[x].index_name)
+                        deploy_node_info = None
+                        if self.use_gsi_for_secondary:
+                            deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
+                        tasks.append(self.async_create_index(bucket.name, query_definitions[x], deploy_node_info = deploy_node_info))
+                x-=1
+            for task in tasks:
+                task.result()
+
+    def _query_explain_in_async(self):
+        tasks = self.async_run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
+            create_index = False, drop_index = False,
+            query_with_explain = self.run_query_with_explain,
+            query = False, scan_consistency = self.scan_consistency)
+        self._run_tasks(tasks)
+        tasks = self.async_run_multi_operations(buckets = self.buckets,
+            query_definitions = self.query_definitions,
+            create_index = False, drop_index = False,
+            query_with_explain = False, query = self.run_query,
+            scan_consistency = self.scan_consistency)
+        self._run_tasks(tasks)
+
     def _pick_query_definitions_employee(self):
         query_definition_generator = SQLDefinitionGenerator()
         if self.create_index_usage == "where":

@@ -40,72 +40,31 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
 			query_with_explain = self.run_query_with_explain, query = self.run_query)
 
     def test_multi_create_query_explain_drop_index(self):
-        if self.run_async:
-            try:
-                tasks = self.async_run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.query_definitions,
-                    create_index = self.run_create_index, drop_index = False,
-                    query_with_explain = False, query = False, scan_consistency = self.scan_consistency)
-                self._run_tasks(tasks)
-                tasks = self.async_run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.query_definitions,
-                    create_index = False, drop_index = False,
-                    query_with_explain = self.run_query_with_explain, query = False, scan_consistency = self.scan_consistency)
-                self._run_tasks(tasks)
-                tasks = self.async_run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.query_definitions,
-                    create_index = False, drop_index = False,
-                    query_with_explain = False, query = self.run_query)
-                self._run_tasks(tasks)
-                # runs operations
-                if self.doc_ops:
-                    self.run_doc_ops()
-                    # verify results
-                    tasks = self.async_run_multi_operations(buckets = self.buckets,
-                        query_definitions = self.query_definitions,
-                        create_index = False, drop_index = False,
-                        query_with_explain = self.run_query_with_explain, query = False, scan_consistency = self.scan_consistency)
-                    self._run_tasks(tasks)
-                    tasks = self.async_run_multi_operations(buckets = self.buckets,
-                        query_definitions = self.query_definitions,
-                        create_index = False, drop_index = False,
-                        query_with_explain = False, query = self.run_query, scan_consistency = self.scan_consistency)
-                    self._run_tasks(tasks)
-            except Exception, ex:
-                self.log.info(ex)
-                raise
-            finally:
-                tasks = self.async_run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.query_definitions,
-                    create_index = False, drop_index = self.run_drop_index,
-                    query_with_explain = False, query = False)
-                self._run_tasks(tasks)
-        else:
-            self.run_multi_operations(buckets = self.buckets,
+        try:
+            self._create_index_in_async()
+            self.run_doc_ops()
+            self._query_explain_in_async()
+        except Exception, ex:
+            self.log.info(ex)
+            raise
+        finally:
+            tasks = self.async_run_multi_operations(
+                buckets = self.buckets,
                 query_definitions = self.query_definitions,
-                create_index = self.run_create_index, drop_index = self.run_drop_index,
-                query_with_explain = self.run_query_with_explain, query = self.run_query, scan_consistency = self.scan_consistency)
+                drop_index = self.run_drop_index)
+            self._run_tasks(tasks)
+
+    def test_multi_create_query_explain_drop_index_with_mutations(self):
+        self.doc_ops=True
+        self.test_multi_create_query_explain_drop_index()
 
     def test_multi_create_query_explain_drop_index_with_concurrent_mutations(self):
         try:
             kvops_tasks = self.async_run_doc_ops()
-            tasks = self.async_run_multi_operations(buckets = self.buckets,
-                query_definitions = self.query_definitions,
-                create_index = self.run_create_index, drop_index = False,
-                query_with_explain = False, query = False, scan_consistency = self.scan_consistency)
+            self._create_index_in_async()
             # runs operations
             self._run_tasks(kvops_tasks)
-            self._run_tasks(tasks)
-            tasks = self.async_run_multi_operations(buckets = self.buckets,
-                query_definitions = self.query_definitions,
-                create_index = False, drop_index = False,
-                query_with_explain = self.run_query_with_explain, query = False)
-            self._run_tasks(tasks)
-            tasks = self.async_run_multi_operations(buckets = self.buckets,
-                query_definitions = self.query_definitions,
-                create_index = False, drop_index = False,
-                query_with_explain = False, query = self.run_query, scan_consistency = self.scan_consistency)
-            self._run_tasks(tasks)
+            self._query_explain_in_async()
         except Exception, ex:
             self.log.info(ex)
             raise
@@ -122,86 +81,32 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             query_definition.index_name = "#primary"
             qdfs.append(query_definition)
         self.query_definitions = qdfs
-        if self.run_async:
-            try:
-                self._verify_primary_index_count()
-                tasks = self.async_run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.query_definitions,
-                    create_index = False, drop_index = False,
-                    query_with_explain = self.run_query_with_explain, query = False, scan_consistency = self.scan_consistency)
-                self._run_tasks(tasks)
-                tasks = self.async_run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.query_definitions,
-                    create_index = False, drop_index = False,
-                    query_with_explain = False, query = self.run_query, scan_consistency = self.scan_consistency)
-                self._run_tasks(tasks)
-                # runs operations
-                self.run_doc_ops()
-                self._verify_primary_index_count()
-                # verify results
-                tasks = self.async_run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.query_definitions,
-                    create_index = False, drop_index = False,
-                    query_with_explain = self.run_query_with_explain, query = False, scan_consistency = self.scan_consistency)
-                self._run_tasks(tasks)
-                tasks = self.async_run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.query_definitions,
-                    create_index = False, drop_index = False,
-                    query_with_explain = False, query = self.run_query, scan_consistency = self.scan_consistency)
-                self._run_tasks(tasks)
-            except Exception, ex:
-                self.log.info(ex)
-                raise
-        else:
-            self.run_multi_operations(buckets = self.buckets,
-                query_definitions = self.query_definitions,
-                create_index = False, drop_index = False,
-                query_with_explain = self.run_query_with_explain, query = self.run_query)
+        try:
+            self._verify_primary_index_count()
+            self._create_index_in_async()
+            self.run_doc_ops()
+            self._verify_primary_index_count()
+            self._query_explain_in_async()
+        except Exception, ex:
+            self.log.info(ex)
+            raise
 
     def test_multi_create_query_explain_drop_index_with_index_where_clause(self):
         query_definition_generator = SQLDefinitionGenerator()
         self.query_definitions = query_definition_generator.generate_employee_data_query_definitions_for_index_where_clause()
         self.use_where_clause_in_index = True
         self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
-        self.run_multi_operations(buckets = self.buckets,
-            query_definitions = self.query_definitions,
-            create_index = True, drop_index = False,
-            query_with_explain = True, query = True)
-        self.run_doc_ops()
-        tasks = self.async_run_multi_operations(buckets = self.buckets,
-            query_definitions = self.query_definitions,
-            create_index = False, drop_index = False,
-            query_with_explain = True, query = True, scan_consistency = self.scan_consistency)
-        for task in tasks:
-            task.result()
-        tasks = self.async_run_multi_operations(buckets = self.buckets,
-            query_definitions = self.query_definitions,
-            create_index = False, drop_index = True,
-            query_with_explain = False, query = False)
-        for task in tasks:
-            task.result()
+        self.test_multi_create_query_explain_drop_index()
 
     def test_multi_create_query_explain_drop_index_with_index_expressions(self):
         query_definition_generator = SQLDefinitionGenerator()
         self.query_definitions = query_definition_generator.generate_employee_data_query_definitions_for_index_expressions()
         self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
-        self.run_multi_operations(buckets = self.buckets,
-            query_definitions = self.query_definitions,
-            create_index = True, drop_index = False,
-            query_with_explain = True, query = True)
-        self.run_doc_ops()
-        tasks = self.async_run_multi_operations(buckets = self.buckets,
-            query_definitions = self.query_definitions,
-            create_index = False, drop_index = False,
-            query_with_explain = True, query = True, scan_consistency = self.scan_consistency)
-        for task in tasks:
-            task.result()
-        tasks = self.async_run_multi_operations(buckets = self.buckets,
-            query_definitions = self.query_definitions,
-            create_index = False, drop_index = True,
-            query_with_explain = False, query = False)
-        for task in tasks:
-            task.result()
+        self.test_multi_create_query_explain_drop_index()
+
+    def test_multi_create_query_explain_drop_index_with_index_expressions_and_where_clause(self):
+        self.use_where_clause_in_index = True
+        self.test_multi_create_query_explain_drop_index_with_index_expressions()
 
     def test_multi_create_query_explain_drop_index_scan_consistency_with_index_expressions(self):
         query_definition_generator = SQLDefinitionGenerator()
@@ -223,10 +128,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         if self.scan_vector_per_values:
             scan_vector_ranges = self._generate_scan_vector_ranges(self.scan_vector_per_values)
         try:
-            self.run_multi_operations(buckets = self.buckets,
-                query_definitions = self.query_definitions,
-                create_index = self.run_create_index, drop_index = False,
-                query_with_explain = False, query = False)
+            self._create_index_in_async()
             if len(scan_vector_ranges) > 0:
                 for use_percentage in scan_vector_ranges:
                     scan_vectors = self.gen_scan_vector(use_percentage = use_percentage,
