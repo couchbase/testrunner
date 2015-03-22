@@ -1,0 +1,13 @@
+{
+    "adminInterface": "172.23.100.65:4985",
+    "interface": "172.23.100.65:4984",
+    "log": ["HTTP", "HTTP+", "CRUD"],
+    "databases": {
+        "db": {
+            "server": "walrus:",
+            "users": {
+                 "GUEST": {"disabled": false, "admin_channels": ["*"] }
+            }
+        }
+    }
+}  

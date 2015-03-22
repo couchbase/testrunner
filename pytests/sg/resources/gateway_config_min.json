@@ -1,0 +1,9 @@
+{
+	"databases": {
+		"db": {
+			"users": {
+				"GUEST": {"disabled": false, "admin_channels": ["*"] }
+			}
+		}
+	}
+}
