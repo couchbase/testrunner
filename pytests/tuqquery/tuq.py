@@ -421,7 +421,7 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result['results'], expected_result)
 
             self.query = "SELECT email FROM %s WHERE email" % (bucket.name) +\
-                         " NOT LIKE '%@%.h' ORDER BY email"
+                         " LIKE '%@%.h' ORDER BY email"
             actual_result = self.run_cbq_query()
             expected_result = []
             self._verify_results(actual_result['results'], expected_result)
