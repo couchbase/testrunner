@@ -38,6 +38,7 @@ class auditTest(BaseTestCase):
             auditTemp.setAuditEnable('true')
             self.sleep(30)
 
+
     def tearDown(self):
         super(auditTest, self).tearDown()
 
@@ -164,8 +165,8 @@ class auditTest(BaseTestCase):
         rest = RestConnection(self.master)
 
         if (ops == 'memoryQuota'):
-            expectedResults = {'quota':512, 'source':source, 'user':user, 'ip':self.ipAddress, 'port':12345}
-            rest.init_cluster_memoryQuota(expectedResults['user'], password, expectedResults['quota'])
+            expectedResults = {'memory_quota':512, 'source':source, 'user':user, 'ip':self.ipAddress, 'port':12345}
+            rest.init_cluster_memoryQuota(expectedResults['user'], password, expectedResults['memory_quota'])
 
         elif (ops == 'loadSample'):
             expectedResults = {'name':'gamesim-sample', 'source':source, "user":user, 'ip':self.ipAddress, 'port':12345}
@@ -282,7 +283,6 @@ class auditTest(BaseTestCase):
             tempStr = (tempStr.split("/"))[4]
             expectedResults['uuid'] = tempStr
 
-
         elif (ops == "DeleteGroup"):
             expectedResults = {'group_name':'delete group', 'source':source, 'user':user, 'ip':self.ipAddress, 'port':1234}
             rest.add_zone(expectedResults['group_name'])
@@ -299,7 +299,21 @@ class auditTest(BaseTestCase):
             rest.rename_node(self.master.ip, user, password)
             expectedResults = {"hostname":self.master.ip, "node":"ns_1@" + self.master.ip, "source":source, "user":user, "ip":self.ipAddress, "port":56845}
 
-        self.checkConfig(self.eventID, self.master, expectedResults)
+        try:
+            self.checkConfig(self.eventID, self.master, expectedResults)
+        finally:
+            if (ops == "UpdateGroupAddNodes"):
+                sourceGroup = "Group 1"
+                destGroup = 'destGroup'
+                rest.shuffle_nodes_in_zones([self.master.ip], destGroup, sourceGroup)
+
+            rest = RestConnection(self.master)
+            zones = rest.get_zone_names()
+            for zone in zones:
+                if zone != "Group 1":
+                    rest.delete_zone(zone)
+
+
 
     def test_cbDiskConf(self):
         ops = self.input.param('ops', None)
@@ -450,7 +464,7 @@ class auditTest(BaseTestCase):
          create_dir = "mkdir " + path
          shell.execute_command(create_dir)
          shell.execute_cluster_backup(backup_location=path)
-         expectedResults = {"peername":self.ipAddress, "sockname":self.master.ip + ":11210", "source":"memcached", "user":"default", 'bucket':'default'}
+         expectedResults = {"peername":self.master.ip, "sockname":self.master.ip + ":11210", "source":"memcached", "user":"default", 'bucket':'default'}
          self.checkConfig(self.eventID, self.master, expectedResults)
 
     def test_Transfer(self):
@@ -469,7 +483,7 @@ class auditTest(BaseTestCase):
          shell.execute_command(create_dir)
          options = "-b default " + " -u " + self.master.rest_username + " -p " + self.master.rest_password
          shell.execute_cbtransfer(source, path, options)
-         expectedResults = {"peername":self.ipAddress, "sockname":self.master.ip + ":11210", "source":"memcached", "user":"default", 'bucket':'default'}
+         expectedResults = {"peername":self.master.ip, "sockname":self.master.ip + ":11210", "source":"memcached", "user":"default", 'bucket':'default'}
          self.checkConfig(self.eventID, self.master, expectedResults)
 
     #Need an implementation for cbreset_password

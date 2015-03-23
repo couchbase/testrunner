@@ -396,19 +396,18 @@ class audit:
                                 log.info ('Mis-Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(tempValue, data[items][seclevel], seclevel))
                                 flag = False
                 else:
-		    if (items == 'port' and data[items] >= 30000 and data[items] <= 65535):
+                    if (items == 'port' and data[items] >= 30000 and data[items] <= 65535):
                         log.info ("Matching port is an ephemeral port -- actual port is {0}".format(data[items]))
-		    else:
-		        log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
-		        if (items == 'peername'):
-		             if (expectedResult[items] not in data[items]):
-		                  flag = False
-		             else:
-		                  log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
-		                  if (data[items] != expectedResult[items]):
-		                      log.info ('Mis - Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
-		                      flag = False
-	#log.info ("Value of flag is {0}".format(flag))
+                    else:
+                        log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
+                        if (items == 'peername'):
+                            if (expectedResult[items] not in data[items]):
+                                flag = False
+                                log.info ('Mis - Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
+                        else:
+                            if (data[items] != expectedResult[items]):
+                                flag = False
+                                log.info ('Mis - Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
         return flag
 
     '''
