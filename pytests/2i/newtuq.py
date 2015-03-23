@@ -79,8 +79,9 @@ class QueryTests(BaseTestCase):
 
     def tearDown(self):
         if hasattr(self, 'n1ql_helper'):
-            n1ql_server = self.get_nodes_from_services_map(service_type = "n1ql")
-            self.n1ql_helper.drop_primary_index(using_gsi = self.use_gsi_for_primary,server = n1ql_server)
+            if hasattr(self, 'skip_cleanup') and not self.skip_cleanup:
+                n1ql_server = self.get_nodes_from_services_map(service_type = "n1ql")
+                self.n1ql_helper.drop_primary_index(using_gsi = self.use_gsi_for_primary,server = n1ql_server)
         if hasattr(self, 'shell'):
             if not self.skip_cleanup:
                 self.n1ql_helper._restart_indexer()

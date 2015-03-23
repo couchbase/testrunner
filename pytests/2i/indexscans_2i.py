@@ -83,7 +83,6 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         self.query_definitions = qdfs
         try:
             self._verify_primary_index_count()
-            self._create_index_in_async()
             self.run_doc_ops()
             self._verify_primary_index_count()
             self._query_explain_in_async()

@@ -593,13 +593,15 @@ class BaseSecondaryIndexingTests(QueryTests):
             create_index = False, drop_index = False,
             query_with_explain = self.run_query_with_explain,
             query = False, scan_consistency = self.scan_consistency)
-        self._run_tasks(tasks)
+        for task in tasks:
+            task.result()
         tasks = self.async_run_multi_operations(buckets = self.buckets,
             query_definitions = self.query_definitions,
             create_index = False, drop_index = False,
             query_with_explain = False, query = self.run_query,
             scan_consistency = self.scan_consistency)
-        self._run_tasks(tasks)
+        for task in tasks:
+            task.result()
 
     def _pick_query_definitions_employee(self):
         query_definition_generator = SQLDefinitionGenerator()
