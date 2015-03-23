@@ -2672,7 +2672,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 repl.get_src_cluster().get_master_node(),
                 repl.get_dest_cluster().get_master_node(),
                 repl.get_src_bucket(),
-                repl.get_src_bucket().kvs[kv_store])
+                repl.get_src_bucket().kvs[kv_store],
+                repl.get_dest_bucket().kvs[kv_store])
             tasks.append(task_info)
         for task in tasks:
             task.result(timeout)

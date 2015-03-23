@@ -1281,16 +1281,18 @@ class BatchedValidateDataTask(GenericLoadingTask):
 
 
 class VerifyRevIdTask(GenericLoadingTask):
-    def __init__(self, src_server, dest_server, bucket, kv_store, max_err_count=200000):
-        GenericLoadingTask.__init__(self, src_server, bucket, kv_store)
+    def __init__(self, src_server, dest_server, bucket, src_kv_store, dest_kv_store, max_err_count=200000):
+        GenericLoadingTask.__init__(self, src_server, bucket, src_kv_store)
         from memcached.helper.data_helper import VBucketAwareMemcached as SmartClient
         self.client_src = SmartClient(RestConnection(src_server), bucket)
         self.client_dest = SmartClient(RestConnection(dest_server), bucket)
-        self.valid_keys, self.deleted_keys = kv_store.key_set()
-        self.num_valid_keys = len(self.valid_keys)
-        self.num_deleted_keys = len(self.deleted_keys)
+        self.src_valid_keys, self.src_deleted_keys = src_kv_store.key_set()
+        self.dest_valid_keys, self.dest_del_keys = dest_kv_store.key_set()
+        self.num_valid_keys = len(self.src_valid_keys)
+        self.num_deleted_keys = len(self.src_deleted_keys)
         self.keys_not_found = {self.client.rest.ip: [], self.client_dest.rest.ip: []}
         self.itr = 0
+        self.not_matching_filter_keys = 0
         self.err_count = 0
         self.max_err_count = max_err_count
         self.src_server = src_server
@@ -1303,6 +1305,9 @@ class VerifyRevIdTask(GenericLoadingTask):
                       .format(self.itr if self.itr < self.num_valid_keys else self.num_valid_keys))
         self.log.info("RevId Verification : {0} deleted items have been verified"
                       .format(self.itr - self.num_valid_keys if self.itr > self.num_valid_keys else 0))
+        self.log.info("RevId Verification : {0} keys were apparently filtered "
+                      "out and not found in target bucket"
+                      .format(self.not_matching_filter_keys))
 
         # if there are missing keys, we would have printed them by now
         # check if excess keys are present on server, if yes, set an exception
@@ -1318,10 +1323,10 @@ class VerifyRevIdTask(GenericLoadingTask):
 
     def next(self):
         if self.itr < self.num_valid_keys:
-            self._check_key_revId(self.valid_keys[self.itr])
+            self._check_key_revId(self.src_valid_keys[self.itr])
         elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
             # verify deleted/expired keys
-            self._check_key_revId(self.deleted_keys[self.itr - self.num_valid_keys],
+            self._check_key_revId(self.src_deleted_keys[self.itr - self.num_valid_keys],
                                   ignore_meta_data=['expiration'])
         self.itr += 1
 
@@ -1337,9 +1342,13 @@ class VerifyRevIdTask(GenericLoadingTask):
             return meta_data
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND:
-                if key not in self.deleted_keys:
+                # if a filter was specified, the key will not be found in
+                # target kv store if key did not match filter expression
+                if key not in self.src_deleted_keys and key in (self.dest_valid_keys+self.dest_del_keys):
                     self.err_count += 1
                     self.keys_not_found[client.rest.ip].append(("key: %s" % key, "vbucket: %s" % client._get_vBucket_id(key)))
+                else:
+                    self.not_matching_filter_keys +=1
             else:
                 self.state = FINISHED
                 self.set_exception(error)
