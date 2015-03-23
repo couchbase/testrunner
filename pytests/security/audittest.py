@@ -60,7 +60,7 @@ class auditTest(BaseTestCase):
         rest = RestConnection(self.master)
 
         if (ops in ['create']):
-            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':2147483648, 'num_replicas':1,
+            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':1073741824, 'num_replicas':1,
                                'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":source, \
@@ -69,7 +69,7 @@ class auditTest(BaseTestCase):
                                '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly')
 
         elif (ops in ['update']):
-            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':2147483648, 'num_replicas':1, 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
+            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':1073741824, 'num_replicas':1, 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":'true', "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457 , 'sessionid':''}
             rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], '11211', 'membase', \
