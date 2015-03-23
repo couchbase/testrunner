@@ -122,12 +122,12 @@ class SQLDefinitionGenerator:
 							 index_fields = ["job_title"],
 							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title != \"Sales\""),
 							 groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, NOTEQUALS,"employee"], index_where_clause = " job_title IS NOT NULL "))
-		definitions_list.append(
-			QueryDefinition(
-				index_name=index_name_prefix+"job_title",
-							 index_fields = ["job_title"],
-							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" or job_title == \"Engineer\""),
-							 groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, OR,"employee"], index_where_clause = " job_title IS NOT NULL "))
+		#definitions_list.append(
+		#	QueryDefinition(
+		#		index_name=index_name_prefix+"job_title",
+		#					 index_fields = ["job_title"],
+		#					 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" or job_title == \"Engineer\""),
+		#					 groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, OR,"employee"], index_where_clause = " job_title IS NOT NULL "))
 		definitions_list.append(
 			QueryDefinition(
 				index_name=index_name_prefix+"join_yr",
