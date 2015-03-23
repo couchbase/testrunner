@@ -148,6 +148,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.cluster.rebalance(update_servers + extra_servers, [], update_servers)
 
     def offline_cluster_upgrade(self):
+        # install on src and dest nodes
         self._install(self.servers[:self.src_init + self.dest_init ])
         upgrade_nodes = self.input.param('upgrade_nodes', "src").split(";")
         self.xdcr_setup()

@@ -2776,7 +2776,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         for cb_cluster in self.__cb_clusters:
             rest1 = RestConnection(cb_cluster.get_master_node())
             for remote_cluster in cb_cluster.get_remote_clusters():
-                rest2 = RestConnection(remote_cluster.get_dest_cluster.get_master_node())
+                rest2 = RestConnection(remote_cluster.get_dest_cluster().get_master_node())
                 for bucket in cb_cluster.get_buckets():
                     _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
                     _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
