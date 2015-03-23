@@ -9,6 +9,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.kvstore import KVStore
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
+from testconstants import SHERLOCK_VERSION
 
 
 class SingleNodeUpgradeTests(NewUpgradeBaseTest):
@@ -565,8 +566,16 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     self._new_master(new_server)
                     FIND_MASTER = True
                     self.log.info("3.0 Node %s becomes the master" % (new_server.ip))
-            if not FIND_MASTER:
-                raise Exception("After rebalance in 3.0 nodes, 3.0 doesn't become the master ")
+            if not FIND_MASTER and not self.is_downgrade:
+                if self.input.param("initial_version", "")[:5] in COUCHBASE_VERSION_3 \
+                    and self.input.param("upgrade_version", "")[:5] in SHERLOCK_VERSION:
+                    raise Exception("After rebalance in {0} nodes, {0} node doesn't become"\
+                        " the master ".format(self.input.param("upgrade_version", "")[:5]))
+                elif self.input.param("initial_version", "")[:5] in COUCHBASE_VERSION_2 \
+                    and self.input.param("upgrade_version", "")[:5] in COUCHBASE_VERSION_3:
+                    raise Exception("After rebalance in {0} nodes, {0} node doesn't become"\
+                        " the master ".format(self.input.param("upgrade_version", "")[:5]))
+
         """ verify DCP upgrade in 3.0.0 version """
         self.monitor_dcp_rebalance()
 

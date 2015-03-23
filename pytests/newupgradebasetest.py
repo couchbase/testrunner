@@ -25,10 +25,10 @@ from testconstants import COUCHBASE_VERSION_3
 class NewUpgradeBaseTest(BaseTestCase):
     def setUp(self):
         super(NewUpgradeBaseTest, self).setUp()
-        self.released_versions = ["1.8.1r", "1.8.1", "2.0.0-1976-rel", "2.0.1"]
+        self.released_versions = ["2.0.0-1976-rel", "2.0.1", "3.0.1", "3.0.2"]
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
-        self.initial_version = self.input.param('initial_version', '1.8.1')
+        self.initial_version = self.input.param('initial_version', '2.5.1-1083')
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.upgrade_versions = self.input.param('upgrade_version', '2.0.1-170-rel')
         self.upgrade_versions = self.upgrade_versions.split(";")
