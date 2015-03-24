@@ -236,6 +236,8 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 for remote_cluster in cluster.get_remote_clusters():
                     remote_cluster.pause_all_replications()
         self._online_upgrade(self.src_nodes, self.servers[self.src_init + self.dest_init:])
+        self._load_bucket(bucket_default, self.src_master, self.gen_update, 'create', exp=self._expires)
+        self._load_bucket(bucket_sasl, self.src_master, self.gen_update, 'create', exp=self._expires)
         self._install(self.src_nodes)
         self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.src_nodes, False)
 
@@ -245,12 +247,14 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self._load_bucket(bucket_sasl, self.src_master, self.gen_update, 'create', exp=self._expires)
         self.sleep(120)
 
+
         self._install(self.servers[self.src_init + self.dest_init:])
         self.sleep(60)
         self._online_upgrade(self.dest_nodes, self.servers[self.src_init + self.dest_init:])
         self._install(self.dest_nodes)
         self.sleep(60)
         self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.dest_nodes, False)
+
 
         self._load_bucket(bucket_standard, self.dest_master, self.gen_delete, 'delete', exp=0)
         self._load_bucket(bucket_standard, self.dest_master, self.gen_update, 'create', exp=self._expires)
@@ -433,3 +437,59 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             if not success_upgrade:
                 self.fail("Upgrade failed!")
             self.sleep(self.expire_time)
+
+    def test_backward_compatibility(self):
+        self.c1_version = self.initial_version
+        self.c2_version = self.upgrade_versions[0]
+        # install older version on C1
+        self._install(self.servers[:self.src_init])
+        # install latest version on C2
+        self.initial_version = self.c2_version
+        self._install(self.servers[self.src_init:])
+
+        self.xdcr_setup()
+
+        if float(self.c1_version[:2]) >= 3.0:
+            for cluster in self.get_cb_clusters():
+                for remote_cluster in cluster.get_remote_clusters():
+                    remote_cluster.pause_all_replications()
+
+        self.sleep(60)
+        bucket = self.src_cluster.get_bucket_by_name('default')
+        self._operations()
+        self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
+        bucket = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
+        self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
+        bucket = self.dest_cluster.get_bucket_by_name('standard_bucket_1')
+        gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self.num_items)
+        self._load_bucket(bucket, self.dest_master, gen_create2, 'create', exp=0)
+
+        if self.pause_xdcr_cluster:
+            for cluster in self.get_cb_clusters():
+                for remote_cluster in cluster.get_remote_clusters():
+                    remote_cluster.resume_all_replications()
+
+        self._wait_for_replication_to_catchup()
+
+        if float(self.c1_version[:2]) > 2.5:
+            for remote_cluster in self.src_cluster.get_remote_clusters():
+                remote_cluster._modify()
+            for remote_cluster in self.dest_cluster.get_remote_clusters():
+                remote_cluster._modify()
+
+        self.sleep(30)
+
+        bucket = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
+        gen_create3 = BlobGenerator('loadThree', 'loadThree', self._value_size, end=self.num_items)
+        self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
+        bucket = self.dest_cluster.get_bucket_by_name('sasl_bucket_1')
+        gen_create4 = BlobGenerator('loadFour', 'loadFour', self._value_size, end=self.num_items)
+        self._load_bucket(bucket, self.dest_master, gen_create4, 'create', exp=0)
+        bucket = self.src_cluster.get_bucket_by_name('default')
+        self._load_bucket(bucket, self.src_master, gen_create2, 'create', exp=0)
+
+        self.merge_all_buckets()
+        self.sleep(60)
+        self._post_upgrade_ops()
+        self.sleep(60)
+        self.verify_results()

@@ -2764,7 +2764,7 @@ class XDCRNewBaseTest(unittest.TestCase):
     def merge_all_buckets(self):
         self.__merge_all_buckets()
 
-    def _wait_for_replication_to_catchup(self, timeout=1200):
+    def _wait_for_replication_to_catchup(self, timeout=300):
 
         for cb_cluster in self.__cb_clusters:
             cb_cluster.run_expiry_pager()
