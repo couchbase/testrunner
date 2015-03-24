@@ -485,8 +485,7 @@ class XdcrCLITest(CliBaseTest):
             options = options.replace("--create ", "--edit ")
             output, _ = self.__execute_cli(cli_command=cli_command, options=options)
             expectedResults = {"real_userid:source":"internal", "user":"Administrator",
-                               "cluster_name":"remote", "cluster_hostname":self.servers[xdcr_hostname].ip + ":8091", "
-                               is_encrypted":False}
+                               "cluster_name":"remote", "cluster_hostname":self.servers[xdcr_hostname].ip + ":8091", "is_encrypted":False}
             self.checkConfig(16385, self.master, expectedResults)
 
         if not xdcr_cluster_name:
