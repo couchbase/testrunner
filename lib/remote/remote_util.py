@@ -1256,6 +1256,11 @@ class RemoteMachineShellConnection:
                     output, error = self.execute_command('{0}dpkg --force-all -i /tmp/{1}'.format(environment, build.name))
                 else:
                     output, error = self.execute_command('{0}dpkg -i /tmp/{1}'.format(environment, build.name))
+
+            if error[0] == 'insserv: Service network is missed in the runlevels 2 4 to use service couchbase-server' and self.info.distribution_type == "openSUSE":
+                        log.info("Ignore this error for opensuse os")
+                        error = []
+
             success &= self.log_command_output(output, error, track_words)
             self.create_directory(path)
             output, error = self.execute_command('/opt/{0}/bin/{1}enable_core_dumps.sh  {2}'.
