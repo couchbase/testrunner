@@ -90,19 +90,31 @@ class N1QLHelper():
         return result
 
     def _verify_results(self, actual_result, expected_result, missing_count = 1, extra_count = 1):
+        self.log.info(" Analyzing Actual Result")
         actual_result = self._gen_dict(actual_result)
+        self.log.info(" Analyzing Expected Result")
         expected_result = self._gen_dict(expected_result)
-        if len(actual_result) != len(expected_result):
-            missing, extra = self.check_missing_and_extra(actual_result, expected_result)
-            self.log.error("Missing items: %s.\n Extra items: %s" % (missing[:missing_count], extra[:extra_count]))
+        if len(actual_result.keys()) != len(expected_result.keys()):
             raise Exception("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
-                                            len(actual_result), len(expected_result)))
-        if self.max_verify is not None:
-            actual_result = actual_result[:self.max_verify]
-            expected_result = expected_result[:self.max_verify]
+                                            len(actual_result.keys()), len(expected_result.keys())))
         msg = "The number of rows match but the results mismatch, please check"
         if actual_result != expected_result:
+            self.analyze_failure(actual_result, expected_result)
             raise Exception(msg)
+
+    def analyze_failure(self, actual, expected):
+        missing_keys =[]
+        different_values = []
+        for key in expected.keys():
+            if key not in actual.keys():
+                missing_keys.append(key)
+            if expected[key] != actual[key]:
+                different_values.append("for key {0}, expected {1} \n actual {2}".
+                    format(key, expected[key], actual[key]))
+        self.log.info(missing_keys)
+        if(len(different_values) > 0):
+            self.log.info(" number of such cases {0}".format(len(different_values)))
+            self.log.info(" example key {0}".format(different_values[0]))
 
     def check_missing_and_extra(self, actual, expected):
         missing = []
@@ -321,19 +333,24 @@ class N1QLHelper():
     def _gen_dict(self, result):
         result_set = []
         map = {}
+        duplicate_keys = []
         try:
             if result != None and len(result) > 0:
                 for val in result:
                     for key in val.keys():
                         result_set.append(val[key])
             for val in result_set:
+                if val["_id"] in map.keys():
+                    duplicate_keys.append(val["_id"])
                 map[val["_id"]] = val
             keys = map.keys()
             keys.sort()
         except Exception, ex:
             self.log.info(ex)
             raise
-        return map.values()
+        if len(duplicate_keys) > 0:
+            raise Exception(" duplicate_keys {0}".format(duplicate_keys))
+        return map
 
     def _set_env_variable(self, server):
         self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip,server.port))

@@ -42,6 +42,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
     def test_multi_create_query_explain_drop_index(self):
         try:
             self._create_index_in_async()
+            self._query_explain_in_async()
             self.run_doc_ops()
             self._query_explain_in_async()
         except Exception, ex:

@@ -153,7 +153,7 @@ class QueryTests(BaseTestCase):
                 isShuffle = True
             if self.dataset != "bigdata":
                 gen_docs_map[key] = method(self.ops_dist_map[key]["end"],
-                    self.ops_dist_map[key]["start"], isShuffle = isShuffle)
+                    self.ops_dist_map[key]["start"])
             else:
                 gen_docs_map[key] = method(value_size = self.value_size,
                     end = self.ops_dist_map[key]["end"],
