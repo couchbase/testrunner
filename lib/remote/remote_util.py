@@ -1257,7 +1257,8 @@ class RemoteMachineShellConnection:
                 else:
                     output, error = self.execute_command('{0}dpkg -i /tmp/{1}'.format(environment, build.name))
 
-            if error[0] == 'insserv: Service network is missed in the runlevels 2 4 to use service couchbase-server' and self.info.distribution_type == "openSUSE":
+            if self.info.distribution_type == "openSUSE":
+                if error and error[0] == 'insserv: Service network is missed in the runlevels 2 4 to use service couchbase-server':
                         log.info("Ignore this error for opensuse os")
                         error = []
 
