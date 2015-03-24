@@ -1266,13 +1266,18 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
     def _verify_revIds(self, src_server, dest_server, kv_store=1, timeout=600):
         error_count = 0
         tasks = []
-        for bucket in self._get_cluster_buckets(src_server):
-            self.log.info("Verifying RevIds for {0} -> {1}, bucket: {2}"
-                          .format(src_server.ip, dest_server.ip, bucket))
-            task_info = self.cluster.async_verify_revid(src_server,
-                                                        dest_server, bucket,
-                                                        bucket.kvs[kv_store])
-            tasks.append(task_info)
+        for src_bucket in self._get_cluster_buckets(src_server):
+            for dest_bucket in  self._get_cluster_buckets(dest_server):
+                if src_bucket.name == dest_bucket.name:
+                    self.log.info("Verifying RevIds for {0} -> {1}, bucket: {2}"
+                          .format(src_server.ip, dest_server.ip, src_bucket))
+                    task_info = self.cluster.async_verify_revid(
+                                                        src_server,
+                                                        dest_server,
+                                                        src_bucket,
+                                                        src_bucket.kvs[kv_store],
+                                                        dest_bucket.kvs[kv_store])
+                    tasks.append(task_info)
         for task in tasks:
             task.result(timeout)
             error_count += task.err_count
