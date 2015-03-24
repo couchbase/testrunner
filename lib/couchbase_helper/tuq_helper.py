@@ -294,7 +294,6 @@ class N1QLHelper():
             query_params.update("scan_vector", scan_vector)
         if scan_consistency:
             query_params.update("scan_consistency", scan_consistency)
-
         return query_params
 
     def _is_index_in_list(self, bucket, index_name, server = None):
@@ -321,11 +320,20 @@ class N1QLHelper():
 
     def _gen_dict(self, result):
         result_set = []
-        if result != None and len(result) > 0:
-            for val in result:
-                for key in val.keys():
-                    result_set.append(val[key])
-        return result_set
+        map = {}
+        try:
+            if result != None and len(result) > 0:
+                for val in result:
+                    for key in val.keys():
+                        result_set.append(val[key])
+            for val in result_set:
+                map[val["_id"]] = val
+            keys = map.keys()
+            keys.sort()
+        except Exception, ex:
+            self.log.info(ex)
+            raise
+        return map.values()
 
     def _set_env_variable(self, server):
         self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip,server.port))
