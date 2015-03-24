@@ -526,7 +526,6 @@ class BaseTestCase(unittest.TestCase):
                           only_store_hash=True, batch_size=1000, pause_secs=1, timeout_secs=30,
                           proxy_client=None):
 
-
         if self.enable_bloom_filter:
           for bucket in self.buckets:
             ClusterOperationHelper.flushctl_set(self.master, "bfilter_enabled", 'true', bucket)
@@ -933,7 +932,7 @@ class BaseTestCase(unittest.TestCase):
         nodes = RestConnection(self.master).node_statuses()
         remote_client = RemoteMachineShellConnection(self.master)
         options = "--cluster-init-password=%s" % new_password
-        cli_command = "cluster-init"
+        cli_command = "cluster-edit"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options,
                                                             cluster_host="localhost:8091",
                                                             user=self.master.rest_username,
