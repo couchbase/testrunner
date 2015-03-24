@@ -308,7 +308,7 @@ class N1QLHelper():
             query_params.update("scan_consistency", scan_consistency)
         return query_params
 
-    def _is_index_in_list(self, bucket, index_name, server = None):
+    def _is_index_in_list(self, bucket, index_name, server = None, index_state = "pending"):
         query = "SELECT * FROM system:indexes"
         if server == None:
             server = self.master
@@ -316,7 +316,7 @@ class N1QLHelper():
         for item in res['results']:
             if 'keyspace_id' not in item['indexes']:
                 return False
-            if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] != "pending":
+            if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] != index_state:
                 return True
         return False
 

@@ -292,11 +292,10 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             self.query = self.query_definitions[0].generate_index_create_query(bucket = self.buckets[0].name)
             res = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             self.log.info(res)
-            self.assertTrue(False," Index cannot be created when KV node is down and not failed over ")
-        except Exception, ex:
-            msg ="Failure to create index"
-            self.log.info(ex)
-            self.assertTrue(msg in str(ex), ex)
+            self.sleep(30)
+            check = self.n1ql_helper._is_index_in_list(self.buckets[0].name, index_name, server = self.n1ql_node, index_state = "online")
+            if not check:
+                self.assertTrue(False," Index cannot be created when KV node is down and not failed over ")
         finally:
             remote = RemoteMachineShellConnection(servr_out[0])
             remote.start_server()
