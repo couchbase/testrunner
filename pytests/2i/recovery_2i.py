@@ -142,7 +142,6 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             servr_out = self.nodes_out_list
             failover_task = self.cluster.async_failover([self.master],
                     failover_nodes = servr_out, graceful=self.graceful)
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
             failover_task.result()
             if self.graceful:
                 # Check if rebalance is still running
