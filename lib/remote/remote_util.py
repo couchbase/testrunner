@@ -510,8 +510,10 @@ class RemoteMachineShellConnection:
             remove_words = ["-rel", ".exe"]
             for word in remove_words:
                 filename = filename.replace(word, "")
-            if "3.5" in filename:
-                """couchbase-server-enterprise_3.5.0-968-windows_amd64"""
+            """couchbase-server-enterprise_3.5.0-968-windows_amd64
+               couchbase-server-enterprise_4.0.0-1655-windows_amd64
+               sherlock changed from 3.5. to 4.0 """
+            if "4.0.0" in filename:
                 tmp = filename.split("_")
                 version = tmp[1].replace("-windows", "")
             else:
@@ -1363,7 +1365,7 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error, track_words)
             if vbuckets:
                 self.set_vbuckets_win(vbuckets)
-            if "3.5" in version[:5]:
+            if "4.0" in version[:5]:
                 """  remove folder if it exists in work around of bub MB-13046 """
                 self.execute_command("rm -rf \
                 /cygdrive/c/Jenkins/workspace/sherlock-windows/couchbase/install/etc/security")
