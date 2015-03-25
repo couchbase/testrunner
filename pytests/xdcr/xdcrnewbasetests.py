@@ -553,8 +553,7 @@ class XDCRRemoteClusterRef:
     def create_replication(
             self, fromBucket,
             rep_type=REPLICATION_PROTOCOL.XMEM,
-            toBucket=None
-    ):
+            toBucket=None):
         """Create replication objects, but replication will not get
         started here.
         """
@@ -1767,7 +1766,7 @@ class CouchbaseCluster:
         task.result()
         if graceful:
             # wait for replica update
-            self.sleep(60)
+            time.sleep(60)
             # use rebalance stats to monitor failover
             RestConnection(self.__master_node).monitorRebalance()
         if rebalance:
@@ -1787,7 +1786,7 @@ class CouchbaseCluster:
             graceful=graceful)
         task.result()
         if graceful:
-            self.sleep(60)
+            time.sleep(60)
             # use rebalance stats to monitor failover
             RestConnection(self.__master_node).monitorRebalance()
         if rebalance:
