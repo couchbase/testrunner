@@ -1,4 +1,5 @@
 from base_2i import BaseSecondaryIndexingTests
+import copy
 from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from couchbase_helper.tuq_generators import TuqGenerators
@@ -72,6 +73,58 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         finally:
             tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions,
+                    create_index = False, drop_index = self.run_drop_index,
+                    query_with_explain = False, query = False, scan_consistency = self.scan_consistency)
+            self._run_tasks(tasks)
+
+    def test_concurrent_mutations_index_create_query_drop(self):
+        self.query_definitions_create_candidates =[]
+        self.query_definitions_query_candidates =[]
+        try:
+            self.query_definitions_drop_candidates = copy.deepcopy(self.query_definitions)
+            self.query_definitions_create_candidates = copy.deepcopy(self.query_definitions)
+            self.query_definitions_query_candidates = copy.deepcopy(self.query_definitions)
+            i =0
+            for query_definition in self.query_definitions_drop_candidates:
+                query_definition.index_name += str(i)+"_drop_candidates"
+                i+=1
+            for query_definition in self.query_definitions_create_candidates:
+                query_definition.index_name += str(i)+"_create_candidates"
+                i+=1
+            for query_definition in self.query_definitions_query_candidates:
+                query_definition.index_name += str(i)+"_query_candidates"
+                i+=1
+            # Start Mutations
+            kvops_tasks = self.async_run_doc_ops()
+            # Initialize indexes
+            self._create_index_in_async(query_definitions = self.query_definitions_drop_candidates)
+            self._create_index_in_async(query_definitions = self.query_definitions_query_candidates)
+            self.log.info("<<<<< Run Query Tasks >>>>>>")
+            query_tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions_query_candidates,
+                    create_index = False, drop_index = False,
+                    query_with_explain = False, query = True, scan_consistency = self.scan_consistency)
+            self.log.info("<<<<< Run Drop Tasks >>>>>>")
+            drop_tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions_drop_candidates,
+                    create_index = False, drop_index = True,
+                    query_with_explain = False, query = False, scan_consistency = self.scan_consistency)
+            self._create_index_in_async(query_definitions = self.query_definitions_create_candidates)
+            # runs operations
+            self._run_tasks(kvops_tasks)
+            self._run_tasks(query_tasks)
+            self._run_tasks(drop_tasks)
+        except Exception, ex:
+            self.log.info(ex)
+            raise
+        finally:
+            tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions_create_candidates,
+                    create_index = False, drop_index = self.run_drop_index,
+                    query_with_explain = False, query = False, scan_consistency = self.scan_consistency)
+            self._run_tasks(tasks)
+            tasks = self.async_run_multi_operations(buckets = self.buckets,
+                    query_definitions = self.query_definitions_query_candidates,
                     create_index = False, drop_index = self.run_drop_index,
                     query_with_explain = False, query = False, scan_consistency = self.scan_consistency)
             self._run_tasks(tasks)
