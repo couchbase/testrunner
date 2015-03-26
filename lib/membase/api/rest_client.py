@@ -1535,7 +1535,7 @@ class RestConnection(object):
         return map
 
     # Check node version
-    def check_node_versions(self, check_version = "4.0"):
+    def check_node_versions(self, check_version="4.0"):
         versions = self.get_nodes_versions()
         if versions[0] < check_version:
             return False
@@ -2690,9 +2690,9 @@ class RestConnection(object):
     def setAuditSettings(self, enabled='true', rotateInterval=86400, logPath='/opt/couchbase/var/lib/couchbase/logs'):
         api = self.baseUrl + "settings/audit"
         params = urllib.urlencode({
-                                    'rotate_interval':'{0}'.format(rotateInterval),
-                                    'auditd_enabled':'{0}'.format(enabled),
-                                    'log_path':'{0}'.format(logPath)
+                                    'rotateInterval':'{0}'.format(rotateInterval),
+                                    'auditdEnabled':'{0}'.format(enabled),
+                                    'logPath':'{0}'.format(logPath)
                                     })
         status, content, header = self._http_request(api, 'POST', params)
         log.info ("Value os status is {0}".format(status))

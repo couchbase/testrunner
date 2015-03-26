@@ -176,7 +176,7 @@ class audit:
     def getAuditLogPath(self):
         rest = RestConnection(self.host)
         content = rest.getAuditSettings()
-        return content['log_path'] + "/"
+        return content['logPath'] + "/"
 
     '''
     getAuditStatus - return value of audit status from REST API
@@ -186,7 +186,7 @@ class audit:
     def getAuditStatus(self):
         rest = RestConnection(self.host)
         content = rest.getAuditSettings()
-        return content['auditd_enabled']
+        return content['auditdEnabled']
 
     '''
     getAuditRotateInterval - return value of rotate Interval from REST API
@@ -196,7 +196,7 @@ class audit:
     def getAuditRotateInterval(self):
         rest = RestConnection(self.host)
         content = rest.getAuditSettings()
-        return content['rotate_interval']
+        return content['rotateInterval']
 
     '''
     setAuditLogPath - set log_path via REST API
