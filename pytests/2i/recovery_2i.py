@@ -16,10 +16,10 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_mo"], \
                         query_template = "", groups = ["simple"])
             self.load_query_definitions.append(query_definition)
-        self.run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.load_query_definitions,
-                    create_index = True, drop_index = False,
-                    query_with_explain = False, query = False)
+        find_index_lost_list = self._find_list_of_indexes_lost()
+        self._create_replica_index_when_indexer_is_down(find_index_lost_list)
+        self.initialize_multi_create_index(buckets = self.buckets,
+                    query_definitions = self.load_query_definitions)
 
     def tearDown(self):
         if hasattr(self, 'query_definitions'):
@@ -266,22 +266,79 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self.scan_vectors = self.gen_scan_vector(use_percentage = self.scan_vector_per_values,
              use_random = self.random_scan_vector)
 
+    def _redefine_index_usage(self):
+        qdfs = []
+        if self.use_replica_when_active_down and self.ops_map["in_between"]["query_ops"]:
+            for query_definition in self.query_definitions:
+                if query_definition.index_name in self.index_lost_during_move_out:
+                    query_definition.index_name = query_definition.index_name+"_replica"
+                qdfs.append(query_definition)
+            self.query_definitions = qdfs
+        elif self.ops_map["in_between"]["query_ops"]:
+            for query_definition in self.query_definitions:
+                if query_definition.index_name in self.index_lost_during_move_out:
+                    query_definition.index_name = query_definition.index_name+"_replica"
+                qdfs.append(query_definition)
+            self.query_definitions = qdfs
+
+    def _create_replica_index_when_indexer_is_down(self, index_lost_during_move_out):
+        memory = []
+        static_node_list = self._find_nodes_not_moved_out()
+        tasks = []
+        if self.use_replica_when_active_down and self.ops_map["in_between"]["query_ops"]:
+            for query_definition in self.query_definitions:
+                if query_definition.index_name in index_lost_during_move_out:
+                    copy_of_query_definition = copy.deepcopy(query_definition)
+                    copy_of_query_definition.index_name = query_definition.index_name+"_replica"
+                    for node in static_node_list:
+                        if copy_of_query_definition.index_name not in memory:
+                            deploy_node_info = ["{0}:{1}".format(node.ip,node.port)]
+                            for bucket in self.buckets:
+                                self.create_index(
+                                    bucket.name,
+                                    copy_of_query_definition,
+                                    deploy_node_info = deploy_node_info)
+                            memory.append(copy_of_query_definition.index_name)
+
+    def _find_nodes_not_moved_out(self):
+        index_nodes = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
+        index_nodes = copy.deepcopy(index_nodes)
+        out_list = []
+        list = []
+        for index_node in self.nodes_out_list:
+            out_list.append("{0}:{1}".format(index_node.ip,index_node.port))
+        for server in index_nodes:
+            key = "{0}:{1}".format(server.ip,server.port)
+            if key not in out_list:
+                list.append(server)
+        return list
+
+    def _find_list_of_indexes_lost(self):
+        index_node_count = 0
+        memory =[]
+        index_lost_during_move_out = []
+        for query_definition in self.query_definitions:
+            if index_node_count < len(self.index_nodes_out):
+                if query_definition.index_name not in memory:
+                    index_lost_during_move_out.append(query_definition.index_name)
+                    memory.append(query_definition.index_name)
+                    index_node_count+=1
+        return index_lost_during_move_out
+
     def _run_aync_tasks(self):
         self._calculate_scan_vector()
         qdfs = []
+        tasks_ops = []
         if self.ops_map["in_between"]["create_index"]:
-            self.index_nodes_out = {}
-        if self.ops_map["in_between"]["query_ops"]:
-            for query_definition in self.query_definitions:
-                if query_definition.index_name in self.index_lost_during_move_out:
-                    query_definition.index_name = "#primary"
-                qdfs.append(query_definition)
-            self.query_definitions = qdfs
+            self.index_nodes_out = []
+        self._redefine_index_usage()
         if self.doc_ops:
-            self.run_doc_ops()
+            tasks_ops = self.async_run_doc_ops()
         tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True,
             scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
         for task in tasks:
+            task.result()
+        for task in tasks_ops:
             task.result()
 
     def run_after_operations(self):

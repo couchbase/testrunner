@@ -1665,7 +1665,7 @@ class BaseTestCase(unittest.TestCase):
         return services
 
     def generate_map_nodes_out_dist(self):
-        self.index_nodes_out = {}
+        self.index_nodes_out = []
         self.nodes_out_list = []
         self.get_services_map(reset = True)
         if self.nodes_out_dist == None:
@@ -1699,11 +1699,8 @@ class BaseTestCase(unittest.TestCase):
                         if addNode and (server not in self.nodes_out_list) and count < service_type_count:
                             count+=1
                             if service_type == "index":
-                                for bucket in self.buckets:
-                                    if bucket.name not in self.index_nodes_out.keys():
-                                        self.index_nodes_out[bucket.name] = []
-                                    self.index_nodes_out[bucket.name].append(server)
-                            self.log.info(self.index_nodes_out)
+                                if server not in self.index_nodes_out:
+                                    self.index_nodes_out.append(server)
                             self.nodes_out_list.append(server)
 
     def generate_services_map(self, nodes, services = None):

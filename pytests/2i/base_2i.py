@@ -10,6 +10,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.initial_stats = None
         self.final_stats = None
         self.index_lost_during_move_out =[]
+        self.use_replica_when_active_down = self.input.param("use_replica_when_active_down",True)
         self.use_where_clause_in_index= self.input.param("use_where_clause_in_index",False)
         self.check_stats= self.input.param("check_stats",True)
         self.create_index_usage= self.input.param("create_index_usage","no_usage")
@@ -99,36 +100,47 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def multi_create_index(self, buckets = [], query_definitions =[]):
         self.index_lost_during_move_out =[]
+        index_node_count = 0
         for bucket in buckets:
-            index_node_count = 0
             for query_definition in query_definitions:
                 index_info = "{0}:{1}".format(bucket.name, query_definition.index_name)
                 if index_info not in self.memory_create_list:
                     self.memory_create_list.append(index_info)
                     self.deploy_node_info = None
                     if index_node_count < len(self.index_nodes_out):
-                        self.deploy_node_info = "{0}:{1}".format(self.index_nodes_out[bucket.name][index_node_count].ip,
-                        self.index_nodes_out[bucket.name][index_node_count].port)
+                        self.deploy_node_info = "{0}:{1}".format(node.ip, node.port)
                         self.index_lost_during_move_out.append(query_definition.index_name)
                         index_node_count += 1
                     self.create_index(bucket.name, query_definition, deploy_node_info = self.deploy_node_info)
 
-    def async_multi_create_index(self, buckets = [], query_definitions =[]):
-        create_index_tasks = []
-        self.index_lost_during_move_out =[]
+    def initialize_multi_create_index(self, buckets = [], query_definitions =[]):
         for bucket in buckets:
-            index_node_count = 0
             for query_definition in query_definitions:
                 index_info = "{0}:{1}".format(bucket.name, query_definition.index_name)
                 if index_info not in self.memory_create_list:
                     self.memory_create_list.append(index_info)
+                    self.create_index(bucket.name, query_definition)
+
+    def async_multi_create_index(self, buckets = [], query_definitions =[]):
+        create_index_tasks = []
+        self.index_lost_during_move_out =[]
+        self.log.info(self.index_nodes_out)
+        index_node_count = 0
+        for query_definition in query_definitions:
+                index_info = "{0}".format(query_definition.index_name)
+                if index_info not in self.memory_create_list:
+                    self.memory_create_list.append(index_info)
                     self.deploy_node_info = None
                     if index_node_count < len(self.index_nodes_out):
-                        self.deploy_node_info = ["{0}:{1}".format(self.index_nodes_out[bucket.name][index_node_count].ip,
-                        self.index_nodes_out[bucket.name][index_node_count].port)]
-                        self.index_lost_during_move_out.append(query_definition.index_name)
+                        node_index = index_node_count
+                        self.deploy_node_info = ["{0}:{1}".format(self.index_nodes_out[index_node_count].ip,
+                        self.index_nodes_out[index_node_count].port)]
+                        if query_definition.index_name not in self.index_lost_during_move_out:
+                            self.index_lost_during_move_out.append(query_definition.index_name)
                         index_node_count += 1
-                    create_index_tasks.append(self.async_create_index(bucket.name, query_definition, deploy_node_info = self.deploy_node_info))
+                    for bucket in buckets:
+                        create_index_tasks.append(self.async_create_index(bucket.name,
+                            query_definition, deploy_node_info = self.deploy_node_info))
                     self.sleep(3)
         if self.defer_build:
             index_list = []
