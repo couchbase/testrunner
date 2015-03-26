@@ -2186,6 +2186,16 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def tearDown(self):
         """Clusters cleanup"""
+        if self._input.param("negative_test", False):
+            if hasattr(self, '_resultForDoCleanups') \
+                and len(self._resultForDoCleanups.failures
+                        or self._resultForDoCleanups.errors):
+                self._resultForDoCleanups.failures = []
+                self._resultForDoCleanups.errors = []
+                self.log.info("This is marked as a negative test and contains "
+                              "errors as expected, hence not failing it")
+            else:
+                raise XDCRException("Negative test passed!")
 
         # collect logs before tearing down clusters
         if self._input.param("get-cbcollect-info", False) and \
@@ -2783,7 +2793,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                     _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
                     _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
                     while _count1 != _count2 and (time.time() - end_time) < 0:
-                        self.sleep(60, "Expected: {0} items, found: {1}. "
+                        self.sleep(60, "Count in one cluster : {0} items, another : {1}. "
                                        "Waiting for replication to catch up ..".
                                    format(_count1, _count2))
                     _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
