@@ -21,11 +21,10 @@ class CommunityBaseTest(BaseTestCase):
 
         #define the data that will be used to test
         self.blob_generator = self.input.param("blob_generator", True)
-        serverInfo = self.servers[0]
-        rest = RestConnection(serverInfo)
+        rest = RestConnection(self.master)
         if rest.is_enterprise_edition():
             raise Exception("This couchbase server is not Community Edition."
-                  "Tests requires Community Edition to test")
+                  "Tests require Community Edition to test")
         if self.blob_generator:
             #gen_load data is used for upload before each test(1000 items by default)
             self.gen_load = BlobGenerator('test', 'test-', self.value_size, end=self.num_items)

@@ -52,5 +52,43 @@ class CommunityTests(CommunityBaseTest):
         if not disabled_zone:
             self.fail("CE version should not have zone feature")
 
+    def check_audit_available(self):
+        audit_available = False
+        self.rest = RestConnection(self.master)
+        try:
+            self.rest.getAuditSettings()
+            audit_available = True
+        except Exception, e :
+            if e:
+                print e
+        if audit_available:
+            self.fail("This feature 'audit' only available on "
+                      "Enterprise Edition")
+
+    def check_ldap_available(self):
+        ldap_available = False
+        self.rest = RestConnection(self.master)
+        try:
+            s, c, h = self.rest.clearLDAPSettings()
+            if s:
+                ldap_available = True
+        except Exception, e :
+            if e:
+                print e
+        if ldap_available:
+            self.fail("This feature 'ldap' only available on "
+                      "Enterprise Edition")
+
+    """ this test need to setup xdcr to test """
+    def test_xdcr_filter(self):
+        filter_on = False
+        serverInfo = self.servers[0]
+        shell = RemoteMachineShellConnection(serverInfo)
+        output, error = shell.execute_command('curl -X POST http://{0}:8091/controller/'\
+            'createReplication -d toCluster="remote_cluster_ref" '\
+                      '-d toBucket="target_bucket_name" -d filterExpression="some_exp"'\
+                                                                   .format(serverInfo.ip))
+        shell.log_command_output(output, error)
+
 
 
