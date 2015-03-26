@@ -57,7 +57,8 @@ class BaseSecondaryIndexingTests(QueryTests):
          defer_build = self.defer_build, index_where_clause = index_where_clause )
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
         if not self.defer_build:
-            check = self.n1ql_helper.is_index_online_and_in_list(bucket, query_definition.index_name, server = self.n1ql_node)
+            check = self.n1ql_helper.is_index_online_and_in_list(bucket, query_definition.index_name,
+             server = self.n1ql_node, timeout = self.timeout_for_index_online)
             self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
     def async_create_index(self, bucket, query_definition, deploy_node_info = None):
@@ -70,7 +71,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         create_index_task = self.cluster.async_create_index(
                  server = self.n1ql_node, bucket = bucket,
                  query = self.query , n1ql_helper = self.n1ql_helper,
-                 index_name = query_definition.index_name, defer_build = self.defer_build)
+                 index_name = query_definition.index_name, defer_build = self.defer_build,
+                  timeout = self.timeout_for_index_online)
         return create_index_task
 
     def async_monitor_index(self, bucket, index_name = None):

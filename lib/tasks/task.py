@@ -1926,7 +1926,8 @@ class CreateIndexTask(Task):
     def __init__(self,
                  server, bucket, index_name,
                  query, n1ql_helper = None,
-                 retry_time=2, defer_build = False):
+                 retry_time=2, defer_build = False,
+                 timeout = 240):
         Task.__init__(self, "create_index_task")
         self.server = server
         self.bucket = bucket
@@ -1935,6 +1936,7 @@ class CreateIndexTask(Task):
         self.index_name = index_name
         self.n1ql_helper = n1ql_helper
         self.retry_time = 2
+        self.timeout = timeout
 
     def execute(self, task_manager):
         try:
@@ -1957,7 +1959,7 @@ class CreateIndexTask(Task):
            # Verify correctness of result set
             check = True
             if not self.defer_build:
-                check = self.n1ql_helper.is_index_online_and_in_list(self.bucket, self.index_name, server = self.server)
+                check = self.n1ql_helper.is_index_online_and_in_list(self.bucket, self.index_name, server = self.server, timeout = self.timeout)
             if not check:
                 raise CreateIndexException("Index {0} not created as expected ".format(self.index_name))
             self.set_result(True)
@@ -2022,17 +2024,20 @@ class MonitorIndexTask(Task):
     def __init__(self,
                  server, bucket, index_name,
                  n1ql_helper = None,
-                 retry_time=2):
+                 retry_time=2,
+                 timeout = 240):
         Task.__init__(self, "build_index_task")
         self.server = server
         self.bucket = bucket
         self.index_name = index_name
         self.n1ql_helper = n1ql_helper
         self.retry_time = 2
+        self.timeout = timeout
 
     def execute(self, task_manager):
         try:
-            check = self.n1ql_helper.is_index_online_and_in_list(self.bucket, self.index_name, server = self.server)
+            check = self.n1ql_helper.is_index_online_and_in_list(self.bucket, self.index_name,
+             server = self.server, timeout = self.timeout)
             if not check:
                 self.state = FINISHED
                 raise CreateIndexException("Index {0} not created as expected ".format(self.index_name))

@@ -689,7 +689,8 @@ class Cluster(object):
                  query, n1ql_helper = None,
                  index_name = None,
                  defer_build = False,
-                 retry_time=2):
+                 retry_time=2,
+                 timeout = 240):
         """Asynchronously runs create index task
 
         Parameters:
@@ -700,6 +701,7 @@ class Cluster(object):
             defer_build - build is defered
             retry_time - The time in seconds to wait before retrying failed queries (int)
             n1ql_helper - n1ql helper object
+            timeout - timeout for index to come online
         Returns:
             CreateIndexTask - A task future that is a handle to the scheduled task."""
         _task = CreateIndexTask(n1ql_helper = n1ql_helper,
@@ -707,7 +709,8 @@ class Cluster(object):
                  defer_build = defer_build,
                  index_name = index_name,
                  query = query,
-                 retry_time= retry_time)
+                 retry_time= retry_time,
+                 timeout = timeout)
         self.task_manager.schedule(_task)
         return _task
 
@@ -723,13 +726,15 @@ class Cluster(object):
             bucket - The name of the bucket containing items for this view. (String)
             index_name - Name of the index to be created
             retry_time - The time in seconds to wait before retrying failed queries (int)
+            timeout - timeout for index to come online
             n1ql_helper - n1ql helper object
         Returns:
             MonitorIndexTask - A task future that is a handle to the scheduled task."""
         _task = MonitorIndexTask(n1ql_helper = n1ql_helper,
                  server = server, bucket = bucket,
                  index_name = index_name,
-                 retry_time= retry_time)
+                 retry_time= retry_time,
+                 timeout = timeout)
         self.task_manager.schedule(_task)
         return _task
 

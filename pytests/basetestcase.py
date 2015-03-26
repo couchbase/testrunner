@@ -1841,7 +1841,7 @@ class BaseTestCase(unittest.TestCase):
         if self.testrunner_client != None:
             os.environ[testconstants.TESTRUNNER_CLIENT] = self.testrunner_client
 
-    def sync_ops_all_buckets(self, docs_gen_map = {}):
+    def sync_ops_all_buckets(self, docs_gen_map = {}, batch_size = 10):
         for key in docs_gen_map.keys():
             verify_data = True
             if key != "remaining":
@@ -1850,11 +1850,11 @@ class BaseTestCase(unittest.TestCase):
                     op_type = "update"
                     verify_data = False
                     self.expiry = 3
-                self.load(docs_gen_map[key], op_type = op_type, exp = self.expiry, verify_data = verify_data)
+                self.load(docs_gen_map[key], op_type = op_type, exp = self.expiry, verify_data = verify_data, batch_size = batch_size)
         if "expiry" in docs_gen_map.keys():
             self._expiry_pager(self.master)
 
-    def async_ops_all_buckets(self, docs_gen_map = {}):
+    def async_ops_all_buckets(self, docs_gen_map = {}, batch_size = 10):
         tasks = []
         if "expiry" in docs_gen_map.keys():
             self._expiry_pager(self.master)
@@ -1864,7 +1864,7 @@ class BaseTestCase(unittest.TestCase):
                 if key == "expiry":
                     op_type = "update"
                     self.expiry = 3
-                tasks +=self.async_load(docs_gen_map[key], op_type = op_type, exp = self.expiry)
+                tasks +=self.async_load(docs_gen_map[key], op_type = op_type, exp = self.expiry, batch_size = batch_size)
         return tasks
 
     def _expiry_pager(self, master, val=10):

@@ -23,6 +23,7 @@ class QueryTests(BaseTestCase):
     def setUp(self):
         super(QueryTests, self).setUp()
         self.expiry = self.input.param("expiry", 0)
+        self.batch_size = self.input.param("batch_size", 1)
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.run_async = self.input.param("run_async", False)
         self.version = self.input.param("cbq_version", "git_repo")
@@ -174,7 +175,7 @@ class QueryTests(BaseTestCase):
 
     def async_run_doc_ops(self):
         if self.doc_ops:
-            tasks = self.async_ops_all_buckets(self.docs_gen_map)
+            tasks = self.async_ops_all_buckets(self.docs_gen_map, batch_size = self.batch_size)
             self.n1ql_helper.full_docs_list = self.full_docs_list_after_ops
             self.gen_results = TuqGenerators(self.log, self.n1ql_helper.full_docs_list)
             return tasks
@@ -182,7 +183,7 @@ class QueryTests(BaseTestCase):
 
     def run_doc_ops(self):
         if self.doc_ops:
-            self.sync_ops_all_buckets(self.docs_gen_map)
+            self.sync_ops_all_buckets(self.docs_gen_map, batch_size = self.batch_size)
             self.n1ql_helper.full_docs_list = self.full_docs_list_after_ops
             self.gen_results = TuqGenerators(self.log, self.n1ql_helper.full_docs_list)
             self.sleep(60)
