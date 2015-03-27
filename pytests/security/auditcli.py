@@ -112,8 +112,13 @@ class auditcli(BaseTestCase):
                 cli_command = "rebalance"
                 options = "--server-remove={0}:8091".format(self.servers[nodes_add - num].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-                expectedResults = {'node':'ns_1@' + self.servers[num + 1].ip, 'source':source, 'user':self.master.rest_username, "ip":'127.0.0.1', "port":57457}
-                self.checkConfig(self.eventID, self.master, expectedResults)
+                #expectedResults = {'node':'ns_1@' + self.servers[num + 1].ip, 'source':source, 'user':self.master.rest_username, "ip":'127.0.0.1', "port":57457}
+                #self.checkConfig(self.eventID, self.master, expectedResults)
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + self.servers[num + 1].ip],
+                                    'ejected_nodes':["ns_1@" + self.servers[num + 1].ip], 'source':'ns_server', 'source':source, 'user':self.master.rest_username,
+                                    "ip":'127.0.0.1', "port":57457}
+                self.checkConfig(8200, self.master, expectedResults)
+
 
         if (cli_command in ["failover"]):
             cli_command = 'failover'
@@ -485,7 +490,8 @@ class XdcrCLITest(CliBaseTest):
             options = options.replace("--create ", "--edit ")
             output, _ = self.__execute_cli(cli_command=cli_command, options=options)
             expectedResults = {"real_userid:source":"internal", "user":"Administrator",
-                               "cluster_name":"remote", "cluster_hostname":self.servers[xdcr_hostname].ip + ":8091", "is_encrypted":False}
+                               "cluster_name":"remote", "cluster_hostname":self.servers[xdcr_hostname].ip + ":8091",
+                               "is_encrypted":False}
             self.checkConfig(16385, self.master, expectedResults)
 
         if not xdcr_cluster_name:
@@ -493,7 +499,8 @@ class XdcrCLITest(CliBaseTest):
         else:
             options = "--delete --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name)
         output, _ = self.__execute_cli(cli_command=cli_command, options=options)
-        expectedResults = {"real_userid:source":"internal", "user":"Administrator", "cluster_name":"remote", "cluster_hostname":self.master.ip + ":8091", "is_encrypted":False}
+        expectedResults = {"real_userid:source":"internal", "user":"Administrator", "cluster_name":"remote",
+                           "cluster_hostname":self.servers[xdcr_hostname].ip + ":8091", "is_encrypted":False}
         self.checkConfig(16386, self.master, expectedResults)
 
 

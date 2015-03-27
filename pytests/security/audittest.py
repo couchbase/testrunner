@@ -21,6 +21,7 @@ import commands
 import logger
 import urllib
 from security.auditmain import audit
+from security.ldaptest import ldaptest
 log = logger.Logger.get_logger()
 
 
@@ -44,6 +45,8 @@ class auditTest(BaseTestCase):
 
     def getLocalIPAddress(self):
         status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
+        if '1' not in ipAddress:
+            status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
 
     #Wrapper around auditmain
@@ -61,7 +64,7 @@ class auditTest(BaseTestCase):
         rest = RestConnection(self.master)
 
         if (ops in ['create']):
-            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':1073741824, 'num_replicas':1,
+            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':104857600, 'num_replicas':1,
                                'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":source, \
@@ -70,19 +73,19 @@ class auditTest(BaseTestCase):
                                '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly')
 
         elif (ops in ['update']):
-            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':1073741824, 'num_replicas':1, 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
+            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':209715200, 'num_replicas':1, 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":'true', "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457 , 'sessionid':''}
             rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], '11211', 'membase', \
                                0, expectedResults['num_threads'], 0 , 'valueOnly')
-            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':536870912, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
+            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':104857600, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":True, "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457}
             rest.change_bucket_props(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                      '11211', 1, 1)
 
         elif (ops in ['delete']):
-            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':536870912, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
+            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':104857600, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":False, "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457}
             rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
@@ -130,17 +133,41 @@ class auditTest(BaseTestCase):
                                'user':self.master.rest_username, "ip":self.ipAddress, "remote:port":57457}
 
         if (ops in ['removeNode']):
-            expectedResults = {'node':'ns_1@' + servs_inout[0].ip, 'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
+            shell = RemoteMachineShellConnection(self.master)
+            os_type = shell.extract_remote_info().distribution_type
+            log.info ("OS type is {0}".format(os_type))
+            if os_type == 'windows':
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
+                               'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
+            else:
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + servs_inout[0].ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
+                               'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
+
 
         if (ops in ['rebalanceIn']):
             self.cluster.rebalance(self.servers, servs_inout, [])
-            expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + servs_inout[0].ip], 'ejected_nodes':[], 'source':'ns_server', \
+            shell = RemoteMachineShellConnection(self.master)
+            os_type = shell.extract_remote_info().distribution_type
+            log.info ("OS type is {0}".format(os_type))
+            if os_type == 'windows':
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':[], 'source':'ns_server', \
+                                'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
+            else:
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + servs_inout[0].ip], 'ejected_nodes':[], 'source':'ns_server', \
                                 'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
 
         if (ops in ['rebalanceOut']):
             self.cluster.rebalance(self.servers, [], servs_inout)
-            expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + servs_inout[0].ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
+            shell = RemoteMachineShellConnection(self.master)
+            os_type = shell.extract_remote_info().distribution_type
+            log.info ("OS type is {0}".format(os_type))
+            if os_type == 'windows':
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
                                'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
+            else:
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + servs_inout[0].ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
+                               'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
+
         if (ops in ['failover']):
             type = self.input.param('type', None)
             self.cluster.failover(self.servers, servs_inout)
@@ -322,18 +349,18 @@ class auditTest(BaseTestCase):
         rest = RestConnection(self.master)
 	shell = RemoteMachineShellConnection(self.master)
 	os_type = shell.extract_remote_info().distribution_type
-	if (os_type == 'CentOS'):
+	if (os_type == 'Windows'):
+            currentPath = "c:/Program Files/Couchbase/Server/var/lib/couchbase/data"
+            newPath = "C:/tmp"
+        else:
 	    currentPath = '/opt/couchbase/var/lib/couchbase/data'
 	    newPath = "/tmp"
-	else:
-            currentPath = "C:/Program Files/Couchbase/Server/var/lib/couchbase/data"
-            newPath = "C:/tmp"
 
         if (ops == 'indexPath'):
             try:
                 expectedResults = {'node': 'ns_1@' + self.master.ip, 'source':source,
-                                   'user':user, 'ip':self.ipAddress, 'port':1234,
-                                   'index_path':newPath, 'db_path':currentPath}
+                                'user':user, 'ip':self.ipAddress, 'port':1234,
+                                'index_path':newPath, 'db_path':currentPath}
 
                 rest.set_data_path(index_path=newPath)
                 self.checkConfig(self.eventID, self.master, expectedResults)
@@ -359,19 +386,28 @@ class auditTest(BaseTestCase):
             expectedResults = {'source':source, 'user':username, 'password':password, 'role':role, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
 
         elif (ops in ['deleteuser']):
-            expectedResults = {"role":role, "real_userid:source":source, 'real_userid:user':user, 'ip':self.ipAddress, "port":123456, 'userid:source':source, 'userid:user':username}
+            expectedResults = {"role":role, "real_userid:source":source, 'real_userid:user':user,
+                               'ip':self.ipAddress, "port":123456, 'userid':username}
             rest.delete_ro_user()
 
         elif (ops in ['passwordChange']):
             expectedResults = {'real_userid:source':source, 'real_userid:user':user,
                                'password':password, 'role':role, 'ip':self.ipAddress, "port":123456,
-                               'userid:source':source, 'userid:user':username}
+                               'userid':username}
             rest.changePass_ro_user(username, password)
 
         elif (ops in ['invalidlogin']):
             status, content = rest.validateLogin(username, password, True, getContent=True)
-            expectedResults = {'source':source, 'user':username, 'password':password, 'role':role, 'ip':self.ipAddress, "port":123456}
+            expectedResults = {'source':source, 'user':username, 'password':password, 'role':role,
+                               'ip':self.ipAddress, "port":123456}
 
+        #User must be pre-created in LDAP in advance
+        elif (ops in ['ldapLogin']):
+            rest = RestConnection(self.master)
+            rest.ldapUserRestOperation(True, [[username]], exclude=None)
+            status, content = rest.validateLogin(username, password, True, getContent=True)
+            sessionID = (((status['set-cookie']).split("="))[1]).split(";")[0]
+            expectedResults = {'source':'saslauthd', 'user':username, 'password':password, 'role':role, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
 
         self.checkConfig(self.eventID, self.master, expectedResults)
 
@@ -458,8 +494,8 @@ class auditTest(BaseTestCase):
          self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
          info = shell.extract_remote_info()
          path = '/tmp/backup'
-         if info.type.lower() == "windows":
-             path = '/cygdrive/c' + path
+         #if info.type.lower() == "windows":
+             #path = 'c:' + path
          shell.delete_files(path)
          create_dir = "mkdir " + path
          shell.execute_command(create_dir)
@@ -476,8 +512,8 @@ class auditTest(BaseTestCase):
          source = "http://" + self.master.ip + ":8091"
          info = shell.extract_remote_info()
          path = '/tmp/backup'
-         if info.type.lower() == "windows":
-             path = '/cygdrive/c' + path
+         #if info.type.lower() == "windows":
+         #    path = '/cygdrive/c' + path
          shell.delete_files(path)
          create_dir = "mkdir " + path
          shell.execute_command(create_dir)
@@ -498,8 +534,9 @@ class auditTest(BaseTestCase):
 
     def test_AuthFailMemcache(self):
         shell = RemoteMachineShellConnection(self.master)
-        info = shell.extract_remote_info()
-        if info.type.lower() == "windows":
+        os_type = shell.extract_remote_info().distribution_type
+        log.info ("OS type is {0}".format(os_type))
+        if os_type == 'windows':
      	     command = "%smcstat.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH_RAW)
         else:
              command = "%smcstat" % (testconstants.LINUX_COUCHBASE_BIN_PATH)

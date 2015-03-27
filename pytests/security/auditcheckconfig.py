@@ -12,6 +12,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 import commands
 from security.auditmain import audit
+from clitest.cli_base import CliBaseTest
 
 
 class auditcheckconfig(BaseTestCase):
@@ -124,7 +125,7 @@ class auditcheckconfig(BaseTestCase):
         rest = RestConnection(self.master)
         status, content = rest.setAuditSettings(logPath=newPath)
         self.assertFalse(status, "Audit is able to set invalid path")
-        self.assertEqual(content['errors']['log_path'], 'The value of log_path must be a valid directory', 'No error or error changed')
+        self.assertEqual(content['errors']['logPath'], 'The value of logPath must be a valid directory', 'No error or error changed')
 
     #Test error on setting of Invalid log file in cluster
     def test_invalidLogPathCluster(self):
@@ -133,10 +134,11 @@ class auditcheckconfig(BaseTestCase):
         rest = RestConnection(self.master)
         status, content = rest.setAuditSettings(logPath=newPath)
         self.assertFalse(status, "Audit is able to set invalid path")
-        self.assertEqual(content['errors']['log_path'], 'The value of log_path must be a valid directory', 'No error or error changed')
+        self.assertEqual(content['errors']['logPath'], 'The value of logPath must be a valid directory', 'No error or error changed')
 
     #Test changing of log file path
     def test_changeLogPath(self):
+        nodes_init = self.input.param("nodes_init", 0)
         auditMaster = audit(host=self.servers[0])
         auditSecNode = audit(host=self.servers[1])
         #Capture original Audit Log Path
@@ -146,7 +148,7 @@ class auditcheckconfig(BaseTestCase):
         try:
             newPath = auditMaster.getAuditLogPath() + "folder"
 
-            for server in self.servers:
+            for server in self.servers[:nodes_init]:
                 shell = RemoteMachineShellConnection(server)
                 try:
                     shell.create_directory(newPath)
@@ -160,7 +162,7 @@ class auditcheckconfig(BaseTestCase):
             auditMaster.setAuditLogPath(newPath)
 
             #Create an event of Updating autofailover settings
-            for server in self.servers:
+            for server in self.servers[:nodes_init]:
                 rest = RestConnection(server)
                 expectedResults = {'max_nodes':1, "timeout":120, 'source':source, "user":user, 'ip':self.ipAddress, 'port':12345}
                 rest.update_autofailover_settings(True, expectedResults['timeout'])
@@ -246,7 +248,7 @@ class auditcheckconfig(BaseTestCase):
 
         expectedResults = {"auditd_enabled":auditIns.getAuditConfigElement('auditd_enabled'),
                            "descriptors_path":auditIns.getAuditConfigElement('descriptors_path'),
-                           "log_path":auditIns.getAuditConfigElement('log_path'),
+                           "log_path":auditIns.getAuditConfigElement('log_path')[:-1],
                            'source':'internal', 'user':'couchbase',
                            "rotate_interval":auditIns.getAuditConfigElement('rotate_interval'),
                            "version":1, 'hostname':self.getHostName(self.master)}
@@ -296,6 +298,7 @@ class auditcheckconfig(BaseTestCase):
     ''' Test roll over of audit.log as per rotate interval in a cluster'''
     def test_rotateIntervalCluster(self):
         intervalSec = self.input.param("intervalSec", None)
+        nodes_init = self.input.param("nodes_init", 2)
         auditIns = audit(host=self.master)
 	auditIns.setAuditEnable('true')
         originalInt = auditIns.getAuditRotateInterval()
@@ -303,13 +306,13 @@ class auditcheckconfig(BaseTestCase):
         firstEventTime = []
 
         try:
-            for i in range(len(self.servers)):
+            for i in range(len(self.servers[:nodes_init])):
                 auditTemp = audit(host=self.servers[i])
                 firstEventTime.append(self.getTimeStampForFile(auditTemp))
 
             self.sleep(intervalSec + 20, 'Sleep for log roll over to happen')
 
-            for i in range(len(self.servers)):
+            for i in range(len(self.servers[:nodes_init])):
                 shell = RemoteMachineShellConnection(self.servers[i])
                 rest = RestConnection(self.servers[i])
                 status, content = rest.validateLogin(self.master.rest_username, self.master.rest_password, True, getContent=True)
@@ -338,7 +341,7 @@ class auditcheckconfig(BaseTestCase):
         originalInt = auditIns.getAuditRotateInterval()
         status, content = auditIns.setAuditRotateInterval(intervalSec)
         self.assertFalse(status, "Audit log interval setting is <900 or > 604800")
-        self.assertEqual(content['errors']['rotate_interval'], 'The value of rotate_interval must be in range from 900 to 604800')
+        self.assertEqual(content['errors']['rotateInterval'], 'The value of rotateInterval must be in range from 15 minutes to 7 days')
 
     #Add test case where folder update does not exist in 2nd node - MB-13442
     def test_folderMisMatchCluster(self):
@@ -376,22 +379,27 @@ class auditcheckconfig(BaseTestCase):
     #Add test case for MB-13511
     def test_fileRotate20MB(self):
         auditIns = audit(host=self.master)
-        firstEventTime = auditIns.getTimeStampFirstEvent()
+        firstEventTime = self.getTimeStampForFile(auditIns)
 
         rest = RestConnection(self.master)
         shell = RemoteMachineShellConnection(self.master)
-
-        filePath = auditIns.pathLogFile() + auditIns.AUDITLOGFILENAME
-        fileSize = int(shell.get_data_file_size(filePath))
-        originalFileSize = int (shell.get_data_file_size(filePath))
-        while (number < 20761804):
-            for i in range(1, 50):
-                status, content = rest.validateLogin("Administrator", "password", True, getContent=True)
-            number = int (shell.get_data_file_size(filePath))
-
+        filePath = auditIns.pathLogFile + auditIns.AUDITLOGFILENAME
+        number = int (shell.get_data_file_size(filePath))
         hostname = shell.execute_command("hostname")
         archiveFile = hostname[0][0] + '-' + firstEventTime + "-audit.log"
         result = shell.file_exists(auditIns.pathLogFile, archiveFile)
+        tempTime = 0
+        starttime = time.time()
+        while ((number < 20971520) and (tempTime < 1800) and (result == False)):
+            for i in range(1, 10):
+                status, content = rest.validateLogin("Administrator", "password", True, getContent=True)
+                number = int (shell.get_data_file_size(filePath))
+                currTime = time.time()
+                tempTime = int (currTime - starttime)
+                result = shell.file_exists(auditIns.pathLogFile, archiveFile)
+        self.sleep(30)
+        result = shell.file_exists(auditIns.pathLogFile, archiveFile)
+        shell.disconnect()
         self.assertTrue(result, "Archive Audit.log is not created on reaching 20MB threshhold")
 
     def test_clusterEndToEnd(self):
@@ -437,3 +445,57 @@ class auditcheckconfig(BaseTestCase):
             self.checkConfig(self.eventID, self.servers[0], expectedResults)
         except:
             auditNodeFirst.setAuditLogPath(origLogPath)
+
+
+class auditCLITest(CliBaseTest):
+
+    def setUp(self):
+        super(auditCLITest, self).setUp()
+        self.enableStatus = self.input.param("enableStatus", None)
+        self.logPath = self.input.param("logPath", None)
+        self.rotateInt = self.input.param("rotateInt", None)
+        self.errorMsg = self.input.param("errorMsg", None)
+
+    def tearDown(self):
+        super(auditCLITest, self).tearDown()
+
+
+    def disableAudit(self):
+        cli_command = 'setting-audit'
+        options = "--audit-enable=0"
+        remote_client = RemoteMachineShellConnection(self.master)
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+        print output
+        print error
+
+    def setAuditParam(self):
+        cli_command = "setting-audit"
+        options = "--audit-enable={0}".format(self.enableStatus)
+        options += "--audit-rotate-interval={0}".format(self.rotateInt)
+        options += "--audit-log-path={0}".format(self.logPath)
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+        tempFlag = self.validateSettings(self.enableStatus, self.logPath, self.rotateInt)
+        self.assertTrue(tempFlag)
+
+
+    def validateSettings(self, status, log_path, rotate_interval):
+        auditIns = audit(host=self.master)
+        tempLogPath = auditIns.getAuditLogPath()[:1]
+        tempStatus = auditIns.getAuditStatus()
+        tempRotateInt = auditIns.getAuditRotateInterval()
+        flag = True
+
+        if (status != tempStatus):
+            self.log.info ("Mismatch with status - Expected - {0} -- Actual - {0}".format(status, tempStatus))
+            flag = False
+
+        if (log_path != tempLogPath):
+            self.log.info ("Mismatch with log path - Expected - {0} -- Actual - {0}".format(log_path, tempLogPath))
+            flag = False
+
+        if (rotate_interval != tempRotateInt):
+            self.log.info ("Mismatch with rotate interval - Expected - {0} -- Actual - {0}".format(rotate_interval, tempRotateInt))
+            flag = False
+        return flag

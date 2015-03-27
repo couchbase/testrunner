@@ -11,6 +11,8 @@ from membase.api.exception import DesignDocCreationException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from random import randint
+from clitest.cli_base import CliBaseTest
+
 
 class ldaptest(BaseTestCase):
 
@@ -657,8 +659,8 @@ class ldaptest(BaseTestCase):
         rest = RestConnection(self.master)
         content = rest.ldapRestOperationGetResponse()
         self.assertEqual(content['enabled'], False)
-        
-        
+
+
     '''Test case to add admins to the system and validate response and login'''
     def test_addNegativeTC(self):
 
@@ -672,12 +674,12 @@ class ldaptest(BaseTestCase):
 
         #Validate the response and try to login as user added to ldapauth (Multiple verifications here)
         self._funcValidateResLogin(rest, self.authRole, self.authState, self.fullAdmin, self.ROAdmin, Admins, roAdmins, loginState)
-    
+
     def test_stopLDAPServer(self):
         loginState = self.input.param("loginState")
         shell = RemoteMachineShellConnection(self.master)
         try:
-            
+
             rest = RestConnection(self.master)
             self._setupLDAPAuth(rest, self.authRole, self.authState, self.fullAdmin, self.ROAdmin)
 
@@ -687,11 +689,62 @@ class ldaptest(BaseTestCase):
             command = "service slapd stop"
             o, r = shell.execute_command(command)
             shell.log_command_output(o, r)
-            
+
             #Validate the response and try to login as user added to ldapauth (Multiple verifications here)
             self._funcValidateResLogin(rest, self.authRole, self.authState, self.fullAdmin, self.ROAdmin, Admins, roAdmins, loginState)
         finally:
             command = "service slapd start"
             o, r = shell.execute_command(command)
             shell.log_command_output(o, r)
-            
+
+
+class ldapCLITest(CliBaseTest):
+
+    def setUp(self):
+        super(ldapCLITest, self).setUp()
+        self.enableStatus = self.input.param("enableStatus", None)
+        self.admin = self.input.param("admin", None)
+        self.roAdmin = self.input.param("roAdmin", None)
+        self.errorMsg = self.input.param("errorMsg", None)
+
+    def tearDown(self):
+        super(ldapCLITest, self).tearDown()
+
+    def disableLdap(self):
+        cli_command = 'setting-ldap'
+        options = "--ldap-enable=0"
+        remote_client = RemoteMachineShellConnection(self.master)
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+        print output
+        print error
+
+    def setAuditParam(self):
+        cli_command = "setting-audit"
+        options = "--ldap-enable={0}".format(self.enableStatus)
+        options += "--ldap-roadmins={0}".format(self.admin)
+        options += "--ldap-admins={0}".format(self.roAdmin)
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+        tempFlag = self.validateSettings(self.enableStatus, self.admin, self.roAdmin)
+        self.assertTrue(tempFlag)
+
+
+    def validateSettings(self, status, admin, roAdmin):
+        rest = RestConnection(self.master)
+        temproAdmins, tempAdmins = self._parseRestResponse(rest.ldapRestOperationGetResponse())
+        tempStatus = rest.ldapRestOperationGetResponse()['enabled']
+        flag = True
+
+        if (status != tempStatus):
+            self.log.info ("Mismatch with status - Expected - {0} -- Actual - {0}".format(status, tempStatus))
+            flag = False
+
+        if (tempAdmins != admin):
+            self.log.info ("Mismatch with Admin - Expected - {0} -- Actual - {0}".format(admin, tempAdmins))
+            flag = False
+
+        if (temproAdmins != roAdmin):
+            self.log.info ("Mismatch with roAdmin - Expected - {0} -- Actual - {0}".format(roAdmin, temproAdmins))
+            flag = False
+        return flag

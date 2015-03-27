@@ -421,10 +421,12 @@ class audit:
         try:
             date = actualTime[:10]
             hourMin = actualTime[11:16]
+            tempTimeZone = actualTime[-6:]
             shell = RemoteMachineShellConnection(self.host)
             try:
                 currDate = shell.execute_command('date +"%Y-%m-%d"')
                 currHourMin = shell.execute_command('date +"%H:%M"')
+                currTimeZone = shell.execute_command('date +%z')
             finally:
                 shell.disconnect()
             log.info (" Matching expected date - currDate {0}; actual Date - {1}".format(currDate[0][0], date))
@@ -437,6 +439,12 @@ class audit:
                 if ((int((hourMin.split(":"))[0])) != (int((currHourMin[0][0].split(":"))[0]))) or ((int((hourMin.split(":"))[1]) + 10) < (int((currHourMin[0][0].split(":"))[1]))):
                     log.info ("Mis-match in values for timestamp - time")
                     return False
+                else:
+                    tempTimeZone = tempTimeZone.replace(":", "")
+                    if (tempTimeZone != currTimeZone[0][0]):
+                        log.info ("Mis-match in value of timezone")
+                        return False
+
         except Exception, e:
             log.info ("Value of execption is {0}".format(e))
             return False
