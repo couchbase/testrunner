@@ -164,7 +164,11 @@ help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
                             '--xdcr-from-bucket=BUCKET': 'local bucket name to replicate from',
                             '--xdcr-replication-mode=[xmem|capi]': 'replication protocol, either capi or xmem.',
                             '--xdcr-replicator=REPLICATOR': ' replication id',
-                            '--xdcr-to-bucket=BUCKETNAME': 'remote bucket to replicate to'},
+                            '--xdcr-to-bucket=BUCKETNAME': 'remote bucket to replicate to',
+                            '--sourceNozzlePerNode=[1-10]': 'the number of source nozzles per source node',
+                            '--targetNozzlePerNode=[1-10]': 'the number of outgoing nozzles per target node',
+                            '--maxExpectedReplicationLag=MS': 'the maximum replication lag (in millisecond) that can be tolerated before it is considered timeout',
+                            '--timeoutPercentageCap=[1-100]': 'the maximum allowed timeout percentage.If this limit is exceeded, replication is considered as not healthy and may be reported'},
  'xdcr-setup OPTIONS': {'--create': ' create a new xdcr configuration',
                         '--delete': ' delete existed xdcr configuration',
                         '--edit': ' modify existed xdcr configuration',
@@ -1363,6 +1367,12 @@ class XdcrCLITest(CliBaseTest):
         error_expected = self.input.param("error-expected", False)
         replication_mode = self.input.param("replication_mode", None)
         pause_resume = self.input.param("pause-resume", None)
+        checkpoint_interval = self.input.param("checkpoint_interval", None)
+        source_nozzles = self.input.param("source_nozzles", None)
+        target_nozzles = self.input.param("target_nozzles", None)
+        filter_expression = self.input.param("filter_expression", None)
+        max_replication_lag = self.input.param("max_replication_lag", None)
+        timeout_perc_cap = self.input.param("timeout_perc_cap", None)
         _, _, xdcr_cluster_name, xdcr_hostname, _, _ = self.__xdcr_setup_create()
         cli_command = "xdcr-replicate"
         options = "--create"
@@ -1370,6 +1380,13 @@ class XdcrCLITest(CliBaseTest):
         options += (" --xdcr-from-bucket=\'{0}\'".format(from_bucket), "")[from_bucket is None]
         options += (" --xdcr-to-bucket=\'{0}\'".format(to_bucket), "")[to_bucket is None]
         options += (" --xdcr-replication-mode=\'{0}\'".format(replication_mode), "")[replication_mode is None]
+        options += (" --sourceNozzlePerNode=\'{0}\'".format(source_nozzles), "")[source_nozzles is None]
+        options += (" --targetNozzlePerNode=\'{0}\'".format(target_nozzles), "")[target_nozzles is None]
+        options += (" --filterExpression=\'{0}\'".format(filter_expression), "")[filter_expression is None]
+        options += (" --maxExpectedReplicationLag=\'{0}\'".format(max_replication_lag), "")[max_replication_lag is None]
+        options += (" --timeoutPercentageCap=\'{0}\'".format(timeout_perc_cap), "")[timeout_perc_cap is None]
+        options += (" --checkpoint-interval=\'{0}\'".format(checkpoint_interval), "")[timeout_perc_cap is None]
+
         self.bucket_size = self._get_bucket_size(self.quota, 1)
         if from_bucket:
             self.cluster.create_default_bucket(self.master, self.bucket_size, self.num_replicas,
@@ -1396,14 +1413,14 @@ class XdcrCLITest(CliBaseTest):
                     output, _ = self.__execute_cli(cli_command, options)
                     # validate output message
                     self.assertEqual(XdcrCLITest.XDCR_REPLICATE_SUCCESS["pause"], output[0])
-                    self.sleep(10)
+                    self.sleep(20)
                     options = "--list"
                     output, _ = self.__execute_cli(cli_command, options)
                     # check if status of replication is "paused"
                     for value in output:
                         if value.startswith("status"):
                             self.assertEqual(value.split(":")[1].strip(), "paused")
-                    self.sleep(10)
+                    self.sleep(20)
                     # resume replication
                     options = "--resume"
                     options += (" --xdcr-replicator={0}".format(replicator))
