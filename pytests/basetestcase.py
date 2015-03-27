@@ -952,7 +952,7 @@ class BaseTestCase(unittest.TestCase):
         nodes = RestConnection(self.master).node_statuses()
         remote_client = RemoteMachineShellConnection(self.master)
         options = "--cluster-init-port=%s" % new_port
-        cli_command = "cluster-init"
+        cli_command = "cluster-edit"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options,
                                                             cluster_host="localhost:%s" % current_port,
                                                             user=self.master.rest_username,
