@@ -96,7 +96,7 @@ class N1QLHelper():
         expected_result = self._gen_dict(expected_result)
         if len(actual_result) != len(expected_result):
             raise Exception("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
-                                            len(actual_result.keys()), len(expected_result.keys())))
+                                            len(actual_result), len(expected_result)))
         msg = "The number of rows match but the results mismatch, please check"
         if actual_result != expected_result:
             raise Exception(msg)
