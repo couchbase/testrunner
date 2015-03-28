@@ -94,12 +94,11 @@ class N1QLHelper():
         actual_result = self._gen_dict(actual_result)
         self.log.info(" Analyzing Expected Result")
         expected_result = self._gen_dict(expected_result)
-        if len(actual_result.keys()) != len(expected_result.keys()):
+        if len(actual_result) != len(expected_result):
             raise Exception("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
                                             len(actual_result.keys()), len(expected_result.keys())))
         msg = "The number of rows match but the results mismatch, please check"
         if actual_result != expected_result:
-            self.analyze_failure(actual_result, expected_result)
             raise Exception(msg)
 
     def analyze_failure(self, actual, expected):
@@ -331,6 +330,14 @@ class N1QLHelper():
         return map
 
     def _gen_dict(self, result):
+        result_set = []
+        if result != None and len(result) > 0:
+                for val in result:
+                    for key in val.keys():
+                        result_set.append(val[key])
+        return result_set
+
+    def old_gen_dict(self, result):
         result_set = []
         map = {}
         duplicate_keys = []
