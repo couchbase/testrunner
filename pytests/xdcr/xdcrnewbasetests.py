@@ -1385,34 +1385,52 @@ class CouchbaseCluster:
         @param pause_secs: pause for next batch load.
         @param timeout_secs: timeout
         """
-        random_key = 0
+        seed = "%s-key-" % self.__name
+        end = 0
         for bucket in self.__buckets:
             current_active_resident = StatsCommon.get_stats(
                 [self.__master_node],
                 bucket,
                 '',
                 'vb_active_perc_mem_resident')[self.__master_node]
+            start = 0
+            end = start + batch_size * 10
             while int(current_active_resident) > active_resident_threshold:
-                self.__log.info(
-                    "resident ratio is %s greater than %s for %s in bucket %s.\
-                    Continue loading to the cluster" % (
-                        current_active_resident,
-                        active_resident_threshold,
-                        self.__master_node.ip, bucket.name))
+                self.__log.info("loading %s keys ..." % (end-start))
 
                 kv_gen = BlobGenerator(
-                    "loadDgm-%s-" % random_key,
-                    "loadDgm-%s-" % random_key,
+                    seed,
+                    seed,
                     value_size,
-                    end=batch_size * 10)
+                    start=start,
+                    end=end)
 
-                self.load_bucket(
-                    bucket, kv_gen, OPS.CREATE, exp=exp, kv_store=kv_store,
-                    flag=flag, only_store_hash=only_store_hash,
-                    batch_size=batch_size, pause_secs=pause_secs,
-                    timeout_secs=timeout_secs)
+                tasks = []
+                tasks.append(self.__clusterop.async_load_gen_docs(
+                    self.__master_node, bucket.name, kv_gen, bucket.kvs[kv_store],
+                    OPS.CREATE, exp, flag, only_store_hash, batch_size,
+                    pause_secs, timeout_secs))
 
-                random_key += 1
+                for task in tasks:
+                    task.result()
+                start = end
+                end = start + batch_size * 10
+                current_active_resident = StatsCommon.get_stats(
+                    [self.__master_node],
+                    bucket,
+                    '',
+                    'vb_active_perc_mem_resident')[self.__master_node]
+                self.__log.info(
+                    "Current resident ratio: %s, desired: %s bucket %s" % (
+                        current_active_resident,
+                        active_resident_threshold,
+                        bucket.name))
+        self.__kv_gen[OPS.CREATE] = BlobGenerator(
+                seed,
+                seed,
+                value_size,
+                start = 0,
+                end=end)
 
     def async_update_delete(
             self, op_type, perc=30, expiration=0, kv_store=1):
@@ -2310,6 +2328,9 @@ class XDCRNewBaseTest(unittest.TestCase):
             "disable_compaction",
             "").split('-')
         self._checkpoint_interval = self._input.param("checkpoint_interval",60)
+        self._dgm_run = self._input.param("dgm_run", False)
+        self._active_resident_threshold = \
+            self._input.param("active_resident_threshold", 100)
         CHECK_AUDIT_EVENT.CHECK = self._input.param("verify_audit", 0)
 
     def __cleanup_previous(self):
@@ -2549,11 +2570,19 @@ class XDCRNewBaseTest(unittest.TestCase):
             else:
                 if i >= len(self.__cb_clusters) - 1:
                     break
-            cluster.load_all_buckets(self._num_items, self._value_size)
+            if not self._dgm_run:
+                cluster.load_all_buckets(self._num_items, self._value_size)
+            else:
+                cluster.load_all_buckets_till_dgm(
+                    active_resident_threshold=self._active_resident_threshold)
 
     def __load_star(self):
         hub = self.__cb_clusters[0]
-        hub.load_all_buckets(self._num_items, self._value_size)
+        if self._dgm_run:
+            hub.load_all_buckets_till_dgm(
+                active_resident_threshold=self._active_resident_threshold)
+        else:
+            hub.load_all_buckets(self._num_items, self._value_size)
 
     def __load_ring(self):
         self.__load_chain()
