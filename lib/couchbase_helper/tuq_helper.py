@@ -309,11 +309,15 @@ class N1QLHelper():
         return query_params
 
     def _is_index_in_list(self, bucket, index_name, server = None, index_state = "pending"):
+        self.log.info(bucket)
+        self.log.info(index_name)
         query = "SELECT * FROM system:indexes"
         if server == None:
             server = self.master
         res = self.run_cbq_query(query = query, server = server)
+        self.log.info(res)
         for item in res['results']:
+            self.log.info(item)
             if 'keyspace_id' not in item['indexes']:
                 return False
             if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] != index_state:

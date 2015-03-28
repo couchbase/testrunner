@@ -717,7 +717,8 @@ class Cluster(object):
     def async_monitor_index(self,
                  server, bucket, n1ql_helper = None,
                  index_name = None,
-                 retry_time=2):
+                 retry_time=2,
+                 timeout = 240):
         """Asynchronously runs create index task
 
         Parameters:
