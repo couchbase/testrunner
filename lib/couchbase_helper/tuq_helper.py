@@ -267,7 +267,7 @@ class N1QLHelper():
         return False
 
     def run_query_and_verify_result(self, server = None, query = None, timeout = 120.0, max_try = 1,
-     expected_result = None, scan_consistency = None, scan_vector = None):
+     expected_result = None, scan_consistency = None, scan_vector = None, verify_results = True):
         check = False
         init_time = time.time()
         try_count = 0
@@ -276,7 +276,10 @@ class N1QLHelper():
             try:
                 actual_result = self.run_cbq_query(query = query, server = server,
                  scan_consistency = scan_consistency, scan_vector = scan_vector)
-                self._verify_results(sorted(actual_result['results']), sorted(expected_result))
+                if verify_results:
+                    self._verify_results(sorted(actual_result['results']), sorted(expected_result))
+                else:
+                    return "ran query with success and validated results" , True
                 check = True
             except Exception, ex:
                 if (next_time - init_time > timeout or try_count >= max_try):

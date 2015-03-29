@@ -1880,12 +1880,14 @@ class N1QLQueryTask(Task):
     def execute(self, task_manager):
         try:
             # Query and get results
+            self.log.info(" <<<<< START Executing Query {0} >>>>>>".format(self.query))
             if not self.is_explain_query:
-                self.msg, self.isSuccess = self.n1ql_helper.run_query_and_verify_result(query = self.query, server = self.server, expected_result = self.expected_result)
+                self.msg, self.isSuccess = self.n1ql_helper.run_query_and_verify_result(query = self.query, server = self.server, expected_result = self.expected_result, verify_results = self.verify_results)
             else:
                 self.actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.server,
                  scan_consistency = self.scan_consistency, scan_vector = self.scan_vector)
                 self.log.info(self.actual_result)
+            self.log.info(" <<<<< Done Executing Query {0} >>>>>>".format(self.query))
             self.state = CHECKING
             task_manager.schedule(self)
         except N1QLQueryException as e:
@@ -1908,9 +1910,13 @@ class N1QLQueryTask(Task):
                     self.log.info(" Query {0} results leads to INCORRECT RESULT ".format(self.query))
                     raise N1QLQueryException(self.msg)
             else:
-                self.n1ql_helper.verify_index_with_explain(self.actual_result, self.index_name)
-            self.set_result(True)
-            self.state = FINISHED
+                check = self.n1ql_helper.verify_index_with_explain(self.actual_result, self.index_name)
+                if not check:
+                    raise Exception(" INDEX usage in Query {0} :: NOT FOUND {1} :: as observed in result {2}".format(
+                        self.query, self.index_name, self.actual_result))
+           self.log.info(" <<<<< Done VERIFYING Query {0} >>>>>>".format(self.query))
+           self.set_result(True)
+           self.state = FINISHED
         except N1QLQueryException as e:
             # subsequent query failed! exit
             self.state = FINISHED

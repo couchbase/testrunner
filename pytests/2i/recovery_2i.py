@@ -36,95 +36,93 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_rebalance_in(self):
         try:
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
-            for task in tasks:
-                task.result()
-            tasks , ops_tasks = self._run_aync_tasks()
+            self._run_initial_index_tasks()
+            kvOps_tasks = self._run_kvops_tasks()
+            before_index_ops = self._run_before_index_tasks()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],self.nodes_in_list, [], services = self.services_in)
+            in_between_index_ops = self._run_in_between_tasks()
+            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             rebalance.result()
-            self._run_in_between_tasks(tasks , ops_tasks)
-            self.run_after_operations()
+            self._run_after_index_tasks()
         except Exception, ex:
             raise
 
     def test_rebalance_out(self):
         try:
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
-            for task in tasks:
-                task.result()
-            tasks , ops_tasks = self._run_aync_tasks()
+            self._run_initial_index_tasks()
+            kvOps_tasks = self._run_kvops_tasks()
+            before_index_ops = self._run_before_index_tasks()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
+            in_between_index_ops = self._run_in_between_tasks()
+            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             rebalance.result()
-            self._run_in_between_tasks(tasks , ops_tasks)
-            self.run_after_operations()
+            self._run_after_index_tasks()
         except Exception, ex:
             raise
 
     def test_rebalance_in_out(self):
         try:
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
-            for task in tasks:
-                task.result()
-            tasks , ops_tasks = self._run_aync_tasks()
+            self._run_initial_index_tasks()
+            kvOps_tasks = self._run_kvops_tasks()
+            before_index_ops = self._run_before_index_tasks()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                     self.nodes_in_list,
                                    self.nodes_out_list, services = self.services_in)
+            in_between_index_ops = self._run_in_between_tasks()
+            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             rebalance.result()
-            self._run_in_between_tasks(tasks , ops_tasks)
-            self.run_after_operations()
+            self._run_after_index_tasks()
         except Exception, ex:
             raise
 
     def test_rebalance_with_stop_start(self):
         try:
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
-            for task in tasks:
-                task.result()
+            self._run_initial_index_tasks()
+            kvOps_tasks = self._run_kvops_tasks()
+            before_index_ops = self._run_before_index_tasks()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                     self.nodes_in_list,
                                    self.nodes_out_list, services = self.services_in)
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
-            # runs operations
-            for task in tasks:
-                task.result()
             stopped = RestConnection(self.master).stop_rebalance(wait_timeout=self.wait_timeout / 3)
             self.assertTrue(stopped, msg="unable to stop rebalance")
             rebalance.result()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                     self.nodes_in_list,
                                    self.nodes_out_list, services = self.services_in)
+            in_between_index_ops = self._run_in_between_tasks()
+            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             rebalance.result()
-            self.run_after_operations()
+            self._run_after_index_tasks()
         except Exception, ex:
             raise
 
     def test_server_crash(self):
         try:
             self.targetProcess= self.input.param("targetProcess",'memcached')
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
-            for task in tasks:
-                task.result()
-            tasks , ops_tasks = self._run_aync_tasks()
+            self._run_initial_index_tasks()
+            kvOps_tasks = self._run_kvops_tasks()
+            before_index_ops = self._run_before_index_tasks()
             for node in self.nodes_out_list:
                 remote = RemoteMachineShellConnection(node)
                 remote.terminate_process(process_name=self.targetProcess)
-            self._run_in_between_tasks(tasks , ops_tasks)
-            self.run_after_operations()
+            in_between_index_ops = self._run_in_between_tasks()
+            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+            self._run_after_index_tasks()
         except Exception, ex:
             raise
 
     def test_server_restart(self):
         try:
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
-            for task in tasks:
-                task.result()
-            tasks , ops_tasks = self._run_aync_tasks()
+            self._run_initial_index_tasks()
+            kvOps_tasks = self._run_kvops_tasks()
+            before_index_ops = self._run_before_index_tasks()
             for node in self.nodes_out_list:
                 remote = RemoteMachineShellConnection(node)
                 remote.stop_server()
             self.sleep(1)
-            self._run_in_between_tasks(tasks , ops_tasks)
-            self.run_after_operations()
+            in_between_index_ops = self._run_in_between_tasks()
+            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+            self._run_after_index_tasks()
         except Exception, ex:
             raise
         finally:
@@ -134,23 +132,23 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_failover(self):
         try:
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
-            for task in tasks:
-                task.result()
+            self._run_initial_index_tasks()
             servr_out = self.nodes_out_list
+            kvOps_tasks = self._run_kvops_tasks()
+            before_index_ops = self._run_before_index_tasks()
             failover_task = self.cluster.async_failover([self.master],
                     failover_nodes = servr_out, graceful=self.graceful)
+            in_between_index_ops = self._run_in_between_tasks()
             failover_task.result()
-            tasks , ops_tasks = self._run_aync_tasks()
             if self.graceful:
                 # Check if rebalance is still running
                 msg = "graceful failover failed for nodes"
                 self.assertTrue(RestConnection(self.master).monitorRebalance(stop_if_loop=True), msg=msg)
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                    [], servr_out)
+            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             rebalance.result()
-            self._run_in_between_tasks(tasks , ops_tasks)
-            self.run_after_operations()
+            self._run_after_index_tasks()
         except Exception, ex:
             raise
 
@@ -160,12 +158,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             recoveryType = self.input.param("recoveryType", "full")
             servr_out = self.nodes_out_list
             nodes_all = rest.node_statuses()
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
-            for task in tasks:
-                task.result()
+            self._run_initial_index_tasks()
             failover_task =self.cluster.async_failover([self.master],
                     failover_nodes = servr_out, graceful=self.graceful)
             failover_task.result()
+            kvOps_tasks = self._run_kvops_tasks()
+            before_index_ops = self._run_before_index_tasks()
             nodes_all = rest.node_statuses()
             nodes = []
             if servr_out[0].ip == "127.0.0.1":
@@ -180,11 +178,11 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 self.log.info(node)
                 rest.add_back_node(node.id)
                 rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
-            tasks , ops_tasks = self._run_aync_tasks()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
-            self._run_in_between_tasks(tasks , ops_tasks)
+            in_between_index_ops = self._run_in_between_tasks()
+            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             rebalance.result()
-            self.run_after_operations()
+            self._run_after_index_tasks()
         except Exception, ex:
             raise
 
@@ -192,20 +190,20 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         autofailover_timeout = 30
         status = RestConnection(self.master).update_autofailover_settings(True, autofailover_timeout)
         self.assertTrue(status, 'failed to change autofailover_settings!')
-        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
-        for task in tasks:
-            task.result()
+        self._run_initial_index_tasks()
         servr_out = self.nodes_out_list
         remote = RemoteMachineShellConnection(servr_out[0])
         try:
+            kvOps_tasks = self._run_kvops_tasks()
+            before_index_ops = self._run_before_index_tasks()
             remote.stop_server()
             self.sleep(autofailover_timeout + 10, "Wait for autofailover")
-            tasks , ops_tasks = self._run_aync_tasks()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                    [], [servr_out[0]])
-            self._run_in_between_tasks(tasks , ops_tasks)
+            in_between_index_ops = self._run_in_between_tasks()
+            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             rebalance.result()
-            self.run_after_operations()
+            self._run_after_index_tasks()
         except Exception, ex:
             raise
         finally:
@@ -215,15 +213,15 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 task.result()
 
     def test_network_partitioning(self):
-        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
-        for task in tasks:
-            task.result()
+        self._run_initial_index_tasks()
         try:
+            kvOps_tasks = self._run_kvops_tasks()
+            before_index_ops = self._run_before_index_tasks()
             for node in self.nodes_out_list:
                 self.start_firewall_on_node(node)
-            tasks , ops_tasks = self._run_aync_tasks()
-            self._run_in_between_tasks(tasks , ops_tasks)
-            self.run_after_operations()
+            in_between_index_ops = self._run_in_between_tasks()
+            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+            self._run_after_index_tasks()
         except Exception, ex:
             raise
         finally:
@@ -232,46 +230,44 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self.sleep(1)
 
     def test_couchbase_bucket_compaction(self):
-        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
-        for task in tasks:
-            task.result()
+        self._run_initial_index_tasks()
         # Run Compaction Here
         # Run auto-compaction to remove the tomb stones
-            compact_tasks = []
-            for bucket in self.buckets:
-                compact_tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
-            for task in tasks:
-                task.result()
-            for task in compact_tasks:
-                task.result()
-        self.run_after_operations()
+        compact_tasks = []
+        kvOps_tasks = self._run_kvops_tasks()
+        before_index_ops = self._run_before_index_tasks()
+        for bucket in self.buckets:
+            compact_tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
+        in_between_index_ops = self._run_in_between_tasks()
+        self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+        for task in compact_tasks:
+            task.result()
+        self._run_after_index_tasks()
 
     def test_warmup(self):
-        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
-        for task in tasks:
-            task.result()
+        self._run_initial_index_tasks()
+        kvops_tasks = self._run_kvops_tasks()
+        before_index_ops = self._run_before_index_tasks()
         for server in self.nodes_out_list:
             remote = RemoteMachineShellConnection(server)
             remote.stop_server()
             remote.start_server()
             remote.disconnect()
-        tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
+        in_between_index_ops = self._run_in_between_tasks()
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-        for task in tasks:
-            task.result()
-        self.run_after_operations()
+        self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+        self._run_after_index_tasks()
 
     def test_couchbase_bucket_flush(self):
-        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
-        for task in tasks:
-            task.result()
-        tasks , ops_tasks = self._run_aync_tasks()
+        self._run_initial_index_tasks()
+        kvops_tasks = self._run_kvops_tasks()
+        before_index_ops = self._run_before_index_tasks()
         #Flush the bucket
         for bucket in self.buckets:
             RestConnection(self.master).flush_bucket(bucket.name)
-        self._run_in_between_tasks(tasks , ops_tasks)
-        self.run_after_operations()
+        in_between_index_ops = self._run_in_between_tasks()
+        self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+        self._run_after_index_tasks()
 
     def _calculate_scan_vector(self):
         self.scan_vectors = None
@@ -281,16 +277,18 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def _redefine_index_usage(self):
         qdfs = []
-        if self.use_replica_when_active_down and self.ops_map["in_between"]["query_ops"]:
+        if self.use_replica_when_active_down and \
+            (self.ops_map["before"]["query_ops"] or self.ops_map["in_between"]["query_ops"]):
             for query_definition in self.query_definitions:
                 if query_definition.index_name in self.index_lost_during_move_out:
                     query_definition.index_name = query_definition.index_name+"_replica"
                 qdfs.append(query_definition)
             self.query_definitions = qdfs
-        elif self.ops_map["in_between"]["query_ops"]:
+        elif self.ops_map["before"]["query_ops"] \
+         or self.ops_map["in_between"]["query_ops"]:
             for query_definition in self.query_definitions:
                 if query_definition.index_name in self.index_lost_during_move_out:
-                    query_definition.index_name = query_definition.index_name+"_replica"
+                    query_definition.index_name = "#primary"
                 qdfs.append(query_definition)
             self.query_definitions = qdfs
 
@@ -338,33 +336,43 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                     index_node_count+=1
         return index_lost_during_move_out
 
-    def _run_aync_tasks(self):
+    def _run_initial_index_tasks(self):
+        self.log.info("<<<<< START INITIALIZATION PHASE >>>>>>")
         self._calculate_scan_vector()
-        qdfs = []
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, initial = True,
+            scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
+        self._run_tasks([tasks])
+        self.log.info("<<<<< END INITIALIZATION PHASE >>>>>>")
+
+    def _run_before_index_tasks(self):
+        if self.ops_map["before"]["create_index"]:
+            self.index_nodes_out = []
+        self._redefine_index_usage()
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True,
+            scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
+        return tasks
+
+    def _run_in_between_tasks(self):
         tasks_ops = []
         if self.ops_map["in_between"]["create_index"]:
             self.index_nodes_out = []
         self._redefine_index_usage()
-        if self.doc_ops:
-            tasks_ops = self.async_run_doc_ops()
         tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True,
             scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
-        return tasks, tasks_ops
+        return tasks
 
-    def _run_in_between_tasks(self, target_tasks, ops_tasks):
-        for task in ops_tasks:
-            task.result()
-        for task in target_tasks:
-            task.result()
+    def _run_kvops_tasks(self):
+        tasks_ops =[]
+        if self.doc_ops:
+            tasks_ops = self.async_run_doc_ops()
+        return tasks_ops
 
-    def run_after_operations(self):
-        qdfs = []
-        if self.ops_map["after"]["query_ops"]:
-            for query_definition in self.query_definitions:
-                if query_definition.index_name in self.index_lost_during_move_out:
-                    query_definition.index_name = "#primary"
-                qdfs.append(query_definition)
-            self.query_definitions = qdfs
-        tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
-        for task in tasks:
-            task.result()
+    def _run_after_index_tasks(self):
+        tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True,
+            scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
+        self._run_tasks([tasks])
+
+    def _run_tasks(self, tasks_list):
+        for tasks in tasks_list:
+            for task in tasks:
+                task.result()
