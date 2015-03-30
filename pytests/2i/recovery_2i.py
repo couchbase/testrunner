@@ -40,6 +40,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             kvOps_tasks = self._run_kvops_tasks()
             before_index_ops = self._run_before_index_tasks()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],self.nodes_in_list, [], services = self.services_in)
+            self.sleep(1)
             in_between_index_ops = self._run_in_between_tasks()
             self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             rebalance.result()
@@ -53,6 +54,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             kvOps_tasks = self._run_kvops_tasks()
             before_index_ops = self._run_before_index_tasks()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
+            self.sleep(1)
             in_between_index_ops = self._run_in_between_tasks()
             self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             rebalance.result()
@@ -68,6 +70,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                     self.nodes_in_list,
                                    self.nodes_out_list, services = self.services_in)
+            self.sleep(1)
             in_between_index_ops = self._run_in_between_tasks()
             self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             rebalance.result()
