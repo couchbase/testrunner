@@ -2696,7 +2696,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.load_data_topology()
         self.setup_xdcr()
 
-    def verify_rev_ids(self, xdcr_replications, kv_store=1, timeout=600):
+    def verify_rev_ids(self, xdcr_replications, kv_store=1, timeout=1200):
         """Verify RevId (sequence number, cas, flags value) for each item on
         every source and destination bucket.
         @param xdcr_replications: list of XDCRReplication objects.
