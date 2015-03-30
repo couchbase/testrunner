@@ -249,7 +249,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_warmup(self):
         self._run_initial_index_tasks()
-        kvops_tasks = self._run_kvops_tasks()
+        kvOps_tasks = self._run_kvops_tasks()
         before_index_ops = self._run_before_index_tasks()
         for server in self.nodes_out_list:
             remote = RemoteMachineShellConnection(server)
