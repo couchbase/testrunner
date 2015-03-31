@@ -464,7 +464,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self.num_items)
         self._load_bucket(bucket, self.dest_master, gen_create2, 'create', exp=0)
 
-        if self.pause_xdcr_cluster:
+        if float(self.c1_version[:2]) >= 3.0:
             for cluster in self.get_cb_clusters():
                 for remote_cluster in cluster.get_remote_clusters():
                     remote_cluster.resume_all_replications()
