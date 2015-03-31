@@ -473,9 +473,9 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
 
         if float(self.c1_version[:2]) > 2.5:
             for remote_cluster in self.src_cluster.get_remote_clusters():
-                remote_cluster._modify()
+                remote_cluster.modify()
             for remote_cluster in self.dest_cluster.get_remote_clusters():
-                remote_cluster._modify()
+                remote_cluster.modify()
 
         self.sleep(30)
 

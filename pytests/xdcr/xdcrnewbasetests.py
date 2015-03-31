@@ -1425,6 +1425,8 @@ class CouchbaseCluster:
                         current_active_resident,
                         active_resident_threshold,
                         bucket.name))
+            self.__log.info("Loaded a total of %s keys into bucket %s"
+                            % (end,bucket.name))
         self.__kv_gen[OPS.CREATE] = BlobGenerator(
                 seed,
                 seed,
