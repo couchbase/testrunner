@@ -412,6 +412,33 @@ class BaseTestCase(unittest.TestCase):
         for task in bucket_tasks:
             task.result(self.wait_timeout * 10)
 
+    def _create_buckets(self, server, bucket_list, server_id=None, bucket_size=None):
+        if server_id is None:
+            server_id = RestConnection(server).get_nodes_self().id
+        if bucket_size is None:
+            bucket_size = self._get_bucket_size(self.quota, len(bucket_list))
+        bucket_tasks = []
+        i = 0
+        for bucket_name in bucket_list:
+            self.log.info(" Creating bucket {0}".format(bucket_name))
+            i += 1
+            bucket_priority = None
+            if self.standard_bucket_priority != None:
+                bucket_priority = self.get_bucket_priority(self.standard_bucket_priority[i])
+            bucket_tasks.append(self.cluster.async_create_standard_bucket(server, bucket_name,
+                                                                    STANDARD_BUCKET_PORT + i,
+                                                                    bucket_size,
+                                                                    self.num_replicas,
+                                                                    enable_replica_index=self.enable_replica_index,
+                                                                    eviction_policy=self.eviction_policy,
+                                                                    bucket_priority = bucket_priority))
+            self.buckets.append(Bucket(name=bucket_name, authType=None, saslPassword=None,
+                                       num_replicas=self.num_replicas,
+                                       bucket_size=bucket_size,
+                       port=STANDARD_BUCKET_PORT + i, master_id=server_id, eviction_policy=self.eviction_policy));
+        for task in bucket_tasks:
+            task.result(self.wait_timeout * 10)
+
     def _create_memcached_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
         if not num_buckets:
             return

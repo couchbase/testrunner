@@ -27,7 +27,8 @@ class N1QLHelper():
         self.log = log
         self.full_docs_list = full_docs_list
         self.master = master
-        self.gen_results = TuqGenerators(self.log, self.full_docs_list)
+        if self.full_docs_list and len(self.full_docs_list) > 0:
+            self.gen_results = TuqGenerators(self.log, self.full_docs_list)
 
     def killall_tuq_process(self):
         self.shell.execute_command("killall cbq-engine")
@@ -94,6 +95,20 @@ class N1QLHelper():
         actual_result = self._gen_dict(actual_result)
         self.log.info(" Analyzing Expected Result")
         expected_result = self._gen_dict(expected_result)
+        if len(actual_result) != len(expected_result):
+            raise Exception("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
+                                            len(actual_result), len(expected_result)))
+        msg = "The number of rows match but the results mismatch, please check"
+        if actual_result != expected_result:
+            raise Exception(msg)
+
+    def _verify_results_rqg(self, n1ql_result = [], sql_result = [], hints = ["a1"]):
+        check = self._check_sample(n1ql_result, hints)
+        actual_result = n1ql_result
+        if check:
+            actual_result = self._gen_dict(n1ql_result)
+        actual_result = sorted(actual_result)
+        expected_result = sorted(sql_result)
         if len(actual_result) != len(expected_result):
             raise Exception("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
                                             len(actual_result), len(expected_result)))
@@ -339,6 +354,17 @@ class N1QLHelper():
                     for key in val.keys():
                         result_set.append(val[key])
         return result_set
+
+    def _check_sample(self, result, expected_in_key = []):
+        if len(expected_in_key) == 0:
+            return True
+        if result != None and len(result) > 0:
+            sample=result[0]
+            for key in sample.keys():
+                for sample in expected_in_key:
+                    if key in sample:
+                        return True
+        return False
 
     def old_gen_dict(self, result):
         result_set = []
