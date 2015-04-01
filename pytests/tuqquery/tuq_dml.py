@@ -425,7 +425,7 @@ class DMLQueryTests(QueryTests):
             self.query = 'update %s use keys %s set vm.os="%s" for vm in VMs when vm.os="ubuntu" END returning VMs'  % (bucket.name, keys_to_update, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.query = 'select name from %s keys %s' % (bucket.name, keys_to_update)
+            self.query = 'select name from %s use keys %s' % (bucket.name, keys_to_update)
             actual_result = self.run_cbq_query()
             self.assertTrue([row for row in actual_result['results']
                              if len([vm['os'] for vm in row['VMs']

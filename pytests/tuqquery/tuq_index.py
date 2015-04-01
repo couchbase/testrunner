@@ -136,7 +136,7 @@ class QueriesViewsTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_meta"
             try:
-                self.query = "CREATE INDEX %s ON %s(meta(type)) " % (index_name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(meta(%s).type) " % (index_name, bucket.name, bucket.name)
                 self.run_cbq_query()
                 self.query = 'EXPLAIN SELECT name FROM %s WHERE meta(%s).type = "json"' % (bucket.name, bucket.name)
                 res = self.run_cbq_query()
@@ -460,7 +460,7 @@ class QueriesViewsTests(QueryTests):
 
     def test_run_query(self):
         indexes = []
-        index_name_prefix = "my_index_%" + str(uuid.uuid4())[:4]
+        index_name_prefix = "my_index_" + str(uuid.uuid4())[:4]
         method_name = self.input.param('to_run', 'test_any')
         index_fields = self.input.param("index_field", '').split(';')
         for bucket in self.buckets:

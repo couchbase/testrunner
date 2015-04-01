@@ -35,6 +35,7 @@ class Base64Tests(QueryTests):
                 actual_result = self.run_cbq_query()
                 actual_result = [doc["$1"] for doc in actual_result['results']]
                 expected_result = self._generate_full_docs_list(self.gens_load)
+                expected_result = [base64.b64encode(doc) for doc in expected_result]
                 self._verify_results(actual_result, expected_result)
             except Exception, ex:
                 self.query = "SELECT %s FROM %s" % (bucket.name, bucket.name)
