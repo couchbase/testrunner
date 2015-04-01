@@ -2,7 +2,7 @@ import uuid
 import copy
 from tuqquery.tuq import QueryTests
 from couchbase_helper.documentgenerator import DocumentGenerator
-
+import time
 
 JOIN_INNER = "INNER"
 JOIN_LEFT = "LEFT"
@@ -33,6 +33,7 @@ class JoinTests(QueryTests):
             self.query = "SELECT employee.name, employee.tasks_ids, new_project " +\
             "FROM %s as employee %s JOIN default.project as new_project " % (bucket.name, self.type_join) +\
             "ON KEYS employee.tasks_ids"
+            time.sleep(30)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             full_list = self._generate_full_joined_docs_list(join_type=self.type_join)
