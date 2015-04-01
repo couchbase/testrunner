@@ -61,6 +61,7 @@ LINUX_CAPI_INI = '/opt/couchbase/etc/couchdb/default.d/capi.ini'
 LINUX_CONFIG_FILE = '/opt/couchbase/var/lib/couchbase/config/config.dat'
 LINUX_MOXI_PATH = '/opt/moxi/bin/'
 LINUX_CW_LOG_PATH = "/opt/couchbase/var/lib/couchbase/tmp/"
+LINUX_DISTRIBUTION_NAME = ["ubuntu", "centos", "red hat", "opensuse"]
 MAC_CW_LOG_PATH = "/Applications/Couchbase\ Server.app/Contents/Resources/couchbase-core/var/lib/couchbase/tmp"
 WINDOWS_CW_LOG_PATH = "c:/Program Files/Couchbase/Server/var/lib/couchbase/tmp/"
 CLI_COMMANDS = ["cbbackup", "cbbrowse_logs", "cbcollect_info", "cbcompact", "cbdump-config", "cbenable_core_dumps.sh", \
