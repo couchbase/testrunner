@@ -1978,40 +1978,74 @@ class CouchbaseCluster:
         """
         active_key_count_passed = True
         replica_key_count_passed = True
+        curr_time = time.time()
+        end_time = curr_time + timeout
 
         # Check active, curr key count
-        stats_tasks = []
-        for bucket in self.__buckets:
-            items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
-            for stat in ['curr_items', 'vb_active_curr_items']:
-                stats_tasks.append(self.__clusterop.async_wait_for_stats(
-                    self.__nodes, bucket, '',
-                    stat, '==', items))
-        try:
-            for task in stats_tasks:
-                task.result(timeout)
-        except TimeoutError:
-            self.__log.error(
-                "ERROR: Timed-out waiting for active item count to match")
-            active_key_count_passed = False
+        rest = RestConnection(self.__master_node)
+        buckets = copy.copy(self.get_buckets())
 
-        # Check replica key count
-        stats_tasks = []
-        for bucket in self.__buckets:
+        for bucket in buckets:
+            active_keys = 0
             items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
-            if bucket.numReplicas >= 1 and len(self.__nodes) > 1:
-                stats_tasks.append(self.__clusterop.async_wait_for_stats(
-                    self.__nodes, bucket, '',
-                    'vb_replica_curr_items', '==', items * bucket.numReplicas))
-        try:
-            for task in stats_tasks:
-                task.result(timeout)
-        except TimeoutError:
-            self.run_cbvdiff()
-            self.__log.error(
-                "ERROR: Timed-out waiting for replica item count to match")
-            replica_key_count_passed = False
-        return active_key_count_passed,replica_key_count_passed
+            items = items * bucket.numReplicas
+            while True:
+                try:
+                    active_keys = int(rest.get_active_key_count(bucket.name))
+                    if active_keys != items:
+                        self.__log.warn("Not Ready: vb_active_curr_items %s == "
+                                "%s expected on %s, %s bucket"
+                                 % (active_keys, items, self.__name, bucket.name))
+                        time.sleep(3)
+                        if time.time() > end_time:
+                            self.__log.error(
+                            "ERROR: Timed-out waiting for active item count to match")
+                            active_key_count_passed = False
+                            buckets = []
+                            break
+                        continue
+                    else:
+                        self.__log.info("Saw: vb_active_curr_items %s == "
+                                "%s expected on %s, %s bucket"
+                                % (active_keys, items, self.__name, bucket.name))
+                        buckets.remove(bucket)
+                        break
+                except Exception as e:
+                    self.__log.error(e)
+
+        # check replica count
+        curr_time = time.time()
+        end_time = curr_time + timeout
+        buckets = copy.copy(self.get_buckets())
+
+        for bucket in buckets:
+            replica_keys = 0
+            items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+            while True:
+                try:
+                    replica_keys = int(rest.get_replica_key_count(bucket.name))
+                    if replica_keys != items:
+                        self.__log.warn("Not Ready: vb_replica_curr_items %s == "
+                                "%s expected on %s, %s bucket"
+                                 % (replica_keys, items ,self.__name, bucket.name))
+                        time.sleep(3)
+                        if time.time() > end_time:
+                            self.__log.error(
+                            "ERROR: Timed-out waiting for replica item count to match")
+                            replica_key_count_passed = False
+                            buckets = []
+                            self.run_cbvdiff()
+                            break
+                        continue
+                    else:
+                        self.__log.info("Saw: vb_replica_curr_items %s == "
+                                "%s expected on %s, %s bucket"
+                                % (replica_keys, items, self.__name, bucket.name))
+                        buckets.remove(bucket)
+                        break
+                except Exception as e:
+                    self.__log.error(e)
+        return active_key_count_passed, replica_key_count_passed
 
     def run_cbvdiff(self):
         """ Run cbvdiff, a tool that compares active and replica vbucket keys
