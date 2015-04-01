@@ -9,6 +9,7 @@ from memcached.helper.old_kvstore import ClientKeyValueStore
 from couchbase.bucket import Bucket as CouchbaseBucket
 from couchbase.exceptions import CouchbaseError,BucketNotFoundError
 from mc_bin_client import MemcachedError
+from couchbase.n1ql import N1QLQuery, N1QLRequest
 
 class SDKClient(object):
     """Python SDK Client Implementation for testrunner - master branch Implementation"""
@@ -272,6 +273,18 @@ class SDKClient(object):
         except CouchbaseError as e:
             raise
 
+    def n1ql_query(self, statement, prepared=False):
+        try:
+            return N1QLQuery(statement, prepared)
+        except CouchbaseError as e:
+            raise
+
+    def n1ql_request(self, query):
+        try:
+            return N1QLRequest(query, self.cb)
+        except CouchbaseError as e:
+            raise
+
     def __translate_get_multi(self, data):
         map = {}
         if data == None:
@@ -307,6 +320,8 @@ class SDKClient(object):
 
     def __translate_upsert_op(self, data):
         return data.rc, data.success, data.errstr, data.key
+
+
 
 class SDKSmartClient(object):
       def __init__(self, rest, bucket, info = None):

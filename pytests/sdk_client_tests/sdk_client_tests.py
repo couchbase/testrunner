@@ -62,4 +62,9 @@ class SDKClientTests(BaseTestCase):
         self.log.info(data)
         stats = client.stats(["key1"])
         self.log.info(stats)
+        client.n1ql_request(client.n1ql_query('create primary index on default')).execute()
+        query = client.n1ql_query('select * from default')
+        request = client.n1ql_request(query)
+        obj = request.get_single_result()._jsobj
+        self.log.info(obj)
         client.close()
