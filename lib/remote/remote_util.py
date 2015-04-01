@@ -1473,7 +1473,7 @@ class RemoteMachineShellConnection:
             type = info.distribution_type.lower()
             if type == "windows":
                 self.execute_command("taskkill /F /T /IM {0}".format(process))
-            elif type in ["ubuntu", "centos", "red hat"]:
+            elif type in ["ubuntu", "centos", "red hat", "opensuse"]:
                 self.terminate_process(info, process)
 
     def remove_folders(self, list):
