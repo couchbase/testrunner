@@ -79,6 +79,7 @@ def installer_factory(params):
     mb_alias = ["membase", "membase-server", "mbs", "mb"]
     cb_alias = ["couchbase", "couchbase-server", "cb"]
     sdk_alias = ["python-sdk", "pysdk"]
+    es_alias = ["elasticsearch"]
     css_alias = ["couchbase-single", "couchbase-single-server", "css"]
     mongo_alias = ["mongo"]
     moxi_alias = ["moxi", "moxi-server"]
@@ -93,6 +94,8 @@ def installer_factory(params):
         return MoxiInstaller()
     elif params["product"] in sdk_alias:
         return SDKInstaller()
+    elif params["product"] in es_alias:
+        return ESInstaller()
 
     sys.exit("ERROR: don't know about product " + params["product"])
 
@@ -693,6 +696,28 @@ class SDKInstaller(Installer):
 
         remote_client.disconnect()
         return True
+
+class ESInstaller(Installer):
+    def __init__(self):
+       self.remote_client = None
+       pass
+
+    def initialize(self, params):
+        self.remote_client.execute_command("~/elasticsearch/bin/elasticsearch start > /var/log/es-{0}.log 2>&1 &".format(datetime.today().ctime().replace(" ","-")))
+
+    def install(self, params):
+        self.remote_client = RemoteMachineShellConnection(params["server"])
+        self.remote_client.execute_command("pkill -f elasticsearch")
+        self.remote_client.execute_command("rm -rf ~/elasticsearch")
+        download_url = "https://download.elasticsearch.org/elasticsearch/elasticsearch/elasticsearch-{0}.tar.gz".format(params["version"])
+        self.remote_client.execute_command("wget {0}".format(download_url))
+        self.remote_client.execute_command("tar xvzf elasticsearch-{0}.tar.gz; mv elasticsearch-{0} elasticsearch".format(params["version"]))
+        self.remote_client.execute_command("~/elasticsearch/bin/plugin -install transport-couchbase -url {0}".format(params["plugin-url"]))
+        return True
+
+    def __exit__(self):
+        self.remote_client.disconnect()
+
 
 class InstallerJob(object):
     def sequential_install(self, servers, params):
