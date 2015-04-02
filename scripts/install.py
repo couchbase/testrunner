@@ -77,6 +77,7 @@ def installer_factory(params):
 
     mb_alias = ["membase", "membase-server", "mbs", "mb"]
     cb_alias = ["couchbase", "couchbase-server", "cb"]
+    sdk_alias = ["python-sdk", "pysdk"]
     css_alias = ["couchbase-single", "couchbase-single-server", "css"]
     mongo_alias = ["mongo"]
     moxi_alias = ["moxi", "moxi-server"]
@@ -89,6 +90,8 @@ def installer_factory(params):
         return MongoInstaller()
     elif params["product"] in moxi_alias:
         return MoxiInstaller()
+    elif params["product"] in sdk_alias:
+        return SDKInstaller()
 
     sys.exit("ERROR: don't know about product " + params["product"])
 
@@ -626,6 +629,70 @@ class MoxiInstaller(Installer):
         if queue:
             queue.put(success)
         return success
+
+class SDKInstaller(Installer):
+    def __init__(self):
+        pass
+
+    def initialize(self, params):
+        log.info('There is no initialize phase for sdk installation')
+
+    def install(self, params):
+        remote_client = RemoteMachineShellConnection(params["server"])
+        info = remote_client.extract_remote_info()
+        os = info.type.lower()
+        type = info.deliverable_type.lower()
+        version = info.distribution_version.lower()
+        sdk_url = "git+git://github.com/couchbase/couchbase-python-client.git@2.0.0-beta2"
+        if os == "linux":
+            if type == "rpm":
+                repo_file = "/etc/yum.repos.d/couchbase.repo"
+                baseurl = ""
+                if (version.find("centos") != -1 and version.find("6.2") != -1):
+                    baseurl = "http://packages.couchbase.com/rpm/6.2/x86-64"
+                elif (version.find("centos") != -1 and version.find("7") != -1):
+                    baseurl = "http://packages.couchbase.com/rpm/7/x86_64"
+                else:
+                    log.info("os version {0} not supported".format(version))
+                    exit(1)
+                remote_client.execute_command("rm -rf {0}".format(repo_file))
+                remote_client.execute_command("touch {0}".format(repo_file))
+                remote_client.execute_command("echo [couchbase] >> {0}".format(repo_file))
+                remote_client.execute_command("echo enabled=1 >> {0}".format(repo_file))
+                remote_client.execute_command("echo name = Couchbase package repository >> {0}".format(repo_file))
+                remote_client.execute_command("baseurl = {0} >> {1}".format(baseurl, repo_file))
+                remote_client.execute_command("yum -y install libcouchbase2-libevent libcouchbase-devel libcouchbase2-bin")
+                remote_client.execute_command("yum -y install pip")
+                remote_client.execute_command("pip uninstall couchbase")
+                remote_client.execute_command("pip install {0}".format(sdk_url))
+            elif type == "deb":
+                repo_file = "/etc/sources.list.d/couchbase.list"
+                entry = ""
+                if (version.find("ubuntu") != -1 and version.find("12.04") != -1):
+                    entry = "http://packages.couchbase.com/ubuntu precise precise/main"
+                elif (version.find("ubuntu") != -1 and version.find("14.04") != -1):
+                    entry = "http://packages.couchbase.com/ubuntu trusty trusty/main"
+                elif (version.find("debian") != -1 and version.find("7") != -1):
+                    entry = "http://packages.couchbase.com/ubuntu wheezy wheezy/main"
+                else:
+                    log.info("os version {0} not supported".format(version))
+                    exit(1)
+                remote_client.execute_command("rm -rf {0}".format(repo_file))
+                remote_client.execute_command("touch {0}".format(repo_file))
+                remote_client.execute_command("deb {0} >> {1}".format(entry, repo_file))
+                remote_client.execute_command("apt-get -y install libcouchbase2-libevent libcouchbase-devel libcouchbase2-bin")
+                remote_client.execute_command("apt-get -y install pip")
+                remote_client.execute_command("pip uninstall couchbase")
+                remote_client.execute_command("pip install {0}".format(sdk_url))
+        if os == "mac":
+            remote_client.execute_command("brew install libcouchbase; brew link libcouchbase")
+            remote_client.execute_command("brew install pip; brew link pip")
+            remote_client.execute_command("pip install {0}".format(sdk_url))
+        if os == "windows":
+            log.info('Currently not supported')
+
+        remote_client.disconnect()
+        return True
 
 class InstallerJob(object):
     def sequential_install(self, servers, params):
