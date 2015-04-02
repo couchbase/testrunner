@@ -1301,7 +1301,7 @@ class VerifyRevIdTask(GenericLoadingTask):
         self.max_err_count = max_err_count
         self.src_server = src_server
         self.bucket = bucket
-        self.log.info("RevID verification: in progress for % ..." % bucket.name)
+        self.log.info("RevID verification: in progress for %s ..." % bucket.name)
 
     def has_next(self):
         if self.itr < (self.num_valid_keys + self.num_deleted_keys) and self.err_count < self.max_err_count:

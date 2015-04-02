@@ -947,7 +947,6 @@ class CouchbaseCluster:
             [],
             use_hostnames=self.__use_hostname).result()
 
-        """
         if master.is_enterprise_edition() and is_master_sherlock_or_greater:
             # enable audit by default in all goxdcr tests
             audit_obj = audit(host=self.__master_node)
@@ -957,7 +956,6 @@ class CouchbaseCluster:
             if not status:
                 self.__log.info("Enabling audit ...")
                 audit_obj.setAuditEnable('true')
-        """
 
     def set_global_checkpt_interval(self, value):
         RestConnection(self.__master_node).set_internalSetting(
@@ -2740,7 +2738,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.log.info("Verifying RevIds for {0} -> {1}, bucket {2}".format(
                 repl.get_src_cluster(),
                 repl.get_dest_cluster(),
-                repl.get_src_bucket))
+                repl.get_src_bucket().name))
             task_info = self.__cluster_op.async_verify_revid(
                 repl.get_src_cluster().get_master_node(),
                 repl.get_dest_cluster().get_master_node(),

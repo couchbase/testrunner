@@ -1479,6 +1479,16 @@ class RestConnection(object):
         bucket_stats = self.fetch_bucket_stats(bucket)
         return bucket_stats['op']['samples']['ep_dcp_xdcr_items_remaining'][-1]
 
+    def get_active_key_count(self, bucket):
+        """Fetch bucket stats and return the bucket's curr_items count"""
+        bucket_stats = self.fetch_bucket_stats(bucket)
+        return bucket_stats['op']['samples']['curr_items'][-1]
+
+    def get_replica_key_count(self, bucket):
+        """Fetch bucket stats and return the bucket's replica count"""
+        bucket_stats = self.fetch_bucket_stats(bucket)
+        return bucket_stats['op']['samples']['vb_replica_curr_items'][-1]
+
     def get_nodes(self):
         nodes = []
         api = self.baseUrl + 'pools/default'
