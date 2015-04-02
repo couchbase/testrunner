@@ -1986,9 +1986,7 @@ class CouchbaseCluster:
         buckets = copy.copy(self.get_buckets())
 
         for bucket in buckets:
-            active_keys = 0
             items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
-            items = items * bucket.numReplicas
             while True:
                 try:
                     active_keys = int(rest.get_active_key_count(bucket.name))
@@ -1996,19 +1994,17 @@ class CouchbaseCluster:
                         self.__log.warn("Not Ready: vb_active_curr_items %s == "
                                 "%s expected on %s, %s bucket"
                                  % (active_keys, items, self.__name, bucket.name))
-                        time.sleep(3)
+                        time.sleep(5)
                         if time.time() > end_time:
                             self.__log.error(
                             "ERROR: Timed-out waiting for active item count to match")
                             active_key_count_passed = False
-                            buckets = []
                             break
                         continue
                     else:
                         self.__log.info("Saw: vb_active_curr_items %s == "
                                 "%s expected on %s, %s bucket"
                                 % (active_keys, items, self.__name, bucket.name))
-                        buckets.remove(bucket)
                         break
                 except Exception as e:
                     self.__log.error(e)
@@ -2019,8 +2015,8 @@ class CouchbaseCluster:
         buckets = copy.copy(self.get_buckets())
 
         for bucket in buckets:
-            replica_keys = 0
             items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+            items = items * bucket.numReplicas
             while True:
                 try:
                     replica_keys = int(rest.get_replica_key_count(bucket.name))
@@ -2033,7 +2029,6 @@ class CouchbaseCluster:
                             self.__log.error(
                             "ERROR: Timed-out waiting for replica item count to match")
                             replica_key_count_passed = False
-                            buckets = []
                             self.run_cbvdiff()
                             break
                         continue
@@ -2041,7 +2036,6 @@ class CouchbaseCluster:
                         self.__log.info("Saw: vb_replica_curr_items %s == "
                                 "%s expected on %s, %s bucket"
                                 % (replica_keys, items, self.__name, bucket.name))
-                        buckets.remove(bucket)
                         break
                 except Exception as e:
                     self.__log.error(e)
@@ -2738,6 +2732,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         @param xdcr_replications: list of XDCRReplication objects.
         @param kv_store: Index of bucket kv_store to compare.
         """
+        if self._dgm_run:
+            timeout = 5400
         error_count = 0
         tasks = []
         for repl in xdcr_replications:

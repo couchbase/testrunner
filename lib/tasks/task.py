@@ -1223,11 +1223,13 @@ class BatchedValidateDataTask(GenericLoadingTask):
             key_vals = self.client.getMulti(keys, parallel=True, timeout_sec=self.timeout_sec)
         except ValueError, error:
             self.state = FINISHED
+            self.kv_store.release_partitions(partition_keys_dic.keys())
             self.set_exception(error)
             return
         except BaseException, error:
         # handle all other exception, for instance concurrent.futures._base.TimeoutError
             self.state = FINISHED
+            self.kv_store.release_partitions(partition_keys_dic.keys())
             self.set_exception(error)
             return
         for partition, keys in partition_keys_dic.items():
@@ -1272,10 +1274,12 @@ class BatchedValidateDataTask(GenericLoadingTask):
                 pass
             else:
                 self.state = FINISHED
+                self.kv_store.release_partitions(key)
                 self.set_exception(error)
         except Exception as error:
             if error.rc != NotFoundError:
                 self.state = FINISHED
+                self.kv_store.release_partitions(key)
                 self.set_exception(error)
         self.kv_store.release_partition(key)
 
@@ -1297,6 +1301,7 @@ class VerifyRevIdTask(GenericLoadingTask):
         self.max_err_count = max_err_count
         self.src_server = src_server
         self.bucket = bucket
+        self.log.info("RevID verification: in progress for % ..." % bucket.name)
 
     def has_next(self):
         if self.itr < (self.num_valid_keys + self.num_deleted_keys) and self.err_count < self.max_err_count:
