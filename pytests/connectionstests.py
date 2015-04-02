@@ -87,6 +87,7 @@ class ConnectionTests(BaseTestCase):
             for connection in connections:
                 connection.join()
 
+    """ this test need to install autoconf and automake on master vm """
     def multiple_connections_using_memcachetest (self):
         mcsoda_items = self.input.param('mcsoda_items', 1000000)
         memcachetest_items = self.input.param('memcachetest_items', 100000)
@@ -95,7 +96,8 @@ class ConnectionTests(BaseTestCase):
         self._stop_mcsoda_localy(moxi_port)
         try:
             self._run_moxi(self.master, moxi_port, self.master.ip, "default")
-            self._run_mcsoda_localy(self.master.ip, moxi_port, "default", mcsoda_items=mcsoda_items)
+            self._run_mcsoda_localy(self.master.ip, moxi_port, "default",
+                                                    mcsoda_items=mcsoda_items)
             self.sleep(30)
             sd = MemcachetestRunner(self.master, num_items=memcachetest_items, \
                                      extra_params="-W 16 -t 16 -c 0 -M 2")  # MB-8083

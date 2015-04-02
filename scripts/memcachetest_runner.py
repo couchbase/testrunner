@@ -37,7 +37,7 @@ import os
     -C Read vbucket data from host:port specified"""
 
 class MemcachetestRunner():
-    def __init__(self, server, path="/tmp/", memcached_ip="localhost", memcached_port="11211", num_items=100000, extra_params=""):
+    def __init__(self, server, path="/tmp", memcached_ip="localhost", memcached_port="11211", num_items=100000, extra_params=""):
         self.server = server
         self.shell = RemoteMachineShellConnection(self.server)
         self.path = path
@@ -54,7 +54,7 @@ class MemcachetestRunner():
             # try to get from git and install
             output, error = self.shell.execute_command_raw("cd {0}; git clone git://github.com/membase/memcachetest.git".format(self.path))
             self.shell.log_command_output(output, error)
-            if "git: command not found" in output[0]:
+            if output and "git: command not found" in output[0]:
                 self.fail("Git should be installed on hosts!")
             output, error = self.shell.execute_command_raw("cd {0}/memcachetest; ./config/autorun.sh && ./configure && make install".format(self.path))
             self.shell.log_command_output(output, error)
@@ -73,7 +73,7 @@ class MemcachetestRunner():
         return self.shell.log_command_output(output, error, track_words=("downstream timeout",))
 
     def stop_memcachetest(self):
-        cmd = "killall memcachetest"
+        cmd = "killall -9 memcachetest"
         output, error = self.shell.execute_command(cmd)
         self.shell.log_command_output(output, error)
         self.log.info("memcachetest was stopped on {0}".format(self.server.ip))
