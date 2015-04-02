@@ -263,7 +263,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_couchbase_bucket_flush(self):
         self._run_initial_index_tasks()
-        kvops_tasks = self._run_kvops_tasks()
+        kvOps_tasks = self._run_kvops_tasks()
         before_index_ops = self._run_before_index_tasks()
         #Flush the bucket
         for bucket in self.buckets:
