@@ -144,7 +144,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                     break
             if not FIND_MASTER:
                 raise Exception("After rebalance in {0} Nodes, one of them doesn't become the master".format(added_versions[0]))
-        self.log.info("Rebalanced out all old version nodes")
+        self.log.info("Rebalancing out all old version nodes")
         self.cluster.rebalance(update_servers + extra_servers, [], update_servers)
 
     def offline_cluster_upgrade(self):
@@ -328,7 +328,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             gen_create4 = BlobGenerator(itemPrefix, itemPrefix, self._value_size, end=self.num_items)
             self._load_bucket(bucket, self.src_master, gen_create4, 'create', exp=0)
             self.sleep(60)
-        self.src_cluster.merge_all_buckets()
+        self.merge_all_buckets()
         self.verify_results()
         self.sleep(self.wait_timeout * 5, "Let clusters work for some time")
 
