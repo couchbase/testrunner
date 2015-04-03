@@ -136,6 +136,7 @@ class Cluster(object):
             services - can be kv, n1ql, index
         Returns:
             NodeInitTask - A task future that is a handle to the scheduled task."""
+
         _task = NodeInitializeTask(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
                           rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers,
                           port, quota_percent, services = services, index_quota_percent = index_quota_percent)

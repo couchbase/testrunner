@@ -73,6 +73,7 @@ class RestHelper(object):
             time.sleep(2)
         if progress <= 0:
             log.error("rebalance progress code : {0}".format(progress))
+
             return False
         elif retry >= 40:
             log.error("rebalance stuck on {0}%".format(progress))
@@ -1645,6 +1646,7 @@ class RestConnection(object):
                       threadsNumber=3,
                       flushEnabled=1,
                       evictionPolicy='valueOnly'):
+
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.urlencode({})
 

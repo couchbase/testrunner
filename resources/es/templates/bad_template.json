@@ -1,0 +1,118 @@
+{
+    "template" : "cb*",
+        "order" : 10,
+        "mappings" : {
+            "couchbaseCheckpoint" : {
+                "_source" : {
+                    "includes" : ["doc.*"]
+                },
+
+                "dynamic_templates": [
+                {
+                    "store_no_index": {
+                        "match": "*",
+                        "mapping": {
+                            "store" : "no",
+                            "index" : "no",
+                            "include_in_all" : false
+                        }
+                    }
+                }
+                ]
+            },
+
+            "couchbaseDocument" : {
+                "_source" : {
+                    "includes" : [ "meta.*", "doc.*" ]
+                },
+                "properties" : {
+                    "doc" : {
+                        "properties" : {
+                            "age" : {
+                                "type" : "long"
+                            },
+                            "update_date" : {
+                                "type" : "date",
+                                "format" : "dateOptionalTime"
+                            },
+                            "location" : {
+                                "type" : "geo_point",
+                                "lat_lon" : true
+                            },
+                            "name" : {
+                                "type" : "string"
+                            }
+                        }
+                    },
+
+                    "meta" : {
+                        "include_in_all" : false,
+                        "properties" : {
+                            "expiration" : {
+                                "type" : "long",
+                                "include_in_all" : false
+                            },
+                            "flags" : {
+                                "type" : "long",
+                                "include_in_all" : false
+                            },
+                            "id" : {
+                                "type" : "string",
+                                "include_in_all" : false
+                            },
+                            "rev" : {
+                                "type" : "string",
+                                "include_in_all" : false
+                            }
+                        }
+                    }
+                }
+            },
+            "_default_" : {
+                "_source" : {
+                    "includes" : [ "meta.*", "doc.*" ]
+                },
+                "properties" : {
+                    "doc" : {
+                        "properties" : {
+                            "age" : {
+                                "type" : "long"
+                            },
+                            "update_date" : {
+                                "type" : "date",
+                                "format" : "dateOptionalTime"
+                            },
+                            "location" : {
+                                "type" : "geo_point",
+                                "lat_lon" : true
+                            },
+                            "name" : {
+                                "type" : "string"
+                            }
+                        }
+                    },
+                    "meta" : {
+                        "include_in_all" : false,
+                        "properties" : {
+                            "expiration" : {
+                                "type" : "long",
+                                "include_in_all" : false
+                            },
+                            "flags" : {
+                                "type" : "long",
+                                "include_in_all" : false
+                            },
+                            "id" : {
+                                "type" : "string",
+                                "include_in_all" : false
+                            },
+                            "rev" : {
+                                "type" : "string",
+                                "include_in_all" : false
+                            }
+                        }
+                    }
+                }
+            }
+        }
+}

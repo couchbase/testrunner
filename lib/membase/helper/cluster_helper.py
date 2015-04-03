@@ -251,6 +251,11 @@ class ClusterOperationHelper(object):
         helper.is_ns_server_running(timeout_in_seconds=testconstants.NS_SERVER_TIMEOUT)
         nodes = rest.node_statuses()
         master_id = rest.get_nodes_self().id
+        for node in nodes:
+            if int(node.port) in xrange(9091, 9991):
+                rest.eject_node(node)
+                nodes.remove(node)
+
         if len(nodes) > 1:
             log.info("rebalancing all nodes in order to remove nodes")
             rest.log_client_error("Starting rebalance from test, ejected nodes %s" % \
