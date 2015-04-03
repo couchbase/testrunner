@@ -21,6 +21,8 @@ from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
+from testconstants import SHERLOCK_VERSION
+
 
 class NewUpgradeBaseTest(BaseTestCase):
     def setUp(self):
@@ -466,7 +468,8 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def monitor_dcp_rebalance(self):
         if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
-           self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3:
+           (self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3 or \
+            self.input.param('upgrade_version', '')[:5] in SHERLOCK_VERSION):
             if int(self.initial_vbuckets) >= 256:
                 if self.master.ip != self.rest.ip or \
                    self.master.ip == self.rest.ip and \
@@ -497,7 +500,8 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def dcp_rebalance_in_offline_upgrade_from_version2_to_version3(self):
         if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
-           self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3:
+           (self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3 or \
+            self.input.param('upgrade_version', '')[:5] in SHERLOCK_VERSION):
             otpNodes = []
             nodes = self.rest.node_statuses()
             for node in nodes:
