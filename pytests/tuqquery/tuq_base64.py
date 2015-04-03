@@ -3,7 +3,7 @@ import base64
 import testconstants
 from tuqquery.tuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
-from couchbase_helper.documentgenerator import Base64Generator
+from couchbase_helper.documentgenerator import JSONNonDocGenerator
 from membase.api.exception import CBQError
 
 class Base64Tests(QueryTests):
@@ -70,8 +70,8 @@ class Base64Tests(QueryTests):
     def generate_docs(self, name="tuq", start=0, end=0):
         if end==0:
             end = self.num_items
-        values = ['Engineer', 'Sales', 'Support']
-        generators = [Base64Generator(name, values, start=start,end=end)]
+        values = ["Engineer", "Sales", "Support"]
+        generators = [JSONNonDocGenerator(name, values, start=start,end=end)]
         return generators
 
     def _generate_full_docs_list(self, gens_load):
@@ -87,7 +87,6 @@ class Base64Tests(QueryTests):
         self.assertEquals(len(actual_result), len(expected_result),
                           "Results are incorrect.Actual num %s. Expected num: %s.\n" % (
                                             len(actual_result), len(expected_result)))
-        actual_result = [base64.decodestring(doc) for doc in actual_result]
         msg = "Results are incorrect.\n Actual first and last 100:  %s.\n ... \n %s" +\
         "Expected first and last 100: %s.\n  ... \n %s"
         self.assertTrue(sorted(actual_result) == sorted(expected_result),

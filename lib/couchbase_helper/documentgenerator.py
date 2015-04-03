@@ -141,7 +141,7 @@ class JSONNonDocGenerator(KVGenerator):
         index = self.itr
         while index > len(self.values):
             index = index - len(self.values)
-        value = self.values[index-1]
+        value = json.dumps(self.values[index-1])
         self.itr += 1
         return key, value
 

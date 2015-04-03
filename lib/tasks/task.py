@@ -601,7 +601,8 @@ class GenericLoadingTask(Thread, Task):
     def _unlocked_create(self, partition, key, value, is_base64_value=False):
         try:
             value_json = json.loads(value)
-            value_json['mutated'] = 0
+            if isinstance(value_json, dict):
+                value_json['mutated'] = 0
             value = json.dumps(value_json)
         except ValueError:
             index = random.choice(range(len(value)))

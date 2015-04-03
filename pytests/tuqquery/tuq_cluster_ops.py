@@ -218,6 +218,7 @@ class QueriesOpsTests(QueryTests):
             except:
                 pass
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+            self.sleep(5)
             self.test_union_all()
         finally:
             self._delete_multiple_indexes(indexes)
