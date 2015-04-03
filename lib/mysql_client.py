@@ -83,6 +83,16 @@ class MySQLClient(object):
             map[table_name] = self._get_table_info(table_name)
         return map
 
+    def _get_field_list_map_for_tables(self):
+        target_map = {}
+        map = self._get_tables_information()
+        for table_name in map.keys():
+            field_list = []
+            for field_info in map[table_name]:
+                field_list.append(field_info['Field'])
+            target_map[table_name] = field_list
+        return target_map
+
     def _get_primary_key_map_for_tables(self):
         target_map = {}
         map = self._get_tables_information()
