@@ -10,11 +10,13 @@ import json
    implementations of similar methods"""
 
 class ESReplicationBaseTest(object):
-
     xd_ref = None
-
     def setup_es_params(self, xd_ref):
-
+        self.config_updates_count = 0
+        self.default_type = 'cbdoc'
+        self.default_child_type = 'childcbdoc'
+        self.delimiter = '_'
+        self.regex = '.*'
         self.xd_ref = xd_ref
         self._es_in = xd_ref._input.param("es_in", False)
         self._cb_in = xd_ref._input.param("cb_in", False)
@@ -26,27 +28,13 @@ class ESReplicationBaseTest(object):
         self._log = logger.Logger.get_logger()
 
 
-    def verify_es_results(self, verification_count=10000):
-
+    def verify_es_results(self, verification_count=0, doc_type=None):
         xd_ref = self.xd_ref
-        rest = RestConnection(self.src_nodes[0])
-
         # Checking replication at destination clusters
-        dest_key_index = 1
-        for key in xd_ref.ord_keys[1:]:
-            if dest_key_index == xd_ref.ord_keys_len:
-                break
-            dest_key = xd_ref.ord_keys[dest_key_index]
-            dest_nodes = xd_ref._clusters_dic[dest_key]
-
-            src_nodes = rest.get_nodes()
-            self.verify_es_stats(src_nodes,
-                                 dest_nodes,
-                                 verification_count)
-            dest_key_index += 1
+        self.verify_es_stats(self.xd_ref.src_nodes,self.xd_ref.dest_nodes, verification_count, doc_type)
 
 
-    def verify_es_stats(self, src_nodes, dest_nodes, verification_count=10000):
+    def verify_es_stats(self, src_nodes, dest_nodes, verification_count=0, doc_type=None):
         xd_ref = self.xd_ref
 
         src_master = self.xd_ref.src_master
@@ -58,40 +46,42 @@ class ESReplicationBaseTest(object):
         xd_ref._expiry_pager(src_master)
         self.sleep(30)
 
-        xd_ref._verify_item_count(src_master, src_nodes)
 
         self._log.info("Verifing couchbase to elasticsearch replication")
-        self.verify_es_num_docs(src_master, dest_master, verification_count=verification_count)
 
-        if xd_ref._doc_ops is not None:
+        self.verify_es_num_docs(src_master, dest_master,1, 10, verification_count, doc_type)
+
+        #if xd_ref._doc_ops is not None:
             # initial data has been modified
             # check revids
-            self._verify_es_revIds(src_master, dest_master, verification_count=verification_count)
+            #self._verify_es_revIds(src_master, dest_master, verification_count=verification_count)
 
-            if "create" in xd_ref._doc_ops:
+        #    if "create" in xd_ref._doc_ops:
                 # initial data values have has been modified
-                self._verify_es_values(src_master, dest_master,
-                                       verification_count=verification_count)
+        #        self._verify_es_values(src_master, dest_master,
+        #                               verification_count=verification_count)
 
 
 
-    def verify_es_num_docs(self, src_server, dest_server, kv_store=1, retry=10, verification_count=10000):
-        cb_rest = RestConnection(src_server)
+    def verify_es_num_docs(self, src_server, dest_server, kv_store=1, retry=10, verification_count=0, doc_type=None):
         es_rest = RestConnection(dest_server)
+        cb_rest = RestConnection(src_server)
         buckets = self.xd_ref._get_cluster_buckets(src_server)
+
         wait = 20
+
         for bucket in buckets:
-            all_cb_docs = cb_rest.all_docs(bucket.name)
-            cb_valid = [str(row['id']) for row in all_cb_docs['rows']]
-            cb_num_items = cb_rest.get_bucket_stats(bucket.name)['curr_items']
-            es_num_items = es_rest.get_bucket(bucket.name).stats.itemCount
+            es_num_items = es_rest.get_bucket(bucket.name, doc_type).stats.itemCount
+            cb_num_items = verification_count
+            self._log.info("STATUS: elastic search item count {0} verification count {1}".format(es_num_items, cb_num_items))
+
             _retry = retry
-            while _retry > 0 and cb_num_items != es_num_items:
+            while _retry > 0 and cb_num_items < es_num_items and cb_num_items != 0:
                 self._log.info("elasticsearch items %s, expected: %s....retry after %s seconds" % \
                                      (es_num_items, cb_num_items, wait))
                 time.sleep(wait)
                 last_es_items = es_num_items
-                es_num_items = es_rest.get_bucket(bucket.name).stats.itemCount
+                es_num_items = es_rest.get_bucket(bucket.name, doc_type).stats.itemCount
                 if es_num_items == last_es_items:
                     _retry = _retry - 1
                     # if index doesn't change reduce retry count
@@ -100,31 +90,17 @@ class ESReplicationBaseTest(object):
                     _retry = retry
                 elif es_num_items >= last_es_items:
                     self._log.info("%s items added to index" % (es_num_items - last_es_items))
-                    _retry = retry
+                    _retry = -1
 
+
+            #if es_num_items != cb_num_items:
+            #    self.xd_ref.fail("Error: Couchbase has %s docs, ElasticSearch has %s docs " % \
+                               # (cb_num_items, es_num_items))
 
 
             if es_num_items != cb_num_items:
-                self.xd_ref.fail("Error: Couchbase has %s docs, ElasticSearch has %s docs " % \
-                                (cb_num_items, es_num_items))
-
-            # query for all es keys
-            es_valid = es_rest.all_docs(keys_only=True, indices=[bucket.name], size=cb_num_items)
-
-            if len(es_valid) != cb_num_items:
-                self._log.info("WARNING: Couchbase has %s docs, ElasticSearch all_docs returned %s docs " % \
-                                     (cb_num_items, len(es_valid)))
-            for _id in cb_valid[:verification_count]:  # match at most 10k keys
-                id_found = _id in es_valid
-
-                if id_found == False:
-                    # document missing from all_docs query do manual term search
-                    doc = es_rest.search_all_nodes(_id, indices=[bucket.name])
-                    if doc is None:
-                        self.xd_ref.fail("Document %s Missing from ES Index (%s)" % (_id, bucket.name))
-
-            self._log.info("Verified couchbase bucket (%s) replicated (%s) docs to elasticSearch with matching keys" % \
-                                 (bucket.name, cb_num_items))
+                self._log.info("ERROR: Couchbase has %s docs, ElasticSearch all_docs returned %s docs " % \
+                                     (cb_num_items, es_num_items))
 
 
     def _verify_es_revIds(self, src_server, dest_server, kv_store=1, verification_count=10000):
@@ -211,3 +187,34 @@ class ESReplicationBaseTest(object):
                 return
 
         self.xd_ref.fail("Failed to setup replication to remote cluster %s " % dest_master)
+
+    def update_configurations(self, command):
+        for node in self.xd_ref.dest_nodes:
+            es_rest = RestConnection(node)
+            es_rest.eject_node(node)
+            es_rest.update_configuration(node, commands=command)
+            es_rest.start_es_node(node)
+
+        self.config_updates_count = len(command)
+
+
+    def reset_configurations(self):
+        for node in self.xd_ref.dest_nodes:
+            es_rest = RestConnection(node)
+            es_rest.eject_node(node)
+            es_rest.reset_configuration(node, self.config_updates_count)
+            es_rest.start_es_node(node)
+
+
+    def upload_bad_template(self):
+        template_path = 'resources/es/templates/bad_template.json'
+        for node in self.xd_ref.dest_nodes:
+            es_rest = RestConnection(node)
+            es_rest.replace_template(node, template_path)
+
+
+    def upload_good_template(self):
+        template_path = 'resources/es/templates/good_template.json'
+        for node in self.xd_ref.dest_nodes:
+            es_rest = RestConnection(node)
+            es_rest.replace_template(node, template_path)

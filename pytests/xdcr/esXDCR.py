@@ -1,4 +1,4 @@
-from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, JSONNonDocGenerator
 from membase.helper.rebalance_helper import RebalanceHelper
 from xdcrbasetests import XDCRReplicationBaseTest
 from esbasetests import ESReplicationBaseTest
@@ -18,18 +18,19 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
     def tearDown(self):
         super(ESTests, self).tearDown()
 
-    def setup_doc_gens(self):
+    def setup_doc_gens(self, template=None):
         # create json doc generators
         ordering = range(self.num_items/4)
         sites1 = ['google', 'bing', 'yahoo', 'wiki']
         sites2 = ['mashable', 'techcrunch', 'hackernews', 'slashdot']
         template = '{{ "ordering": {0}, "site_name": "{1}" }}'
 
+
         delete_start= int((self.num_items) * (float)(100 - self._percent_delete) / 100)
         update_end = int((self.num_items) * (float)(self._percent_update) / 100)
 
         self.gen_create =\
-            DocumentGenerator('es_xdcr_docs', template, ordering,
+            DocumentGenerator('es_xdcr_docs{0}{1}'.format(self.delimiter,self.default_type), template, ordering,
                                sites1, start=0, end=self.num_items)
 
         self.gen_recreate =\
@@ -44,6 +45,14 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
                                sites1, start=delete_start, end=self.num_items)
 
         self.gen_blob = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self.num_items)
+
+        self.gen_with_typedelimiter =\
+            DocumentGenerator('es_xdcr_docs', template, ordering,
+                               sites1, start=delete_start, end=self.num_items)
+
+        values = ['1', '10']
+        self.gen_num =\
+            JSONNonDocGenerator('es_xdcr_docs', values, start=0, end=self.num_items)
 
     def _async_modify_data(self):
         tasks = []
@@ -82,7 +91,6 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
         pass
 
     def test_multi_bucket_doctypes_with_async_ops(self):
-
         bucket_idx = 0
         buckets = self._get_cluster_buckets(self.src_master)
 
@@ -204,3 +212,98 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
             if monitor:
                 [task.result() for task in tasks]
 
+    def test_deletes(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self._doc_ops = ['delete']
+        tasks = self._async_modify_data()
+        for task in tasks:
+            task.result()
+        self.verify_es_results(verification_count=0)
+
+    def test_ignore_deletes(self):
+        config_commands = ['couchbase.ignore_deletes: True']
+        self.update_configurations(config_commands)
+
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self._doc_ops = ['delete']
+
+        tasks = self._async_modify_data()
+        for task in tasks:
+            task.result()
+
+        self.verify_es_results(verification_count=self.num_items)
+        self.reset_configurations()
+
+    def test_wrap_counters(self):
+        config_commands = ['couchbase.wrap_counters: True']
+        self.update_configurations(config_commands)
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.verify_es_results(verification_count=self.num_items)
+        self.reset_configurations()
+
+    def test_ignore_failures(self):
+        config_commands = ['couchbase.ignore_failures: True']
+        self.update_configurations(config_commands)
+        self.upload_bad_template()
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.verify_es_results(verification_count=(self.num_items + 1024))
+        self.upload_good_template()
+        self.reset_configurations()
+
+    def test_delimiter_type_selector(self):
+        config_commands = []
+        config_commands.append('couchbase.typeSelector: org.elasticsearch.transport.couchbase.capi.DelimiterTypeSelector')
+        config_commands.append('couchbase.typeSelector.documentTypeDelimiter: {0}'.format(self.delimiter))
+
+        self.update_configurations(config_commands)
+        self._load_all_buckets(self.src_master, self.gen_with_typedelimiter , "create", 0)
+        self.verify_es_results(verification_count=self.num_items, doc_type=self.default_type)
+        self.reset_configurations()
+
+
+    def test_regex_type_selector(self):
+        config_commands = []
+        config_commands.append('couchbase.typeSelector: org.elasticsearch.transport.couchbase.capi.RegexTypeSelector')
+        config_commands.append('couchbase.typeSelector.{0}: {1}'.format(self.default_type, self.regex))
+
+        self.update_configurations(config_commands)
+        self._load_all_buckets(self.src_master, self.gen_create , "create", 0)
+        self.verify_es_results(verification_count=self.num_items, doc_type=self.default_type)
+        self.reset_configurations()
+
+
+    def test_parent_child_mapping(self):
+        pass
+
+    def test_doc_routing(self):
+        config_commands = []
+        config_commands.append('couchbase.typeSelector: org.elasticsearch.transport.couchbase.capi.RegexTypeSelector')
+        config_commands.append('couchbase.typeSelector.{0}: {1}'.format(self.default_type, self.regex))
+        config_commands.append('couchbase.documentTypeRoutingFields.{0}: {1}'.format(self.default_type, 'site_name'))
+
+        self.update_configurations(config_commands)
+        self._load_all_buckets(self.src_master, self.gen_create , "create", 0)
+        self.verify_es_results(verification_count=self.num_items, doc_type=self.default_type)
+        self.reset_configurations()
+
+    def test_doc_include_filter(self):
+        config_commands = []
+        config_commands.append('couchbase.keyFilter: org.elasticsearch.transport.couchbase.capi.RegexKeyFilter')
+        config_commands.append('couchbase.keyFilter.type: Include')
+        config_commands.append('couchbase.keyFilter.keyFiltersRegex.*: {0}'.format(self.regex))
+
+        self.update_configurations(config_commands)
+        self._load_all_buckets(self.src_master, self.gen_create , "create", 0)
+        self.verify_es_results(verification_count=self.num_items)
+        self.reset_configurations()
+
+    def test_doc_exclude_filter(self):
+        config_commands = []
+        config_commands.append('couchbase.keyFilter: org.elasticsearch.transport.couchbase.capi.RegexKeyFilter')
+        config_commands.append('couchbase.keyFilter.type: Exclude')
+        config_commands.append('couchbase.keyFilter.keyFiltersRegex.*: {0}'.format(self.regex))
+
+        self.update_configurations(config_commands)
+        self._load_all_buckets(self.src_master, self.gen_create , "create", 0)
+        self.verify_es_results(verification_count=0)
+        self.reset_configurations()

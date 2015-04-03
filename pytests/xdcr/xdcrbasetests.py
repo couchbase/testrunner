@@ -98,7 +98,6 @@ class XDCRBaseTest(unittest.TestCase):
                 self._cleanup_previous_setup()
 
             self._init_clusters(self._disabled_consistent_view)
-
             # XDCR global settings
             # Set this by default to 1 for all tests
             self.set_xdcr_param('xdcrFailureRestartInterval', 1)
@@ -337,10 +336,17 @@ class XDCRBaseTest(unittest.TestCase):
         self.ord_keys = self._clusters_keys_olst
         self.ord_keys_len = len(self.ord_keys)
 
-        self.src_nodes = copy.copy(self._clusters_dic[0])
-        self.src_master = self.src_nodes[0]
 
+        self.src_nodes = copy.copy(self._clusters_dic[0])
         self.dest_nodes = copy.copy(self._clusters_dic[1])
+
+
+        if int(self.src_nodes[0].port) in xrange(9091, 9991):
+            temp = self.dest_nodes
+            self.dest_nodes = self.src_nodes
+            self.src_nodes = temp
+
+        self.src_master = self.src_nodes[0]
         self.dest_master = self.dest_nodes[0]
 
         self._defaul_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
@@ -1123,6 +1129,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
         self._link_clusters(src_master, dest_cluster_name, dest_master)
+        if int(self.dest_master.port) in xrange(9091, 9991):
+            self.rep_type = 'capi'
         self._replicate_clusters(src_master, dest_cluster_name)
         if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
             self._link_clusters(dest_master, src_cluster_name, src_master)
@@ -1135,10 +1143,16 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         if self._demand_encryption:
             rest_conn_dest = RestConnection(dest_master)
             certificate = rest_conn_dest.get_cluster_ceritificate()
-        rest_conn_src.add_remote_cluster(dest_master.ip, dest_master.port,
-            dest_master.rest_username,
-            dest_master.rest_password, remote_cluster_name,
-            demandEncryption=self._demand_encryption, certificate=certificate)
+        if int(dest_master.port) in xrange(9091, 9991):
+            rest_conn_src.add_remote_cluster(dest_master.ip, dest_master.port,
+                dest_master.es_username,
+                dest_master.es_password, remote_cluster_name,
+                demandEncryption=self._demand_encryption, certificate=certificate)
+        else:
+            rest_conn_src.add_remote_cluster(dest_master.ip, dest_master.port,
+                dest_master.rest_username,
+                dest_master.rest_password, remote_cluster_name,
+                demandEncryption=self._demand_encryption, certificate=certificate)
 
     def _modify_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master, require_encryption=None):
         rest_conn_src = RestConnection(src_master)
@@ -1173,6 +1187,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             self._start_replication_time[bucket.name] = datetime.datetime.now()
             self._cluster_state_arr.append((rest_conn_src, dest_cluster_name, rep_id))
             self.sleep(5)
+
 
     """merge 2 different kv strores from different clsusters/buckets
        assume that all elements in the second kvs are more relevant.
@@ -1327,9 +1342,11 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         try:
             for task in stats_tasks:
                 task.result(timeout)
+            return items
         except TimeoutError:
             self.log.error('ERROR: Timed-out waiting for item count to match.'
                           ' Will proceed to do metadata checks.')
+
 
     # CBQE-1695 Wait for replication_changes_left (outbound mutations) to be 0.
     def __wait_for_outbound_mutations_zero(self, master_node, timeout=180):

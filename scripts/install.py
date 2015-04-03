@@ -712,7 +712,9 @@ class ESInstaller(Installer):
         download_url = "https://download.elasticsearch.org/elasticsearch/elasticsearch/elasticsearch-{0}.tar.gz".format(params["version"])
         self.remote_client.execute_command("wget {0}".format(download_url))
         self.remote_client.execute_command("tar xvzf elasticsearch-{0}.tar.gz; mv elasticsearch-{0} elasticsearch".format(params["version"]))
+        self.remote_client.execute_command("echo couchbase.password: password >> ~/elasticsearch/config/elasticsearch.yml")
         self.remote_client.execute_command("~/elasticsearch/bin/plugin -install transport-couchbase -url {0}".format(params["plugin-url"]))
+        self.remote_client.execute_command("~/elasticsearch/bin/plugin -install mobz/elasticsearch-head")
         return True
 
     def __exit__(self):

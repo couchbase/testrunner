@@ -80,6 +80,8 @@ class TestInputServer(object):
         self.index_path = ''
         self.n1ql_port = ''
         self.index_port = ''
+        self.es_username = ''
+        self.es_password = ''
 
     def __str__(self):
         #ip_str = "ip:{0}".format(self.ip)
@@ -271,6 +273,10 @@ class TestInputParser():
                     server.n1ql_port = global_properties['n1ql_port']
                 if server.index_port == '' and 'index_port' in global_properties:
                     server.index_port = global_properties['index_port']
+                if server.es_username == '' and 'es_username' in global_properties:
+                    server.es_username = global_properties['es_username']
+                if server.es_password == '' and 'es_password' in global_properties:
+                    server.es_password = global_properties['es_password']
         return servers
 
     @staticmethod

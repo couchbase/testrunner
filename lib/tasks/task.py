@@ -27,6 +27,7 @@ from membase.api.exception import N1QLQueryException, DropIndexException, Create
                                     ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException, BucketCompactionException
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
+
 try:
     CHECK_FLAG = False
     if (testconstants.TESTRUNNER_CLIENT in os.environ.keys()) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.MC_BIN_CLIENT:
@@ -109,8 +110,15 @@ class NodeInitializeTask(Task):
                 self.state = FINISHED
                 self.set_exception(error)
                 return
+        info = rest.get_nodes_self()
         username = self.server.rest_username
         password = self.server.rest_password
+
+        if int(info.port) in range(9091,9991):
+            self.state = FINISHED
+            self.set_result(True)
+            return
+
         if self.services:
             status = rest.init_node_services(username= username, password = password, port = self.port, hostname= self.server.ip, services= self.services)
             if not status:
@@ -137,6 +145,7 @@ class NodeInitializeTask(Task):
                 self.set_exception(error)
                 return
         info = rest.get_nodes_self()
+
         if info is None:
             self.state = FINISHED
             self.set_exception(Exception('unable to get information on a server %s, it is available?' % (self.server.ip)))
@@ -180,11 +189,24 @@ class BucketCreateTask(Task):
                 self.state = FINISHED
                 self.set_exception(error)
                 return
+        info = rest.get_nodes_self()
+
         if self.size <= 0:
-            info = rest.get_nodes_self()
             self.size = info.memoryQuota * 2 / 3
 
         authType = 'none' if self.password is None else 'sasl'
+
+        if int(info.port) in xrange(9091, 9991):
+            try:
+                self.port = info.port
+                rest.create_bucket(bucket=self.bucket)
+                self.state = CHECKING
+                task_manager.schedule(self)
+            except Exception as e:
+                self.state = FINISHED
+                self.set_exception(e)
+            return
+
 
         version = rest.get_nodes_self().version
         try:
@@ -211,6 +233,7 @@ class BucketCreateTask(Task):
                                evictionPolicy=self.eviction_policy)
             self.state = CHECKING
             task_manager.schedule(self)
+
         except BucketCreationException as e:
             self.state = FINISHED
             self.set_exception(e)
@@ -222,7 +245,7 @@ class BucketCreateTask(Task):
 
     def check(self, task_manager):
         try:
-            if self.bucket_type == 'memcached':
+            if self.bucket_type == 'memcached' or int(self.port) in xrange(9091, 9991):
                 self.set_result(True)
                 self.state = FINISHED
                 return

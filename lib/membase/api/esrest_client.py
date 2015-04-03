@@ -1,7 +1,7 @@
 from membase.api.rest_client import RestConnection, Bucket, BucketStats, OtpNode, Node
 from remote.remote_util import RemoteMachineShellConnection
 from TestInput import TestInputSingleton
-import pyes
+from pyes import ES, managers, query
 import logger
 import time
 import requests
@@ -12,6 +12,7 @@ log = logger.Logger.get_logger()
 #   Instance created by membase.api.rest_client.RestConnection
 #   when elastic-search endpoint is detected so it is not necessary to
 #   directly import this module into tests
+
 class EsRestConnection(RestConnection):
     def __init__(self, serverInfo, proto = "http"):
         #serverInfo can be a json object
@@ -21,35 +22,43 @@ class EsRestConnection(RestConnection):
         # TODO: dynamic master node detection
         if isinstance(serverInfo, dict):
             self.ip = serverInfo["ip"]
-            self.username = serverInfo["username"]
-            self.password = serverInfo["password"]
+            self.rest_username = serverInfo["username"]
+            self.rest_password = serverInfo["password"]
+            self.username = serverInfo["es_username"]
+            self.password = serverInfo["es_password"]
             self.port = 9091 #serverInfo["port"]
         else:
             self.ip = serverInfo.ip
-            self.username = serverInfo.rest_username
-            self.password = serverInfo.rest_password
+            self.rest_username = serverInfo.rest_username
+            self.rest_password = serverInfo.rest_password
+            self.username = serverInfo.es_username
+            self.password = serverInfo.es_password
             self.port = 9091 # serverInfo.port
 
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.capiBaseUrl = self.baseUrl
+        self.esHttpUrl = "http://{0}:9200".format(self.ip)
         self.http_port = str(int(self.port) + 109)
         self.proto = proto
-        self.conn = pyes.ES((self.proto,self.ip,self.http_port))
+        self.conn = ES(server=self.esHttpUrl)
+        self.manager = managers.Cluster(self.conn)
         self.test_params = TestInputSingleton.input
+        self.docs = None
 
     def get_index_stats(self):
-        return pyes.index_stats()
+        return ES.index_stats()
 
     def get_indices(self):
         return self.conn.indices.get_indices()
 
-    def get_indices_as_buckets(self):
+    def get_indices_as_buckets(self, doc_type='couchbaseDocument'):
         buckets = []
         indices = self.get_indices()
 
         for index in indices:
             bucket = Bucket()
-            stats = self.conn.indices.stats()['indices'][index]
+            q = query.MatchAllQuery()
+            docs = self.conn.search(q,index,doc_type)
             bucket.name = index
             bucket.type = "es"
             bucket.port = self.port
@@ -59,15 +68,15 @@ class EsRestConnection(RestConnection):
 
             #vBucketServerMap
             bucketStats = BucketStats()
-            bucketStats.itemCount = stats['primaries']['docs']['count']
+            bucketStats.itemCount = docs.count()
             bucket.stats = bucketStats
             buckets.append(bucket)
             bucket.master_id = "es@"+self.ip
 
         return buckets
 
-    def get_bucket(self, bucket_name):
-        for bucket in self.get_indices_as_buckets():
+    def get_bucket(self, bucket_name, doc_type):
+        for bucket in self.get_indices_as_buckets(doc_type):
             if bucket.name == bucket_name:
                 return bucket
         return
@@ -105,7 +114,6 @@ class EsRestConnection(RestConnection):
 
 
     def node_statuses(self, timeout=120):
-
         otp_nodes = []
 
         for node in self.get_nodes():
@@ -123,36 +131,33 @@ class EsRestConnection(RestConnection):
 
 
     def get_nodes_self(self, timeout=120):
-
         for node in self.get_nodes():
             # force to return master node
             if node.port == 9091:
                 return node
-
         return
 
     def get_nodes(self):
-
         es_nodes = []
-        nodes = self.conn.cluster_nodes()['nodes']
-        status = self.conn.cluster_health()['status']
+        nodes = self.manager.state()['nodes']
+        status = self.manager.health()['status']
         if status == "green":
             status = "healthy"
 
         for node_key in nodes:
             nodeInfo = nodes[node_key]
             ex_params = self.get_node_params(nodeInfo)
+
             nodeInfo.update({'ssh_password' : ex_params.ssh_password,
                              'ssh_username' : ex_params.ssh_username})
             nodeInfo['key'] = node_key
             node = ESNode(nodeInfo)
             node.status = status
             es_nodes.append(node)
-
         return es_nodes
 
     def get_node_params(self, info):
-        ip, port = parse_addr(info["couchbase_address"])
+        ip, port = parse_addr(info["transport_address"])
         clusters = self.test_params.clusters
         master_node = None
         for _id in clusters:
@@ -168,7 +173,7 @@ class EsRestConnection(RestConnection):
     def search_term(self, key, indices=["default"]):
         result = None
         params = {"term":{"_id":key}}
-        query = pyes.Search(params)
+        query = ES.Search(params)
         row = self.conn.search(query, indices = indices)
         if row.total > 0:
            result = row[0]
@@ -178,12 +183,12 @@ class EsRestConnection(RestConnection):
         return self.search_term(key, indices = indices) is not None
 
     def all_docs(self, keys_only = False, indices=["default"],size=10000):
+        q = query.MatchAllQuery()
 
-        query = pyes.Search({'match_all' : {}})
-        rows = self.conn.search(query, indices=indices, size=size)
+        docs = self.conn.search(q,indices=indices,doc_types='couchbaseDocument')
         docs = []
 
-        for row in rows:
+        for row in docs:
             if keys_only:
                 row = row['meta']['id']
             docs.append(row)
@@ -194,9 +199,7 @@ class EsRestConnection(RestConnection):
     # See - CBES-17
     # for use when it seems nodes are out of sync
     def search_all_nodes(self, key, indices=["default"]):
-
         doc = None
-
         for index in indices:
            for _node in self.get_nodes():
                ip, port = (_node.ip, _node.ht_port)
@@ -219,25 +222,58 @@ class EsRestConnection(RestConnection):
     def _rebalance_progress(self, *args, **kwargs):
         return 100
 
+    def _rebalance_progress_status(self, *args, **kwargs):
+        return 'not running'
+
     def get_vbuckets(self, *args, **kwargs):
         return ()
 
-    def add_node(self, user='', password='', remoteIp='', port='8091'):
+    def replace_template(self, node, file):
+        f = open(file, 'r')
+        template = f.read().replace('\n', ' ')
+        api =  "http://{0}:9200/_template/couchbase".format(node.ip)
+        status, content, header = self._http_request(api, 'PUT', template)
+        if status:
+            log.info('uploaded couchbase template: '+file)
+        else:
+            log.error('template upload failed: {0}'.format(content))
+
+    def add_node(self, user='', password='', remoteIp='', port='8091',zone_name='', services=None):
         new_node = self.get_nodes_self()
         new_node.ip = remoteIp
         new_node.port = port
 
         self.start_es_node(new_node)
 
-    def start_es_node(self, node):
+    def update_configuration(self, node, commands):
+        rmc = RemoteMachineShellConnection(node)
+        shell = rmc._ssh_client.invoke_shell()
+        for command in commands:
+            log.info('Adding elastic search config {0} on node {1}'.format(command, self.ip))
+            shell.send('echo "{0}" >> ~/elasticsearch/config/elasticsearch.yml \n'.format(command))
+            while not shell.recv_ready():
+                time.sleep(2)
+            rc = shell.recv(1024)
+            log.info(rc)
 
+    def reset_configuration(self, node, count=1):
+        rmc = RemoteMachineShellConnection(node)
+        shell = rmc._ssh_client.invoke_shell()
+        log.info('Removing last {0} lines from elastic search config on node {1}'.format(count, self.ip))
+        shell.send('head -n -{0}  ~/elasticsearch/config/elasticsearch.yml > temp ; mv temp  ~/elasticsearch/config/elasticsearch.yml \n'.format(count))
+        while not shell.recv_ready():
+            time.sleep(2)
+        rc = shell.recv(1024)
+        log.info(rc)
+
+
+    def start_es_node(self, node):
         rmc = RemoteMachineShellConnection(node)
 
         # define es exec path if not in $PATH environment
-        es_bin = 'elasticsearch'
+        es_bin = '~/elasticsearch/bin/elasticsearch'
         if 'es_bin' in TestInputSingleton.input.test_params:
             es_bin = TestInputSingleton.input.test_params['es_bin']
-
 
         # connect to remote node
         log.info('Starting node: %s:%s' % (node.ip, node.port))
@@ -292,23 +328,6 @@ class EsRestConnection(RestConnection):
     def set_max_parallel_replica_indexers(self, *args, **kwargs):
         pass
 
-    def rebalance(self, otpNodes, ejectedNodes):
-        # shutdown ejected nodes
-        # wait for shards to be rebalanced
-
-        nodesToShutdown = \
-            [node for node in self.get_nodes() if node.id in ejectedNodes]
-
-        for node in nodesToShutdown:
-            self.eject_node(node)
-
-    def eject_node(self, node):
-        api = "http://%s:%s/_cluster/nodes/%s/_shutdown" % (node.ip, node.ht_port, node.key)
-        status, content, header = self._http_request(api, 'POST', '')
-        if status:
-            log.info('ejected node: '+node.id)
-        else:
-            raise Exception("failed to eject node: "+node.id)
 
     def log_client_error(self, post):
         # cannot post req errors to 9091
@@ -349,10 +368,10 @@ class EsRestConnection(RestConnection):
             self.eject_node(node)
 
     def eject_node(self, node):
-        api = "http://%s:%s/_cluster/nodes/%s/_shutdown" % (node.ip, node.ht_port, node.key)
+        api = "http://%s:9200/_cluster/nodes/local/_shutdown" % (node.ip)
         status, content, header = self._http_request(api, 'POST', '')
         if status:
-            log.info('ejected node: '+node.id)
+            log.info('ejected node: '+node.ip)
         else:
             log.error('rebalance operation failed: {0}'.format(content))
 
@@ -391,8 +410,9 @@ class ESNode(Node):
     def __init__(self, info):
         super(ESNode, self).__init__()
         self.key = str(info['key'])
-        self.ip, self.port = parse_addr(info["couchbase_address"])
+        self.ip, self.port = parse_addr(info["transport_address"])
         self.tr_ip, self.tr_port = parse_addr(info["transport_address"])
+        self.port = 9091
 
         if 'http_address' in info:
             self.ht_ip, self.ht_port = parse_addr(info["http_address"])
