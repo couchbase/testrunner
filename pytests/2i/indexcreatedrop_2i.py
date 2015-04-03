@@ -285,8 +285,8 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     def test_fail_create_kv_node_down(self):
         servr_out =[]
         try:
-            servr_out = self.get_nodes_from_services_map(service_type = "kv", get_all_nodes = True)
-            remote = RemoteMachineShellConnection(servr_out[0])
+            servr_out = self.get_nodes_from_services_map(service_type = "kv")
+            remote = RemoteMachineShellConnection(servr_out[1])
             remote.stop_server()
             self.sleep(10)
             self.query = self.query_definitions[0].generate_index_create_query(bucket = self.buckets[0].name)
@@ -297,7 +297,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             if not check:
                 self.assertTrue(False," Index cannot be created when KV node is down and not failed over ")
         finally:
-            remote = RemoteMachineShellConnection(servr_out[0])
+            remote = RemoteMachineShellConnection(servr_out[1])
             remote.start_server()
 
     def test_fail_drop_index_node_down(self):

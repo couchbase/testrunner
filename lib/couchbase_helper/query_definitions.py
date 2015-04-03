@@ -150,7 +150,7 @@ class SQLDefinitionGenerator:
 			QueryDefinition(
 				index_name=index_name_prefix+"job_title_join_yr",
 							 index_fields = ["join_yr","job_title"],
-							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" or join_yr > 2010 and join_yr < 2014 ORDER BY job_title, _id"),
+							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"Sales\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title, _id"),
 							 groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,OR,"employee"], index_where_clause = " job_title IS NOT NULL "))
 		return definitions_list
 
@@ -212,7 +212,7 @@ class SQLDefinitionGenerator:
 			QueryDefinition(
 				index_name=index_name_prefix+"CurrencyCode_join_yr",
 							 index_fields = ["join_yr","CurrencyCode"],
-							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"USD\" or join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
+							 query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title == \"USD\" and join_yr > 2010 and join_yr < 2014 ORDER BY job_title"),
 							 groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,OR,"sabre"], index_where_clause = " CurrencyCode IS NOT NULL "))
 
 		return definitions_list
@@ -269,8 +269,8 @@ class SQLDefinitionGenerator:
 			QueryDefinition(
 				index_name="composite_index_2",
 				index_fields = ["join_mo","job_title"],
-				query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title != \"Sales\" or join_mo > 0"),
-				groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,OR,LESS_THAN,"employee"], index_where_clause = "job_title != \"Sales\" or join_mo > 0"))
+				query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title != \"Sales\" and join_mo > 0"),
+				groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,OR,LESS_THAN,"employee"], index_where_clause = "job_title != \"Sales\" and join_mo > 0"))
 		return definitions_list
 
 	def generate_employee_data_query_definitions_for_index_expressions(self):
@@ -311,8 +311,8 @@ class SQLDefinitionGenerator:
 			QueryDefinition(
 				index_name="composite_index_2",
 				index_fields = ["job_title != \"Sales\" or join_mo > 0"],
-				query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title != \"Sales\" or join_mo > 0"),
-				groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,OR,LESS_THAN,"employee"], index_where_clause = "job_title != \"Sales\" or join_mo > 0"))
+				query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title != \"Sales\" and join_mo > 0"),
+				groups = [COMPOSITE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, EQUALS,OR,LESS_THAN,"employee"], index_where_clause = "job_title != \"Sales\" and join_mo > 0"))
 		return definitions_list
 
 	def filter_by_group(self, groups = [], query_definitions = []):

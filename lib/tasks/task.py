@@ -1918,6 +1918,8 @@ class N1QLQueryTask(Task):
             else:
                 check = self.n1ql_helper.verify_index_with_explain(self.actual_result, self.index_name)
                 if not check:
+                    actual_result = self.n1ql_helper.run_cbq_query(query = "select * from system:indexes", server = self.server)
+                    self.log.info(actual_result)
                     raise Exception(" INDEX usage in Query {0} :: NOT FOUND {1} :: as observed in result {2}".format(
                         self.query, self.index_name, self.actual_result))
            self.log.info(" <<<<< Done VERIFYING Query {0} >>>>>>".format(self.query))
