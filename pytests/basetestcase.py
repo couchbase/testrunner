@@ -1659,7 +1659,8 @@ class BaseTestCase(unittest.TestCase):
     def get_nodes_from_services_map(self, service_type ="n1ql", get_all_nodes = False):
         self.get_services_map()
         if (service_type not in self.services_map):
-            self.log.info("cannot find service node {0} in cluster ".format(service_type))
+            self.log.info("cannot find service node {0} in cluster " \
+                                                .format(service_type))
         else:
             list = []
             for server_info in self.services_map[service_type]:
@@ -1667,8 +1668,20 @@ class BaseTestCase(unittest.TestCase):
                 ip = tokens[0]
                 port = int(tokens[1])
                 for server in self.servers:
-                    if (port != 8091 and port == int(server.port)) or (port == 8091 and server.ip == ip):
+                    """ In tests use hostname, if IP in ini file use IP, we need
+                        to convert it to hostname to compare it with hostname
+                        in cluster """
+                    if "couchbase.com" in ip and "couchbase.com" not in server.ip:
+                        shell = RemoteMachineShellConnection(server)
+                        hostname = shell.get_full_hostname()
+                        self.log.info("convert IP: {0} to hostname: {1}" \
+                                      .format(server.ip, hostname))
+                        server.ip = hostname
+                        shell.disconnect()
+                    if (port != 8091 and port == int(server.port)) or \
+                                        (port == 8091 and server.ip == ip):
                         list.append(server)
+            self.log.info("list of all nodes in cluster: {0}".format(list))
             if get_all_nodes:
                 return list
             else:
