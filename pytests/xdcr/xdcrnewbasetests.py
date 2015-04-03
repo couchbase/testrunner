@@ -2730,8 +2730,6 @@ class XDCRNewBaseTest(unittest.TestCase):
         @param xdcr_replications: list of XDCRReplication objects.
         @param kv_store: Index of bucket kv_store to compare.
         """
-        if self._dgm_run:
-            timeout = 5400
         error_count = 0
         tasks = []
         for repl in xdcr_replications:
@@ -2747,7 +2745,10 @@ class XDCRNewBaseTest(unittest.TestCase):
                 repl.get_dest_bucket().kvs[kv_store])
             tasks.append(task_info)
         for task in tasks:
-            task.result(timeout)
+            if self._dgm_run:
+                task.result()
+            else:
+                task.result(timeout)
             error_count += task.err_count
             if task.err_count:
                 for ip, values in task.keys_not_found.iteritems():
