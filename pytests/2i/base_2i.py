@@ -393,6 +393,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.verify_query_result = True
         self.verify_explain_result = True
         if initial:
+            self._set_scan_consistency_parameters("initial")
             self._set_query_explain_flags("initial")
             return self._async_run_operations(buckets = buckets,
                 create_index = self.ops_map["initial"]["create_index"],
@@ -402,6 +403,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 scan_consistency = scan_consistency,
                 scan_vectors = scan_vectors)
         if before:
+            self._set_scan_consistency_parameters("before")
             self._set_query_explain_flags("before")
             return self._async_run_operations(buckets = buckets,
                 create_index = self.ops_map["before"]["create_index"] ,
@@ -411,6 +413,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 scan_consistency = scan_consistency,
                 scan_vectors = scan_vectors)
         if in_between:
+            self._set_scan_consistency_parameters("in_between")
             self._set_query_explain_flags("in_between")
             return self._async_run_operations(buckets = buckets,
                 create_index = self.ops_map["in_between"]["create_index"],
@@ -420,6 +423,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 scan_consistency = scan_consistency,
                 scan_vectors = scan_vectors)
         if after:
+            self._set_scan_consistency_parameters("after")
             self._set_query_explain_flags("after")
             return self._async_run_operations(buckets = buckets,
                 create_index = self.ops_map["after"]["create_index"],
@@ -667,6 +671,16 @@ class BaseSecondaryIndexingTests(QueryTests):
             scan_consistency = self.scan_consistency)
         for task in tasks:
             task.result()
+
+    def _set_scan_consistency_parameters(self, phase):
+        if phase == "initial":
+            self.scan_consistency = self.scan_consistency
+        elif phase == "before":
+            self.scan_consistency = None
+        elif phase == "in_between":
+            self.scan_consistency = None
+        elif phase == "after":
+            self.scan_consistency = self.scan_consistency
 
     def _set_query_explain_flags(self, phase):
         if ("query_ops" in self.ops_map[phase].keys()) and self.ops_map[phase]["query_ops"]:
