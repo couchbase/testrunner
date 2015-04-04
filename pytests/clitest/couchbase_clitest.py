@@ -165,10 +165,10 @@ help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
                             '--xdcr-replication-mode=[xmem|capi]': 'replication protocol, either capi or xmem.',
                             '--xdcr-replicator=REPLICATOR': ' replication id',
                             '--xdcr-to-bucket=BUCKETNAME': 'remote bucket to replicate to',
-                            '--sourceNozzlePerNode=[1-10]': 'the number of source nozzles per source node',
-                            '--targetNozzlePerNode=[1-10]': 'the number of outgoing nozzles per target node',
-                            '--maxExpectedReplicationLag=MS': 'the maximum replication lag (in millisecond) that can be tolerated before it is considered timeout',
-                            '--timeoutPercentageCap=[1-100]': 'the maximum allowed timeout percentage.If this limit is exceeded, replication is considered as not healthy and may be reported'},
+                            '--source-nozzle-per-node=[1-10]': 'the number of source nozzles per source node',
+                            '--target-nozzle-per-node=[1-100]': 'the number of outgoing nozzles per target node',
+                            '--max-expected-replication-lag=MS': 'the maximum replication lag (in millisecond) that can be tolerated before it is considered timeout',
+                            '--timeout-percentage-cap=[1-100]': 'the maximum allowed timeout percentage.If this limit is exceeded, replication is considered as not healthy and may be reported'},
  'xdcr-setup OPTIONS': {'--create': ' create a new xdcr configuration',
                         '--delete': ' delete existed xdcr configuration',
                         '--edit': ' modify existed xdcr configuration',
@@ -1380,11 +1380,11 @@ class XdcrCLITest(CliBaseTest):
         options += (" --xdcr-from-bucket=\'{0}\'".format(from_bucket), "")[from_bucket is None]
         options += (" --xdcr-to-bucket=\'{0}\'".format(to_bucket), "")[to_bucket is None]
         options += (" --xdcr-replication-mode=\'{0}\'".format(replication_mode), "")[replication_mode is None]
-        options += (" --sourceNozzlePerNode=\'{0}\'".format(source_nozzles), "")[source_nozzles is None]
-        options += (" --targetNozzlePerNode=\'{0}\'".format(target_nozzles), "")[target_nozzles is None]
-        options += (" --filterExpression=\'{0}\'".format(filter_expression), "")[filter_expression is None]
-        options += (" --maxExpectedReplicationLag=\'{0}\'".format(max_replication_lag), "")[max_replication_lag is None]
-        options += (" --timeoutPercentageCap=\'{0}\'".format(timeout_perc_cap), "")[timeout_perc_cap is None]
+        options += (" --source-nozzle-per-node=\'{0}\'".format(source_nozzles), "")[source_nozzles is None]
+        options += (" --target-nozzle-per-node=\'{0}\'".format(target_nozzles), "")[target_nozzles is None]
+        options += (" --filter-expression=\'{0}\'".format(filter_expression), "")[filter_expression is None]
+        options += (" --max-expected-replication-lag=\'{0}\'".format(max_replication_lag), "")[max_replication_lag is None]
+        options += (" --timeout-percentage-cap=\'{0}\'".format(timeout_perc_cap), "")[timeout_perc_cap is None]
         options += (" --checkpoint-interval=\'{0}\'".format(checkpoint_interval), "")[timeout_perc_cap is None]
 
         self.bucket_size = self._get_bucket_size(self.quota, 1)
