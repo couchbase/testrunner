@@ -86,7 +86,11 @@ class N1QLHelper():
                                                            end_msg='cbq>')
             result = self._parse_query_output(output)
         if isinstance(result, str) or 'errors' in result:
-            raise CBQError(result, server.ip)
+            error_result = str(result)
+            length_display = len(error_result)
+            if length_display > 500:
+                error_result = error_result[:500]
+            raise CBQError(error_result, server.ip)
         self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
         return result
 
