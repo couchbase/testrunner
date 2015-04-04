@@ -43,6 +43,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
 
     def xdcr_setup(self):
         XDCRNewBaseTest.setUp(self)
+        self.servers = self._input.servers
         self.src_cluster = self.get_cb_cluster_by_name('C1')
         self.src_master = self.src_cluster.get_master_node()
         self.src_nodes = self.src_cluster.get_nodes()
@@ -68,7 +69,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
     def _override_clusters_structure(self):
         TestInputSingleton.input.clusters[0] = self.servers[:self.src_init]
         TestInputSingleton.input.clusters[1] = self.servers[self.src_init: self.src_init + self.dest_init ]
-
 
     def _create_buckets(self, cluster):
         if cluster == self.src_cluster:
@@ -216,11 +216,13 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_dest, self.dest_master)
 
     def online_cluster_upgrade(self):
+
         self._install(self.servers[:self.src_init + self.dest_init])
         prev_initial_version = self.initial_version
         self.initial_version = self.upgrade_versions[0]
         self._install(self.servers[self.src_init + self.dest_init:])
         self.xdcr_setup()
+
         if prev_initial_version < "3.0.0":
             self.pause_xdcr_cluster = None
         bucket_default = self.src_cluster.get_bucket_by_name('default')
@@ -236,10 +238,12 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 for remote_cluster in cluster.get_remote_clusters():
                     remote_cluster.pause_all_replications()
         self._online_upgrade(self.src_nodes, self.servers[self.src_init + self.dest_init:])
+        self.src_master = self.servers[self.src_init + self.dest_init]
         self._load_bucket(bucket_default, self.src_master, self.gen_update, 'create', exp=self._expires)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_update, 'create', exp=self._expires)
         self._install(self.src_nodes)
         self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.src_nodes, False)
+        self.src_master = self.servers[0]
 
         self._load_bucket(bucket_default, self.src_master, self.gen_delete, 'delete', exp=0)
         self._load_bucket(bucket_default, self.src_master, self.gen_update, 'create', exp=self._expires)
@@ -247,6 +251,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self._load_bucket(bucket_sasl, self.src_master, self.gen_update, 'create', exp=self._expires)
         self.sleep(120)
 
+        self.log.info("###### Upgrading C1: completed ######")
 
         self._install(self.servers[self.src_init + self.dest_init:])
         self.sleep(60)
@@ -254,7 +259,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self._install(self.dest_nodes)
         self.sleep(60)
         self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.dest_nodes, False)
-
 
         self._load_bucket(bucket_standard, self.dest_master, self.gen_delete, 'delete', exp=0)
         self._load_bucket(bucket_standard, self.dest_master, self.gen_update, 'create', exp=self._expires)
@@ -273,6 +277,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
 
         self.merge_all_buckets()
         self.sleep(120)
+        self.log.info("###### Upgrading C2: completed ######")
         self._post_upgrade_ops()
         self.sleep(120)
         self.verify_results()
@@ -384,8 +389,12 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             for op_cluster in self.post_upgrade_ops.split(';'):
                 cluster, op = op_cluster.split('-')
                 if op == 'rebalancein':
-                    free_servs = [ser for ser in self.servers
-                                  if not (ser in self.src_nodes or ser in self.dest_nodes)]
+                    free_servs= copy.copy(self.servers)
+                    for ser in self.servers:
+                        for used in self.src_nodes+self.dest_nodes:
+                            if ser.ip == used.ip:
+                                free_servs.remove(ser)
+                                break
                     servers_to_add = free_servs[:self.nodes_in]
                     if servers_to_add:
                         temp = self.initial_version
