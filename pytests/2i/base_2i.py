@@ -636,6 +636,9 @@ class BaseSecondaryIndexingTests(QueryTests):
             buckets = self.buckets
         if query_definitions == None:
             query_definitions = self.query_definitions
+        if not self.run_async:
+            self.run_multi_operations(buckets = buckets, query_definitions = query_definitions)
+            return
         if index_nodes == None:
             index_nodes = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
         check = True

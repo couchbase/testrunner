@@ -20,6 +20,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self._create_replica_index_when_indexer_is_down(find_index_lost_list)
         self.initialize_multi_create_index(buckets = self.buckets,
                     query_definitions = self.load_query_definitions)
+        self.drop_indexes_in_between = self.input.param("drop_indexes_in_between", False)
 
     def tearDown(self):
         if hasattr(self, 'query_definitions'):
@@ -362,7 +363,15 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self._redefine_index_usage()
         tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True,
             scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
+        tasks += self._drop_indexes_in_between()
         return tasks
+
+    def _drop_indexes_in_between(self):
+        drop_tasks =[]
+        if self.drop_indexes_in_between:
+            drop_tasks = self.async_multi_drop_index(buckets = self.buckets,
+             query_definitions = self.load_query_definitions)
+        return drop_tasks
 
     def _run_kvops_tasks(self):
         tasks_ops =[]

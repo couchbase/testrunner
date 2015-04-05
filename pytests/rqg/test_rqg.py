@@ -134,7 +134,7 @@ class RQGTests(BaseTestCase):
         table_field_map = self.client._get_field_list_map_for_tables()
         for table_name in table_field_map.keys():
             field_list = table_field_map[table_name]
-            secondary_index_map = {}
+            secondary_index_list = set([])
             for query in query_list:
                 tokens = query.split(" ")
                 check_for_table_name = False
@@ -156,10 +156,18 @@ class RQGTests(BaseTestCase):
                         if field_name in query:
                             list.append(field)
                     if len(list) > 0:
-                        index_name = "bucket_{0}_{1}".format(table_name,"_".join(list))
-                        if index_name not in secondary_index_map:
-                            secondary_index_map[index_name] = list
-            secondary_index_table_map[table_name] = secondary_index_map
+                        secondary_index_list = set(secondary_index_list).union(set(list))
+            list = []
+            index_map ={}
+            if len(secondary_index_list) > 0:
+                list = [element for element in secondary_index_list]
+                index_name = "{0}_{1}".format(table_name,"_".join(list))
+                index_map = {index_name:list}
+            for field in list:
+                index_name = "{0}_{1}".format(table_name,field)
+                index_map[index_name] = [field]
+            if len(index_map) > 0:
+                secondary_index_table_map[table_name] = index_map
         return secondary_index_table_map
 
     def _generate_secondary_indexes(self, query_list):
