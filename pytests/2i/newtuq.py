@@ -25,7 +25,7 @@ class QueryTests(BaseTestCase):
         self.expiry = self.input.param("expiry", 0)
         self.batch_size = self.input.param("batch_size", 1)
         self.skip_cleanup = self.input.param("skip_cleanup", False)
-        self.run_async = self.input.param("run_async", False)
+        self.run_async = self.input.param("run_async", True)
         self.version = self.input.param("cbq_version", "git_repo")
         if self.input.tuq_client and "client" in self.input.tuq_client:
             self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
