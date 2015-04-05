@@ -300,7 +300,9 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         memory = []
         static_node_list = self._find_nodes_not_moved_out()
         tasks = []
-        if self.use_replica_when_active_down and self.ops_map["in_between"]["query_ops"]:
+        if self.use_replica_when_active_down and self.ops_map["before"]["query_ops"] or \
+        self.use_replica_when_active_down and self.ops_map["in_between"]["query_ops"] or \
+        self.use_replica_when_active_down and self.ops_map["after"]["query_ops"]:
             for query_definition in self.query_definitions:
                 if query_definition.index_name in index_lost_during_move_out:
                     copy_of_query_definition = copy.deepcopy(query_definition)
