@@ -96,9 +96,10 @@ class QueryTests(BaseTestCase):
         self.negative_common_body(queries_errors)
 
     def test_unnest(self):
-        query_template = 'SELECT emp.$int0, task FROM bucket0 emp UNNEST emp.$nested_list_3l0 task'
-        actual_result, expected_result = self.run_query_from_template(query_template)
-        self._verify_results(actual_result['results'], expected_result)
+        for bucket in self.buckets:
+            query_template = 'SELECT emp.$int0, task FROM %s emp UNNEST emp.$nested_list_3l0 task' % bucket.name
+            actual_result, expected_result = self.run_query_from_template(query_template)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_subquery_select(self):
         for bucket in self.buckets:
@@ -399,7 +400,6 @@ class QueryTests(BaseTestCase):
         return actual_result, expected_result
 
     def run_query_with_subquery_from_template(self, query_template):
-        #select tasks.join_mo from (select join_mo From default) as tasks
         subquery_template = re.sub(r'.*\$subquery\(', '', query_template)
         subquery_template = subquery_template[:subquery_template.rfind(')')]
         subquery_full_list = self.generate_full_docs_list(gens_load=self.gens_load)
