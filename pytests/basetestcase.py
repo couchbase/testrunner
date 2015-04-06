@@ -1826,7 +1826,7 @@ class BaseTestCase(unittest.TestCase):
                 key, val = doc_gen.next()
                 try:
                     val = json.loads(val)
-                    if 'mutated' not in val.keys():
+                    if isinstance(val, dict) and 'mutated' not in val.keys():
                         if update:
                             val['mutated'] = 1
                         else:
