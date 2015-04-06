@@ -321,9 +321,9 @@ class SQLDefinitionGenerator:
 			count = 0
 			for group in query_definition.groups:
 				for group_name in groups:
-					if group_name = group:
+					if group_name == group:
 						count += 1
-			if count = len(groups) and query_definition.name not in new_query_definitions.keys():
+			if count == len(groups) and query_definition.name not in new_query_definitions.keys():
 				new_query_definitions[query_definition.name] = query_definition
 		return new_query_definitions.values()
 
