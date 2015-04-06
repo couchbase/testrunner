@@ -42,6 +42,7 @@ class QueryTests(BaseTestCase):
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.skip_load = self.input.param("skip_load", False)
+        self.skip_index = self.input.param("skip_index", False)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.primary_indx_type = self.input.param("primary_indx_type", 'VIEW')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
@@ -156,7 +157,7 @@ class QueryTests(BaseTestCase):
     def test_all_negative(self):
         queries_errors = {'SELECT ALL * FROM %s' : ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
-
+    
     def test_distinct_negative(self):
         queries_errors = {'SELECT name FROM {0} ORDER BY DISTINCT name' : ('syntax error', 3000),
                           'SELECT name FROM {0} GROUP BY DISTINCT name' : ('syntax error', 3000),
@@ -2757,6 +2758,9 @@ class QueryTests(BaseTestCase):
                 shell.disconnect()
 
     def create_primary_index_for_3_0_and_greater(self):
+        if self.skip_index:
+            self.log.info("Not creating index")
+            return
         if self.flat_json:
                     return
         self.log.info("CREATE PRIMARY INDEX")

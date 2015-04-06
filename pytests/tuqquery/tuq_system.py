@@ -45,6 +45,10 @@ class SysCatalogTests(QueryTests):
                             res['namespaces']['datastore_id'].find(self.master.ip) != -1,
                             "Expected: %s, actual: %s" % (host, result))
 
+    def test_negative_buckets(self):
+        queries_errors = {'SELECT * FROM system:keyspaces' : ('Invalid fetch value <nil> of type %!T(MISSING)', 5030)}
+        self.negative_common_body(queries_errors)
+
     def test_buckets(self):
         self.query = "SELECT * FROM system:keyspaces"
         result = self.run_cbq_query()
