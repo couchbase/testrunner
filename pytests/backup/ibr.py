@@ -67,7 +67,8 @@ class IBRTests(BackupBaseTest):
         pattern_bucket = 'bucket-\w+'
         pattern_node = 'node\-\d{1,3}\.\d{1,3}\.\d{1,3}.\d{1,3}.+'
 
-        pattern_design_json = timestamp + '/|\\\\' + timestamp_backup + '/|\\\\' + pattern_bucket
+        pattern_design_json = timestamp + '/|\\\\' + timestamp_backup + \
+                                                    '/|\\\\' + pattern_bucket
         pattern_backup_files = pattern_design_json +  '/|\\\\' + pattern_node
 
         data_cbb = 0
@@ -89,13 +90,19 @@ class IBRTests(BackupBaseTest):
                 if re.search(pattern_design_json, line):
                     design_json += 1
 
-        self.log.info("expected_data_cbb {0} data_cbb {1}".format(expected_data_cbb, data_cbb))
-        self.log.info("expected_failover_json {0} failover {1}".format(expected_failover_json, failover))
-        self.log.info("expected_meta_json {0} meta_json {1}".format(expected_meta_json,  meta_json))
-        self.log.info("expected_design_json {0} design_json {1}".format(expected_design_json, design_json))
+        self.log.info("expected_data_cbb {0} data_cbb {1}"
+                           .format(expected_data_cbb, data_cbb))
+        self.log.info("expected_failover_json {0} failover {1}"
+                      .format(expected_failover_json, failover))
+        self.log.info("expected_meta_json {0} meta_json {1}"
+                        .format(expected_meta_json,  meta_json))
+        """ add json support later in this test
+            self.log.info("expected_design_json {0} design_json {1}"
+                          .format(expected_design_json, design_json)) """
 
         if data_cbb == expected_data_cbb and failover == expected_failover_json and \
-            meta_json == expected_meta_json and design_json == expected_design_json:
+            meta_json == expected_meta_json:
+            # add support later in and design_json == expected_design_json:
             return True
 
         return False
@@ -154,8 +161,8 @@ class IBRTests(BackupBaseTest):
             self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, options)
 
             self.total_backups += 1
-            self.log.info("sleeping for 60 secs")
-            self.sleep(60)
+            self.log.info("sleeping for 30 secs")
+            self.sleep(30)
 
         if not self.verify_dir_structure(self.total_backups, len(self.buckets), len(self.servers)):
             raise Exception('Backup Directory Verification Failed for Incremental Backup')
