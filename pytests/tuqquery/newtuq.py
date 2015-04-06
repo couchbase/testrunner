@@ -141,6 +141,11 @@ class QueryTests(BaseTestCase):
 #   LIMIT OFFSET CHECKS
 ##############################################################################################
 
+    def test_limit_negative(self):
+        #queries_errors = {'SELECT * FROM default LIMIT {0}' : ('Invalid LIMIT value 2.5', 5030)}
+        queries_errors = {'SELECT ALL * FROM %s' : ('syntax error', 3000)}
+        self.negative_common_body(queries_errors)
+
     def test_limit_offset(self):
         for bucket in self.buckets:
             query_template = 'SELECT DISTINCT $str0 FROM %s ORDER BY $str0 LIMIT 10' % (bucket.name)
@@ -170,6 +175,12 @@ class QueryTests(BaseTestCase):
                           'Invalid OFFSET value 1.1'}
         self.negative_common_body(queries_errors)
 
+    def test_limit_offset_sp_char_check(self):
+        queries_errors = {'SELECT DISTINCT $str0 FROM {0} LIMIT ~' :
+                          'syntax erro',
+                          'SELECT DISTINCT $str0 FROM {0} OFFSET ~' :
+                          'syntax erro'}
+        self.negative_common_body(queries_errors)
 ##############################################################################################
 #
 #   ALIAS CHECKS
@@ -429,7 +440,7 @@ class QueryTests(BaseTestCase):
                                     "Error is incorrect.Actual %s.\n Expected: %s.\n" %(
                                                                 str(ex).split(':')[-1], error))
                 else:
-                    self.fail("There was no errors. Error expected: %s" % error)
+                    self.fail("There were no errors. Error expected: %s" % error)
 
     def run_cbq_query(self, query=None, min_output_size=10, server=None):
         if query is None:
