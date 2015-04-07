@@ -378,6 +378,19 @@ class QueriesViewsTests(QueryTests):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                     self.run_cbq_query()
 
+    def test_index_meta(self):
+        for bucket in self.buckets:
+            index_name = "my_index_meta"
+            try:
+               self.query = "CREATE INDEX %s ON %s(" % (index_name, bucket.name) + \
+               "meta(%s"%(bucket.name) + ").id)"
+               self.run_cbq_query()
+            except Exception, ex:
+               self.assertTrue(str(ex).find("Error creating index") != -1,
+                              "Error message is %s." % str(ex))
+            else:
+                self.fail("Error message expected")
+    
     def test_index_dates(self):
         for bucket in self.buckets:
             index_name = "my_index_date"
@@ -440,6 +453,10 @@ class QueriesViewsTests(QueryTests):
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                     self.run_cbq_query()
+
+    def test_negative_indexes(self):
+        queries_errors = {'create index gsi on default(name) using gsi' : ('syntax error', 3000)}
+        self.negative_common_body(queries_errors)
 
     def test_prepared_with_index_simple_where(self):
         index_name_prefix = 'auto_ind_prepared'
