@@ -75,13 +75,14 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
         "indexer.settings.compaction.min_frag":30,
         "indexer.settings.compaction.min_size":1048576,
         "indexer.settings.inmemory_snapshot.interval":200,
-        "indexer.settings.log_level":"info",
+        "indexer.settings.log_level":"debug",
         "indexer.settings.log_override":"",
         "indexer.settings.max_cpu_percent":400,
         "indexer.settings.memory_quota":0,
         "indexer.settings.persisted_snapshot.interval":30000,
         "indexer.settings.recovery.max_rollbacks":5,
-        "projector.settings.log_level":"info",
+        "projector.settings.log_level":"debug",
+        "indexer.settings.scan_timeout":120000,
         "projector.settings.log_override":""}
         return map
 
@@ -99,6 +100,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
         "indexer.settings.persisted_snapshot.interval":300,
         "indexer.settings.recovery.max_rollbacks":1,
         "projector.settings.log_level":"debug",
+        "indexer.settings.scan_timeout":120000,
         "projector.settings.log_override":""
         }
         return map
