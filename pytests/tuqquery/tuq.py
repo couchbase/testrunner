@@ -157,6 +157,10 @@ class QueryTests(BaseTestCase):
     def test_all_negative(self):
         queries_errors = {'SELECT ALL * FROM %s' : ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
+
+    def test_keywords(self):
+        queries_errors = {'SELECT description as DESC FROM %s order by DESC' : ('syntax error', 3000)}
+        self.negative_common_body(queries_errors)
     
     def test_distinct_negative(self):
         queries_errors = {'SELECT name FROM {0} ORDER BY DISTINCT name' : ('syntax error', 3000),
