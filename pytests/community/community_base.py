@@ -1,5 +1,6 @@
 import testconstants
 from basetestcase import BaseTestCase
+from xdcr.xdcrbasetests import XDCRReplicationBaseTest
 from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, Bucket
@@ -47,3 +48,12 @@ class CommunityBaseTest(BaseTestCase):
             right after kill erlang process, we need to start couchbase server
             in teardown so that the next test will not be false failed """
         super(CommunityBaseTest, self).tearDown()
+
+
+class CommunityXDCRBaseTest(XDCRReplicationBaseTest):
+    def setup(self):
+        super(CommunityXDCRBaseTest, self).setUp()
+
+
+    def tearDonw(self):
+        super(CommunityXDCRBaseTest, self).teardown()

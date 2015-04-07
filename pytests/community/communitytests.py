@@ -5,6 +5,7 @@ import testconstants
 from TestInput import TestInputSingleton
 
 from community.community_base import CommunityBaseTest
+from community.community_base import CommunityXDCRBaseTest
 from memcached.helper.data_helper import  MemcachedClientHelper
 from membase.api.rest_client import RestConnection, Bucket
 from membase.helper.rebalance_helper import RebalanceHelper
@@ -92,3 +93,12 @@ class CommunityTests(CommunityBaseTest):
 
 
 
+class CommunityXDCRTests(CommunityXDCRBaseTest):
+    def setUp(self):
+        super(CommunityXDCRTests, self).setUp()
+
+    def tearDown(self):
+        super(CommunityXDCRTests, self).tearDown()
+
+    def test_xdcr_filter(self):
+        """ paste code here """
