@@ -200,12 +200,19 @@ class BaseSecondaryIndexingTests(QueryTests):
                     self.sync_drop_index(bucket.name, query_definition)
 
     def drop_index(self, bucket, query_definition, verifydrop = True):
-        self.query = query_definition.generate_index_drop_query(bucket = bucket,
-          use_gsi_for_secondary = self.use_gsi_for_secondary, use_gsi_for_primary = self.use_gsi_for_primary)
-        actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
-        if verifydrop:
-            check = self.n1ql_helper._is_index_in_list(bucket, query_definition.index_name, server = self.n1ql_node)
-            self.assertFalse(check, "index {0} failed to be deleted".format(query_definition.index_name))
+        try:
+            self.query = query_definition.generate_index_drop_query(bucket = bucket,
+            use_gsi_for_secondary = self.use_gsi_for_secondary, use_gsi_for_primary = self.use_gsi_for_primary)
+            actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
+            if verifydrop:
+                check = self.n1ql_helper._is_index_in_list(bucket, query_definition.index_name, server = self.n1ql_node)
+                self.assertFalse(check, "index {0} failed to be deleted".format(query_definition.index_name))
+        except Exception, ex:
+                self.log.info(ex)
+                query = "select * from system:indexes"
+                actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_node)
+                self.log.info(actual_result)
+
 
     def async_drop_index(self, bucket, query_definition):
         self.query = query_definition.generate_index_drop_query(bucket = bucket,
@@ -450,7 +457,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             raise
         finally:
             if drop_index:
-                self.multi_drop_index(self.buckets,query_definitions)
+                self.multi_drop_index(buckets,query_definitions)
 
     def async_run_multi_operations(self, buckets = [], query_definitions = [], expected_results = {},
         create_index = False, drop_index = False, query_with_explain = False, query = False,

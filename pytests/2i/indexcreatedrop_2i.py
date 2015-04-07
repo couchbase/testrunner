@@ -29,18 +29,23 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
         query_definitions = []
         tasks = []
         verification_map ={}
+        query_definition_map ={}
         servers = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
         try:
             servers.reverse()
             for bucket in self.buckets:
+                query_definition_map[bucket.name] =[]
                 for server in servers:
                     index_name = "index_name_ip_{0}_port_{1}_{2}".format(server.ip.replace(".","_"),server.port,bucket.name)
                     query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_yr"], \
                         query_template = "", groups = [])
+                    query_definition_map[bucket.name].append(query_definition)
                     query_definitions.append(query_definition)
-                    deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
-                    verification_map["{0}:{1}".format(server.ip,server.port)] = {}
-                    verification_map["{0}:{1}".format(server.ip,server.port)][bucket.name]=index_name
+                    node_key = "{0}:{1}".format(server.ip,server.port)
+                    deploy_node_info = [node_key]
+                    if node_key not in verification_map.keys():
+                        verification_map[node_key] = {}
+                    verification_map[node_key][bucket.name]=index_name
                     tasks.append(self.async_create_index(bucket.name, query_definition, deploy_node_info = deploy_node_info))
                 for task in tasks:
                     task.result()
@@ -55,7 +60,9 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             self.log.info(ex)
             raise
         finally:
-            self.run_multi_operations(buckets = self.buckets, query_definitions = query_definitions, drop_index = True)
+            for bucket in self.buckets:
+                self.log.info("<<<<<<<<<<<< drop index {0} >>>>>>>>>>>".format(bucket.name))
+                self.run_multi_operations(buckets = [bucket], query_definitions = query_definition_map[bucket.name], drop_index = True)
 
     def test_fail_deployment_plan_defer_build_same_name_index(self):
         query_definitions = []
@@ -285,7 +292,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     def test_fail_create_kv_node_down(self):
         servr_out =[]
         try:
-            servr_out = self.get_nodes_from_services_map(service_type = "kv")
+            servr_out = self.get_nodes_from_services_map(service_type = "kv", get_all_nodes = True)
             remote = RemoteMachineShellConnection(servr_out[1])
             remote.stop_server()
             self.sleep(10)
