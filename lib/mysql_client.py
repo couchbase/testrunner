@@ -93,6 +93,16 @@ class MySQLClient(object):
             target_map[table_name] = field_list
         return target_map
 
+    def _get_field_with_types_list_map_for_tables(self):
+        target_map = {}
+        map = self._get_tables_information()
+        for table_name in map.keys():
+            field_list = []
+            for field_info in map[table_name]:
+                field_list.append({field_info['Field']:field_info['Type']})
+            target_map[table_name] = field_list
+        return target_map
+
     def _get_primary_key_map_for_tables(self):
         target_map = {}
         map = self._get_tables_information()
@@ -102,7 +112,28 @@ class MySQLClient(object):
                     target_map[table_name] = field_info['Field']
         return target_map
 
+    def _get_distinct_values_for_fields(self, table_name, field):
+        query = "Select DISTINCT({0}) from {1} ORDER BY {0}".format(field, table_name)
+        list = []
+        columns, rows = self._execute_query(query)
+        for row in rows:
+            list.append(row[0])
+        return list
+
+    def _get_values_with_type_for_fields_in_table(self):
+        map = self._get_field_with_types_list_map_for_tables()
+        print map
+        gen_map = {}
+        for table_name in map.keys():
+            gen_map[table_name] = {}
+            for vals in map[table_name]:
+                field_name = vals.keys()[0]
+                value_list = self._get_distinct_values_for_fields(table_name, field_name)
+                gen_map[table_name][field_name] = {"type": vals[field_name], "distinct_values": sorted(value_list)}
+                print "For table {0} and field {1} we have read {2} distinct values ".format(table_name, field_name, len(value_list))
+        return gen_map
+
 if __name__=="__main__":
     client = MySQLClient(database = "flightstats", host = "localhost", user_id = "root", password = "")
-    map = client._get_primary_key_map_for_tables()
+    map = client._get_values_with_type_for_fields_in_table()
     print map
