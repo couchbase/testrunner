@@ -1,15 +1,8 @@
 from basetestcase import BaseTestCase
 import json
 from membase.helper.cluster_helper import ClusterOperationHelper
-SDK_CLIENT_INSTALLED=False
-try:
-    from sdk_client import SDKClient
-    SDK_CLIENT_INSTALLED = True
-except Exception, e:
-    print e
-finally:
-    import mc_bin_client
-    from memcached.helper.data_helper import  VBucketAwareMemcached
+import mc_bin_client
+from memcached.helper.data_helper import  VBucketAwareMemcached
 from mysql_client import MySQLClient
 from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.tuq_helper import N1QLHelper
@@ -126,15 +119,15 @@ class RQGTests(BaseTestCase):
             print 'WARN======================='
             print ex
 
-    def _load_data_in_buckets(self, bucket_name, data_set):
-        scheme = "couchbase"
-        host=self.master.ip
-        if self.master.ip == "127.0.0.1":
-            scheme = "http"
-            host="{0}:{1}".format(self.master.ip,self.master.port)
-        client = SDKClient(scheme=scheme,hosts = [host], bucket = bucket_name)
-        client.upsert_multi(data_set)
-        client.close()
+#    def _load_data_in_buckets(self, bucket_name, data_set):
+#        scheme = "couchbase"
+#        host=self.master.ip
+#        if self.master.ip == "127.0.0.1":
+#            scheme = "http"
+#            host="{0}:{1}".format(self.master.ip,self.master.port)
+#        client = SDKClient(scheme=scheme,hosts = [host], bucket = bucket_name)
+#        client.upsert_multi(data_set)
+#        client.close()
 
     def _initialize_n1ql_helper(self):
         self.n1ql_helper = N1QLHelper(version = "sherlock", shell = None,
