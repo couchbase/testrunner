@@ -1,6 +1,15 @@
 from basetestcase import BaseTestCase
+import json
 from membase.helper.cluster_helper import ClusterOperationHelper
-from sdk_client import SDKClient
+SDK_CLIENT_INSTALLED=False
+try:
+    from sdk_client import SDKClient
+    SDK_CLIENT_INSTALLED = True
+except Exception, e:
+    print e
+finally:
+    import mc_bin_client
+    from memcached.helper.data_helper import  VBucketAwareMemcached
 from mysql_client import MySQLClient
 from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.tuq_helper import N1QLHelper
@@ -107,6 +116,15 @@ class RQGTests(BaseTestCase):
 
     def _build_primary_indexes(self, using_gsi= True, bucket_list = []):
         self.n1ql_helper.create_primary_index(using_gsi = using_gsi,server = self.n1ql_server)
+
+    def _load_data_in_buckets_using_mc_bin_client(self, bucket, data_set):
+        client = VBucketAwareMemcached(RestConnection(self.master), bucket)
+        try:
+            for key in data_set.keys():
+                o, c, d = client.set(key, 0, 0, json.dumps(data_set[key]))
+        except Exception, ex:
+            print 'WARN======================='
+            print ex
 
     def _load_data_in_buckets(self, bucket_name, data_set):
         scheme = "couchbase"
@@ -215,7 +233,9 @@ class RQGTests(BaseTestCase):
             query = "select * from {0}".format(bucket_name)
             columns, rows = self.client._execute_query(query = query)
             dict = self.client._gen_json_from_results_with_primary_key(columns, rows, table_key_map[bucket_name])
-            self._load_data_in_buckets(bucket_name, dict)
+            for bucket in self.buckets:
+                if bucket.name == bucket_name:
+                    self._load_data_in_buckets_using_mc_bin_client(bucket, dict)
 
 
 
