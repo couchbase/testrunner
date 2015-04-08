@@ -2015,8 +2015,11 @@ class CouchbaseCluster:
         buckets = copy.copy(self.get_buckets())
 
         for bucket in buckets:
-            items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
-            items = items * bucket.numReplicas
+            if len(self.__nodes) > 1:
+                items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                items = items * bucket.numReplicas
+            else:
+                items = 0
             while True:
                 try:
                     replica_keys = int(rest.get_replica_key_count(bucket.name))
@@ -2912,12 +2915,12 @@ class XDCRNewBaseTest(unittest.TestCase):
                 finally:
                     rev_err_count = self.verify_rev_ids(remote_cluster_ref.get_replications())
                     # we're done with the test, now report specific errors
-                    if (not(src_active_passed or dest_active_passed)) and \
-                        (not(src_dcp_queue_drained or dest_dcp_queue_drained)):
+                    if (not(src_active_passed and dest_active_passed)) and \
+                        (not(src_dcp_queue_drained and dest_dcp_queue_drained)):
                         self.fail("Incomplete replication: Keys stuck in dcp queue")
-                    if not (src_active_passed or dest_active_passed):
+                    if not (src_active_passed and dest_active_passed):
                         self.fail("Incomplete replication: Active key count is incorrect")
-                    if not (src_replica_passed or dest_replica_passed):
+                    if not (src_replica_passed and dest_replica_passed):
                         self.fail("Incomplete intra-cluster replication: "
                                   "replica count did not match active count")
                     if rev_err_count > 0:
