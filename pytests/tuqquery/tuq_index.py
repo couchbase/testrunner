@@ -483,7 +483,7 @@ class QueriesViewsTests(QueryTests):
         for bucket in self.buckets:
             try:
                 for field in index_fields:
-                    index_name = '%s%s' % (index_name_prefix, field)
+                    index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, ','.join(field.split(';')), self.index_type)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
