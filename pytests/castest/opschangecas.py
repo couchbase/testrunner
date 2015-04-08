@@ -4,7 +4,9 @@ from memcacheConstants import ERR_NOT_FOUND
 from castest.cas_base import CasBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
 from mc_bin_client import MemcachedError
-from memcached.helper.data_helper import MemcachedClientHelper
+
+from membase.api.rest_client import RestConnection, RestHelper
+from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 
 class OpsChangeCasTests(CasBaseTest):
 
@@ -50,6 +52,10 @@ class OpsChangeCasTests(CasBaseTest):
         For expire, We want to verify using the latest CAS value of that item
         can not mutate it because it is expired already."""
 
+
+        client = VBucketAwareMemcached(RestConnection(self.master), 'default')
+
+
         for bucket in self.buckets:
             gen = generator
             cas_error_collection = []
@@ -58,9 +64,10 @@ class OpsChangeCasTests(CasBaseTest):
                 key, value = gen.next()
                 if ops == "update":
                     for x in range(self.mutate_times):
-                        o_old, cas_old, d_old = self.clients[bucket.name].get(key)
-                        self.clients[bucket.name].cas(key, 0, 0, cas_old, "{0}-{1}".format("mysql-new-value", x))
-                        o_new, cas_new, d_new = self.clients[bucket.name].get(key)
+                        o_old, cas_old, d_old = client.get(key)
+                        client.memcached(key).cas(key, 0, 0, cas_old, "{0}-{1}".format("mysql-new-value", x))
+
+                        o_new, cas_new, d_new = client.get(key)
                         if cas_old == cas_new:
                             cas_error_collection.append(cas_old)
                         if d_new != "{0}-{1}".format("mysql-new-value", x):
@@ -68,6 +75,18 @@ class OpsChangeCasTests(CasBaseTest):
                         if cas_old != cas_new and d_new == "{0}-{1}".format("mysql-new-value", x):
                             self.log.info("Use item cas {0} to mutate the same item with key {1} successfully! Now item cas is {2} "
                                           .format(cas_old, key, cas_new))
+
+
+                        mc_active = client.memcached( key )
+                        mc_replica = client.memcached( key, replica_index=0 )
+
+                        active_cas = int( mc_active.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(key)) + ':max_cas'] )
+                        replica_cas = int( mc_replica.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(key)) + ':max_cas'] )
+                        self.assertTrue(active_cas == cas_new,
+                                        'cbstats cas mismatch. Expected {0}, actual {1}'.format( cas_new, active_cas))
+                        self.assertTrue(active_cas == replica_cas,
+                                        'replica cas mismatch. Expected {0}, actual {1}'.format( cas_new, replica_cas))
+
                 elif ops == "delete":
                     o, cas, d = self.clients[bucket.name].delete(key)
                     time.sleep(10)
