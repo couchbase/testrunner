@@ -307,7 +307,7 @@ class N1QLHelper():
                 try_count += 1
         return "ran query with success and validated results" , check
 
-    def is_index_online_and_in_list(self, bucket, index_name, server = None, timeout = 240.0):
+    def is_index_online_and_in_list(self, bucket, index_name, server = None, timeout = 600.0):
         check = self._is_index_in_list(bucket, index_name, server = server)
         init_time = time.time()
         while not check:
