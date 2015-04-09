@@ -9,6 +9,7 @@ from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import Bucket
 from couchbase_helper.documentgenerator import Base64Generator
 from couchbase_helper.documentgenerator import JSONNonDocGenerator
+from couchbase_helper.tuq_generators import JsonGenerator
 import TestInput
 import logger
 import json
@@ -180,6 +181,13 @@ class JoinDocLoader(DocLoaderCouchbase):
                                             start=20, end=end))
         return generators
 
+class SabreDocLoader(DocLoaderCouchbase):
+    def __init__(self, servers, cluster):
+        super(SabreDocLoader, self).__init__(servers, cluster)
+
+    def generate_docs(self, docs_per_day, years):
+        return JsonGenerator().generate_docs_sabre(docs_per_day=docs_per_day, years=years)
+
 
 class Base64DocLoader(DocLoaderCouchbase):
     def __init__(self, servers, cluster):
@@ -275,6 +283,8 @@ def main():
                 loader = DocLoaderCouchbase(input.servers, cluster)
             elif loader_type == 'join':
                 loader = JoinDocLoader(input.servers, cluster)
+            elif loader_type == 'sabre':
+                loader = SabreDocLoader(input.servers, cluster)
             elif loader_type == 'base64':
                 loader = Base64DocLoader(input.servers, cluster)
             elif loader_type== 'nondoc':

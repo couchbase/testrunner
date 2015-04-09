@@ -548,10 +548,10 @@ class JsonGenerator:
                                                start=start, end=docs_per_day))
         return generators
 
-    def generate_docs_sabre(self, docs_per_day = 1, start=0, isShuffle = False):
+    def generate_docs_sabre(self, docs_per_day=1, start=0, isShuffle=False, years=2):
         generators = []
         dests = self._shuffle(['BOS', 'MIA', 'SFO'],isShuffle)
-        join_yr = self._shuffle([2010, 2011],isShuffle)
+        join_yr = self._shuffle(xrange(2010, 2010 + years), isShuffle)
         join_mo = self._shuffle(xrange(1, 12 + 1),isShuffle)
         join_day = self._shuffle(xrange(1, 28 + 1),isShuffle)
         template = '{{ "Amount":{0}, "CurrencyCode":"{1}",'
