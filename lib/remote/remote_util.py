@@ -1538,18 +1538,22 @@ class RemoteMachineShellConnection:
                 self.create_windows_capture_file(task, product, full_version)
                 self.modify_bat_file('/cygdrive/c/automation', bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
-                log.info('sleep for 5 seconds before running task schedule uninstall on {0}'.format(self.ip))
+                log.info('sleep for 5 seconds before running task '
+                                    'schedule uninstall on {0}'.format(self.ip))
 
-                """ the code below need to remove when bug MB-11328 is fixed in 3.0.1 """
+                """ the code below need to remove when bug MB-11328
+                                                            is fixed in 3.0.1 """
                 output, error = self.kill_erlang(os="windows")
                 self.log_command_output(output, error)
                 """ end remove code """
 
                 time.sleep(5)
                 # run schedule task uninstall couchbase server
-                output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
+                output, error = \
+                        self.execute_command("cmd /c schtasks /run /tn removeme")
                 self.log_command_output(output, error)
-                deleted = self.wait_till_file_deleted(version_path, version_file, timeout_in_seconds=600)
+                deleted = self.wait_till_file_deleted(version_path, \
+                                            version_file, timeout_in_seconds=600)
                 if not deleted:
                     log.error("Uninstall was failed at node {0}".format(self.ip))
                     sys.exit()
@@ -1559,33 +1563,38 @@ class RemoteMachineShellConnection:
                                                          .format(self.ip))
                 self.sleep(10, "next step is to install")
                 """ delete binary after uninstall """
-                output, error = self.execute_command("rm -f /cygdrive/c/tmp/{0}".format(build_name))
+                output, error = self.execute_command("rm -f /cygdrive/c/tmp/{0}"\
+                                                              .format(build_name))
                 self.log_command_output(output, error)
                 output, error = self.execute_command("rm \
                        /cygdrive/c/automation/{0}_uninstall.iss".format(self.ip))
                 self.log_command_output(output, error)
 
-                """ the code below need to remove when bug MB-11328 is fixed in 3.0.1 """
+                """ the code below need to remove when bug MB-11328
+                                                           is fixed in 3.0.1 """
                 output, error = self.kill_erlang(os="windows")
                 self.log_command_output(output, error)
                 """ end remove code """
 
 
-                """ the code below need to remove when bug MB-11985 is fixed in 3.0.1 """
+                """ the code below need to remove when bug MB-11985
+                                                           is fixed in 3.0.1 """
                 if full_version[:5] in COUCHBASE_VERSION_2 or \
                    full_version[:5] in COUCHBASE_VERSION_3 or \
                    full_version.startswith("4.0.0"):
                     log.info("due to bug MB-11985, we need to delete below registry")
                     output, error = self.execute_command("reg delete \
-                               'HKLM\Software\Wow6432Node\Ericsson\Erlang\ErlSrv' /f ")
+                            'HKLM\Software\Wow6432Node\Ericsson\Erlang\ErlSrv' /f ")
                     self.log_command_output(output, error)
                 """ end remove code """
             else:
-                log.info("No couchbase server on {0} server. Free to install".format(self.ip))
+                log.info("No couchbase server on {0} server. Free to install" \
+                                                                 .format(self.ip))
         elif type in LINUX_DISTRIBUTION_NAME:
             # uninstallation command is different
             if type == "ubuntu":
-                uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("couchbase-server", "couchbase-server")
+                uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
+                                     .format("couchbase-server", "couchbase-server")
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
             elif type in RPM_DIS_NAME:
@@ -1752,7 +1761,8 @@ class RemoteMachineShellConnection:
         elif type in LINUX_DISTRIBUTION_NAME:
             # uninstallation command is different
             if type == "ubuntu":
-                uninstall_cmd = 'dpkg -r {0};dpkg --purge {1};'.format('membase-server', 'membase-server')
+                uninstall_cmd = 'dpkg -r {0};dpkg --purge {1};' \
+                                 .format('membase-server', 'membase-server')
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
             elif type in RPM_DIS_NAME:
