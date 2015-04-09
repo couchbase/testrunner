@@ -438,6 +438,7 @@ class BuildQuery(object):
         sherlock build name with extra build number:
                /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
                /1454/couchbase-server-enterprise-4.0.0-1454-centos6.x86_64.rpm
+               /1796/couchbase-server-enterprise-4.0.0-1796-oel6.x86_64.rpm
                /723/couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
                /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb
                /1120/couchbase-server-enterprise_3.5.0-1120-macos_x86_64.zip
@@ -513,6 +514,7 @@ class BuildQuery(object):
             /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
             /1154/couchbase-server-enterprise-3.5.0-1154-centos7.x86_64.rpm
             /1454/couchbase-server-enterprise-4.0.0-1454-centos6.x86_64.rpm
+            /1796/couchbase-server-enterprise-4.0.0-1796-oel6.x86_64.rpm
             /723/couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
             /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb
             /795/couchbase_server-enterprise-windows-amd64-3.5.0-795.exe
@@ -533,6 +535,12 @@ class BuildQuery(object):
             elif "opensuse" in distribution_version:
                 build.distribution_version = "opensuse11.3"
                 os_name = "opensuse11.3"
+                build.name = edition_type + "-" + build.product_version + \
+                   "-" + os_name + "." + build.architecture_type + \
+                   "." + build.deliverable_type
+            elif "oracle linux" in distribution_version:
+                build.distribution_version = "oracle linux"
+                os_name = "oel6"
                 build.name = edition_type + "-" + build.product_version + \
                    "-" + os_name + "." + build.architecture_type + \
                    "." + build.deliverable_type

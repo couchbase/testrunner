@@ -18,6 +18,8 @@ from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import WIN_CB_VERSION_3
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
+from testconstants import RPM_DIS_NAME
+from testconstants import LINUX_DISTRIBUTION_NAME
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
 
@@ -1473,7 +1475,7 @@ class RemoteMachineShellConnection:
             type = info.distribution_type.lower()
             if type == "windows":
                 self.execute_command("taskkill /F /T /IM {0}".format(process))
-            elif type in ["ubuntu", "centos", "red hat", "opensuse", "oracle linux"]:
+            elif type in LINUX_DISTRIBUTION_NAME:
                 self.terminate_process(info, process)
 
     def remove_folders(self, list):
@@ -1580,13 +1582,13 @@ class RemoteMachineShellConnection:
                 """ end remove code """
             else:
                 log.info("No couchbase server on {0} server. Free to install".format(self.ip))
-        elif type in ["ubuntu", "centos", "red hat", "opensuse", "oracle linux"]:
+        elif type in LINUX_DISTRIBUTION_NAME:
             # uninstallation command is different
             if type == "ubuntu":
                 uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("couchbase-server", "couchbase-server")
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
-            elif type in ["centos", "red hat", "opensuse"]:
+            elif type in RPM_DIS_NAME:
                 """ Sometimes, vm left with unfinish uninstall/install process.
                     We need to kill them before doing uninstall """
                 output, error = self.execute_command("killall -9 rpm")
@@ -1747,13 +1749,13 @@ class RemoteMachineShellConnection:
                 self.log_command_output(output, error)
             else:
                 log.info("No membase server on this server.  Free to install")
-        elif type in ["ubuntu", "centos", "red hat"]:
+        elif type in LINUX_DISTRIBUTION_NAME:
             # uninstallation command is different
             if type == "ubuntu":
                 uninstall_cmd = 'dpkg -r {0};dpkg --purge {1};'.format('membase-server', 'membase-server')
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
-            elif type in ["centos", "red hat"]:
+            elif type in RPM_DIS_NAME:
                 """ Sometimes, vm left with unfinish uninstall/install process.
                     We need to kill them before doing uninstall """
                 output, error = self.execute_command("killall -9 rpm")
@@ -1777,7 +1779,7 @@ class RemoteMachineShellConnection:
             uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("moxi-server", "moxi-server")
             output, error = self.execute_command(uninstall_cmd)
             self.log_command_output(output, error)
-        elif type in ["centos", "red hat"]:
+        elif type in LINUX_DISTRIBUTION_NAME:
             uninstall_cmd = 'rpm -e {0}'.format("moxi-server")
             log.info('running rpm -e to remove couchbase-server')
             output, error = self.execute_command(uninstall_cmd)
