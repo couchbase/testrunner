@@ -615,7 +615,7 @@ class BaseTestCase(unittest.TestCase):
         timeout - Waiting the end of the thread. (str)
     """
     def _wait_for_stats_all_buckets(self, servers, ep_queue_size=0, \
-                                     ep_queue_size_cond='==', check_ep_items_remaining = False, timeout=360):
+                                     ep_queue_size_cond='==', check_ep_items_remaining = True, timeout=360):
         tasks = []
         servers = self.get_kv_nodes(servers)
         for server in servers:
@@ -726,7 +726,7 @@ class BaseTestCase(unittest.TestCase):
         return gen_load
 
     def verify_cluster_stats(self, servers=None, master=None, max_verify=None, timeout=None, check_items=True,
-                             only_store_hash=True, replica_to_read=None, batch_size=1000, check_bucket_stats = True, check_ep_items_remaining = False):
+                             only_store_hash=True, replica_to_read=None, batch_size=1000, check_bucket_stats = True, check_ep_items_remaining = True):
         servers = self.get_kv_nodes(servers)
         if servers is None:
             servers = self.servers
