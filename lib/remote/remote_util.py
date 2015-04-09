@@ -1473,7 +1473,7 @@ class RemoteMachineShellConnection:
             type = info.distribution_type.lower()
             if type == "windows":
                 self.execute_command("taskkill /F /T /IM {0}".format(process))
-            elif type in ["ubuntu", "centos", "red hat", "opensuse"]:
+            elif type in ["ubuntu", "centos", "red hat", "opensuse", "oracle linux"]:
                 self.terminate_process(info, process)
 
     def remove_folders(self, list):
@@ -1580,7 +1580,7 @@ class RemoteMachineShellConnection:
                 """ end remove code """
             else:
                 log.info("No couchbase server on {0} server. Free to install".format(self.ip))
-        elif type in ["ubuntu", "centos", "red hat", "opensuse"]:
+        elif type in ["ubuntu", "centos", "red hat", "opensuse", "oracle linux"]:
             # uninstallation command is different
             if type == "ubuntu":
                 uninstall_cmd = "dpkg -r {0};dpkg --purge {1};".format("couchbase-server", "couchbase-server")
@@ -1999,6 +1999,10 @@ class RemoteMachineShellConnection:
                         os_distro = 'openSUSE'
                         os_version = etc_issue
                         is_linux_distro = True
+                    elif etc_issue.lower().find('oracle linux') != -1:
+                        os_distro = 'Oracle Linux'
+                        os_version = etc_issue
+                        is_linux_distro = True
                     else:
                         print "error not found"
                         log.error("Error should not land here")
@@ -2081,7 +2085,8 @@ class RemoteMachineShellConnection:
                    'Red Hat' : "rpm",
                    "Mac"     : "zip",
                    "Debian"  : "deb",
-                   "openSUSE": "rpm"}.get(os_distro, '')
+                   "openSUSE": "rpm",
+                   "Oracle Linux": "rpm"}.get(os_distro, '')
             arch = {'i686': 'x86',
                     'i386': 'x86'}.get(os_arch, os_arch)
 
