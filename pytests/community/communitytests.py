@@ -101,4 +101,11 @@ class CommunityXDCRTests(CommunityXDCRBaseTest):
         super(CommunityXDCRTests, self).tearDown()
 
     def test_xdcr_filter(self):
-        """ paste code here """
+        filter_on = False
+        serverInfo = self.servers[0]
+        shell = RemoteMachineShellConnection(serverInfo)
+        output, error = shell.execute_command('curl -X POST http://{0}:8091/controller/'\
+            'createReplication -d toCluster="remote_cluster_ref" '\
+                      '-d toBucket="target_bucket_name" -d filterExpression="some_exp"'\
+                                                                   .format(serverInfo.ip))
+        shell.log_command_output(output, error)
