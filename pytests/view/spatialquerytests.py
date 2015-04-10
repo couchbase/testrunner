@@ -566,8 +566,8 @@ class SpatialQueryTests(unittest.TestCase):
             # failover and verify loaded data
             #self.cluster.failover(self.servers, failover_nodes)
             self.cluster.failover(self.servers, self.servers[1:2])
-            self.log.info("10 seconds sleep after failover before invoking rebalance...")
-            time.sleep(10)
+            self.log.info("120 seconds sleep after failover before invoking rebalance...")
+            time.sleep(120)
             rebalance = self.cluster.async_rebalance(self.servers,
                 [], self.servers[1:2])
 
@@ -591,7 +591,7 @@ class SpatialQueryTests(unittest.TestCase):
             remote.start_server()
             remote.disconnect()
             self.log.info("Node {0} should be warming up ".format(server.ip))
-            time.sleep(20)
+            time.sleep(120)
         self._query_test_init(data_set)
 
     # REBOOT
@@ -610,7 +610,7 @@ class SpatialQueryTests(unittest.TestCase):
                     shell.disconnect()
                     self.log.info("Node {0} is being stopped".format(server.ip))
 
-                    time.sleep(60)
+                    time.sleep(120)
                     shell = RemoteMachineShellConnection(server)
                     command = "/sbin/iptables -F"
                     o, r = shell.execute_command(command)
