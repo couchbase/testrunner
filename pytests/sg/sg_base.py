@@ -42,7 +42,7 @@ class GatewayBaseTest(unittest.TestCase):
                 if status_code == 200:
                     self.log.info('Found "{0}"'.format(url))
                     return filename, url
-        self.log.interrupt('Target build not found')
+        self.log.fatal('Target build not found')
 
     def get_expected_locations(self, shell):
         self.info = shell.extract_remote_info()
