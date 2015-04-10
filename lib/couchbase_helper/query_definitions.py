@@ -303,12 +303,6 @@ class SQLDefinitionGenerator:
 				groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, LESS_THAN,"employee"], index_where_clause = " join_yr < 2014 "))
 		definitions_list.append(
 			QueryDefinition(
-				index_name="simple_like",
-				index_fields = ["simple_like"],
-				query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title LIKE \"Engineer\""),
-				groups = [SIMPLE_INDEX,RANGE_SCAN, NO_ORDERBY_GROUPBY, LESS_THAN,"employee"], index_where_clause = "job_title LIKE \"Engineer\""))
-		definitions_list.append(
-			QueryDefinition(
 				index_name="composite_index_1",
 				index_fields = ["job_title = \"Sales\" and join_yr > 2010 and join_yr > 2014"],
 				query_template = RANGE_SCAN_TEMPLATE.format(emit_fields," %s " % "job_title = \"Sales\" and join_yr > 2010 and join_yr > 2014"),
