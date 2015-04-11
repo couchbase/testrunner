@@ -36,6 +36,7 @@ class QueryTests(BaseTestCase):
         if self.input.param("start_cmd", True):
             self._start_command_line_query(self.master, user=self.master.rest_username, password=self.master.rest_password)
         self.use_rest = self.input.param("use_rest", True)
+        self.hint_index = self.input.param("hint", None)
         self.max_verify = self.input.param("max_verify", None)
         self.buckets = RestConnection(self.master).get_buckets()
         self.docs_per_day = self.input.param("doc-per-day", 49)
@@ -69,7 +70,7 @@ class QueryTests(BaseTestCase):
                 else:
                     self.load(self.gens_load, flag=self.item_flag)
             self.create_primary_index_for_3_0_and_greater()
-            if not self.input.param("skip_build_tuq", False):
+            if not self.input.param("skip_build_tuq", True):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
         except Exception, ex:
@@ -82,7 +83,7 @@ class QueryTests(BaseTestCase):
         super(QueryTests, self).tearDown()
 
     def suite_tearDown(self):
-        if not self.input.param("skip_build_tuq", False):
+        if not self.input.param("skip_build_tuq", True):
             if hasattr(self, 'shell'):
                o = self.shell.execute_command("ps -aef| grep cbq-engine")
                self.log.info(o)
@@ -2548,6 +2549,13 @@ class QueryTests(BaseTestCase):
             query_params.update({'scan_consistency': self.scan_consistency})
             if hasattr(self, 'query_params') and self.query_params:
                 query_params = self.query_params
+            if self.hint_index and (query.lower().find('select') != -1):
+                from_clause = re.sub(r'let.*', '', re.sub(r'.*from', '', re.sub(r'where.*', '', query)))
+                from_clause = re.sub(r'LET.*', '', re.sub(r'.*FROM', '', re.sub(r'WHERE.*', '', from_clause)))
+                from_clause = re.sub(r'select.*', '', re.sub(r'order by.*', '', re.sub(r'group by.*', '', from_clause)))
+                from_clause = re.sub(r'SELECT.*', '', re.sub(r'ORDER BY.*', '', re.sub(r'GROUP BY.*', '', from_clause)))
+                hint = ' USE INDEX (%s using %s) ' % (self.hint_index, self.index_type)
+                query = query.replace(from_clause, from_clause + hint)
             self.log.info('RUN QUERY %s' % query)
             result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared=is_prepared)
         else:

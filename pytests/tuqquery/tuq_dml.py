@@ -15,7 +15,9 @@ class DMLQueryTests(QueryTests):
         super(DMLQueryTests, self).setUp()
         self.directory = self.input.param("directory", "/tmp/tuq_data")
         self.shell.execute_command("killall cbq-engine")
-        self._start_command_line_query(self.master)
+        for bucket in self.buckets:
+            self.cluster.bucket_flush(self.master, bucket=bucket,
+                                  timeout=self.wait_timeout * 5)
         self.create_primary_index_for_3_0_and_greater()
 
 ############################################################################################################################
@@ -272,6 +274,15 @@ class DMLQueryTests(QueryTests):
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['results'][0]['actual'], current_docs - 1, 'Item was not deleted')
 
+    def delete_where_clause_json_hints(self, idx_name):
+        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where_hints')
+        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_title"] == 'Engineer']
+        for bucket in self.buckets:
+            self.query = 'delete from %s use index(%s) where job_title="Engineer"'  % (bucket.name, idx_name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self._keys_are_deleted(keys_to_delete)
+
 ############################################################################################################################
 #
 # MERGE
@@ -430,6 +441,64 @@ class DMLQueryTests(QueryTests):
             self.assertTrue([row for row in actual_result['results']
                              if len([vm['os'] for vm in row['VMs']
                                      if vm['os'] == updated_value]) == 1], 'Os of vms were not changed')
+
+    def update_keys_clause_hints(self, idx_name):
+        num_docs = self.input.param('num_docs', 10)
+        keys, _ = self._insert_gen_keys(num_docs, prefix='update_keys_hints')
+        updated_value = 'new_name'
+        for bucket in self.buckets:
+            self.query = 'update %s use index(%s) set name="%s"'  % (bucket.name, idx_name, updated_value)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+            self.query = 'select name from %s use index(%s)' % (bucket.name, idx_name)
+            self.run_cbq_query()
+            self.sleep(10, 'wait for index')
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['results'],[{'name':updated_value}] * num_docs, 'Names were not changed')
+
+    def update_where_hints(self, idx_name):
+        num_docs = self.input.param('num_docs', 10)
+        _, values = self._insert_gen_keys(num_docs, prefix='update_where')
+        updated_value = 'new_name'
+        for bucket in self.buckets:
+            self.query = 'update %s use index(%s) set name="%s" where join_day=1 returning name'  % (bucket.name, idx_name, updated_value)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+            self.query = 'select name from %s use index(%s) where join_day=1' % (bucket.name, idx_name)
+            self.run_cbq_query()
+            self.sleep(10, 'wait for index')
+            actual_result = self.run_cbq_query()
+            self.assertFalse([doc for doc in actual_result['results'] if doc['name'] != updated_value], 'Names were not changed')
+
+########################################################################################################################
+#
+# WITH INDEX
+#######################################################################################################################
+
+    def test_with_hints(self):
+        indexes = []
+        index_name_prefix = "hint_index_" + str(uuid.uuid4())[:4]
+        method_name = self.input.param('to_run', 'test_any')
+        index_fields = self.input.param("index_field", '').split(';')
+        for bucket in self.buckets:
+            try:
+                for field in index_fields:
+                    index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
+                    self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, ','.join(field.split(';')), self.index_type)
+                    self.run_cbq_query()
+                    self._wait_for_index_online(bucket, index_name)
+                    indexes.append(index_name)
+                for indx in indexes:
+                    fn = getattr(self, method_name)
+                    fn(indx)
+            finally:
+                for indx in indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, indx, self.index_type)
+                    try:
+                        self.run_cbq_query()
+                    except:
+                        pass
+
 
 ############################################################################################################################
 
