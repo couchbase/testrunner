@@ -52,6 +52,8 @@ class RQGTests(BaseTestCase):
         total =0
         fail_case = 0
         failure_map = {}
+        self.assertTrue(len(n1ql_query_list) == len(sql_query_list),
+         "number of query mismatch n1ql:{0}, sql:{1}".format(len(n1ql_query_list),len(sql_query_list)))
         for n1ql_query in n1ql_query_list:
             sql_query = sql_query_list[i]
             i+=1
