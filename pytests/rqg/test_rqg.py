@@ -74,6 +74,7 @@ class RQGTests(BaseTestCase):
             n1ql_query_list = f.readlines()
         self._generate_secondary_indexes(n1ql_query_list)
         failure_list = []
+        n1ql_query_list = self.query_helper._convert_sql_list_to_n1ql(n1ql_query_list)
         check = True
         for n1ql_query in n1ql_query_list:
             try:
