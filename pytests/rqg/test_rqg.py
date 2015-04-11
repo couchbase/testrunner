@@ -100,8 +100,6 @@ class RQGTests(BaseTestCase):
         self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
         self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
         try:
-            self.log.info("Sample SQL Result {0}".format(sql_result[0]))
-            self.log.info("N1QL Result {0}".format(n1ql_result[0]))
             self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
         except Exception, ex:
             self.log.info(ex)
