@@ -3,10 +3,19 @@ class QueryHelper(object):
         select_text  =  self._find_string_type(n1ql_query, ["SELECT", "Select", "select"])
         from_text = self._find_string_type(n1ql_query, ["FROM", "from", "From"])
         result_text = n1ql_query.split(select_text)[1].split(from_text)[0].strip()
+        if self._check_function(result_text):
+            return "FUN"
         if result_text == "*":
             return []
         if ".*" in result_text:
             return [result_text.split(".")[0]]
+
+    def _check_function(self, sql):
+        func_list = ["MIN", "min", "MAX", "COUNT"]
+        for func in func_list:
+            if func in sql:
+                return True
+        return False
 
     def _find_string_type(self, n1ql_query, hints = []):
         for hint in hints:
@@ -107,7 +116,8 @@ class QueryHelper(object):
 if __name__=="__main__":
     helper = QueryHelper()
     print "running now"
-    helper._convert_sql_to_nql_dump_in_file("/Users/parag/fix_testrunner/testrunner/b/resources/flightstats_mysql/inner_join_flightstats_n1ql_queries.txt")
+    print helper._find_hints("SELECT MIN(A.*) from check")
+    #helper._convert_sql_to_nql_dump_in_file("/Users/parag/fix_testrunner/testrunner/b/resources/flightstats_mysql/inner_join_flightstats_n1ql_queries.txt")
     #print helper._gen_sql_to_nql("SELECT SUM(  a1.distance) FROM `ontime_mysiam`  AS a1 INNER JOIN `aircraft`  AS a2 ON ( a2 .`tail_num` = a1 .`tail_num` ) INNER JOIN `airports`  AS a3 ON ( a1 . `origin` = a3 .`code` ) ")
     #print helper._gen_sql_to_nql("SELECT a1.* FROM ON (a.key1 = a.key2)")
     #print helper._gen_sql_to_nql("SELECT a1.* FROM ON (a.key1= a.key2)")

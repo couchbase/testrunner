@@ -64,7 +64,7 @@ class RQGTests(BaseTestCase):
                 pass_case += 1
             else:
                 fail_case +=  1
-                failure_map[str[1]] = { "sql_query":sql_query, "n1ql_query": n1ql_query, "reason for failure": msg}
+                failure_map[str(fail_case)] = { "sql_query":sql_query, "n1ql_query": n1ql_query, "reason for failure": msg}
         self.log.info(" Total Queries Run = {0}, Pass Percentage = {1}".format(total, (100*(pass_case/total))))
         self.assertTrue(check, failure_map)
 
@@ -94,9 +94,11 @@ class RQGTests(BaseTestCase):
         hints = self.query_helper._find_hints(n1ql_query)
         actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server)
         n1ql_result = actual_result["results"]
+        self.log.info(actual_result)
         # Run SQL Query
         columns, rows = self.client._execute_query(query = sql_query)
         sql_result = self.client._gen_json_from_results(columns, rows)
+        self.log.info(sql_result)
         self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
         self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
         try:

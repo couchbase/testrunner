@@ -359,7 +359,9 @@ class N1QLHelper():
                         result_set.append(val[key])
         return result_set
 
-    def _check_sample(self, result, expected_in_key = []):
+    def _check_sample(self, result, expected_in_key = None):
+        if expected_in_key == "FUN":
+            return False
         if len(expected_in_key) == 0:
             return True
         if result != None and len(result) > 0:
