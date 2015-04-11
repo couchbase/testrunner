@@ -55,6 +55,7 @@ class RQGTests(BaseTestCase):
         self.assertTrue(len(n1ql_query_list) == len(sql_query_list),
          "number of query mismatch n1ql:{0}, sql:{1}".format(len(n1ql_query_list),len(sql_query_list)))
         for n1ql_query in n1ql_query_list:
+            self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING QUERY CASE NUMBER {0} >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(i))
             sql_query = sql_query_list[i]
             i+=1
             # Run n1ql query
@@ -67,7 +68,8 @@ class RQGTests(BaseTestCase):
             else:
                 fail_case +=  1
                 failure_map[str(fail_case)] = { "sql_query":sql_query, "n1ql_query": n1ql_query, "reason for failure": msg}
-        self.log.info(" Total Queries Run = {0}, Pass Percentage = {1}".format(total, (100*(pass_case/total))))
+            self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING QUERY CASE NUMBER {0} >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(i-1))
+        self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case))
         self.assertTrue(check, failure_map)
 
     def test_n1ql_queries_only(self):
@@ -92,13 +94,14 @@ class RQGTests(BaseTestCase):
         actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server)
 
     def _run_queries_compare(self, n1ql_query = None, sql_query = None):
+        self.log.info(" SQL QUERY :: {0}".format(sql_query))
+        self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
         # Run n1ql query
         hints = self.query_helper._find_hints(n1ql_query)
         actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server)
         n1ql_result = actual_result["results"]
         self.log.info(actual_result)
         # Run SQL Query
-        self.log.info(" SQL QUERY :: {0}".format(sql_query))
         columns, rows = self.client._execute_query(query = sql_query)
         sql_result = self.client._gen_json_from_results(columns, rows)
         self.log.info(sql_result)
