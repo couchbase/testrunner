@@ -96,6 +96,7 @@ class RQGTests(BaseTestCase):
         n1ql_result = actual_result["results"]
         self.log.info(actual_result)
         # Run SQL Query
+        self.log.info(" SQL QUERY :: {0}".format(sql_query))
         columns, rows = self.client._execute_query(query = sql_query)
         sql_result = self.client._gen_json_from_results(columns, rows)
         self.log.info(sql_result)

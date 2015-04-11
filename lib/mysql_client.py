@@ -122,7 +122,6 @@ class MySQLClient(object):
 
     def _get_values_with_type_for_fields_in_table(self):
         map = self._get_field_with_types_list_map_for_tables()
-        print map
         gen_map = {}
         for table_name in map.keys():
             gen_map[table_name] = {}
@@ -136,4 +135,3 @@ class MySQLClient(object):
 if __name__=="__main__":
     client = MySQLClient(database = "flightstats", host = "localhost", user_id = "root", password = "")
     map = client._get_values_with_type_for_fields_in_table()
-    print map

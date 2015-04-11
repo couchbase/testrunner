@@ -11,7 +11,7 @@ class QueryHelper(object):
             return [result_text.split(".")[0]]
 
     def _check_function(self, sql):
-        func_list = ["MIN", "min", "MAX", "COUNT"]
+        func_list = ["MIN", "min", "MAX", "max" "DISTINCT","COUNT","SUM","sum"]
         for func in func_list:
             if func in sql:
                 return True

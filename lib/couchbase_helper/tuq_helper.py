@@ -107,6 +107,8 @@ class N1QLHelper():
             raise Exception(msg)
 
     def _verify_results_rqg(self, n1ql_result = [], sql_result = [], hints = ["a1"]):
+        if self._is_function_in_result(hints):
+            return self._verify_results_rqg_for_function(n1ql_result, sql_result)
         check = self._check_sample(n1ql_result, hints)
         actual_result = n1ql_result
         if check:
@@ -119,6 +121,41 @@ class N1QLHelper():
         msg = "The number of rows match but the results mismatch, please check"
         if actual_result != expected_result:
             raise Exception(msg)
+
+    def _is_function_in_result(self, result):
+        if result == "FUN":
+            return True
+        return False
+
+    def _verify_results_rqg_for_function(self, n1ql_result = [], sql_result = [], hints = ["a1"]):
+        actual_count = -1
+        expected_count = -1
+        actual_result = n1ql_result
+        if actual_result == None or (isinstance(actual_result,list) and len(actual_result) == 0):
+            actual_count = 0
+        elif "$1" in actual_result[0]:
+            actual_count =  int(actual_result[0]["$1"])
+        expected_response = sql_result[0].values()[0]
+        if expected_response:
+            expected_count = self._convert_to_number(expected_response)
+        else:
+            expected_count = 0
+        msg = "The number of rows match but the results mismatch, expected = {0}, actual = {1}".format(expected_count, actual_count)
+        if expected_count != actual_count:
+            raise Exception(msg)
+
+    def _convert_to_number(self, val):
+        if not isinstance(val, str):
+            return val
+        value = -1
+        try:
+            if value == '':
+                return 0
+            value = int(val.split("(")[1].split(")")[0])
+        except Exception, ex:
+            self.log.info(ex)
+        finally:
+            return value
 
     def analyze_failure(self, actual, expected):
         missing_keys =[]
