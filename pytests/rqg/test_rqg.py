@@ -67,7 +67,7 @@ class RQGTests(BaseTestCase):
                 pass_case += 1
             else:
                 fail_case +=  1
-                failure_map[str(fail_case)] = { "sql_query":sql_query, "n1ql_query": n1ql_query, "reason for failure": msg}
+                failure_map["Case :: "+str(i-1)] = { "sql_query":sql_query, "n1ql_query": n1ql_query, "reason for failure": msg}
             self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING QUERY CASE NUMBER {0} >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(i-1))
         self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case))
         self.assertTrue(check, failure_map)

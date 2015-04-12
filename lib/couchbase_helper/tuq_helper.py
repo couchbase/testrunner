@@ -134,13 +134,19 @@ class N1QLHelper():
         if actual_result == None or (isinstance(actual_result,list) and len(actual_result) == 0):
             actual_count = 0
         elif "$1" in actual_result[0]:
-            actual_count =  int(actual_result[0]["$1"])
+            if isinstance(actual_result[0]["$1"], int):
+                actual_count =  int(actual_result[0]["$1"])
+            else:
+                actual_count =  actual_result[0]["$1"]
         expected_response = sql_result[0].values()[0]
         if expected_response:
-            expected_count = self._convert_to_number(expected_response)
+            if isinstance(expected_response, int):
+                expected_count = self._convert_to_number(expected_response)
+            else:
+                expected_count = expected_response
         else:
             expected_count = 0
-        msg = "The number of rows match but the results mismatch, expected = {0}, actual = {1}".format(expected_count, actual_count)
+        msg = "expected = {0}, actual = {1}".format(expected_count, actual_count)
         if expected_count != actual_count:
             raise Exception(msg)
 
