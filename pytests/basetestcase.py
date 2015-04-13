@@ -615,7 +615,8 @@ class BaseTestCase(unittest.TestCase):
         timeout - Waiting the end of the thread. (str)
     """
     def _wait_for_stats_all_buckets(self, servers, ep_queue_size=0, \
-                                     ep_queue_size_cond='==', check_ep_items_remaining = True, timeout=360):
+                                                ep_queue_size_cond='==',
+                         check_ep_items_remaining = False, timeout=360):
         tasks = []
         servers = self.get_kv_nodes(servers)
         for server in servers:
@@ -623,11 +624,13 @@ class BaseTestCase(unittest.TestCase):
                 if bucket.type == 'memcached':
                     continue
                 tasks.append(self.cluster.async_wait_for_stats([server], bucket, '',
-                                   'ep_queue_size', ep_queue_size_cond, ep_queue_size))
+                                'ep_queue_size', ep_queue_size_cond, ep_queue_size))
                 if check_ep_items_remaining:
-                    ep_items_remaining = 'ep_{0}_items_remaining'.format(self.protocol)
-                    tasks.append(self.cluster.async_wait_for_stats([server], bucket, self.protocol,
-                                   ep_items_remaining, "==", 0))
+                    ep_items_remaining = 'ep_{0}_items_remaining' \
+                                             .format(self.protocol)
+                    tasks.append(self.cluster.async_wait_for_stats([server],
+                                                      bucket, self.protocol,
+                                               ep_items_remaining, "==", 0))
         for task in tasks:
             task.result(timeout)
 
@@ -725,8 +728,10 @@ class BaseTestCase(unittest.TestCase):
         self._load_all_buckets(self.master, gen_load, data_op, 0, batch_size=batch_size)
         return gen_load
 
-    def verify_cluster_stats(self, servers=None, master=None, max_verify=None, timeout=None, check_items=True,
-                             only_store_hash=True, replica_to_read=None, batch_size=1000, check_bucket_stats = True, check_ep_items_remaining = True):
+    def verify_cluster_stats(self, servers=None, master=None, max_verify=None,
+                     timeout=None, check_items=True, only_store_hash=True,
+                     replica_to_read=None, batch_size=1000, check_bucket_stats = True,
+                                                    check_ep_items_remaining = False):
         servers = self.get_kv_nodes(servers)
         if servers is None:
             servers = self.servers
@@ -735,14 +740,16 @@ class BaseTestCase(unittest.TestCase):
         if max_verify is None:
             max_verify = self.max_verify
 
-        self._wait_for_stats_all_buckets(servers, timeout=(timeout or 120), check_ep_items_remaining = check_ep_items_remaining)
+        self._wait_for_stats_all_buckets(servers, timeout=(timeout or 120),
+                                 check_ep_items_remaining = check_ep_items_remaining)
         if check_items:
             try:
                 self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify,
-                                     only_store_hash=only_store_hash, replica_to_read=replica_to_read,
-                                     batch_size=batch_size)
+                       only_store_hash=only_store_hash, replica_to_read=replica_to_read,
+                                                                  batch_size=batch_size)
             except ValueError, e:
-                # get/verify stats if 'ValueError: Not able to get values for following keys' was gotten
+                """ get/verify stats if 'ValueError: Not able to get values
+                                             for following keys' was gotten """
                 self._verify_stats_all_buckets(servers, timeout=(timeout or 120))
                 raise e
             if check_bucket_stats:
@@ -751,7 +758,8 @@ class BaseTestCase(unittest.TestCase):
             verified = True
             for bucket in self.buckets:
                 verified &= RebalanceHelper.wait_till_total_numbers_match(master, bucket)
-            self.assertTrue(verified, "Lost items!!! Replication was completed but sum(curr_items) don't match the curr_items_total")
+            self.assertTrue(verified, "Lost items!!! Replication was completed but "
+                            "          sum(curr_items) don't match the curr_items_total")
         else:
             self.log.warn("verification of items was omitted")
 
