@@ -100,12 +100,12 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         u'failover_uuid': 77928303208376}                : local vb_uuid
 
     goXDCR checkpoint record-
-        {u'target_vb_uuid': 253238405904748,
-         u'failover_uuid': 274630499466225,
-         u'target_seqno': 1,
-         u'dcp_snapshot_seqno': 0,
-         u'seqno': 1,
-         u'dcp_snapshot_end_seqno': 0}
+        {u'failover_uuid': 160944507567365,
+        u'target_seqno': 2,
+        u'dcp_snapshot_seqno': 0,
+        u'seqno': 2,
+        u'target_vb_opaque': {u'target_vb_uuid': 153938018208243},
+        u'dcp_snapshot_end_seqno': 0}
 
         Main method that validates a checkpoint record """
     def get_and_validate_latest_checkpoint(self):
@@ -122,7 +122,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
 
         self.log.info ("Verifying commitopaque/remote failover log ...")
         if seqno != 0:
-            self.validate_remote_failover_log(checkpoint_record["target_vb_uuid"], checkpoint_record["target_seqno"])
+            self.validate_remote_failover_log(checkpoint_record["target_vb_opaque"]["target_vb_uuid"], checkpoint_record["target_seqno"])
             self.log.info ("Verifying local failover uuid ...")
             local_vb_uuid, _ = self.get_failover_log(self.src_master)
             self.assertTrue((int(failover_uuid) == int(local_vb_uuid)) or
