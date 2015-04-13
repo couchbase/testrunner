@@ -76,7 +76,10 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
         finally:
             self.stop_firewall_on_node(index_servers[0])
             self.sleep(10)
-            self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = True)
+            try:
+                self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = True)
+            except Exception, ex:
+                self.log.info(ex)
 
     def test_index_create_sync(self):
         index_dist_factor = 2
@@ -174,6 +177,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
             self.query_definitions = self._create_query_definitions(index_count = num_indexes)
             self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = True, query = True)
             index_map = self.get_index_stats(perNode=True)
+            self.log.info(index_map)
             for node in index_map.keys():
                 self.log.info(" verifying node {0}".format(node))
                 for bucket_name in index_map[node].keys():
@@ -182,7 +186,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
         except Exception, ex:
             raise
         finally:
-            self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = True)
+            self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = self.run_drop_index)
 
     def _create_query_definitions(self, start= 0, index_count=2):
         query_definitions = []

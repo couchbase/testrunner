@@ -296,6 +296,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             remote = RemoteMachineShellConnection(servr_out[1])
             remote.stop_server()
             self.sleep(10)
+            index_name = self.query_definitions[0].index_name
             self.query = self.query_definitions[0].generate_index_create_query(bucket = self.buckets[0].name)
             res = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             self.log.info(res)
