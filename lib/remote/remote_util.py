@@ -1349,6 +1349,8 @@ class RemoteMachineShellConnection:
             self.stop_schedule_tasks()
             self.remove_win_backup_dir()
             self.remove_win_collect_tmp()
+            log.info("Kill any un/install process leftover in sherlock")
+            self.execute_command('taskkill /F /T /IM 4.0.0-*')
             log.info('sleep for 5 seconds before running task schedule install me')
             time.sleep(5)
             """ run task schedule to install cb server """
@@ -1538,6 +1540,8 @@ class RemoteMachineShellConnection:
                 self.create_windows_capture_file(task, product, full_version)
                 self.modify_bat_file('/cygdrive/c/automation', bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
+                log.info("Kill any un/install process leftover in sherlock")
+                self.execute_command('taskkill /F /T /IM 4.0.0-*')
                 log.info('sleep for 5 seconds before running task '
                                     'schedule uninstall on {0}'.format(self.ip))
 
