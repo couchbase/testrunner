@@ -2413,7 +2413,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             # buckets cannot be created if size<100MB
             bucket_size = 256
         else:
-            bucket_size = int(float(cluster_quota) / float(num_buckets))
+            bucket_size = int(float(cluster_quota) - 500 / float(num_buckets))
         return bucket_size
 
     def __create_buckets(self):
