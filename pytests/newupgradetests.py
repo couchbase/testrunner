@@ -580,3 +580,52 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.monitor_dcp_rebalance()
 
         self.verification(new_servers)
+
+    def online_upgrade_add_services(self):
+        half_node = len(self.servers) / 2
+        self._install(self.servers[:half_node])
+        self.operations(self.servers[:half_node])
+        if self.ddocs_num:
+            self.create_ddocs_and_views()
+        self.initial_version = self.upgrade_versions[0]
+        self.sleep(self.sleep_time, "Pre-setup of old version is done. "
+                              " Wait for online upgrade to {0} version"
+                                          .format(self.initial_version))
+        self.product = 'couchbase-server'
+        self._install(self.servers[half_node:])
+        self.sleep(self.sleep_time, "Installation of new version is done."
+                                                     " Wait for rebalance")
+        self.log.info("Rebalanced in upgraded nodes and rebalanced out "
+                                                  "nodes with old version")
+        self.cluster.rebalance(self.servers, self.servers[half_node:],
+                                                  self.servers[:half_node])
+        self.sleep(10)
+
+        """ verify DCP upgrade in 3.x.x version """
+        self.master = self.servers[half_node]
+        self.monitor_dcp_rebalance()
+        self.sleep(self.sleep_time)
+        try:
+            for server in self.servers[half_node:]:
+                if self.port and self.port != '8091':
+                    server.port = self.port
+            self._new_master(self.servers[half_node])
+            self.verification(self.servers[half_node:])
+            self.log.info("Upgrade nodes of old version")
+            upgrade_threads = self._async_update(self.upgrade_versions[0],
+                                     self.servers[:half_node], None, True)
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
+            success_upgrade = True
+            while not self.queue.empty():
+                success_upgrade &= self.queue.get()
+            if not success_upgrade:
+                self.fail("Upgrade failed!")
+            self.cluster.rebalance(self.servers[half_node:],
+                                             self.servers[:half_node], [])
+            self.log.info("Rebalanced in all new version nodes")
+            self.sleep(self.sleep_time)
+            self.verification(self.servers)
+        finally:
+            for server in self.servers:
+                server.port = '8091'
