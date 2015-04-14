@@ -1349,10 +1349,16 @@ class RemoteMachineShellConnection:
             self.stop_schedule_tasks()
             self.remove_win_backup_dir()
             self.remove_win_collect_tmp()
+
+            """ Remove this workaround when bug MB-14504 is fixed """
             log.info("Kill any un/install process leftover in sherlock")
             self.execute_command('taskkill /F /T /IM 4.0.0-*')
-            log.info('sleep for 5 seconds before running task schedule install me')
-            time.sleep(5)
+            log.info("Kill any cbq-engine.exe in sherlock")
+            self.execute_command('taskkill /F /T /IM cbq-engine.exe')
+            log.info('sleep for 5 seconds before running task '
+                                'schedule uninstall on {0}'.format(self.ip))
+            """ End remove this workaround when bug MB-14504 is fixed """
+
             """ run task schedule to install cb server """
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
             success &= self.log_command_output(output, error, track_words)
@@ -1540,10 +1546,15 @@ class RemoteMachineShellConnection:
                 self.create_windows_capture_file(task, product, full_version)
                 self.modify_bat_file('/cygdrive/c/automation', bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
+
+                """ Remove this workaround when bug MB-14504 is fixed """
                 log.info("Kill any un/install process leftover in sherlock")
                 self.execute_command('taskkill /F /T /IM 4.0.0-*')
+                log.info("Kill any cbq-engine.exe in sherlock")
+                self.execute_command('taskkill /F /T /IM cbq-engine.exe')
                 log.info('sleep for 5 seconds before running task '
                                     'schedule uninstall on {0}'.format(self.ip))
+                """ End remove this workaround when bug MB-14504 is fixed """
 
                 """ the code below need to remove when bug MB-11328
                                                             is fixed in 3.0.1 """
