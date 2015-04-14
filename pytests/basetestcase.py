@@ -1889,7 +1889,7 @@ class BaseTestCase(unittest.TestCase):
         if self.testrunner_client != None:
             os.environ[testconstants.TESTRUNNER_CLIENT] = self.testrunner_client
 
-    def sync_ops_all_buckets(self, docs_gen_map = {}, batch_size = 10, verify_data = False):
+    def sync_ops_all_buckets(self, docs_gen_map = {}, batch_size = 10, verify_data = True):
         for key in docs_gen_map.keys():
             if key != "remaining":
                 op_type = key
