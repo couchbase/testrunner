@@ -780,9 +780,7 @@ class RestConnection(object):
                                  password='password',
                                  memoryQuota=256):
         api = self.baseUrl + 'pools/default'
-        params = urllib.urlencode({'memoryQuota': memoryQuota,
-                                   'username': username,
-                                   'password': password})
+        params = urllib.urlencode({'memoryQuota': memoryQuota})
         log.info('pools/default params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)
         return status
