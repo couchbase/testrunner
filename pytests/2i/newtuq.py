@@ -182,7 +182,10 @@ class QueryTests(BaseTestCase):
         return []
 
     def run_doc_ops(self):
+        verify_data = True
+        if self.scan_consistency == "request_plus":
+            verify_data = False
         if self.doc_ops:
-            self.sync_ops_all_buckets(self.docs_gen_map, batch_size = self.batch_size)
+            self.sync_ops_all_buckets(self.docs_gen_map, batch_size = self.batch_size, verify_data = verify_data)
             self.n1ql_helper.full_docs_list = self.full_docs_list_after_ops
             self.gen_results = TuqGenerators(self.log, self.n1ql_helper.full_docs_list)
