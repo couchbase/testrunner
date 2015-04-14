@@ -80,18 +80,6 @@ class CommunityTests(CommunityBaseTest):
             self.fail("This feature 'ldap' only available on "
                       "Enterprise Edition")
 
-    """ this test need to setup xdcr to test """
-    def test_xdcr_filter(self):
-        filter_on = False
-        serverInfo = self.servers[0]
-        shell = RemoteMachineShellConnection(serverInfo)
-        output, error = shell.execute_command('curl -X POST http://{0}:8091/controller/'\
-            'createReplication -d toCluster="remote_cluster_ref" '\
-                      '-d toBucket="target_bucket_name" -d filterExpression="some_exp"'\
-                                                                   .format(serverInfo.ip))
-        shell.log_command_output(output, error)
-
-
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
     def setUp(self):
@@ -102,10 +90,21 @@ class CommunityXDCRTests(CommunityXDCRBaseTest):
 
     def test_xdcr_filter(self):
         filter_on = False
-        serverInfo = self.servers[0]
+        serverInfo = self._servers[0]
+        rest = RestConnection(serverInfo)
+        rest.remove_all_replications()
         shell = RemoteMachineShellConnection(serverInfo)
-        output, error = shell.execute_command('curl -X POST http://{0}:8091/controller/'\
-            'createReplication -d toCluster="remote_cluster_ref" '\
-                      '-d toBucket="target_bucket_name" -d filterExpression="some_exp"'\
-                                                                   .format(serverInfo.ip))
-        shell.log_command_output(output, error)
+        output, error = shell.execute_command('curl -X POST '
+                                         '-u Administrator:password '
+                     ' http://{0}:8091/controller/createReplication '
+                     '-d fromBucket="default" '
+                     '-d toCluster="cluster1" '
+                     '-d toBucket="default" '
+                     '-d replicationType="continuous" '
+                     '-d filterExpression="some_exp"'
+                                              .format(serverInfo.ip))
+        if output:
+            self.log.info(output[0])
+        if output and "default" in output[0]:
+            self.fail("XDCR Filter feature should not available in "
+                      "Community Edition")
