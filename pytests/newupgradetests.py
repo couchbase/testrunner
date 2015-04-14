@@ -629,3 +629,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         finally:
             for server in self.servers:
                 server.port = '8091'
+        self._install(self.servers[-1])
+        self.cluster.rebalance(self.servers[:4],
+                                             self.servers[-1], [])
