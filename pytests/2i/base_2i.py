@@ -14,7 +14,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.use_where_clause_in_index= self.input.param("use_where_clause_in_index",False)
         self.check_stats= self.input.param("check_stats",True)
         self.create_index_usage= self.input.param("create_index_usage","no_usage")
-        self.scan_consistency= self.input.param("scan_consistency",None)
+        self.scan_consistency= self.input.param("scan_consistency","request_plus")
         self.scan_vector_per_values= self.input.param("scan_vector_per_values",None)
         self.timeout_for_index_online= self.input.param("timeout_for_index_online",120)
         self.max_attempts_check_index= self.input.param("max_attempts_check_index",10)

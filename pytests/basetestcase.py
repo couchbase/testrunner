@@ -1889,9 +1889,8 @@ class BaseTestCase(unittest.TestCase):
         if self.testrunner_client != None:
             os.environ[testconstants.TESTRUNNER_CLIENT] = self.testrunner_client
 
-    def sync_ops_all_buckets(self, docs_gen_map = {}, batch_size = 10):
+    def sync_ops_all_buckets(self, docs_gen_map = {}, batch_size = 10, verify_data = False):
         for key in docs_gen_map.keys():
-            verify_data = True
             if key != "remaining":
                 op_type = key
                 if key == "expiry":

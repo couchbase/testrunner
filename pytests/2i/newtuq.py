@@ -186,4 +186,3 @@ class QueryTests(BaseTestCase):
             self.sync_ops_all_buckets(self.docs_gen_map, batch_size = self.batch_size)
             self.n1ql_helper.full_docs_list = self.full_docs_list_after_ops
             self.gen_results = TuqGenerators(self.log, self.n1ql_helper.full_docs_list)
-            self.sleep(60)
