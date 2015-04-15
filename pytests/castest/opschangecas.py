@@ -62,6 +62,8 @@ class OpsChangeCasTests(CasBaseTest):
             data_error_collection = []
             while gen.has_next():
                 key, value = gen.next()
+
+
                 if ops == "update":
                     for x in range(self.mutate_times):
                         o_old, cas_old, d_old = client.get(key)
@@ -76,7 +78,6 @@ class OpsChangeCasTests(CasBaseTest):
                             self.log.info("Use item cas {0} to mutate the same item with key {1} successfully! Now item cas is {2} "
                                           .format(cas_old, key, cas_new))
 
-
                         mc_active = client.memcached( key )
                         mc_replica = client.memcached( key, replica_index=0 )
 
@@ -88,11 +89,11 @@ class OpsChangeCasTests(CasBaseTest):
                                         'replica cas mismatch. Expected {0}, actual {1}'.format( cas_new, replica_cas))
 
                 elif ops == "delete":
-                    o, cas, d = self.clients[bucket.name].delete(key)
+                    o, cas, d = client.memcached(key).delete(key)
                     time.sleep(10)
                     self.log.info("Delete operation set item cas with key {0} to {1}".format(key, cas))
                     try:
-                        self.clients[bucket.name].cas(key, 0, self.item_flag, cas, value)
+                        client.memcached(key).cas(key, 0, self.item_flag, cas, value)
                         raise Exception("The item should already be deleted. We can't mutate it anymore")
                     except MemcachedError as error:
                     #It is expected to raise MemcachedError because the key is deleted.
@@ -102,11 +103,11 @@ class OpsChangeCasTests(CasBaseTest):
                         else:
                             raise Exception(error)
                 elif ops == "expire":
-                    o, cas, d = self.clients[bucket.name].set(key, self.expire_time, 0, value)
+                    o, cas, d = client.memcached(key).set(key, self.expire_time, 0, value)
                     time.sleep(self.expire_time+1)
                     self.log.info("Try to mutate an expired item with its previous cas {0}".format(cas))
                     try:
-                        self.clients[bucket.name].cas(key, 0, self.item_flag, cas, value)
+                        client.memcached(key).cas(key, 0, self.item_flag, cas, value)
                         raise Exception("The item should already be expired. We can't mutate it anymore")
                     except MemcachedError as error:
                     #It is expected to raise MemcachedError becasue the key is expired.
