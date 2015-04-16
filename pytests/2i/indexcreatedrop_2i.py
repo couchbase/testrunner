@@ -84,6 +84,36 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             msg =  "Index test_deployment_plan_defer_build_same_name_index already exist"
             self.assertTrue(msg in str(ex),ex)
 
+    def test_concurrent_deployment_plan_defer_build_different_name_index(self):
+        query_definitions = []
+        tasks = []
+        self.defer_build = True
+        index_name = "test_concurrent_deployment_plan_defer_build_different_name_index"
+        servers = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
+        try:
+            servers.reverse()
+            for server in servers:
+                self.defer_build=True
+                for index in range(0,10):
+                    query_definition = QueryDefinition(index_name=index_name+"_"+str(index), index_fields = ["join_yr"], \
+                        query_template = "", groups = [])
+                    query_definitions.append(query_definition)
+                    deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
+                    tasks.append(self.async_create_index(self.buckets[0], query_definition, deploy_node_info = deploy_node_info))
+            for task in tasks:
+                task.result()
+            index_list = [query_definition.index_name for query_definition in query_definitions]
+            task = self.async_build_index(bucket = "default", index_list = index_list)
+            task.result()
+            tasks = []
+            for index_name in index_list:
+                tasks.append(self.async_monitor_index(bucket = "default", index_name = index_name))
+            for task in tasks:
+                task.result()
+        except Exception, ex:
+            msg =  "Index test_deployment_plan_defer_build_same_name_index already exist"
+            self.assertTrue(msg in str(ex),ex)
+
     def test_failure_concurrent_create_index(self):
         try:
             self.run_async = True
