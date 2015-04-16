@@ -25,7 +25,7 @@ class XDCRTopologyTest(XDCRNewBaseTest):
         self.setup_xdcr_and_load()
 
         self.perform_update_delete()
-
+        self.merge_all_buckets()
         self.verify_results()
 
     def load_with_rebalance_out(self):
@@ -38,7 +38,7 @@ class XDCRTopologyTest(XDCRNewBaseTest):
             cb_cluster.rebalance_out(num_rebalance)
 
         self.perform_update_delete()
-
+        self.merge_all_buckets()
         self.verify_results()
 
     def load_with_rebalance_out_master(self):
@@ -49,7 +49,7 @@ class XDCRTopologyTest(XDCRNewBaseTest):
             cb_cluster.rebalance_out_master()
 
         self.perform_update_delete()
-
+        self.merge_all_buckets()
         self.verify_results()
 
     def load_with_rebalance_in(self):
@@ -61,7 +61,7 @@ class XDCRTopologyTest(XDCRNewBaseTest):
             cb_cluster.rebalance_in(num_rebalance)
 
         self.perform_update_delete()
-
+        self.merge_all_buckets()
         self.verify_results()
 
     def load_with_swap_rebalance(self):
@@ -72,7 +72,7 @@ class XDCRTopologyTest(XDCRNewBaseTest):
             cb_cluster.swap_rebalance()
 
         self.perform_update_delete()
-
+        self.merge_all_buckets()
         self.verify_results()
 
     def load_with_swap_rebalance_master(self):
@@ -98,7 +98,7 @@ class XDCRTopologyTest(XDCRNewBaseTest):
                 graceful=graceful)
 
         self.perform_update_delete()
-
+        self.merge_all_buckets()
         self.verify_results()
 
     def load_with_failover_master(self):
@@ -110,7 +110,7 @@ class XDCRTopologyTest(XDCRNewBaseTest):
             cb_cluster.failover_and_rebalance_master(graceful=graceful)
 
         self.perform_update_delete()
-
+        self.merge_all_buckets()
         self.verify_results()
 
     def tearDown(self):
