@@ -205,7 +205,7 @@ remark_condition:
 	table_alias.`airport_remark_id` BETWEEN _tinyint_unsigned AND _smallint_unsigned ;
 
 generic_char_expression:
-	BETWEEN 'a' AND 'Z' |
+	BETWEEN 'A' AND 'Z' |
 	LIKE 'N10%' |	# 6098 aircraft with tail num starting with N10 
 	LIKE 'N9Q%' ;	# 10 aircraft starting with N9Q
 
@@ -213,7 +213,7 @@ one_two:
 	1 | 2 ;
 
 generic_code_expression:
-#	BETWEEN 'a' AND 'Z' |
+#	BETWEEN 'A' AND 'Z' |
 	= single_airport |
 	IN [ airport_list ] ;
 
