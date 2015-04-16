@@ -2773,6 +2773,11 @@ class XDCRNewBaseTest(unittest.TestCase):
         valid_keys_dest, deleted_keys_dest = kv_dest_bucket[
             kvs_num].key_set()
 
+        self.log.info("src_kvstore has %s valid and %s deleted keys"
+                      % (len(valid_keys_src), len(deleted_keys_src)))
+        self.log.info("dest kvstore has %s valid and %s deleted keys"
+                      % (len(valid_keys_dest), len(deleted_keys_dest)))
+
         if filter_exp:
             filtered_src_keys = filter(
                 lambda key: re.search(str(filter_exp), key) is not None,
@@ -2818,7 +2823,7 @@ class XDCRNewBaseTest(unittest.TestCase):
 
         valid_keys_dest, deleted_keys_dest = kv_dest_bucket[
             kvs_num].key_set()
-        self.log.info("Destination bucket's kv_store now has {0}"
+        self.log.info("After merging: destination bucket's kv_store now has {0}"
                       " valid keys and {1} deleted keys".
                       format(len(valid_keys_dest), len(deleted_keys_dest)))
 
