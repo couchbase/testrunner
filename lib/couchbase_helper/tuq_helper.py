@@ -131,13 +131,16 @@ class N1QLHelper():
         actual_count = -1
         expected_count = -1
         actual_result = n1ql_result
-        if actual_result == None or (isinstance(actual_result,list) and len(actual_result) == 0):
+        if actual_result == None or (isinstance(actual_result,list) and len(actual_result) == 0) or actual_result == "":
             actual_count = 0
         elif "$1" in actual_result[0]:
             if isinstance(actual_result[0]["$1"], int):
                 actual_count =  int(actual_result[0]["$1"])
             else:
-                actual_count =  actual_result[0]["$1"]
+                if actual_result[0]["$1"] == "":
+                    actual_count = 0
+                else:
+                    actual_count =  actual_result[0]["$1"]
         expected_response = sql_result[0].values()[0]
         if expected_response:
             if isinstance(expected_response, int):
