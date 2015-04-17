@@ -231,7 +231,7 @@ airport_list:
 generic_state_expression:
 	= single_state |
 	IN [ state_list ] |
-	BETWEEN _char(2) AND _char(2) ;
+	BETWEEN 'A' AND 'Z' ;
 
 state_list:
 	single_state |
