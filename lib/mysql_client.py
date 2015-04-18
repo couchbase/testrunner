@@ -3,6 +3,7 @@
 Python based MySQL interface
 """
 import mysql.connector
+from couchbase_helper.query_helper import QueryHelper
 
 class MySQLClient(object):
     """Python MySQLClient Client Implementation for testrunner"""
@@ -24,6 +25,11 @@ class MySQLClient(object):
 
     def _close_mysql_connection(self):
         self.mysql_connector_client.close()
+
+    def _insert_execute_query(self, query = ""):
+        cur = self.mysql_connector_client.cursor()
+        cur.execute(query)
+        self.mysql_connector_client.commit()
 
     def _execute_query(self, query = ""):
         column_names = []
@@ -112,6 +118,18 @@ class MySQLClient(object):
                     target_map[table_name] = field_info['Field']
         return target_map
 
+    def _get_pkey_map_for_tables_without_primary_key_column(self):
+        target_map = {}
+        map = self._get_tables_information()
+        for table_name in map.keys():
+            target_map[table_name] ={}
+            field_map = {}
+            for field_info in map[table_name]:
+                if field_info['Key'] != "PRI":
+                    field_map[field_info['Field']] ={"type":field_info['Type']}
+            target_map[table_name] = field_map
+        return target_map
+
     def _get_distinct_values_for_fields(self, table_name, field):
         query = "Select DISTINCT({0}) from {1} ORDER BY {0}".format(field, table_name)
         list = []
@@ -132,15 +150,34 @@ class MySQLClient(object):
                 print "For table {0} and field {1} we have read {2} distinct values ".format(table_name, field_name, len(value_list))
         return gen_map
 
+    def _gen_data_simple_table(self, number_of_rows = 10000, table_name = "simple_table"):
+        helper = QueryHelper()
+        map = self._get_pkey_map_for_tables_without_primary_key_column()
+        table_map = map[table_name]
+        for x in range(0, number_of_rows):
+            statement = helper._generate_insert_statement("simple_table", table_map)
+            print statement
+            self._insert_execute_query(statement)
+
+    def _gen_queries_from_template(self, query_path = "./queries.txt", table_name = "simple_table"):
+        helper = QueryHelper()
+        map = self._get_values_with_type_for_fields_in_table()
+        table_map = map[table_name]
+        with open(query_path) as f:
+            content = f.readlines()
+        for query in content:
+            n1ql = helper._convert_sql_template_to_value(sql = query, table_map = table_map, table_name= table_name)
+            print n1ql
+
 if __name__=="__main__":
-    client = MySQLClient(database = "flightstats", host = "localhost", user_id = "root", password = "")
-    map = client._get_values_with_type_for_fields_in_table()
-    table_map = map["airports"]
-    from couchbase_helper.query_helper import QueryHelper
-    sql = "SELECT * FROM BUCKET WHERE (STRING_FIELD IS NOT VALUED) OR (NUMERIC_FIELD BETWEEN LOWER_BOUND_VALUE and UPPER_BOUND_VALUE)"
-    helper = QueryHelper()
-    with open("./query.txt") as f:
-        content = f.readlines()
-    for sql in content:
-        new_sql = helper._convert_sql_template_to_value(sql = sql, table_map = table_map)
-        print new_sql
+    client = MySQLClient(database = "simple_table_db", host = "localhost", user_id = "root", password = "")
+    #client._gen_data_simple_table()
+    client._gen_queries_from_template()
+    #with open("./queries.txt") as f:
+    #    content = f.readlines()
+    #for sql in content:
+    #    print " <<<<<< START >>>>>"
+    #    print sql
+    #    new_sql = helper._convert_sql_template_to_value(sql = sql, table_map = table_map, table_name= "airports")
+    #    print new_sql
+    #    print " <<<<< END >>>> "

@@ -2,13 +2,24 @@ query:
  	select ;
 
 select:
-	SELECT * FROM BUCKET WHERE condition;
+	SELECT select_from FROM BUCKET_NAME WHERE condition ORDER BY order_by |
+	SELECT select_from FROM BUCKET_NAME WHERE condition GROUP BY field_list |
+	SELECT select_from FROM BUCKET_NAME WHERE condition;
+
+create_index:
+	CREATE INDEX INDEX_NAME ON BUCKET_NAME(FIELD_LIST) WHERE condition |
+	CREATE INDEX INDEX_NAME ON BUCKET_NAME(condition) |
+	CREATE INDEX INDEX_NAME ON BUCKET_NAME(field_list);
+
+select_from:
+	* | COUNT(*) |  COUNT( DISTINCT field_list ) | SUM( NUMERIC_FIELD ) | SUM(DISTINCT NUMERIC_FIELD ) | AVG( NUMERIC_FIELD ) |  AVG( DISTINCT NUMERIC_FIELD ) | MAX( NUMERIC_FIELD ) |
+	MIN( NUMERIC_FIELD );
 
 condition:
 	numeric_condition | string_condition | (numeric_condition) AND (string_condition) | (string_condition) OR (numeric_condition) | (condition) AND (condition) | (condition) OR (condition);
 
 order_by:
-	string_field_list | numeric_field_list | string_field_list,numeric_field_list;
+	field_list;
 
 numeric_condition:
 	numeric_field < numeric_value |
@@ -158,3 +169,5 @@ bool_field:
 bool_value:
 	true | false;
 
+field_list:
+	NUMERIC_FIELD_LIST | STRING_FIELD_LIST  | NUMERIC_FIELD_LIST, STRING_FIELD_LIST

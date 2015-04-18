@@ -1,4 +1,8 @@
 import random
+import string
+from random import randrange
+from random import randint
+from datetime import datetime
 
 class QueryHelper(object):
     def _find_hints(self, n1ql_query):
@@ -12,8 +16,38 @@ class QueryHelper(object):
         if ".*" in result_text:
             return [result_text.split(".")[0]]
 
+    def _divide_sql(self, sql):
+        sql = sql.replace(";","")
+        sql = sql.replace("\n","")
+        group_by_text = None
+        where_condition_text = None
+        order_by_text = None
+        select_from_text = None
+        select_text  =  self._find_string_type(sql, ["SELECT", "Select", "select"])
+        from_text = self._find_string_type(sql, ["FROM", "from", "From"])
+        where_text = self._find_string_type(sql, ["WHERE", "where",])
+        order_by = self._find_string_type(sql, ["ORDER BY", "order by"])
+        group_by = self._find_string_type(sql, ["GROUP BY", "group by"])
+        from_field_text = sql.split(from_text)[1].split(where_text)[0]
+        select_from_text = sql.split(select_text)[1].split(from_text)[0].strip()
+        where_condition_text = sql.split(where_text)[1]
+        if group_by:
+            group_by_text = sql.split(group_by)[1].split(order_by)[0]
+            where_condition_text = where_condition_text.split(group_by)[0]
+        if order_by:
+            order_by_text = sql.split(order_by)[1]
+            where_condition_text = where_condition_text.split(order_by)[0]
+        map = {
+                "from_fields": from_field_text,
+                "where_condition":where_condition_text,
+                "select_from":select_from_text,
+                "group_by": group_by_text,
+                "order_by" : order_by_text
+                }
+        return map
+
     def _check_function(self, sql):
-        func_list = ["MIN", "min", "MAX", "max" "DISTINCT","COUNT","SUM","sum"]
+        func_list = ["MIN", "min", "MAX", "max" ,"COUNT","SUM","sum","AVG","avg"]
         for func in func_list:
             if func in sql:
                 return True
@@ -63,13 +97,133 @@ class QueryHelper(object):
         key =random.choice(list_types)
         return key, map[key]["distinct_values"]
 
+    def _search_fields_of_given_type(self, types, map):
+        list_types =[]
+        for key in map.keys():
+            if self._search_presence_of_type(map[key]["type"],types):
+                list_types.append(key)
+        return list_types
+
     def _search_presence_of_type(self, type, list):
         for key in list:
             if key in type:
                 return True
         return False
 
-    def _convert_sql_template_to_value(self, sql ="", table_map = {}):
+    def _generate_random_range(self, list):
+        val = randrange(len(list))
+        if val == 0:
+            if len(list) > 0:
+                val = 1
+        return list[0:val]
+
+    def _random_alphanumeric(self, limit = 10):
+        #ascii alphabet of all alphanumerals
+        r = (range(48, 58) + range(65, 91) + range(97, 123))
+        random.shuffle(r)
+        return reduce(lambda i, s: i + chr(s), r[:random.randint(0, len(r))], "")
+
+    def _random_char(self):
+        return random.choice(string.ascii_uppercase)
+
+    def _random_int(self):
+        return randint(0,10000)
+
+    def _random_float(self):
+        return 10000*random.random()
+
+    def _random_double(self):
+        return 10000*random.random()
+
+    def _random_datetime(self, start = 1999, end = 2015):
+        year = random.choice(range(start, end))
+        month = random.choice(range(1, 13))
+        day = random.choice(range(1, 29))
+        return datetime(year, month, day)
+
+    def _generate_insert_statement(self, table_name ="TABLE_NAME", table_map ={}):
+        values = ""
+        intial_statement = ""
+        intial_statement += " INSERT INTO {0} ".format(table_name)
+        column_names = "( "+",".join(table_map.keys())+" ) "
+        values = ""
+        for field_name in table_map.keys():
+            type = table_map[field_name]["type"]
+            if "tinyint" in type:
+                values +=  str(self._random_int()%10)+","
+            elif "mediumint" in type:
+                values +=  str(self._random_int()%100)+","
+            elif "int" in type:
+                values +=  str(self._random_int())+","
+            elif "decimal" in type:
+                values +=  str(self._random_float())+","
+            elif "float" in type:
+                values +=  str(self._random_float())+","
+            elif "double" in type:
+                values +=  str(self._random_double())+","
+            elif "varchar" in type:
+                values +=  "\""+self._random_alphabet_string()+"\","
+            elif "char" in type:
+                values +=  "\'"+self._random_char()+"\',"
+            elif "tinytext" in type:
+                values +=  "\'"+self._random_alphabet_string(limit = 1)+"\',"
+            elif "mediumtext" in type:
+                values +=  "\'"+self._random_alphabet_string(limit = 10)+"\',"
+            elif "text" in type:
+                values +=  "\'"+self._random_alphabet_string(limit = 100)+"\',"
+            elif "datetime" in type:
+                values +=  "\'"+str(self._random_datetime())+"\',"
+            elif "bool" in type:
+                values +=  "\'True\',"
+        return intial_statement+column_names+" VALUES ( "+values[0:len(values)-1]+" )"
+
+    def _random_alphabet_string(self, limit =10):
+        uppercase = sorted(string.ascii_uppercase)
+        lowercase = sorted(string.ascii_lowercase)
+        value = []
+        for x in range(0,limit/2):
+            value.append(random.choice(uppercase))
+            value.append(random.choice(lowercase))
+        random.shuffle(value)
+        return "".join(value)
+
+    def _covert_fields_template_to_value(self, sql = "", table_map = {}):
+        string_field_names = self._search_fields_of_given_type(["varchar","text","tinytext","char"], table_map)
+        numeric_field_names = self._search_fields_of_given_type(["int","mediumint","tinyint","double", "float", "decimal"], table_map)
+        new_sql = sql
+        if "STRING_FIELD_LIST" in sql:
+            new_list = self._generate_random_range(string_field_names)
+            new_sql = new_sql.replace("STRING_FIELD_LIST", self._convert_list(new_list,"numeric"))
+        if "NUMERIC_FIELD_LIST" in sql:
+            new_list = self._generate_random_range(numeric_field_names)
+            new_sql = new_sql.replace("NUMERIC_FIELD_LIST", self._convert_list(new_list,"numeric"))
+        if "STRING_FIELD" in sql:
+            new_sql = new_sql.replace("STRING_FIELD", random.choice(string_field_names))
+        if "NUMERIC_FIELD"  in sql:
+            new_sql = new_sql.replace("NUMERIC_FIELD", random.choice(numeric_field_names))
+        return new_sql
+
+    def _convert_sql_template_to_value(self, sql ="", table_map = {}, table_name= "BUCKET_NAME"):
+        sql_map = self._divide_sql(sql)
+        select_from = sql_map["select_from"]
+        from_fields = sql_map["from_fields"]
+        where_condition = sql_map["where_condition"]
+        order_by = sql_map["order_by"]
+        group_by = sql_map["group_by"]
+        new_sql = "SELECT "
+        if select_from:
+            new_sql += self._covert_fields_template_to_value(select_from, table_map)+" FROM "
+        if from_fields:
+            new_sql += from_fields.replace("BUCKET_NAME",table_name)+ " "
+        if where_condition:
+            new_sql += " WHERE "+self._convert_condition_template_to_value(where_condition, table_map)+ " "
+        if group_by:
+            new_sql += " GROUP BY "+self._covert_fields_template_to_value(group_by, table_map)+" "
+        if order_by:
+            new_sql += " ORDER BY "+self._covert_fields_template_to_value(order_by, table_map)+" "
+        return new_sql
+
+    def _convert_condition_template_to_value(self, sql ="", table_map = {}):
         tokens = sql.split(" ")
         check = False
         string_check = False
@@ -87,11 +241,11 @@ class QueryHelper(object):
                 if "STRING_FIELD" in token:
                     string_check = True
                     add_token = False
-                    field_name, values = self._search_field(["varchar"], table_map)
+                    field_name, values = self._search_field(["varchar","text","tinytext","char"], table_map)
                     new_sql+=token.replace("STRING_FIELD",field_name)+space
                 elif "NUMERIC_FIELD" in token:
                     add_token = False
-                    field_name, values = self._search_field(["int","double", "float", "decimal"], table_map)
+                    field_name, values = self._search_field(["int","mediumint","tinyint","double", "float", "decimal"], table_map)
                     new_sql+=token.replace("NUMERIC_FIELD",field_name)+space
                     numeric_check = True
                 elif "BOOL_FIELD" in token:
@@ -235,16 +389,13 @@ class QueryHelper(object):
                 temp_list +=" \""+num+"\" ,"
         return temp_list[0:len(temp_list)-1]
 
-
-
 if __name__=="__main__":
     helper = QueryHelper()
-    print "running now"
-    print helper._find_hints("SELECT MIN(A.*) from check")
-    sql = "SELECT * FROM TABLE WHERE ( NUMERIC_FIELD COMPARATOR NUMERIC_VALUE ) and (  NUMERIC_FIELD COMPARATOR LOWER_BOUND_VALUE OR UPPER_BOUND_VALUE ) "
-    new_sql = helper._convert_sql_template_to_value(sql = sql)
-    print sql
-    print new_sql
+    print helper._random_alphanumeric(10)
+    print helper._random_alphanumeric(100)
+    print helper._random_char()
+    print helper._random_alphabet_string()
+    print helper._random_alphabet_string()
     #helper._convert_sql_to_nql_dump_in_file("/Users/parag/fix_testrunner/testrunner/b/resources/flightstats_mysql/inner_join_flightstats_n1ql_queries.txt")
     #print helper._gen_sql_to_nql("SELECT SUM(  a1.distance) FROM `ontime_mysiam`  AS a1 INNER JOIN `aircraft`  AS a2 ON ( a2 .`tail_num` = a1 .`tail_num` ) INNER JOIN `airports`  AS a3 ON ( a1 . `origin` = a3 .`code` ) ")
     #print helper._gen_sql_to_nql("SELECT a1.* FROM ON (a.key1 = a.key2)")
