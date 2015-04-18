@@ -1,3 +1,5 @@
+import random
+
 class QueryHelper(object):
     def _find_hints(self, n1ql_query):
         select_text  =  self._find_string_type(n1ql_query, ["SELECT", "Select", "select"])
@@ -52,6 +54,117 @@ class QueryHelper(object):
                 index += 1
             data.append(map)
         return data
+
+    def _search_field(self, types, map):
+        list_types =[]
+        for key in map.keys():
+            if self._search_presence_of_type(map[key]["type"],types):
+                list_types.append(key)
+        key =random.choice(list_types)
+        return key, map[key]["distinct_values"]
+
+    def _search_presence_of_type(self, type, list):
+        for key in list:
+            if key in type:
+                return True
+        return False
+
+    def _convert_sql_template_to_value(self, sql ="", table_map = {}):
+        tokens = sql.split(" ")
+        check = False
+        string_check = False
+        boolean_check = False
+        numeric_check = False
+        bool_check = False
+        add_token = True
+        new_sql = ""
+        space = " "
+        field_name = ""
+        values = ["DEFAULT"]
+        for token in tokens:
+            check = string_check or numeric_check or bool_check
+            if not check:
+                if "STRING_FIELD" in token:
+                    string_check = True
+                    add_token = False
+                    field_name, values = self._search_field(["varchar"], table_map)
+                    new_sql+=token.replace("STRING_FIELD",field_name)+space
+                elif "NUMERIC_FIELD" in token:
+                    add_token = False
+                    field_name, values = self._search_field(["int","double", "float", "decimal"], table_map)
+                    new_sql+=token.replace("NUMERIC_FIELD",field_name)+space
+                    numeric_check = True
+                elif "BOOL_FIELD" in token:
+                    new_sql+=token.replace("BOOL_FIELD",field_name)+space
+                    field_name, values = self._search_field(["bool"], table_map)
+                    add_token = False
+                    book_check = False
+            else:
+                if string_check:
+                    if token == "IS":
+                        string_check = False
+                        add_token = True
+                    elif "LIST" in token:
+                        string_check = False
+                        add_token = False
+                        max = 5
+                        if len(values) < 5:
+                            max = len(values)
+                        list = self._convert_list(values[0:max], type="string")
+                        new_sql+=token.replace("LIST",list)+space
+                    elif "STRING_VALUES" in token:
+                        mid_value_index = len(values)/2
+                        if "%" in token:
+                            value = token.replace("STRING_VALUES",str(values[mid_value_index]))
+                            new_sql+=value+space
+                        else:
+                            new_sql+=token.replace("STRING_VALUES","\""+str(values[mid_value_index])+"\"")+space
+                        string_check = False
+                        add_token = False
+                    elif "UPPER_BOUND_VALUE" in token:
+                        string_check = False
+                        add_token = False
+                        new_sql+=token.replace("UPPER_BOUND_VALUE","\""+str(values[len(values) -1])+"\"")+space
+                    elif "LOWER_BOUND_VALUE" in token:
+                        add_token = False
+                        new_sql+=token.replace("LOWER_BOUND_VALUE","\""+str(values[0])+"\"")+space
+                    else:
+                        add_token = False
+                        new_sql+=token+space
+                elif numeric_check:
+                    if token == "IS":
+                        numeric_check = False
+                        add_token = True
+                    elif "LIST" in token:
+                        numeric_check = False
+                        add_token = False
+                        max = 5
+                        if len(values) < 5:
+                            max = len(values)
+                        list = self._convert_list(values[0:max], type="numeric")
+                        new_sql+=token.replace("LIST",list)+space
+                    elif "NUMERIC_VALUE" in token:
+                        mid_value_index = len(values)/2
+                        numeric_check = False
+                        add_token = False
+                        new_sql+=token.replace("NUMERIC_VALUE",str(values[mid_value_index]))+space
+                    elif "UPPER_BOUND_VALUE" in token:
+                        numeric_check = False
+                        add_token = False
+                        new_sql+=token.replace("UPPER_BOUND_VALUE",str(values[len(values) -1]))+space
+                    elif "LOWER_BOUND_VALUE" in token:
+                        add_token = False
+                        new_sql+=token.replace("LOWER_BOUND_VALUE",str(values[0]))+space
+                    else:
+                        add_token = False
+                        new_sql+=token+space
+                else:
+                    new_sql+=token+space
+            if add_token:
+                new_sql+=token+space
+            else:
+                add_token = True
+        return new_sql
 
     def _gen_sql_to_nql(self, sql):
         check_keys=False
@@ -112,11 +225,26 @@ class QueryHelper(object):
         file_path+=".convert"
         self._dump_queries_into_file(queries, file_path)
 
+    def _convert_list(self, list, type):
+        temp_list = ""
+        if type == "numeric":
+            for num in list:
+                temp_list +=" "+str(num)+" ,"
+        if type == "string":
+            for num in list:
+                temp_list +=" \""+num+"\" ,"
+        return temp_list[0:len(temp_list)-1]
+
+
 
 if __name__=="__main__":
     helper = QueryHelper()
     print "running now"
     print helper._find_hints("SELECT MIN(A.*) from check")
+    sql = "SELECT * FROM TABLE WHERE ( NUMERIC_FIELD COMPARATOR NUMERIC_VALUE ) and (  NUMERIC_FIELD COMPARATOR LOWER_BOUND_VALUE OR UPPER_BOUND_VALUE ) "
+    new_sql = helper._convert_sql_template_to_value(sql = sql)
+    print sql
+    print new_sql
     #helper._convert_sql_to_nql_dump_in_file("/Users/parag/fix_testrunner/testrunner/b/resources/flightstats_mysql/inner_join_flightstats_n1ql_queries.txt")
     #print helper._gen_sql_to_nql("SELECT SUM(  a1.distance) FROM `ontime_mysiam`  AS a1 INNER JOIN `aircraft`  AS a2 ON ( a2 .`tail_num` = a1 .`tail_num` ) INNER JOIN `airports`  AS a3 ON ( a1 . `origin` = a3 .`code` ) ")
     #print helper._gen_sql_to_nql("SELECT a1.* FROM ON (a.key1 = a.key2)")

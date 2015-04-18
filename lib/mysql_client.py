@@ -135,3 +135,12 @@ class MySQLClient(object):
 if __name__=="__main__":
     client = MySQLClient(database = "flightstats", host = "localhost", user_id = "root", password = "")
     map = client._get_values_with_type_for_fields_in_table()
+    table_map = map["airports"]
+    from couchbase_helper.query_helper import QueryHelper
+    sql = "SELECT * FROM BUCKET WHERE (STRING_FIELD IS NOT VALUED) OR (NUMERIC_FIELD BETWEEN LOWER_BOUND_VALUE and UPPER_BOUND_VALUE)"
+    helper = QueryHelper()
+    with open("./query.txt") as f:
+        content = f.readlines()
+    for sql in content:
+        new_sql = helper._convert_sql_template_to_value(sql = sql, table_map = table_map)
+        print new_sql
