@@ -32,10 +32,11 @@ class QueryHelper(object):
         select_from_text = sql.split(select_text)[1].split(from_text)[0].strip()
         where_condition_text = sql.split(where_text)[1]
         if group_by:
-            group_by_text = sql.split(group_by)[1].split(order_by)[0]
+            group_by_text = sql.split(group_by)[1]
             where_condition_text = where_condition_text.split(group_by)[0]
         if order_by:
             order_by_text = sql.split(order_by)[1]
+            group_by_text = sql.split(group_by)[1].split(order_by)[0]
             where_condition_text = where_condition_text.split(order_by)[0]
         map = {
                 "from_fields": from_field_text,
@@ -111,10 +112,9 @@ class QueryHelper(object):
         return False
 
     def _generate_random_range(self, list):
-        val = randrange(len(list))
-        if val == 0:
-            if len(list) > 0:
-                val = 1
+        val = randrange(1,len(list))
+        if len(list) < 4:
+            val = len(list)
         return list[0:val]
 
     def _random_alphanumeric(self, limit = 10):
@@ -391,11 +391,6 @@ class QueryHelper(object):
 
 if __name__=="__main__":
     helper = QueryHelper()
-    print helper._random_alphanumeric(10)
-    print helper._random_alphanumeric(100)
-    print helper._random_char()
-    print helper._random_alphabet_string()
-    print helper._random_alphabet_string()
     #helper._convert_sql_to_nql_dump_in_file("/Users/parag/fix_testrunner/testrunner/b/resources/flightstats_mysql/inner_join_flightstats_n1ql_queries.txt")
     #print helper._gen_sql_to_nql("SELECT SUM(  a1.distance) FROM `ontime_mysiam`  AS a1 INNER JOIN `aircraft`  AS a2 ON ( a2 .`tail_num` = a1 .`tail_num` ) INNER JOIN `airports`  AS a3 ON ( a1 . `origin` = a3 .`code` ) ")
     #print helper._gen_sql_to_nql("SELECT a1.* FROM ON (a.key1 = a.key2)")

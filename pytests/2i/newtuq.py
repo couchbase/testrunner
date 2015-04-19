@@ -24,6 +24,7 @@ class QueryTests(BaseTestCase):
         super(QueryTests, self).setUp()
         self.expiry = self.input.param("expiry", 0)
         self.batch_size = self.input.param("batch_size", 1)
+        self.scan_consistency = self.input.param("scan_consistency", "request_plus")
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.run_async = self.input.param("run_async", True)
         self.version = self.input.param("cbq_version", "git_repo")
@@ -52,7 +53,10 @@ class QueryTests(BaseTestCase):
             self.n1ql_helper.configure_gomaxprocs()
         self.full_docs_list = self.generate_full_docs_list(self.gens_load)
         self.gen_results = TuqGenerators(self.log, self.full_docs_list)
-        self.load(self.gens_load, flag=self.item_flag)
+        verify_data = False
+        if self.scan_consistency != "request_plus":
+            verify_data = True
+        self.load(self.gens_load, flag=self.item_flag, verify_data = verify_data)
         if self.doc_ops:
             self.ops_dist_map = self.calculate_data_change_distribution(
                 create_per = self.create_ops_per ,update_per = self.update_ops_per ,
