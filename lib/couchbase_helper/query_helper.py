@@ -36,7 +36,8 @@ class QueryHelper(object):
             where_condition_text = where_condition_text.split(group_by)[0]
         if order_by:
             order_by_text = sql.split(order_by)[1]
-            group_by_text = sql.split(group_by)[1].split(order_by)[0]
+            if group_by_text:
+                group_by_text = group_by_text.split(order_by)[0]
             where_condition_text = where_condition_text.split(order_by)[0]
         map = {
                 "from_fields": from_field_text,
@@ -113,7 +114,7 @@ class QueryHelper(object):
 
     def _generate_random_range(self, list):
         val = randrange(0,len(list))
-        if len(list) < 4:
+        if val == 0:
             val = len(list)
         return list[0:val]
 
