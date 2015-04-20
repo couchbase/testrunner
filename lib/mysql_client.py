@@ -147,7 +147,7 @@ class MySQLClient(object):
                 field_name = vals.keys()[0]
                 value_list = self._get_distinct_values_for_fields(table_name, field_name)
                 gen_map[table_name][field_name] = {"type": vals[field_name], "distinct_values": sorted(value_list)}
-                print "For table {0} and field {1} we have read {2} distinct values ".format(table_name, field_name, len(value_list))
+                #print "For table {0} and field {1} we have read {2} distinct values ".format(table_name, field_name, len(value_list))
         return gen_map
 
     def _gen_data_simple_table(self, number_of_rows = 10000, table_name = "simple_table"):

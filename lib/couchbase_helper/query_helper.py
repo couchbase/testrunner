@@ -112,7 +112,7 @@ class QueryHelper(object):
         return False
 
     def _generate_random_range(self, list):
-        val = randrange(1,len(list))
+        val = randrange(0,len(list))
         if len(list) < 4:
             val = len(list)
         return list[0:val]
@@ -168,9 +168,9 @@ class QueryHelper(object):
             elif "tinytext" in type:
                 values +=  "\'"+self._random_alphabet_string(limit = 1)+"\',"
             elif "mediumtext" in type:
-                values +=  "\'"+self._random_alphabet_string(limit = 10)+"\',"
+                values +=  "\'"+self._random_alphabet_string(limit = 5)+"\',"
             elif "text" in type:
-                values +=  "\'"+self._random_alphabet_string(limit = 100)+"\',"
+                values +=  "\'"+self._random_alphabet_string(limit = 5)+"\',"
             elif "datetime" in type:
                 values +=  "\'"+str(self._random_datetime())+"\',"
             elif "bool" in type:
@@ -190,7 +190,11 @@ class QueryHelper(object):
     def _covert_fields_template_to_value(self, sql = "", table_map = {}):
         string_field_names = self._search_fields_of_given_type(["varchar","text","tinytext","char"], table_map)
         numeric_field_names = self._search_fields_of_given_type(["int","mediumint","tinyint","double", "float", "decimal"], table_map)
+        datetime_field_names = self._search_fields_of_given_type(["datetime"], table_map)
         new_sql = sql
+        if "DATETIME_FIELD_LIST" in sql:
+            new_list = self._generate_random_range(datetime_field_names)
+            new_sql = new_sql.replace("DATETIME_FIELD_LIST", self._convert_list(new_list,"numeric"))
         if "STRING_FIELD_LIST" in sql:
             new_list = self._generate_random_range(string_field_names)
             new_sql = new_sql.replace("STRING_FIELD_LIST", self._convert_list(new_list,"numeric"))
@@ -201,6 +205,8 @@ class QueryHelper(object):
             new_sql = new_sql.replace("STRING_FIELD", random.choice(string_field_names))
         if "NUMERIC_FIELD"  in sql:
             new_sql = new_sql.replace("NUMERIC_FIELD", random.choice(numeric_field_names))
+        if "DATETIME_FIELD"  in sql:
+            new_sql = new_sql.replace("DATETIME_FIELD", random.choice(datetime_field_names))
         return new_sql
 
     def _convert_sql_template_to_value(self, sql ="", table_map = {}, table_name= "BUCKET_NAME"):
@@ -230,13 +236,14 @@ class QueryHelper(object):
         boolean_check = False
         numeric_check = False
         bool_check = False
+        datetime_check = False
         add_token = True
         new_sql = ""
         space = " "
         field_name = ""
         values = ["DEFAULT"]
         for token in tokens:
-            check = string_check or numeric_check or bool_check
+            check = string_check or numeric_check or bool_check or datetime_check
             if not check:
                 if "STRING_FIELD" in token:
                     string_check = True
@@ -248,6 +255,11 @@ class QueryHelper(object):
                     field_name, values = self._search_field(["int","mediumint","tinyint","double", "float", "decimal"], table_map)
                     new_sql+=token.replace("NUMERIC_FIELD",field_name)+space
                     numeric_check = True
+                elif "DATETIME_FIELD" in token:
+                    add_token = False
+                    field_name, values = self._search_field(["datetime"], table_map)
+                    new_sql+=token.replace("DATETIME_FIELD",field_name)+space
+                    datetime_check = True
                 elif "BOOL_FIELD" in token:
                     new_sql+=token.replace("BOOL_FIELD",field_name)+space
                     field_name, values = self._search_field(["bool"], table_map)
@@ -309,6 +321,33 @@ class QueryHelper(object):
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
                         new_sql+=token.replace("LOWER_BOUND_VALUE",str(values[0]))+space
+                    else:
+                        add_token = False
+                        new_sql+=token+space
+                elif datetime_check:
+                    if token == "IS":
+                        datetime_check = False
+                        add_token = True
+                    elif "LIST" in token:
+                        datetime_check = False
+                        add_token = False
+                        max = 5
+                        if len(values) < 5:
+                            max = len(values)
+                        list = self._convert_list(values[0:max], type="datetime")
+                        new_sql+=token.replace("LIST",list)+space
+                    elif "DATETIME_VALUES" in token:
+                        mid_value_index = len(values)/2
+                        datetime_check = False
+                        add_token = False
+                        new_sql+=token.replace("DATETIME_VALUES","\'"+str(values[mid_value_index])+"\'")+space
+                    elif "UPPER_BOUND_VALUE" in token:
+                        datetime_check = False
+                        add_token = False
+                        new_sql+=token.replace("UPPER_BOUND_VALUE","\'"+str(values[len(values) -1])+"\'")+space
+                    elif "LOWER_BOUND_VALUE" in token:
+                        add_token = False
+                        new_sql+=token.replace("LOWER_BOUND_VALUE","\'"+str(values[0])+"\'")+space
                     else:
                         add_token = False
                         new_sql+=token+space
@@ -387,6 +426,9 @@ class QueryHelper(object):
         if type == "string":
             for num in list:
                 temp_list +=" \""+num+"\" ,"
+        if type == "datetime":
+            for num in list:
+                temp_list +=" \'"+str(num)+"\' ,"
         return temp_list[0:len(temp_list)-1]
 
 if __name__=="__main__":
