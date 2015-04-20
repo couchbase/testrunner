@@ -2031,8 +2031,8 @@ class RemoteMachineShellConnection:
                         os_version = etc_issue
                         is_linux_distro = True
                     else:
-                        print "error not found"
-                        log.error("Error should not land here")
+                        log.info("It could be other operating systyem."
+                                 "  Go to check at other location")
                     file.close()
                     # now remove this file
                     os.remove(filename)
@@ -2066,6 +2066,9 @@ class RemoteMachineShellConnection:
                             os_distro = 'CentOS'
                             os_version = "CentOS 7"
                             is_linux_distro = True
+                    else:
+                        log.error("Could not find OS name."
+                                 "It could be unsupport OS")
                     file.close()
                     os.remove(filename)
                     break
