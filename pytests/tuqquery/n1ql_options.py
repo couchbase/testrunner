@@ -39,7 +39,7 @@ class OptionsTests(QueryTests):
         self.shell.execute_command("killall cbq-engine")
         self._start_command_line_query(self.master, options='-readonly=true')
         for bucket in self.buckets:
-            self.query = 'INSERT into %s key "%s" VALUES "%s"' % (bucket.name, 'key1', 'value')
+            self.query = 'INSERT into %s (key, value) VALUES ("%s", %s)' % (bucket.name, 'key1', 'value')
             try:
                 actual_result = self.run_cbq_query()
             except Exception, ex:
@@ -116,7 +116,7 @@ class OptionsRestTests(QueryTests):
 
     def test_readonly(self):
        for bucket in self.buckets:
-            self.query = 'INSERT into %s key "%s" VALUES "%s"' % (bucket.name, 'key3', 'value3')
+            self.query = 'INSERT into %s (key, value) VALUES ("%s", "%s")' % (bucket.name, 'key3', 'value3')
             try:
                 actual_result = self.run_cbq_query(query_params= {'readonly':True})
             except Exception, ex:
@@ -138,7 +138,7 @@ class OptionsRestTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT count(name) FROM %s" % (bucket.name)
             try:
-                actual_result = self.run_cbq_query(query_params= {'timeout':'1ms'})
+                actual_result = self.run_cbq_query(query_params= {'timeout':'0.5s'})
                 print actual_result
             except Exception, ex:
                 self.assertTrue(str(ex).find('timeout') != -1, 'Server timeout did not work')
