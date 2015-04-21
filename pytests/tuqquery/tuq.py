@@ -2777,6 +2777,7 @@ class QueryTests(BaseTestCase):
             return
         if self.flat_json:
                     return
+        self.sleep(30, 'Sleep for some time prior to index creation')
         self.log.info("CREATE PRIMARY INDEX")
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
