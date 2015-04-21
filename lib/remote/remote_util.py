@@ -4,6 +4,7 @@ import urllib
 import uuid
 import time
 import logging
+import unittest
 from datetime import datetime
 import logger
 from subprocess import Popen, PIPE
