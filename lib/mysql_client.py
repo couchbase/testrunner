@@ -172,7 +172,8 @@ class MySQLClient(object):
 if __name__=="__main__":
     client = MySQLClient(database = "simple_table_db", host = "localhost", user_id = "root", password = "")
     #client._gen_data_simple_table()
-    client._gen_queries_from_template()
+    query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
+    client._gen_queries_from_template(query_path=query_path)
     #with open("./queries.txt") as f:
     #    content = f.readlines()
     #for sql in content:

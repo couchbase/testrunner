@@ -14,6 +14,9 @@ create_index:
 select_from:
 	* | COUNT(*) |  COUNT( DISTINCT field_list ) | SUM( NUMERIC_FIELD ) | SUM(DISTINCT NUMERIC_FIELD ) | AVG( NUMERIC_FIELD ) |  AVG( DISTINCT NUMERIC_FIELD ) | AVG( DISTINCT DATETIME_FIELD ) |  MAX( NUMERIC_FIELD ) | MAX( DATETIME_FIELD ) | MIN( NUMERIC_FIELD ) | MIN( DATETIME_FIELD );
 
+select_from:
+	* | COUNT(*) |  COUNT( DISTINCT field_list ) | SUM( NUMERIC_FIELD ) | SUM(DISTINCT NUMERIC_FIELD ) | AVG( NUMERIC_FIELD ) |  AVG( DISTINCT NUMERIC_FIELD ) | AVG( DISTINCT DATETIME_FIELD ) |  MAX( NUMERIC_FIELD ) | MAX( DATETIME_FIELD ) | MIN( NUMERIC_FIELD ) | MIN( DATETIME_FIELD );
+
 condition:
 	numeric_condition | string_condition | datetime_condition| (condition) AND (condition) | (condition) OR (condition);
 
@@ -35,11 +38,7 @@ numeric_condition:
 	numeric_is_not_null |
 	numeric_not_equals_condition |
 	numeric_is_null |
-	numeric_in_conidtion |
-	numeric_is_not_missing |
-	numeric_is_missing |
-	numeric_is_valued |
-	numeric_is_not_valued;
+	numeric_in_conidtion ;
 
 numeric_equals_condition:
 	numeric_field EQUALS numeric_value | numeric_field = numeric_value | numeric_field == numeric_value ;
@@ -98,11 +97,7 @@ datetime_condition:
 	datetime_is_not_null |
 	datetime_not_equals_condition |
 	datetime_is_null |
-	datetime_in_conidtion |
-	datetime_is_not_missing |
-	datetime_is_missing |
-	datetime_is_valued |
-	datetime_is_not_valued;
+	datetime_in_conidtion ;
 
 datetime_equals_condition:
 	datetime_field EQUALS DATETIME_VALUES | datetime_field = DATETIME_VALUES | datetime_field == DATETIME_VALUES ;
@@ -163,11 +158,7 @@ string_condition:
 	string_in_conidtion |
 	string_like_condition |
 	string_equals_condition |
-	string_not_like_condition |
-	string_is_not_missing |
-	string_is_missing |
-	string_is_valued |
-	string_is_not_valued;
+	string_not_like_condition ;
 
 string_equals_condition:
 	string_field EQUALS string_values | string_field = string_values | string_field == string_values;

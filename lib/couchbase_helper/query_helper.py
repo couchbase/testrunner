@@ -360,6 +360,34 @@ class QueryHelper(object):
                 add_token = True
         return new_sql
 
+    def _gen_n1ql_to_sql(self, n1ql):
+        check_keys=False
+        check_first_paran = False
+        space = " "
+        new_sql = ""
+        value = ""
+        #print "Analyzing for : %s" % sql
+        for token in n1ql.split(" "):
+            if (not check_keys) and (token == "IN" or token == "in"):
+                check_keys= True
+                new_sql += " ON KEYS "
+            elif not check_keys:
+                new_sql += token+space
+            if check_keys:
+                if "[" in token:
+                    val = token.replace("[","(")
+                    if "]" in token:
+                        val = val.replace("]",")")
+                        check_keys = False
+                    new_sql += val+space
+                elif "]" in token:
+                    val = token.replace("]",")")
+                    check_keys = False
+                    new_sql += val+space
+                else:
+                    new_sql += token+space
+        return new_sql
+
     def _gen_sql_to_nql(self, sql):
         check_keys=False
         check_first_paran = False
@@ -402,6 +430,14 @@ class QueryHelper(object):
         content = self._read_from_file(file_path)
         return self._convert_sql_list_to_n1ql(content)
 
+    def _convert_n1ql_list_to_sql(self, file_path):
+        f = open(file_path+".convert",'w')
+        n1ql_queries = self._read_from_file(file_path)
+        for n1ql_query in n1ql_queries:
+            sql_query=self._gen_n1ql_to_sql(n1ql_query)
+            f.write(sql_query)
+        f.close()
+
     def _convert_sql_list_to_n1ql(self, sql_list):
         n1ql_list = []
         for query in sql_list:
@@ -434,6 +470,7 @@ class QueryHelper(object):
 
 if __name__=="__main__":
     helper = QueryHelper()
+    helper._convert_n1ql_list_to_sql("/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_examples/n1ql_10000_queries_for_simple_table.txt")
     #helper._convert_sql_to_nql_dump_in_file("/Users/parag/fix_testrunner/testrunner/b/resources/flightstats_mysql/inner_join_flightstats_n1ql_queries.txt")
     #print helper._gen_sql_to_nql("SELECT SUM(  a1.distance) FROM `ontime_mysiam`  AS a1 INNER JOIN `aircraft`  AS a2 ON ( a2 .`tail_num` = a1 .`tail_num` ) INNER JOIN `airports`  AS a3 ON ( a1 . `origin` = a3 .`code` ) ")
     #print helper._gen_sql_to_nql("SELECT a1.* FROM ON (a.key1 = a.key2)")
