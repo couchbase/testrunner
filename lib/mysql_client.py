@@ -169,11 +169,17 @@ class MySQLClient(object):
             n1ql = helper._convert_sql_template_to_value(sql = query, table_map = table_map, table_name= table_name)
             print n1ql
 
+    def _gen_gsi_index_info_from_n1ql_query_template(self, query_path = "./queries.txt", output_file_path = "./output.txt",  table_name = "simple_table"):
+        helper = QueryHelper()
+        map = self._get_values_with_type_for_fields_in_table()
+        table_map = map[table_name]
+        helper._convert_n1ql_gsi_index_info(query_path, gsi_index_file_path = output_file_path, table_map = table_map, table_name = table_name)
+
 if __name__=="__main__":
     client = MySQLClient(database = "simple_table_db", host = "localhost", user_id = "root", password = "")
     #client._gen_data_simple_table()
     query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
-    client._gen_queries_from_template(query_path=query_path)
+    client._gen_gsi_index_info_from_n1ql_query_template(query_path=query_path)
     #with open("./queries.txt") as f:
     #    content = f.readlines()
     #for sql in content:

@@ -1,5 +1,6 @@
 import random
 import string
+import json
 from random import randrange
 from random import randint
 from datetime import datetime
@@ -209,6 +210,49 @@ class QueryHelper(object):
         if "DATETIME_FIELD"  in sql:
             new_sql = new_sql.replace("DATETIME_FIELD", random.choice(datetime_field_names))
         return new_sql
+
+    def _convert_sql_template_to_value_for_secondary_indexes(self, sql ="", table_map = {}, table_name= "simple_table"):
+        n1ql = self._convert_sql_template_to_value(sql =sql, table_map = table_map, table_name= table_name)
+        sql = self._gen_n1ql_to_sql(n1ql)
+        sql_map = self._divide_sql(n1ql)
+        where_condition = sql_map["where_condition"]
+        simple_create_index_n1ql_with_where = None
+        simple_create_index_n1ql_with_expression = None
+        fields = table_map.keys()
+        field_that_occur = []
+        field_that_do_not_occur = []
+        if where_condition:
+            for field in fields:
+                if field in where_condition:
+                    field_that_occur.append(field)
+                else:
+                    field_that_do_not_occur.append(field)
+        if where_condition:
+            index_name_with_occur_fields_where = "{0}_where_based_fields_occur_{1}".format(table_name,self._random_alphanumeric(8))
+            index_name_with_do_not_occur_fields_where = "{0}_where_based_field_do_not_occur_{1}".format(table_name,self._random_alphanumeric(8))
+            index_name_with_expression = "{0}_expression_based_{1}".format(table_name,self._random_alphanumeric(8))
+            simple_create_index_n1ql_fields_occur_with_where = \
+            "CREATE INDEX {0} ON {1}({2}) WHERE {3} USING GSI".format(index_name_with_occur_fields_where,
+             table_name,self._convert_list(field_that_occur,"numeric") , where_condition)
+            simple_create_index_n1ql_fields_do_not_occur_with_where = \
+            "CREATE INDEX {0} ON {1}({2}) WHERE {3} USING GSI".format(index_name_with_do_not_occur_fields_where,
+             table_name,self._convert_list(field_that_do_not_occur,"numeric") , where_condition)
+            simple_create_index_n1ql_with_expression = "CREATE INDEX {0} ON {1}({2}) USING GSI".format(
+                index_name_with_expression,table_name, where_condition)
+        map = {
+                "n1ql":n1ql,
+                "sql":sql,
+                "bucket":table_name,
+                "gsi_indexes":
+                    {
+                        index_name_with_occur_fields_where:simple_create_index_n1ql_fields_occur_with_where,
+                        index_name_with_do_not_occur_fields_where:simple_create_index_n1ql_fields_do_not_occur_with_where,
+                        index_name_with_expression:simple_create_index_n1ql_with_expression
+                    }
+
+                }
+        return map
+
 
     def _convert_sql_template_to_value(self, sql ="", table_map = {}, table_name= "BUCKET_NAME"):
         sql_map = self._divide_sql(sql)
@@ -436,6 +480,14 @@ class QueryHelper(object):
         for n1ql_query in n1ql_queries:
             sql_query=self._gen_n1ql_to_sql(n1ql_query)
             f.write(sql_query)
+        f.close()
+
+    def _convert_n1ql_gsi_index_info(self, file_path, gsi_index_file_path = None, table_map= {}, table_name = "simple_table"):
+        f = open(gsi_index_file_path,'w')
+        n1ql_queries = self._read_from_file(file_path)
+        for n1ql_query in n1ql_queries:
+            map=self._convert_sql_template_to_value_for_secondary_indexes(n1ql_query, table_map = table_map, table_name = table_name)
+            f.write(json.dumps(map))
         f.close()
 
     def _convert_sql_list_to_n1ql(self, sql_list):
