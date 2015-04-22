@@ -579,10 +579,13 @@ class XdcrStatsWaitTask(StatsWaitTask):
         self.set_result(True)
 
 class GenericLoadingTask(Thread, Task):
-    def __init__(self, server, bucket, kv_store):
+    def __init__(self, server, bucket, kv_store, batch_size=1, pause_secs=1, timeout_secs=30):
         Thread.__init__(self)
         Task.__init__(self, "load_gen_task")
         self.kv_store = kv_store
+        self.batch_size = batch_size
+        self.pause = pause_secs
+        self.timeout = timeout_secs
         self.client = VBucketAwareMemcached(RestConnection(server), bucket)
 
     def execute(self, task_manager):
@@ -732,10 +735,105 @@ class GenericLoadingTask(Thread, Task):
             self.set_exception(error)
 
 
+
+    # start of batch methods
+    def _create_batch(self, partition_keys_dic, key_val):
+        try:
+            self._process_values_for_create(key_val)
+            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
+            self._populate_kvstore(partition_keys_dic, key_val)
+        except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError, RuntimeError) as error:
+            self.state = FINISHED
+            self.set_exception(error)
+
+
+    def _update_batch(self, partition_keys_dic, key_val):
+        try:
+            self._process_values_for_update(partition_keys_dic, key_val)
+            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
+            self._populate_kvstore(partition_keys_dic, key_val)
+        except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError, RuntimeError) as error:
+            self.state = FINISHED
+            self.set_exception(error)
+
+
+    def _delete_batch(self, partition_keys_dic, key_val):
+        for partition, keys in partition_keys_dic.items():
+            for key in keys:
+                try:
+                    self.client.delete(key)
+                    partition.delete(key)
+                except MemcachedError as error:
+                    if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
+                        pass
+                    else:
+                        self.state = FINISHED
+                        self.set_exception(error)
+                        return
+                except (ServerUnavailableException, socket.error, EOFError, AttributeError) as error:
+                    self.state = FINISHED
+                    self.set_exception(error)
+
+
+    def _read_batch(self, partition_keys_dic, key_val):
+        try:
+            o, c, d = self.client.getMulti(key_val.keys(), self.pause, self.timeout)
+        except MemcachedError as error:
+                self.state = FINISHED
+                self.set_exception(error)
+
+    def _process_values_for_create(self, key_val):
+        for key, value in key_val.items():
+            try:
+                value_json = json.loads(value)
+                value_json['mutated'] = 0
+                value = json.dumps(value_json)
+            except ValueError:
+                index = random.choice(range(len(value)))
+                value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+            finally:
+                key_val[key] = value
+
+    def _process_values_for_update(self, partition_keys_dic, key_val):
+        for partition, keys in partition_keys_dic.items():
+            for key in keys:
+                value = partition.get_valid(key)
+                if value is None:
+                    del key_val[key]
+                    continue
+                try:
+                    value = key_val[key]  # new updated value, however it is not their in orginal code "LoadDocumentsTask"
+                    value_json = json.loads(value)
+                    value_json['mutated'] += 1
+                    value = json.dumps(value_json)
+                except ValueError:
+                    index = random.choice(range(len(value)))
+                    value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+                finally:
+                    key_val[key] = value
+
+
+    def _populate_kvstore(self, partition_keys_dic, key_val):
+        for partition, keys in partition_keys_dic.items():
+            self._populate_kvstore_partition(partition, keys, key_val)
+
+    def _release_locks_on_kvstore(self):
+        for part in self._partitions_keyvals_dic.keys:
+            self.kv_store.release_lock(part)
+
+    def _populate_kvstore_partition(self, partition, keys, key_val):
+        for key in keys:
+            if self.only_store_hash:
+                key_val[key] = str(crc32.crc32_hash(key_val[key]))
+            partition.set(key, key_val[key], self.exp, self.flag)
+
+
 class LoadDocumentsTask(GenericLoadingTask):
+
     def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0,
-                 only_store_hash=True, proxy_client=None):
-        GenericLoadingTask.__init__(self, server, bucket, kv_store)
+                 only_store_hash=True, proxy_client=None, batch_size=1, pause_secs=1, timeout_secs=30):
+        GenericLoadingTask.__init__(self, server, bucket, kv_store, batch_size=batch_size,pause_secs=pause_secs,
+                                    timeout_secs=timeout_secs)
         self.generator = generator
         self.op_type = op_type
         self.exp = exp
@@ -749,31 +847,61 @@ class LoadDocumentsTask(GenericLoadingTask):
     def has_next(self):
         return self.generator.has_next()
 
+
     def next(self):
-        key, value = self.generator.next()
-        partition = self.kv_store.acquire_partition(key)
-        if self.op_type == 'create':
-            is_base64_value = (self.generator.__class__.__name__ == 'Base64Generator')
-            self._unlocked_create(partition, key, value, is_base64_value=is_base64_value)
-        elif self.op_type == 'read':
-            self._unlocked_read(partition, key)
-        elif self.op_type == 'read_replica':
-            self._unlocked_replica_read(partition, key)
-        elif self.op_type == 'update':
-            self._unlocked_update(partition, key)
-        elif self.op_type == 'delete':
-            self._unlocked_delete(partition, key)
-        elif self.op_type == 'append':
-            self._unlocked_append(partition, key, value)
+        if self.batch_size == 1:
+            key, value = self.generator.next()
+            partition = self.kv_store.acquire_partition(key)
+            if self.op_type == 'create':
+                is_base64_value = (self.generator.__class__.__name__ == 'Base64Generator')
+                self._unlocked_create(partition, key, value, is_base64_value=is_base64_value)
+            elif self.op_type == 'read':
+                self._unlocked_read(partition, key)
+            elif self.op_type == 'read_replica':
+                self._unlocked_replica_read(partition, key)
+            elif self.op_type == 'update':
+                self._unlocked_update(partition, key)
+            elif self.op_type == 'delete':
+                self._unlocked_delete(partition, key)
+            elif self.op_type == 'append':
+                self._unlocked_append(partition, key, value)
+            else:
+                self.state = FINISHED
+                self.set_exception(Exception("Bad operation type: %s" % self.op_type))
+            self.kv_store.release_partition(key)
+
         else:
-            self.state = FINISHED
-            self.set_exception(Exception("Bad operation type: %s" % self.op_type))
-        self.kv_store.release_partition(key)
+            # do batch things
+            key_value = self.generator.next_batch()
+            partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys())
+            if self.op_type == 'create':
+                self._create_batch(partition_keys_dic, key_value)
+            elif self.op_type == 'update':
+                self._update_batch(partition_keys_dic, key_value)
+            elif self.op_type == 'delete':
+                self._delete_batch(partition_keys_dic, key_value)
+            elif self.op_type == 'read':
+                self._read_batch(partition_keys_dic, key_value)
+            else:
+                self.state = FINISHED
+                self.set_exception(Exception("Bad operation type: %s" % self.op_type))
+            self.kv_store.release_partitions(partition_keys_dic.keys())
+
+
 
 class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
-    def __init__(self, server, bucket, generators, kv_store, op_type, exp, flag=0, only_store_hash=True):
-        LoadDocumentsTask.__init__(self, server, bucket, generators[0], kv_store, op_type, exp, flag=flag, only_store_hash=only_store_hash)
-        self.generators = generators
+    def __init__(self, server, bucket, generators, kv_store, op_type, exp, flag=0, only_store_hash=True,
+                 batch_size=1,pause_secs=1, timeout_secs=30):
+        LoadDocumentsTask.__init__(self, server, bucket, generators[0], kv_store, op_type, exp, flag=flag,
+                    only_store_hash=only_store_hash, batch_size=batch_size, pause_secs=pause_secs, timeout_secs=timeout_secs)
+
+        if batch_size == 1:
+            self.generators = generators
+        else:
+            self.generators = []
+            for i in generators:
+                self.generators.append( BatchedDocumentGenerator(i, batch_size))
+
         self.op_types = None
         self.buckets = None
         if isinstance(op_type, list):
@@ -803,6 +931,7 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
         self.state = FINISHED
         self.set_result(True)
 
+# This will be obsolete with the implementation of batch operations in LoadDocumentsTaks
 class BatchedLoadDocumentsTask(GenericLoadingTask):
     def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=True, batch_size=100, pause_secs=1, timeout_secs=30):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
@@ -934,6 +1063,8 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
             if self.only_store_hash:
                 key_val[key] = str(crc32.crc32_hash(key_val[key]))
             partition.set(key, key_val[key], self.exp, self.flag)
+
+
 
 class WorkloadTask(GenericLoadingTask):
     def __init__(self, server, bucket, kv_store, num_ops, create, read, update, delete, exp):
