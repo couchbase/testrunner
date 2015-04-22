@@ -559,16 +559,28 @@ class QueriesViewsTests(QueryTests):
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     indexes.append(index_name)
-                self.hint_index = indexes[0]
-                fn = getattr(self, method_name)
-                fn()
-            finally:
+            except:
                 for indx in indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, indx, self.index_type)
                     try:
                         self.run_cbq_query()
                     except:
                         pass
+                raise
+        try:
+            self.query = "select * from system:indexes where name = %s" % (index_name)
+            self.log.info(self.run_cbq_query())
+            self.hint_index = indexes[0]
+            fn = getattr(self, method_name)
+            fn()
+        finally:
+            for bucket in self.buckets:
+                for indx in indexes:
+                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, indx, self.index_type)
+                        try:
+                            self.run_cbq_query()
+                        except:
+                            pass
 
     def _verify_view_is_present(self, view_name, bucket):
         if self.primary_indx_type.lower() == 'gsi':
