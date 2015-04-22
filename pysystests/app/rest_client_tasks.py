@@ -141,6 +141,9 @@ def perform_bucket_create_tasks(bucketMsg):
     if "standard" in bucketMsg:
         create_standard_buckets(rest, bucketMsg["standard"])
 
+    if "tpcc" in bucketMsg:
+        create_tpcc_buckets(rest, bucketMsg["tpcc"])
+
 def parseBucketMsg(bucket):
     bucketMsg = {'count': 1,
                  'ramQuotaMB': 1000,
@@ -169,7 +172,6 @@ def parseBucketMsg(bucket):
 
 def create_default_buckets(rest, bucketMsg):
     bucketMsgParsed = parseBucketMsg(bucketMsg)
-
     rest.create_bucket(bucket="default",
                        ramQuotaMB = bucketMsgParsed['ramQuotaMB'],
                        replicaNumber = bucketMsgParsed['replicas'],
@@ -181,9 +183,23 @@ def create_default_buckets(rest, bucketMsg):
                        threadsNumber = bucketMsgParsed['priority'],
                        evictionPolicy = bucketMsgParsed['eviction_policy'])
 
+def create_tpcc_buckets(rest, bucketMsg):
+    bucketMsgParsed = parseBucketMsg(bucketMsg)
+    tpcc_list = ["ITEM", "ORDERS", "ORDER_LINE", "NEW_ORDER", "STOCK", "CUSTOMER", "DISTRICT", "WAREHOUSE", "HISTORY"]
+    for b_name in tpcc_list:
+        rest.create_bucket(bucket=b_name,
+                       ramQuotaMB = bucketMsgParsed['ramQuotaMB'],
+                       replicaNumber = bucketMsgParsed['replicas'],
+                       proxyPort = 11211,
+                       authType = "sasl",
+                       saslPassword = None,
+                       bucketType = bucketMsgParsed['type'],
+                       replica_index = bucketMsgParsed['replica_index'],
+                       threadsNumber = bucketMsgParsed['priority'],
+                       evictionPolicy = bucketMsgParsed['eviction_policy'])
+
 def create_sasl_buckets(rest, bucketMsg):
     bucketMsgParsed = parseBucketMsg(bucketMsg)
-
     for i in range(bucketMsgParsed['count']):
         if i == 0:
             name = "saslbucket"
