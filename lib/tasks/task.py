@@ -85,11 +85,14 @@ class NodeInitializeTask(Task):
                  maxParallelIndexers=None,
                  maxParallelReplicaIndexers=None,
                  port=None, quota_percent=None,
+                 index_quota_percent=None,
                  services = None):
         Task.__init__(self, "node_init_task")
         self.server = server
         self.port = port or server.port
         self.quota = 0
+        self.index_quota = 0
+        self.index_quota_percent = index_quota_percent
         self.quota_percent = quota_percent
         self.disable_consistent_view = disabled_consistent_view
         self.rebalanceIndexWaitingDisabled = rebalanceIndexWaitingDisabled
@@ -141,6 +144,9 @@ class NodeInitializeTask(Task):
         self.quota = int(info.mcdMemoryReserved * 2 / 3)
         if self.quota_percent:
            self.quota = int(info.mcdMemoryReserved * self.quota_percent / 100)
+        if self.index_quota_percent:
+            self.index_quota = int((info.mcdMemoryReserved * 2/3) *self.index_quota_percent / 100)
+            rest.set_indexer_memoryQuota(username, password, self.index_quota)
         rest.init_cluster_memoryQuota(username, password, self.quota)
         self.state = CHECKING
         task_manager.schedule(self)

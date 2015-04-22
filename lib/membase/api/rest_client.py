@@ -785,6 +785,15 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
+    def set_indexer_memoryQuota(self, username='Administrator',
+                                 password='password',
+                                 indexMemoryQuota=256):
+        api = self.baseUrl + 'pools/default'
+        params = urllib.urlencode({'indexMemoryQuota': indexMemoryQuota})
+        log.info('pools/default params : {0}'.format(params))
+        status, content, header = self._http_request(api, 'POST', params)
+        return status
+
     def get_cluster_ceritificate(self):
         api = self.baseUrl + 'pools/default/certificate'
         status, content, _ = self._http_request(api, 'GET')

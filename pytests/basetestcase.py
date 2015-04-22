@@ -60,6 +60,7 @@ class BaseTestCase(unittest.TestCase):
         try:
             self.vbuckets = self.input.param("vbuckets", 1024)
             self.upr = self.input.param("upr", None)
+            self.index_quota_percent = self.input.param("index_quota_percent", None)
             self.targetIndexManager = self.input.param("targetIndexManager", False)
             self.targetMaster = self.input.param("targetMaster", False)
             self.reset_services = self.input.param("reset_services", False)
@@ -323,6 +324,9 @@ class BaseTestCase(unittest.TestCase):
                           port=None, quota_percent=None, services = None):
         quota = 0
         init_tasks = []
+        if self._version_compatability("3.5"):
+            if self.index_quota_percent == None:
+                self.index_quota_percent = 80
         for server in servers:
             init_port = port or server.port or '8091'
             assigned_services = services
@@ -330,7 +334,7 @@ class BaseTestCase(unittest.TestCase):
                 assigned_services = None
             init_tasks.append(cluster.async_init_node(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
                         rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers, init_port,
-                        quota_percent, services = assigned_services))
+                        quota_percent, services = assigned_services, index_quota_percent = self.index_quota_percent))
         for task in init_tasks:
             node_quota = task.result()
             if node_quota < quota or quota == 0:
@@ -1917,6 +1921,14 @@ class BaseTestCase(unittest.TestCase):
     def _expiry_pager(self, master, val=10):
         for bucket in self.buckets:
             ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", val, bucket)
+
+    def _version_compatability(self, compatible_version):
+        rest = RestConnection(self.master)
+        versions = rest.get_nodes_versions()
+        for version in versions:
+            if compatible_version <= version:
+                return True
+        return False
 
     def get_kv_nodes(self, servers = None):
         rest = RestConnection(self.master)
