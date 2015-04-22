@@ -44,7 +44,7 @@ numeric_not_equals_condition:
 	numeric_field NOT EQUALS numeric_value | numeric_field != numeric_value ;
 
 numeric_in_conidtion:
-	numeric_field IN ( numeric_field_list );
+	numeric_field IN [ numeric_field_list ];
 
 numeric_between_condition:
 	NUMERIC_FIELD BETWEEN LOWER_BOUND_VALUE and UPPER_BOUND_VALUE;
@@ -103,7 +103,7 @@ datetime_not_equals_condition:
 	datetime_equals_condition NOT EQUALS DATETIME_VALUES | datetime_field != DATETIME_VALUES ;
 
 datetime_in_conidtion:
-	datetime_field IN ( datetime_field_list );
+	datetime_field IN [ datetime_field_list ];
 
 datetime_between_condition:
 	DATETIME_FIELD BETWEEN LOWER_BOUND_VALUE and UPPER_BOUND_VALUE;
@@ -173,7 +173,7 @@ string_is_not_null:
 	string_field IS NOT NULL;
 
 string_in_conidtion:
-	string_field IN ( string_field_list );
+	string_field IN [ string_field_list ];
 
 string_is_null:
 	string_field IS NULL;

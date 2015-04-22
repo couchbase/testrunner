@@ -131,26 +131,18 @@ class N1QLHelper():
         actual_count = -1
         expected_count = -1
         actual_result = n1ql_result
-        if actual_result == None or (isinstance(actual_result,list) and len(actual_result) == 0) or actual_result == "":
-            actual_count = 0
-        elif "$1" in actual_result[0]:
-            if isinstance(actual_result[0]["$1"], int):
-                actual_count =  int(actual_result[0]["$1"])
-            else:
-                if actual_result[0]["$1"] == "":
-                    actual_count = 0
-                else:
-                    actual_count =  actual_result[0]["$1"]
-        expected_response = sql_result[0].values()[0]
-        if expected_response:
-            if isinstance(expected_response, int):
-                expected_count = self._convert_to_number(expected_response)
-            else:
-                expected_count = expected_response
-        else:
-            expected_count = 0
-        msg = "expected = {0}, actual = {1}".format(expected_count, actual_count)
-        if expected_count != actual_count:
+        msg = "the number of results do not match :: expected = {0}, actual = {1}".format(len(n1ql_result), len(sql_result))
+        if len(sql_result) != len(n1ql_result):
+            raise Exception(msg)
+        n1ql_result = self._gen_dict_n1ql_func_result(n1ql_result)
+        n1ql_result = sorted(n1ql_result)
+        sql_result = self._gen_dict(sql_result)
+        sql_result = sorted(sql_result)
+        if sql_result != n1ql_result:
+            max = 5
+            if len(sql_result) < 5:
+                max = len(sql_result)
+            msg = "mismatch in results :: expected [0:{0}]:: {1}, actual 0:{0}]:: {2} ".format(max, sql_result[0:max], actual_result[0:max])
             raise Exception(msg)
 
     def _convert_to_number(self, val):
@@ -403,6 +395,10 @@ class N1QLHelper():
                 for val in result:
                     for key in val.keys():
                         result_set.append(val[key])
+        return result_set
+
+    def _gen_dict_n1ql_func_result(self, result):
+        result_set = [val[key] for val in result for key in val.keys()]
         return result_set
 
     def _check_sample(self, result, expected_in_key = None):

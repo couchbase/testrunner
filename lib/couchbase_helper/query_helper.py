@@ -49,6 +49,27 @@ class QueryHelper(object):
                 }
         return map
 
+    def _add_explain_with_hints(self, sql, index_hint):
+        sql_map = self._divide_sql(sql)
+        select_from = sql_map["select_from"]
+        from_fields = sql_map["from_fields"]
+        where_condition = sql_map["where_condition"]
+        order_by = sql_map["order_by"]
+        group_by = sql_map["group_by"]
+        new_sql = "EXPLAIN SELECT "
+        if select_from:
+            new_sql += select_from +" FROM "
+        if from_fields:
+            new_sql += from_fields+ " "
+            new_sql += index_hint + " "
+        if where_condition:
+            new_sql += " WHERE "+ where_condition + " "
+        if group_by:
+            new_sql += " GROUP BY "+ group_by +" "
+        if order_by:
+            new_sql += " ORDER BY "+ order_by +" "
+        return new_sql
+
     def _check_function(self, sql):
         func_list = ["MIN", "min", "MAX", "max" ,"COUNT","SUM","sum","AVG","avg"]
         for func in func_list:
@@ -211,9 +232,17 @@ class QueryHelper(object):
             new_sql = new_sql.replace("DATETIME_FIELD", random.choice(datetime_field_names))
         return new_sql
 
-    def _convert_sql_template_to_value_for_secondary_indexes(self, sql ="", table_map = {}, table_name= "simple_table"):
-        n1ql = self._convert_sql_template_to_value(sql =sql, table_map = table_map, table_name= table_name)
+    def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=True):
+        n1ql = self._convert_sql_template_to_value(sql =n1ql_template, table_map = table_map, table_name= table_name)
         sql = self._gen_n1ql_to_sql(n1ql)
+        if not define_gsi_index:
+            map = {
+                "n1ql":n1ql,
+                "sql":sql,
+                "bucket":table_name,
+                "gsi_indexes":{}
+                    }
+            return map
         sql_map = self._divide_sql(n1ql)
         where_condition = sql_map["where_condition"]
         simple_create_index_n1ql_with_where = None
@@ -482,12 +511,13 @@ class QueryHelper(object):
             f.write(sql_query)
         f.close()
 
-    def _convert_n1ql_gsi_index_info(self, file_path, gsi_index_file_path = None, table_map= {}, table_name = "simple_table"):
+    def _convert_template_query_info_with_gsi(self, file_path, gsi_index_file_path = None, table_map= {}, table_name = "simple_table", define_gsi_index = True):
         f = open(gsi_index_file_path,'w')
         n1ql_queries = self._read_from_file(file_path)
         for n1ql_query in n1ql_queries:
-            map=self._convert_sql_template_to_value_for_secondary_indexes(n1ql_query, table_map = table_map, table_name = table_name)
-            f.write(json.dumps(map))
+            map=self._convert_sql_template_to_value_for_secondary_indexes(
+                n1ql_query, table_map = table_map, table_name = table_name, define_gsi_index= define_gsi_index)
+            f.write(json.dumps(map)+"\n")
         f.close()
 
     def _convert_sql_list_to_n1ql(self, sql_list):

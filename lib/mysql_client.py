@@ -3,6 +3,7 @@
 Python based MySQL interface
 """
 import mysql.connector
+from mysql.connector import FieldType
 from couchbase_helper.query_helper import QueryHelper
 
 class MySQLClient(object):
@@ -14,6 +15,7 @@ class MySQLClient(object):
         self.user_id = user_id
         self.password = password
         self._set_mysql_client(self.database , self.host , self.user_id , self.password)
+        self.table_key_type_map = self._get_pkey_map_for_tables_with_primary_key_column()
 
     def _reset_client_connection(self):
         self._reset_client_connection()
@@ -37,8 +39,10 @@ class MySQLClient(object):
         cur.execute(query)
         rows = cur.fetchall()
         desc = cur.description
-        column_names = [row[0]  for row in desc]
-        return column_names, rows
+        columns =[]
+        for row in desc:
+            columns.append({"column_name":row[0], "type":FieldType.get_info(row[1]).lower()})
+        return columns, rows
 
     def _gen_json_from_results_with_primary_key(self, columns, rows, primary_key = ""):
         primary_key_index = 0
@@ -46,7 +50,7 @@ class MySQLClient(object):
         dict = {}
         # Trace_index_of_primary_key
         for column in columns:
-            if column == primary_key:
+            if column["column_name"] == primary_key:
                 primary_key_index = count
             count += 1
         # Convert to JSON and capture in a dictionary
@@ -54,7 +58,8 @@ class MySQLClient(object):
             index = 0
             map = {}
             for column in columns:
-                map[column] = row[index]
+                value = row[index]
+                map[column["column_name"]] = self._convert_to_mysql_json_compatible_val(value, column["type"])
                 index += 1
             dict[str(row[primary_key_index])] = map
         return dict
@@ -66,10 +71,20 @@ class MySQLClient(object):
             index = 0
             map = {}
             for column in columns:
-                map[column] = row[index]
+                value = row[index]
+                map[column["column_name"]] = self._convert_to_mysql_json_compatible_val(value, column["type"])
                 index += 1
             data.append(map)
         return data
+
+    def _convert_to_mysql_json_compatible_val(self, value, type):
+        if not hasattr(self, 'table_key_type_map'):
+            return value
+        if "datetime" in str(type):
+            return str(value)
+        if "decimal" in str(type):
+            return int(value)
+        return value
 
     def _get_table_list(self):
         table_list = []
@@ -116,6 +131,18 @@ class MySQLClient(object):
             for field_info in map[table_name]:
                 if field_info['Key'] == "PRI":
                     target_map[table_name] = field_info['Field']
+        return target_map
+
+
+    def _get_pkey_map_for_tables_with_primary_key_column(self):
+        target_map = {}
+        map = self._get_tables_information()
+        for table_name in map.keys():
+            target_map[table_name] ={}
+            field_map = {}
+            for field_info in map[table_name]:
+                field_map[field_info['Field']] ={"type":field_info['Type']}
+            target_map[table_name] = field_map
         return target_map
 
     def _get_pkey_map_for_tables_without_primary_key_column(self):
@@ -173,13 +200,30 @@ class MySQLClient(object):
         helper = QueryHelper()
         map = self._get_values_with_type_for_fields_in_table()
         table_map = map[table_name]
-        helper._convert_n1ql_gsi_index_info(query_path, gsi_index_file_path = output_file_path, table_map = table_map, table_name = table_name)
+        helper._convert_template_query_info_with_gsi(query_path, gsi_index_file_path = output_file_path, table_map = table_map, table_name = table_name)
 
 if __name__=="__main__":
+    import json
     client = MySQLClient(database = "simple_table_db", host = "localhost", user_id = "root", password = "")
+    #query = "select * from simple_table LIMIT 1"
+    #print query
+    #column_info, rows = client._execute_query(query = query)
+    #dict = client._gen_json_from_results_with_primary_key(column_info, rows, "primary_key_id")
+    #print dict
+
+
     #client._gen_data_simple_table()
-    query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
-    client._gen_gsi_index_info_from_n1ql_query_template(query_path=query_path)
+    #query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
+    client._gen_gsi_index_info_from_n1ql_query_template(query_path="./template.txt")
+    #with open("./output.txt") as f:
+    #    content = f.readlines()
+    #for data in content:
+    #    json_data= json.loads(data)
+    #    print "<<<<<<<<<<< BEGIN >>>>>>>>>>"
+    #    print json_data["sql"]
+    #    print json_data["n1ql"]
+    #    print json_data["gsi_indexes"]
+    #    print "<<<<<<<<<<< END >>>>>>>>>>"
     #with open("./queries.txt") as f:
     #    content = f.readlines()
     #for sql in content:
