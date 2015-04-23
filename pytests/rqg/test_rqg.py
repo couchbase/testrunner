@@ -126,6 +126,67 @@ class RQGTests(BaseTestCase):
         result = self._generate_result(failure_map)
         self.assertTrue(check, result)
 
+    def test_rqg_main(self):
+        self.run_query_without_index_hint= self.input.param("run_query_without_index_hint",True)
+        self.run_query_with_primary= self.input.param("run_query_with_primary",True)
+        self.run_query_with_secondary= self.input.param("run_query_with_secondary",True)
+        self.run_explain_with_hints= self.input.param("run_explain_with_hints",True)
+        self.n1ql_file_path= self.input.param("test_file_path","default")
+        with open(self.n1ql_file_path) as f:
+            n1ql_query_list = f.readlines()
+        i = 0
+        check = True
+        pass_case = 0
+        total =0
+        fail_case = 0
+        failure_map = {}
+        for n1ql_query_info in n1ql_query_list:
+            # Run n1ql query
+            data = json.loads(n1ql_query_info)
+            n1ql_query = data["n1ql"]
+            sql_query = data["sql"]
+            indexes = data["indexes"]
+            table_name = data["bucket"]
+            expected_result = data["expected_result"]
+            run_result ={}
+            hints = self.query_helper._find_hints(n1ql_query)
+            self._generate_secondary_indexes_with_index_map(index_map = indexes, table_name = table_name)
+            self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(total))
+            result_run = {}
+            if expected_result == None:
+                expected_result = self._gen_expected_result(sql_query)
+            if self.run_query_without_index_hint:
+                query_index_run = self._run_queries_and_verify(n1ql_query = n1ql_query , sql_query = sql_query, expected_result = expected_result)
+                result_run["run_query_without_index_hint"] = query_index_run
+            if self.run_query_with_primary:
+                index_info = {"name":"`#primary`","type":"GSI"}
+                query = self.query_helper._add_index_hints_to_query(n1ql_query, [index_info])
+                query_index_run = self._run_queries_and_verify(n1ql_query = query , sql_query = sql_query, expected_result = expected_result)
+                result_run["run_query_with_primary"] = query_index_run
+            if self.run_query_with_secondary:
+                for index_name in indexes.keys():
+                    query = self.query_helper._add_index_hints_to_query(n1ql_query, [indexes[index_name]])
+                    query_index_run = self._run_queries_and_verify(n1ql_query = query , sql_query = sql_query)
+                    key = "run_query_with_index_name::{0}".format(index_name)
+                    result_run[key] = query_index_run
+            if self.run_explain_with_hints:
+                result = self._run_queries_with_explain(n1ql_query , indexes)
+                result_run.update(result)
+            message = "NO FAILURES \n"
+            check, message = self._analyze_result(result_run)
+            total += 1
+            if check:
+                pass_case += 1
+            else:
+                fail_case +=  1
+                failure_map[str(total)] = {"sql_query":sql_query, "n1ql_query": n1ql_query,
+                 "run_result" : message}
+            self._drop_secondary_indexes_with_index_map(index_map = indexes, table_name = table_name)
+            self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING QUERY CASE NUMBER {0} >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(total))
+        self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case))
+        result = self._generate_result(failure_map)
+        self.assertTrue(fail_case == 0, result)
+
     def test_rqg_from_file(self):
         self.n1ql_file_path= self.input.param("n1ql_file_path","default")
         with open(self.n1ql_file_path) as f:
@@ -230,7 +291,43 @@ class RQGTests(BaseTestCase):
         # Run n1ql query
         actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server)
 
-    def _run_queries_compare(self, n1ql_query = None, sql_query = None):
+    def _gen_expected_result(self, sql = ""):
+        sql_result = {}
+        try:
+            columns, rows = self.client._execute_query(query = sql)
+            sql_result = self.client._gen_json_from_results(columns, rows)
+        except Exception, ex:
+            self.log.info(ex)
+        return sql_result
+
+    def _run_queries_and_verify(self, n1ql_query = None, sql_query = None, expected_result = None):
+        self.log.info(" SQL QUERY :: {0}".format(sql_query))
+        self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
+        result_run = {}
+        # Run n1ql query
+        hints = self.query_helper._find_hints(n1ql_query)
+        try:
+            actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server)
+            n1ql_result = actual_result["results"]
+            #self.log.info(actual_result)
+            # Run SQL Query
+            sql_result = expected_result
+            if expected_result == None:
+                columns, rows = self.client._execute_query(query = sql_query)
+                sql_result = self.client._gen_json_from_results(columns, rows)
+            #self.log.info(sql_result)
+            self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
+            self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
+            try:
+                self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
+            except Exception, ex:
+                self.log.info(ex)
+                return {"success":False, "result": str(ex)}
+            return {"success":True, "result": "Pass"}
+        except Exception, ex:
+            return {"success":False, "result": str(ex)}
+
+    def _run_queries_compare(self, n1ql_query = None, sql_query = None, expected_result = None):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
         # Run n1ql query
@@ -240,8 +337,10 @@ class RQGTests(BaseTestCase):
             n1ql_result = actual_result["results"]
             #self.log.info(actual_result)
             # Run SQL Query
-            columns, rows = self.client._execute_query(query = sql_query)
-            sql_result = self.client._gen_json_from_results(columns, rows)
+            sql_result = expected_result
+            if expected_result == None:
+                columns, rows = self.client._execute_query(query = sql_query)
+                sql_result = self.client._gen_json_from_results(columns, rows)
             #self.log.info(sql_result)
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
@@ -262,34 +361,30 @@ class RQGTests(BaseTestCase):
         except Exception, ex:
             self.log.info(ex)
 
-    def _run_queries_with_explain(self, n1ql_query = None, gsi_index_list =[]):
-        error_check = True
-        error_messages = []
+    def _run_queries_with_explain(self, n1ql_query = None, indexes = {}):
+        run_result = {}
         # Run n1ql query
-        for index_name in gsi_index_list:
-            hint = "USE INDEX({0} USING GSI)".format(index_name)
+        for index_name in indexes:
+            hint = "USE INDEX({0} USING {1})".format(index_name,indexes[index_name]["type"])
             n1ql = self.query_helper._add_explain_with_hints(n1ql_query, hint)
             self.log.info(n1ql_query)
-            error_message = "NA"
+            message = "Pass"
             check = True
             try:
                 actual_result = self.n1ql_helper.run_cbq_query(query = n1ql, server = self.n1ql_server)
                 self.log.info(actual_result)
                 check = self.n1ql_helper.verify_index_with_explain(actual_result, index_name)
-                error_check = False and error_check
-                error_message= " query {0} failed explain result, index {1} not found".format(n1ql_query,index_name)
-                self.log.info(error_message)
+                if not check:
+                    message= " query {0} failed explain result, index {1} not found".format(n1ql_query,index_name)
+                    self.log.info(message)
             except Exception, ex:
                 self.log.info(ex)
-                error_message = ex
+                message = ex
                 check = False
             finally:
-                error_check = check and error_check
-                if not check:
-                    error_messages.append(error_message)
-        if not error_check:
-            return False, error_messages
-        return True, "::::".join(error_messages)
+                key = "Explain for index {0}".format(index_name)
+                run_result[key] = {"success":check, "result":message}
+        return run_result
 
     def _run_queries_from_file_and_compare(self, n1ql_query = None, sql_query = None, sql_result = None):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
@@ -444,7 +539,7 @@ class RQGTests(BaseTestCase):
     def _generate_secondary_indexes_with_index_map(self, index_map = {}, table_name = "simple_table"):
         self.log.info(" Building Secondary Indexes for Bucket {0}".format(table_name))
         for index_name in index_map.keys():
-            query =index_map[index_name]
+            query =index_map[index_name]["definition"]
             self.log.info(" Running Query {0} ".format(query))
             try:
                 actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
@@ -457,12 +552,22 @@ class RQGTests(BaseTestCase):
     def _drop_secondary_indexes_with_index_map(self, index_map = {}, table_name = "simple_table"):
         self.log.info(" Dropping Secondary Indexes for Bucket {0}".format(table_name))
         for index_name in index_map.keys():
-            query ="DROP INDEX {0}.{1} USING GSI".format(table_name, index_name)
+            query ="DROP INDEX {0}.{1} USING {2}".format(table_name, index_name, index_map[index_name]["type"])
             try:
                 self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
             except Exception, ex:
                 self.log.info(ex)
                 raise
+
+    def _analyze_result(self, result):
+        check = True
+        message = ""
+        for key in result.keys():
+            check = check and result[key]["success"]
+            message +=  "\n ____________________________________________________\n "
+            message += " Scenario ::  {0} \n".format(key)
+            message += " Reason ::  {0} \n".format(result[key]["result"])
+        return check, message
 
     def _convert_fun_result(self, result_set):
         list = []

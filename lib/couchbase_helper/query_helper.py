@@ -70,6 +70,29 @@ class QueryHelper(object):
             new_sql += " ORDER BY "+ order_by +" "
         return new_sql
 
+    def _add_index_hints_to_query(self, sql, index_list = []):
+        sql_map = self._divide_sql(sql)
+        select_from = sql_map["select_from"]
+        from_fields = sql_map["from_fields"]
+        where_condition = sql_map["where_condition"]
+        order_by = sql_map["order_by"]
+        group_by = sql_map["group_by"]
+        new_sql = "SELECT "
+        new_index_list = [ index["name"]+" USING "+index["type"] for index in index_list]
+        index_hint =" USE INDEX({0})".format(str(",".join(new_index_list)))
+        if select_from:
+            new_sql += select_from +" FROM "
+        if from_fields:
+            new_sql += from_fields+ " "
+            new_sql += index_hint + " "
+        if where_condition:
+            new_sql += " WHERE "+ where_condition + " "
+        if group_by:
+            new_sql += " GROUP BY "+ group_by +" "
+        if order_by:
+            new_sql += " ORDER BY "+ order_by +" "
+        return new_sql
+
     def _check_function(self, sql):
         func_list = ["MIN", "min", "MAX", "max" ,"COUNT","SUM","sum","AVG","avg"]
         for func in func_list:
@@ -249,36 +272,48 @@ class QueryHelper(object):
         simple_create_index_n1ql_with_expression = None
         fields = table_map.keys()
         field_that_occur = []
-        field_that_do_not_occur = []
         if where_condition:
             for field in fields:
                 if field in where_condition:
                     field_that_occur.append(field)
-                else:
-                    field_that_do_not_occur.append(field)
         if where_condition:
-            index_name_with_occur_fields_where = "{0}_where_based_fields_occur_{1}".format(table_name,self._random_alphanumeric(8))
-            index_name_with_do_not_occur_fields_where = "{0}_where_based_field_do_not_occur_{1}".format(table_name,self._random_alphanumeric(8))
-            index_name_with_expression = "{0}_expression_based_{1}".format(table_name,self._random_alphanumeric(8))
-            simple_create_index_n1ql_fields_occur_with_where = \
+            index_name_with_occur_fields_where = "{0}_where_based_fields_occur_{1}".format(table_name,self._random_alphanumeric(4))
+            index_name_fields_only = "{0}_index_name_fields_only_{1}".format(table_name,self._random_alphanumeric(4))
+            index_name_with_expression = "{0}_expression_based_{1}".format(table_name,self._random_alphanumeric(4))
+            create_index_fields_occur_with_where = \
             "CREATE INDEX {0} ON {1}({2}) WHERE {3} USING GSI".format(index_name_with_occur_fields_where,
              table_name,self._convert_list(field_that_occur,"numeric") , where_condition)
-            simple_create_index_n1ql_fields_do_not_occur_with_where = \
-            "CREATE INDEX {0} ON {1}({2}) WHERE {3} USING GSI".format(index_name_with_do_not_occur_fields_where,
-             table_name,self._convert_list(field_that_do_not_occur,"numeric") , where_condition)
-            simple_create_index_n1ql_with_expression = "CREATE INDEX {0} ON {1}({2}) USING GSI".format(
+            create_index_name_fields_only = \
+            "CREATE INDEX {0} ON {1}({2}) USING GSI".format(index_name_fields_only,
+             table_name,self._convert_list(field_that_occur,"numeric"))
+            create_index_name_with_expression = "CREATE INDEX {0} ON {1}({2}) USING GSI".format(
                 index_name_with_expression,table_name, where_condition)
         map = {
                 "n1ql":n1ql,
                 "sql":sql,
                 "bucket":table_name,
-                "gsi_indexes":
+                "expected_result":None,
+                "indexes":
                     {
-                        index_name_with_occur_fields_where:simple_create_index_n1ql_fields_occur_with_where,
-                        index_name_with_do_not_occur_fields_where:simple_create_index_n1ql_fields_do_not_occur_with_where,
-                        index_name_with_expression:simple_create_index_n1ql_with_expression
+                        index_name_with_occur_fields_where:
+                        {
+                            "name":index_name_with_occur_fields_where,
+                            "type":"GSI",
+                            "definition":create_index_fields_occur_with_where
+                        },
+                        index_name_fields_only:
+                        {
+                            "name":index_name_fields_only,
+                            "type":"GSI",
+                            "definition":create_index_name_fields_only
+                        },
+                        index_name_with_expression:
+                        {
+                            "name":index_name_with_expression,
+                            "type":"GSI",
+                            "definition":create_index_name_with_expression
+                        }
                     }
-
                 }
         return map
 
@@ -551,8 +586,9 @@ class QueryHelper(object):
         return temp_list[0:len(temp_list)-1]
 
 if __name__=="__main__":
+
     helper = QueryHelper()
-    helper._convert_n1ql_list_to_sql("/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_examples/n1ql_10000_queries_for_simple_table.txt")
+    #helper._convert_n1ql_list_to_sql("/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_examples/n1ql_10000_queries_for_simple_table.txt")
     #helper._convert_sql_to_nql_dump_in_file("/Users/parag/fix_testrunner/testrunner/b/resources/flightstats_mysql/inner_join_flightstats_n1ql_queries.txt")
     #print helper._gen_sql_to_nql("SELECT SUM(  a1.distance) FROM `ontime_mysiam`  AS a1 INNER JOIN `aircraft`  AS a2 ON ( a2 .`tail_num` = a1 .`tail_num` ) INNER JOIN `airports`  AS a3 ON ( a1 . `origin` = a3 .`code` ) ")
     #print helper._gen_sql_to_nql("SELECT a1.* FROM ON (a.key1 = a.key2)")

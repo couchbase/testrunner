@@ -83,7 +83,10 @@ class MySQLClient(object):
         if "datetime" in str(type):
             return str(value)
         if "decimal" in str(type):
-            return int(value)
+            if value == None:
+                return 0
+            else:
+                return int(value)
         return value
 
     def _get_table_list(self):
@@ -196,11 +199,40 @@ class MySQLClient(object):
             n1ql = helper._convert_sql_template_to_value(sql = query, table_map = table_map, table_name= table_name)
             print n1ql
 
-    def _gen_gsi_index_info_from_n1ql_query_template(self, query_path = "./queries.txt", output_file_path = "./output.txt",  table_name = "simple_table"):
+    def _query_and_convert_to_json(self, query):
+        columns, rows = self._execute_query(query = query)
+        sql_result = self._gen_json_from_results(columns, rows)
+        return sql_result
+
+    def _convert_template_query_info_with_gsi(self, file_path, gsi_index_file_path = None, table_map= {}, table_name = "simple_table", define_gsi_index = True, gen_expected_result = True):
         helper = QueryHelper()
+        f = open(gsi_index_file_path,'w')
+        n1ql_queries = self._read_from_file(file_path)
+        for n1ql_query in n1ql_queries:
+            check = True
+            map=helper._convert_sql_template_to_value_for_secondary_indexes(
+                n1ql_query, table_map = table_map, table_name = table_name, define_gsi_index= define_gsi_index)
+            if gen_expected_result:
+                query = map["sql"]
+                try:
+                    sql_result = self._query_and_convert_to_json(query)
+                    map["expected_result"] = sql_result
+                except Exception, ex:
+                    print ex
+                    check = False
+            if check:
+                f.write(json.dumps(map)+"\n")
+        f.close()
+
+    def  _read_from_file(self, file_path):
+        with open(file_path) as f:
+            content = f.readlines()
+        return content
+
+    def _gen_gsi_index_info_from_n1ql_query_template(self, query_path = "./queries.txt", output_file_path = "./output.txt",  table_name = "simple_table", gen_expected_result= True):
         map = self._get_values_with_type_for_fields_in_table()
         table_map = map[table_name]
-        helper._convert_template_query_info_with_gsi(query_path, gsi_index_file_path = output_file_path, table_map = table_map, table_name = table_name)
+        self._convert_template_query_info_with_gsi(query_path, gsi_index_file_path = output_file_path, table_map = table_map, table_name = table_name, gen_expected_result = gen_expected_result)
 
 if __name__=="__main__":
     import json
