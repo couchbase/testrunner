@@ -324,9 +324,6 @@ class BaseTestCase(unittest.TestCase):
                           port=None, quota_percent=None, services = None):
         quota = 0
         init_tasks = []
-        if self._version_compatability("3.5"):
-            if self.index_quota_percent == None:
-                self.index_quota_percent = 80
         for server in servers:
             init_port = port or server.port or '8091'
             assigned_services = services
