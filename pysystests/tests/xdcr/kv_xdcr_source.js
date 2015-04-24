@@ -23,7 +23,8 @@
                               "dest_cluster_rest_username" : "Administrator",
                               "dest_cluster_rest_pwd" : "password",
                               "replication_type" : "unidirection",
-                              "buckets" : ["standardbucket","standardbucket1"]
+                              "buckets" : ["saslbucket","standardbucket","standardbucket1"],
+                              "filter_expression" : {"saslbucket": "50$"}
                              }
                  },
                 "2" :

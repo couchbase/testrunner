@@ -405,12 +405,13 @@ def perform_xdcr_tasks(xdcrMsg):
     xdcr_link_cluster(src_master, dest_master, dest_cluster_name)
 
     buckets = xdcrMsg.get("buckets")
-    xdcr_start_replication(src_master, dest_cluster_name, buckets)
+    replication_filters = xdcrMsg.get("filter_expression")
 
-    if xdcrMsg['replication_type'] == "bidirection":
-        src_cluster_name = dest_cluster_name + "_temp"
-        xdcr_link_cluster(dest_master, src_master, src_cluster_name)
-        xdcr_start_replication(dest_master, src_cluster_name, buckets)
+    for bucket in buckets:
+        xdcr_params={}
+        if bucket in replication_filters.keys():
+            xdcr_params["filterExpression"] = replication_filters[bucket]
+        xdcr_start_replication(src_master, dest_cluster_name, bucket, xdcr_params)
 
 def xdcr_link_cluster(src_master, dest_master, dest_cluster_name):
     rest_conn_src = RestConnection(src_master)
@@ -418,13 +419,15 @@ def xdcr_link_cluster(src_master, dest_master, dest_cluster_name):
                                  dest_master.rest_username,
                                  dest_master.rest_password, dest_cluster_name)
 
-def xdcr_start_replication(src_master, dest_cluster_name, bucketFilter = None):
-        rest_conn_src = RestConnection(src_master)
-        for bucket in rest_conn_src.get_buckets():
-            if bucketFilter is None or bucket.name in bucketFilter:
-                rep_id = rest_conn_src.start_replication("continuous",
-                                                                         bucket.name, dest_cluster_name)
-                logger.error("rep_id: %s" %rep_id)
+def xdcr_start_replication(src_master, dest_cluster_name, bucket_name, xdcr_params):
+    rest_conn_src = RestConnection(src_master)
+    for bucket in rest_conn_src.get_buckets():
+        if bucket.name == bucket_name:
+            rep_id = rest_conn_src.start_replication("continuous",
+                                                        bucket.name,
+                                                        dest_cluster_name,
+                                                        xdcr_params=xdcr_params)
+            logger.error("rep_id: %s" %rep_id)
 
 def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status", zone_name = ''):
 
