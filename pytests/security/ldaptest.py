@@ -85,7 +85,7 @@ class ldaptest(BaseTestCase):
                     shell.disconnect()
 
     '''
-    Delete user in LDAP. 
+    Delete user in LDAP.
     Parameters:
         ldapUserList - List of user that need to be created in LDAP. List should
         be of ['username','password']
@@ -105,10 +105,10 @@ class ldaptest(BaseTestCase):
     '''
     Change password for a particular user
     Parameters
-        user - username 
+        user - username
         password - new password that need to be changed
     Returns
-    
+
     '''
     def _changeLdapPassRemote(self, user, password):
         shell = RemoteMachineShellConnection(self.master)
@@ -125,7 +125,7 @@ class ldaptest(BaseTestCase):
     Multiple users in the list have to user1:password1?user2:password2
     Parameters
         Admin - String from input of format above
-    
+
     Returns
         List that contains user and password - ['username','password']
     '''
@@ -136,9 +136,9 @@ class ldaptest(BaseTestCase):
     '''
     Returns list of Admins and ROAdmins from the response. Also strip up unicode identifier
     Parameters
-        response - Response from LDAPAuth Get Command 
+        response - Response from LDAPAuth Get Command
         {"enabled":true,"admins":["bjones03","bjones02"],"roAdmins":["bjones01","bjones"]}
-    
+
     Returns
         2 list - roAdmins -  list of RO Admin['bjones03','bjones02']
         admins - list of FullAdmins
@@ -151,12 +151,12 @@ class ldaptest(BaseTestCase):
                     admin_roles[key].append(tempValue.encode('utf-8'))
         return admin_roles['roAdmins'], admin_roles['admins']
 
-    ''' 
-    Compare list of users passed as input with users returned by API after successful command 
+    '''
+    Compare list of users passed as input with users returned by API after successful command
     Parameters
         responseList - List of user from response
         userList - List of user passed to the function
-    
+
     Returns
         True/False - Based on comparison of input and API
     '''
@@ -176,9 +176,9 @@ class ldaptest(BaseTestCase):
         fullAdmin - List of users that need to be added as fullAdmin
         ROAdmin - List of users that need to added as Read Only Admin
         default - Default user role/priviledge if user is not explicitly part of fullAdmin or ROAdmin
-    
+
     Returns:
-        
+
     '''
     def _setupLDAPAuth(self, rest, authRole, authState, fullAdmin, ROAdmin, default=None):
         #Depending on the role specified as command line, pass parameters to the API
@@ -190,11 +190,11 @@ class ldaptest(BaseTestCase):
             rest.ldapUserRestOperation(authState, fullAdmin, ROAdmin, exclude=default)
 
     '''
-    _validateCred - 
-    Function for testing the TEST/Check Credentails/Role functionality. Test value of checkRole passed as 
+    _validateCred -
+    Function for testing the TEST/Check Credentails/Role functionality. Test value of checkRole passed as
     argument to the function.
-    
-    Parameters: 
+
+    Parameters:
         rest - RestConnection to CB
         authRole - What is the authRole that need to be checked
         fullAdmin - list of users that are added as fulLAdmin
@@ -205,7 +205,7 @@ class ldaptest(BaseTestCase):
         default - Value of default role
         valSource - Validate Source
         valRole - Validate Role
-        
+
     Returns:
         None
     '''
@@ -246,7 +246,7 @@ class ldaptest(BaseTestCase):
         ROAdmin - list of users for ROADmin
         Admins - Result from REST command for saslauthd
         roAdmins - Result from REST command for saslauthd
-    
+
     Returns:
     '''
     def _funcValidateResLogin(self, rest, authRole, authState, fullAdmin, ROAdmin, Admins, roAdmins, login=True):
@@ -382,7 +382,7 @@ class ldaptest(BaseTestCase):
             self.assertTrue(status, 'User added as RoAdmin has errors while login - user -- {0}'.format(user))
 
 
-    ''' Test list of users along with default roles for users that are not explicitly part of the 
+    ''' Test list of users along with default roles for users that are not explicitly part of the
     fullAdmin or RO Admin role
     '''
     def test_validateDefaultRole(self):
@@ -703,48 +703,108 @@ class ldapCLITest(CliBaseTest):
     def setUp(self):
         super(ldapCLITest, self).setUp()
         self.enableStatus = self.input.param("enableStatus", None)
-        self.admin = self.input.param("admin", None)
-        self.roAdmin = self.input.param("roAdmin", None)
+        self.admin = self.returnUserList(self.input.param("admin", None))
+        self.roAdmin = self.returnUserList(self.input.param("roAdmin", None))
         self.errorMsg = self.input.param("errorMsg", None)
+        self.default = self.input.param("default", None)
+        self.ldapUser = self.input.param('ldapUser', 'Administrator')
+        self.ldapPass = self.input.param('ldapPass', 'password')
+        self.source = self.input.param('source', None)
+        if (self.source == 'saslauthd'):
+            rest = RestConnection(self.master)
+            rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
 
     def tearDown(self):
         super(ldapCLITest, self).tearDown()
 
-    def disableLdap(self):
+    def _parseRestResponse(self, response):
+        admin_roles = {'roAdmins': [], 'admins': []}
+        for key, value in response.items():
+            if key in admin_roles.keys():
+                for tempValue in value:
+                    admin_roles[key].append(tempValue.encode('utf-8'))
+        return admin_roles['roAdmins'], admin_roles['admins']
+
+    def returnUserList(self, Admin):
+        if Admin is not None:
+            Admin = Admin.split("?")
+            return list(Admin)
+
+    def returnBool(self, boolString):
+        if boolString in ('True', True, 'true'):
+            return 1
+        else:
+            return 0
+
+
+    def test_enableDisableLdap(self):
+        rest = RestConnection(self.master)
+        remote_client = RemoteMachineShellConnection(self.master)
+        origState = rest.ldapRestOperationGetResponse()['enabled']
         cli_command = 'setting-ldap'
         options = "--ldap-enable=0"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
+        tempStatus = rest.ldapRestOperationGetResponse()['enabled']
+        self.assertFalse(tempStatus, "Issues with setting LDAP enable/disable")
+        cli_command = 'setting-ldap'
+        options = "--ldap-enable=1"
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user="Administrator", password="password")
+        tempStatus = rest.ldapRestOperationGetResponse()['enabled']
+        self.assertTrue(tempStatus, "Issues with setting LDAP enable/disable")
+
+
+
+    def test_setLDAPParam(self):
+        cli_command = "setting-ldap"
+        options = " --ldap-enable={0}".format(self.enableStatus)
+        options += " --ldap-roadmins={0}".format(",".join(self.roAdmin))
+        options += " --ldap-admins={0}".format(",".join(self.admin))
+        options += " --ldap-default={0}".format(self.default)
         remote_client = RemoteMachineShellConnection(self.master)
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-        print output
-        print error
-
-    def setAuditParam(self):
-        cli_command = "setting-audit"
-        options = "--ldap-enable={0}".format(self.enableStatus)
-        options += "--ldap-roadmins={0}".format(self.admin)
-        options += "--ldap-admins={0}".format(self.roAdmin)
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-        tempFlag = self.validateSettings(self.enableStatus, self.admin, self.roAdmin)
+                    options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
+        tempFlag = self.validateSettings(self.enableStatus, self.admin, self.roAdmin, self.default)
         self.assertTrue(tempFlag)
 
 
-    def validateSettings(self, status, admin, roAdmin):
+    def validateSettings(self, status, admin, roAdmin, default):
         rest = RestConnection(self.master)
         temproAdmins, tempAdmins = self._parseRestResponse(rest.ldapRestOperationGetResponse())
+        print temproAdmins
+        print tempAdmins
         tempStatus = rest.ldapRestOperationGetResponse()['enabled']
+        print rest.ldapRestOperationGetResponse()
         flag = True
 
-        if (status != tempStatus):
-            self.log.info ("Mismatch with status - Expected - {0} -- Actual - {0}".format(status, tempStatus))
+        if (status is not self.returnBool(tempStatus)):
+            self.log.info ("Mismatch with status - Expected - {0} -- Actual - {1}".format(status, tempStatus))
             flag = False
 
-        if (tempAdmins != admin):
-            self.log.info ("Mismatch with Admin - Expected - {0} -- Actual - {0}".format(admin, tempAdmins))
-            flag = False
+        if (default == 'admins'):
+            tempAdmins = "".join(tempAdmins)
+            if (tempAdmins == 'asterisk'):
+                print "Admins is Default"
+            else:
+                print "Admin is not Default"
+                flag = False
+        else:
+            if (tempAdmins != admin):
+                self.log.info ("Mismatch with Admin - Expected - {0} -- Actual - {1}".format(admin, tempAdmins))
+                flag = False
 
-        if (temproAdmins != roAdmin):
-            self.log.info ("Mismatch with roAdmin - Expected - {0} -- Actual - {0}".format(roAdmin, temproAdmins))
-            flag = False
+        if (default == 'roadmins'):
+            temproAdmins = "".join(temproAdmins)
+            if (temproAdmins == 'asterisk'):
+                print "Admins is Default"
+            else:
+                print "Admin is not Default"
+                flag = False
+        else:
+            if (temproAdmins != roAdmin):
+                print roAdmin
+                self.log.info ("Mismatch with ROAdmin - Expected - {0} -- Actual - {1}".format(roAdmin, temproAdmins))
+                flag = False
+
         return flag

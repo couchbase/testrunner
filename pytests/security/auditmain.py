@@ -23,8 +23,10 @@ class audit:
     AUDITDESCFILE = 'audit_events.json'
     WINLOGFILEPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs"
     LINLOGFILEPATH = "/opt/couchbase/var/lib/couchbase/logs"
+    MACLOGFILEPATH = "/Users/couchbase/Library/Application Support/Couchbase/var/lib/couchbase/logs"
     WINCONFIFFILEPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/config/"
     LINCONFIGFILEPATH = "/opt/couchbase/var/lib/couchbase/config/"
+    MACCONFIGFILEPATH = "/Users/couchbase/Library/Application Support/Couchbase/var/lib/couchbase/config"
     DOWNLOADPATH = "/tmp/"
 
     def __init__(self,
@@ -32,6 +34,11 @@ class audit:
                  host=None,
                  method='REST'):
 
+        rest = RestConnection(host)
+        if (rest.is_enterprise_edition()):
+            log.info ("Enterprise Edition, Audit is part of the test")
+        else:
+            raise Exception(" Install is not an enterprise edition, Audit requires enterprise edition.")
         self.method = method
         self.host = host
         self.pathDescriptor = self.getAuditConfigElement("descriptors_path") + "/"
@@ -50,6 +57,9 @@ class audit:
         if os_type == 'windows':
             auditconfigpath = audit.WINCONFIFFILEPATH
             self.currentLogFile = audit.WINLOGFILEPATH
+        elif os_type == 'mac':
+            auditconfigpath = audit.MACCONFIGFILEPATH
+            self.currentLogFile = audit.MACLOGFILEPATH
         else:
             auditconfigpath = audit.LINCONFIGFILEPATH
             self.currentLogFile = audit.LINLOGFILEPATH
@@ -74,7 +84,7 @@ class audit:
     '''
     readFile - copy file to local '/tmp' directory
     Parameters:
-        pathAuditFile - remove file path 
+        pathAuditFile - remove file path
         fileName - file that needs to be copied
     Returns:
         None
@@ -119,7 +129,7 @@ class audit:
             shell.disconnect()
 
     '''
-    returnEvent - reads actual audit event from audit.log file and returns last event 
+    returnEvent - reads actual audit event from audit.log file and returns last event
     Parameters:
         eventNumber - event number that needs to be queried
     Returns:
@@ -455,7 +465,7 @@ class audit:
     Parameters:
         expectedResults - dictionary of keys as fields in audit.log and expected values for reach
     Returns:
-        fieldVerification - Boolean - True if all matching fields have been found. 
+        fieldVerification - Boolean - True if all matching fields have been found.
         valueVerification - Boolean - True if data matches with expected Results
     '''
     def validateEvents(self, expectedResults):

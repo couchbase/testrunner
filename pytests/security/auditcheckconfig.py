@@ -13,6 +13,7 @@ from remote.remote_util import RemoteMachineShellConnection
 import commands
 from security.auditmain import audit
 from clitest.cli_base import CliBaseTest
+import socket
 
 
 class auditcheckconfig(BaseTestCase):
@@ -31,8 +32,13 @@ class auditcheckconfig(BaseTestCase):
     Returns ip address of the requesting machine
     '''
     def getLocalIPAddress(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("couchbase.com", 0))
+        return s.getsockname()[0]
+        '''
         status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
         return ipAddress
+        '''
 
     def getTimeStampForFile(self, audit):
         return (audit.getTimeStampFirstEvent()).replace(":", "-")
@@ -53,10 +59,19 @@ class auditcheckconfig(BaseTestCase):
         finally:
             shell.disconnect()
 
+    def changePathWindows(self, path):
+        shell = RemoteMachineShellConnection(self.master)
+        os_type = shell.extract_remote_info().distribution_type
+        self.log.info ("OS type is {0}".format(os_type))
+        if os_type == 'windows':
+            path = path.replace("/", "\\")
+        return path
+
+
     def createBucketAudit(self, host, bucketName):
         rest = RestConnection(host)
         #Create an Event for Bucket Creation
-        expectedResults = {'name':bucketName, 'ram_quota':536870912, 'num_replicas':1,
+        expectedResults = {'name':bucketName, 'ram_quota':104857600, 'num_replicas':1,
                                    'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                     'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                     "flush_enabled":False, "num_threads":3, "source":source, \
@@ -65,10 +80,15 @@ class auditcheckconfig(BaseTestCase):
                                     '11211', 'membase', 0, expectedResults['num_threads'], expectedResults['flush_enabled'], 'valueOnly')
         return expectedResults
 
+    def returnBoolVal(self, boolVal):
+        if boolVal == 1:
+            return 'true'
+        else:
+            return 'false'
     '''
     checkConfig - Wrapper around audit class
     Parameters:
-        eventID - eventID of the event 
+        eventID - eventID of the event
         host - host for creating and reading event
         expectedResult - dictionary of fields and value for event
     '''
@@ -113,8 +133,8 @@ class auditcheckconfig(BaseTestCase):
 
         auditIns = audit(host=self.master)
         expectedResults = {"auditd_enabled":auditIns.getAuditStatus(),
-                           "descriptors_path":auditIns.getAuditConfigElement('descriptors_path'),
-                           "log_path":(auditIns.getAuditLogPath())[:-1], "source":"internal",
+                           "descriptors_path":self.changePathWindows(auditIns.getAuditConfigElement('descriptors_path')),
+                           "log_path":self.changePathWindows((auditIns.getAuditLogPath())[:-1]), "source":"internal",
                            "user":"couchbase", "rotate_interval":86400, "version":1, 'hostname':self.getHostName(self.master)}
         self.checkConfig(self.AUDITCONFIGRELOAD, self.master, expectedResults)
 
@@ -247,8 +267,8 @@ class auditcheckconfig(BaseTestCase):
             self.assertTrue(flag, "Shutdown event is not printed")
 
         expectedResults = {"auditd_enabled":auditIns.getAuditConfigElement('auditd_enabled'),
-                           "descriptors_path":auditIns.getAuditConfigElement('descriptors_path'),
-                           "log_path":auditIns.getAuditConfigElement('log_path')[:-1],
+                           "descriptors_path":self.changePathWindows(auditIns.getAuditConfigElement('descriptors_path')),
+                           "log_path":self.changePathWindows(auditIns.getAuditConfigElement('log_path')[:-1]),
                            'source':'internal', 'user':'couchbase',
                            "rotate_interval":auditIns.getAuditConfigElement('rotate_interval'),
                            "version":1, 'hostname':self.getHostName(self.master)}
@@ -295,6 +315,7 @@ class auditcheckconfig(BaseTestCase):
         finally:
             auditIns.setAuditRotateInterval(originalInt)
 
+
     ''' Test roll over of audit.log as per rotate interval in a cluster'''
     def test_rotateIntervalCluster(self):
         intervalSec = self.input.param("intervalSec", None)
@@ -326,11 +347,37 @@ class auditcheckconfig(BaseTestCase):
                     self.assertTrue(result, "Archive Audit.log is not created on time interval")
                     self.log.info ("Validation of archive File created is True, Audit archive File is created {0}".format(archiveFile))
                     result = shell.file_exists(auditIns.pathLogFile, auditIns.AUDITLOGFILENAME)
-                    self.assertTrue(result, "Audit.log is not created when memcached server is killed")
+                    self.assertTrue(result, "Audit.log is not created as per the roll over time specified")
                 finally:
                     shell.disconnect()
         finally:
             auditIns.setAuditRotateInterval(originalInt)
+
+    ''' Test enabling/disabling in a cluster'''
+    def test_enableStatusCluster(self):
+        nodes_init = self.input.param("nodes_init", 2)
+        auditIns = audit(host=self.master)
+        origState = auditIns.getAuditStatus()
+        auditIns.setAuditEnable('true')
+
+        try:
+            for i in range(len(self.servers[:nodes_init])):
+                auditTemp = audit(host=self.servers[i])
+                tempStatus = auditTemp.getAuditStatus()
+                self.log.info ("value of current status is {0} on ip -{1}".format(tempStatus, self.servers[i].ip))
+                self.assertTrue(tempStatus, "Audit is not enabled across the cluster")
+
+            auditTemp = audit(host=self.servers[1])
+            auditTemp.setAuditEnable('false')
+
+            for i in range(len(self.servers[:nodes_init])):
+                auditTemp = audit(host=self.servers[i])
+                tempStatus = auditTemp.getAuditStatus()
+                self.log.info ("value of current status is {0} on ip -{1}".format(tempStatus, self.servers[i].ip))
+                self.assertFalse(tempStatus, "Audit is not enabled across the cluster")
+
+        finally:
+            auditIns.setAuditEnable(self.returnBoolVal(origState))
 
 
     '''Boundary Condition for rotate interval'''
@@ -390,7 +437,7 @@ class auditcheckconfig(BaseTestCase):
         result = shell.file_exists(auditIns.pathLogFile, archiveFile)
         tempTime = 0
         starttime = time.time()
-        while ((number < 20971520) and (tempTime < 1800) and (result == False)):
+        while ((number < 20971520) and (tempTime < 14400) and (result == False)):
             for i in range(1, 10):
                 status, content = rest.validateLogin("Administrator", "password", True, getContent=True)
                 number = int (shell.get_data_file_size(filePath))
@@ -455,47 +502,92 @@ class auditCLITest(CliBaseTest):
         self.logPath = self.input.param("logPath", None)
         self.rotateInt = self.input.param("rotateInt", None)
         self.errorMsg = self.input.param("errorMsg", None)
+        self.ldapUser = self.input.param('ldapUser', 'Administrator')
+        self.ldapPass = self.input.param('ldapPass', 'password')
+        self.source = self.input.param('source', None)
+        self.shell = RemoteMachineShellConnection(self.master)
+        info = self.shell.extract_remote_info()
+        type = info.type.lower()
+        if type == 'windows' and self.source == 'saslauthd':
+            raise Exception(" Ldap Tests cannot run on windows");
+        else:
+            if self.source == 'saslauthd':
+                rest = RestConnection(self.master)
+                rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
 
     def tearDown(self):
         super(auditCLITest, self).tearDown()
 
+    def returnBool(self, boolString):
+        if boolString in ('True', True, 'true'):
+            return 1
+        else:
+            return 0
 
-    def disableAudit(self):
-        cli_command = 'setting-audit'
-        options = "--audit-enable=0"
+    def returnBoolVal(self, boolVal):
+        if boolVal == 1:
+            return 'true'
+        else:
+            return 'false'
+
+
+
+    def test_enableDisableAudit(self):
+        auditIns = audit(host=self.master)
         remote_client = RemoteMachineShellConnection(self.master)
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-        print output
-        print error
+        tempEnable = auditIns.getAuditStatus()
+        try:
+            cli_command = 'setting-audit'
+            options = "--audit-enable=0"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                        options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
+            tempEnable = auditIns.getAuditStatus()
+            self.assertFalse(tempEnable, "Issues enable/disable via CLI")
+            options = "--audit-enable=1"
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                        options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
+            tempEnable = auditIns.getAuditStatus()
+            self.assertTrue(tempEnable, "Issues enable/disable via CLI")
+        finally:
+            auditIns.setAuditEnable(self.returnBoolVal(tempEnable))
 
-    def setAuditParam(self):
-        cli_command = "setting-audit"
-        options = "--audit-enable={0}".format(self.enableStatus)
-        options += "--audit-rotate-interval={0}".format(self.rotateInt)
-        options += "--audit-log-path={0}".format(self.logPath)
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                    options=options, cluster_host="localhost", user="Administrator", password="password")
-        tempFlag = self.validateSettings(self.enableStatus, self.logPath, self.rotateInt)
-        self.assertTrue(tempFlag)
+    def test_setAuditParam(self):
+        auditIns = audit(host=self.master)
+        tempEnable = auditIns.getAuditStatus()
+        tempLogPath = auditIns.getAuditLogPath()
+        tempRotateInt = auditIns.getAuditRotateInterval()
+        try:
+            remote_client = RemoteMachineShellConnection(self.master)
+            cli_command = "setting-audit"
+            options = " --audit-enable={0}".format(self.enableStatus)
+            options += " --audit-rotate-interval={0}".format(self.rotateInt)
+            options += " --audit-log-path={0}".format(self.logPath)
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                        options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
+            tempFlag = self.validateSettings(self.enableStatus, self.logPath, self.rotateInt)
+            self.assertTrue(tempFlag)
+        finally:
+            auditIns.setAuditEnable(self.returnBoolVal(tempEnable))
+            auditIns.setAuditLogPath(tempLogPath)
+            auditIns.setAuditRotateInterval(tempRotateInt)
 
 
     def validateSettings(self, status, log_path, rotate_interval):
         auditIns = audit(host=self.master)
-        tempLogPath = auditIns.getAuditLogPath()[:1]
+        tempLogPath = auditIns.getAuditLogPath()
         tempStatus = auditIns.getAuditStatus()
         tempRotateInt = auditIns.getAuditRotateInterval()
         flag = True
 
-        if (status != tempStatus):
-            self.log.info ("Mismatch with status - Expected - {0} -- Actual - {0}".format(status, tempStatus))
+        if (status != self.returnBool(tempStatus)):
+            self.log.info ("Mismatch with status - Expected - {0} -- Actual - {1}".format(status, tempStatus))
             flag = False
 
-        if (log_path != tempLogPath):
-            self.log.info ("Mismatch with log path - Expected - {0} -- Actual - {0}".format(log_path, tempLogPath))
+        if (log_path is not tempLogPath):
+            self.log.info ("Mismatch with log path - Expected - {0} -- Actual - {1}".format(log_path, tempLogPath))
             flag = False
 
-        if (rotate_interval != tempRotateInt):
-            self.log.info ("Mismatch with rotate interval - Expected - {0} -- Actual - {0}".format(rotate_interval, tempRotateInt))
+        if (rotate_interval is not tempRotateInt):
+            self.log.info ("Mismatch with rotate interval - Expected - {0} -- Actual - {1}".format(rotate_interval, tempRotateInt))
             flag = False
         return flag

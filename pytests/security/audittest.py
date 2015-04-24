@@ -22,6 +22,7 @@ import logger
 import urllib
 from security.auditmain import audit
 from security.ldaptest import ldaptest
+import socket
 log = logger.Logger.get_logger()
 
 
@@ -44,10 +45,15 @@ class auditTest(BaseTestCase):
         super(auditTest, self).tearDown()
 
     def getLocalIPAddress(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('couchbase.com', 0))
+        return s.getsockname()[0]
+        '''
         status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
         if '1' not in ipAddress:
             status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
-        return ipAddress
+        return '192.168.3.85'
+        '''
 
     #Wrapper around auditmain
     def checkConfig(self, eventID, host, expectedResults):
@@ -93,7 +99,7 @@ class auditTest(BaseTestCase):
             rest.delete_bucket(expectedResults['bucket_name'])
 
         elif (ops in ['flush']):
-            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':512, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
+            expectedResults = {'bucket_name':'TestBucket', 'ram_quota':100, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
 			    'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":True, "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457}
             rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'], expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
@@ -133,6 +139,7 @@ class auditTest(BaseTestCase):
                                'user':self.master.rest_username, "ip":self.ipAddress, "remote:port":57457}
 
         if (ops in ['removeNode']):
+            self.cluster.rebalance(self.servers, [], servs_inout)
             shell = RemoteMachineShellConnection(self.master)
             os_type = shell.extract_remote_info().distribution_type
             log.info ("OS type is {0}".format(os_type))
@@ -398,7 +405,7 @@ class auditTest(BaseTestCase):
 
         elif (ops in ['invalidlogin']):
             status, content = rest.validateLogin(username, password, True, getContent=True)
-            expectedResults = {'source':source, 'user':username, 'password':password, 'role':role,
+            expectedResults = {'real_userid':username, 'password':password, 'role':role,
                                'ip':self.ipAddress, "port":123456}
 
         #User must be pre-created in LDAP in advance
@@ -421,7 +428,7 @@ class auditTest(BaseTestCase):
             user = server.rest_username
             rest = RestConnection(server)
             if (ops in ['create']):
-                expectedResults = {'bucket_name':'TestBucket' + server.ip, 'ram_quota':536870912, 'num_replicas':1,
+                expectedResults = {'bucket_name':'TestBucket' + server.ip, 'ram_quota':104857600, 'num_replicas':1,
                                    'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                    'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                     "flush_enabled":False, "num_threads":3, "source":source, \
@@ -455,7 +462,7 @@ class auditTest(BaseTestCase):
 
         restFirstNode = RestConnection(firstNode)
         if (ops in ['create']):
-            expectedResults = {'bucket_name':'TestBucketRemNode', 'ram_quota':536870912, 'num_replicas':0,
+            expectedResults = {'bucket_name':'TestBucketRemNode', 'ram_quota':104857600, 'num_replicas':0,
                                 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                 'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":source, \
@@ -475,7 +482,7 @@ class auditTest(BaseTestCase):
             user = server.rest_username
             rest = RestConnection(server)
             if (ops in ['create']):
-                expectedResults = {'bucket_name':'TestBucket' + server.ip, 'ram_quota':536870912, 'num_replicas':1,
+                expectedResults = {'bucket_name':'TestBucket' + server.ip, 'ram_quota':104857600, 'num_replicas':1,
                                    'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                    'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                     "flush_enabled":False, "num_threads":3, "source":source, \
