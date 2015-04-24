@@ -198,17 +198,9 @@ class Rebalance(XDCRNewBaseTest):
             for task in tasks:
                 task.result(self._poll_timeout)
 
-            tasks = []
-            # Setting up doc-ops at source nodes
-            if "C1" in self._upd_clusters:
-                tasks.extend(self.src_cluster.async_update_delete(OPS.UPDATE, self._perc_upd, self._expires))
-            if "C1" in self._del_clusters:
-                tasks.extend(self.src_cluster.async_update_delete(OPS.DELETE, self._perc_del))
-            if "C2" in self._upd_clusters:
-                tasks.extend(self.dest_cluster.async_update_delete(OPS.UPDATE, self._perc_upd, self._expires))
-            if "C2" in self._del_clusters:
-                tasks.extend(self.dest_cluster.async_update_delete(OPS.DELETE, self._perc_del))
+            self.async_perform_update_delete()
 
+            tasks=[]
             # Swap-Rebalance
             for _ in range(self.__num_rebalance):
                 if "C1" in self.__rebalance:
@@ -216,18 +208,8 @@ class Rebalance(XDCRNewBaseTest):
                 if "C2" in self.__rebalance:
                     tasks.append(self.dest_cluster.async_swap_rebalance())
 
-            self.sleep(5)
-            while True:
-                for view in views:
-                    self.src_cluster.query_view(prefix + ddoc_name, view.name, query)
-                    self.dest_cluster.query_view(prefix + ddoc_name, view.name, query)
-                if set([task.state for task in tasks]) != set(["FINISHED"]):
-                    continue
-                else:
-                    if self._wait_for_expiration:
-                        if "C1" in self._upd_clusters or "C2" in self._upd_clusters:
-                            self.sleep(self._expires)
-                    break
+            for task in tasks:
+                task.result()
 
             self.merge_all_buckets()
             self.src_cluster.verify_items_count()
