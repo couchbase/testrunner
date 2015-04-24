@@ -3,6 +3,10 @@
 Python based MySQL interface
 """
 import mysql.connector
+import zipfile
+import os
+from os.path import basename
+import shutil
 from mysql.connector import FieldType
 from couchbase_helper.query_helper import QueryHelper
 
@@ -229,6 +233,30 @@ class MySQLClient(object):
             content = f.readlines()
         return content
 
+    def dump_database(self, data_dump_path = "/tmp"):
+        zip_path= data_dump_path+"/"+self.database+".zip"
+        data_dump_path = data_dump_path+"/"+self.database
+        os.mkdir(data_dump_path)
+        table_key_map = self._get_primary_key_map_for_tables()
+        # Make a list of buckets that we want to create for querying
+        bucket_list = table_key_map.keys()
+        # Read Data from mysql database and populate the couchbase server
+        for bucket_name in bucket_list:
+            query = "select * from {0}".format(bucket_name)
+            columns, rows = self._execute_query(query = query)
+            dict = self._gen_json_from_results_with_primary_key(columns, rows, table_key_map[bucket_name])
+            # Take snap-shot of Data in
+            f = open(data_dump_path+"/"+bucket_name+".txt",'w')
+            f.write(json.dumps(dict))
+            f.close()
+        zipf = zipfile.ZipFile(zip_path, 'w')
+        for root, dirs, files in os.walk(data_dump_path):
+            for file in files:
+                path = os.path.join(root, file)
+                filter_path = path.replace(self.database,"")
+                zipf.write(path, basename(filter_path))
+        shutil.rmtree(data_dump_path)
+
     def _gen_gsi_index_info_from_n1ql_query_template(self, query_path = "./queries.txt", output_file_path = "./output.txt",  table_name = "simple_table", gen_expected_result= True):
         map = self._get_values_with_type_for_fields_in_table()
         table_map = map[table_name]
@@ -246,6 +274,7 @@ if __name__=="__main__":
 
     #client._gen_data_simple_table()
     #query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
+    #client.dump_database()
     client._gen_gsi_index_info_from_n1ql_query_template(query_path="./template.txt")
     #with open("./output.txt") as f:
     #    content = f.readlines()

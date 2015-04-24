@@ -150,7 +150,8 @@ class RQGTests(BaseTestCase):
             expected_result = data["expected_result"]
             run_result ={}
             hints = self.query_helper._find_hints(n1ql_query)
-            self._generate_secondary_indexes_with_index_map(index_map = indexes, table_name = table_name)
+            if self.run_query_with_secondary or self.run_explain_with_hints:
+                self._generate_secondary_indexes_with_index_map(index_map = indexes, table_name = table_name)
             self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(total))
             result_run = {}
             if expected_result == None:
@@ -166,7 +167,7 @@ class RQGTests(BaseTestCase):
             if self.run_query_with_secondary:
                 for index_name in indexes.keys():
                     query = self.query_helper._add_index_hints_to_query(n1ql_query, [indexes[index_name]])
-                    query_index_run = self._run_queries_and_verify(n1ql_query = query , sql_query = sql_query)
+                    query_index_run = self._run_queries_and_verify(n1ql_query = query , sql_query = sql_query, expected_result = expected_result)
                     key = "run_query_with_index_name::{0}".format(index_name)
                     result_run[key] = query_index_run
             if self.run_explain_with_hints:
@@ -181,7 +182,8 @@ class RQGTests(BaseTestCase):
                 fail_case +=  1
                 failure_map[str(total)] = {"sql_query":sql_query, "n1ql_query": n1ql_query,
                  "run_result" : message}
-            self._drop_secondary_indexes_with_index_map(index_map = indexes, table_name = table_name)
+            if self.run_query_with_secondary or self.run_explain_with_hints:
+                self._drop_secondary_indexes_with_index_map(index_map = indexes, table_name = table_name)
             self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING QUERY CASE NUMBER {0} >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(total))
         self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case))
         result = self._generate_result(failure_map)
@@ -607,15 +609,15 @@ class RQGTests(BaseTestCase):
     def _setup_and_load_buckets_from_files(self):
         bucket_list =[]
         import shutil
-        self.data_dump_path= self.input.param("data_dump_path","b/resources/flightstats_mysql/data_set")
-        self.zip_path= self.input.param("zip_path","b/resources/flightstats_mysql/flightstats_data.zip")
-        shutil.rmtree(self.data_dump_path, ignore_errors=True)
         #Unzip the files and get bucket list
+        self.zip_path = "b/resources/rqg/{0}/data_dump/{0}.zip".format(self.database)
+        data_file_path = "b/resources/rqg/{0}/data_dump/data_files".format(self.database)
+        os.mkdir(data_file_path)
         with zipfile.ZipFile(self.zip_path, "r") as z:
-            z.extractall(".")
+            z.extractall(data_file_path)
         from os import listdir
         from os.path import isfile, join
-        onlyfiles = [ f for f in listdir(self.data_dump_path) if isfile(join(self.data_dump_path,f))]
+        onlyfiles = [ f for f in listdir(data_file_path) if isfile(join(data_file_path,f))]
         for file in onlyfiles:
             bucket_list.append(file.split(".")[0])
         # Remove any previous buckets
@@ -631,11 +633,11 @@ class RQGTests(BaseTestCase):
         for bucket_name in bucket_list:
              for bucket in self.buckets:
                 if bucket.name == bucket_name:
-                    file_path = self.data_dump_path+"/"+bucket_name+".txt"
+                    file_path = data_file_path+"/"+bucket_name+".txt"
                     with open(file_path) as data_file:
                         data = json.load(data_file)
                         self._load_data_in_buckets_using_mc_bin_client_json(bucket, data)
-        shutil.rmtree(self.data_dump_path, ignore_errors=True)
+        shutil.rmtree(data_file_path, ignore_errors=True)
 
     def _setup_and_load_buckets(self):
         # Remove any previous buckets
