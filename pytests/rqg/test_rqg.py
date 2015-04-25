@@ -131,10 +131,11 @@ class RQGTests(BaseTestCase):
     def test_rqg_concurrent(self):
         self.create_all_indexes= self.input.param("create_all_indexes",False)
         self.concurreny_count= self.input.param("concurreny_count",10)
+        self.total_queries= self.input.param("total_queries",None)
         self.run_query_without_index_hint= self.input.param("run_query_without_index_hint",True)
         self.run_query_with_primary= self.input.param("run_query_with_primary",True)
-        self.run_query_with_secondary= self.input.param("run_query_with_secondary",True)
-        self.run_explain_with_hints= self.input.param("run_explain_with_hints",True)
+        self.run_query_with_secondary= self.input.param("run_query_with_secondary",False)
+        self.run_explain_with_hints= self.input.param("run_explain_with_hints",False)
         self.n1ql_file_path= self.input.param("test_file_path","default")
         check = True
         failure_map = {}
@@ -143,8 +144,11 @@ class RQGTests(BaseTestCase):
         test_case_number = 1
         count = 1
         inserted_count = 0
+        self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
         with open(self.n1ql_file_path) as f:
             n1ql_query_list = f.readlines()
+        if self.total_queries  == None:
+            self.total_queries = len(n1ql_query_list)
         for n1ql_query_info in n1ql_query_list:
             data = json.loads(n1ql_query_info)
             batch.append({str(test_case_number):data})
@@ -156,13 +160,16 @@ class RQGTests(BaseTestCase):
             else:
                 count +=1
             test_case_number += 1
+            if test_case_number >= self.total_queries:
+                break
         if inserted_count != len(n1ql_query_list):
             batches.append(batch)
         result_queue = Queue.Queue()
         for test_batch in batches:
             # Build all required secondary Indexes
             list = [data[data.keys()[0]] for data in test_batch]
-            self._generate_secondary_indexes_in_batches(list)
+            if self.use_secondary_index:
+                self._generate_secondary_indexes_in_batches(list)
             thread_list = []
             # Create threads and run the batch
             for test_case in test_batch:
@@ -175,7 +182,8 @@ class RQGTests(BaseTestCase):
             for t in thread_list:
                 t.join()
             # Drop all the secondary Indexes
-            self._drop_secondary_indexes_in_batches(list)
+            if self.use_secondary_index:
+                self._drop_secondary_indexes_in_batches(list)
         # Analyze the results for the failure and assert on the run
         success, result = self._test_result_analysis(result_queue)
         self.assertTrue(check, result)
@@ -196,7 +204,7 @@ class RQGTests(BaseTestCase):
         result_run["test_case_number"] = test_case_number
         if expected_result == None:
             expected_result = self._gen_expected_result(sql_query)
-        if self.run_query_without_index_hint:
+        if self.run_query_without_index_hint and self.use_secondary_index:
             query_index_run = self._run_queries_and_verify(n1ql_query = n1ql_query , sql_query = sql_query, expected_result = expected_result)
             result_run["run_query_without_index_hint"] = query_index_run
         if self.run_query_with_primary:
