@@ -184,13 +184,12 @@ class MySQLClient(object):
                 #print "For table {0} and field {1} we have read {2} distinct values ".format(table_name, field_name, len(value_list))
         return gen_map
 
-    def _gen_data_simple_table(self, number_of_rows = 10000, table_name = "simple_table"):
+    def _gen_data_simple_table(self, number_of_rows = 1000, table_name = "simple_table"):
         helper = QueryHelper()
         map = self._get_pkey_map_for_tables_without_primary_key_column()
         table_map = map[table_name]
         for x in range(0, number_of_rows):
             statement = helper._generate_insert_statement("simple_table", table_map)
-            print statement
             self._insert_execute_query(statement)
 
     def _gen_queries_from_template(self, query_path = "./queries.txt", table_name = "simple_table"):
@@ -201,14 +200,13 @@ class MySQLClient(object):
             content = f.readlines()
         for query in content:
             n1ql = helper._convert_sql_template_to_value(sql = query, table_map = table_map, table_name= table_name)
-            print n1ql
 
     def _query_and_convert_to_json(self, query):
         columns, rows = self._execute_query(query = query)
         sql_result = self._gen_json_from_results(columns, rows)
         return sql_result
 
-    def _convert_template_query_info_with_gsi(self, file_path, gsi_index_file_path = None, table_map= {}, table_name = "simple_table", define_gsi_index = True, gen_expected_result = True):
+    def _convert_template_query_info_with_gsi(self, file_path, gsi_index_file_path = None, table_map= {}, table_name = "simple_table", define_gsi_index = True, gen_expected_result = False):
         helper = QueryHelper()
         f = open(gsi_index_file_path,'w')
         n1ql_queries = self._read_from_file(file_path)
@@ -275,7 +273,7 @@ if __name__=="__main__":
     #client._gen_data_simple_table()
     #query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
     #client.dump_database()
-    client._gen_gsi_index_info_from_n1ql_query_template(query_path="./template.txt")
+    client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt")
     #with open("./output.txt") as f:
     #    content = f.readlines()
     #for data in content:

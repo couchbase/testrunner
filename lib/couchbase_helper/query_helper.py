@@ -176,10 +176,10 @@ class QueryHelper(object):
         return randint(0,10000)
 
     def _random_float(self):
-        return 10000*random.random()
+        return round(10000*random.random(),2)
 
     def _random_double(self):
-        return 10000*random.random()
+        return round(10000*random.random(),2)
 
     def _random_datetime(self, start = 1999, end = 2015):
         year = random.choice(range(start, end))
@@ -258,6 +258,7 @@ class QueryHelper(object):
     def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=True):
         n1ql = self._convert_sql_template_to_value(sql =n1ql_template, table_map = table_map, table_name= table_name)
         sql = self._gen_n1ql_to_sql(n1ql)
+        print sql
         if not define_gsi_index:
             map = {
                 "n1ql":n1ql,
@@ -478,7 +479,7 @@ class QueryHelper(object):
         for token in n1ql.split(" "):
             if (not check_keys) and (token == "IN" or token == "in"):
                 check_keys= True
-                new_sql += " ON KEYS "
+                new_sql += " "
             elif not check_keys:
                 new_sql += token+space
             if check_keys:

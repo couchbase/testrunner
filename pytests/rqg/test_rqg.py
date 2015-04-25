@@ -130,7 +130,7 @@ class RQGTests(BaseTestCase):
 
     def test_rqg_concurrent(self):
         self.create_all_indexes= self.input.param("create_all_indexes",False)
-        self.concurreny_count= self.input.param("concurreny_count",2)
+        self.concurreny_count= self.input.param("concurreny_count",10)
         self.run_query_without_index_hint= self.input.param("run_query_without_index_hint",True)
         self.run_query_with_primary= self.input.param("run_query_with_primary",True)
         self.run_query_with_secondary= self.input.param("run_query_with_secondary",True)

@@ -142,7 +142,7 @@ class N1QLHelper():
             max = 5
             if len(sql_result) < 5:
                 max = len(sql_result)
-            msg = "mismatch in results :: expected [0:{0}]:: {1}, actual 0:{0}]:: {2} ".format(max, sql_result[0:max], actual_result[0:max])
+            msg = "mismatch in results :: expected [0:{0}]:: {1}, actual 0:{0}]:: {2} ".format(max, sql_result[0:max], n1ql_result[0:max])
             raise Exception(msg)
 
     def _convert_to_number(self, val):

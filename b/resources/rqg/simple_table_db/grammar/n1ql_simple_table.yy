@@ -12,10 +12,16 @@ create_index:
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(USER_FIELD_LIST);
 
 select_from:
-	* | COUNT(*) |  COUNT( DISTINCT field_list ) | SUM( NUMERIC_FIELD ) | SUM(DISTINCT NUMERIC_FIELD ) | AVG( NUMERIC_FIELD ) |  AVG( DISTINCT NUMERIC_FIELD ) | AVG( DISTINCT DATETIME_FIELD ) |  MAX( NUMERIC_FIELD ) | MAX( DATETIME_FIELD ) | MIN( NUMERIC_FIELD ) | MIN( DATETIME_FIELD );
+	* | COUNT(*) |  COUNT( DISTINCT field ) | SUM( non_string_field ) | SUM(DISTINCT non_string_field ) | AVG( non_string_field ) | AVG( DISTINCT non_string_field ) |  MAX( non_string_field ) | MIN( non_string_field );
 
 condition:
 	numeric_condition | string_condition | datetime_condition| (condition) AND (condition) | (condition) OR (condition);
+
+field:
+	NUMERIC_FIELD | STRING_FIELD | DATETIME_FIELD;
+
+non_string_field:
+	NUMERIC_FIELD  | DATETIME_FIELD;
 
 order_by:
 	field_list;
@@ -38,10 +44,10 @@ numeric_condition:
 	numeric_in_conidtion ;
 
 numeric_equals_condition:
-	numeric_field EQUALS numeric_value | numeric_field = numeric_value | numeric_field == numeric_value ;
+	numeric_field = numeric_value ;
 
 numeric_not_equals_condition:
-	numeric_field NOT EQUALS numeric_value | numeric_field != numeric_value ;
+	numeric_field != numeric_value ;
 
 numeric_in_conidtion:
 	numeric_field IN [ numeric_field_list ];
@@ -97,10 +103,10 @@ datetime_condition:
 	datetime_in_conidtion ;
 
 datetime_equals_condition:
-	datetime_field EQUALS DATETIME_VALUES | datetime_field = DATETIME_VALUES | datetime_field == DATETIME_VALUES ;
+	datetime_field = DATETIME_VALUES ;
 
 datetime_not_equals_condition:
-	datetime_equals_condition NOT EQUALS DATETIME_VALUES | datetime_field != DATETIME_VALUES ;
+	datetime_field != DATETIME_VALUES ;
 
 datetime_in_conidtion:
 	datetime_field IN [ datetime_field_list ];
@@ -158,7 +164,7 @@ string_condition:
 	string_not_like_condition ;
 
 string_equals_condition:
-	string_field EQUALS string_values | string_field = string_values | string_field == string_values;
+	string_field = string_values;
 
 string_not_equals_condition:
 	string_field != string_values | string_field <> string_values ;
@@ -211,10 +217,10 @@ bool_condition:
 	bool_equals_condition | bool_not_equals_condition;
 
 bool_equals_condition:
-	bool_field EQUALS bool_value | bool_field = bool_value | bool_field == bool_value ;
+	bool_field EQUALS bool_value | bool_field = bool_value | bool_field = bool_value ;
 
 bool_not_equals_condition:
-	bool_field NOT EQUALS bool_value | bool_field != bool_value ;
+	bool_field != bool_value ;
 
 bool_field:
 	BOOL_FIELD;
