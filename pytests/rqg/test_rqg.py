@@ -146,7 +146,6 @@ class RQGTests(BaseTestCase):
         with open(self.n1ql_file_path) as f:
             n1ql_query_list = f.readlines()
         for n1ql_query_info in n1ql_query_list:
-            print n1ql_query_info
             data = json.loads(n1ql_query_info)
             batch.append({str(test_case_number):data})
             if count == self.concurreny_count:
@@ -695,7 +694,6 @@ class RQGTests(BaseTestCase):
                 task.result()
         except Exception, ex:
             self.log.info(ex)
-            raise
 
     def async_monitor_index(self, bucket, index_name = None):
         monitor_index_task = self.cluster.async_monitor_index(
@@ -713,7 +711,6 @@ class RQGTests(BaseTestCase):
                     self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
                 except Exception, ex:
                     self.log.info(ex)
-                    raise
 
     def _drop_secondary_indexes_with_index_map(self, index_map = {}, table_name = "simple_table"):
         self.log.info(" Dropping Secondary Indexes for Bucket {0}".format(table_name))
