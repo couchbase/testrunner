@@ -116,11 +116,39 @@ class N1QLHelper():
         actual_result = sorted(actual_result)
         expected_result = sorted(sql_result)
         if len(actual_result) != len(expected_result):
-            raise Exception("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
-                                            len(actual_result), len(expected_result)))
+            extra_msg = self._get_failure_message(expected_result, actual_result)
+            raise Exception("Results are incorrect.Actual num %s. Expected num: %s.:: %s \n" % (
+                                            len(actual_result), len(expected_result), extra_msg))
         msg = "The number of rows match but the results mismatch, please check"
         if actual_result != expected_result:
             raise Exception(msg)
+
+    def _get_failure_message(self, expected_result, actual_result):
+        if expected_result == None:
+            expected_result = []
+        if actual_result == None:
+            actual_result = []
+        len_expected_result = len(expected_result)
+        len_actual_result = len(actual_result)
+        len_expected_result = min(5,len_expected_result)
+        len_actual_result = min(5,len_actual_result)
+        extra_msg = "mismatch in results :: expected :: {0}, actual :: {1} ".format(expected_result[0:len_expected_result], actual_result[0:len_actual_result])
+        return extra_msg
+
+    def _analyze_for_special_case_using_func(self, expected_result, actual_result):
+        if expected_result == None:
+            expected_result = []
+        if actual_result == None:
+            actual_result = []
+        if len(expected_result) == 1:
+            value = expected_result[0].values()[0]
+            if value == None:
+                expected_result = []
+        if len(actual_result) == 1:
+            value = actual_result[0].values()[0]
+            if value == None:
+                actual_result = []
+        return expected_result, actual_result
 
     def _is_function_in_result(self, result):
         if result == "FUN":
@@ -131,18 +159,22 @@ class N1QLHelper():
         actual_count = -1
         expected_count = -1
         actual_result = n1ql_result
-        msg = "the number of results do not match :: expected = {0}, actual = {1}".format(len(n1ql_result), len(sql_result))
-        if len(sql_result) != len(n1ql_result):
-            raise Exception(msg)
+        sql_result, actual_result= self._analyze_for_special_case_using_func(sql_result, actual_result)
+        if len(sql_result) != len(actual_result):
+            msg = "the number of results do not match :: expected = {0}, actual = {1}".format(len(n1ql_result), len(sql_result))
+            extra_msg = self._get_failure_message(sql_result, actual_result)
+            raise Exception(msg+"\n"+extra_msg)
         n1ql_result = self._gen_dict_n1ql_func_result(n1ql_result)
         n1ql_result = sorted(n1ql_result)
         sql_result = self._gen_dict(sql_result)
         sql_result = sorted(sql_result)
+        if  len(sql_result) == 0 and len(actual_result) == 0:
+            return
         if sql_result != n1ql_result:
-            max = 5
+            max = 2
             if len(sql_result) < 5:
                 max = len(sql_result)
-            msg = "mismatch in results :: expected [0:{0}]:: {1}, actual 0:{0}]:: {2} ".format(max, sql_result[0:max], n1ql_result[0:max])
+            msg = "mismatch in results :: expected [0:{0}]:: {1}, actual [0:{0}]:: {2} ".format(max, sql_result[0:max], n1ql_result[0:max])
             raise Exception(msg)
 
     def _convert_to_number(self, val):
@@ -399,7 +431,16 @@ class N1QLHelper():
 
     def _gen_dict_n1ql_func_result(self, result):
         result_set = [val[key] for val in result for key in val.keys()]
-        return result_set
+        new_result_set = []
+        if len(result_set) > 0:
+            for value in result_set:
+                if isinstance(value, float):
+                    new_result_set.append(round(value, 0))
+                else:
+                    new_result_set.append(value)
+        else:
+            new_result_set = result_set
+        return new_result_set
 
     def _check_sample(self, result, expected_in_key = None):
         if expected_in_key == "FUN":

@@ -84,12 +84,21 @@ class MySQLClient(object):
     def _convert_to_mysql_json_compatible_val(self, value, type):
         if not hasattr(self, 'table_key_type_map'):
             return value
+        if isinstance(value, float):
+            return int(round(value, 0))
         if "datetime" in str(type):
             return str(value)
+        if ("float" in str(type)) or ("double" in str(type)):
+            if value == None:
+                return None
+            else:
+                return int(round(value, 0))
         if "decimal" in str(type):
             if value == None:
-                return 0
+                return None
             else:
+                if isinstance(value, float):
+                    return int(round(value, 0))
                 return int(value)
         return value
 
