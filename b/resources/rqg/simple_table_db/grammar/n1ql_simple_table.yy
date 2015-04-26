@@ -2,26 +2,29 @@ query:
  	select ;
 
 select:
-	SELECT select_from FROM BUCKET_NAME WHERE condition ORDER BY order_by |
-	SELECT select_from FROM BUCKET_NAME WHERE condition GROUP BY field_list |
-	SELECT select_from FROM BUCKET_NAME WHERE condition;
+	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY order_by |
+	SELECT select_from FROM BUCKET_NAME WHERE complex_condition GROUP BY field_list |
+	SELECT select_from FROM BUCKET_NAME WHERE complex_condition;
 
 create_index:
-	CREATE INDEX INDEX_NAME ON BUCKET_NAME(FIELD_LIST) WHERE condition |
-	CREATE INDEX INDEX_NAME ON BUCKET_NAME(condition) |
+	CREATE INDEX INDEX_NAME ON BUCKET_NAME(FIELD_LIST) WHERE complex_condition |
+	CREATE INDEX INDEX_NAME ON BUCKET_NAME(complex_condition) |
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(USER_FIELD_LIST);
 
 select_from:
 	* | COUNT(*) |  COUNT( DISTINCT field ) | SUM( non_string_field ) | SUM(DISTINCT non_string_field ) | AVG( non_string_field ) | AVG( DISTINCT non_string_field ) |  MAX( non_string_field ) | MIN( non_string_field );
 
+complex_condition:
+	(condition) AND (condition) | (condition) OR (condition) | condition;
+
 condition:
-	numeric_condition | string_condition | datetime_condition| (condition) AND (condition) | (condition) OR (condition);
+	numeric_condition | string_condition ;
 
 field:
-	NUMERIC_FIELD | STRING_FIELD | DATETIME_FIELD;
+	NUMERIC_FIELD | STRING_FIELD;
 
 non_string_field:
-	NUMERIC_FIELD  | DATETIME_FIELD;
+	NUMERIC_FIELD;
 
 order_by:
 	field_list;
@@ -84,65 +87,6 @@ numeric_field:
 
 numeric_value:
 	NUMERIC_VALUE;
-
-# DATE TIME RULES
-
-datetime_condition:
-	datetime_field < DATETIME_VALUES |
-	datetime_field = DATETIME_VALUES |
-	datetime_field > DATETIME_VALUES |
-	datetime_field  >= DATETIME_VALUES |
-	datetime_field  <= DATETIME_VALUES |
-	(datetime_condition) AND (datetime_condition)|
-	(datetime_condition) OR (datetime_condition)|
-	NOT (datetime_condition) |
-	datetime_between_condition |
-	datetime_is_not_null |
-	datetime_not_equals_condition |
-	datetime_is_null |
-	datetime_in_conidtion ;
-
-datetime_equals_condition:
-	datetime_field = DATETIME_VALUES ;
-
-datetime_not_equals_condition:
-	datetime_field != DATETIME_VALUES ;
-
-datetime_in_conidtion:
-	datetime_field IN [ datetime_field_list ];
-
-datetime_between_condition:
-	DATETIME_FIELD BETWEEN LOWER_BOUND_VALUE and UPPER_BOUND_VALUE;
-
-datetime_not_between_condition:
-	DATETIME_FIELD NOT BETWEEN LOWER_BOUND_VALUE and UPPER_BOUND_VALUE;
-
-datetime_is_not_null:
-	DATETIME_FIELD IS NOT NULL;
-
-datetime_is_missing:
-	DATETIME_FIELD IS MISSING;
-
-datetime_is_not_missing:
-	DATETIME_FIELD IS NOT MISSING;
-
-datetime_is_valued:
-	DATETIME_FIELD IS VALUED;
-
-datetime_is_not_valued:
-	DATETIME_FIELD IS NOT VALUED;
-
-datetime_is_null:
-	DATETIME_FIELD IS NULL;
-
-datetime_field_list:
-	LIST;
-
-is_not_missing:
-	IS NOT MISSING;
-
-datetime_field:
-	DATETIME_FIELD;
 
 # STRING RULES
 
@@ -229,4 +173,4 @@ bool_value:
 	true | false;
 
 field_list:
-	NUMERIC_FIELD_LIST | STRING_FIELD_LIST | DATETIME_FIELD_LIST | NUMERIC_FIELD_LIST, STRING_FIELD_LIST, DATETIME_FIELD_LIST | NUMERIC_FIELD_LIST, STRING_FIELD_LIST | STRING_FIELD_LIST, DATETIME_FIELD_LIST;
+	NUMERIC_FIELD_LIST | STRING_FIELD_LIST | NUMERIC_FIELD_LIST, STRING_FIELD_LIST ;
