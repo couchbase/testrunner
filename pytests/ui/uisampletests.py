@@ -709,6 +709,8 @@ class ServerTestControls():
 
     def failover_confirmation(self):
         self.failover_conf_dialog = self.helper.find_control('failover_dialog', 'dialog')
+        self.failover_conf_cb = self.helper.find_control('failover_dialog', 'confirm_cb',
+                                                         parent_locator='dialog')
         self.failover_conf_submit_btn = self.helper.find_control('failover_dialog', 'submit_btn',
                                                                  parent_locator='dialog')
         self.failover_conf_cancel_btn = self.helper.find_control('failover_dialog', 'cancel_btn',
@@ -1131,7 +1133,7 @@ class ServerHelper():
                         "no reaction for click create new bucket btn in %d sec" % (self.wait._timeout))
         self.fill_server_info(input)
         self.controls.add_server_dialog().add_server_dialog_btn.click()
-        self.controls.add_server_dialog().add_server_confirm_btn.click()
+        #self.controls.add_server_dialog().add_server_confirm_btn.click()
         self.wait.until_not(lambda fn:
                             self.controls.add_server_dialog().confirm_server_addition.is_displayed(),
                             "Add server pop up is not closed in %d sec" % self.wait._timeout)
@@ -1249,7 +1251,7 @@ class ServerHelper():
         stats["estimated_transfer"] = "Estimated number of keys transferred:%s" %\
                         src.split("Estimated number of keys transferred:</span>")[1].split("</p>")[0].replace('\n',' ')
         stats["vbuckets"] = "Number of Active# vBuckets and Replica# vBuckets to transfer:%s" %\
-                         src.split("vBuckets to transfer:")[1].split("</p>")[0].replace('\n',' ').replace('</span>',' ')
+                         src.split("vBuckets to transfer:")[1].split("</p>")[0].replace('\n',' ').replace('</span>', ' ')
         self.close_server_stats(server)
         return stats
 
@@ -1302,6 +1304,9 @@ class ServerHelper():
                 self.controls.failover_confirmation().confirm_failover_option.check()
                 self.tc.log.info("Hard Failover Enabled with warnings")
         if confirm:
+            if self.controls.failover_confirmation().failover_conf_cb.is_present() and\
+                    self.controls.failover_confirmation().failover_conf_cb.is_displayed():
+                self.controls.failover_confirmation().failover_conf_cb.check()
             self.controls.failover_confirmation().failover_conf_submit_btn.click_native()
             self.wait.until(lambda fn: not self.is_confirmation_failover_opened() or\
                                        self.is_error_present_failover(),
@@ -1319,7 +1324,11 @@ class ServerHelper():
         return self.controls.failover_warning().get_text()
 
     def is_node_failed_over(self, server):
-        return self.controls.failed_over_msg(server.ip).is_displayed()
+        for i in xrange(3):
+            try:
+                return self.controls.failed_over_msg(server.ip).is_displayed()
+            except:
+                pass
 
     def add_node_back(self):
         self.wait.until(lambda fn: self.controls.add_back_failover().is_displayed(),
@@ -1354,9 +1363,9 @@ class ServerHelper():
         self.controls.pending_rebalance_tab().click()
         self.tc.log.info("Try to set %s option in recovery %s" % (option, server.ip))
         if option == 'delta':
-            self.controls.select_recovery(server.ip).delta_option.click()
+            self.controls.select_recovery(server.ip).delta_option.click(highlight=False)
         if option == 'full':
-            self.controls.select_recovery(server.ip).full_option.click()
+            self.controls.select_recovery(server.ip).full_option.click(highlight=False)
         self.tc.log.info("%s option in recovery %s is set" % (option, server.ip))
 
     def set_recovery_251(self, server, option='full', confirm=True):

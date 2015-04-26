@@ -10,6 +10,7 @@ from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.common.exceptions import NoSuchElementException
 from threading import Thread
@@ -103,10 +104,14 @@ class BaseUITestCase(unittest.TestCase):
                                                        self.machine.port),
                                                desired_capabilities=DesiredCapabilities.FIREFOX)
             elif self.browser == 'chrome':
+                local_capabilities = DesiredCapabilities.CHROME
+                chrome_options = Options()
+                chrome_options.add_experimental_option("excludeSwitches", ["ignore-certificate-errors"])
+                local_capabilities.update(chrome_options.to_capabilities())
                 self.driver = webdriver.Remote(command_executor='http://{0}:{1}/wd/hub'
                                                .format(self.machine.ip,
                                                        self.machine.port),
-                                               desired_capabilities=DesiredCapabilities.CHROME)
+                                               desired_capabilities=local_capabilities)
             self.log.info('start selenium started')
             self.driver.get("http://{0}:{1}".format(self.servers[0].ip,
                                                     self.servers[0].port))
@@ -191,13 +196,20 @@ class Control():
         ActionChains(self.selenium).send_keys(Keys.DELETE).perform()
         ActionChains(self.selenium).send_keys(text).perform()
 
-    def click(self):
-        self.highlightElement()
+    def click(self, highlight=True):
+        if highlight:
+            self.highlightElement()
         self.web_element.click()
 
     def click_native(self):
         ActionChains(self.selenium).move_to_element(self.web_element).perform()
         ActionChains(self.selenium).click(self.web_element).perform()
+
+    def click_with_mouse_over(self):
+        ActionChains(self.selenium).move_to_element(self.web_element).perform()
+        ActionChains(self.selenium).click(self.web_element).perform()
+        ActionChains(self.selenium).key_down(Keys.ENTER).perform()
+        ActionChains(self.selenium).key_up(Keys.ENTER).perform()
 
     def type(self, message):
         if message:
