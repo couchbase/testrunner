@@ -145,7 +145,7 @@ class auditcheckconfig(BaseTestCase):
         rest = RestConnection(self.master)
         status, content = rest.setAuditSettings(logPath=newPath)
         self.assertFalse(status, "Audit is able to set invalid path")
-        self.assertEqual(content['errors']['logPath'], 'The value of logPath must be a valid directory', 'No error or error changed')
+        self.assertEqual(content['errors']['logPath'], 'The value must be a valid directory', 'No error or error changed')
 
     #Test error on setting of Invalid log file in cluster
     def test_invalidLogPathCluster(self):
@@ -154,7 +154,7 @@ class auditcheckconfig(BaseTestCase):
         rest = RestConnection(self.master)
         status, content = rest.setAuditSettings(logPath=newPath)
         self.assertFalse(status, "Audit is able to set invalid path")
-        self.assertEqual(content['errors']['logPath'], 'The value of logPath must be a valid directory', 'No error or error changed')
+        self.assertEqual(content['errors']['logPath'], 'The value must be a valid directory', 'No error or error changed')
 
     #Test changing of log file path
     def test_changeLogPath(self):
@@ -437,7 +437,7 @@ class auditcheckconfig(BaseTestCase):
         result = shell.file_exists(auditIns.pathLogFile, archiveFile)
         tempTime = 0
         starttime = time.time()
-        while ((number < 20971520) and (tempTime < 14400) and (result == False)):
+        while ((number < 20971520) and (tempTime < 18000) and (result == False)):
             for i in range(1, 10):
                 status, content = rest.validateLogin("Administrator", "password", True, getContent=True)
                 number = int (shell.get_data_file_size(filePath))

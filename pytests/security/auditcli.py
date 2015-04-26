@@ -446,7 +446,7 @@ class XdcrCLITest(CliBaseTest):
         super(XdcrCLITest, self).setUp()
         self.ldapUser = self.input.param("ldapUser", 'Administrator')
         self.ldapPass = self.input.param('ldapPass', 'password')
-        self.source = self.input.param('source', 'internal')
+        self.source = self.input.param('source', 'ns_server')
         self.__user = self.input.param("ldapUser", 'Administrator')
         self.__password = self.input.param('ldapPass', 'password')
         self.shell = RemoteMachineShellConnection(self.master)
