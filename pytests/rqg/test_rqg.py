@@ -186,7 +186,7 @@ class RQGTests(BaseTestCase):
                 self._drop_secondary_indexes_in_batches(list)
         # Analyze the results for the failure and assert on the run
         success, result = self._test_result_analysis(result_queue)
-        self.assertTrue(check, result)
+        self.assertTrue(success, result)
 
 
     def _run_basic_test(self, test_data, result_queue):

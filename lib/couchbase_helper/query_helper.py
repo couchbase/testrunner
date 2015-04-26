@@ -176,10 +176,10 @@ class QueryHelper(object):
         return randint(0,10000)
 
     def _random_float(self):
-        return round(10000*random.random(),2)
+        return round(10000*random.random(),0)
 
     def _random_double(self):
-        return round(10000*random.random(),2)
+        return round(10000*random.random(),0)
 
     def _random_datetime(self, start = 1999, end = 2015):
         year = random.choice(range(start, end))

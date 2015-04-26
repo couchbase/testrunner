@@ -17,7 +17,7 @@ SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='TRADITIONAL,ALLOW_INVALID_DATES';
 -- -----------------------------------------------------
 -- Schema simple_table_db
 -- -----------------------------------------------------
-CREATE SCHEMA IF NOT EXISTS `simple_table_db` DEFAULT CHARACTER SET utf8 ;
+CREATE SCHEMA IF NOT EXISTS `simple_table_db` DEFAULT CHARACTER SET utf8  COLLATE utf8_bin;
 USE `simple_table_db` ;
 
 -- -----------------------------------------------------
@@ -29,7 +29,6 @@ CREATE TABLE IF NOT EXISTS `simple_table_db`.`simple_table` (
   `decimal_field1` DECIMAL(10,0) NULL DEFAULT NULL,
   `float_field1` FLOAT NULL DEFAULT NULL,
   `double_field1` DOUBLE NULL DEFAULT NULL,
-  `datetime_field1` DATETIME NULL DEFAULT NULL,
   `medium_int_field1` MEDIUMINT(100) NULL DEFAULT NULL,
   `tiny_int_field1` TINYINT(100) NULL DEFAULT NULL,
   `varchar_field1` VARCHAR(1000) NOT NULL,
@@ -39,7 +38,7 @@ CREATE TABLE IF NOT EXISTS `simple_table_db`.`simple_table` (
   PRIMARY KEY (`primary_key_id`))
 ENGINE = InnoDB
 AUTO_INCREMENT = 10007
-DEFAULT CHARACTER SET = latin1;
+DEFAULT CHARACTER SET utf8  COLLATE utf8_bin;
 
 
 SET SQL_MODE=@OLD_SQL_MODE;

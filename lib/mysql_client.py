@@ -85,22 +85,24 @@ class MySQLClient(object):
         if not hasattr(self, 'table_key_type_map'):
             return value
         if isinstance(value, float):
-            return int(round(value, 0))
+            return round(value, 0)
+        if "long" in str(type):
+            return value
         if "datetime" in str(type):
             return str(value)
         if ("float" in str(type)) or ("double" in str(type)):
             if value == None:
                 return None
             else:
-                return int(round(value, 0))
+                return round(value, 0)
         if "decimal" in str(type):
             if value == None:
                 return None
             else:
                 if isinstance(value, float):
-                    return int(round(value, 0))
-                return int(value)
-        return value
+                    return round(value, 0)
+                return int(round(value, 0))
+        return unicode(value)
 
     def _get_table_list(self):
         table_list = []
@@ -279,9 +281,9 @@ if __name__=="__main__":
     #print dict
 
 
-    #client._gen_data_simple_table()
+    client._gen_data_simple_table()
     #query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
-    #client.dump_database()
+    client.dump_database()
     client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt")
     #with open("./output.txt") as f:
     #    content = f.readlines()

@@ -142,11 +142,11 @@ class N1QLHelper():
             actual_result = []
         if len(expected_result) == 1:
             value = expected_result[0].values()[0]
-            if value == None:
+            if value == None or value == 0:
                 expected_result = []
         if len(actual_result) == 1:
             value = actual_result[0].values()[0]
-            if value == None:
+            if value == None or value == 0:
                 actual_result = []
         return expected_result, actual_result
 
@@ -166,7 +166,7 @@ class N1QLHelper():
             raise Exception(msg+"\n"+extra_msg)
         n1ql_result = self._gen_dict_n1ql_func_result(n1ql_result)
         n1ql_result = sorted(n1ql_result)
-        sql_result = self._gen_dict(sql_result)
+        sql_result = self._gen_dict_n1ql_func_result(sql_result)
         sql_result = sorted(sql_result)
         if  len(sql_result) == 0 and len(actual_result) == 0:
             return
