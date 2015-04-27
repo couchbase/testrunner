@@ -317,16 +317,17 @@ class unidirectional(XDCRNewBaseTest):
         )
 
     """ Verify the fix for MB-9548"""
-    def test_verify_replications_stream_delete(self):
+    def verify_replications_deleted_after_bucket_deletion(self):
         self.setup_xdcr_and_load()
         self.verify_results()
         rest_conn = RestConnection(self.src_master)
         replications = rest_conn.get_replications()
-        self.assertTrue(replications, "Number of replication streams should not be 0")
+        self.assertTrue(replications, "Number of replications should not be 0")
         self.src_cluster.delete_all_buckets()
-
+        self.sleep(60)
         replications = rest_conn.get_replications()
-        self.assertTrue(not replications, "No replication streams should exists after deleting the buckets")
+        self.log.info("Replications : %s" % replications)
+        self.assertTrue(not replications, "Rest returns replication list even after source bucket is deleted ")
 
     """ Verify fix for MB-9862"""
     def test_verify_memcache_connections(self):
