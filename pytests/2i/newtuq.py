@@ -56,7 +56,7 @@ class QueryTests(BaseTestCase):
         verify_data = False
         if self.scan_consistency != "request_plus":
             verify_data = True
-        self.load(self.gens_load, flag=self.item_flag, verify_data = verify_data, self.batch_size)
+        self.load(self.gens_load, flag=self.item_flag, verify_data = verify_data, batch_size=self.batch_size)
         if self.doc_ops:
             self.ops_dist_map = self.calculate_data_change_distribution(
                 create_per = self.create_ops_per ,update_per = self.update_ops_per ,
