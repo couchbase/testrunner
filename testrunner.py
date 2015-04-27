@@ -453,7 +453,9 @@ def watcher():
         if child == 0:
             main() # child runs test
         try:
-            os.wait()
+            rc = os.waitpid(child, 0)[1] /256 # exit status is the high order byte of second member of the tuple
+            if rc > 0:
+                sys.exit( rc )
         except KeyboardInterrupt:
             print 'KeyBoardInterrupt'
             try:
