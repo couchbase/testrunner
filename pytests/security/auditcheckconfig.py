@@ -437,7 +437,7 @@ class auditcheckconfig(BaseTestCase):
         result = shell.file_exists(auditIns.pathLogFile, archiveFile)
         tempTime = 0
         starttime = time.time()
-        while ((number < 20971520) and (tempTime < 18000) and (result == False)):
+        while ((number < 20971520) and (tempTime < 21600) and (result == False)):
             for i in range(1, 10):
                 status, content = rest.validateLogin("Administrator", "password", True, getContent=True)
                 number = int (shell.get_data_file_size(filePath))
