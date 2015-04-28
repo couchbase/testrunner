@@ -185,8 +185,9 @@ class RQGTests(BaseTestCase):
             if self.use_secondary_index:
                 self._drop_secondary_indexes_in_batches(list)
         # Analyze the results for the failure and assert on the run
-        success, result = self._test_result_analysis(result_queue)
-        self.assertTrue(success, result)
+        success, summary, result = self._test_result_analysis(result_queue)
+        self.log.info(result)
+        self.assertTrue(success, summary)
 
 
     def _run_basic_test(self, test_data, result_queue):
@@ -202,7 +203,7 @@ class RQGTests(BaseTestCase):
         result_run["n1ql_query"] = n1ql_query
         result_run["sql_query"] = sql_query
         result_run["test_case_number"] = test_case_number
-        if expected_result == None:
+        if  expected_result == None:
             expected_result = self._gen_expected_result(sql_query)
         if self.run_query_without_index_hint and self.use_secondary_index:
             query_index_run = self._run_queries_and_verify(n1ql_query = n1ql_query , sql_query = sql_query, expected_result = expected_result)
@@ -247,9 +248,10 @@ class RQGTests(BaseTestCase):
                 fail_case +=  1
                 failure_map[test_case_number] = {"sql_query":sql_query, "n1ql_query": n1ql_query,
                  "run_result" : message}
+        summary = " Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case)
         self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case))
         result = self._generate_result(failure_map)
-        return success, result
+        return success, summary, result
 
     def test_rqg_main(self):
         self.run_query_without_index_hint= self.input.param("run_query_without_index_hint",True)
@@ -421,8 +423,11 @@ class RQGTests(BaseTestCase):
     def _gen_expected_result(self, sql = ""):
         sql_result = {}
         try:
-            columns, rows = self.client._execute_query(query = sql)
+            client = MySQLClient(database = self.database, host = self.mysql_url,
+            user_id = self.user_id, password = self.password)
+            columns, rows = client._execute_query(query = sql)
             sql_result = self.client._gen_json_from_results(columns, rows)
+            client._close_mysql_connection()
         except Exception, ex:
             self.log.info(ex)
         return sql_result
@@ -432,7 +437,7 @@ class RQGTests(BaseTestCase):
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
         result_run = {}
         # Run n1ql query
-        hints = self.query_helper._find_hints(n1ql_query)
+        hints = self.query_helper._find_hints(sql_query)
         try:
             actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server)
             n1ql_result = actual_result["results"]
