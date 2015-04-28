@@ -1,13 +1,9 @@
-from sg.sg_base import GatewayBaseTest
 from sg.sg_webhook_base import GatewayWebhookBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 
 class SGWebHookTest(GatewayWebhookBaseTest):
     def setUp(self):
         super(SGWebHookTest, self).setUp()
-        for server in self.servers:
-            shell = RemoteMachineShellConnection(server)
-            shell.copy_files_local_to_remote('pytests/sg/resources', '/root')
 
     def tearDown(self):
         super(SGWebHookTest, self).tearDown()
@@ -33,8 +29,9 @@ class SGWebHookTest(GatewayWebhookBaseTest):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             self.start_sync_gateway(shell, self.configfile)
+            #TODO need to start 2nd simpleServe
             success, revision, status = self.create_doc_logfiles(shell, self.doc_id, self.doc_content,
-                                        ['/opt/gocode/simpleServe.txt', '/opt/gocode/simpleServe2.txt'])
+                                        ['/tmp/simpleServe.txt', '/tmp/simpleServe2.txt'])
             self.assertTrue(success)
             shell.disconnect()
 

@@ -730,7 +730,7 @@ class RemoteMachineShellConnection:
     # copy multi files from local to remote server
     def copy_files_local_to_remote(self, src_path, des_path):
         files = os.listdir(src_path)
-        log.info("copy file from {0} to {1}".format(src_path, des_path))
+        log.info("copy files from {0} to {1}".format(src_path, des_path))
         # self.execute_batch_command("cp -r  {0}/* {1}".format(src_path, des_path))
         for file in files:
             if file.find("wget") != 1:

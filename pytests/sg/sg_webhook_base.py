@@ -1,15 +1,13 @@
 import logger
-import unittest
 import json
 from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 import re
-import requests
-from requests.exceptions import ConnectionError
 import time
+from pytests.sg.sg_base import GatewayBaseTest
 
 
-class GatewayWebhookBaseTest(unittest.TestCase):
+class GatewayWebhookBaseTest(GatewayBaseTest):
 
     def setUp(self):
         super(GatewayWebhookBaseTest, self).setUp()
@@ -23,6 +21,18 @@ class GatewayWebhookBaseTest(unittest.TestCase):
         self.expected_error = self.input.param("expected_error", "")
         self.servers = self.input.servers
         self.master = self.servers[0]
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            if self.case_number == 1:
+                # will install sg only the first time
+                self.install(shell)
+                pid = self.is_sync_gateway_process_running(shell)
+                self.assertNotEqual(pid, 0)
+                exist = shell.file_exists('/root/', 'gateway.log')
+                self.assertTrue(exist)
+                shell.copy_files_local_to_remote('pytests/sg/resources', '/root')
+            self.start_simpleServe(shell)
+            shell.disconnect()
 
     def start_sync_gateway(self, shell, config_filename):
         self.log.info('=== start_sync_gateway with config file {0}.'.format(config_filename))
@@ -110,7 +120,7 @@ class GatewayWebhookBaseTest(unittest.TestCase):
 
     def check_http_server(self, shell, doc_id, revision, doc_content, attachment_filename, deleted, go_logfiles, silent):
         if not go_logfiles:
-            go_logfiles = ['/opt/gocode/simpleServe.txt']
+            go_logfiles = ['/tmp/simpleServe.txt']
         for go_logfile in go_logfiles:
             output, error = shell.execute_command_raw('tail -1 {0}'.format(go_logfile))
             if not silent:

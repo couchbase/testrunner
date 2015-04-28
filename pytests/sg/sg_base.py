@@ -22,8 +22,11 @@ class GatewayBaseTest(unittest.TestCase):
         super(GatewayBaseTest, self).setUp()
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
+        self.case_number = self.input.param("case_number", 0)
         self.version = self.input.param("version", "0.0.0-358")
-        self.extra_param = self.input.param("extra_param", "").replace("$", "=")  # '=' is a delimiter in conf file
+        self.extra_param = self.input.param("extra_param", "")
+        if isinstance(self.extra_param, str):
+            self.extra_param=self.extra_param.replace("$", "=")  # '=' is a delimiter in conf file
         self.logsdir = self.input.param("logsdir", "/home/sync_gateway/logs")
         self.datadir = self.input.param("datadir", "/home/sync_gateway")
         self.configdir = self.input.param("configdir", "/home/sync_gateway")
@@ -128,6 +131,14 @@ class GatewayBaseTest(unittest.TestCase):
         shell.copy_files_local_to_remote('pytests/sg/resources', '/root')
         output, error = shell.execute_command_raw('nohup /opt/couchbase-sync-gateway/bin/sync_gateway'
                                                   ' /root/gateway_config.json >/root/gateway.log 2>&1 &')
+        shell.log_command_output(output, error)
+
+    def start_simpleServe(self, shell):
+        self.log.info('=== Starting SimpleServe instances')
+        shell.execute_command('killall -9 simpleServe.go')
+        shell.copy_file_local_to_remote("pytests/sg/simpleServe.go", "/tmp/simpleServe.go")
+        output, error = shell.execute_command_raw('go run /tmp/simpleServe.go 8081'
+                                                  '  >/tmp/simpleServe.txt 2>&1 &')
         shell.log_command_output(output, error)
 
     def add_user(self, shell, user_name):
