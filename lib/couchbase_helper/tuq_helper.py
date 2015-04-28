@@ -111,6 +111,8 @@ class N1QLHelper():
             return self._verify_results_rqg_for_function(n1ql_result, sql_result)
         check = self._check_sample(n1ql_result, hints)
         actual_result = n1ql_result
+        if actual_result == [{}]:
+            actual_result = []
         if check:
             actual_result = self._gen_dict(n1ql_result)
         actual_result = sorted(actual_result)
@@ -121,7 +123,8 @@ class N1QLHelper():
                                             len(actual_result), len(expected_result), extra_msg))
         msg = "The number of rows match but the results mismatch, please check"
         if actual_result != expected_result:
-            raise Exception(msg)
+            extra_msg = self._get_failure_message(expected_result, actual_result)
+            raise Exception(msg+"\n "+extra_msg)
 
     def _get_failure_message(self, expected_result, actual_result):
         if expected_result == None:
@@ -445,8 +448,8 @@ class N1QLHelper():
     def _check_sample(self, result, expected_in_key = None):
         if expected_in_key == "FUN":
             return False
-        if len(expected_in_key) == 0:
-            return True
+        if expected_in_key == None or len(expected_in_key) == 0:
+            return False
         if result != None and len(result) > 0:
             sample=result[0]
             for key in sample.keys():

@@ -7,15 +7,16 @@ from datetime import datetime
 
 class QueryHelper(object):
     def _find_hints(self, n1ql_query):
-        select_text  =  self._find_string_type(n1ql_query, ["SELECT", "Select", "select"])
-        from_text = self._find_string_type(n1ql_query, ["FROM", "from", "From"])
-        result_text = n1ql_query.split(select_text)[1].split(from_text)[0].strip()
-        if self._check_function(result_text):
+        map = self._divide_sql(n1ql_query)
+        select_from = map["select_from"]
+        table_name = map["from_fields"].strip().split("USE INDEX")[0]
+        if self._check_function(select_from):
             return "FUN"
-        if result_text == "*":
-            return []
-        if ".*" in result_text:
-            return [result_text.split(".")[0]]
+        if select_from.strip() == "*":
+            return [str(table_name)]
+        if ".*" in select_from:
+            return [select_from.split(".")[0]]
+        return []
 
     def _divide_sql(self, sql):
         sql = sql.replace(";","")
