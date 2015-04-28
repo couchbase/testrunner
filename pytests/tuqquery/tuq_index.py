@@ -410,10 +410,11 @@ class QueriesViewsTests(QueryTests):
             created_indexes = []
             try:
                 for attr in ['join_day', 'join_mo', 'join_day,join_mo']:
-                    self.query = "CREATE INDEX %s_%s ON %s(%s)  USING %s" % (index_name_prefix, attr,
+                    ind_name = attr.split('.')[0].split('[')[0].replace(',', '_')
+                    self.query = "CREATE INDEX %s_%s ON %s(%s)  USING %s" % (index_name_prefix, ind_name,
                                                                     bucket.name, attr, self.index_type)
                     self.run_cbq_query()
-                    created_indexes.append('%s_%s' % (index_name_prefix, attr.split('.')[0].split('[')[0].replace(',', '_')))
+                    created_indexes.append('%s_%s' % (index_name_prefix, ind_name))
                 for ind in created_indexes:
                     self.query = 'EXPLAIN SELECT name, join_day, join_mo FROM %s  USING INDEX(%s using %s) WHERE join_day>2 AND join_mo>3' % (bucket.name, ind, self.index_type)
                     self.hint_index = ind
@@ -431,10 +432,11 @@ class QueriesViewsTests(QueryTests):
             created_indexes = []
             try:
                 for attr in ['job_title', 'test_rate', 'job_title,test_rate']:
-                    self.query = "CREATE INDEX %s_%s ON %s(%s)  USING %s" % (index_name_prefix, attr,
+                    ind_name = attr.split('.')[0].split('[')[0].replace(',', '_')
+                    self.query = "CREATE INDEX %s_%s ON %s(%s)  USING %s" % (index_name_prefix, ind_name,
                                                                     bucket.name, attr, self.index_type)
                     self.run_cbq_query()
-                    created_indexes.append('%s_%s' % (index_name_prefix, attr.split('.')[0].split('[')[0].replace(',', '_')))
+                    created_indexes.append('%s_%s' % (index_name_prefix,ind_name))
                 for ind in created_indexes:
                     self.query = "EXPLAIN SELECT join_mo, SUM(test_rate) as rate FROM %s USING INDEX(%s using %s)" % (bucket.name, ind, self.index_type) +\
                                  "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
@@ -454,7 +456,7 @@ class QueriesViewsTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
-                fields = ['job_title', 'job_title', 'job_title,test_rate']
+                fields = ['job_title', 'job_title,test_rate']
                 for attr in fields:
                     self.query = "CREATE INDEX %s_%s_%s ON %s(%s) USING %s" % (index_name_prefix, attr, fields.index(attr),
                                                                        bucket.name, attr, self.index_type)
@@ -480,11 +482,11 @@ class QueriesViewsTests(QueryTests):
         for bucket in self.buckets:
             created_indexes = []
             try:
-                for attr in ['join_day', 'join_mo']:
+                for attr in ['join_day', 'join_day,join_mo']:
                     self.query = "CREATE INDEX %s_%s ON %s(%s) " % (index_name_prefix, attr,
                                                                     bucket.name, attr)
                     self.run_cbq_query()
-                    created_indexes.append('%s_%s' % (index_name_prefix, attr))
+                    created_indexes.append('%s_%s' % (index_name_prefix, attr if attr.find(',') == -1 else attr.split(',')[1]))
                     self.query = 'SELECT name, join_day, join_mo FROM %s WHERE join_day>2 AND join_mo>3' % (bucket.name)
                     res = self.run_cbq_query()
                     full_list = self.generate_full_docs_list(self.gens_load)
@@ -518,7 +520,7 @@ class QueriesViewsTests(QueryTests):
                     self._verify_results(sorted(res['results']), sorted(expected_result))
                     self.query = 'EXPLAIN SELECT name, join_day, join_yr FROM %s WHERE join_yr>3' % (bucket.name)
                     res = self.run_cbq_query()
-                    self.assertTrue(res["results"][0]["~children"][0]["index"] == '%s_%s' % (index_name_prefix, attr),
+                    self.assertTrue(res["results"][0]["~children"][0]["index"] != '%s_%s' % (index_name_prefix, attr),
                                     "Index should be %s_%s, but is: %s" % (index_name_prefix, attr, res["results"]))
             finally:
                 for index_name in created_indexes:
