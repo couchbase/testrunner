@@ -5,7 +5,7 @@ import Queue
 from datetime import datetime
 from membase.api.rest_client import RestConnection, Bucket
 from newupgradebasetest import NewUpgradeBaseTest
-from xdcrnewbasetests import XDCRNewBaseTest, REPLICATION_TYPE
+from xdcrnewbasetests import XDCRNewBaseTest, NodeHelper
 from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
@@ -148,11 +148,13 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.cluster.rebalance(update_servers + extra_servers, [], update_servers)
 
     def offline_cluster_upgrade(self):
+
         # install on src and dest nodes
         self._install(self.servers[:self.src_init + self.dest_init ])
         upgrade_nodes = self.input.param('upgrade_nodes', "src").split(";")
+
         self.xdcr_setup()
-        if self.initial_version < "3.0.0":
+        if float(self.initial_version[:2]) < 3.0:
             self.pause_xdcr_cluster = None
         self.sleep(60)
         bucket = self.src_cluster.get_bucket_by_name('default')
@@ -163,10 +165,11 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         bucket = self.dest_cluster.get_bucket_by_name('standard_bucket_1')
         gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self.num_items)
         self._load_bucket(bucket, self.dest_master, gen_create2, 'create', exp=0)
+
         nodes_to_upgrade = []
-        if "src" in upgrade_nodes :
+        if "src" in upgrade_nodes:
             nodes_to_upgrade += self.src_nodes
-        if "dest" in upgrade_nodes :
+        if "dest" in upgrade_nodes:
             nodes_to_upgrade += self.dest_nodes
 
         self.sleep(60)
@@ -175,7 +178,16 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             for cluster in self.get_cb_clusters():
                 for remote_cluster in cluster.get_remote_clusters():
                     remote_cluster.pause_all_replications()
+
         self._offline_upgrade(nodes_to_upgrade)
+
+        self.log.info("######### Upgrade of C1 and C2 completed ##########")
+
+        if not self.is_goxdcr_migration_successful(self.src_master):
+            self.fail("C1: Metadata migration failed after offline upgrade of C1")
+
+        if not self.is_goxdcr_migration_successful(self.dest_master):
+            self.fail("C2: Metadata migration failed after offline upgrade of C2")
 
         if self._use_encryption_after_upgrade and "src" in upgrade_nodes and "dest" in upgrade_nodes and self.upgrade_versions[0] >= "2.5.0":
             if "src" in self._use_encryption_after_upgrade:
@@ -185,6 +197,15 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 for remote_cluster in self.dest_cluster.get_remote_clusters():
                     remote_cluster._modify()
         self.sleep(60)
+
+        if self._demand_encryption or self._use_encryption_after_upgrade:
+            if not self.is_ssl_over_memcached(self.src_master):
+                self.fail("C1: After old nodes were replaced, C1 still uses "
+                          "ns_proxy connection to C2 which is >= 3.0")
+            if not self.is_ssl_over_memcached(self.dest_master):
+                self.fail("C2: After old nodes were replaced, C2 still uses "
+                          "ns_proxy connection to C1 which is >= 3.0")
+
         bucket = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
         gen_create3 = BlobGenerator('loadThree', 'loadThree', self._value_size, end=self.num_items)
         self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
@@ -196,7 +217,8 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 for remote_cluster in cluster.get_remote_clusters():
                     remote_cluster.resume_all_replications()
         bucket = self.src_cluster.get_bucket_by_name('default')
-        self._load_bucket(bucket, self.src_master, gen_create2, 'create', exp=0)
+        gen_create5 = BlobGenerator('loadFive', 'loadFive', self._value_size, end=self.num_items)
+        self._load_bucket(bucket, self.src_master, gen_create5, 'create', exp=0)
         self.merge_all_buckets()
         self.sleep(60)
         self._post_upgrade_ops()
@@ -215,6 +237,26 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_dest, self.dest_master)
 
+    def is_goxdcr_migration_successful(self, server):
+        count = NodeHelper.check_goxdcr_log(server,
+                                "Metadata migration completed without errors")
+        self.log.info(count)
+        if count == 1:
+            self.log.info("SUCCESS: Metadata migration completed without errors")
+            return True
+        self.log.error("ERROR: Metadata migration was unsuccessful")
+        return False
+
+    def is_ssl_over_memcached(self, master):
+        if not NodeHelper.check_goxdcr_log(master,
+                    "Try to create a ssl over memcached connection"):
+            if NodeHelper.check_goxdcr_log(master,
+                    "Get or create ssl over proxy connection"):
+                self.log.error("SSL still uses ns_proxy connection!")
+            return False
+        self.log.info("SSL uses memcached after upgrade!")
+        return True
+
     def online_cluster_upgrade(self):
         self._install(self.servers[:self.src_init + self.dest_init])
         prev_initial_version = self.initial_version
@@ -222,7 +264,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self._install(self.servers[self.src_init + self.dest_init:])
         self.xdcr_setup()
 
-        if prev_initial_version < "3.0.0":
+        if float(prev_initial_version[:2]) < 3.0:
             self.pause_xdcr_cluster = None
         bucket_default = self.src_cluster.get_bucket_by_name('default')
         bucket_sasl = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
@@ -241,6 +283,14 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self._online_upgrade(self.src_nodes, self.servers[self.src_init + self.dest_init:])
         self.src_master = self.servers[self.src_init + self.dest_init]
 
+        if not self.is_goxdcr_migration_successful(self.src_master):
+            self.fail("C1: Metadata migration failed after old nodes were removed")
+
+        if float(self.initial_version[:2]) >= 3.0 and self._demand_encryption:
+            if not self.is_ssl_over_memcached(self.src_master):
+                self.fail("C1: After old nodes were replaced, C1 still uses "
+                          "proxy connection to C2 which is >= 3.0")
+
         self._load_bucket(bucket_default, self.src_master, self.gen_update, 'create', exp=self._expires)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_update, 'create', exp=self._expires)
         self._install(self.src_nodes)
@@ -258,6 +308,16 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self._install(self.servers[self.src_init + self.dest_init:])
         self.sleep(60)
         self._online_upgrade(self.dest_nodes, self.servers[self.src_init + self.dest_init:])
+        self.dest_master = self.servers[self.src_init + self.dest_init]
+
+        if not self.is_goxdcr_migration_successful(self.dest_master):
+            self.fail("C2: Metadata migration failed after old nodes were removed")
+
+        if float(self.initial_version[:2]) >= 3.0 and self._demand_encryption:
+            if not self.is_ssl_over_memcached(self.dest_master):
+                self.fail("C2: After old nodes were replaced, C2 still uses "
+                          "proxy connection to C1 which is >= 3.0")
+
         self._install(self.dest_nodes)
         self.sleep(60)
         self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.dest_nodes, False)
@@ -454,7 +514,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.c2_version = self.upgrade_versions[0]
         # install older version on C1
         self._install(self.servers[:self.src_init])
-        # install latest version on C2
+        #install latest version on C2
         self.initial_version = self.c2_version
         self._install(self.servers[self.src_init:])
 
