@@ -88,9 +88,11 @@ class MySQLClient(object):
             return round(value, 0)
         if "tiny" in str(type):
             if value == 0:
-                return True
-            else:
                 return False
+            else:
+                return True
+        if "int" in str(type):
+            return value
         if "long" in str(type):
             return value
         if "datetime" in str(type):
