@@ -416,8 +416,7 @@ class QueriesViewsTests(QueryTests):
                     self.run_cbq_query()
                     created_indexes.append('%s_%s' % (index_name_prefix, ind_name))
                 for ind in created_indexes:
-                    self.query = 'EXPLAIN SELECT name, join_day, join_mo FROM %s  USING INDEX(%s using %s) WHERE join_day>2 AND join_mo>3' % (bucket.name, ind, self.index_type)
-                    self.hint_index = ind
+                    self.query = 'EXPLAIN SELECT name, join_day, join_mo FROM %s  USE INDEX(%s using %s) WHERE join_day>2 AND join_mo>3' % (bucket.name, ind, self.index_type)
                     res = self.run_cbq_query()
                     self.assertTrue(res["results"][0]["~children"][0]["index"] == ind,
                                     "Index should be %s, but is: %s" % (ind, res["results"]))
@@ -438,11 +437,10 @@ class QueriesViewsTests(QueryTests):
                     self.run_cbq_query()
                     created_indexes.append('%s_%s' % (index_name_prefix,ind_name))
                 for ind in created_indexes:
-                    self.query = "EXPLAIN SELECT join_mo, SUM(test_rate) as rate FROM %s USING INDEX(%s using %s)" % (bucket.name, ind, self.index_type) +\
+                    self.query = "EXPLAIN SELECT join_mo, SUM(test_rate) as rate FROM %s USE INDEX(%s using %s)" % (bucket.name, ind, self.index_type) +\
                                  "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
                                  "HAVING SUM(employees.test_rate) > 0 and " +\
                                  "SUM(test_rate) < 100000"
-                    self.hint_index = ind
                     res = self.run_cbq_query()
                     self.assertTrue(res["results"][0]["~children"][0]["index"] == ind,
                                     "Index should be %s, but is: %s" % (ind, res["results"]))
@@ -464,11 +462,10 @@ class QueriesViewsTests(QueryTests):
                     created_indexes.append('%s_%s_%s' % (index_name_prefix, attr.split('.')[0].split('[')[0].replace(',', '_'),
                                                          fields.index(attr)))
                 for ind in created_indexes:
-                    self.query = "EXPLAIN SELECT join_mo, SUM(test_rate) as rate FROM %s  USING INDEX(%s using %s)" % (bucket.name, ind, self.index_type) +\
+                    self.query = "EXPLAIN SELECT join_mo, SUM(test_rate) as rate FROM %s  USE INDEX(%s using %s)" % (bucket.name, ind, self.index_type) +\
                                  "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
                                  "HAVING SUM(employees.test_rate) > 0 and " +\
                                  "SUM(test_rate) < 100000"
-                    self.hint_index = ind
                     res = self.run_cbq_query()
                     self.assertTrue(res["results"][0]["~children"][0]["index"] == ind,
                                     "Index should be %s, but is: %s" % (ind, res["results"]))

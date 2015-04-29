@@ -2808,7 +2808,7 @@ class QueryTests(BaseTestCase):
                     self.log.error(item)
                     continue
                 if item['indexes']['keyspace_id'] == bucket.name and item['indexes']['name'] == index_name:
-                    if item['indexes']['keyspace_id'] == "online":
+                    if item['indexes']['state'] == "online":
                         return
             self.sleep(5, 'index is pending or not in the list. sleeping...')
         raise Exception('index %s is not online. last response is %s' % (index_name, res))
