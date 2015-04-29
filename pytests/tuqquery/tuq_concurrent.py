@@ -86,16 +86,17 @@ class ConcurrentTests(QueryTests):
         index_name_prefix = 'hint' + str(uuid.uuid4())[:4]
         try:
             created_indexes = []
-            fields = self.input.param("index_hints", '').replace(':', ',')
+            fields = self.input.param("index_field", '').replace(':', ',')
             fields = fields.split(';')
             for attr in fields:
                 for bucket in self.buckets:
+                    ind_name = attr.split('.')[0].split('[')[0].replace(',', '_')
                     self.query = "CREATE INDEX %s_%s_%s ON %s(%s) USING %s" % (index_name_prefix,
-                                                                               attr.split('.')[0].split('[')[0].replace(',', '_'),
+                                                                               ind_name,
                                                                                fields.index(attr),
                                                                                bucket.name, attr, self.index_type)
                     self.run_cbq_query()
-                    created_indexes.append('%s_%s_%s' % (index_name_prefix, attr.split('.')[0].split('[')[0].replace(',', '_'),
+                    created_indexes.append('%s_%s_%s' % (index_name_prefix, ind_name,
                                                         fields.index(attr)))
             for ind in created_indexes:
                 self.hint_index = ind

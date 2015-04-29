@@ -437,8 +437,8 @@ class QueriesViewsTests(QueryTests):
                     self.run_cbq_query()
                     created_indexes.append('%s_%s' % (index_name_prefix,ind_name))
                 for ind in created_indexes:
-                    self.query = "EXPLAIN SELECT join_mo, SUM(test_rate) as rate FROM %s USE INDEX(%s using %s)" % (bucket.name, ind, self.index_type) +\
-                                 "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
+                    self.query = "EXPLAIN SELECT join_mo, SUM(test_rate) as rate FROM %s as employees USE INDEX(%s using %s)" % (bucket.name, ind, self.index_type) +\
+                                 " WHERE job_title='Sales' GROUP BY join_mo " +\
                                  "HAVING SUM(employees.test_rate) > 0 and " +\
                                  "SUM(test_rate) < 100000"
                     res = self.run_cbq_query()
@@ -456,14 +456,14 @@ class QueriesViewsTests(QueryTests):
             try:
                 fields = ['job_title', 'job_title,test_rate']
                 for attr in fields:
-                    self.query = "CREATE INDEX %s_%s_%s ON %s(%s) USING %s" % (index_name_prefix, attr, fields.index(attr),
+                    ind_name = attr.split('.')[0].split('[')[0].replace(',', '_')
+                    self.query = "CREATE INDEX %s_%s ON %s(%s) USING %s" % (index_name_prefix, ind_name,
                                                                        bucket.name, attr, self.index_type)
                     self.run_cbq_query()
-                    created_indexes.append('%s_%s_%s' % (index_name_prefix, attr.split('.')[0].split('[')[0].replace(',', '_'),
-                                                         fields.index(attr)))
+                    created_indexes.append('%s_%s' % (index_name_prefix, ind_name))
                 for ind in created_indexes:
-                    self.query = "EXPLAIN SELECT join_mo, SUM(test_rate) as rate FROM %s  USE INDEX(%s using %s)" % (bucket.name, ind, self.index_type) +\
-                                 "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
+                    self.query = "EXPLAIN SELECT join_mo, SUM(test_rate) as rate FROM %s  as employees USE INDEX(%s using %s)" % (bucket.name, ind, self.index_type) +\
+                                 "WHERE job_title='Sales' GROUP BY join_mo " +\
                                  "HAVING SUM(employees.test_rate) > 0 and " +\
                                  "SUM(test_rate) < 100000"
                     res = self.run_cbq_query()
