@@ -86,6 +86,11 @@ class MySQLClient(object):
             return value
         if isinstance(value, float):
             return round(value, 0)
+        if "tiny" in str(type):
+            if value == 0:
+                return True
+            else:
+                return False
         if "long" in str(type):
             return value
         if "datetime" in str(type):
@@ -283,8 +288,8 @@ if __name__=="__main__":
 
     #client._gen_data_simple_table()
     #query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
-    #client.dump_database()
-    client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt", gen_expected_result= False)
+    client.dump_database()
+    #client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt", gen_expected_result= False)
     #with open("./output.txt") as f:
     #    content = f.readlines()
     #for data in content:
