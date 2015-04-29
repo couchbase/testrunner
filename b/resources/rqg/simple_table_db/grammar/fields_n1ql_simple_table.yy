@@ -19,8 +19,10 @@ complex_condition:
 	NOT (condition) | (condition) AND (condition) | (condition) OR (condition) | (condition) AND (condition) OR (condition) AND (condition) | condition;
 
 condition:
-	numeric_condition | string_condition | (string_condition AND numeric_condition) |
-	(numeric_condition OR string_condition) ;
+	numeric_condition | string_condition | bool_condition | (string_condition AND numeric_condition) |
+	(numeric_condition OR string_condition) | (bool_condition AND numeric_condition) |  (bool_condition OR numeric_condition) |
+	 (bool_condition AND numeric_condition) | (bool_condition OR string_condition) |
+	 (bool_condition AND string_condition) | (numeric_condition AND string_condition AND bool_condition);
 
 field:
 	NUMERIC_FIELD | STRING_FIELD;
@@ -157,10 +159,13 @@ string_values:
 # BOOLEAN RULES
 
 bool_condition:
-	bool_equals_condition | bool_not_equals_condition;
+	bool_field |
+	NOT (bool_field) |
+	bool_equals_condition |
+	bool_not_equals_condition ;
 
 bool_equals_condition:
-	bool_field EQUALS bool_value | bool_field = bool_value | bool_field = bool_value ;
+	bool_field = bool_value;
 
 bool_not_equals_condition:
 	bool_field != bool_value ;
@@ -172,4 +177,4 @@ bool_value:
 	true | false;
 
 field_list:
-	NUMERIC_FIELD_LIST | STRING_FIELD_LIST | NUMERIC_FIELD_LIST, STRING_FIELD_LIST ;
+	NUMERIC_FIELD_LIST | STRING_FIELD_LIST | NUMERIC_FIELD_LIST, STRING_FIELD_LIST | NUMERIC_FIELD_LIST, STRING_FIELD_LIST, BOOL_FIELD_LIST;

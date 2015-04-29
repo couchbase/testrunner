@@ -154,7 +154,7 @@ class QueryHelper(object):
 
     def _search_presence_of_type(self, type, list):
         for key in list:
-            if key in type:
+            if key == type.split("(")[0]:
                 return True
         return False
 
@@ -172,6 +172,9 @@ class QueryHelper(object):
 
     def _random_char(self):
         return random.choice(string.ascii_uppercase)
+
+    def _random_tiny_int(self):
+        return randint(0,1)
 
     def _random_int(self):
         return randint(0,10000)
@@ -197,7 +200,7 @@ class QueryHelper(object):
         for field_name in table_map.keys():
             type = table_map[field_name]["type"]
             if "tinyint" in type:
-                values +=  str(self._random_int()%10)+","
+                values +=  str(self._random_tiny_int())+","
             elif "mediumint" in type:
                 values +=  str(self._random_int()%100)+","
             elif "int" in type:
@@ -220,8 +223,6 @@ class QueryHelper(object):
                 values +=  "\'"+self._random_alphabet_string(limit = 5)+"\',"
             elif "datetime" in type:
                 values +=  "\'"+str(self._random_datetime())+"\',"
-            elif "bool" in type:
-                values +=  "\'True\',"
         return intial_statement+column_names+" VALUES ( "+values[0:len(values)-1]+" )"
 
     def _random_alphabet_string(self, limit =10):
@@ -236,9 +237,13 @@ class QueryHelper(object):
 
     def _covert_fields_template_to_value(self, sql = "", table_map = {}):
         string_field_names = self._search_fields_of_given_type(["varchar","text","tinytext","char"], table_map)
-        numeric_field_names = self._search_fields_of_given_type(["int","mediumint","tinyint","double", "float", "decimal"], table_map)
+        numeric_field_names = self._search_fields_of_given_type(["int","mediumint","double", "float", "decimal"], table_map)
         datetime_field_names = self._search_fields_of_given_type(["datetime"], table_map)
+        bool_field_names = self._search_fields_of_given_type(["tinyint"], table_map)
         new_sql = sql
+        if "BOOL_FIELD_LIST" in sql:
+            new_list = self._generate_random_range(bool_field_names)
+            new_sql = new_sql.replace("BOOL_FIELD_LIST", self._convert_list(new_list,"numeric"))
         if "DATETIME_FIELD_LIST" in sql:
             new_list = self._generate_random_range(datetime_field_names)
             new_sql = new_sql.replace("DATETIME_FIELD_LIST", self._convert_list(new_list,"numeric"))
@@ -248,6 +253,8 @@ class QueryHelper(object):
         if "NUMERIC_FIELD_LIST" in sql:
             new_list = self._generate_random_range(numeric_field_names)
             new_sql = new_sql.replace("NUMERIC_FIELD_LIST", self._convert_list(new_list,"numeric"))
+        if "BOOL_FIELD" in sql:
+            new_sql = new_sql.replace("BOOL_FIELD", random.choice(bool_field_names))
         if "STRING_FIELD" in sql:
             new_sql = new_sql.replace("STRING_FIELD", random.choice(string_field_names))
         if "NUMERIC_FIELD"  in sql:
@@ -356,14 +363,18 @@ class QueryHelper(object):
         for token in tokens:
             check = string_check or numeric_check or bool_check or datetime_check
             if not check:
-                if "STRING_FIELD" in token:
+                if "BOOL_FIELD" in token:
+                    add_token = False
+                    field_name, values = self._search_field(["tinyint"], table_map)
+                    new_sql+=token.replace("BOOL_FIELD",field_name)+space
+                elif "STRING_FIELD" in token:
                     string_check = True
                     add_token = False
                     field_name, values = self._search_field(["varchar","text","tinytext","char"], table_map)
                     new_sql+=token.replace("STRING_FIELD",field_name)+space
                 elif "NUMERIC_FIELD" in token:
                     add_token = False
-                    field_name, values = self._search_field(["int","mediumint","tinyint","double", "float", "decimal"], table_map)
+                    field_name, values = self._search_field(["int","mediumint","double", "float", "decimal"], table_map)
                     new_sql+=token.replace("NUMERIC_FIELD",field_name)+space
                     numeric_check = True
                 elif "DATETIME_FIELD" in token:
@@ -371,11 +382,6 @@ class QueryHelper(object):
                     field_name, values = self._search_field(["datetime"], table_map)
                     new_sql+=token.replace("DATETIME_FIELD",field_name)+space
                     datetime_check = True
-                elif "BOOL_FIELD" in token:
-                    new_sql+=token.replace("BOOL_FIELD",field_name)+space
-                    field_name, values = self._search_field(["bool"], table_map)
-                    add_token = False
-                    book_check = False
             else:
                 if string_check:
                     if token == "IS":
