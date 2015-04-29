@@ -363,6 +363,24 @@ class NodeHelper:
         shell.disconnect()
 
     @staticmethod
+    def check_goxdcr_log(server, str):
+        """ Checks if a string 'str' is present in goxdcr.log on server
+            and returns the number of occurances
+        """
+        shell = RemoteMachineShellConnection(server)
+        os_type = shell.extract_remote_info().distribution_type
+        if os_type.lower() == 'windows':
+            goxdcr_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/goxdcr.*"
+        else:
+            goxdcr_log = "/opt/couchbase/var/lib/couchbase/logs/goxdcr.*"
+
+        count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
+                                             format(str, goxdcr_log))
+        NodeHelper._log.info(count)
+        shell.disconnect()
+        return int(count[0])
+
+    @staticmethod
     def rename_nodes(servers):
         """Rename server name from ip to their hostname
         @param servers: list of server objects.
@@ -476,6 +494,12 @@ class XDCRRemoteClusterRef:
 
     def get_rest_info(self):
         return self.__rest_info
+
+    def get_replication_for_bucket(self, bucket):
+        for replication in self.__replications:
+            if replication.get_src_bucket().name == bucket.name:
+                return replication
+        return None
 
     def __get_event_expected_results(self):
         expected_results = {
@@ -1973,7 +1997,7 @@ class CouchbaseCluster:
         for task in tasks:
             task.result(timeout)
 
-    def verify_items_count(self, timeout=180):
+    def verify_items_count(self, timeout=300):
         """Wait for actual bucket items count reach to the count on bucket kv_store.
         """
         active_key_count_passed = True
@@ -2863,15 +2887,15 @@ class XDCRNewBaseTest(unittest.TestCase):
                     _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
                     _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
                     while _count1 != _count2 and (time.time() - end_time) < 0:
-                        self.sleep(60, "Count in one cluster : {0} items, another : {1}. "
+                        self.sleep(60, "Bucket: {0}, count in one cluster : {1} items, another : {2}. "
                                        "Waiting for replication to catch up ..".
-                                   format(_count1, _count2))
-                    _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
-                    _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
-                    if _count1 != _count2:
-                        self.fail("not all items replicated in {0} sec for {1} "
-                                  "bucket. on source cluster:{2}, on dest:{3}".\
-                          format(timeout, bucket.name, _count1, _count2))
+                                   format(bucket.name, _count1, _count2))
+                        _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+                        _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+                        if _count1 != _count2:
+                            self.fail("not all items replicated in {0} sec for {1} "
+                                        "bucket. on source cluster:{2}, on dest:{3}".\
+                            format(timeout, bucket.name, _count1, _count2))
                     self.log.info("Replication caught up for bucket {0}: {1}"
                           .format(bucket.name, _count1))
 
