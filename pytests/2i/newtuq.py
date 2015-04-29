@@ -28,6 +28,15 @@ class QueryTests(BaseTestCase):
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.run_async = self.input.param("run_async", True)
         self.version = self.input.param("cbq_version", "git_repo")
+        for server in self.servers:
+            rest = RestConnection(server)
+            temp = rest.cluster_status()
+            self.log.info ("Initial status of {0} cluster is {1}".format(server.ip, temp['nodes'][0]['status']))
+            while (temp['nodes'][0]['status'] == 'warmup'):
+                self.log.info ("Waiting for cluster to become healthy")
+                self.sleep(5)
+                temp = rest.cluster_status()
+            self.log.info ("current status of {0}  is {1}".format(server.ip, temp['nodes'][0]['status']))
         if self.input.tuq_client and "client" in self.input.tuq_client:
             self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
         else:
