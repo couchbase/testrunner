@@ -421,13 +421,14 @@ class RQGTests(BaseTestCase):
         actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server)
 
     def _gen_expected_result(self, sql = ""):
-        sql_result = {}
+        sql_result = []
         try:
             client = MySQLClient(database = self.database, host = self.mysql_url,
             user_id = self.user_id, password = self.password)
             columns, rows = client._execute_query(query = sql)
             sql_result = self.client._gen_json_from_results(columns, rows)
             client._close_mysql_connection()
+            client = None
         except Exception, ex:
             self.log.info(ex)
         return sql_result
