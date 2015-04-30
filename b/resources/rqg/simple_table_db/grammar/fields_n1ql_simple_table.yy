@@ -3,14 +3,16 @@ query:
 
 select:
 	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY field_list |
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY field_list LIMIT 2 |
 	SELECT select_from FROM BUCKET_NAME WHERE complex_condition GROUP BY field_list |
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition GROUP BY field_list ORDER BY field_list ;
+	SELECT select_from FROM BUCKET_NAME WHERE complex_condition GROUP BY field_list ORDER BY field_list direction ;
 
 create_index:
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(FIELD_LIST) WHERE complex_condition |
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(complex_condition) |
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(USER_FIELD_LIST);
+
+direction:
+	ASC | DESC;
 
 select_from:
 	*  | field_list | DISTINCT(field);
