@@ -62,11 +62,11 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             self.get_checkpoint_call_history(node)
         self.num_pre_replicates_beginning, self.num_successful_prereps_beginning,self.num_failed_prereps_beginning = \
             self.get_pre_replicate_call_history(node)
-        self.log.info("From previous runs on {} : Num of commit calls : {} ; num of successful commits : {} \
-        num of failed commits : {}".format(node.ip, self.num_commit_for_chkpt_beginning, \
+        self.log.info("From previous runs on {0} : Num of commit calls : {1} ; num of successful commits : {2} \
+        num of failed commits : {3}".format(node.ip, self.num_commit_for_chkpt_beginning, \
         self.num_successful_chkpts_beginning,self.num_failed_chkpts_beginning))
-        self.log.info("From previous runs on {} : Num of pre_replicate calls : {} ; num of successful pre_replicates : {} \
-        num of failed pre_replicates : {}".format(node.ip,self.num_pre_replicates_beginning, \
+        self.log.info("From previous runs on {0} : Num of pre_replicate calls : {1} ; num of successful pre_replicates : {2} \
+        num of failed pre_replicates : {3}".format(node.ip,self.num_pre_replicates_beginning, \
                                             self.num_successful_prereps_beginning, self.num_failed_prereps_beginning ))
 
         self.num_commit_for_chkpt_calls_so_far = self.num_commit_for_chkpt_beginning
@@ -112,10 +112,10 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         rest_con = RestConnection(self.src_master)
         try:
             checkpoint_record = rest_con.get_recent_xdcr_vb_ckpt('default')
-            self.log.info("Checkpoint record : {}".format(checkpoint_record))
+            self.log.info("Checkpoint record : {0}".format(checkpoint_record))
             self.chkpt_records.append(checkpoint_record)
         except Exception as e:
-            raise XDCRCheckpointException("Error retrieving last checkpoint document - {}".format(e))
+            raise XDCRCheckpointException("Error retrieving last checkpoint document - {0}".format(e))
 
         failover_uuid = checkpoint_record["failover_uuid"]
         seqno = checkpoint_record["seqno"]
@@ -138,7 +138,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def validate_remote_failover_log(self, vb_uuid, high_seqno):
         # TAP based validation
         remote_uuid, remote_highseq = self.get_failover_log(self.dest_master)
-        self.log.info("Remote failover log = [{},{}]".format(remote_uuid, remote_highseq))
+        self.log.info("Remote failover log = [{0},{1}]".format(remote_uuid, remote_highseq))
         if int(remote_uuid) != int(vb_uuid):
             raise XDCRCheckpointException("vb_uuid in commitopaque is {0} while actual remote vb_uuid is {1}"
                                           .format(vb_uuid, remote_uuid))
@@ -157,14 +157,14 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             couchdb_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/couchdb.log"
         else:
             couchdb_log = "/opt/couchbase/var/lib/couchbase/logs/couchdb.log"
-        total_chkpt_calls, error = shell.execute_command("grep \"POST /_commit_for_checkpoint\" \"{}\" | wc -l"
+        total_chkpt_calls, error = shell.execute_command("grep \"POST /_commit_for_checkpoint\" \"{0}\" | wc -l"
                                                                      .format(couchdb_log))
-        total_successful_chkpts, error = shell.execute_command("grep \"POST /_commit_for_checkpoint 200\" \"{}\" | wc -l"
+        total_successful_chkpts, error = shell.execute_command("grep \"POST /_commit_for_checkpoint 200\" \"{0}\" | wc -l"
                                                                      .format(couchdb_log))
         self.log.info(int(total_successful_chkpts[0]))
         if self.num_successful_chkpts_so_far != 0:
             checkpoint_number = int(total_successful_chkpts[0]) - self.num_successful_chkpts_beginning
-            self.log.info("Checkpoint on this node (this run): {}".format(checkpoint_number))
+            self.log.info("Checkpoint on this node (this run): {0}".format(checkpoint_number))
         shell.disconnect()
         total_commit_failures = int(total_chkpt_calls[0]) - int(total_successful_chkpts[0])
         return int(total_chkpt_calls[0]), int(total_successful_chkpts[0]), total_commit_failures
@@ -178,9 +178,9 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             couchdb_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/couchdb.log"
         else:
             couchdb_log = "/opt/couchbase/var/lib/couchbase/logs/couchdb.log"
-        total_prerep_calls, error = shell.execute_command("grep \"POST /_pre_replicate\" \"{}\" | wc -l"
+        total_prerep_calls, error = shell.execute_command("grep \"POST /_pre_replicate\" \"{0}\" | wc -l"
                                                                      .format(couchdb_log))
-        total_successful_prereps, error = shell.execute_command("grep \"POST /_pre_replicate 200\" \"{}\" | wc -l"
+        total_successful_prereps, error = shell.execute_command("grep \"POST /_pre_replicate 200\" \"{0}\" | wc -l"
                                                                      .format(couchdb_log))
         shell.disconnect()
         total_prerep_failures = int(total_prerep_calls[0]) - int(total_successful_prereps[0])
@@ -192,16 +192,16 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         node = self.get_active_vb0_node(self.dest_master)
         total_commit_calls, success, failures = self.get_checkpoint_call_history(node)
         if success > self.num_successful_chkpts_so_far :
-            self.log.info("_commit_for_checkpoint was successful: last recorded success:{} , now :{}".
+            self.log.info("_commit_for_checkpoint was successful: last recorded success:{0} , now :{1}".
                           format(self.num_successful_chkpts_so_far, success))
             self.num_successful_chkpts_so_far = success
             return True
         elif failures > self.num_failed_chkpts_so_far:
-            self.log.info("_commit_for_checkpoint was NOT successful: last recorded failure :{} , now :{}".
+            self.log.info("_commit_for_checkpoint was NOT successful: last recorded failure :{0} , now :{1}".
                           format(self.num_failed_chkpts_so_far, failures))
             self.num_failed_chkpts_so_far = failures
         elif total_commit_calls == self.num_commit_for_chkpt_calls_so_far:
-            self.log.info("Checkpointing did not happen: last recorded call :{} , now :{}".
+            self.log.info("Checkpointing did not happen: last recorded call :{0} , now :{1}".
                           format(self.num_commit_for_chkpt_calls_so_far, total_commit_calls))
         return False
 
@@ -211,12 +211,12 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         node = self.get_active_vb0_node(self.dest_master)
         total_commit_calls, success, failures = self.get_pre_replicate_call_history(node)
         if success > self.num_successful_prereps_so_far :
-            self.log.info("_pre_replicate was successful: last recorded success :{} , now :{}".
+            self.log.info("_pre_replicate was successful: last recorded success :{0} , now :{1}".
                           format(self.num_successful_prereps_so_far, success))
             self.num_successful_prereps_so_far = success
             return True
         elif failures > self.num_failed_prereps_so_far:
-            self.log.error("_pre_replicate was NOT successful: last recorded failure :{} , now :{}".
+            self.log.error("_pre_replicate was NOT successful: last recorded failure :{0} , now :{1}".
                           format(self.num_failed_prereps_so_far, failures))
             self.num_failed_prereps_so_far = failures
         elif total_commit_calls == self.num_pre_replicate_calls_so_far:
@@ -231,8 +231,8 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             memc_client.set(key, exp=0, flags=0, val="dummy val")
             self.key_counter += 1
             self.keys_loaded.append(key)
-            self.log.info("Loaded key {} onto vb0 in {}".format(key, vb0_active_src_node.ip))
-            self.log.info ("deleted, flags, exp, rev_id, cas for key {} = {}".format(key, memc_client.getMeta(key)))
+            self.log.info("Loaded key {0} onto vb0 in {1}".format(key, vb0_active_src_node.ip))
+            self.log.info ("deleted, flags, exp, rev_id, cas for key {0} = {1}".format(key, memc_client.getMeta(key)))
         except MemcachedError as e:
             self.log.error(e)
 
@@ -246,9 +246,9 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             self.sleep(self._checkpoint_interval + 10)
             remote_vbuuid, remote_highseqno = self.get_failover_log(self.dest_master)
             local_vbuuid, local_highseqno = self.get_failover_log(self.src_master)
-            self.log.info("Local failover log: [{}, {}]".format(local_vbuuid,local_highseqno))
-            self.log.info("Remote failover log: [{}, {}]".format(remote_vbuuid,remote_highseqno))
-            self.log.info("################ New mutation:{} ##################".format(self.key_counter+1))
+            self.log.info("Local failover log: [{0}, {1}]".format(local_vbuuid,local_highseqno))
+            self.log.info("Remote failover log: [{0}, {1}]".format(remote_vbuuid,remote_highseqno))
+            self.log.info("################ New mutation:{0} ##################".format(self.key_counter+1))
             self.load_one_mutation_into_source_vb0(active_src_node)
             if local_highseqno == "0":
                 # avoid checking very first/empty checkpoint record
@@ -273,21 +273,21 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             trace_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/xdcr_trace.log"
         else:
             trace_log = "/opt/couchbase/var/lib/couchbase/logs/xdcr_trace.*"
-        num_404_errors_before_load, error = shell.execute_command("grep \"error,404\" {} | wc -l"
+        num_404_errors_before_load, error = shell.execute_command("grep \"error,404\" {0} | wc -l"
                                                                      .format(trace_log))
-        num_get_remote_bkt_failed_before_load, error = shell.execute_command("grep \"get_remote_bucket_failed\" \"{}\" | wc -l"
+        num_get_remote_bkt_failed_before_load, error = shell.execute_command("grep \"get_remote_bucket_failed\" \"{0}\" | wc -l"
                                                                      .format(trace_log))
-        self.log.info("404 errors: {}, get_remote_bucket_failed errors : {}".
+        self.log.info("404 errors: {0}, get_remote_bucket_failed errors : {1}".
                       format(num_404_errors_before_load, num_get_remote_bkt_failed_before_load))
         self.sleep(60)
-        self.log.info("################ New mutation:{} ##################".format(self.key_counter+1))
+        self.log.info("################ New mutation:{0} ##################".format(self.key_counter+1))
         self.load_one_mutation_into_source_vb0(active_src_node)
         self.sleep(5)
-        num_404_errors_after_load, error = shell.execute_command("grep \"error,404\" {} | wc -l"
+        num_404_errors_after_load, error = shell.execute_command("grep \"error,404\" {0} | wc -l"
                                                                      .format(trace_log))
-        num_get_remote_bkt_failed_after_load, error = shell.execute_command("grep \"get_remote_bucket_failed\" \"{}\" | wc -l"
+        num_get_remote_bkt_failed_after_load, error = shell.execute_command("grep \"get_remote_bucket_failed\" \"{0}\" | wc -l"
                                                                      .format(trace_log))
-        self.log.info("404 errors: {}, get_remote_bucket_failed errors : {}".
+        self.log.info("404 errors: {0}, get_remote_bucket_failed errors : {1}".
                       format(num_404_errors_after_load, num_get_remote_bkt_failed_after_load))
         shell.disconnect()
         if (int(num_404_errors_after_load[0]) > int(num_404_errors_before_load[0])) or \
@@ -295,7 +295,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             self.log.info("Checkpointing error-404 verified after dest failover/rebalance out")
             return True
         else:
-            self.log.info("404 errors on source node before last load : {}, after last node: {}".
+            self.log.info("404 errors on source node before last load : {0}, after last node: {1}".
                           format(int(num_404_errors_after_load[0]), int(num_404_errors_before_load[0])))
             self.log.error("Checkpoint 404 error NOT recorded at source following dest failover or rebalance!")
 
@@ -305,14 +305,14 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.log.info("Starting rebalance-out ...")
         # find which node contains vb0
         node = self.get_active_vb0_node(master)
-        self.log.info("Node {} contains active vb0".format(node))
+        self.log.info("Node {0} contains active vb0".format(node))
         if node == self.src_master:
             self.src_cluster.rebalance_out_master()
             if master == node and node in self.src_nodes:
                 self.src_nodes.remove(self.src_master)
             self.src_master = self.src_nodes[0]
             post_rebalance_uuid, _= self.get_failover_log(self.get_active_vb0_node(self.src_master))
-            self.log.info("Remote uuid before rebalance :{}, after rebalance : {}".
+            self.log.info("Remote uuid before rebalance :{0}, after rebalance : {1}".
                       format(pre_rebalance_uuid, post_rebalance_uuid))
             # source rebalance on tap?
             if RestConnection(self.src_master).get_internal_replication_type() == 'tap':
@@ -328,7 +328,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                 self.dest_nodes.remove(self.dest_master)
             self.dest_master = self.dest_nodes[0]
             post_rebalance_uuid, _= self.get_failover_log(self.get_active_vb0_node(self.dest_master))
-            self.log.info("Remote uuid before rebalance :{}, after rebalance : {}".
+            self.log.info("Remote uuid before rebalance :{0}, after rebalance : {1}".
                       format(pre_rebalance_uuid, post_rebalance_uuid))
             # destination rebalance on tap?
             if RestConnection(self.dest_master).get_internal_replication_type() == 'tap':
@@ -352,7 +352,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.log.info("Starting failover ...")
         # find which node contains vb0, we will failover that node
         node = self.get_active_vb0_node(master)
-        self.log.info("Node {} contains active vb0".format(node))
+        self.log.info("Node {0} contains active vb0".format(node))
         if node == self.src_master:
             self.src_cluster.failover_and_rebalance_master()
             if node in self.src_nodes:
@@ -368,7 +368,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             post_failover_uuid, _= self.get_failover_log(self.get_active_vb0_node(self.src_master))
         else:
             post_failover_uuid, _= self.get_failover_log(self.get_active_vb0_node(self.dest_master))
-        self.log.info("Remote uuid before failover :{}, after failover : {}".format(pre_failover_uuid, post_failover_uuid))
+        self.log.info("Remote uuid before failover :{0}, after failover : {1}".format(pre_failover_uuid, post_failover_uuid))
         self.assertTrue(int(pre_failover_uuid) != int(post_failover_uuid),"Remote vb_uuid is same before and after failover")
 
     """ Crash node, check uuid before and after crash """
@@ -376,7 +376,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         count = 0
         pre_crash_uuid, _ = self.get_failover_log(master)
         node = self.get_active_vb0_node(master)
-        self.log.info("Crashing node {} containing vb0 ...".format(node))
+        self.log.info("Crashing node {0} containing vb0 ...".format(node))
         shell = RemoteMachineShellConnection(node)
         shell.terminate_process(process_name='memcached')
         shell.disconnect()
@@ -387,7 +387,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                 count += 1
         self.sleep(10)
         post_crash_uuid, _=self.get_failover_log(master)
-        self.log.info("vb_uuid before crash :{}, after crash : {}".format(pre_crash_uuid, post_crash_uuid))
+        self.log.info("vb_uuid before crash :{0}, after crash : {1}".format(pre_crash_uuid, post_crash_uuid))
         self.assertTrue(int(pre_crash_uuid) != int(post_crash_uuid),
                         "vb_uuid is same before and after erlang crash - MB-11085 ")
 
@@ -405,7 +405,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.mutate_and_checkpoint(n=2)
         self.crash_node(self.src_master)
         if self.was_pre_rep_successful():
-            self.log.info("_pre_replicate following the source crash was successful: {}".
+            self.log.info("_pre_replicate following the source crash was successful: {0}".
                           format(self.num_successful_prereps_so_far))
             # the replicator might still be awake, ensure adequate time gap
             self.sleep(self._wait_timeout * 2)
@@ -447,7 +447,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.key_counter = 0
         self.keys_loaded = []
         if self.was_pre_rep_successful():
-            self.log.info("_pre_replicate following the source bucket recreate was successful: {}".
+            self.log.info("_pre_replicate following the source bucket recreate was successful: {0}".
                           format(self.num_successful_prereps_so_far))
             self.verify_next_checkpoint_passes()
         else:
@@ -521,11 +521,11 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                 self.log.info("deleted, flags, exp, rev_id, cas for key from Destination({0}) {1} = {2}"
                                .format(dest_node.ip, key, dest_meta))
                 if src_meta == dest_meta:
-                    self.log.info("RevID verification successful for key {}".format(key))
+                    self.log.info("RevID verification successful for key {0}".format(key))
                 else:
-                    self.fail("RevID verification failed for key {}".format(key))
+                    self.fail("RevID verification failed for key {0}".format(key))
             except MemcachedError:
-                self.log.error("Key {} is missing at destination".format(key))
+                self.log.error("Key {0} is missing at destination".format(key))
                 missing_keys = True
         if missing_keys:
             self.fail("Some keys are missing at destination")
