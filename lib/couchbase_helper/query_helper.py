@@ -50,6 +50,66 @@ class QueryHelper(object):
                 }
         return map
 
+    def _check_deeper_query_condition(self, query):
+        standard_tokens = ["UNION ALL","INTERSECT ALL", "EXCEPT ALL","UNION","INTERSECT","EXCEPT"]
+        for token in standard_tokens:
+            if token in query:
+                return True
+        return False
+
+    def _gen_sql_with_deep_selects(self, sql ="", table_map = {}, table_name= "simple_table"):
+        standard_tokens = ["UNION ALL","INTERSECT ALL", "EXCEPT ALL","UNION","INTERSECT","EXCEPT"]
+        query_list = []
+        new_sql = ""
+        print sql
+        for token in standard_tokens:
+            if token in sql:
+                new_sql = " "
+                sql_token_list  = self._gen_select_after_analysis(sql)
+                print sql_token_list
+                for sql_token in sql_token_list:
+                    if sql_token in standard_tokens:
+                        new_sql += sql_token +" "
+                    else:
+                        new_query = self._convert_sql_template_to_value(sql = sql_token, table_map = table_map, table_name=table_name)
+                        print new_query
+                        query_list.append(new_query)
+                        new_sql += new_query
+                return new_sql, query_list
+        else:
+            sql_token_list = []
+            new_sql = self._convert_sql_template_to_value(sql =sql, table_map = table_map, table_name=table_name)
+        return new_sql, query_list
+
+    def _gen_select_after_analysis(self, query):
+        sql_delimiter_list = [query]
+        standard_tokens = ["UNION ALL","INTERSECT ALL", "EXCEPT ALL","UNION","INTERSECT","EXCEPT"]
+        for token in standard_tokens:
+            if token in query:
+                sql_delimiter_list = self._gen_select_delimiter_list(sql_delimiter_list, token)
+        return sql_delimiter_list
+
+    def _gen_select_delimiter_list(self, query_token_list, delimit):
+        sql_delimiter_list = []
+        standard_tokens = ["UNION ALL","INTERSECT ALL", "EXCEPT ALL","UNION","INTERSECT","EXCEPT"]
+        for query in query_token_list:
+            if query.strip() not in standard_tokens:
+                tokens = query.split(delimit)
+                count = 0
+                while count < len(tokens):
+                    sql_delimiter_list.append(tokens[count])
+                    count += 1
+                    if count < len(tokens):
+                        sql_delimiter_list.append(delimit)
+                        sql_delimiter_list.append(tokens[count])
+                        count += 1
+                        if count < len(tokens):
+                            sql_delimiter_list.append(delimit)
+            else:
+                sql_delimiter_list.append(query)
+        return sql_delimiter_list
+
+
     def _add_explain_with_hints(self, sql, index_hint):
         sql_map = self._divide_sql(sql)
         select_from = sql_map["select_from"]
@@ -267,13 +327,14 @@ class QueryHelper(object):
         n1ql = self._convert_sql_template_to_value(sql =n1ql_template, table_map = table_map, table_name= table_name)
         sql = self._gen_n1ql_to_sql(n1ql)
         print sql
-        if not define_gsi_index:
-            map = {
+        map = {
                 "n1ql":n1ql,
                 "sql":sql,
                 "bucket":table_name,
-                "gsi_indexes":{}
+                "expected_result":None,
+                "indexes":{}
                     }
+        if not define_gsi_index:
             return map
         sql_map = self._divide_sql(n1ql)
         where_condition = sql_map["where_condition"]
@@ -297,12 +358,7 @@ class QueryHelper(object):
              table_name,self._convert_list(field_that_occur,"numeric"))
             create_index_name_with_expression = "CREATE INDEX {0} ON {1}({2}) USING GSI".format(
                 index_name_with_expression,table_name, where_condition)
-        map = {
-                "n1ql":n1ql,
-                "sql":sql,
-                "bucket":table_name,
-                "expected_result":None,
-                "indexes":
+        map["indexes"] = \
                     {
                         index_name_with_occur_fields_where:
                         {
@@ -323,11 +379,46 @@ class QueryHelper(object):
                             "definition":create_index_name_with_expression
                         }
                     }
-                }
         return map
 
+    def _convert_sql_template_to_value_for_secondary_indexes_sub_queries(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=True):
+        n1ql, query_list = self._gen_sql_with_deep_selects(sql =n1ql_template, table_map = table_map, table_name= table_name)
+        sql = self._gen_n1ql_to_sql(n1ql)
+        print sql
+        map = {
+                "n1ql":n1ql,
+                "sql":sql,
+                "expected_result":None,
+                "bucket":table_name,
+                "indexes":{}
+             }
+        if not define_gsi_index:
+            return map
+        for n1ql in query_list:
+            sql_map = self._divide_sql(n1ql)
+            where_condition = sql_map["where_condition"]
+            simple_create_index_n1ql_with_where = None
+            simple_create_index_n1ql_with_expression = None
+            fields = table_map.keys()
+            field_that_occur = []
+            if where_condition:
+                for field in fields:
+                    if field in where_condition:
+                        field_that_occur.append(field)
+            if where_condition:
+                index_name_fields_only = "{0}_index_name_fields_only_{1}".format(table_name,self._random_alphanumeric(4))
+                create_index_name_fields_only = \
+                "CREATE INDEX {0} ON {1}({2}) USING GSI".format(index_name_fields_only,
+                    table_name,self._convert_list(field_that_occur,"numeric"))
+                map["indexes"][index_name_fields_only] = \
+                    {
+                        "name":index_name_fields_only,
+                        "type":"GSI",
+                        "definition":create_index_name_fields_only
+                    }
+        return map
 
-    def _convert_sql_template_to_value(self, sql ="", table_map = {}, table_name= "BUCKET_NAME"):
+    def _convert_sql_template_to_value(self, sql ="", table_map = {}, table_name= "simple_table"):
         sql_map = self._divide_sql(sql)
         select_from = sql_map["select_from"]
         from_fields = sql_map["from_fields"]
@@ -335,6 +426,8 @@ class QueryHelper(object):
         order_by = sql_map["order_by"]
         group_by = sql_map["group_by"]
         new_sql = "SELECT "
+        if "(SELECT" in sql or "( SELECT":
+            new_sql = "(SELECT "
         if select_from:
             new_sql += self._covert_fields_template_to_value(select_from, table_map)+" FROM "
         if from_fields:
@@ -596,6 +689,8 @@ class QueryHelper(object):
 if __name__=="__main__":
 
     helper = QueryHelper()
+    sql = helper._gen_select_after_analysis("q1 EXCEPT q2 EXCEPT q9")
+    print sql
     #helper._convert_n1ql_list_to_sql("/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_examples/n1ql_10000_queries_for_simple_table.txt")
     #helper._convert_sql_to_nql_dump_in_file("/Users/parag/fix_testrunner/testrunner/b/resources/flightstats_mysql/inner_join_flightstats_n1ql_queries.txt")
     #print helper._gen_sql_to_nql("SELECT SUM(  a1.distance) FROM `ontime_mysiam`  AS a1 INNER JOIN `aircraft`  AS a2 ON ( a2 .`tail_num` = a1 .`tail_num` ) INNER JOIN `airports`  AS a3 ON ( a1 . `origin` = a3 .`code` ) ")

@@ -230,8 +230,12 @@ class MySQLClient(object):
         n1ql_queries = self._read_from_file(file_path)
         for n1ql_query in n1ql_queries:
             check = True
-            map=helper._convert_sql_template_to_value_for_secondary_indexes(
-                n1ql_query, table_map = table_map, table_name = table_name, define_gsi_index= define_gsi_index)
+            if not helper._check_deeper_query_condition(n1ql_query):
+                map=helper._convert_sql_template_to_value_for_secondary_indexes(
+                 n1ql_query, table_map = table_map, table_name = table_name, define_gsi_index= define_gsi_index)
+            else:
+                map=helper._convert_sql_template_to_value_for_secondary_indexes_sub_queries(
+                    n1ql_query, table_map = table_map, table_name = table_name, define_gsi_index= define_gsi_index)
             if gen_expected_result:
                 query = map["sql"]
                 try:
@@ -290,8 +294,8 @@ if __name__=="__main__":
 
     #client._gen_data_simple_table()
     #query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
-    client.dump_database()
-    #client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt", gen_expected_result= False)
+    #client.dump_database()
+    client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt", gen_expected_result= False)
     #with open("./output.txt") as f:
     #    content = f.readlines()
     #for data in content:
