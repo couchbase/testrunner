@@ -133,7 +133,7 @@ class RQGTests(BaseTestCase):
         self.concurreny_count= self.input.param("concurreny_count",10)
         self.total_queries= self.input.param("total_queries",None)
         self.run_query_without_index_hint= self.input.param("run_query_without_index_hint",True)
-        self.run_query_with_primary= self.input.param("run_query_with_primary",True)
+        self.run_query_with_primary= self.input.param("run_query_with_primary",False)
         self.run_query_with_secondary= self.input.param("run_query_with_secondary",False)
         self.run_explain_with_hints= self.input.param("run_explain_with_hints",False)
         self.n1ql_file_path= self.input.param("test_file_path","default")
@@ -205,9 +205,8 @@ class RQGTests(BaseTestCase):
         result_run["test_case_number"] = test_case_number
         if  expected_result == None:
             expected_result = self._gen_expected_result(sql_query)
-        if self.run_query_without_index_hint and self.use_secondary_index:
-            query_index_run = self._run_queries_and_verify(n1ql_query = n1ql_query , sql_query = sql_query, expected_result = expected_result)
-            result_run["run_query_without_index_hint"] = query_index_run
+        query_index_run = self._run_queries_and_verify(n1ql_query = n1ql_query , sql_query = sql_query, expected_result = expected_result)
+        result_run["run_query_without_index_hint"] = query_index_run
         if self.run_query_with_primary:
             index_info = {"name":"`#primary`","type":"GSI"}
             query = self.query_helper._add_index_hints_to_query(n1ql_query, [index_info])
