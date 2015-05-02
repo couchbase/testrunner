@@ -50,6 +50,50 @@ class QueryHelper(object):
                 }
         return map
 
+    def _gen_select_tables_info(self, sql = "", table_map = {}):
+        count = 0
+        table_name_list = table_map.keys()
+        prev_table_list = []
+        standard_tokens = ["INNER JOIN","LEFT JOIN"]
+        new_sub_query = ""
+        sql_token_list  = self._gen_select_after_analysis(sql, standard_tokens = standard_tokens)
+        if len(sql_token_list) == 1:
+            table_name = random.choice(table_name_list)
+            table_name_alias = ""
+            if "alias_name" in table_map[table_name].keys():
+                table_name_alias = table_map[table_name]["alias_name"]
+            bucket_string = table_name
+            if table_name_alias != "":
+                table_name_alias = table_map[table_name]["alias_name"]
+                bucket_string = table_name_list[0]+"  "+table_name_alias
+            return sql.replace("BUCKET_NAME",bucket_string),{table_name:table_map[table_name]}
+        for token in sql_token_list:
+            if token.strip() not in standard_tokens:
+                choice_list = list(set(table_name_list)  - set(prev_table_list))
+                if len(choice_list) > 0:
+                    table_name = random.choice(choice_list)
+                    table_name_alias = table_map[table_name]["alias_name"]
+                else:
+                    table_name = table_name_list[0]
+                    table_name_alias = table_map[table_name]["alias_name"]+self._random_alphabet_string()
+                primary_key_field = table_map[table_name]["primary_key_field"]
+                data = token
+                data = data.replace("BUCKET_NAME",(table_name+" "+table_name_alias))
+                if "PREVIOUS_TABLE" in token:
+                    previous_table_name = random.choice(prev_table_list)
+                    previous_table_name_alias = table_map[previous_table_name]["alias_name"]
+                    data = data.replace("PREVIOUS_TABLE.FIELD",(previous_table_name_alias+"."+table_map[previous_table_name]["primary_key_field"]))
+                    data = data.replace("CURRENT_TABLE.FIELD",(table_name_alias+"."+table_map[table_name]["primary_key_field"]))
+                new_sub_query +=  data + " "
+                prev_table_list.append(table_name)
+            else:
+                new_sub_query += token+" "
+        new_map ={}
+        for key in table_map.keys():
+            if key in prev_table_list:
+                new_map[key] = table_map[key]
+        return new_sub_query, new_map
+
     def _check_deeper_query_condition(self, query):
         standard_tokens = ["UNION ALL","INTERSECT ALL", "EXCEPT ALL","UNION","INTERSECT","EXCEPT"]
         for token in standard_tokens:
@@ -65,33 +109,32 @@ class QueryHelper(object):
         for token in standard_tokens:
             if token in sql:
                 new_sql = " "
-                sql_token_list  = self._gen_select_after_analysis(sql)
-                print sql_token_list
+                sql_token_list  = self._gen_select_after_analysis(sql, standard_tokens = standard_tokens)
                 for sql_token in sql_token_list:
                     if sql_token in standard_tokens:
                         new_sql += sql_token +" "
                     else:
-                        new_query = self._convert_sql_template_to_value(sql = sql_token, table_map = table_map, table_name=table_name)
+                        new_query, table_map = self._convert_sql_template_to_value(sql = sql_token, table_map = table_map, table_name=table_name)
                         print new_query
                         query_list.append(new_query)
                         new_sql += new_query
-                return new_sql, query_list
-        else:
-            sql_token_list = []
-            new_sql = self._convert_sql_template_to_value(sql =sql, table_map = table_map, table_name=table_name)
-        return new_sql, query_list
+                return new_sql, query_list, table_map
+        new_sql, table_map  = self._convert_sql_template_to_value(sql =sql, table_map = table_map, table_name=table_name)
+        return new_sql, query_list, table_map
 
-    def _gen_select_after_analysis(self, query):
+    def _gen_select_after_analysis(self, query, standard_tokens = None):
         sql_delimiter_list = [query]
-        standard_tokens = ["UNION ALL","INTERSECT ALL", "EXCEPT ALL","UNION","INTERSECT","EXCEPT"]
+        if standard_tokens == None:
+            standard_tokens = ["UNION ALL","INTERSECT ALL", "EXCEPT ALL","UNION","INTERSECT","EXCEPT"]
         for token in standard_tokens:
             if token in query:
                 sql_delimiter_list = self._gen_select_delimiter_list(sql_delimiter_list, token)
         return sql_delimiter_list
 
-    def _gen_select_delimiter_list(self, query_token_list, delimit):
+    def _gen_select_delimiter_list(self, query_token_list, delimit, standard_tokens = None):
         sql_delimiter_list = []
-        standard_tokens = ["UNION ALL","INTERSECT ALL", "EXCEPT ALL","UNION","INTERSECT","EXCEPT"]
+        if standard_tokens == None:
+            standard_tokens = ["UNION ALL","INTERSECT ALL", "EXCEPT ALL","UNION","INTERSECT","EXCEPT"]
         for query in query_token_list:
             if query.strip() not in standard_tokens:
                 tokens = query.split(delimit)
@@ -199,17 +242,34 @@ class QueryHelper(object):
 
     def _search_field(self, types, map):
         list_types =[]
-        for key in map.keys():
-            if self._search_presence_of_type(map[key]["type"],types):
-                list_types.append(key)
+        table_name = random.choice(map.keys())
+        table_name_alias = None
+        if "alias_name" in map[table_name].keys():
+            table_name_alias = map[table_name]["alias_name"]
+        for key in map[table_name]["fields"].keys():
+            if self._search_presence_of_type(map[table_name]["fields"][key]["type"],types):
+                key_name = key
+                if table_name_alias:
+                    key_name = table_name_alias+"."+key
+                list_types.append(key_name)
         key =random.choice(list_types)
-        return key, map[key]["distinct_values"]
+        key_name = key
+        if "." in key:
+            key_name = key.split(".")[1]
+        return key, map[table_name]["fields"][key_name]["distinct_values"]
 
     def _search_fields_of_given_type(self, types, map):
         list_types =[]
-        for key in map.keys():
-            if self._search_presence_of_type(map[key]["type"],types):
-                list_types.append(key)
+        table_name = random.choice(map.keys())
+        table_name_alias = None
+        if "alias_name" in map[table_name].keys():
+            table_name_alias = map[table_name]["alias_name"]
+        for key in map[table_name]["fields"].keys():
+            if self._search_presence_of_type(map[table_name]["fields"][key]["type"],types):
+                key_name = key
+                if table_name_alias:
+                    key_name = table_name_alias+"."+key
+                list_types.append(key_name)
         return list_types
 
     def _search_presence_of_type(self, type, list):
@@ -323,14 +383,14 @@ class QueryHelper(object):
             new_sql = new_sql.replace("DATETIME_FIELD", random.choice(datetime_field_names))
         return new_sql
 
-    def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=True):
-        n1ql = self._convert_sql_template_to_value(sql =n1ql_template, table_map = table_map, table_name= table_name)
-        sql = self._gen_n1ql_to_sql(n1ql)
+    def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=False):
+        sql, table_map = self._convert_sql_template_to_value(sql =n1ql_template, table_map = table_map, table_name= table_name)
+        n1ql = self._gen_sql_to_nql(sql)
         print sql
         map = {
                 "n1ql":n1ql,
                 "sql":sql,
-                "bucket":table_name,
+                "bucket":str(",".join(table_map.keys())),
                 "expected_result":None,
                 "indexes":{}
                     }
@@ -340,7 +400,9 @@ class QueryHelper(object):
         where_condition = sql_map["where_condition"]
         simple_create_index_n1ql_with_where = None
         simple_create_index_n1ql_with_expression = None
-        fields = table_map.keys()
+        table_name = random.choice(table_map.keys())
+        map["bucket"] = table_name
+        fields = table_map[table_name]["fields"].keys()
         field_that_occur = []
         if where_condition:
             for field in fields:
@@ -382,9 +444,10 @@ class QueryHelper(object):
         return map
 
     def _convert_sql_template_to_value_for_secondary_indexes_sub_queries(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=True):
-        n1ql, query_list = self._gen_sql_with_deep_selects(sql =n1ql_template, table_map = table_map, table_name= table_name)
-        sql = self._gen_n1ql_to_sql(n1ql)
+        sql, query_list, table_map = self._gen_sql_with_deep_selects(sql =n1ql_template, table_map = table_map, table_name= table_name)
+        n1ql = self._gen_sql_to_nql(sql)
         print sql
+        table_name = table_map.keys()[0]
         map = {
                 "n1ql":n1ql,
                 "sql":sql,
@@ -397,9 +460,7 @@ class QueryHelper(object):
         for n1ql in query_list:
             sql_map = self._divide_sql(n1ql)
             where_condition = sql_map["where_condition"]
-            simple_create_index_n1ql_with_where = None
-            simple_create_index_n1ql_with_expression = None
-            fields = table_map.keys()
+            fields = table_map[table_name]["fields"].keys()
             field_that_occur = []
             if where_condition:
                 for field in fields:
@@ -425,8 +486,9 @@ class QueryHelper(object):
         where_condition = sql_map["where_condition"]
         order_by = sql_map["order_by"]
         group_by = sql_map["group_by"]
+        from_fields, table_map = self._gen_select_tables_info(from_fields, table_map)
         new_sql = "SELECT "
-        if "(SELECT" in sql or "( SELECT":
+        if "(SELECT" in sql or "( SELECT" in sql:
             new_sql = "(SELECT "
         if select_from:
             new_sql += self._covert_fields_template_to_value(select_from, table_map)+" FROM "
@@ -438,7 +500,7 @@ class QueryHelper(object):
             new_sql += " GROUP BY "+self._covert_fields_template_to_value(group_by, table_map)+" "
         if order_by:
             new_sql += " ORDER BY "+self._covert_fields_template_to_value(order_by, table_map)+" "
-        return new_sql
+        return new_sql, table_map
 
     def _convert_condition_template_to_value(self, sql ="", table_map = {}):
         tokens = sql.split(" ")
@@ -597,6 +659,41 @@ class QueryHelper(object):
                     new_sql += token+space
         return new_sql
 
+    def _gen_sql_to_n1ql_braces(self, n1ql):
+        check_keys=False
+        check_first_paran = False
+        space = " "
+        new_sql = ""
+        value = ""
+        #print "Analyzing for : %s" % sql
+        for token in n1ql.split(" "):
+            if (not check_keys) and (token == "IN" or token == "in"):
+                check_keys= True
+                new_sql += " "
+            elif not check_keys:
+                new_sql += token+space
+            if check_keys:
+                if "(" in token:
+                    val = token.replace("(","[")
+                    if ")" in token:
+                        val = val.replace(")","]")
+                        check_keys = False
+                    new_sql += val+space
+                elif ")" in token:
+                    val=""
+                    count = 0
+                    for vals in token:
+                        if count == 0 and vals == ")":
+                            val += "]"
+                        else:
+                            val += vals
+                        count += 1
+                    check_keys = False
+                    new_sql += val+space
+                else:
+                    new_sql += token+space
+        return new_sql
+
     def _gen_sql_to_nql(self, sql):
         check_keys=False
         check_first_paran = False
@@ -628,7 +725,7 @@ class QueryHelper(object):
                     check_keys = False
                     check_first_paran = False
                     value = ""
-        return new_sql
+        return self._gen_sql_to_n1ql_braces(new_sql)
 
     def  _read_from_file(self, file_path):
         with open(file_path) as f:

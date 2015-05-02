@@ -56,7 +56,7 @@ numeric_not_equals_condition:
 	numeric_field != numeric_value ;
 
 numeric_in_conidtion:
-	numeric_field IN [ numeric_field_list ];
+	numeric_field IN ( numeric_field_list );
 
 numeric_between_condition:
 	NUMERIC_FIELD BETWEEN LOWER_BOUND_VALUE and UPPER_BOUND_VALUE;
@@ -126,7 +126,7 @@ string_is_not_null:
 	string_field IS NOT NULL;
 
 string_in_conidtion:
-	string_field IN [ string_field_list ];
+	string_field IN ( string_field_list );
 
 string_is_null:
 	string_field IS NULL;
