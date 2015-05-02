@@ -984,7 +984,7 @@ class CouchbaseCliTest(CliBaseTest):
                     options=options, cluster_host="localhost", user="Administrator", password="password")
             output = self.del_runCmd_value(output)
             self.assertEqual(output[0], "ERROR: unable to create group group2 (400) Bad Request")
-            self.assertEqual(output[1], "{u'name':u'already exists'}")
+            self.assertEqual(output[1], '{"name":"already exists"}')
             # rename group test
             options = " --rename=group3 --group-name=group2"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
