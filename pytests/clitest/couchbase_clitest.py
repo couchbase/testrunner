@@ -1003,7 +1003,7 @@ class CouchbaseCliTest(CliBaseTest):
                     options=options, cluster_host="localhost", user="Administrator", password="password")
             output = self.del_runCmd_value(output)
             self.assertEqual(output[0], "ERROR: unable to delete group Group 1 (400) Bad Request")
-            self.assertEqual(output[1], '{"_": "group is not empty"}')
+            self.assertEqual(output[1], '{"_":"group is not empty"}')
             # delete non-existing group
             options = " --delete --group-name=groupn"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
@@ -1039,7 +1039,7 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                     options=options, cluster_host="localhost", user="Administrator", password="password")
             self.assertEqual(output[0], "ERROR: unable to delete group Group 1 (400) Bad Request")
-            self.assertEqual(output[2], '{"_": "group is not empty"}')
+            self.assertEqual(output[2], '{"_":"group is not empty"}')
             # delete non-existing group
             options = " --delete --group-name=groupn"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
