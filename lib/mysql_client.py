@@ -19,7 +19,6 @@ class MySQLClient(object):
         self.user_id = user_id
         self.password = password
         self._set_mysql_client(self.database , self.host , self.user_id , self.password)
-        self.table_key_type_map = self._get_pkey_map_for_tables_with_primary_key_column()
 
     def _reset_client_connection(self):
         self._reset_client_connection()
@@ -82,8 +81,6 @@ class MySQLClient(object):
         return data
 
     def _convert_to_mysql_json_compatible_val(self, value, type):
-        if not hasattr(self, 'table_key_type_map'):
-            return value
         if isinstance(value, float):
             return round(value, 0)
         if "tiny" in str(type):
@@ -162,12 +159,22 @@ class MySQLClient(object):
     def _get_pkey_map_for_tables_with_primary_key_column(self):
         target_map = {}
         map = self._get_tables_information()
+        number_of_tables = len(map.keys())
+        count = 1
         for table_name in map.keys():
             target_map[table_name] ={}
             field_map = {}
+            primary_key_field = "primary_key_field"
             for field_info in map[table_name]:
                 field_map[field_info['Field']] ={"type":field_info['Type']}
-            target_map[table_name] = field_map
+                if field_info['Key'] == "PRI":
+                    primary_key_field = field_info['Field']
+            target_map[table_name]["fields"] = field_map
+            target_map[table_name]["primary_key_field"] = primary_key_field
+            if number_of_tables > 1:
+                table_name_alias = "t_"+str(count)
+                target_map[table_name]["alias_name"] = table_name_alias
+            count += 1
         return target_map
 
     def _get_pkey_map_for_tables_without_primary_key_column(self):
@@ -192,23 +199,21 @@ class MySQLClient(object):
 
     def _get_values_with_type_for_fields_in_table(self):
         map = self._get_field_with_types_list_map_for_tables()
-        gen_map = {}
+        gen_map = self._get_pkey_map_for_tables_with_primary_key_column()
         for table_name in map.keys():
-            gen_map[table_name] = {}
             for vals in map[table_name]:
                 field_name = vals.keys()[0]
                 value_list = self._get_distinct_values_for_fields(table_name, field_name)
-                gen_map[table_name][field_name] = {"type": vals[field_name], "distinct_values": sorted(value_list)}
-                #print "For table {0} and field {1} we have read {2} distinct values ".format(table_name, field_name, len(value_list))
+                gen_map[table_name]["fields"][field_name]["distinct_values"]= sorted(value_list)
         return gen_map
 
     def _gen_data_simple_table(self, number_of_rows = 1000, table_name = "simple_table"):
         helper = QueryHelper()
         map = self._get_pkey_map_for_tables_without_primary_key_column()
-        table_map = map[table_name]
-        for x in range(0, number_of_rows):
-            statement = helper._generate_insert_statement("simple_table", table_map)
-            self._insert_execute_query(statement)
+        for table_name in map.keys():
+            for x in range(0, number_of_rows):
+                statement = helper._generate_insert_statement(table_name, map[table_name])
+                self._insert_execute_query(statement)
 
     def _gen_queries_from_template(self, query_path = "./queries.txt", table_name = "simple_table"):
         helper = QueryHelper()
@@ -279,8 +284,12 @@ class MySQLClient(object):
 
     def _gen_gsi_index_info_from_n1ql_query_template(self, query_path = "./queries.txt", output_file_path = "./output.txt",  table_name = "simple_table", gen_expected_result= True):
         map = self._get_values_with_type_for_fields_in_table()
-        table_map = map[table_name]
+        table_map = map
         self._convert_template_query_info_with_gsi(query_path, gsi_index_file_path = output_file_path, table_map = table_map, table_name = table_name, gen_expected_result = gen_expected_result)
+
+    def _gen_gsi_index_info_from_n1ql_query_template(self, query_path = "./queries.txt", output_file_path = "./output.txt",  table_name = "simple_table", gen_expected_result= True):
+        map = self._get_values_with_type_for_fields_in_table()
+        self._convert_template_query_info_with_gsi(query_path, gsi_index_file_path = output_file_path, table_map = map, gen_expected_result = gen_expected_result)
 
 if __name__=="__main__":
     import json
@@ -292,10 +301,10 @@ if __name__=="__main__":
     #print dict
 
 
-    #client._gen_data_simple_table()
+    client._gen_data_simple_table()
     #query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
-    #client.dump_database()
-    client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt", gen_expected_result= False)
+    client.dump_database()
+    #client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt", gen_expected_result= False)
     #with open("./output.txt") as f:
     #    content = f.readlines()
     #for data in content:
