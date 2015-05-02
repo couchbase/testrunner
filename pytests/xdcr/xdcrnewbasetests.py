@@ -503,7 +503,7 @@ class XDCRRemoteClusterRef:
 
     def __get_event_expected_results(self):
         expected_results = {
-                "real_userid:source": "internal",
+                "real_userid:source": "ns_server",
                 "real_userid:user": self.__src_cluster.get_master_node().rest_username,
                 "cluster_name": self.__name,
                 "cluster_hostname": "%s:%s" % (self.__dest_cluster.get_master_node().ip, self.__dest_cluster.get_master_node().port),
@@ -690,7 +690,7 @@ class XDCReplication:
 
     def __get_event_expected_results(self):
         expected_results = {
-                "real_userid:source": "internal",
+                "real_userid:source": "ns_server",
                 "real_userid:user": self.__src_cluster.get_master_node().rest_username,
                 "local_cluster_name": "%s:%s" % (self.__src_cluster.get_master_node().ip, self.__src_cluster.get_master_node().port),
                 "source_bucket_name": self.__from_bucket.name,
@@ -1913,7 +1913,7 @@ class CouchbaseCluster:
         RestConnection(self.__master_node).set_internalSetting(param, value)
 
         expected_results = {
-            "real_userid:source": "internal",
+            "real_userid:source": "ns_server",
             "real_userid:user": self.__master_node.rest_username,
             "local_cluster_name": "",  # TODO
             "updated_settings": {param: value}
@@ -2389,6 +2389,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._active_resident_threshold = \
             self._input.param("active_resident_threshold", 100)
         CHECK_AUDIT_EVENT.CHECK = self._input.param("verify_audit", 0)
+        self._max_verify = self._input.param("max_verify", 100000)
 
     def __cleanup_previous(self):
         for cluster in self.__cb_clusters:
@@ -2771,7 +2772,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 repl.get_dest_cluster().get_master_node(),
                 repl.get_src_bucket(),
                 repl.get_src_bucket().kvs[kv_store],
-                repl.get_dest_bucket().kvs[kv_store])
+                repl.get_dest_bucket().kvs[kv_store],
+                max_verify=self._max_verify)
             tasks.append(task_info)
         for task in tasks:
             if self._dgm_run:
@@ -2937,8 +2939,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     src_active_passed, src_replica_passed = src_cluster.verify_items_count()
                     dest_active_passed, dest_replica_passed = dest_cluster.verify_items_count()
 
-                    src_cluster.verify_data()
-                    dest_cluster.verify_data()
+                    src_cluster.verify_data(max_verify=self._max_verify)
+                    dest_cluster.verify_data(max_verify=self._max_verify)
                 except Exception as e:
                     self.log.error(e)
                 finally:

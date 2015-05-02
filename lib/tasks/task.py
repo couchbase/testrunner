@@ -1423,7 +1423,7 @@ class BatchedValidateDataTask(GenericLoadingTask):
 
 
 class VerifyRevIdTask(GenericLoadingTask):
-    def __init__(self, src_server, dest_server, bucket, src_kv_store, dest_kv_store, max_err_count=200000):
+    def __init__(self, src_server, dest_server, bucket, src_kv_store, dest_kv_store, max_err_count=200000, max_verify=None):
         GenericLoadingTask.__init__(self, src_server, bucket, src_kv_store)
         from memcached.helper.data_helper import VBucketAwareMemcached as SmartClient
         self.client_src = SmartClient(RestConnection(src_server), bucket)
@@ -1433,6 +1433,10 @@ class VerifyRevIdTask(GenericLoadingTask):
         self.num_valid_keys = len(self.src_valid_keys)
         self.num_deleted_keys = len(self.src_deleted_keys)
         self.keys_not_found = {self.client.rest.ip: [], self.client_dest.rest.ip: []}
+        if max_verify:
+            self.max_verify = max_verify
+        else:
+            self.max_verify = self.num_valid_keys + self.num_deleted_keys
         self.itr = 0
         self.not_matching_filter_keys = 0
         self.err_count = 0
@@ -1442,7 +1446,9 @@ class VerifyRevIdTask(GenericLoadingTask):
         self.log.info("RevID verification: in progress for %s ..." % bucket.name)
 
     def has_next(self):
-        if self.itr < (self.num_valid_keys + self.num_deleted_keys) and self.err_count < self.max_err_count:
+        if self.itr < (self.num_valid_keys + self.num_deleted_keys) and \
+                        self.err_count < self.max_err_count and \
+                        self.itr < self.max_verify:
             return True
         self.log.info("RevId Verification : {0} existing items have been verified"
                       .format(self.itr if self.itr < self.num_valid_keys else self.num_valid_keys))
@@ -1530,7 +1536,7 @@ class VerifyRevIdTask(GenericLoadingTask):
                     .format(meta_key, src_meta_data[meta_key],
                         dest_meta_data[meta_key], self.err_count))
 
-        if self.err_count - prev_error_count > 0:
+        if self.err_count - prev_error_count > 0 and self.err_count < 200:
             self.log.error("===== Verifying rev_ids failed for key: {0} =====".format(key))
             [self.log.error(err) for err in err_msg]
             self.log.error("Source meta data: %s" % src_meta_data)
