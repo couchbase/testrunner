@@ -753,7 +753,7 @@ class ServerTestControls():
 class BucketTestsControls():
     def __init__(self, driver):
         self.helper = ControlsHelper(driver)
-        self.create_bucket_btn = self.helper.find_control('bucket','new_create_btn')
+        self.create_bucket_btn = self.helper.find_control('bucket', 'new_create_btn')
 
     def bucket_pop_up(self, parent='create_bucket_pop_up'):
         self.parent = parent
@@ -1732,7 +1732,11 @@ class DdocViewHelper():
 
     def edit_view(self, view_name):
         self.tc.log.info('trying edit view %s' % view_name)
-        self.controls.view_row(view_name).edit_btn.click()
+        for i in xrange(3):
+            try:
+                self.controls.view_row(view_name).edit_btn.click()
+            except:
+                pass
         self.wait.until(lambda fn:
                         self.controls.view_map_reduce_fn().map_fn.is_displayed(),
                         "Edit view screen is not opened")
