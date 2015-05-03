@@ -40,13 +40,7 @@ class OptionsTests(QueryTests):
         self._start_command_line_query(self.master, options='-readonly=true')
         for bucket in self.buckets:
             self.query = 'INSERT into %s (key, value) VALUES ("%s", %s)' % (bucket.name, 'key1', 'value')
-            try:
-                actual_result = self.run_cbq_query()
-            except Exception, ex:
-                self.assertTrue(str(ex).find('request is read-only') != -1, 'Server is not readonly')
-                self.log.info('Read only is on')
-            else:
-                self.fail('server is not read-only')
+            actual_result = self.run_cbq_query()
 
     def test_namespace(self):
         self.shell.execute_command("killall cbq-engine")
@@ -117,13 +111,7 @@ class OptionsRestTests(QueryTests):
     def test_readonly(self):
        for bucket in self.buckets:
             self.query = 'INSERT into %s (key, value) VALUES ("%s", "%s")' % (bucket.name, 'key3', 'value3')
-            try:
-                actual_result = self.run_cbq_query(query_params= {'readonly':True})
-            except Exception, ex:
-                self.assertTrue(str(ex).find('request is read-only') != -1, 'Server is not readonly')
-                self.log.info('Read only is on')
-            else:
-                self.fail('server is not read-only')
+            actual_result = self.run_cbq_query(query_params= {'readonly':True})
 
     def test_signature(self):
         for bucket in self.buckets:

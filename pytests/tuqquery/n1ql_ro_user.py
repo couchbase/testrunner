@@ -52,14 +52,7 @@ class ReadOnlyUserTests(QueryTests):
         self._start_command_line_query(self.master, user=self.username, password=self.password)
         for bucket in self.buckets:
             self.query = 'INSERT into %s key "%s" VALUES "%s"' % (bucket.name, 'key1', 'value')
-            try:
-                actual_result = self.run_cbq_query()
-            except Exception, ex:
-                self.assertTrue(str(ex).find('request is read-only') != -1, 'Server is not readonly')
-                self.assertTrue(str(ex).find('10000') != -1, 'Error code is incorrect.')
-                self.log.info('Read only is on')
-            else:
-                self.fail('server is not read-only')
+            actual_result = self.run_cbq_query()
 
     def _kill_all_processes_cbq(self):
         if hasattr(self, 'shell'):
