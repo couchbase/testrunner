@@ -96,6 +96,8 @@ class ConcurrentTests(QueryTests):
                                                                                fields.index(attr),
                                                                                bucket.name, attr, self.index_type)
                     self.run_cbq_query()
+                    self._wait_for_index_online(bucket, '%s_%s_%s' % (index_name_prefix, ind_name,
+                                                        fields.index(attr)))
                     created_indexes.append('%s_%s_%s' % (index_name_prefix, ind_name,
                                                         fields.index(attr)))
             for ind in created_indexes:
