@@ -3,6 +3,7 @@ import time
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from couchbase_helper.cluster import Cluster
+from membase.api.rest_client import RestConnection
 from uibasetest import *
 from uisampletests import Bucket, NavigationHelper, BucketHelper
 
@@ -22,6 +23,7 @@ class XDCRTests(BaseUITestCase):
         super(XDCRTests, self).tearDown()
         if hasattr(self, 'driver') and self.driver:
             self._deinitialize_api()
+            self._initialize_nodes()
 
     def _deinitialize_api(self):
         for server in self.servers:
