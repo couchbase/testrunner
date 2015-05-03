@@ -24,10 +24,20 @@ class RQGTests(BaseTestCase):
         self.database= self.input.param("database","flightstats")
         self.user_id= self.input.param("user_id","root")
         self.password= self.input.param("password","")
+        self.reset_database = self.input.param("reset_database",True)
+        self.items = self.input.param("items",1000)
         self.mysql_url= self.input.param("mysql_url","localhost")
         self.gen_secondary_indexes= self.input.param("gen_secondary_indexes",False)
         self.gen_gsi_indexes= self.input.param("gen_gsi_indexes",True)
         self.n1ql_server = self.get_nodes_from_services_map(service_type = "n1ql")
+        self.create_all_indexes= self.input.param("create_all_indexes",False)
+        self.concurreny_count= self.input.param("concurreny_count",10)
+        self.total_queries= self.input.param("total_queries",None)
+        self.run_query_without_index_hint= self.input.param("run_query_without_index_hint",True)
+        self.run_query_with_primary= self.input.param("run_query_with_primary",False)
+        self.run_query_with_secondary= self.input.param("run_query_with_secondary",False)
+        self.run_explain_with_hints= self.input.param("run_explain_with_hints",False)
+        self.test_file_path= self.input.param("test_file_path","default")
         self.query_helper = QueryHelper()
         self._initialize_n1ql_helper()
         if self.initial_loading_to_cb:
@@ -35,6 +45,10 @@ class RQGTests(BaseTestCase):
 
     def tearDown(self):
         super(RQGTests, self).tearDown()
+        if hasattr(self, 'reset_database'):
+            self.skip_cleanup= self.input.param("skip_cleanup",False)
+            if self.use_mysql and self.reset_database and (not self.skip_cleanup):
+                self.client.drop_database(self.database)
 
     def test_rqg_example(self):
         self._initialize_mysql_client()
@@ -78,65 +92,7 @@ class RQGTests(BaseTestCase):
         self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case))
         self.assertTrue(check, failure_map)
 
-    def test_rqg_with_gsi(self):
-        self.run_queries= self.input.param("run_queries",True)
-        self.run_explain_with_hints= self.input.param("run_explain_with_hints",True)
-        self.n1ql_file_path= self.input.param("test_file_path","default")
-        with open(self.n1ql_file_path) as f:
-            n1ql_query_list = f.readlines()
-        i = 0
-        check = True
-        pass_case = 0
-        total =0
-        fail_case = 0
-        failure_map = {}
-        for n1ql_query_info in n1ql_query_list:
-            # Run n1ql query
-            data = json.loads(n1ql_query_info)
-            n1ql_query = data["n1ql"]
-            sql_query = data["sql"]
-            gsi_indexes = data["gsi_indexes"]
-            table_name = data["bucket"]
-            hints = self.query_helper._find_hints(n1ql_query)
-            self._generate_secondary_indexes_with_index_map(index_map = gsi_indexes, table_name = table_name)
-            self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(total))
-            success_query_run = True
-            msg_for_query_run = ""
-            success_explain_run = "NA"
-            success_query_run = "NA"
-            if self.run_queries:
-                success_query_run, msg_for_query_run = self._run_queries_compare(n1ql_query = n1ql_query , sql_query = sql_query)
-            success_explain_run = True
-            msg_for_explain_run = []
-            if self.run_explain_with_hints:
-                success_explain_run, msg_for_explain_run = self._run_queries_with_explain(n1ql_query , gsi_indexes.keys())
-            total += 1
-            check = check and success_query_run
-            check = check and success_explain_run
-            if not success_query_run:
-                self._run_explain_and_print_result(n1ql_query)
-            if check:
-                pass_case += 1
-            else:
-                fail_case +=  1
-                failure_map[str(total)] = {"sql_query":sql_query, "n1ql_query": n1ql_query,
-                 "query run result": msg_for_query_run,
-                 "explain result": str(msg_for_explain_run)}
-            self._drop_secondary_indexes_with_index_map(index_map = gsi_indexes, table_name = table_name)
-            self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING QUERY CASE NUMBER {0} >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(total))
-        self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case))
-        result = self._generate_result(failure_map)
-        self.assertTrue(check, result)
-
-    def test_rqg_concurrent(self):
-        self.create_all_indexes= self.input.param("create_all_indexes",False)
-        self.concurreny_count= self.input.param("concurreny_count",10)
-        self.total_queries= self.input.param("total_queries",None)
-        self.run_query_without_index_hint= self.input.param("run_query_without_index_hint",True)
-        self.run_query_with_primary= self.input.param("run_query_with_primary",False)
-        self.run_query_with_secondary= self.input.param("run_query_with_secondary",False)
-        self.run_explain_with_hints= self.input.param("run_explain_with_hints",False)
-        self.n1ql_file_path= self.input.param("test_file_path","default")
+    def test_rqg_concurrent_with_predefined_input(self):
         check = True
         failure_map = {}
         batches = []
@@ -145,7 +101,7 @@ class RQGTests(BaseTestCase):
         count = 1
         inserted_count = 0
         self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
-        with open(self.n1ql_file_path) as f:
+        with open(self.test_file_path) as f:
             n1ql_query_list = f.readlines()
         if self.total_queries  == None:
             self.total_queries = len(n1ql_query_list)
@@ -173,7 +129,9 @@ class RQGTests(BaseTestCase):
             thread_list = []
             # Create threads and run the batch
             for test_case in test_batch:
-                t = threading.Thread(target=self._run_basic_test, args = (test_case, result_queue))
+                test_case_number = test_case.keys()[0]
+                data = test_case[test_case_number]
+                t = threading.Thread(target=self._run_basic_test, args = (data, test_case_number, result_queue))
                 t.daemon = True
                 t.start()
                 thread_list.append(t)
@@ -189,10 +147,74 @@ class RQGTests(BaseTestCase):
         self.log.info(result)
         self.assertTrue(success, summary)
 
+    def test_rqg_concurrent(self):
+        # Get Data Map
+        table_map = self.client._get_values_with_type_for_fields_in_table()
+        check = True
+        failure_map = {}
+        batches = []
+        batch = []
+        test_case_number = 1
+        count = 1
+        inserted_count = 0
+        self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
+        # Load All the templates
+        with open(self.test_file_path) as f:
+            query_list = f.readlines()
+        if self.total_queries  == None:
+            self.total_queries = len(query_list)
+        for n1ql_query_info in query_list:
+            data = n1ql_query_info
+            batch.append({str(test_case_number):data})
+            if count == self.concurreny_count:
+                inserted_count += len(batch)
+                batches.append(batch)
+                count = 1
+                batch = []
+            else:
+                count +=1
+            test_case_number += 1
+            if test_case_number >= self.total_queries:
+                break
+        if inserted_count != len(query_list):
+            batches.append(batch)
+        result_queue = Queue.Queue()
+        # Run Test Batches
+        test_case_number = 1
+        for test_batch in batches:
+            # Build all required secondary Indexes
+            list = [data[data.keys()[0]] for data in test_batch]
+            list = self.client._convert_template_query_info(
+                    table_map = table_map,
+                    n1ql_queries = list,
+                    define_gsi_index = self.use_secondary_index,
+                    gen_expected_result = True)
+            if self.use_secondary_index:
+                self._generate_secondary_indexes_in_batches(list)
+            thread_list = []
+            # Create threads and run the batch
+            for test_case in list:
+                test_case_input = test_case
+                t = threading.Thread(target=self._run_basic_test, args = (test_case_input, test_case_number, result_queue))
+                t.daemon = True
+                t.start()
+                thread_list.append(t)
+                test_case_number += 1
+            # Capture the results when done
+            check = False
+            for t in thread_list:
+                t.join()
+            # Drop all the secondary Indexes
+            if self.use_secondary_index:
+                self._drop_secondary_indexes_in_batches(list)
+        # Analyze the results for the failure and assert on the run
+        success, summary, result = self._test_result_analysis(result_queue)
+        self.log.info(result)
+        self.assertTrue(success, summary)
 
-    def _run_basic_test(self, test_data, result_queue):
-        test_case_number = test_data.keys()[0]
-        data = test_data[test_case_number]
+
+    def _run_basic_test(self, test_data, test_case_number, result_queue):
+        data = test_data
         n1ql_query = data["n1ql"]
         sql_query = data["sql"]
         indexes = data["indexes"]
@@ -234,7 +256,6 @@ class RQGTests(BaseTestCase):
         while not queue.empty():
             result_list.append(queue.get())
         for result_run in result_list:
-            print result_run
             test_case_number = result_run["test_case_number"]
             sql_query = result_run["sql_query"]
             n1ql_query = result_run["n1ql_query"]
@@ -589,8 +610,16 @@ class RQGTests(BaseTestCase):
             log = self.log, input = self.input, master = self.master)
 
     def _initialize_mysql_client(self):
-        self.client = MySQLClient(database = self.database, host = self.mysql_url,
-            user_id = self.user_id, password = self.password)
+        if self.reset_database:
+            self.client = MySQLClient(host = self.mysql_url,
+                user_id = self.user_id, password = self.password)
+            path  = "b/resources/rqg/{0}/database_definition/definition.sql".format(self.database)
+            self.database = self.database+"_"+str(self.query_helper._random_int())
+            self.client.reset_database_add_data(database = self.database, items= self.items,
+             sql_file_definiton_path = path)
+        else:
+            self.client = MySQLClient(database = self.database, host = self.mysql_url,
+                user_id = self.user_id, password = self.password)
 
     def _zipdir(self, path, zip_path):
         self.log.info(zip_path)
@@ -762,25 +791,6 @@ class RQGTests(BaseTestCase):
             list.append(map)
         return list
 
-    def _take_snapshot_of_database(self):
-        self.zip_path= self.input.param("zip_path","flightstats_data.zip")
-        self.data_dump_path= self.input.param("data_dump_path","b/resources/flightstats_mysql")
-        # Pull information about tables from mysql database and interpret them as no-sql dbs
-        table_key_map = self.client._get_primary_key_map_for_tables()
-        # Make a list of buckets that we want to create for querying
-        bucket_list = table_key_map.keys()
-        # Read Data from mysql database and populate the couchbase server
-        for bucket_name in bucket_list:
-            query = "select * from {0}".format(bucket_name)
-            columns, rows = self.client._execute_query(query = query)
-            dict = self.client._gen_json_from_results_with_primary_key(
-                columns, rows, table_key_map[bucket_name])
-            # Take snap-shot of Data in
-            f = open(self.data_dump_path+"/"+bucket_name+".txt",'w')
-            f.write(json.dumps(dict))
-            f.close()
-        self._zipdir(self.data_dump_path, self.zip_path)
-
     def _setup_and_load_buckets_from_files(self):
         bucket_list =[]
         import shutil
@@ -831,7 +841,6 @@ class RQGTests(BaseTestCase):
         # Read Data from mysql database and populate the couchbase server
         for bucket_name in bucket_list:
             query = "select * from {0}".format(bucket_name)
-            print query
             columns, rows = self.client._execute_query(query = query)
             dict = self.client._gen_json_from_results_with_primary_key(columns, rows,
                 primary_key = table_key_map[bucket_name])

@@ -386,7 +386,6 @@ class QueryHelper(object):
     def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=False):
         sql, table_map = self._convert_sql_template_to_value(sql =n1ql_template, table_map = table_map, table_name= table_name)
         n1ql = self._gen_sql_to_nql(sql)
-        print sql
         map = {
                 "n1ql":n1ql,
                 "sql":sql,
@@ -446,7 +445,6 @@ class QueryHelper(object):
     def _convert_sql_template_to_value_for_secondary_indexes_sub_queries(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=True):
         sql, query_list, table_map = self._gen_sql_with_deep_selects(sql =n1ql_template, table_map = table_map, table_name= table_name)
         n1ql = self._gen_sql_to_nql(sql)
-        print sql
         table_name = table_map.keys()[0]
         map = {
                 "n1ql":n1ql,
