@@ -13,28 +13,49 @@ from couchbase_helper.query_helper import QueryHelper
 class MySQLClient(object):
     """Python MySQLClient Client Implementation for testrunner"""
 
-    def __init__(self, database = "flightstats", host = "127.0.0.1", user_id = "root", password = ""):
+    def __init__(self, database = None, host = "127.0.0.1", user_id = "root", password = ""):
         self.database = database
         self.host = host
         self.user_id = user_id
         self.password = password
-        self._set_mysql_client(self.database , self.host , self.user_id , self.password)
+        if self.database:
+            self._set_mysql_client(self.database , self.host , self.user_id , self.password)
+        else:
+            self._set_mysql_client_without_database(self.host , self.user_id , self.password)
 
     def _reset_client_connection(self):
-        self._reset_client_connection()
+        self._close_mysql_connection()
         self._set_mysql_client(self.database , self.host , self.user_id , self.password)
 
     def _set_mysql_client(self, database = "flightstats", host = "127.0.0.1", user_id = "root", password = ""):
         self.mysql_connector_client = mysql.connector.connect(user = user_id, password = password,
          host = host, database = database)
 
+    def _set_mysql_client_without_database(self, host = "127.0.0.1", user_id = "root", password = ""):
+        self.mysql_connector_client = mysql.connector.connect(user = user_id, password = password,
+         host = host)
+
     def _close_mysql_connection(self):
         self.mysql_connector_client.close()
 
     def _insert_execute_query(self, query = ""):
         cur = self.mysql_connector_client.cursor()
-        cur.execute(query)
-        self.mysql_connector_client.commit()
+        try:
+            cur.execute(query)
+            self.mysql_connector_client.commit()
+        except Exception, ex:
+            print ex
+            raise
+
+    def _db_execute_query(self, query = ""):
+        cur = self.mysql_connector_client.cursor()
+        try:
+            rows = cur.execute(query, multi = True)
+            for row in rows:
+                print row
+        except Exception, ex:
+            print ex
+            raise
 
     def _execute_query(self, query = ""):
         column_names = []
@@ -207,7 +228,7 @@ class MySQLClient(object):
                 gen_map[table_name]["fields"][field_name]["distinct_values"]= sorted(value_list)
         return gen_map
 
-    def _gen_data_simple_table(self, number_of_rows = 1000, table_name = "simple_table"):
+    def _gen_data_simple_table(self, number_of_rows = 1000):
         helper = QueryHelper()
         map = self._get_pkey_map_for_tables_without_primary_key_column()
         for table_name in map.keys():
@@ -253,10 +274,44 @@ class MySQLClient(object):
                 f.write(json.dumps(map)+"\n")
         f.close()
 
+    def _convert_template_query_info(self, n1ql_queries = [], table_map= {}, define_gsi_index = True, gen_expected_result = False):
+        helper = QueryHelper()
+        query_input_list = []
+        for n1ql_query in n1ql_queries:
+            check = True
+            if not helper._check_deeper_query_condition(n1ql_query):
+                map=helper._convert_sql_template_to_value_for_secondary_indexes(
+                 n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index)
+            else:
+                map=helper._convert_sql_template_to_value_for_secondary_indexes_sub_queries(
+                    n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index)
+            if gen_expected_result:
+                query = map["sql"]
+                try:
+                    sql_result = self._query_and_convert_to_json(query)
+                    map["expected_result"] = sql_result
+                except Exception, ex:
+                    print ex
+                    check = False
+            query_input_list.append(map)
+        return query_input_list
+
     def  _read_from_file(self, file_path):
         with open(file_path) as f:
             content = f.readlines()
         return content
+
+    def drop_database(self, database):
+        query ="DROP SCHEMA IF EXISTS {0}".format(database)
+        self._db_execute_query(query)
+
+    def reset_database_add_data(self, database = "", items = 1000, sql_file_definiton_path= "/tmp/definition.sql"):
+        sqls = self._read_from_file(sql_file_definiton_path)
+        sqls = " ".join(sqls).replace("DATABASE_NAME",database).replace("\n","")
+        self._db_execute_query(sqls)
+        self.database = database
+        self._reset_client_connection()
+        self._gen_data_simple_table(number_of_rows = items)
 
     def dump_database(self, data_dump_path = "/tmp"):
         zip_path= data_dump_path+"/"+self.database+".zip"
@@ -293,7 +348,7 @@ class MySQLClient(object):
 
 if __name__=="__main__":
     import json
-    client = MySQLClient(database = "simple_table_db", host = "localhost", user_id = "root", password = "")
+    client = MySQLClient(host = "localhost", user_id = "root", password = "")
     #query = "select * from simple_table LIMIT 1"
     #print query
     #column_info, rows = client._execute_query(query = query)
@@ -301,9 +356,9 @@ if __name__=="__main__":
     #print dict
 
 
-    client._gen_data_simple_table()
+    client.reset_database_add_data(database="multi_table_db_2",sql_file_definiton_path = "/Users/parag/fix_testrunner/testrunner/b/resources/rqg/multiple_table_db/database_definition/definition.sql")
     #query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
-    client.dump_database()
+    #client.dump_database()
     #client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt", gen_expected_result= False)
     #with open("./output.txt") as f:
     #    content = f.readlines()
