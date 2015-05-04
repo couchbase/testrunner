@@ -28,8 +28,12 @@ class SGWebHookTest(GatewayWebhookBaseTest):
     def webHookMutipleWebHooks(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
+            self.log.info('=== Starting SimpleServe second instances')
+            shell.copy_file_local_to_remote("pytests/sg/simpleServe.go", "/tmp/simpleServe2.go")
+            output, error = shell.execute_command_raw('go run /tmp/simpleServe2.go 8082'
+                                                  '  >/tmp/simpleServe2.txt 2>&1 &')
             self.start_sync_gateway(shell, self.configfile)
-            #TODO need to start 2nd simpleServe
+            shell.log_command_output(output, error)
             success, revision, status = self.create_doc_logfiles(shell, self.doc_id, self.doc_content,
                                         ['/tmp/simpleServe.txt', '/tmp/simpleServe2.txt'])
             self.assertTrue(success)
@@ -40,9 +44,12 @@ class SGWebHookTest(GatewayWebhookBaseTest):
             shell = RemoteMachineShellConnection(server)
             self.start_sync_gateway(shell, self.configfile)
             success, revision, status = self.create_doc(shell, self.doc_id, self.doc_content)
-            self.assertTrue(success)
+            self.assertFalse(success)
+            self.assertTrue("404", status)
             self.assertTrue(self.check_message_in_gatewaylog(shell,
-                            'Error attempting to post to url http://localhost:9999'))
+                            'Webhook handler ran for event.  Payload  posted to URL http://localhost:9999, got status 404 Not Found'))
+            self.assertTrue(self.check_message_in_gatewaylog(shell,
+                            'Webhook handler ran for event.  Payload  posted to URL http://localhost:8081, got status 200 OK'))
             shell.disconnect()
 
     def webHookFilter(self):
@@ -138,6 +145,7 @@ class SGWebHookTest(GatewayWebhookBaseTest):
                             'function processing aborted: SyntaxError: Unexpected token'))
             shell.disconnect()
 
+    #https://github.com/couchbase/sync_gateway/issues/661
     def webHookBadEvent(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
@@ -150,6 +158,7 @@ class SGWebHookTest(GatewayWebhookBaseTest):
                             'FATAL:'))
             shell.disconnect()
 
+    #https://github.com/couchbase/sync_gateway/issues/661
     def webHookBadEventHandlers(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
@@ -174,6 +183,7 @@ class SGWebHookTest(GatewayWebhookBaseTest):
                             'FATAL: Error opening database: Unknown event handler type webhookkkkkkkkkkk'))
             shell.disconnect()
 
+    #https://github.com/couchbase/sync_gateway/issues/662
     def webHookBadUrlProtocol(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
@@ -186,6 +196,7 @@ class SGWebHookTest(GatewayWebhookBaseTest):
                            'unsupported protocol scheme'))
             shell.disconnect()
 
+    #https://github.com/couchbase/sync_gateway/issues/662
     def webHookBadUrl(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
@@ -198,6 +209,7 @@ class SGWebHookTest(GatewayWebhookBaseTest):
                             'FATAL:'))
             shell.disconnect()
 
+    #https://github.com/couchbase/sync_gateway/issues/662
     def webHookNoUrl(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
@@ -225,7 +237,7 @@ class SGWebHookTest(GatewayWebhookBaseTest):
             self.start_sync_gateway(shell, self.configfile)
             success, revision, status = self.create_doc_delay(shell, self.doc_id, self.doc_content, 5)
             # Issue 679
-            self.assertFalse(success)
+            self.assertTrue(success)
             shell.disconnect()
 
     def webHookTimeoutNegative(self):
