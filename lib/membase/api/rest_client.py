@@ -1468,6 +1468,16 @@ class RestConnection(object):
         status, content, header = self._http_request(api)
         return json.loads(content)
 
+    def fetch_bucket_xdcr_stats(self, bucket='default', zoom='minute'):
+        """Return deserialized bucket xdcr stats.
+        Keyword argument:
+        bucket -- bucket name
+        zoom -- stats zoom level (minute | hour | day | week | month | year)
+        """
+        api = self.baseUrl + 'pools/default/buckets/@xdcr-{0}/stats?zoom={1}'.format(bucket, zoom)
+        status, content, header = self._http_request(api)
+        return json.loads(content)
+
     def fetch_system_stats(self):
         """Return deserialized system stats."""
         api = self.baseUrl + 'pools/default/'
@@ -1477,7 +1487,7 @@ class RestConnection(object):
     def get_xdc_queue_size(self, bucket):
         """Fetch bucket stats and return the latest value of XDC replication
         queue size"""
-        bucket_stats = self.fetch_bucket_stats(bucket)
+        bucket_stats = self.fetch_bucket_xdcr_stats(bucket)
         return bucket_stats['op']['samples']['replication_changes_left'][-1]
 
     def get_dcp_queue_size(self, bucket):

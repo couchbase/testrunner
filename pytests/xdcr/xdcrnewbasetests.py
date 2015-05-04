@@ -1931,7 +1931,7 @@ class CouchbaseCluster:
         @param stat: stat name
         @return: value of stat
         """
-        return int(RestConnection(self.__master_node).fetch_bucket_stats(
+        return int(RestConnection(self.__master_node).fetch_bucket_xdcr_stats(
             bucket_name)['op']['samples'][stat][-1])
 
     def wait_for_xdcr_stat(self, bucket, stat, comparison, value):
@@ -2164,9 +2164,8 @@ class CouchbaseCluster:
                 try:
                     mutations = int(rest.get_xdc_queue_size(bucket.name))
                 except KeyError:
-                    # Sometimes replication_changes_left are not found in the stat.
-                    # So setting up -1 if not found sometimes.
-                    mutations = -1
+                    self.__log.error("Stat \"replication_changes_left\" not found")
+                    return False
                 self.__log.info(
                     "Current Outbound mutations on cluster node: %s for bucket %s is %s" %
                     (self.__name, bucket.name, mutations))
