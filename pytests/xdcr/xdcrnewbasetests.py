@@ -2383,6 +2383,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._disable_compaction = self._input.param(
             "disable_compaction",
             "").split('-')
+        self._item_count_timeout = self._input.param("item_count_timeout", 300)
         self._checkpoint_interval = self._input.param("checkpoint_interval",60)
         self._dgm_run = self._input.param("dgm_run", False)
         self._active_resident_threshold = \
@@ -2935,8 +2936,10 @@ class XDCRNewBaseTest(unittest.TestCase):
                     # just log any exception thrown, do not fail test
                     self.log.error(e)
                 try:
-                    src_active_passed, src_replica_passed = src_cluster.verify_items_count()
-                    dest_active_passed, dest_replica_passed = dest_cluster.verify_items_count()
+                    src_active_passed, src_replica_passed =\
+                        src_cluster.verify_items_count(timeout=self._item_count_timeout)
+                    dest_active_passed, dest_replica_passed = \
+                        dest_cluster.verify_items_count(timeout=self._item_count_timeout)
 
                     src_cluster.verify_data(max_verify=self._max_verify)
                     dest_cluster.verify_data(max_verify=self._max_verify)
