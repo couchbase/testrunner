@@ -559,7 +559,7 @@ class XdcrStatsWaitTask(StatsWaitTask):
                 rest = RestConnection(server)
                 stat = 'replications/' + rest.get_replication_for_buckets(self.bucket, self.bucket)['id'] + '/' + self.stat
                 # just get the required value, don't fetch the big big structure of stats
-                stats_value = rest.fetch_bucket_stats(self.bucket)['op']['samples'][stat][-1]
+                stats_value = rest.fetch_bucket_xdcr_stats(self.bucket)['op']['samples'][stat][-1]
                 stat_result += long(stats_value)
             except (EOFError, Exception)  as ex:
                 self.state = FINISHED
