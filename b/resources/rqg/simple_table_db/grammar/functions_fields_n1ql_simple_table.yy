@@ -29,11 +29,11 @@ condition:
 	( bool_condition )  |
 #	( datetime_condition ) |
 	NOT ( condition ) |
-	( condition ) logical_operator ( condition ) |
+	( condition ) logical_operator ( condition ) ;
 #	( condition ) OR ( condition ) ;
 
 logical_operator:
-	AND | OR;
+	AND | OR  ;
 
 field:
 	NUMERIC_FIELD | STRING_FIELD;
@@ -214,7 +214,7 @@ string_field:
 	STRING_FIELD;
 
 string_values:
-	STRING_VALUES |  string_function( STRING_VALUES ) | SUBSTR( STRING_VALUES, 0 ) | CONCAT( STRING_VALUES , characters ) | REPLACE( STRING_VALUES , characters , characters ) ;
+	STRING_VALUES |  string_function( STRING_VALUES ) | SUBSTR( STRING_VALUES, 0 ) | CONCAT( STRING_VALUES , characters ) | REPLACE( STRING_VALUES , characters , characters  ) ;
 
 string_function:
 	UPPER | LOWER | LTRIM |  RTRIM | TRIM | TITLE | INITCAP ;
