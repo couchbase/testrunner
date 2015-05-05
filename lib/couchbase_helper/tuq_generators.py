@@ -301,11 +301,15 @@ class TuqGenerators(object):
         if self.distict:
             result = [dict(y) for y in set(tuple(x.items()) for x in result)]
         if unnest_clause:
-            result = [item for doc in result for item in eval(unnest_clause)]
+            unnest_attr = unnest_clause[5:-2]
+            if unnest_attr in self.aliases:
+                result = [{unnest_attr: item} for doc in result for item in eval(unnest_clause)]
+            else:
+                result = [item for doc in result for item in eval(unnest_clause)]
         if self._create_groups()[0]:
             result = self._group_results(result)
         if self.aggr_fns:
-            if not self._create_groups()[0]:
+            if not self._create_groups()[0] or len(result) == 0:
                 for fn_name, params in self.aggr_fns.iteritems():
                     if fn_name == 'COUNT':
                         result = [{params['alias'] : len(result)}]
