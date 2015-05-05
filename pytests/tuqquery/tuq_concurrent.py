@@ -130,7 +130,7 @@ class ConcurrentTests(QueryTests):
                     task_ops.result()
         finally:
             for bucket in self.buckets:
-                for index_name in created_indexes:
+                for index_name in set(created_indexes):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                     self.run_cbq_query()
 

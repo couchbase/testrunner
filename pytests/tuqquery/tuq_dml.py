@@ -481,13 +481,15 @@ class DMLQueryTests(QueryTests):
         method_name = self.input.param('to_run', 'test_any')
         index_fields = self.input.param("index_field", '').split(';')
         for bucket in self.buckets:
+            for field in index_fields:
+                index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
+                self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (
+                index_name, bucket.name, ','.join(field.split(';')), self.index_type)
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name)
+                indexes.append(index_name)
+        for bucket in self.buckets:
             try:
-                for field in index_fields:
-                    index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
-                    self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, ','.join(field.split(';')), self.index_type)
-                    self.run_cbq_query()
-                    self._wait_for_index_online(bucket, index_name)
-                    indexes.append(index_name)
                 for indx in indexes:
                     fn = getattr(self, method_name)
                     fn(indx)
