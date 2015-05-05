@@ -434,7 +434,7 @@ class QueriesViewsTests(QueryTests):
                     self.query = "CREATE INDEX %s_%s ON %s(%s)  USING %s" % (index_name_prefix, ind_name,
                                                                     bucket.name, attr, self.index_type)
                     self.run_cbq_query()
-                    self._wait_for_index_online(bucket, index_name)
+                    self._wait_for_index_online(bucket, ind_name)
                     created_indexes.append('%s_%s' % (index_name_prefix, ind_name))
                 for ind in created_indexes:
                     self.query = 'EXPLAIN SELECT name, join_day, join_mo FROM %s  USE INDEX(%s using %s) WHERE join_day>2 AND join_mo>3' % (bucket.name, ind, self.index_type)
@@ -456,7 +456,7 @@ class QueriesViewsTests(QueryTests):
                     self.query = "CREATE INDEX %s_%s ON %s(%s)  USING %s" % (index_name_prefix, ind_name,
                                                                     bucket.name, attr, self.index_type)
                     self.run_cbq_query()
-                    self._wait_for_index_online(bucket, index_name)
+                    self._wait_for_index_online(bucket, ind_name)
                     created_indexes.append('%s_%s' % (index_name_prefix,ind_name))
                 for ind in created_indexes:
                     self.query = "EXPLAIN SELECT join_mo, SUM(test_rate) as rate FROM %s as employees USE INDEX(%s using %s)" % (bucket.name, ind, self.index_type) +\
@@ -482,7 +482,7 @@ class QueriesViewsTests(QueryTests):
                     self.query = "CREATE INDEX %s_%s ON %s(%s) USING %s" % (index_name_prefix, ind_name,
                                                                        bucket.name, attr, self.index_type)
                     self.run_cbq_query()
-                    self._wait_for_index_online(bucket, index_name)
+                    self._wait_for_index_online(bucket, ind_name)
                     created_indexes.append('%s_%s' % (index_name_prefix, ind_name))
                 for ind in created_indexes:
                     self.query = "EXPLAIN SELECT join_mo, SUM(test_rate) as rate FROM %s  as employees USE INDEX(%s using %s)" % (bucket.name, ind, self.index_type) +\
@@ -506,7 +506,7 @@ class QueriesViewsTests(QueryTests):
                     self.query = "CREATE INDEX %s_%s ON %s(%s) " % (index_name_prefix, attr,
                                                                     bucket.name, attr)
                     self.run_cbq_query()
-                    self._wait_for_index_online(bucket, index_name)
+                    self._wait_for_index_online(bucket, '%s_%s' % (index_name_prefix, attr))
                     created_indexes.append('%s_%s' % (index_name_prefix, attr if attr.find(',') == -1 else attr.split(',')[1]))
                     self.query = 'SELECT name, join_day, join_mo FROM %s WHERE join_day>2 AND join_mo>3' % (bucket.name)
                     res = self.run_cbq_query()
@@ -529,11 +529,12 @@ class QueriesViewsTests(QueryTests):
             created_indexes = []
             try:
                 for attr in ['join_day', 'join_mo']:
-                    self.query = "CREATE INDEX %s_%s ON %s(%s) " % (index_name_prefix, attr,
-                                                                    bucket.name, attr)
+                    index_name = '%s_%s%s' % (index_name_prefix, attr, str(uuid.uuid4())[:4])
+                    self.query = "CREATE INDEX %s ON %s(%s) " % (index_name,
+                                                                bucket.name, attr)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
-                    created_indexes.append('%s_%s' % (index_name_prefix, attr))
+                    created_indexes.append(index_name)
                     self.query = 'SELECT name, join_day, join_yr FROM %s WHERE join_yr>3' % (bucket.name)
                     res = self.run_cbq_query()
                     full_list = self.generate_full_docs_list(self.gens_load)
@@ -550,7 +551,7 @@ class QueriesViewsTests(QueryTests):
                     self.run_cbq_query()
 
     def test_negative_indexes(self):
-        queries_errors = {'create index gsi on default(name) using gsi' : ('syntax error', 3000)}
+        queries_errors = {'create index gsi on default(name) using gsi': ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
 
     def test_prepared_with_index_simple_where(self):
