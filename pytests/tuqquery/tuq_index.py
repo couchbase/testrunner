@@ -197,7 +197,7 @@ class QueriesViewsTests(QueryTests):
                 self.query = "EXPLAIN SELECT * FROM %s WHERE email = 'abc'" % (bucket.name)
                 res = self.run_cbq_query()
                 self.assertTrue(res["results"][0]["~children"][0]["index"] != index_name,
-                                "Index should be %s, but is: %s" % (index_name, res["results"]))
+                                "Index should be %s, but is: %s" % (index_name, res["results"][0]["~children"][0]["index"]))
             finally:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
@@ -215,7 +215,7 @@ class QueriesViewsTests(QueryTests):
                     self.query = "EXPLAIN SELECT COUNT(%s) FROM %s" % (self.FIELDS_TO_INDEX[ind - 1], bucket.name)
                     res = self.run_cbq_query()
                     self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
-                                    "Index should be %s, but is: %s" % (index_name, res["results"]))
+                                    "Index should be %s, but is: %s" % (index_name, res["results"][0]["~children"][0]["index"]))
             finally:
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
@@ -234,7 +234,7 @@ class QueriesViewsTests(QueryTests):
                     self.query = "EXPLAIN SELECT SUM(%s) FROM %s" % (self.FIELDS_TO_INDEX[ind - 1], bucket.name)
                     res = self.run_cbq_query()
                     self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
-                                    "Index should be %s, but is: %s" % (index_name, res["results"]))
+                                    "Index should be %s, but is: %s" % (index_name, res["results"][0]["~children"][0]["index"]))
             finally:
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
@@ -253,7 +253,7 @@ class QueriesViewsTests(QueryTests):
                     self.query = "EXPLAIN SELECT employee.name, new_task.project FROM %s as employee JOIN %s as new_task" % (bucket.name, bucket.name)
                     res = self.run_cbq_query()
                     self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
-                                    "Index should be %s, but is: %s" % (index_name, res["results"]))
+                                    "Index should be %s, but is: %s" % (index_name, res["results"][0]["~children"][0]["index"]))
             finally:
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
@@ -272,7 +272,7 @@ class QueriesViewsTests(QueryTests):
                     self.query = "EXPLAIN SELECT emp.name, task FROM %s emp UNNEST emp.tasks_ids task" % (bucket.name)
                     res = self.run_cbq_query()
                     self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
-                                    "Index should be %s, but is: %s" % (index_name, res["results"]))
+                                    "Index should be %s, but is: %s" % (index_name, res["results"][0]["~children"][0]["index"]))
             finally:
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
