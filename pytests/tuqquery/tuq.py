@@ -2798,7 +2798,7 @@ class QueryTests(BaseTestCase):
                 except Exception, ex:
                     self.log.info(str(ex))
 
-    def _wait_for_index_online(self, bucket, index_name, timeout=600):
+    def _wait_for_index_online(self, bucket, index_name, timeout=6000):
         end_time = time.time() + timeout
         while time.time() < end_time:
             query = "SELECT * FROM system:indexes"
