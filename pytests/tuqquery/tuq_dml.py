@@ -297,7 +297,7 @@ class DMLQueryTests(QueryTests):
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.assertEqual(actual_result['results']['rows'], 0, 'Query was not run successfully')
+        self.assertEqual(len(actual_result['results']), 0, 'Query was not run successfully')
 
     def test_merge_delete_match_limit(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
@@ -307,7 +307,7 @@ class DMLQueryTests(QueryTests):
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.assertEqual(actual_result['results']['rows'], 0, 'Query was not run successfully')
+        self.assertEqual(len(actual_result['results']), 0, 'Query was not run successfully')
 
     def test_merge_delete_where_match(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
