@@ -430,8 +430,8 @@ class QueriesViewsTests(QueryTests):
             created_indexes = []
             try:
                 for attr in ['join_day', 'join_mo', 'join_day,join_mo']:
-                    ind_name = attr.split('.')[0].split('[')[0].replace(',', '_')
-                    self.query = "CREATE INDEX %s_%s ON %s(%s)  USING %s" % (index_name_prefix, ind_name,
+                    ind_name = '%s_%s' % (index_name_prefix, attr.split('.')[0].split('[')[0].replace(',', '_'))
+                    self.query = "CREATE INDEX %s ON %s(%s)  USING %s" % (ind_name,
                                                                     bucket.name, attr, self.index_type)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, ind_name)
@@ -452,8 +452,8 @@ class QueriesViewsTests(QueryTests):
             created_indexes = []
             try:
                 for attr in ['job_title', 'test_rate', 'job_title,test_rate']:
-                    ind_name = attr.split('.')[0].split('[')[0].replace(',', '_')
-                    self.query = "CREATE INDEX %s_%s ON %s(%s)  USING %s" % (index_name_prefix, ind_name,
+                    ind_name = '%s_%s' % (index_name_prefix, attr.split('.')[0].split('[')[0].replace(',', '_'))
+                    self.query = "CREATE INDEX %s ON %s(%s)  USING %s" % (ind_name,
                                                                     bucket.name, attr, self.index_type)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, ind_name)
@@ -478,8 +478,8 @@ class QueriesViewsTests(QueryTests):
             try:
                 fields = ['job_title', 'job_title,test_rate']
                 for attr in fields:
-                    ind_name = attr.split('.')[0].split('[')[0].replace(',', '_')
-                    self.query = "CREATE INDEX %s_%s ON %s(%s) USING %s" % (index_name_prefix, ind_name,
+                    ind_name = '%s_%s' % (index_name_prefix, attr.split('.')[0].split('[')[0].replace(',', '_'))
+                    self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (ind_name,
                                                                        bucket.name, attr, self.index_type)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, ind_name)
@@ -503,10 +503,11 @@ class QueriesViewsTests(QueryTests):
             created_indexes = []
             try:
                 for attr in ['join_day', 'join_day,join_mo']:
-                    self.query = "CREATE INDEX %s_%s ON %s(%s) " % (index_name_prefix, attr,
+                    ind_name = '%s_%s' % (index_name_prefix, attr.split('.')[0].split('[')[0].replace(',', '_'))
+                    self.query = "CREATE INDEX %s_%s ON %s(%s) " % (ind_name,
                                                                     bucket.name, attr)
                     self.run_cbq_query()
-                    self._wait_for_index_online(bucket, '%s_%s' % (index_name_prefix, attr))
+                    self._wait_for_index_online(bucket, ind_name)
                     created_indexes.append('%s_%s' % (index_name_prefix, attr if attr.find(',') == -1 else attr.split(',')[1]))
                     self.query = 'SELECT name, join_day, join_mo FROM %s WHERE join_day>2 AND join_mo>3' % (bucket.name)
                     res = self.run_cbq_query()
