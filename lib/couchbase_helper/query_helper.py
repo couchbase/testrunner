@@ -386,6 +386,8 @@ class QueryHelper(object):
     def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=False):
         sql, table_map = self._convert_sql_template_to_value(sql =n1ql_template, table_map = table_map, table_name= table_name)
         n1ql = self._gen_sql_to_nql(sql)
+        sql = self._convert_condition_template_to_value_datetime(sql, table_map, sql_type ="sql")
+        n1ql = self._convert_condition_template_to_value_datetime(n1ql, table_map, sql_type ="n1ql")
         map = {
                 "n1ql":n1ql,
                 "sql":sql,
@@ -445,6 +447,8 @@ class QueryHelper(object):
     def _convert_sql_template_to_value_for_secondary_indexes_sub_queries(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=True):
         sql, query_list, table_map = self._gen_sql_with_deep_selects(sql =n1ql_template, table_map = table_map, table_name= table_name)
         n1ql = self._gen_sql_to_nql(sql)
+        sql = self._convert_condition_template_to_value_datetime(sql, table_map, sql_type ="sql")
+        n1ql = self._convert_condition_template_to_value_datetime(n1ql, table_map, sql_type ="n1ql")
         table_name = table_map.keys()[0]
         map = {
                 "n1ql":n1ql,
@@ -530,11 +534,6 @@ class QueryHelper(object):
                     field_name, values = self._search_field(["int","mediumint","double", "float", "decimal"], table_map)
                     new_sql+=token.replace("NUMERIC_FIELD",field_name)+space
                     numeric_check = True
-                elif "DATETIME_FIELD" in token:
-                    add_token = False
-                    field_name, values = self._search_field(["datetime"], table_map)
-                    new_sql+=token.replace("DATETIME_FIELD",field_name)+space
-                    datetime_check = True
             else:
                 if string_check:
                     if token == "IS":
@@ -606,11 +605,6 @@ class QueryHelper(object):
                             max = len(values)
                         list = self._convert_list(values[0:max], type="datetime")
                         new_sql+=token.replace("LIST",list)+space
-                    elif "DATETIME_VALUES" in token:
-                        mid_value_index = len(values)/2
-                        datetime_check = False
-                        add_token = False
-                        new_sql+=token.replace("DATETIME_VALUES","\'"+str(values[mid_value_index])+"\'")+space
                     elif "UPPER_BOUND_VALUE" in token:
                         datetime_check = False
                         add_token = False
@@ -628,6 +622,93 @@ class QueryHelper(object):
             else:
                 add_token = True
         return new_sql
+
+    def _convert_condition_template_to_value_datetime(self, sql ="", table_map = {}, sql_type = "sql"):
+        datetime_function_list = [[],["MILLIS"],
+         ["MILLIS", "MILLIS_TO_STR", "MILLIS"],
+         ["STR_TO_UTC", "MILLIS"], []]
+        function_list = random.choice(datetime_function_list)
+        tokens = sql.split(" ")
+        check = False
+        string_check = False
+        boolean_check = False
+        numeric_check = False
+        bool_check = False
+        datetime_check = False
+        add_token = True
+        new_sql = ""
+        space = " "
+        field_name = ""
+        values = ["DEFAULT"]
+        for token in tokens:
+            check = string_check or numeric_check or bool_check or datetime_check
+            if not check:
+                if "DATETIME_FIELD" in token:
+                    add_token = False
+                    field_name, values = self._search_field(["datetime"], table_map)
+                    if sql_type == "n1ql":
+                        new_sql+=token.replace("DATETIME_FIELD",self._apply_functions_to_params(function_list,field_name))+space
+                    else:
+                        new_sql+=token.replace("DATETIME_FIELD",field_name)+space
+                    datetime_check = True
+            else:
+                if datetime_check:
+                    if token == "IS":
+                        datetime_check = False
+                        add_token = True
+                    elif "DATETIME_LIST" in token:
+                        datetime_check = False
+                        add_token = False
+                        max = 5
+                        if len(values) < 5:
+                            max = len(values)
+                        list = self._convert_list(values[0:max], type="datetime")
+                        new_list = self._convert_list_datetime(values[0:max], function_list)
+                        if sql_type == "n1ql":
+                            new_sql+=token.replace("DATETIME_LIST",new_list)+space
+                        else:
+                            new_sql+=token.replace("DATETIME_LIST",list)+space
+                    elif "DATETIME_VALUE" in token:
+                        mid_value_index = len(values)/2
+                        datetime_check = False
+                        add_token = False
+                        if sql_type == "n1ql":
+                            new_sql+=token.replace("DATETIME_VALUE","\'"+\
+                                self._apply_functions_to_params(function_list,str(values[mid_value_index]))+"\'")+space
+                        else:
+                            new_sql+=token.replace("DATETIME_VALUE","\'"+str(values[mid_value_index])+"\'")+space
+                    elif "UPPER_BOUND_VALUE" in token:
+                        datetime_check = False
+                        add_token = False
+                        if sql_type == "n1ql":
+                            new_sql+=token.replace("UPPER_BOUND_VALUE","\'"+\
+                                self._apply_functions_to_params(function_list,str(values[len(values) -1]))+"\'")+space
+                        else:
+                            new_sql+=token.replace("UPPER_BOUND_VALUE","\'"+str(values[len(values) -1])+"\'")+space
+                    elif "LOWER_BOUND_VALUE" in token:
+                        add_token = False
+                        if sql_type == "n1ql":
+                            new_sql+=token.replace("LOWER_BOUND_VALUE","\'"+\
+                                self._apply_functions_to_params(function_list,str(values[0]))+"\'")+space
+                        else:
+                            new_sql+=token.replace("LOWER_BOUND_VALUE","\'"+str(values[0])+"\'")+space
+                    else:
+                        add_token = False
+                        new_sql+=token+space
+                else:
+                    new_sql+=token+space
+            if add_token:
+                new_sql+=token+space
+            else:
+                add_token = True
+        return new_sql
+
+    def _apply_functions_to_params(self, function_list = [], param = "default"):
+        sql = param
+        count = 0;
+        for function in function_list:
+            sql = function + "( " + sql + " )"
+        return sql
 
     def _gen_n1ql_to_sql(self, n1ql):
         check_keys=False
@@ -781,11 +862,19 @@ class QueryHelper(object):
                 temp_list +=" \'"+str(num)+"\' ,"
         return temp_list[0:len(temp_list)-1]
 
+    def _convert_list_datetime(self, list, function_list):
+        temp_list = ""
+        for num in list:
+            value = " \'"+str(num)+"\'"
+            value = self._apply_functions_to_params(function_list,value)
+            temp_list +=value+" ,"
+        return temp_list[0:len(temp_list)-1]
+
 if __name__=="__main__":
 
     helper = QueryHelper()
     sql = helper._gen_select_after_analysis("q1 EXCEPT q2 EXCEPT q9")
-    print sql
+    print helper._apply_functions_to_params(["func1","func"],"parameter_value")
     #helper._convert_n1ql_list_to_sql("/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_examples/n1ql_10000_queries_for_simple_table.txt")
     #helper._convert_sql_to_nql_dump_in_file("/Users/parag/fix_testrunner/testrunner/b/resources/flightstats_mysql/inner_join_flightstats_n1ql_queries.txt")
     #print helper._gen_sql_to_nql("SELECT SUM(  a1.distance) FROM `ontime_mysiam`  AS a1 INNER JOIN `aircraft`  AS a2 ON ( a2 .`tail_num` = a1 .`tail_num` ) INNER JOIN `airports`  AS a3 ON ( a1 . `origin` = a3 .`code` ) ")
