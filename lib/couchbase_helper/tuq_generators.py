@@ -1,3 +1,4 @@
+import copy
 from documentgenerator import  DocumentGenerator
 import re
 import datetime
@@ -303,7 +304,15 @@ class TuqGenerators(object):
         if unnest_clause:
             unnest_attr = unnest_clause[5:-2]
             if unnest_attr in self.aliases:
-                result = [{unnest_attr: item} for doc in result for item in eval(unnest_clause)]
+                def res_generator():
+                    for doc in result:
+                        doc_temp = copy.deepcopy(doc)
+                        del doc_temp[unnest_attr]
+                        for item in eval(unnest_clause):
+                            doc_to_append = copy.deepcopy(doc_temp)
+                            doc_to_append[unnest_attr] = copy.deepcopy(item)
+                            yield doc_to_append
+                result = list(res_generator())
             else:
                 result = [item for doc in result for item in eval(unnest_clause)]
         if self._create_groups()[0]:
@@ -389,7 +398,10 @@ class TuqGenerators(object):
                                                         [params['alias'] for params in self.aggr_fns.itervalues()
                                                          if params['field'] == att_name[1:-1]][0])
             key = lambda doc: eval(order_clause)
-        result = sorted(result, key=key, reverse=reverse)
+        try:
+            result = sorted(result, key=key, reverse=reverse)
+        except:
+            return result
         if self.attr_order_clause_greater_than_select and not self.parent_selected:
             for doc in result:
                 for attr in self.attr_order_clause_greater_than_select:

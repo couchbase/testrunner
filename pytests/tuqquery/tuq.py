@@ -33,7 +33,7 @@ class QueryTests(BaseTestCase):
             self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
         else:
             self.shell = RemoteMachineShellConnection(self.master)
-        if self.input.param("start_cmd", True):
+        if self.input.param("start_cmd", True) and self.input.param("cbq_version", "sherlock") != 'sherlock':
             self._start_command_line_query(self.master, user=self.master.rest_username, password=self.master.rest_password)
         self.use_rest = self.input.param("use_rest", True)
         self.hint_index = self.input.param("hint", None)
@@ -2801,15 +2801,15 @@ class QueryTests(BaseTestCase):
     def _wait_for_index_online(self, bucket, index_name, timeout=6000):
         end_time = time.time() + timeout
         while time.time() < end_time:
-            query = "SELECT * FROM system:indexes"
+            query = 'SELECT * FROM system:indexes where name="%s"' % index_name
             res = self.run_cbq_query(query)
             for item in res['results']:
                 if 'keyspace_id' not in item['indexes']:
                     self.log.error(item)
                     continue
-                if item['indexes']['keyspace_id'] == bucket.name and item['indexes']['name'] == index_name:
+                if item['indexes']['keyspace_id'] == bucket.name:
                     if item['indexes']['state'] == "online":
                         return
-            self.sleep(5, 'index is pending or not in the list. sleeping...')
+            self.sleep(5, 'index is pending or not in the list. sleeping... (%s)' % res['indexes'])
         raise Exception('index %s is not online. last response is %s' % (index_name, res))
 

@@ -23,12 +23,12 @@ class QueryTests(BaseTestCase):
         if not self._testMethodName == 'suite_setUp':
             self.skip_buckets_handle = True
         super(QueryTests, self).setUp()
-        self.version = self.input.param("cbq_version", "git_repo")
+        self.version = self.input.param("cbq_version", "sherlock")
         if self.input.tuq_client and "client" in self.input.tuq_client:
             self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
         else:
             self.shell = RemoteMachineShellConnection(self.master)
-        if not self._testMethodName == 'suite_setUp':
+        if not self._testMethodName == 'suite_setUp' and self.input.param("cbq_version", "sherlock") != 'sherlock':
             self._start_command_line_query(self.master)
         self.use_rest = self.input.param("use_rest", True)
         self.max_verify = self.input.param("max_verify", None)
@@ -99,7 +99,7 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             query_template = 'SELECT emp.$int0, task FROM %s emp UNNEST emp.$nested_list_3l0 task' % bucket.name
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(actual_result['results'], expected_result)
+            self._verify_results(sorted(actual_result['results']), sorted(expected_result))
 
     def test_subquery_select(self):
         for bucket in self.buckets:
