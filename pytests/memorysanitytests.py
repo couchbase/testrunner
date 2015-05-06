@@ -55,10 +55,14 @@ class MemorySanity(BaseTestCase):
         for i in range(0, self.repetitions):
             BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
             del self.buckets[:]
+            self.log.info('About to create the buckets')
             self._bucket_creation()
+            self.log.info('Done bucket creation, about to load them')
             self._load_all_buckets(self.master, self.gen_create, "create", 0,
                                batch_size=10000, pause_secs=5, timeout_secs=100)
+            self.log.info('Buckets are loaded, waiting for stats')
             self._wait_for_stats_all_buckets(self.servers)
+            self.log.info('Have the stats, sleeping for 30 seconds')
             self.sleep(30)
             for bucket in self.buckets:
                 mem_usage[bucket.name] = rest.fetch_bucket_stats(bucket.name)["op"]["samples"]["mem_used"][-1]
