@@ -655,7 +655,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             for server in index_nodes:
                 for bucket in buckets:
                     key = "{0}:{1}".format(bucket.name, query_definitions[x].index_name)
-                    if key not in refer_index:
+                    if (key not in refer_index) and (x > -1):
                         refer_index.append(key)
                         refer_index.append(query_definitions[x].index_name)
                         deploy_node_info = None
