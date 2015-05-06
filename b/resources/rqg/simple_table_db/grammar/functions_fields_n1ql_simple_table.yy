@@ -27,10 +27,10 @@ condition:
 	( numeric_condition ) |
 	( string_condition )  |
 	( bool_condition )  |
-#	( datetime_condition ) |
+	( datetime_condition ) |
 	NOT ( condition ) |
 	( condition ) logical_operator ( condition ) ;
-#	( condition ) OR ( condition ) ;
+
 
 logical_operator:
 	AND | OR  ;
