@@ -354,12 +354,10 @@ if __name__=="__main__":
     #column_info, rows = client._execute_query(query = query)
     #dict = client._gen_json_from_results_with_primary_key(column_info, rows, "primary_key_id")
     #print dict
-
-
-    client.reset_database_add_data(database="multi_table_db_2",sql_file_definiton_path = "/Users/parag/fix_testrunner/testrunner/b/resources/rqg/multiple_table_db/database_definition/definition.sql")
+    client.reset_database_add_data(database="simple_table_db",sql_file_definiton_path = "/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table_db/database_definition/definition.sql")
     #query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
     #client.dump_database()
-    #client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt", gen_expected_result= False)
+    client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt", gen_expected_result= False)
     #with open("./output.txt") as f:
     #    content = f.readlines()
     #for data in content:
