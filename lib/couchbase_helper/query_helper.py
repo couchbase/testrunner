@@ -25,28 +25,36 @@ class QueryHelper(object):
         where_condition_text = None
         order_by_text = None
         select_from_text = None
+        having_text = None
         select_text  =  self._find_string_type(sql, ["SELECT", "Select", "select"])
         from_text = self._find_string_type(sql, ["FROM", "from", "From"])
         where_text = self._find_string_type(sql, ["WHERE", "where",])
         order_by = self._find_string_type(sql, ["ORDER BY", "order by"])
         group_by = self._find_string_type(sql, ["GROUP BY", "group by"])
+        having = self._find_string_type(sql, ["HAVING", "having"])
         from_field_text = sql.split(from_text)[1].split(where_text)[0]
         select_from_text = sql.split(select_text)[1].split(from_text)[0].strip()
         where_condition_text = sql.split(where_text)[1]
         if group_by:
             group_by_text = sql.split(group_by)[1]
             where_condition_text = where_condition_text.split(group_by)[0]
+            if having:
+                having_text = group_by_text.split(having)[1]
+                group_by_text = group_by_text.split(having)[0]
         if order_by:
             order_by_text = sql.split(order_by)[1]
-            if group_by_text:
+            if group_by_text and not having:
                 group_by_text = group_by_text.split(order_by)[0]
+            if having:
+                having_text = having_text.split(order_by)[0]
             where_condition_text = where_condition_text.split(order_by)[0]
         map = {
                 "from_fields": from_field_text,
                 "where_condition":where_condition_text,
                 "select_from":select_from_text,
                 "group_by": group_by_text,
-                "order_by" : order_by_text
+                "order_by" : order_by_text,
+                "having" : having_text
                 }
         return map
 
@@ -482,27 +490,92 @@ class QueryHelper(object):
         return map
 
     def _convert_sql_template_to_value(self, sql ="", table_map = {}, table_name= "simple_table"):
+        aggregate_function_list = []
         sql_map = self._divide_sql(sql)
         select_from = sql_map["select_from"]
         from_fields = sql_map["from_fields"]
         where_condition = sql_map["where_condition"]
         order_by = sql_map["order_by"]
         group_by = sql_map["group_by"]
+        having = sql_map["having"]
         from_fields, table_map = self._gen_select_tables_info(from_fields, table_map)
         new_sql = "SELECT "
         if "(SELECT" in sql or "( SELECT" in sql:
             new_sql = "(SELECT "
         if select_from:
-            new_sql += self._covert_fields_template_to_value(select_from, table_map)+" FROM "
+            if group_by and having:
+                groupby_fields = self._covert_fields_template_to_value(group_by, table_map).split(",")
+                if "AGGREGATE_FIELD" not in select_from:
+                    new_sql += ",".join(groupby_fields) + " FROM "
+                else:
+                    select_sql, aggregate_function_list = self._gen_aggregate_method_subsitution(select_from, groupby_fields)
+                    new_sql += select_sql + " FROM "
+            else:
+                new_sql += self._covert_fields_template_to_value(select_from, table_map)+" FROM "
         if from_fields:
-            new_sql += from_fields.replace("BUCKET_NAME",table_name)+ " "
+            new_sql += from_fields+ " "
         if where_condition:
             new_sql += " WHERE "+self._convert_condition_template_to_value(where_condition, table_map)+ " "
         if group_by:
-            new_sql += " GROUP BY "+self._covert_fields_template_to_value(group_by, table_map)+" "
+            if group_by and having:
+                new_sql += " GROUP BY "+(",".join(groupby_fields))+" "
+            else:
+                new_sql += " GROUP BY "+self._covert_fields_template_to_value(group_by, table_map)+" "
+        if having:
+            groupby_table_map = self._filter_table_map_based_on_fields(groupby_fields, table_map)
+            if "AGGREGATE_FIELD" not in sql:
+                new_sql += " HAVING "+self._convert_condition_template_to_value(having, groupby_table_map)+" "
+            else:
+                new_sql += " HAVING "+self._convert_condition_template_to_value_with_aggregate_method(having, groupby_table_map, aggregate_function_list)
         if order_by:
             new_sql += " ORDER BY "+self._covert_fields_template_to_value(order_by, table_map)+" "
         return new_sql, table_map
+
+    def _gen_aggregate_method_subsitution(self, sql, fields):
+        new_sql = ""
+        aggregate_function_list =[]
+        count_star = 0
+        token_count = 1
+        for token in sql.split(","):
+            function_without_alias = token.replace("AS AGGREGATE_FIELD","")
+            function_with_alias = token.replace("AS AGGREGATE_FIELD"," AS ALIAS_"+str(token_count))
+            token_count += 1
+            if "*" in token:
+                if count_star == 0:
+                    count_star = 1
+                    new_sql += " "+function_with_alias+" ,"
+                    aggregate_function_list.append(function_without_alias)
+            else:
+                subsitution_str  = function_with_alias.replace("FIELD",random.choice(fields))
+                if subsitution_str not in aggregate_function_list:
+                    new_sql += " "+subsitution_str+" ,"
+                    aggregate_function_list.append(function_without_alias)
+        return new_sql[0:len(new_sql)-1], aggregate_function_list
+
+
+    def _filter_table_map_based_on_fields(self, fields = [], table_map = {}):
+        map = {}
+        alias_map = {}
+        for table_name in table_map:
+            if "alias_name" in table_map[table_name].keys():
+                alias_map[table_map[table_name]["alias_name"]] = table_name
+        for field in fields:
+            field = field.strip()
+            if len(alias_map) > 0:
+                tokens = field.split(".")
+                alias_name = tokens[0]
+                table_name = alias_map[tokens[0]]
+                field_name = tokens[1]
+            else:
+                field_name = field
+                table_name = table_map.keys()[0]
+            if table_name not in map.keys():
+                map[table_name] = {}
+                map[table_name]["fields"] = {}
+                if len(alias_map) > 0:
+                    map[table_name]["alias_name"] = alias_name
+            map[table_name]["fields"][field_name] = table_map[table_name]["fields"][field_name]
+        return map
 
     def _convert_condition_template_to_value(self, sql ="", table_map = {}):
         tokens = sql.split(" ")
@@ -622,6 +695,128 @@ class QueryHelper(object):
             else:
                 add_token = True
         return new_sql
+
+    def _convert_condition_template_to_value_with_aggregate_method(self, sql ="", table_map = {}, aggregate_function_list_list = []):
+        tokens = sql.split(" ")
+        check = False
+        string_check = False
+        boolean_check = False
+        numeric_check = False
+        bool_check = False
+        datetime_check = False
+        add_token = True
+        new_sql = ""
+        space = " "
+        field_name = ""
+        values = ["DEFAULT"]
+        for token in tokens:
+            check = string_check or numeric_check or bool_check or datetime_check
+            aggregate_function = random.choice(aggregate_function_list_list)
+            aggregate_function_str = aggregate_function.split("(")[0]+"( FIELD )"
+            if not check:
+                if "BOOL_FIELD" in token:
+                    add_token = False
+                    field_name, values = self._search_field(["tinyint"], table_map)
+                    new_sql+=token.replace("BOOL_FIELD",aggregate_function_str.replace("FIELD",field_name))+space
+                elif "STRING_FIELD" in token:
+                    string_check = True
+                    add_token = False
+                    field_name, values = self._search_field(["varchar","text","tinytext","char"], table_map)
+                    new_sql+=token.replace("STRING_FIELD",aggregate_function_str.replace("FIELD",field_name))+space
+                elif "NUMERIC_FIELD" in token:
+                    add_token = False
+                    field_name, values = self._search_field(["int","mediumint","double", "float", "decimal"], table_map)
+                    new_sql+=token.replace("NUMERIC_FIELD",aggregate_function_str.replace("FIELD",field_name))+space
+                    numeric_check = True
+            else:
+                if string_check:
+                    if token == "IS":
+                        string_check = False
+                        add_token = True
+                    elif "LIST" in token:
+                        string_check = False
+                        add_token = False
+                        max = 5
+                        if len(values) < 5:
+                            max = len(values)
+                        list = self._convert_list(values[0:max], type="string")
+                        new_sql+=token.replace("LIST",list)+space
+                    elif "STRING_VALUES" in token:
+                        mid_value_index = len(values)/2
+                        if "%" in token:
+                            value = token.replace("STRING_VALUES",str(values[mid_value_index]))
+                            new_sql+=value+space
+                        else:
+                            new_sql+=token.replace("STRING_VALUES","\""+str(values[mid_value_index])+"\"")+space
+                        string_check = False
+                        add_token = False
+                    elif "UPPER_BOUND_VALUE" in token:
+                        string_check = False
+                        add_token = False
+                        new_sql+=token.replace("UPPER_BOUND_VALUE","\""+str(values[len(values) -1])+"\"")+space
+                    elif "LOWER_BOUND_VALUE" in token:
+                        add_token = False
+                        new_sql+=token.replace("LOWER_BOUND_VALUE","\""+str(values[0])+"\"")+space
+                    else:
+                        add_token = False
+                        new_sql+=token+space
+                elif numeric_check:
+                    if token == "IS":
+                        numeric_check = False
+                        add_token = True
+                    elif "LIST" in token:
+                        numeric_check = False
+                        add_token = False
+                        max = 5
+                        if len(values) < 5:
+                            max = len(values)
+                        list = self._convert_list(values[0:max], type="numeric")
+                        new_sql+=token.replace("LIST",list)+space
+                    elif "NUMERIC_VALUE" in token:
+                        mid_value_index = len(values)/2
+                        numeric_check = False
+                        add_token = False
+                        new_sql+=token.replace("NUMERIC_VALUE",str(values[mid_value_index]))+space
+                    elif "UPPER_BOUND_VALUE" in token:
+                        numeric_check = False
+                        add_token = False
+                        new_sql+=token.replace("UPPER_BOUND_VALUE",str(values[len(values) -1]))+space
+                    elif "LOWER_BOUND_VALUE" in token:
+                        add_token = False
+                        new_sql+=token.replace("LOWER_BOUND_VALUE",str(values[0]))+space
+                    else:
+                        add_token = False
+                        new_sql+=token+space
+                elif datetime_check:
+                    if token == "IS":
+                        datetime_check = False
+                        add_token = True
+                    elif "LIST" in token:
+                        datetime_check = False
+                        add_token = False
+                        max = 5
+                        if len(values) < 5:
+                            max = len(values)
+                        list = self._convert_list(values[0:max], type="datetime")
+                        new_sql+=token.replace("LIST",list)+space
+                    elif "UPPER_BOUND_VALUE" in token:
+                        datetime_check = False
+                        add_token = False
+                        new_sql+=token.replace("UPPER_BOUND_VALUE","\'"+str(values[len(values) -1])+"\'")+space
+                    elif "LOWER_BOUND_VALUE" in token:
+                        add_token = False
+                        new_sql+=token.replace("LOWER_BOUND_VALUE","\'"+str(values[0])+"\'")+space
+                    else:
+                        add_token = False
+                        new_sql+=token+space
+                else:
+                    new_sql+=token+space
+            if add_token:
+                new_sql+=token+space
+            else:
+                add_token = True
+        return new_sql
+
 
     def _convert_condition_template_to_value_datetime(self, sql ="", table_map = {}, sql_type = "sql"):
         datetime_function_list = [["MILLIS"],
@@ -874,7 +1069,14 @@ if __name__=="__main__":
 
     helper = QueryHelper()
     sql = helper._gen_select_after_analysis("q1 EXCEPT q2 EXCEPT q9")
-    print helper._apply_functions_to_params(["func1","func"],"parameter_value")
+    print helper._divide_sql("select field from table where condition")
+    print helper._divide_sql("select field from table where condition")
+    print helper._divide_sql("select field from table where condition order by order_by_fields")
+    print helper._divide_sql("select field from table where condition group by group_by_fields order by order_by_fields")
+    print helper._divide_sql("select field from table where condition group by group_by_fields")
+    print helper._divide_sql("select field from table where condition group by group_by_fields having h_condition")
+    print helper._divide_sql("select field from table where condition group by group_by_fields order by order_by_fields")
+    print helper._divide_sql("select field from table where condition group by group_by_fields having h_condition order by order_by_fields")
     #helper._convert_n1ql_list_to_sql("/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_examples/n1ql_10000_queries_for_simple_table.txt")
     #helper._convert_sql_to_nql_dump_in_file("/Users/parag/fix_testrunner/testrunner/b/resources/flightstats_mysql/inner_join_flightstats_n1ql_queries.txt")
     #print helper._gen_sql_to_nql("SELECT SUM(  a1.distance) FROM `ontime_mysiam`  AS a1 INNER JOIN `aircraft`  AS a2 ON ( a2 .`tail_num` = a1 .`tail_num` ) INNER JOIN `airports`  AS a3 ON ( a1 . `origin` = a3 .`code` ) ")
