@@ -624,7 +624,7 @@ class QueryHelper(object):
         return new_sql
 
     def _convert_condition_template_to_value_datetime(self, sql ="", table_map = {}, sql_type = "sql"):
-        datetime_function_list = [[],["MILLIS"],
+        datetime_function_list = [["MILLIS"],
          ["MILLIS", "MILLIS_TO_STR", "MILLIS"],
          ["STR_TO_UTC", "MILLIS"], []]
         function_list = random.choice(datetime_function_list)
