@@ -22,6 +22,7 @@ from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
+from testconstants import COUCHBASE_REPO
 import TestInput
 
 
@@ -54,7 +55,7 @@ Examples:
  install.py -i /tmp/ubuntu.ini -p product=cb,version=2.2.0-792,url=http://builds.hq.northscale.net/latestbuilds....
  install.py -i /tmp/ubuntu.ini -p product=mb,version=1.7.1r-38,parallel=true,toy=keith
  install.py -i /tmp/ubuntu.ini -p product=mongo,version=2.0.2
- install.py -i /tmp/ubuntu.ini -p product=cb,version=0.0.0-704-toy,toy=couchstore,parallel=true,vbuckets=1024
+ install.py -i /tmp/ubuntu.ini -p product=cb,version=0.0.0-704,toy=couchstore,parallel=true,vbuckets=1024
 
  # to run with build with require openssl version 1.0.0
  install.py -i /tmp/ubuntu.ini -p product=cb,version=2.2.0-792,openssl=1
@@ -189,10 +190,7 @@ class Installer(object):
                 names = ['couchbase-server-enterprise_centos6', 'couchbase-server-community_centos6', \
                          'couchbase-server-enterprise_ubuntu_1204', 'couchbase-server-community_ubuntu_1204']
             if "toy" in params:
-                if "1" in openssl:
-                    names = ['couchbase-server-community_cent64']
-                else:
-                    names = ['couchbase-server-community_cent58']
+                names = ['couchbase-server-enterprise']
 
         remote_client = RemoteMachineShellConnection(server)
         info = remote_client.extract_remote_info()
@@ -206,7 +204,9 @@ class Installer(object):
                                     "2.5.0", "2.5.1", "3.0.1", "3.0.1-1444",
                                     "3.0.2", "3.0.2-1603"]
             build_repo = MV_LATESTBUILD_REPO
-            if version[:3] == "3.5" or version[:3] == "4.0":
+            if toy is not "":
+                build_repo = COUCHBASE_REPO
+            elif version[:3] == "3.5" or version[:3] == "4.0":
                 build_repo = SHERLOCK_BUILD_REPO
             for name in names:
                 if version in releases_version:
