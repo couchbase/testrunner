@@ -448,13 +448,17 @@ class BuildQuery(object):
                               couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
         For toy build: name  =
             couchbase-server-community_cent58-3.0.0-toy-toyName-x86_64_3.0.0-xx-toy.rpm
+            http://latestbuilds.hq.couchbase.com/couchbase-server/
+                toy-wied/14/couchbase-server-enterprise-1004.0.0-14-centos6.x86_64.rpm
+                toy-nimish/16/couchbase-server-enterprise_1003.5.0-16-windows_amd64.exe
         For windows build diff - and _ compare to unix build
                        name = couchbase_server-enterprise-windows-amd64-3.0.0-998.exe
                               couchbase_server-enterprise-windows-amd64-3.0.2-1603.exe
+                              couchbase_server-enterprise-windows-amd64-3.0.3-1716.exe
                               couchbase-server-enterprise_3.5.0-952-windows_amd64.exe
                               couchbase-server-enterprise_3.5.0-1390-windows_x86.exe
         """
-        build.toy = toy
+        build.toy = "toy-" + toy
         build.deliverable_type = deliverable_type
         build.architecture_type = architecture_type
         build.distribution_version = distribution_version
@@ -465,11 +469,13 @@ class BuildQuery(object):
         build_number = ""
         unix_deliverable_type = ["deb", "rpm", "zip"]
         if deliverable_type in unix_deliverable_type:
-            if version[:3] == "3.5" or version[:3] == "4.0":
+            if toy == "" and (version[:3] == "3.5" or version[:3] == "4.0"):
                 if "rel" not in version and toy == "":
                     build.product_version = version
                 elif "-rel" in version:
                     build.product_version = version.replace("-rel", "")
+            elif toy != "":
+                build.product_version = version
             else:
                 if "rel" not in version and toy == "":
                     build.product_version = version + "-rel"
@@ -495,8 +501,6 @@ class BuildQuery(object):
                 elif "x86" in architecture_type:
                     build.architecture_type = "x86"
 
-        if "toy" in version and toy != "":
-            edition_type += "-" + version[:5] + "-toy-" + toy
         if "deb" in deliverable_type and "centos6" in edition_type:
             edition_type = edition_type.replace("centos6", "ubuntu_1204")
         if "debian" in distribution_version:
@@ -509,7 +513,7 @@ class BuildQuery(object):
         if "exe" in deliverable_type and version[:5] not in COUCHBASE_VERSION_2:
             joint_char = "-"
             version_join_char = "-"
-        if version[:3] == "3.5" or version[:3] == "4.0":
+        if toy == "" and (version[:3] == "3.5" or version[:3] == "4.0"):
             """ format for sherlock build name
             /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
             /1154/couchbase-server-enterprise-3.5.0-1154-centos7.x86_64.rpm
@@ -566,6 +570,16 @@ class BuildQuery(object):
                    "-" + os_name + "_" +  build.architecture_type + \
                    "." + build.deliverable_type
             build.url = repo + build_number + "/" + build.name
+        elif toy is not "":
+            centos_version = "centos6"
+            build_info = version.split("-")
+            build_number = build_info[1]
+            if "centos" in distribution_version:
+                build.name = edition_type + "-" + build.product_version + \
+                   "-" + centos_version + "." + build.architecture_type + \
+                   "." + build.deliverable_type
+            build.url = repo + build.toy + "/" +build_number \
+                        + "/" + build.name
         else:
             build.name = edition_type + joint_char + os_name + \
                 build.architecture_type +  version_join_char + \
