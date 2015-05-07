@@ -30,8 +30,17 @@ class QueriesOpsTests(QueryTests):
             super(QueriesOpsTests, self).tearDown()
         except:
             pass
-        ClusterOperationHelper.cleanup_cluster(self.servers)
-        self.sleep(10)
+        try:
+            ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
+            self.sleep(1)
+        except:
+            for server in set(self.servers) - set([self.master]):
+                try:
+                    rest = RestConnection(server)
+                    rest.force_eject_node()
+                    time.sleep(1)
+                except BaseException, e:
+                    self.fail(e)
 
 
     def suite_tearDown(self):
@@ -218,6 +227,7 @@ class QueriesOpsTests(QueryTests):
             except:
                 pass
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+            self.verify_cluster_stats(self.servers[:self.nodes_init])
             self.sleep(5)
             self.test_union_all()
         finally:
@@ -230,6 +240,7 @@ class QueriesOpsTests(QueryTests):
             node = RestConnection(self.master).get_nodes_self()
             self.is_membase = False
             BackupHelper(self.master, self).backup('default', node, tmp_folder)
+            self.verify_cluster_stats(self.servers[:self.nodes_init])
             self.test_union_all()
         finally:
             self.shell.delete_files(tmp_folder)
