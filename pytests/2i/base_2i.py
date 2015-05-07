@@ -654,14 +654,15 @@ class BaseSecondaryIndexingTests(QueryTests):
             tasks = []
             for server in index_nodes:
                 for bucket in buckets:
-                    key = "{0}:{1}".format(bucket.name, query_definitions[x].index_name)
-                    if (key not in refer_index) and (x > -1):
-                        refer_index.append(key)
-                        refer_index.append(query_definitions[x].index_name)
-                        deploy_node_info = None
-                        if self.use_gsi_for_secondary:
-                            deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
-                        tasks.append(self.async_create_index(bucket.name, query_definitions[x], deploy_node_info = deploy_node_info))
+                    if (x > -1):
+                        key = "{0}:{1}".format(bucket.name, query_definitions[x].index_name)
+                        if (key not in refer_index):
+                            refer_index.append(key)
+                            refer_index.append(query_definitions[x].index_name)
+                            deploy_node_info = None
+                            if self.use_gsi_for_secondary:
+                                deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
+                            tasks.append(self.async_create_index(bucket.name, query_definitions[x], deploy_node_info = deploy_node_info))
                 x-=1
             for task in tasks:
                 task.result()
