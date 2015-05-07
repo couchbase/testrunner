@@ -488,18 +488,18 @@ class DMLQueryTests(QueryTests):
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 indexes.append(index_name)
-        for bucket in self.buckets:
-            try:
-                for indx in indexes:
-                    fn = getattr(self, method_name)
-                    fn(indx)
-            finally:
+        try:
+            for indx in indexes:
+                fn = getattr(self, method_name)
+                fn(indx)
+        finally:
+            for bucket in self.buckets:
                 for indx in indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, indx, self.index_type)
-                    try:
-                        self.run_cbq_query()
-                    except:
-                        pass
+                try:
+                    self.run_cbq_query()
+                except:
+                    pass
 
 
 ############################################################################################################################

@@ -467,9 +467,12 @@ class QueriesViewsTests(QueryTests):
                     self.assertTrue(res["results"][0]["~children"][0]["index"] == ind,
                                     "Index should be %s, but is: %s" % (ind, res["results"]))
             finally:
-                for index_name in created_indexes:
-                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
-                    self.run_cbq_query()
+                for index_name in set(created_indexes):
+                    try:
+                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
+                        self.run_cbq_query()
+                    except:
+                        pass
 
     def test_multiple_index_hints_explain_same_attr(self):
         index_name_prefix = 'hint' + str(uuid.uuid4())[:4]
@@ -493,9 +496,12 @@ class QueriesViewsTests(QueryTests):
                     self.assertTrue(res["results"][0]["~children"][0]["index"] == ind,
                                     "Index should be %s, but is: %s" % (ind, res["results"]))
             finally:
-                for index_name in created_indexes:
-                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
-                    self.run_cbq_query()
+                for index_name in set(created_indexes):
+                    try:
+                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
+                        self.run_cbq_query()
+                    except:
+                        pass
 
     def test_multiple_indexes_query_attr(self):
         index_name_prefix = 'auto_ind'
@@ -520,9 +526,12 @@ class QueriesViewsTests(QueryTests):
                     self.assertTrue(res["results"][0]["~children"][0]["index"] == '%s_%s' % (index_name_prefix, attr),
                                     "Index should be %s_%s, but is: %s" % (index_name_prefix, attr, res["results"]))
             finally:
-                for index_name in created_indexes:
-                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
-                    self.run_cbq_query()
+                for index_name in set(created_indexes):
+                    try:
+                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
+                        self.run_cbq_query()
+                    except:
+                        pass
 
     def test_multiple_indexes_query_non_ind_attr(self):
         index_name_prefix = 'auto_ind'
