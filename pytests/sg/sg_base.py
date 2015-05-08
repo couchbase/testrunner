@@ -13,7 +13,8 @@ class GatewayBaseTest(unittest.TestCase):
         'http://latestbuilds.hq.couchbase.com/couchbase-sync-gateway': (
             '0.0.0/{0}/couchbase-sync-gateway-community_{0}_x86_64.rpm',
             '1.1.0/{0}/couchbase-sync-gateway-community_{0}_x86_64.rpm',
-            '0.0.1/{0}/couchbase-sync-gateway-community_{0}_x86_64.rpm'
+            '0.0.1/{0}/couchbase-sync-gateway-community_{0}_x86_64.rpm',
+            'release/1.1.0/{0}/couchbase-sync-gateway-community_{0}_x86_64.rpm'
         ),
     }
 
