@@ -494,6 +494,7 @@ class XdcrCLITest(CliBaseTest):
         cli_command = "xdcr-setup"
         options = "--create"
         options += (" --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name), "")[xdcr_cluster_name is None]
+        print ("Value of xdcr_home is {0}".format(xdcr_hostname))
         if xdcr_hostname is not None:
             options += " --xdcr-hostname={0}".format(self.servers[xdcr_hostname].ip)
         options += (" --xdcr-username={0}".format(xdcr_username), "")[xdcr_username is None]
