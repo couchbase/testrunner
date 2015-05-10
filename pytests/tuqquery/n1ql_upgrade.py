@@ -1,10 +1,7 @@
-import math
-
 from tuq import QueryTests
-from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
-from membase.api.exception import CBQError
 from newupgradebasetest import NewUpgradeBaseTest
+from remote.remote_util import RemoteMachineShellConnection
+
 
 class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
@@ -31,19 +28,28 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
     def test_mixed_cluster(self):
         self.assertTrue(len(self.servers) > 1, 'Test needs more than 1 server')
         self._install(self.servers[:2])
-        upgrade_threads = self._async_update(self.upgrade_versions[0], [self.servers[0]])
+        self.bucket_size = 100
+        self._bucket_creation()
+        self.load(self.gens_load, flag=self.item_flag)
+        upgrade_threads = self._async_update(self.upgrade_versions[0], [self.servers[1]], None, True)
         for upgrade_thread in upgrade_threads:
             upgrade_thread.join()
-        out = self._start_command_line_query(self.master)
-        self.assertFalse(out[0], 'N1ql started')
+        self.cluster.rebalance(self.servers[:1], self.servers[1:2], [])
+        self.shell = RemoteMachineShellConnection(self.servers[1])
+        self._start_command_line_query(self.servers[1])
+        o = self.shell.execute_command("ps -aef| grep cbq-engine")
+        print o
+        self.assertTrue(o[0][0].find('cbq-engine -datastore')!= -1,
+                        'N1ql couldn\'t be started')
 
     def test_upgrade(self):
         method_name = self.input.param('to_run', 'test_any')
         self._install(self.servers[:2])
-        self._start_command_line_query(self.master)
-        self.create_primary_index_for_3_0_and_greater()
-        getattr(self, method_name)()
-        upgrade_threads = self._async_update(self.upgrade_versions[0], [self.servers[:2]])
+        self.bucket_size = 100
+        self._bucket_creation()
+        self.load(self.gens_load, flag=self.item_flag)
+        self.cluster.rebalance(self.servers[:1], self.servers[1:2], [])
+        upgrade_threads = self._async_update(self.upgrade_versions[0], self.servers[:2])
         for upgrade_thread in upgrade_threads:
             upgrade_thread.join()
         o = self.shell.execute_command("ps -aef| grep cbq-engine")
@@ -55,4 +61,3 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self._start_command_line_query(self.master)
         self.create_primary_index_for_3_0_and_greater()
         getattr(self, method_name)()
-        

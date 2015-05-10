@@ -69,7 +69,8 @@ class QueryTests(BaseTestCase):
                     self.load_directory(self.gens_load)
                 else:
                     self.load(self.gens_load, flag=self.item_flag)
-            self.create_primary_index_for_3_0_and_greater()
+            if str(self.__class__).find('QueriesUpgradeTests') == -1:
+                self.create_primary_index_for_3_0_and_greater()
             if not self.input.param("skip_build_tuq", True):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
