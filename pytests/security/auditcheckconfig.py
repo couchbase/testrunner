@@ -32,13 +32,14 @@ class auditcheckconfig(BaseTestCase):
     Returns ip address of the requesting machine
     '''
     def getLocalIPAddress(self):
+        '''
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("couchbase.com", 0))
         return s.getsockname()[0]
         '''
         status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
         return ipAddress
-        '''
+
 
     def getTimeStampForFile(self, audit):
         return (audit.getTimeStampFirstEvent()).replace(":", "-")
@@ -74,8 +75,8 @@ class auditcheckconfig(BaseTestCase):
         expectedResults = {'name':bucketName, 'ram_quota':104857600, 'num_replicas':1,
                                    'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                     'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
-                                    "flush_enabled":False, "num_threads":3, "source":source, \
-                                    "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'' }
+                                    "flush_enabled":1, "num_threads":3, \
+                                    "ip":self.ipAddress, "port":57457, 'sessionid':'' }
         rest.create_bucket(expectedResults['name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                     '11211', 'membase', 0, expectedResults['num_threads'], expectedResults['flush_enabled'], 'valueOnly')
         return expectedResults
@@ -225,6 +226,11 @@ class auditcheckconfig(BaseTestCase):
 
         #Check for audit.log and for roll over file
         self.sleep(120, 'Waiting for server to start after shutdown')
+        rest = RestConnection(self.master)
+        #Create an Event for Bucket Creation
+        #expectedResults = self.createBucketAudit(self.master, "TestBucketKillShutdown")
+        status, content = rest.validateLogin("Administrator", "password", True, getContent=True)
+        self.sleep(30)
         result = shell.file_exists(auditIns.pathLogFile, audit.AUDITLOGFILENAME)
         self.assertTrue(result, "Audit.log is not created when memcached server is killed or stopped")
         hostname = shell.execute_command("hostname")
@@ -427,7 +433,7 @@ class auditcheckconfig(BaseTestCase):
     def test_fileRotate20MB(self):
         auditIns = audit(host=self.master)
         firstEventTime = self.getTimeStampForFile(auditIns)
-
+        tempEventCounter = 0
         rest = RestConnection(self.master)
         shell = RemoteMachineShellConnection(self.master)
         filePath = auditIns.pathLogFile + auditIns.AUDITLOGFILENAME
@@ -437,9 +443,10 @@ class auditcheckconfig(BaseTestCase):
         result = shell.file_exists(auditIns.pathLogFile, archiveFile)
         tempTime = 0
         starttime = time.time()
-        while ((number < 20971520) and (tempTime < 21600) and (result == False)):
+        while ((number < 21089520) and (tempTime < 21600) and (result == False)):
             for i in range(1, 10):
                 status, content = rest.validateLogin("Administrator", "password", True, getContent=True)
+                tempEventCounter += 1
                 number = int (shell.get_data_file_size(filePath))
                 currTime = time.time()
                 tempTime = int (currTime - starttime)
@@ -447,6 +454,7 @@ class auditcheckconfig(BaseTestCase):
         self.sleep(30)
         result = shell.file_exists(auditIns.pathLogFile, archiveFile)
         shell.disconnect()
+        self.log.info ("--------Total Event Created ---- {0}".format(tempEventCounter))
         self.assertTrue(result, "Archive Audit.log is not created on reaching 20MB threshhold")
 
     def test_clusterEndToEnd(self):
@@ -465,7 +473,7 @@ class auditcheckconfig(BaseTestCase):
             for server in self.servers:
                 rest = RestConnection(sever)
                 #Create an Event for Bucket Creation
-                expectedResults = self.createBucketAudit(server, "Test Bucket" + server.ip)
+                expectedResults = self.createBucketAudit(server, "TestBucket" + server.ip)
                 self.checkConfig(self.eventID, server, expectedResults)
 
             #Remove one node from the cluser
