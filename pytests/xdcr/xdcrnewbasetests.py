@@ -363,20 +363,22 @@ class NodeHelper:
         shell.disconnect()
 
     @staticmethod
+    def get_goxdcr_log_dir(node):
+        """Gets couchbase log directory, even for cluster_run
+        """
+        _, dir = RestConnection(node).diag_eval('filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+        return str(dir)
+
+    @staticmethod
     def check_goxdcr_log(server, str):
         """ Checks if a string 'str' is present in goxdcr.log on server
             and returns the number of occurances
         """
         shell = RemoteMachineShellConnection(server)
-        os_type = shell.extract_remote_info().distribution_type
-        if os_type.lower() == 'windows':
-            goxdcr_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/goxdcr.*"
-        else:
-            goxdcr_log = "/opt/couchbase/var/lib/couchbase/logs/goxdcr.*"
-
+        goxdcr_log = NodeHelper.get_goxdcr_log_dir(server) + '/goxdcr.log*'
         count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
-                                             format(str, goxdcr_log),
-                                           debug=False)
+                                        format(str, goxdcr_log), debug=False)
+
         NodeHelper._log.info(int(count[0]))
         shell.disconnect()
         return int(count[0])
@@ -2349,12 +2351,16 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__mixed_priority = self._input.param("mixed_priority", None)
 
         self.__lww = self._input.param("lww", 0)
-
+        self.__fail_on_crash = self._input.param("fail_on_crash", True)
         # simply append to this list, any error from log we want to fail test on
-        self.__report_error_list = ["panic:"]
+        self.__report_error_list = []
+        if self.__fail_on_crash:
+            self.__report_error_list.append("panic:")
+
         # for format {ip1: {"panic": 2, "KEY_ENOENT":3}}
         self.__error_count_dict = {}
-        self.__initialize_error_count_dict()
+        if len(self.__report_error_list) > 0:
+            self.__initialize_error_count_dict()
 
         # Public init parameters - Used in other tests too.
         # Move above private to this section if needed in future, but
@@ -2889,6 +2895,16 @@ class XDCRNewBaseTest(unittest.TestCase):
     def merge_all_buckets(self):
         self.__merge_all_buckets()
 
+    def print_panic_stacktrace(self, node):
+        """ Prints panic stacktrace from goxdcr.log*
+        """
+        shell = RemoteMachineShellConnection(node)
+        result, err = shell.execute_command("zgrep -A 40 'panic:' {0}/goxdcr.log*".
+                            format(NodeHelper.get_goxdcr_log_dir(node)))
+        for line in result:
+            self.log.info(line)
+        shell.disconnect()
+
     def check_errors_in_goxdcr_logs(self):
         """
         checks if new errors from self.__report_error_list
@@ -2898,16 +2914,18 @@ class XDCRNewBaseTest(unittest.TestCase):
         for node in self._input.servers:
             for error in self.__report_error_list:
                 new_error_count = NodeHelper.check_goxdcr_log(node, error)
-                if (new_error_count  > self.__error_count_dict[node.ip][error]):
-                    error_found_logger.append("{0} found on {1}".format(error,
-                                                                    node.ip))
                 self.log.info("Initial {0} count on {1} :{2}, now :{3}".
                             format(error,
                                 node.ip,
                                 self.__error_count_dict[node.ip][error],
                                 new_error_count))
+                if (new_error_count  > self.__error_count_dict[node.ip][error]):
+                    error_found_logger.append("{0} found on {1}".format(error,
+                                                                    node.ip))
+                    if "panic" in error:
+                        self.print_panic_stacktrace(node)
         if error_found_logger:
-            self.log.info(error_found_logger)
+            self.log.error(error_found_logger)
         return error_found_logger
 
     def _wait_for_replication_to_catchup(self, timeout=300):
@@ -2998,7 +3016,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                         self.fail("RevID verification failed for remote-cluster: {0}".
                             format(remote_cluster_ref))
 
-        # treat goxdcr crashes as failures
-        error_logger = self.check_errors_in_goxdcr_logs()
-        if error_logger:
-            self.fail("Errors found in logs : {0}".format(error_logger))
+        # treat errors in self.__report_error_list as failures
+        if len(self.__report_error_list) > 0:
+            error_logger = self.check_errors_in_goxdcr_logs()
+            if error_logger:
+                self.fail("Errors found in logs : {0}".format(error_logger))
