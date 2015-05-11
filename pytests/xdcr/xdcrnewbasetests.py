@@ -378,10 +378,13 @@ class NodeHelper:
         goxdcr_log = NodeHelper.get_goxdcr_log_dir(server) + '/goxdcr.log*'
         count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
                                         format(str, goxdcr_log), debug=False)
-
-        NodeHelper._log.info(int(count[0]))
+        if isinstance(count, list):
+            count = int(count[0])
+        else:
+            count = int(count)
+        NodeHelper._log.info(count)
         shell.disconnect()
-        return int(count[0])
+        return count
 
     @staticmethod
     def rename_nodes(servers):
