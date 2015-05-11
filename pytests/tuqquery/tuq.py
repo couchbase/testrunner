@@ -675,7 +675,7 @@ class QueryTests(BaseTestCase):
 
     def test_meta_like(self):
         for bucket in self.buckets:
-            self.query = 'SELECT name FROM %s WHERE META(%s).id LIKE "query-test%"'  % (
+            self.query = 'SELECT name FROM %s WHERE META(%s).id LIKE "employee%"'  % (
                                                                             bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'],
@@ -688,7 +688,7 @@ class QueryTests(BaseTestCase):
     def test_prepared_meta_like(self):
         for bucket in self.buckets:
             self.query = 'SELECT name FROM %s WHERE META(%s).id '  % (bucket.name, bucket.name) +\
-                         'LIKE "query-test%"'
+                         'LIKE "employee%"'
             self.prepared_common_body()
 
     def test_meta_flags(self):
