@@ -946,6 +946,10 @@ class CouchbaseCluster:
     def get_name(self):
         return self.__name
 
+    def get_cluster(self):
+        return self.__clusterop
+
+
     def get_kv_gen(self):
         raise_if(
             self.__kv_gen is None,
@@ -2406,6 +2410,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             self._input.param("active_resident_threshold", 100)
         CHECK_AUDIT_EVENT.CHECK = self._input.param("verify_audit", 0)
         self._max_verify = self._input.param("max_verify", 100000)
+        self._evict_with_compactor = self._input.param("evict_with_compactor", False)
 
     def __initialize_error_count_dict(self):
         """
@@ -2980,8 +2985,16 @@ class XDCRNewBaseTest(unittest.TestCase):
                 try:
                     src_cluster = remote_cluster_ref.get_src_cluster()
                     dest_cluster = remote_cluster_ref.get_dest_cluster()
-                    src_cluster.run_expiry_pager()
-                    dest_cluster.run_expiry_pager()
+
+                    if self._evict_with_compactor:
+                        for b in src_cluster.get_buckets():
+                           # only need to do compaction on the source cluster, evictions are propagated to the remote
+                           # cluster
+                           src_cluster.get_cluster().compact_bucket(src_cluster.get_master_node(), b)
+
+                    else:
+                        src_cluster.run_expiry_pager()
+                        dest_cluster.run_expiry_pager()
 
                     src_cluster.wait_for_flusher_empty()
                     dest_cluster.wait_for_flusher_empty()
