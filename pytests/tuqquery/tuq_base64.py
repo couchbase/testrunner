@@ -54,15 +54,7 @@ class Base64Tests(QueryTests):
                 if str(output).find('cbq-engine') == -1:
                     os = self.shell.extract_remote_info().type.lower()
                     if os != 'windows':
-                        gopath = testconstants.LINUX_GOPATH
-                    else:
-                        gopath = testconstants.WINDOWS_GOPATH
-                    if self.input.tuq_client and "gopath" in self.input.tuq_client:
-                        gopath = self.input.tuq_client["gopath"]
-                    output = shell.execute_command('tail -10 %s/src/github.com/couchbase/query/n1ql.log' % gopath)
-                    self.log.info('LAST LOG CBQ_ENGINE')
-                    self.log.info(output)
-                    self.fail('Cbq-engine is crashed')
+                        self.fail('Cbq-engine is crashed')
                 self.log.info('Error appeared as expected')
             else:
                 self.fail('Error expected but not appeared')
