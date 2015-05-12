@@ -856,10 +856,12 @@ class RemoteMachineShellConnection:
 
         if task == "install":
             template_file = "cb-install.wct"
-            file = "{0}_{1}_install.iss".format(uuid.uuid4(), self.ip)
+            #file = "{0}_{1}_install.iss".format(uuid.uuid4(), self.ip)
+            file = "{0}_install.iss".format(self.ip)
         elif task == "uninstall":
             template_file = "cb-uninstall.wct"
-            file = "{0}_{1}_uninstall.iss".format(uuid.uuid4(), self.ip)
+            #file = "{0}_{1}_uninstall.iss".format(uuid.uuid4(), self.ip)
+            file = "{0}_uninstall.iss".format(self.ip)
 
         # create in/uninstall file from windows capture template (wct) file
         full_src_path_template = os.path.join(src_path, template_file)
