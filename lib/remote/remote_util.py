@@ -856,10 +856,10 @@ class RemoteMachineShellConnection:
 
         if task == "install":
             template_file = "cb-install.wct"
-            file = "{0}_install.iss".format(self.ip)
+            file = "{0}_{1}_install.iss".format(uuid.uuid4(), self.ip)
         elif task == "uninstall":
             template_file = "cb-uninstall.wct"
-            file = "{0}_uninstall.iss".format(self.ip)
+            file = "{0}_{1}_uninstall.iss".format(uuid.uuid4(), self.ip)
 
         # create in/uninstall file from windows capture template (wct) file
         full_src_path_template = os.path.join(src_path, template_file)
@@ -882,6 +882,7 @@ class RemoteMachineShellConnection:
 
         self.copy_file_local_to_remote(full_src_path, full_des_path)
         """ remove capture file from source after copy to destination """
+        self.sleep(2, "wait for remote copy completed")
         os.remove(full_src_path)
 
     def get_windows_system_info(self):
