@@ -2354,7 +2354,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__mixed_priority = self._input.param("mixed_priority", None)
 
         self.__lww = self._input.param("lww", 0)
-        self.__fail_on_crash = self._input.param("fail_on_crash", True)
+        self.__fail_on_crash = self._input.param("fail_on_crash", False)
         # simply append to this list, any error from log we want to fail test on
         self.__report_error_list = []
         if self.__fail_on_crash:
