@@ -1018,8 +1018,8 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
     def teardown_extended(self):
         for _, clusters in self._clusters_dic.items():
             rest = RestConnection(clusters[0])
-            rest.remove_all_remote_clusters()
             rest.remove_all_replications()
+            rest.remove_all_remote_clusters()
             rest.remove_all_recoveries()
 #            #TODO should be added 'stop replication' when API to stop will be implemented
 #        for (rest_conn, cluster_ref, rep_database, rep_id) in self._cluster_state_arr:
