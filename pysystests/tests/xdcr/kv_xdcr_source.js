@@ -8,11 +8,11 @@
                     "name" : "load_dgm",
                     "desc" :  "load_hotset",
                     "workload" : [{"spec" : "b:standardbucket,t:template512,s:100,e:20,ttl:86400,ccq:std1ph5keys,ops:60000",
-                                  "conditions" : "post:vb_active_resident_items_ratio < 50"},
+                                  "conditions" : "post:vb_active_resident_items_ratio < 20"},
                                   {"spec" : "b:standardbucket1,e:30,s:100,ttl:86400,ccq:std2ph5keys,ops:40000",
                                   "conditions" : "post:count = 20000000"},
                                   {"spec" : "b:saslbucket,pwd:password,s:100,ccq:saslph5keys,ops:60000",
-                                   "conditions" : "post:vb_active_resident_items_ratio < 70"}]
+                                   "conditions" : "post:vb_active_resident_items_ratio < 50"}]
                  },
                  "1" :
                  {

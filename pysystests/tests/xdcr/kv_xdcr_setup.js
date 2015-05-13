@@ -25,9 +25,7 @@
                     "name" : "test_load",
                     "desc" :  "test_load",
                     "workload" : [{"spec" : "b:standardbucket,t:template512,s:100,e:20,ttl:86400,ccq:std1ph5keys,ops:60000",
-                                  "conditions" : "post:count = 100"},
-                                  {"spec" : "b:saslbucket,pwd:password,s:100,ccq:saslph5keys,ops:60000",
-                                   "conditions" :  "post:count = 100"}]
+                                  "conditions" : "post:count = 100"}]
                  }
                }
 }
