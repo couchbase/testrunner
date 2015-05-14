@@ -285,6 +285,16 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['vm_memories']))
             self._verify_results(actual_result, expected_result)
 
+    def test_array_objects(self):
+        for bucket in self.buckets:
+            self.query = "SELECT VMs[*].os from %s" % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'])
+            expected_result = [{"os" : [vm["os"] for vm in doc['VMs']]}
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
     def test_arrays_negative(self):
         queries_errors = {'SELECT ARRAY vm.memory FOR vm IN 123 END AS vm_memories FROM %s' : ('syntax error', 3000),
                           'SELECT job_title, array_agg(name)[:5] as names FROM %s' : ('syntax error', 3000),
