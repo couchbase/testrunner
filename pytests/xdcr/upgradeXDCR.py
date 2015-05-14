@@ -472,17 +472,17 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                         self.dest_nodes.extend(servers_to_add)
                 elif op == 'rebalanceout':
                     if cluster == 'src':
+                        self.src_master = self.servers[0]
                         rebalance_out_candidates = filter(lambda node: node != self.src_master, self.src_nodes)
                         self.cluster.rebalance(self.src_nodes, [], rebalance_out_candidates[:self.nodes_out])
                         for node in rebalance_out_candidates[:self.nodes_out]:
                             self.src_nodes.remove(node)
-                        self.src_master = self.src_nodes[0]
                     elif cluster == 'dest':
+                        self.dest_master = self.servers[self.src_init]
                         rebalance_out_candidates = filter(lambda node: node != self.dest_master, self.dest_nodes)
                         self.cluster.rebalance(self.dest_nodes, [], rebalance_out_candidates[:self.nodes_out])
                         for node in rebalance_out_candidates[:self.nodes_out]:
                             self.dest_nodes.remove(node)
-                        self.dest_master = self.dest_nodes[0]
                 if op == 'create_index':
                     ddoc_num = 1
                     views_num = 2
