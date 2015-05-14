@@ -82,6 +82,26 @@ class QueriesViewsTests(QueryTests):
                     self._verify_results(actual_result['results'], [])
                 self.test_case()
 
+    def test_create_same_name(self):
+        for bucket in self.buckets:
+            view_name = "tuq_index_%s%s" % (bucket.name, 'VMs')
+            try:
+                self.query = "CREATE INDEX %s ON %s(%s) USING VIEW" % (view_name, bucket.name, 'VMs')
+                actual_result = self.run_cbq_query()
+                self._verify_results(actual_result['results'], [])
+                self.query = "CREATE INDEX %s ON %s(%s) USING GSI" % (view_name, bucket.name, 'VMs')
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, view_name)
+                self._verify_results(actual_result['results'], [])
+            finally:
+                try:
+                    self.query = "DROP INDEX %s.%s USING VIEW" % (bucket.name, view_name)
+                    self.run_cbq_query()
+                    self.query = "DROP INDEX %s.%s USING GSI" % (bucket.name, view_name)
+                    self.run_cbq_query()
+                except:
+                    pass
+
     def test_explain(self):
         for bucket in self.buckets:
             self.query = "EXPLAIN SELECT * FROM %s" % (bucket.name)
