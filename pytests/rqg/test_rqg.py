@@ -24,6 +24,7 @@ class RQGTests(BaseTestCase):
         self.database= self.input.param("database","flightstats")
         self.user_id= self.input.param("user_id","root")
         self.password= self.input.param("password","")
+        self.using_gsi= self.input.param("using_gsi",True)
         self.reset_database = self.input.param("reset_database",True)
         self.items = self.input.param("items",1000)
         self.mysql_url= self.input.param("mysql_url","localhost")
@@ -568,7 +569,7 @@ class RQGTests(BaseTestCase):
             self._setup_and_load_buckets_from_files()
         self._initialize_n1ql_helper()
         self.sleep(10)
-        self._build_primary_indexes()
+        self._build_primary_indexes(self.using_gsi)
 
     def _build_primary_indexes(self, using_gsi= True):
         self.n1ql_helper.create_primary_index(using_gsi = using_gsi, server = self.n1ql_server)

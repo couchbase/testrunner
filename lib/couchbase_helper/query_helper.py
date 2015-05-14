@@ -32,9 +32,13 @@ class QueryHelper(object):
         order_by = self._find_string_type(sql, ["ORDER BY", "order by"])
         group_by = self._find_string_type(sql, ["GROUP BY", "group by"])
         having = self._find_string_type(sql, ["HAVING", "having"])
-        from_field_text = sql.split(from_text)[1].split(where_text)[0]
+        if where_text:
+            from_field_text = sql.split(from_text)[1].split(where_text)[0]
+        else:
+            from_field_text = sql.split(from_text)[1]
         select_from_text = sql.split(select_text)[1].split(from_text)[0].strip()
-        where_condition_text = sql.split(where_text)[1]
+        if where_text:
+            where_condition_text = sql.split(where_text)[1]
         if group_by:
             group_by_text = sql.split(group_by)[1]
             where_condition_text = where_condition_text.split(group_by)[0]
@@ -58,6 +62,129 @@ class QueryHelper(object):
                 }
         return map
 
+    def _gen_query_with_subquery(self, sql = "", table_map = {}):
+        outer_table_map = {}
+        count = 0
+        new_sql = ""
+        new_n1ql = ""
+        space = " "
+        start_query = False
+        not_seen_end  = True
+        sql_template= ""
+        inner_subquery_in_field = ""
+        inner_subquery_aggregate_field = ""
+        inner_subquery_fields = ""
+        outer_subquery_fields = ""
+        end_map ={}
+        start_count =0
+        end_count = 0
+        for token in sql.split(" "):
+            if not_seen_end and start_query and ("START" in token or "END" in token):
+                start_query = False
+                table_map_new = {}
+                for key in  list(set(table_map.keys()) - set(outer_table_map.keys()) ):
+                    table_map_new[key]=table_map[key]
+                if len(table_map_new) == 0:
+                    table_map_new=outer_table_map
+                sql_template, new_table_map = self._convert_sql_template_to_value(sql_template, table_map_new)
+                n1ql_template = self._gen_sql_to_nql(sql_template)
+                table_name = random.choice(new_table_map.keys())[0]
+                outer_table_map.update(new_table_map)
+                if "USE KEYS" in sql_template:
+                    sql_template = sql_template.replace("USE KEYS","")
+                    if "OUTER_PRIMARY_KEY" in sql_template:
+                        table_name = random.choice(outer_table_map.keys())
+                        alias_name = outer_table_map[table_name]["alias_name"]
+                        primary_key_field = outer_table_map[table_name]["primary_key_field"]
+                        sql_template = sql_template.replace("OUTER_PRIMARY_KEY","")
+                        n1ql_template = n1ql_template.replace("OUTER_PRIMARY_KEY",alias_name+"."+primary_key_field)
+                    elif "INNER_PRIMARY_KEYS" in sql_template:
+                        primary_key_field = table_map[table_name]["primary_key_field"]
+                        keys = table_map[table_name]["fields"][primary_key_field]["distinct_values"][0:10]
+                        keys = self._convert_list(keys,"string")
+                        sql_template = sql_template.replace("[INNER_PRIMARY_KEYS]","")
+                        n1ql_template = n1ql_template.replace("INNER_PRIMARY_KEYS",keys)
+                    elif "OUTER_BUCKET_ALIAS" in sql_template:
+                        table_name = random.choice(outer_table_map.keys())
+                        alias_name = outer_table_map[table_name]["alias_name"]
+                        sql_template = sql_template.replace("META(OUTER_BUCKET_ALIAS).id","")
+                        n1ql_template = n1ql_template.replace("OUTER_BUCKET_ALIAS",alias_name)
+                if "OUTER_SUBQUERY_FIELDS" in sql_template:
+                    sql_template = sql_template.replace("OUTER_SUBQUERY_FIELDS",inner_subquery_fields)
+                    n1ql_template = n1ql_template.replace("OUTER_SUBQUERY_FIELDS",inner_subquery_fields)
+                if "INNER_SUBQUERY_FIELDS" in sql_template:
+                    inner_subquery_fields = self._search_fields_of_given_type(["int","mediumint","double", "float", "decimal"], new_table_map)
+                    new_list  =" "
+                    inner_subquery_fields = self._convert_list(inner_subquery_fields,"numeric")
+                    field_map  = {}
+                    for  field in inner_subquery_fields.split(","):
+                        field_map["\""+field.split(".")[1].strip()+"\""] = field.split(".")[1].strip()
+                        new_list += " "+field.split(".")[1]+ " ,"
+                    sql_template = sql_template.replace("INNER_SUBQUERY_FIELDS","( "+new_list[:len(new_list)-1]+" )")
+                    n1ql_template = n1ql_template.replace("INNER_SUBQUERY_FIELDS","TO_ARRAY("+ str(field_map).replace("'","")+")")
+                    inner_subquery_fields = new_list[:len(new_list)-1]
+                if "OUTER_SUBQUERY_IN_FIELD" in sql_template:
+                    sql_template = sql_template.replace("OUTER_SUBQUERY_IN_FIELD",inner_subquery_in_field)
+                    n1ql_template = n1ql_template.replace("OUTER_SUBQUERY_IN_FIELD",inner_subquery_in_field)
+                if "INNER_SUBQUERY_IN_FIELD" in sql_template:
+                    inner_subquery_in_field = self._search_fields_of_given_type(["int","mediumint","double", "float", "decimal"], new_table_map)[0]
+                    inner_subquery_in_field = inner_subquery_in_field.split(".")[1]
+                    n1ql_begin = " ARRAY c.{0} FOR c in ".format(inner_subquery_in_field)
+                    sql_template = sql_template.replace("INNER_SUBQUERY_IN_FIELD",inner_subquery_in_field)
+                    n1ql_template = n1ql_template.replace("INNER_SUBQUERY_IN_FIELD",inner_subquery_in_field)+" "+n1ql_begin
+                    end_map[start_count-1] = "END "
+                if "OUTER_SUBQUERY_AGG_FIELD" in sql_template:
+                    sql_template = sql_template.replace("OUTER_SUBQUERY_AGG_FIELD",inner_subquery_agg_field)
+                    n1ql_template = n1ql_template.replace("OUTER_SUBQUERY_AGG_FIELD",inner_subquery_agg_field)
+                if "INNER_SUBQUERY_AGG_FIELD" in sql_template:
+                    inner_subquery_agg_field = self._search_fields_of_given_type(["int","mediumint","double", "float", "decimal"], new_table_map)[0]
+                    inner_subquery_agg_field = inner_subquery_agg_field.split(".")[1]
+                    n1ql_begin = " ( ARRAY c.{0} FOR c in ".format(inner_subquery_agg_field)
+                    sql_template = sql_template.replace("INNER_SUBQUERY_AGG_FIELD",inner_subquery_agg_field)
+                    n1ql_template = n1ql_template.replace("INNER_SUBQUERY_AGG_FIELD"," TO_ARRAY( "+inner_subquery_agg_field+" ) ")+n1ql_begin
+                    end_map[start_count-1] = "END )"
+                if "END_" not in token:
+                    new_sql += sql_template+space
+                    new_n1ql += n1ql_template+space
+                    start_count+=1
+                else:
+                    new_sql += sql_template+space
+                    new_n1ql += n1ql_template+space
+                if "END_" in token:
+                    start_count -=2
+                    not_seen_end = False
+                    if (start_count-end_count) in end_map.keys():
+                        new_n1ql += end_map[start_count-end_count]
+                    end_count+=1
+                else:
+                    start_query = True
+                    type = token
+                    sql_template = ""
+                    n1ql_template = ""
+            elif not_seen_end and start_query:
+                sql_template += token+space
+            elif not_seen_end and "START" in token:
+                start_count+=1
+                start_query = True
+                type = token
+                sql_template = ""
+                new_sql += space
+                new_n1ql += space
+            else:
+                if "END_" not in token:
+                    new_sql += token+space
+                    new_n1ql += token+space
+                if "END_" in token:
+                    if (start_count-end_count) in end_map.keys():
+                        new_n1ql= new_n1ql+end_map[start_count-end_count]
+                    end_count+=1
+        for x in range(0,randint(0,5)):
+            alias_name = "tb_"+self._random_char()
+            new_sql = "SELECT {0}.* FROM ({1}) {0}".format(alias_name,new_sql)
+            new_n1ql = "SELECT {0}.* FROM ({1}) {0}".format(alias_name,new_n1ql)
+        return {"sql":new_sql, "n1ql":new_n1ql},outer_table_map
+
+
     def _gen_select_tables_info(self, sql = "", table_map = {}):
         count = 0
         table_name_list = table_map.keys()
@@ -73,7 +200,7 @@ class QueryHelper(object):
             bucket_string = table_name
             if table_name_alias != "":
                 table_name_alias = table_map[table_name]["alias_name"]
-                bucket_string = table_name_list[0]+"  "+table_name_alias
+                bucket_string = table_name+"  "+table_name_alias
             return sql.replace("BUCKET_NAME",bucket_string),{table_name:table_map[table_name]}
         for token in sql_token_list:
             if token.strip() not in standard_tokens:
@@ -390,6 +517,40 @@ class QueryHelper(object):
         if "DATETIME_FIELD"  in sql:
             new_sql = new_sql.replace("DATETIME_FIELD", random.choice(datetime_field_names))
         return new_sql
+
+    def _convert_sql_template_to_value_nested_subqueries(self, n1ql_template =""):
+        table_alias_list = []
+        space = " "
+        new_sql=""
+        alias_count =0
+        for token in n1ql_template.split(" "):
+            if "TABLE_ALIAS" in token:
+                if "TABLE_ALIAS.*" in token:
+                    alias_name = "sb_t_"+self._random_char()
+                    table_alias_list.append(alias_name)
+                    new_sql += token.replace("TABLE_ALIAS",alias_name)+space
+                    alias_count += 1
+                else:
+                    new_sql += token.replace("TABLE_ALIAS",table_alias_list[alias_count-1])+space
+                    alias_count -= 1
+            else:
+                new_sql += token+space
+        return new_sql
+
+
+
+    def _convert_sql_template_to_value_with_subqueries(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=False):
+        map, table_map = self._gen_query_with_subquery(sql =n1ql_template, table_map = table_map)
+        sql = map["sql"]
+        n1ql = map["n1ql"]
+        map = {
+                "n1ql":n1ql,
+                "sql":sql,
+                "bucket":str(",".join(table_map.keys())),
+                "expected_result":None,
+                "indexes":{}
+                    }
+        return map
 
     def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=False):
         sql, table_map = self._convert_sql_template_to_value(sql =n1ql_template, table_map = table_map, table_name= table_name)
@@ -1051,7 +1212,7 @@ class QueryHelper(object):
                 temp_list +=" "+str(num)+" ,"
         if type == "string":
             for num in list:
-                temp_list +=" \""+num+"\" ,"
+                temp_list +=" \""+str(num)+"\" ,"
         if type == "datetime":
             for num in list:
                 temp_list +=" \'"+str(num)+"\' ,"
@@ -1068,15 +1229,8 @@ class QueryHelper(object):
 if __name__=="__main__":
 
     helper = QueryHelper()
-    sql = helper._gen_select_after_analysis("q1 EXCEPT q2 EXCEPT q9")
-    print helper._divide_sql("select field from table where condition")
-    print helper._divide_sql("select field from table where condition")
-    print helper._divide_sql("select field from table where condition order by order_by_fields")
-    print helper._divide_sql("select field from table where condition group by group_by_fields order by order_by_fields")
-    print helper._divide_sql("select field from table where condition group by group_by_fields")
-    print helper._divide_sql("select field from table where condition group by group_by_fields having h_condition")
-    print helper._divide_sql("select field from table where condition group by group_by_fields order by order_by_fields")
-    print helper._divide_sql("select field from table where condition group by group_by_fields having h_condition order by order_by_fields")
+    print helper._convert_sql_template_to_value_nested_subqueries("CRAP1 TABLE_ALIAS.* CRAP2 TABLE_ALIAS.* FROM TABLE_ALIAS TABLE_ALIAS")
+
     #helper._convert_n1ql_list_to_sql("/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_examples/n1ql_10000_queries_for_simple_table.txt")
     #helper._convert_sql_to_nql_dump_in_file("/Users/parag/fix_testrunner/testrunner/b/resources/flightstats_mysql/inner_join_flightstats_n1ql_queries.txt")
     #print helper._gen_sql_to_nql("SELECT SUM(  a1.distance) FROM `ontime_mysiam`  AS a1 INNER JOIN `aircraft`  AS a2 ON ( a2 .`tail_num` = a1 .`tail_num` ) INNER JOIN `airports`  AS a3 ON ( a1 . `origin` = a3 .`code` ) ")

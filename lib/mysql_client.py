@@ -257,8 +257,12 @@ class MySQLClient(object):
         for n1ql_query in n1ql_queries:
             check = True
             if not helper._check_deeper_query_condition(n1ql_query):
-                map=helper._convert_sql_template_to_value_for_secondary_indexes(
-                 n1ql_query, table_map = table_map, table_name = table_name, define_gsi_index= define_gsi_index)
+                if "SUBQUERY" in n1ql_query:
+                    map = helper._convert_sql_template_to_value_with_subqueries(
+                        n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index)
+                else:
+                    map=helper._convert_sql_template_to_value_for_secondary_indexes(
+                        n1ql_query, table_map = table_map, table_name = table_name, define_gsi_index= define_gsi_index)
             else:
                 map=helper._convert_sql_template_to_value_for_secondary_indexes_sub_queries(
                     n1ql_query, table_map = table_map, table_name = table_name, define_gsi_index= define_gsi_index)
@@ -280,8 +284,12 @@ class MySQLClient(object):
         for n1ql_query in n1ql_queries:
             check = True
             if not helper._check_deeper_query_condition(n1ql_query):
-                map=helper._convert_sql_template_to_value_for_secondary_indexes(
-                 n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index)
+                if "SUBQUERY" in n1ql_query:
+                    map = helper._convert_sql_template_to_value_with_subqueries(
+                    n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index)
+                else:
+                    map=helper._convert_sql_template_to_value_for_secondary_indexes(
+                    n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index)
             else:
                 map=helper._convert_sql_template_to_value_for_secondary_indexes_sub_queries(
                     n1ql_query, table_map = table_map, define_gsi_index= define_gsi_index)
@@ -354,7 +362,7 @@ if __name__=="__main__":
     #column_info, rows = client._execute_query(query = query)
     #dict = client._gen_json_from_results_with_primary_key(column_info, rows, "primary_key_id")
     #print dict
-    client.reset_database_add_data(database="simple_table_db",sql_file_definiton_path = "/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table_db/database_definition/definition.sql")
+    client.reset_database_add_data(database="multiple_table_db",sql_file_definiton_path = "/Users/parag/fix_testrunner/testrunner/b/resources/rqg/multiple_table_db/database_definition/definition.sql")
     #query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
     #client.dump_database()
     client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt", gen_expected_result= False)
