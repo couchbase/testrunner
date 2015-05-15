@@ -137,7 +137,7 @@ class EvictionKV(EvictionBase):
         self.run_expiry_pager()
         self.cluster.wait_for_stats([self.master],
                                     "default", "",
-                                    "curr_items", "==", 0, timeout=30)
+                                    "curr_items", "==", 0, timeout=60)
 
 
     def test_eject_all_ops(self):
