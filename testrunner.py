@@ -266,6 +266,7 @@ class StoppableThreadWithResult(Thread):
         return self._return
 
 def main():
+
     BEFORE_SUITE = "suite_setUp"
     AFTER_SUITE = "suite_tearDown"
     names, test_params, arg_i, arg_p, options = parse_args(sys.argv)
@@ -433,6 +434,13 @@ def main():
     if TestInputSingleton.input.param("get-delays", False):
         sd.stop_measure_sched_delay()
         sd.fetch_logs()
+
+    # terminate any non main thread - these were causing hangs
+    for t in threading.enumerate():
+        if t.name != 'MainThread':
+            print 'Thread', t.name, 'was not properly terminated, will be terminated now.'
+            t.shutdown(True)
+
 
 def watcher():
     """This little code snippet is from
