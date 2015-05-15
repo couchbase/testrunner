@@ -34,6 +34,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.upgrade_versions = self.input.param('upgrade_version', '2.0.1-170-rel')
         self.upgrade_versions = self.upgrade_versions.split(";")
+        self.init_nodes = self.input.param('init_nodes', True)
 
         self.is_downgrade = self.input.param('downgrade', False)
         if self.is_downgrade:
@@ -118,6 +119,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         params['product'] = self.product
         params['version'] = self.initial_version
         params['vbuckets'] = [self.initial_vbuckets]
+        params['init_nodes'] = self.init_nodes
         if self.initial_build_type is not None:
             params['type'] = self.initial_build_type
         self.log.info("will install {0} on {1}".format(self.initial_version, [s.ip for s in servers]))
