@@ -592,7 +592,9 @@ class JsonGenerator:
 
     def generate_docs_sabre(self, docs_per_day=1, start=0, isShuffle=False, years=2):
         generators = []
-        dests = self._shuffle(['BOS', 'MIA', 'SFO'],isShuffle)
+        all_airports = ["ABR", "ABI", "ATL","BOS", "BUR", "CHI", "MDW", "DAL", "SFO", "SAN", "SJC", "LGA", "JFK", "MSP",
+                        "MSQ", "MIA", "LON", "DUB"]
+        dests = random.sample(all_airports,3)
         join_yr = self._shuffle(xrange(2010, 2010 + years), isShuffle)
         join_mo = self._shuffle(xrange(1, 12 + 1),isShuffle)
         join_day = self._shuffle(xrange(1, 28 + 1),isShuffle)
@@ -651,7 +653,7 @@ class JsonGenerator:
                                            "Equipment": {"AirEquipType": 763},
                                            "DepartureDateTime": "2014-07-12T00:35:00",
                                            "MarriageGrp": "O",
-                                           "ArrivalAirport": {"LocationCode": "MSP"}},
+                                           "ArrivalAirport": {"LocationCode": random.sample(all_airports, 1)}},
                                         {"TPA_Extensions":
                                            {"eTicket": {"Ind": False}},
                                            "MarketingAirline": {"Code": dest},
@@ -659,7 +661,7 @@ class JsonGenerator:
                                            "DepartureTimeZone": {"GMTOffset": -7},
                                            "OperatingAirline": {"Code": "DL",
                                                                 "FlightNumber": year + month + 1},
-                                           "DepartureAirport": {"LocationCode": "SFO"},
+                                           "DepartureAirport": {"LocationCode": random.sample(all_airports, 1)},
                                            "ArrivalTimeZone": {"GMTOffset": -3},
                                            "ResBookDesigCode": "X",
                                            "FlightNumber": year + day,
@@ -668,7 +670,7 @@ class JsonGenerator:
                                            "Equipment": {"AirEquipType": 764},
                                            "DepartureDateTime": "2014-07-12T00:35:00",
                                            "MarriageGrp": "1",
-                                           "ArrivalAirport": {"LocationCode": "MSP"}}],
+                                           "ArrivalAirport": {"LocationCode": random.sample(all_airports, 1)}}],
                                     "ElapsedTime": 619},
                                    {"FlightSegment": [
                                          {"TPA_Extensions":
@@ -678,7 +680,7 @@ class JsonGenerator:
                                            "DepartureTimeZone": {"GMTOffset": -7},
                                            "OperatingAirline": {"Code": "DL",
                                                                 "FlightNumber": year + month},
-                                           "DepartureAirport": {"LocationCode": "SFO"},
+                                           "DepartureAirport": {"LocationCode": random.sample(all_airports, 1)},
                                            "ArrivalTimeZone": {"GMTOffset": -5},
                                            "ResBookDesigCode": "X",
                                            "FlightNumber": year + day,
@@ -687,7 +689,7 @@ class JsonGenerator:
                                            "Equipment": {"AirEquipType": 763},
                                            "DepartureDateTime": "2014-07-12T00:35:00",
                                            "MarriageGrp": "O",
-                                           "ArrivalAirport": {"LocationCode": "MSP"}},
+                                           "ArrivalAirport": {"LocationCode": random.sample(all_airports, 1)}},
                                         {"TPA_Extensions":
                                            {"eTicket": {"Ind": False}},
                                            "MarketingAirline": {"Code": dest},
@@ -695,7 +697,7 @@ class JsonGenerator:
                                            "DepartureTimeZone": {"GMTOffset": -7},
                                            "OperatingAirline": {"Code": "DL",
                                                                 "FlightNumber": year + month + 1},
-                                           "DepartureAirport": {"LocationCode": "SFO"},
+                                           "DepartureAirport": {"LocationCode": random.sample(all_airports, 1)},
                                            "ArrivalTimeZone": {"GMTOffset": -3},
                                            "ResBookDesigCode": "X",
                                            "FlightNumber": year + day,
@@ -704,7 +706,7 @@ class JsonGenerator:
                                            "Equipment": {"AirEquipType": 764},
                                            "DepartureDateTime": "2014-07-12T00:35:00",
                                            "MarriageGrp": "1",
-                                           "ArrivalAirport": {"LocationCode": "MSP"}}]}]},
+                                           "ArrivalAirport": {"LocationCode": random.sample(all_airports, 1)}}]}]},
                                      "DirectionInd": "Return"}
                         generators.append(DocumentGenerator(prefix, template,
                                                amount, currency, decimal_tax, amount_tax, currency_tax,
