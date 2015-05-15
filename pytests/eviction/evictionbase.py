@@ -42,7 +42,7 @@ class EvictionBase(BaseTestCase):
         # go into heavy dgm
         while curr_active > active:
             curr_items = self.stat('curr_items')
-            gen_create = BlobGenerator('dgmkv', 'dgmkv-', doc_size , start=curr_items + 1, end=curr_items+5000)
+            gen_create = BlobGenerator('dgmkv', 'dgmkv-', doc_size , start=curr_items + 1, end=curr_items+50000)
             try:
                 self._load_all_buckets(self.master, gen_create, "create", ttl)
             except:
