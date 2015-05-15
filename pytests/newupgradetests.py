@@ -7,6 +7,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.kvstore import KVStore
+from 2i.indexscans_2i import SecondaryIndexingScanTests
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 from testconstants import SHERLOCK_VERSION
@@ -583,8 +584,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
     def online_upgrade_add_services(self):
         half_node = len(self.servers) / 2
-        self._install(self.servers[:half_node])
-        self.operations(self.servers[:half_node])
+        self._install(self.servers[:2])
+        self.operations(self.servers[:2])
         if self.ddocs_num:
             self.create_ddocs_and_views()
         self.initial_version = self.upgrade_versions[0]
@@ -592,28 +593,28 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                               " Wait for online upgrade to {0} version"
                                           .format(self.initial_version))
         self.product = 'couchbase-server'
-        self._install(self.servers[half_node:])
+        self._install(self.servers[2:])
         self.sleep(self.sleep_time, "Installation of new version is done."
                                                      " Wait for rebalance")
         self.log.info("Rebalanced in upgraded nodes and rebalanced out "
                                                   "nodes with old version")
-        self.cluster.rebalance(self.servers, self.servers[half_node:],
-                                                  self.servers[:half_node])
+        self.cluster.rebalance(self.servers, self.servers[2:],
+                                                  self.servers[:2])
         self.sleep(10)
 
         """ verify DCP upgrade in 3.x.x version """
-        self.master = self.servers[half_node]
+        self.master = self.servers[2]
         self.monitor_dcp_rebalance()
         self.sleep(self.sleep_time)
         try:
-            for server in self.servers[half_node:]:
+            for server in self.servers[2:]:
                 if self.port and self.port != '8091':
                     server.port = self.port
-            self._new_master(self.servers[half_node])
-            self.verification(self.servers[half_node:])
+            self._new_master(self.servers[2])
+            self.verification(self.servers[2:])
             self.log.info("Upgrade nodes of old version")
             upgrade_threads = self._async_update(self.upgrade_versions[0],
-                                     self.servers[:half_node], None, True)
+                                     self.servers[:2], None, True)
             for upgrade_thread in upgrade_threads:
                 upgrade_thread.join()
             success_upgrade = True
@@ -621,14 +622,18 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 success_upgrade &= self.queue.get()
             if not success_upgrade:
                 self.fail("Upgrade failed!")
-            self.cluster.rebalance(self.servers[half_node:],
-                                             self.servers[:half_node], [])
+            self.cluster.rebalance(self.servers[2:],
+                                             self.servers[:2], [])
             self.log.info("Rebalanced in all new version nodes")
             self.sleep(self.sleep_time)
             self.verification(self.servers)
         finally:
             for server in self.servers:
                 server.port = '8091'
+        """ init_nodes=False so we could set service on it"""
+        self.init_nodes = False
         self._install(self.servers[-1])
         self.cluster.rebalance(self.servers[:4],
                                              self.servers[-1], [])
+        SecondaryIndexingScanTests().test_multi_create_query_explain_drop_index()
+        # we could add more tests later
