@@ -404,7 +404,7 @@ class CouchbaseServerInstaller(Installer):
                     init_nodes = params["init_nodes"]
                 else:
                     init_nodes = "True"
-                if init_nodes.lower() == "true":
+                if (isinstance(init_nodes, bool) and init_nodes) or (init_nodes.lower() == "true"):
                     if server.services:
                         rest.init_node_services(username=server.rest_username,
                                                 password=server.rest_password,
