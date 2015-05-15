@@ -576,7 +576,8 @@ class QueriesViewsTests(QueryTests):
             created_indexes = []
             try:
                 for attr in ['join_day', 'join_mo']:
-                    self.query = "CREATE INDEX %s_%s ON %s(%s) " % (index_name_prefix, attr,
+                    index_name = '%s_%s' % (index_name_prefix, attr)
+                    self.query = "CREATE INDEX %s ON %s(%s) " % (index_name,
                                                                     bucket.name, attr)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)

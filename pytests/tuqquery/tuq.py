@@ -2680,7 +2680,7 @@ class QueryTests(BaseTestCase):
             else:
                 couchbase_path = testconstants.LINUX_COUCHBASE_BIN_PATH
                 cmd = "cd %s; " % (couchbase_path) +\
-                "./cbq-engine -datastore http://%s%s:%s/ %s >n1ql.log 2>&1 &" %(
+                "./cbq-engine -datastore http://%s%s:%s/ %s >/dev/null 2>&1 &" %(
                                                                 ('', auth_row)[auth_row is not None], server.ip, server.port, options)
             out = self.shell.execute_command(cmd)
             self.log.info(out)
