@@ -330,10 +330,14 @@ class SDKSmartClient(object):
             self.bucket=bucket.name
         else:
             self.bucket=bucket
+
         if hasattr(bucket, 'saslPassword'):
             self.saslPassword = bucket.saslPassword
         else:
-            self.saslPassword = None
+            bucket_info = rest.get_bucket(bucket)
+            self.saslPassword = bucket_info.saslPassword
+
+
         if rest.ip == "127.0.0.1":
             self.host = "{0}:{1}".format(rest.ip,rest.port)
             self.scheme = "http"
