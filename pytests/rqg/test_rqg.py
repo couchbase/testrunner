@@ -160,6 +160,7 @@ class RQGTests(BaseTestCase):
         inserted_count = 0
         self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
         # Load All the templates
+        self.test_file_path= self.unzip_template(self.test_file_path)
         with open(self.test_file_path) as f:
             query_list = f.readlines()
         if self.total_queries  == None:
@@ -791,6 +792,17 @@ class RQGTests(BaseTestCase):
                 map[key] =  val
             list.append(map)
         return list
+
+    def unzip_template(self, template_path):
+        if "zip" not in template_path:
+            return template_path
+        tokens =  template_path.split("/")
+        file_name = tokens[len(tokens)-1]
+        output_path = template_path.replace(file_name,"")
+        with zipfile.ZipFile(template_path, "r") as z:
+            z.extractall(output_path)
+        template_path = template_path.replace(".zip","")
+        return template_path
 
     def _setup_and_load_buckets_from_files(self):
         bucket_list =[]
