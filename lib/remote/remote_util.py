@@ -1439,21 +1439,22 @@ class RemoteMachineShellConnection:
                 added = True
         return added
 
+
+
+
     def wait_till_compaction_end(self, rest, bucket, timeout_in_seconds=60):
         end_time = time.time() + float(timeout_in_seconds)
-        compaction_started = False
+
         while time.time() < end_time:
             status, progress = rest.check_compaction_status(bucket)
             if status:
                 log.info("compaction progress is %s" % progress)
                 time.sleep(1)
-                compaction_started = True
-            elif compaction_started:
-                return True
             else:
-                log.info("auto compaction is not started yet.")
-                time.sleep(1)
-        log.error("auto compaction is not started in {0} sec.".format(str(timeout_in_seconds)))
+                # the compaction task has completed
+                return True
+
+        log.error("auto compaction has not ended in {0} sec.".format(str(timeout_in_seconds)))
         return False
 
     def wait_till_process_ended(self, process_name, timeout_in_seconds=360):
@@ -2652,6 +2653,8 @@ class RemoteMachineShellConnection:
         else:
             command = "%s %s:11210 %s %s %s " % (cbstat_command, self.ip, command,
                                                                 keyname, vbid)
+
+
         output, error = self.execute_command(command)
         self.log_command_output(output, error)
         return output, error
