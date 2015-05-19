@@ -80,14 +80,9 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         shell.log_command_output(output, error)
         if self.config != '':
             self.config = '/root/{0}'.format(self.config)
-        if self.param:
-            output, error = shell.execute_command_raw(
+        output, error = shell.execute_command(
                 'nohup /opt/couchbase-sync-gateway/bin/sync_gateway {0} {1} >/root/gateway.log 2>&1 &'
                 .format(self.param, self.config))
-        else:
-            output, error = shell.execute_command_raw(
-                'nohup /opt/couchbase-sync-gateway/bin/sync_gateway {0} >/root/gateway.log 2>&1 &'
-                .format(self.config))
         shell.log_command_output(output, error)
         if not self.expected_error:
             obj = RemoteMachineHelper(shell).is_process_running('sync_gateway')
@@ -95,12 +90,13 @@ class GatewayConfigBaseTest(GatewayBaseTest):
                 self.log.info('Sync Gateway is running with pid of {0}'.format(obj.pid))
                 if not shell.file_exists('/root/', 'gateway.log'):
                     self.log.info('Fail to find gateway.log')
-                    return False
                 else:
                     return True
             else:
                 self.log.info('Sync Gateway is NOT running')
-                return False
+                output, error = shell.execute_command_raw('cat /root/gateway.log')
+                shell.log_command_output(output, error)
+            return False
         else:
             return self.check_message_in_gatewaylog(shell, self.expected_error)
 
@@ -146,7 +142,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
                     continue
                 else:
                     self.log.info('check_message_in_gatewaylog did not find expected error - {0}'.format(expected_str))
-                    output, error = shell.execute_command_raw('cat /root/gateway.log'.format(expected_str))
+                    output, error = shell.execute_command_raw('cat /root/gateway.log')
                     shell.log_command_output(output, error)
                     return False
             else:
