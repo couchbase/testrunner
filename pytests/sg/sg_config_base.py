@@ -80,7 +80,7 @@ class GatewayConfigBaseTest(unittest.TestCase):
 
     def start_sync_gateway(self, shell):
         self.log.info('=== start_sync_gateway_internal')
-        shell.execute_command('killall -9 sync_gateway')
+        shell.execute_command('killall sync_gateway')
         output, error = shell.execute_command_raw('ps -ef | grep sync_gateway')
         shell.log_command_output(output, error)
         if self.config != '':
