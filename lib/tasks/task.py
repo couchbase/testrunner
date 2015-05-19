@@ -27,6 +27,7 @@ from membase.api.exception import N1QLQueryException, DropIndexException, Create
                                     ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException, BucketCompactionException
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
+from TestInput import TestInputServer
 
 try:
     CHECK_FLAG = False
@@ -857,6 +858,7 @@ class LoadDocumentsTask(GenericLoadingTask):
                  only_store_hash=True, proxy_client=None, batch_size=1, pause_secs=1, timeout_secs=30):
         GenericLoadingTask.__init__(self, server, bucket, kv_store, batch_size=batch_size,pause_secs=pause_secs,
                                     timeout_secs=timeout_secs)
+
         self.generator = generator
         self.op_type = op_type
         self.exp = exp
@@ -3693,6 +3695,14 @@ class CompactBucketTask(Task):
         self.retries = 20
         self.statuses = {}
 
+        # get the current count of compactions
+
+        nodes = self.rest.get_nodes()
+        self.compaction_count = {}
+
+        for node in nodes:
+            self.compaction_count[node.ip] = 0
+
     def execute(self, task_manager):
 
         try:
@@ -3710,21 +3720,27 @@ class CompactBucketTask(Task):
     def check(self, task_manager):
         # check bucket compaction status across all nodes
         nodes = self.rest.get_nodes()
+        current_compaction_count = {}
 
         for node in nodes:
-            last_status = self.statuses.get(node.id)
+            current_compaction_count[node.ip] = 0
+            s = TestInputServer()
+            s.ip = node.ip
+            s.ssh_username = self.server.ssh_username
+            s.ssh_password = self.server.ssh_password
+            shell = RemoteMachineShellConnection(s)
+            res = shell.execute_cbstats("", "raw", keyname="kvtimings", vbid="")
 
-            rest = RestConnection(node)
-            running, progress = rest.check_compaction_status(self.bucket)
-            if progress is None and last_status is False:
-                # finished if previously detected running but not == 100%
-                self.statuses[node.id] = True
 
-            if running:
-                self.statuses[node.id] = (progress == 100)
-        done = all(self.statuses.values())
-        if done:
-            # task was completed sucessfully
+            for i in res[0]:
+                # check for lines that look like
+                #    rw_0:compact_131072,262144:        8
+                if 'compact' in i:
+                    current_compaction_count[node.ip] += int(i.split(':')[2])
+
+
+        if cmp(current_compaction_count, self.compaction_count) == 1:
+            # compaction count has increased
             self.set_result(True)
             self.state = FINISHED
 
