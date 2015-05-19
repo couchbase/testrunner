@@ -1,17 +1,14 @@
-import logger
-import unittest
+from sg.sg_base import GatewayBaseTest
 from jinja2 import Environment, FileSystemLoader
 import json
 import time
-from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 import re
 
-class GatewayConfigBaseTest(unittest.TestCase):
+class GatewayConfigBaseTest(GatewayBaseTest):
 
     def setUp(self):
-        self.log = logger.Logger.get_logger()
-        self.input = TestInputSingleton.input
+        super(GatewayConfigBaseTest, self).setUp()
         self.version = self.input.param("version", "0.0.0-358")
         self.template = self.input.param("template", "")
         self.feedtype = self.input.param("feedtype", "tap")
@@ -27,8 +24,6 @@ class GatewayConfigBaseTest(unittest.TestCase):
         self.db_name = self.input.param("db_name", "db")
         self.sync_port = self.input.param("sync_port", "4984")
         self.admin_port = self.input.param("admin_port", "4985")
-        self.servers = self.input.servers
-        self.master = self.servers[0]
         self.dbs = self.input.clusters
         self.db_master = self.dbs[0]
         # parameters for accounts

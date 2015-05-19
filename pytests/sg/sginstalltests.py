@@ -53,7 +53,7 @@ class SGInstallerTest(GatewayBaseTest):
             shell = RemoteMachineShellConnection(server)
             self.assertTrue(self.service_clean(shell))
             self.assertTrue(self.install_gateway(shell))
-            output, error = shell.execute_command_raw(
+            shell.execute_command_raw(
                 'rm -rf {0}/* {1}/* {2}/sync_gateway.json /tmp/test*; mkdir /tmp/test /tmp/test2'.
                 format(self.logsdir, self.datadir, self.configdir))
             output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
