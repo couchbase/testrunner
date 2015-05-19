@@ -1,6 +1,7 @@
 from sg.sg_config_base import GatewayConfigBaseTest
 from sg.sg_webhook_base import GatewayWebhookBaseTest
 from remote.remote_util import RemoteMachineShellConnection
+import shutil
 
 help_string = ['Usage of /opt/couchbase-sync-gateway/bin/sync_gateway:',
 '  -adminInterface="127.0.0.1:4985": Address to bind admin interface to',
@@ -45,6 +46,8 @@ class SGConfigTests(GatewayConfigBaseTest):
     def configStartSgw(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
+            shutil.copy2('pytests/sg/resources/gateway_config_backup.json', 'pytests/sg/resources/gateway_config.json')
+            shell.copy_files_local_to_remote('pytests/sg/resources', '/root')
             self.assertTrue(self.start_sync_gateway(shell))
             self.assertTrue(self.check_message_in_gatewaylog(shell, self.expected_log))
             if not self.expected_error:

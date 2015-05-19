@@ -2,6 +2,7 @@ import logger
 import unittest
 from jinja2 import Environment, FileSystemLoader
 import json
+import time
 from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 import re
@@ -12,7 +13,6 @@ class GatewayConfigBaseTest(unittest.TestCase):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.version = self.input.param("version", "0.0.0-358")
-        self.param = self.input.param("param", "").replace("$", ",")
         self.template = self.input.param("template", "")
         self.feedtype = self.input.param("feedtype", "tap")
         self.config = self.input.param("config", "gateway_config.json")
@@ -20,7 +20,6 @@ class GatewayConfigBaseTest(unittest.TestCase):
         self.doc_content = self.input.param("doc_content", '"a":1')
         self.expected_error = self.input.param("expected_error", "")
         self.expected_stdout = self.input.param("expected_stdout", "")
-        self.expected_log = self.input.param("expected_log", "")
         self.not_expected_log = self.input.param("not_expected_log", "")
         self.bucket = self.input.param("bucket", "default")
         self.password = self.input.param("password", "")
@@ -44,6 +43,8 @@ class GatewayConfigBaseTest(unittest.TestCase):
         self.role_channels = self.input.param("role_channels", "")
         self.roles = self.input.param("roles", "")
         self.expect_channels = self.input.param("expect_channels", "")
+        self.param = self.input.param("param", "").replace("LOCAL_IP", self.master.ip)
+        self.expected_log = self.input.param("expected_log", "").replace("LOCAL_IP", self.master.ip)
 
     def generate_sync_gateways_config(self, template_filename, output_config_file):
         loader = FileSystemLoader('pytests/sg/resources')
@@ -143,10 +144,13 @@ class GatewayConfigBaseTest(unittest.TestCase):
             output, error = shell.execute_command_raw('grep \'{0}\' /root/gateway.log'.format(expected_str))
             shell.log_command_output(output, error)
             if not output or not output[0]:
-                if i < 3:
+                if i < 2:
+                    time.sleep(1)
                     continue
                 else:
                     self.log.info('check_message_in_gatewaylog did not find expected error - {0}'.format(expected_str))
+                    output, error = shell.execute_command_raw('cat /root/gateway.log'.format(expected_str))
+                    shell.log_command_output(output, error)
                     return False
             else:
                 return True
