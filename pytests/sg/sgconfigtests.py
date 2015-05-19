@@ -1,5 +1,4 @@
 from sg.sg_config_base import GatewayConfigBaseTest
-from sg.sg_webhook_base import GatewayWebhookBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 import shutil
 
@@ -26,8 +25,17 @@ class SGConfigTests(GatewayConfigBaseTest):
     def setUp(self):
         super(SGConfigTests, self).setUp()
         for server in self.servers:
-            shell = RemoteMachineShellConnection(server)
-            shell.copy_files_local_to_remote('pytests/sg/resources', '/root')
+            if self.case_number == 1:
+                shell = RemoteMachineShellConnection(server)
+                shell.copy_files_local_to_remote('pytests/sg/resources', '/root')
+                # will install sg only the first time
+                self.install(shell)
+                pid = self.is_sync_gateway_process_running(shell)
+                self.assertNotEqual(pid, 0)
+                exist = shell.file_exists('/root/', 'gateway.log')
+                self.assertTrue(exist)
+                shell.disconnect()
+
 
     def tearDown(self):
         super(SGConfigTests, self).tearDown()
