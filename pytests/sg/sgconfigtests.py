@@ -26,6 +26,11 @@ class SGConfigTests(GatewayConfigBaseTest):
         super(SGConfigTests, self).setUp()
         for server in self.servers:
             if self.case_number == 1:
+                with open('pytests/sg/resources/gateway_config_walrus_template.json', 'r') as file:
+                    filedata = file.read()
+                    filedata=filedata.replace('LOCAL_IP', server.ip)
+                with open('pytests/sg/resources/gateway_config_walrus.json', 'w') as file:
+                        file.write(filedata)
                 shell = RemoteMachineShellConnection(server)
                 shell.copy_files_local_to_remote('pytests/sg/resources', '/root')
                 # will install sg only the first time

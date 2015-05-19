@@ -1,6 +1,6 @@
 {
-    "adminInterface": "172.23.100.65:4985",
-    "interface": "172.23.100.65:4984",
+    "adminInterface": "LOCAL_IP:4985",
+    "interface": "LOCAL_IP:4984",
     "log": ["HTTP", "HTTP+", "CRUD"],
     "databases": {
         "db": {
@@ -10,4 +10,4 @@
             }
         }
     }
-}  
+}
