@@ -7,7 +7,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.kvstore import KVStore
-from 2i.indexscans_2i import SecondaryIndexingScanTests
+#from 2i.indexscans_2i import SecondaryIndexingScanTests
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 from testconstants import SHERLOCK_VERSION
@@ -635,5 +635,5 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self._install(self.servers[-1])
         self.cluster.rebalance(self.servers[:4],
                                              self.servers[-1], [])
-        SecondaryIndexingScanTests().test_multi_create_query_explain_drop_index()
+        #SecondaryIndexingScanTests().test_multi_create_query_explain_drop_index()
         # we could add more tests later
