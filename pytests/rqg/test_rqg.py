@@ -28,6 +28,7 @@ class RQGTests(BaseTestCase):
         self.reset_database = self.input.param("reset_database",True)
         self.items = self.input.param("items",1000)
         self.mysql_url= self.input.param("mysql_url","localhost")
+        self.mysql_url=self.mysql_url.replace("_",".")
         self.gen_secondary_indexes= self.input.param("gen_secondary_indexes",False)
         self.gen_gsi_indexes= self.input.param("gen_gsi_indexes",True)
         self.n1ql_server = self.get_nodes_from_services_map(service_type = "n1ql")
