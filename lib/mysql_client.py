@@ -177,6 +177,51 @@ class MySQLClient(object):
         return target_map
 
 
+    def _gen_index_combinations_for_tables(self, index_type = "GSI"):
+        import itertools
+        index_map = {}
+        map = self._get_pkey_map_for_tables_without_primary_key_column()
+        for table_name in map.keys():
+            index_map[table_name] = {}
+            number_field_list =[]
+            string_field_list = []
+            datetime_field_list= []
+            for key in map[table_name].keys():
+                if "int" in key or "decimal" in key:
+                    number_field_list.append(key)
+                if "char" in key or "text" in key:
+                    string_field_list.append(key)
+                if "tinyint" in key:
+                    datetime_field_list.append(key)
+            key_list = map[table_name].keys()
+            count = 0
+            index_list_map = {}
+            prefix= table_name+"_idx_"
+            for pair in list(itertools.permutations(key_list,1)):
+                index_list_map[prefix+"_".join(pair)] = pair
+            for pair in list(itertools.permutations(key_list,3)):
+                index_list_map[prefix+"_".join(pair)] = pair
+            for pair in list(itertools.permutations(string_field_list,len(string_field_list))):
+                index_list_map[prefix+"_".join(pair)] = pair
+            for pair in list(itertools.permutations(number_field_list,len(number_field_list))):
+                index_list_map[prefix+"_".join(pair)] = pair
+            index_list_map[prefix+"_".join(key_list)] = key_list
+            index_map[table_name] = index_list_map
+            index_list_map = {}
+            final_map = {}
+            for table_name in index_map.keys():
+                final_map[table_name] = {}
+                for index_name in index_map[table_name].keys():
+                    defintion  = "CREATE INDEX {0} ON {1}({2}) USING {3}".format(index_name,table_name, ",".join(index_map[table_name][index_name]),index_type)
+                    final_map[table_name][index_name] =\
+                        {
+                            "type":index_type,
+                            "definition":defintion,
+                            "name":index_name
+                        }
+        return final_map
+
+
     def _get_pkey_map_for_tables_with_primary_key_column(self):
         target_map = {}
         map = self._get_tables_information()
@@ -373,7 +418,8 @@ if __name__=="__main__":
     #column_info, rows = client._execute_query(query = query)
     #dict = client._gen_json_from_results_with_primary_key(column_info, rows, "primary_key_id")
     #print dict
-    client.reset_database_add_data(database="simple_table_dv",sql_file_definiton_path = "/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table_db/database_definition/definition.sql")
+    client.reset_database_add_data(database="multiple_table_db",sql_file_definiton_path = "/Users/parag/fix_testrunner/testrunner/b/resources/rqg/multiple_table_db/database_definition/definition.sql")
+    client._gen_index_combinations_for_tables()
     #query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
     #client.dump_database()
     #client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt", gen_expected_result= False)

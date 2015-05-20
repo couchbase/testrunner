@@ -11,20 +11,11 @@ USE `DATABASE_NAME` ;
 CREATE TABLE IF NOT EXISTS `DATABASE_NAME`.`simple_table` (
   `primary_key_id` VARCHAR(100) NOT NULL,
   `int_field1` INT(11) NULL DEFAULT NULL,
-  `int_field2` INT(11) NULL DEFAULT NULL,
-  `int_field3` INT(11) NULL DEFAULT NULL,
   `decimal_field1` DECIMAL(10,0) NULL DEFAULT NULL,
-  `medium_int_field1` MEDIUMINT(100) NULL DEFAULT NULL,
   `datetime_field1` DATETIME NULL DEFAULT NULL,
-  `datetime_field2` DATETIME NULL DEFAULT NULL,
   `bool_field1` TINYINT(1) NOT NULL DEFAULT 0,
-  `bool_field2` TINYINT(1) NOT NULL DEFAULT 0,
   `varchar_field1` VARCHAR(1000) NOT NULL,
-  `varchar_field2` VARCHAR(1000) NOT NULL,
   `char_field1` CHAR(100) NULL DEFAULT NULL,
-  `char_field2` CHAR(100) NULL DEFAULT NULL,
-  `longtext_field1` LONGTEXT NULL DEFAULT NULL,
-  `text_field1` TEXT NULL DEFAULT NULL,
   PRIMARY KEY (`primary_key_id`))
 ENGINE = InnoDB
 AUTO_INCREMENT = 10007
