@@ -94,9 +94,11 @@ class PauseResumeTest(XDCRNewBaseTest):
                 if self.reboot == "dest_node":
                     self.dest_cluster.reboot_one_node(self, master=True)
                 if self.reboot == "dest_cluster":
+                    from xdcrnewbasetests import NodeHelper
                     threads = []
                     for node in self.dest_cluster.get_nodes():
-                        threads.append(Thread(target=self.dest_cluster.reboot_one_node, args=(self,)))
+                        threads.append(Thread(target=NodeHelper.reboot_server,
+                                              args=(node, self)))
                     for thread in threads:
                         thread.start()
                     for thread in threads:
