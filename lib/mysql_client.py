@@ -136,6 +136,14 @@ class MySQLClient(object):
             table_list.append(row[0])
         return table_list
 
+    def _get_databases(self):
+        table_list = []
+        columns, rows = self._execute_query(query = "SHOW DATABASES")
+        for row in rows:
+            if "table" in row[0]:
+                table_list.append(row[0])
+        return table_list
+
     def _get_table_info(self, table_name = ""):
         columns, rows = self._execute_query(query = "DESCRIBE {0}".format(table_name))
         return self._gen_json_from_results(columns, rows)
@@ -369,6 +377,11 @@ class MySQLClient(object):
         query ="DROP SCHEMA IF EXISTS {0}".format(database)
         self._db_execute_query(query)
 
+    def remove_databases(self):
+        list_databases = self._get_databases()
+        for database in list_databases:
+            self.drop_database(database)
+
     def reset_database_add_data(self, database = "", items = 1000, sql_file_definiton_path= "/tmp/definition.sql"):
         sqls = self._read_from_file(sql_file_definiton_path)
         sqls = " ".join(sqls).replace("DATABASE_NAME",database).replace("\n","")
@@ -418,8 +431,8 @@ if __name__=="__main__":
     #column_info, rows = client._execute_query(query = query)
     #dict = client._gen_json_from_results_with_primary_key(column_info, rows, "primary_key_id")
     #print dict
-    client.reset_database_add_data(database="multiple_table_db",sql_file_definiton_path = "/Users/parag/fix_testrunner/testrunner/b/resources/rqg/multiple_table_db/database_definition/definition.sql")
-    client._gen_index_combinations_for_tables()
+    #client.reset_database_add_data(database="multiple_table_db",sql_file_definiton_path = "/Users/parag/fix_testrunner/testrunner/b/resources/rqg/multiple_table_db/database_definition/definition.sql")
+    client.remove_databases()
     #query_path="/Users/parag/fix_testrunner/testrunner/b/resources/rqg/simple_table/query_template/n1ql_query_template_10000.txt"
     #client.dump_database()
     #client._gen_gsi_index_info_from_n1ql_query_template(query_path="./temp.txt", gen_expected_result= False)
