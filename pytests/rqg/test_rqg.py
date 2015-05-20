@@ -26,6 +26,7 @@ class RQGTests(BaseTestCase):
         self.password= self.input.param("password","")
         self.using_gsi= self.input.param("using_gsi",True)
         self.reset_database = self.input.param("reset_database",True)
+        self.create_secondary_indexes = self.input.param("create_secondary_indexes",False)
         self.items = self.input.param("items",1000)
         self.mysql_url= self.input.param("mysql_url","localhost")
         self.mysql_url=self.mysql_url.replace("_",".")
@@ -572,6 +573,9 @@ class RQGTests(BaseTestCase):
         self._initialize_n1ql_helper()
         self.sleep(10)
         self._build_primary_indexes(self.using_gsi)
+        if self.create_secondary_indexes:
+            map  = self.client._gen_index_combinations_for_tables()
+            self._generate_secondary_indexes_during_initialize(map)
 
     def _build_primary_indexes(self, using_gsi= True):
         self.n1ql_helper.create_primary_index(using_gsi = using_gsi, server = self.n1ql_server)
@@ -699,6 +703,42 @@ class RQGTests(BaseTestCase):
                 except Exception, ex:
                     self.log.info(ex)
                     raise
+
+    def _generate_secondary_indexes_during_initialize(self, index_map = {}):
+        defer_mode = str({"defer_build":True})
+        for table_name in index_map.keys():
+            build_index_list = []
+            batch_index_definitions = {}
+            batch_index_definitions = index_map[table_name]
+            for index_name in batch_index_definitions.keys():
+                query = "{0} WITH {1}".format(
+                    batch_index_definitions[index_name]["definition"],
+                    defer_mode)
+                build_index_list.append(index_name)
+                self.log.info(" Running Query {0} ".format(query))
+                try:
+                    actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+                    build_index_list.append(index_name)
+                except Exception, ex:
+                    self.log.info(ex)
+                    raise
+            # Run Build Query
+            try:
+                build_query = "BUILD INDEX on {0}({1}) USING GSI".format(table_name,",".join(build_index_list))
+                actual_result = self.n1ql_helper.run_cbq_query(query = build_query, server = self.n1ql_server)
+                self.log.info(actual_result)
+            except Exception, ex:
+                self.log.info(ex)
+                raise
+            # Monitor till the index is built
+            tasks = []
+            try:
+                for index_name in build_index_list:
+                    tasks.append(self.async_monitor_index(bucket = table_name, index_name = index_name))
+                for task in tasks:
+                    task.result()
+            except Exception, ex:
+                self.log.info(ex)
 
     def _generate_secondary_indexes_in_batches(self, batches):
         defer_mode = str({"defer_build":True})
