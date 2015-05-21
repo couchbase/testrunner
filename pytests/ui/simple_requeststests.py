@@ -10,7 +10,6 @@ class SimpleRequests(BaseTestCase):
         rest = RestConnection(self.master)
         passed = True
         for api in ["", "versions", "pools", "pools/default", "pools/nodes", "pools/default/overviewStats",
-                    # "_uistats", MB-15070
                     "pools/default/buckets", "pools/default/buckets/@query/stats", "pools/default/nodeServices",
                     "pools/default/remoteClusters", "pools/default/serverGroups", "pools/default/certificate",
                     "pools/default/settings/memcached/global", "nodeStatuses", "logs", "settings/web",
@@ -20,9 +19,9 @@ class SimpleRequests(BaseTestCase):
                     "settings/autoCompaction", "settings/replications", "settings/replications",
                     "settings/saslauthdAuth", "settings/audit", "internalSettings", "nodes/self/xdcrSSLPorts",
                     "indexStatus",
-                    #"diag/vbuckets", MB-15070
+                    #"diag/vbuckets", MB-15080
                     "settings/indexes", "diag",
-                    #"diag/ale", MB-15070
+                    #"diag/ale", MB-15080
                     "pools/default/rebalanceProgress", "pools/default/tasks", "index.html", "sasl_logs", "sasl_logs",
                     "erlwsh/", "couchBase", "sampleBuckets"]:
             url = rest.baseUrl + api
@@ -32,7 +31,7 @@ class SimpleRequests(BaseTestCase):
             if not status:
                 self.log.info("wrong status for {0} GET request {1}".format(url, header))
                 passed = False
-            self.assertTrue(passed, msg="some GET requests failed. See logs above")
+        self.assertTrue(passed, msg="some GET requests failed. See logs above")
 
         _, content, _ = rest._http_request(rest.baseUrl + "sasl_logs")
         foundIndex = content.find("web request failed")
