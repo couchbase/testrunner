@@ -1234,7 +1234,7 @@ class RemoteMachineShellConnection:
             if vbuckets:
                 self.set_vbuckets_win(vbuckets)
 
-            output, error = self.execute_command("rm \
+            output, error = self.execute_command("rm -f \
                        /cygdrive/c/automation/{0}_install.iss".format(self.ip))
             self.log_command_output(output, error)
             # output, error = self.execute_command("cmd rm /cygdrive/c/tmp/{0}*.exe".format(build_name))
