@@ -723,22 +723,23 @@ class RQGTests(BaseTestCase):
                     self.log.info(ex)
                     raise
             # Run Build Query
-            try:
-                build_query = "BUILD INDEX on {0}({1}) USING GSI".format(table_name,",".join(build_index_list))
-                actual_result = self.n1ql_helper.run_cbq_query(query = build_query, server = self.n1ql_server)
-                self.log.info(actual_result)
-            except Exception, ex:
-                self.log.info(ex)
-                raise
-            # Monitor till the index is built
-            tasks = []
-            try:
-                for index_name in build_index_list:
-                    tasks.append(self.async_monitor_index(bucket = table_name, index_name = index_name))
-                for task in tasks:
-                    task.result()
-            except Exception, ex:
-                self.log.info(ex)
+            if build_index_list != None and len(build_index_list) > 0:
+                try:
+                    build_query = "BUILD INDEX on {0}({1}) USING GSI".format(table_name,",".join(build_index_list))
+                    actual_result = self.n1ql_helper.run_cbq_query(query = build_query, server = self.n1ql_server)
+                    self.log.info(actual_result)
+                except Exception, ex:
+                    self.log.info(ex)
+                    raise
+                # Monitor till the index is built
+                tasks = []
+                try:
+                    for index_name in build_index_list:
+                        tasks.append(self.async_monitor_index(bucket = table_name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
 
     def _generate_secondary_indexes_in_batches(self, batches):
         defer_mode = str({"defer_build":True})
@@ -760,25 +761,26 @@ class RQGTests(BaseTestCase):
                 self.log.info(ex)
                 raise
         # Run Build Query
-        try:
-            build_query = "BUILD INDEX on {0}({1}) USING GSI".format(table_name,",".join(build_index_list))
-            actual_result = self.n1ql_helper.run_cbq_query(query = build_query, server = self.n1ql_server)
-            self.log.info(actual_result)
-        except Exception, ex:
-            self.log.info(ex)
-            raise
-        # Monitor till the index is built
-        tasks = []
-        try:
-            for info in batches:
-                table_name = info["bucket"]
-                for index_name in info["indexes"]:
-                    if index_name in build_index_list:
-                        tasks.append(self.async_monitor_index(bucket = table_name, index_name = index_name))
-            for task in tasks:
-                task.result()
-        except Exception, ex:
-            self.log.info(ex)
+        if build_index_list != None and len(build_index_list) > 0:
+            try:
+                build_query = "BUILD INDEX on {0}({1}) USING GSI".format(table_name,",".join(build_index_list))
+                actual_result = self.n1ql_helper.run_cbq_query(query = build_query, server = self.n1ql_server)
+                self.log.info(actual_result)
+            except Exception, ex:
+                self.log.info(ex)
+                raise
+            # Monitor till the index is built
+            tasks = []
+            try:
+                for info in batches:
+                    table_name = info["bucket"]
+                    for index_name in info["indexes"]:
+                        if index_name in build_index_list:
+                            tasks.append(self.async_monitor_index(bucket = table_name, index_name = index_name))
+                for task in tasks:
+                    task.result()
+            except Exception, ex:
+                self.log.info(ex)
 
     def async_monitor_index(self, bucket, index_name = None):
         monitor_index_task = self.cluster.async_monitor_index(
