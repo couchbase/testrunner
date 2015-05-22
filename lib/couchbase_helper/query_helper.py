@@ -240,7 +240,6 @@ class QueryHelper(object):
         standard_tokens = ["UNION ALL","INTERSECT ALL", "EXCEPT ALL","UNION","INTERSECT","EXCEPT"]
         query_list = []
         new_sql = ""
-        print sql
         for token in standard_tokens:
             if token in sql:
                 new_sql = " "
@@ -250,7 +249,6 @@ class QueryHelper(object):
                         new_sql += sql_token +" "
                     else:
                         new_query, table_map = self._convert_sql_template_to_value(sql = sql_token, table_map = table_map, table_name=table_name)
-                        print new_query
                         query_list.append(new_query)
                         new_sql += new_query
                 return new_sql, query_list, table_map
@@ -553,6 +551,9 @@ class QueryHelper(object):
         return map
 
     def _convert_sql_template_to_value_for_secondary_indexes(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=False):
+        index_name_with_occur_fields_where = None
+        index_name_with_expression = None
+        index_name_fields_only = None
         sql, table_map = self._convert_sql_template_to_value(sql =n1ql_template, table_map = table_map, table_name= table_name)
         n1ql = self._gen_sql_to_nql(sql)
         sql = self._convert_condition_template_to_value_datetime(sql, table_map, sql_type ="sql")
@@ -574,11 +575,11 @@ class QueryHelper(object):
         map["bucket"] = table_name
         fields = table_map[table_name]["fields"].keys()
         field_that_occur = []
-        if where_condition:
+        if where_condition and ("OR" not in where_condition):
             for field in fields:
                 if field in where_condition:
                     field_that_occur.append(field)
-        if where_condition:
+        if where_condition and ("OR" not in where_condition):
             index_name_with_occur_fields_where = "{0}_where_based_fields_occur_{1}".format(table_name,self._random_alphanumeric(4))
             index_name_fields_only = "{0}_index_name_fields_only_{1}".format(table_name,self._random_alphanumeric(4))
             index_name_with_expression = "{0}_expression_based_{1}".format(table_name,self._random_alphanumeric(4))
@@ -590,27 +591,27 @@ class QueryHelper(object):
              table_name,self._convert_list(field_that_occur,"numeric"))
             create_index_name_with_expression = "CREATE INDEX {0} ON {1}({2}) USING GSI".format(
                 index_name_with_expression,table_name, where_condition)
-        map["indexes"] = \
-                    {
-                        index_name_with_occur_fields_where:
+        if index_name_with_occur_fields_where:
+            map["indexes"][index_name_with_occur_fields_where] = \
                         {
                             "name":index_name_with_occur_fields_where,
                             "type":"GSI",
                             "definition":create_index_fields_occur_with_where
-                        },
-                        index_name_fields_only:
+                        }
+        if index_name_fields_only:
+            map["indexes"][index_name_fields_only] = \
                         {
                             "name":index_name_fields_only,
                             "type":"GSI",
                             "definition":create_index_name_fields_only
-                        },
-                        index_name_with_expression:
+                        }
+        if index_name_with_expression:
+            map["indexes"][index_name_with_expression] = \
                         {
                             "name":index_name_with_expression,
                             "type":"GSI",
                             "definition":create_index_name_with_expression
                         }
-                    }
         return map
 
     def _convert_sql_template_to_value_for_secondary_indexes_sub_queries(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=True):
@@ -633,11 +634,11 @@ class QueryHelper(object):
             where_condition = sql_map["where_condition"]
             fields = table_map[table_name]["fields"].keys()
             field_that_occur = []
-            if where_condition:
+            if where_condition and ("OR" not in where_condition):
                 for field in fields:
                     if field in where_condition:
                         field_that_occur.append(field)
-            if where_condition:
+            if where_condition and ("OR" not in where_condition):
                 index_name_fields_only = "{0}_index_name_fields_only_{1}".format(table_name,self._random_alphanumeric(4))
                 create_index_name_fields_only = \
                 "CREATE INDEX {0} ON {1}({2}) USING GSI".format(index_name_fields_only,
