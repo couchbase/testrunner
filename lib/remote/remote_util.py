@@ -853,15 +853,16 @@ class RemoteMachineShellConnection:
         # remove dot in version (like 2.0.0 ==> 200)
         reg_version = version[0:5:2]
         reg_id = WIN_REGISTER_ID[reg_version]
+        uuid_name = uuid.uuid4()
 
         if task == "install":
             template_file = "cb-install.wct"
-            #file = "{0}_{1}_install.iss".format(uuid.uuid4(), self.ip)
-            file = "{0}_install.iss".format(self.ip)
+            file = "{0}_{1}_install.iss".format(uuid_name, self.ip)
+            #file = "{0}_install.iss".format(self.ip)
         elif task == "uninstall":
             template_file = "cb-uninstall.wct"
-            #file = "{0}_{1}_uninstall.iss".format(uuid.uuid4(), self.ip)
-            file = "{0}_uninstall.iss".format(self.ip)
+            file = "{0}_{1}_uninstall.iss".format(uuid_name, self.ip)
+            #file = "{0}_uninstall.iss".format(self.ip)
 
         # create in/uninstall file from windows capture template (wct) file
         full_src_path_template = os.path.join(src_path, template_file)
@@ -884,8 +885,9 @@ class RemoteMachineShellConnection:
 
         self.copy_file_local_to_remote(full_src_path, full_des_path)
         """ remove capture file from source after copy to destination """
-        self.sleep(2, "wait for remote copy completed")
+        self.sleep(4, "wait for remote copy completed")
         os.remove(full_src_path)
+        return uuid_name
 
     def get_windows_system_info(self):
         try:
@@ -931,6 +933,7 @@ class RemoteMachineShellConnection:
             log.error('Windows automation does not support {0} version yet'.format(version))
             sys.exit()
 
+        uuid_name = self.create_windows_capture_file(task, name, version)
         try:
             f = sftp.open(found, 'w')
             name = name.strip()
@@ -939,8 +942,8 @@ class RemoteMachineShellConnection:
                 content = 'c:\\tmp\{3}.exe /s -f1c:\\automation\{0}_{1}_{2}.iss'.format(name,
                                                                          product_version, task, version)
             else:
-                content = 'c:\\tmp\{0}.exe /s -f1c:\\automation\{2}_{1}.iss' \
-                             .format(version, task, self.ip)
+                content = 'c:\\tmp\{0}.exe /s -f1c:\\automation\{3}_{2}_{1}.iss' \
+                             .format(version, task, self.ip, uuid_name)
             log.info("create {0} task with content:{1}".format(task, content))
             f.write(content)
             log.info('Successful write to {0}'.format(found))
@@ -1235,7 +1238,7 @@ class RemoteMachineShellConnection:
                 self.set_vbuckets_win(vbuckets)
 
             output, error = self.execute_command("rm -f \
-                       /cygdrive/c/automation/{0}_install.iss".format(self.ip))
+                       /cygdrive/c/automation/*_{0}_install.iss".format(self.ip))
             self.log_command_output(output, error)
             # output, error = self.execute_command("cmd rm /cygdrive/c/tmp/{0}*.exe".format(build_name))
             # self.log_command_output(output, error)
@@ -1348,7 +1351,7 @@ class RemoteMachineShellConnection:
             # build = self.build_url(params)
             self.create_multiple_dir(dir_paths)
             self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
-            self.create_windows_capture_file(task, abbr_product, version)
+            #self.create_windows_capture_file(task, abbr_product, version)
             self.modify_bat_file('/cygdrive/c/automation', bat_file, abbr_product, version, task)
             self.stop_schedule_tasks()
             self.remove_win_backup_dir()
@@ -1372,8 +1375,8 @@ class RemoteMachineShellConnection:
             if not ended:
                 self.fail("*****  Node {0} failed to install  *****".format(self.ip))
             self.sleep(10, "wait for server to start up completely")
-            output, error = self.execute_command("rm \
-                       /cygdrive/c/automation/{0}_install.iss".format(self.ip))
+            output, error = self.execute_command("rm -f \
+                       /cygdrive/c/automation/*_{0}_install.iss".format(self.ip))
             self.log_command_output(output, error)
             output, error = self.execute_command("rm -f *-diag.zip")
             self.log_command_output(output, error, track_words)
@@ -1548,7 +1551,7 @@ class RemoteMachineShellConnection:
                 self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
                 self.stop_couchbase()
                 # modify bat file to run uninstall schedule task
-                self.create_windows_capture_file(task, product, full_version)
+                #self.create_windows_capture_file(task, product, full_version)
                 self.modify_bat_file('/cygdrive/c/automation', bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
 
@@ -1587,7 +1590,7 @@ class RemoteMachineShellConnection:
                                                               .format(build_name))
                 self.log_command_output(output, error)
                 output, error = self.execute_command("rm \
-                       /cygdrive/c/automation/{0}_uninstall.iss".format(self.ip))
+                       /cygdrive/c/automation/*_{0}_uninstall.iss".format(self.ip))
                 self.log_command_output(output, error)
 
                 """ the code below need to remove when bug MB-11328
@@ -1697,8 +1700,8 @@ class RemoteMachineShellConnection:
                 self.fail("*****  Node {0} failed to uninstall  *****"
                                                      .format(self.ip))
             self.sleep(10, "next step is to install")
-            output, error = self.execute_command("rm \
-                       /cygdrive/c/automation/{0}_uninstall.iss".format(self.ip))
+            output, error = self.execute_command("rm -f \
+                       /cygdrive/c/automation/*_{0}_uninstall.iss".format(self.ip))
             self.log_command_output(output, error)
             output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
             self.log_command_output(output, error)
@@ -1755,7 +1758,7 @@ class RemoteMachineShellConnection:
                 self.create_multiple_dir(dir_paths)
                 self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
                 # modify bat file to run uninstall schedule task
-                self.create_windows_capture_file(task, product, full_version)
+                #self.create_windows_capture_file(task, product, full_version)
                 self.modify_bat_file('/cygdrive/c/automation', bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
                 self.sleep(5, "before running task schedule uninstall")
@@ -1771,8 +1774,8 @@ class RemoteMachineShellConnection:
                     self.fail("*****  Node {0} failed to uninstall  *****"
                                                          .format(self.ip))
                 self.sleep(10, "next step is to install")
-                output, error = self.execute_command("rm \
-                       /cygdrive/c/automation/{0}_uninstall.iss".format(self.ip))
+                output, error = self.execute_command("rm -f \
+                       /cygdrive/c/automation/*_{0}_uninstall.iss".format(self.ip))
                 self.log_command_output(output, error)
                 output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN removeme /V")
                 self.log_command_output(output, error)
