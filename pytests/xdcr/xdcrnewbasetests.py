@@ -377,7 +377,7 @@ class NodeHelper:
         shell = RemoteMachineShellConnection(server)
         goxdcr_log = NodeHelper.get_goxdcr_log_dir(server) + '/goxdcr.log*'
         count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
-                                        format(str, goxdcr_log), debug=False)
+                                        format(str, goxdcr_log))
         if isinstance(count, list):
             count = int(count[0])
         else:
@@ -2358,11 +2358,12 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__mixed_priority = self._input.param("mixed_priority", None)
 
         self.__lww = self._input.param("lww", 0)
-        self.__fail_on_crash = self._input.param("fail_on_crash", False)
+        self.__fail_on_errors = self._input.param("fail_on_errors", False)
         # simply append to this list, any error from log we want to fail test on
         self.__report_error_list = []
-        if self.__fail_on_crash:
-            self.__report_error_list.append("panic:")
+        if self.__fail_on_errors:
+            self.__report_error_list = ["panic:",
+                                        "non-recoverable error from xmem client. response status=KEY_ENOENT"]
 
         # for format {ip1: {"panic": 2, "KEY_ENOENT":3}}
         self.__error_count_dict = {}
