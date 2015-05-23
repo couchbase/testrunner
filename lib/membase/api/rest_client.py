@@ -1328,6 +1328,15 @@ class RestConnection(object):
             index_map = RestParser().parse_index_stats_response(json_parsed, index_map=index_map)
         return index_map
 
+    def get_index_status(self, timeout=120, index_map=None):
+        api = self.baseUrl + 'indexStatus'
+        index_map = {}
+        status, content, header = self._http_request(api, timeout=timeout)
+        if status:
+            json_parsed = json.loads(content)
+            index_map = RestParser().parse_index_status_response(json_parsed)
+        return index_map
+
     # returns node data for this host
     def get_nodes_self(self, timeout=120):
         node = None
@@ -2869,8 +2878,21 @@ class vBucket(object):
         self.replica = []
         self.id = -1
 
-
 class RestParser(object):
+    def parse_index_status_response(self, parsed):
+        index_map = {}
+        for map in parsed:
+            bucket_name = map['bucket'].encode('ascii','ignore')
+            if bucket_name not in index_map.keys():
+                index_map[bucket_name] = {}
+            index_name = map['index'].encode('ascii','ignore')
+            index_map[bucket_name][index_name] = {}
+            index_map[bucket_name][index_name]['status'] = map['status'].encode('ascii','ignore')
+            index_map[bucket_name][index_name]['progress'] = str(map['progress']).encode('ascii','ignore')
+            index_map[bucket_name][index_name]['definition'] = map['definition'].encode('ascii','ignore')
+            index_map[bucket_name][index_name]['hosts'] = map['hosts'][0].encode('ascii','ignore')
+        return index_map
+
     def parse_index_stats_response(self, parsed, index_map=None):
         if index_map == None:
             index_map = {}
