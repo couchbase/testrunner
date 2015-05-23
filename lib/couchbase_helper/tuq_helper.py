@@ -414,6 +414,21 @@ class N1QLHelper():
                 return True
         return False
 
+    def gen_index_map(self, server = None):
+        query = "SELECT * FROM system:indexes"
+        if server == None:
+            server = self.master
+        res = self.run_cbq_query(query = query, server = server)
+        index_map = {}
+        for item in res['results']:
+            bucket_name = item['indexes']['keyspace_id'].encode('ascii','ignore')
+            if bucket_name not in index_map.keys():
+                index_map[bucket_name] = {}
+            index_name = str(item['indexes']['name'])
+            index_map[bucket_name][index_name] = {}
+            index_map[bucket_name][index_name]['state'] = item['indexes']['state']
+        return index_map
+
     def get_index_count_using_primary_index(self, buckets, server = None):
         query = "SELECT COUNT(*) FROM {0}"
         map= {}

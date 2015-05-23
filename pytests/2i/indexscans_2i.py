@@ -44,8 +44,10 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         try:
             self._create_index_in_async()
             self._query_explain_in_async()
+            self._verify_index_map()
             self.run_doc_ops()
             self._query_explain_in_async()
+            self._verify_index_map()
         except Exception, ex:
             self.log.info(ex)
             raise

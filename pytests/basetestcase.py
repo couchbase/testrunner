@@ -273,6 +273,9 @@ class BaseTestCase(unittest.TestCase):
                 self.cluster.shutdown(force=True)
                 self._log_finish(self)
 
+    def get_index_map(self):
+        return RestConnection(self.master).get_index_status()
+
     @staticmethod
     def change_max_buckets(self, total_buckets):
         command = "curl -X POST -u {0}:{1} -d maxBucketCount={2} http://{3}:{4}/internalSettings".format\
@@ -1620,6 +1623,7 @@ class BaseTestCase(unittest.TestCase):
             victim_nodes = self.add_remove_servers(nodes, nodes, [chosen,self.master],[])
             victim_nodes = victim_nodes[:victim_count]
         return victim_nodes
+
 
     def get_services_map(self, reset = True):
         if not reset:

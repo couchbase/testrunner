@@ -10,6 +10,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.initial_stats = None
         self.final_stats = None
         self.index_lost_during_move_out =[]
+        self.verify_using_index_status = self.input.param("verify_using_index_status",False)
         self.use_replica_when_active_down = self.input.param("use_replica_when_active_down",True)
         self.use_where_clause_in_index= self.input.param("use_where_clause_in_index",False)
         self.check_stats= self.input.param("check_stats",True)
@@ -582,6 +583,22 @@ class BaseSecondaryIndexingTests(QueryTests):
         if self.initial_stats != None:
             self.final_stats = self.get_index_stats(perNode=True)
 
+    def _verify_index_map(self):
+        if not self.verify_using_index_status:
+            return
+        index_map = self.get_index_map()
+        index_bucket_map = self.n1ql_helper.gen_index_map(self.n1ql_node)
+        msg = "difference in index map found, expected {0} \n actual {1}".format(index_bucket_map,index_map)
+        self.assertTrue(len(index_map.keys()) == len(self.buckets),
+            "numer of buckets mismatch :: "+msg)
+        for bucket in self.buckets:
+            self.assertTrue((bucket.name in index_map.keys()), " bucket name not present in index map {0}".format(index_map))
+        for bucket_name in index_bucket_map.keys():
+            self.assertTrue(len(index_bucket_map[bucket_name].keys()) == len(index_map[bucket_name].keys()),"number of indexes mismatch ::"+msg)
+            for index_name in index_bucket_map[bucket_name].keys():
+                msg1 ="index_name {0} not found in {1}".format(index_name, index_map[bucket_name].keys())
+                self.assertTrue(index_name in index_map[bucket_name].keys(), msg1+" :: "+ msg)
+
     def _verify_primary_index_count(self):
         bucket_map = self.get_buckets_itemCount()
         index_bucket_map = self.n1ql_helper.get_index_count_using_primary_index(self.buckets, self.n1ql_node)
@@ -666,6 +683,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 x-=1
             for task in tasks:
                 task.result()
+
 
     def _query_explain_in_async(self):
         tasks = self.async_run_multi_operations(buckets = self.buckets,
