@@ -886,7 +886,9 @@ class RemoteMachineShellConnection:
         self.copy_file_local_to_remote(full_src_path, full_des_path)
         """ remove capture file from source after copy to destination """
         self.sleep(4, "wait for remote copy completed")
-        os.remove(full_src_path)
+        """ need to implement to remove only at the end
+            of installation """
+        #os.remove(full_src_path)
         return uuid_name
 
     def get_windows_system_info(self):
@@ -1589,7 +1591,7 @@ class RemoteMachineShellConnection:
                 output, error = self.execute_command("rm -f /cygdrive/c/tmp/{0}"\
                                                               .format(build_name))
                 self.log_command_output(output, error)
-                output, error = self.execute_command("rm \
+                output, error = self.execute_command("rm -f \
                        /cygdrive/c/automation/*_{0}_uninstall.iss".format(self.ip))
                 self.log_command_output(output, error)
 
