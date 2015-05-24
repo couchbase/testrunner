@@ -297,7 +297,7 @@ class MySQLClient(object):
         map = self._get_pkey_map_for_tables_wit_primary_key_column()
         for table_name in map.keys():
             for x in range(0, number_of_rows):
-                statement = helper._generate_insert_statement(table_name, map[table_name])
+                statement = helper._generate_insert_statement(table_name, map[table_name],"\""+str(x+1)+"\"")
                 self._insert_execute_query(statement)
 
     def _gen_queries_from_template(self, query_path = "./queries.txt", table_name = "simple_table"):
