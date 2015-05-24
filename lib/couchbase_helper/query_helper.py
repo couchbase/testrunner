@@ -1040,15 +1040,15 @@ class QueryHelper(object):
                         datetime_check = False
                         add_token = False
                         if sql_type == "n1ql":
-                            new_sql+=token.replace("UPPER_BOUND_VALUE","\'"+\
-                                self._apply_functions_to_params(function_list,str(values[len(values) -1]))+"\'")+space
+                            new_sql+=token.replace("UPPER_BOUND_VALUE",\
+                                self._apply_functions_to_params(function_list,"\'"+str(values[len(values) -1])+"\'"))+space
                         else:
                             new_sql+=token.replace("UPPER_BOUND_VALUE","\'"+str(values[len(values) -1])+"\'")+space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
                         if sql_type == "n1ql":
-                            new_sql+=token.replace("LOWER_BOUND_VALUE","\'"+\
-                                self._apply_functions_to_params(function_list,str(values[0]))+"\'")+space
+                            new_sql+=token.replace("LOWER_BOUND_VALUE",\
+                                self._apply_functions_to_params(function_list,"\'"+str(values[0])+"\'"))+space
                         else:
                             new_sql+=token.replace("LOWER_BOUND_VALUE","\'"+str(values[0])+"\'")+space
                     else:
@@ -1060,6 +1060,10 @@ class QueryHelper(object):
                 new_sql+=token+space
             else:
                 add_token = True
+        if sql_type == "sql":
+            new_sql = new_sql.replace("SUBSTR_INDEX","1")
+        else:
+            new_sql = new_sql.replace("SUBSTR_INDEX","0")
         return new_sql
 
     def _apply_functions_to_params(self, function_list = [], param = "default"):
