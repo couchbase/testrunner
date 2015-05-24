@@ -1032,8 +1032,8 @@ class QueryHelper(object):
                         datetime_check = False
                         add_token = False
                         if sql_type == "n1ql":
-                            new_sql+=token.replace("DATETIME_VALUE","\'"+\
-                                self._apply_functions_to_params(function_list,str(values[mid_value_index]))+"\'")+space
+                            new_sql+=token.replace("DATETIME_VALUE",\
+                                self._apply_functions_to_params(function_list,"\'"+str(values[mid_value_index])+"\'"))+space
                         else:
                             new_sql+=token.replace("DATETIME_VALUE","\'"+str(values[mid_value_index])+"\'")+space
                     elif "UPPER_BOUND_VALUE" in token:
@@ -1163,6 +1163,7 @@ class QueryHelper(object):
                     check_keys = False
                     check_first_paran = False
                     value = ""
+        new_sql = new_sql.replace("TRUNCATE","TRUNC")
         return self._gen_sql_to_n1ql_braces(new_sql)
 
     def  _read_from_file(self, file_path):
