@@ -444,7 +444,7 @@ class QueryHelper(object):
         day = random.choice(range(1, 29))
         return datetime(year, month, day)
 
-    def _generate_insert_statement(self, table_name ="TABLE_NAME", table_map ={}):
+    def _generate_insert_statement(self, table_name ="TABLE_NAME", table_map ={}, primary_key=""):
         values = ""
         intial_statement = ""
         intial_statement += " INSERT INTO {0} ".format(table_name)
@@ -452,7 +452,9 @@ class QueryHelper(object):
         values = ""
         for field_name in table_map.keys():
             type = table_map[field_name]["type"]
-            if "tinyint" in type:
+            if "primary" in field_name:
+                values +=  primary_key+","
+            elif "tinyint" in type:
                 values +=  str(self._random_tiny_int())+","
             elif "mediumint" in type:
                 values +=  str(self._random_int()%100)+","
