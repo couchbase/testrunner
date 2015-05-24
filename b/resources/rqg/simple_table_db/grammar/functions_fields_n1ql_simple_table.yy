@@ -98,7 +98,7 @@ numeric_field:
 	NUMERIC_FIELD;
 
 numeric_value:
-	NUMERIC_VALUE | TRUNC( 1000 * maths_operator( NUMERIC_VALUE ) ) | POWER( NUMERIC_VALUE , 2 ) | ( NUMERIC_VALUE numeric_operator digit ) ;
+	NUMERIC_VALUE | TRUNCATE( 1000 * maths_operator( NUMERIC_VALUE ), 0 ) | POWER( NUMERIC_VALUE , 2 ) | ( NUMERIC_VALUE numeric_operator digit ) ;
 
 maths_operator:
 	SIN | LOG | TAN | COS | SQRT | TAN | FLOOR | RADIANS | ASIN | ACOS | ATAN | ABS | CEIL | FLOOR;
