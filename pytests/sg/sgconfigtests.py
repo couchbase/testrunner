@@ -1,6 +1,8 @@
 from sg.sg_config_base import GatewayConfigBaseTest
 from remote.remote_util import RemoteMachineShellConnection
+from membase.helper.bucket_helper import BucketOperationHelper
 import shutil
+from couchbase_helper.cluster import Cluster
 
 help_string = ['Usage of /opt/couchbase-sync-gateway/bin/sync_gateway:',
 '  -adminInterface="127.0.0.1:4985": Address to bind admin interface to',
@@ -18,8 +20,6 @@ help_string = ['Usage of /opt/couchbase-sync-gateway/bin/sync_gateway:',
 '  -url="walrus:": Address of Couchbase server',
 '  -verbose=false: Log more info about requests']
 
-# Prerequisites:  Install Couchbase server on the local machine and run create_buckets.sh to create buckets.  Creation
-# of buckets may also be done with https://github.com/membase/testrunner/blob/master/pytests/basetestcase.py#L347
 
 class SGConfigTests(GatewayConfigBaseTest):
     def setUp(self):
@@ -40,10 +40,18 @@ class SGConfigTests(GatewayConfigBaseTest):
                 exist = shell.file_exists('/root/', 'gateway.log')
                 self.assertTrue(exist)
                 shell.disconnect()
+        if self.case_number==1:
+            BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+            self.cluster = Cluster()
+            self.cluster.create_default_bucket(self.master, 150)
 
+            self.cluster.async_create_sasl_bucket(self.master, 'test_%E-.5', 'password', 150, 1)
+            self.cluster.async_create_standard_bucket(self.master, 'db', 11219, 150, 1)
 
     def tearDown(self):
         super(SGConfigTests, self).tearDown()
+        if self.case_number==1:
+            self.cluster.shutdown(force=True)
 
     def configCBS(self):
         for server in self.servers:
@@ -68,7 +76,7 @@ class SGConfigTests(GatewayConfigBaseTest):
                     self.assertTrue(self.get_users(shell))
                 if self.sync_port:
                     success, revision = self.create_doc(shell)
-                    self.assertTrue(success)
+                    self.assertFalse(success)
                     self.assertTrue(self.delete_doc(shell, revision))
             shell.disconnect()
 
