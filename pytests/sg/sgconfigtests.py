@@ -76,7 +76,7 @@ class SGConfigTests(GatewayConfigBaseTest):
                     self.assertTrue(self.get_users(shell))
                 if self.sync_port:
                     success, revision = self.create_doc(shell)
-                    self.assertFalse(success)
+                    self.assertTrue(success)
                     self.assertTrue(self.delete_doc(shell, revision))
             shell.disconnect()
 
