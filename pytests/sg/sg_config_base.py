@@ -81,6 +81,8 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         shell.log_command_output(output, error)
         if self.config != '':
             self.config = '/root/{0}'.format(self.config)
+            output, error = shell.execute_command('cat {0}'.format(self.config))
+            shell.log_command_output(output, error)
         output, error = shell.execute_command(
                 'nohup /opt/couchbase-sync-gateway/bin/sync_gateway {0} {1} >/root/gateway.log 2>&1 &'
                 .format(self.param, self.config))
