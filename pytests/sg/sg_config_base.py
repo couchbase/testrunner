@@ -2,6 +2,7 @@ from sg.sg_base import GatewayBaseTest
 from jinja2 import Environment, FileSystemLoader
 import json
 import time
+import urllib
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 import re
 
@@ -46,7 +47,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         env = Environment(loader=loader)
         template = env.get_template('{0}'.format(template_filename))
         if self.password:
-            password_str = '{0}:{1}@'.format(self.bucket, self.password)
+            password_str = urllib.quote('{0}:{1}@'.format(self.bucket, self.password))
         else:
             password_str = ''
         if template_filename == 'gateway_config_template.json':
@@ -114,11 +115,11 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         output, error = shell.execute_command_raw(cmd)
         if not output:
             self.log.info('No output from issuing {0}'.format(cmd))
-            return None
+            return None, error
         else:
             output_str = ''.join(output)
             self.log.info('Output - {0}'.format(output_str))
-            return output_str
+            return output_str, error
 
     def check_status_in_gateway_log(self, shell):
         output, error = shell.execute_command_raw('tail -1 ~/gateway.log')
@@ -155,13 +156,15 @@ class GatewayConfigBaseTest(GatewayBaseTest):
                           if self.doc_channels else '{{{0}}}'.format(self.doc_content)
         cmd = 'curl -X PUT http://{0}:{1}/{2}/{3} -d \'{4}\' -H "Content-Type: application/json"'\
               .format(self.info.ip, self.sync_port, self.db_name, self.doc_id, doc_content_str)
-        send_requst_ret = self.send_request(shell, cmd)
+        send_requst_ret, errors = self.send_request(shell, cmd)
         if not send_requst_ret:
              self.log.info('create_doc does not have output')
              return False, ''
         elif 'error' in send_requst_ret:
              self.log.info('create_doc return error - {0}'.format(send_requst_ret))
              return False, ''
+        elif errors and 'curl: (3)' in errors[1]:
+            return False, errors
         else:
             send_requst_dic = json.loads(send_requst_ret)
             revision = send_requst_dic['rev']
@@ -176,7 +179,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         self.info = shell.extract_remote_info()
         cmd = 'curl -X GET http://{0}:{1}/{2}/_all_docs?channels=true'\
               .format(self.info.ip, self.sync_port, self.db_name)
-        send_requst_ret = self.send_request(shell, cmd)
+        send_requst_ret, _ = self.send_request(shell, cmd)
         if not send_requst_ret:
              self.log.info('get_all_docs does not have output')
              return False
@@ -207,7 +210,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         self.log.info('=== delete_doc a doc({0})'.format(self.doc_id))
         self.info = shell.extract_remote_info()
         cmd = 'curl -X DELETE http://{0}:{1}/{2}/{3}?rev={4}'.format(self.info.ip, self.sync_port, self.db_name, self.doc_id, revision)
-        send_requst_ret = self.send_request(shell, cmd)
+        send_requst_ret, _ = self.send_request(shell, cmd)
         if send_requst_ret and 'error' in send_requst_ret:
             self.log.info('delete_doc failed - {0}'.format(send_requst_ret))
             return False
@@ -240,7 +243,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         if str and str[-1] == ',': str = str[:-1]
         cmd = "curl -X PUT http://{0}:{1}/{2}/_user/{3} --data '{{{4}}}'"\
               .format(self.info.ip, self.admin_port, self.db_name, self.user_name, str)
-        send_requst_ret = self.send_request(shell, cmd)
+        send_requst_ret, _ = self.send_request(shell, cmd)
         if self.expected_stdout:
             if send_requst_ret and self.expected_stdout in send_requst_ret:
                 return True
@@ -258,7 +261,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         self.log.info('=== get_users')
         self.info = shell.extract_remote_info()
         cmd = 'curl -X GET http://{0}:{1}/{2}/_user/'.format(self.info.ip, self.admin_port, self.db_name)
-        send_requst_ret = self.send_request(shell, cmd)
+        send_requst_ret, _ = self.send_request(shell, cmd)
         if send_requst_ret and 'error' in send_requst_ret:
             self.log.info('get_users failed - {0}'.format(send_requst_ret))
             return False
@@ -270,7 +273,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         self.info = shell.extract_remote_info()
         cmd = 'curl -X GET http://{0}:{1}/{2}/_user/{3}'.\
             format(self.info.ip, self.admin_port, self.db_name, self.user_name)
-        send_requst_ret = self.send_request(shell, cmd)
+        send_requst_ret, _ = self.send_request(shell, cmd)
         if send_requst_ret and 'error' in send_requst_ret:
             self.log.info('get_user failed - {0}'.format(send_requst_ret))
             return False
@@ -343,7 +346,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         self.info = shell.extract_remote_info()
         cmd = 'curl -X DELETE http://{0}:{1}/{2}/_user/{3}'.\
             format(self.info.ip, self.admin_port, self.db_name, self.user_name)
-        send_requst_ret = self.send_request(shell, cmd)
+        send_requst_ret, _ = self.send_request(shell, cmd)
         if send_requst_ret and 'error' in send_requst_ret:
             self.log.info('delete_user failed - {0}'.format(send_requst_ret))
             return False
@@ -357,7 +360,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         admin_channels_str = '"admin_channels":[{0}]'.format(admin_channels) if admin_channels else ''
         cmd = "curl -X PUT http://{0}:{1}/{2}/_role/{3} --data '{{{4}}}'"\
               .format(self.info.ip, self.admin_port, self.db_name, role_name, admin_channels_str)
-        send_requst_ret = self.send_request(shell, cmd)
+        send_requst_ret, _ = self.send_request(shell, cmd)
         if send_requst_ret:
             self.log.info('create_role got error - {0}'.format(send_requst_ret))
             return False
@@ -383,7 +386,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         self.log.info('=== get_roles')
         self.info = shell.extract_remote_info()
         cmd = 'curl -X GET http://{0}:{1}/{2}/_role/'.format(self.info.ip, self.admin_port, self.db_name)
-        send_requst_ret = self.send_request(shell, cmd)
+        send_requst_ret, _ = self.send_request(shell, cmd)
         if send_requst_ret and 'error' in send_requst_ret:
             self.log.info('get_roles failed - {0}'.format(send_requst_ret))
             return False
@@ -395,7 +398,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         self.info = shell.extract_remote_info()
         cmd = 'curl -X GET http://{0}:{1}/{2}/_role/{3}'.\
             format(self.info.ip, self.admin_port, self.db_name, self.role_name)
-        send_requst_ret = self.send_request(shell, cmd)
+        send_requst_ret. _ = self.send_request(shell, cmd)
         if self.expected_stdout:
             if send_requst_ret and self.expected_stdout in send_requst_ret:
                 return True
@@ -436,7 +439,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         self.info = shell.extract_remote_info()
         cmd = 'curl -X DELETE http://{0}:{1}/{2}/_role/{3}'.\
             format(self.info.ip, self.admin_port, self.db_name, self.role_name)
-        send_requst_ret = self.send_request(shell, cmd)
+        send_requst_ret, _ = self.send_request(shell, cmd)
         if send_requst_ret and 'error' in send_requst_ret:
             self.log.info('delete_role failed - {0}'.format(send_requst_ret))
             return False
