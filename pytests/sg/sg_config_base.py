@@ -400,7 +400,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         self.info = shell.extract_remote_info()
         cmd = 'curl -X GET http://{0}:{1}/{2}/_role/{3}'.\
             format(self.info.ip, self.admin_port, self.db_name, self.role_name)
-        send_requst_ret. _ = self.send_request(shell, cmd)
+        send_requst_ret, _ = self.send_request(shell, cmd)
         if self.expected_stdout:
             if send_requst_ret and self.expected_stdout in send_requst_ret:
                 return True
