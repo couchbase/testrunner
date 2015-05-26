@@ -516,3 +516,45 @@ class unidirectional(XDCRNewBaseTest):
         self.sleep(self._wait_timeout)
 
         self.verify_results()
+
+    def test_optimistic_replication(self):
+        """Tests with 2 buckets with customized optimisic replication thresholds
+           one greater than value_size, other smaller
+        """
+        from xdcrnewbasetests import REPL_PARAM
+        self.setup_xdcr_and_load()
+        for remote_cluster in self.src_cluster.get_remote_clusters():
+            for replication in remote_cluster.get_replications():
+                src_bucket_name = replication.get_src_bucket().name
+                opt_repl_threshold = replication.get_xdcr_setting(REPL_PARAM.OPTIMISTIC_THRESHOLD)
+                docs_opt_replicated_stat = 'replications/%s/docs_opt_repd' %replication.get_repl_id()
+                opt_replicated = RestConnection(self.src_master).fetch_bucket_xdcr_stats(
+                                        src_bucket_name
+                                        )['op']['samples'][docs_opt_replicated_stat][-1]
+                self.log.info("Bucket: %s, value size: %s, optimistic threshold: %s"
+                              " number of mutations optimistically replicated: %s"
+                                %(src_bucket_name,
+                                  self._value_size,
+                                  opt_repl_threshold,
+                                  opt_replicated
+                                ))
+                if self._value_size <= opt_repl_threshold:
+                    if opt_replicated == self._num_items:
+                        self.log.info("SUCCESS: All keys in bucket %s were optimistically"
+                                      " replicated"
+                                      %(replication.get_src_bucket().name))
+                    else:
+                        self.fail("Value size: %s, optimistic threshold: %s,"
+                                  " number of docs optimistically replicated: %s"
+                          %(self._value_size, opt_repl_threshold, opt_replicated))
+                else:
+                    if opt_replicated == 0:
+                        self.log.info("SUCCESS: No key in bucket %s was optimistically"
+                                      " replicated"
+
+                                      %(replication.get_src_bucket().name))
+                    else:
+                        self.fail("Partial optimistic replication detected!")
+
+
+
