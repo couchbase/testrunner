@@ -935,7 +935,8 @@ class RemoteMachineShellConnection:
             log.error('Windows automation does not support {0} version yet'.format(version))
             sys.exit()
 
-        uuid_name = self.create_windows_capture_file(task, name, version)
+        if "upgrade" not in task:
+            uuid_name = self.create_windows_capture_file(task, name, version)
         try:
             f = sftp.open(found, 'w')
             name = name.strip()
