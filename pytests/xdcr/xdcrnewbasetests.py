@@ -729,8 +729,18 @@ class XDCReplication:
             GO_XDCR_AUDIT_EVENT_ID.IND_SETT,
             self.get_src_cluster().get_master_node(), expected_results)
 
+    def get_xdcr_setting(self, param):
+        """Get a replication setting value
+        """
+        src_master = self.__src_cluster.get_master_node()
+        return RestConnection(src_master).get_xdcr_param(
+                    self.__from_bucket.name,
+                    self.__to_bucket.name,
+                    param)
 
     def set_xdcr_param(self, param, value, verify_event=True):
+        """Set a replication setting to a value
+        """
         src_master = self.__src_cluster.get_master_node()
         RestConnection(src_master).set_xdcr_param(
             self.__from_bucket.name,
@@ -2419,8 +2429,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             like {ip1: {"panic": 2, "KEY_ENOENT":3}}
         """
         for node in self._input.servers:
-            self.__error_count_dict[node.ip] =\
-                {error : NodeHelper.check_goxdcr_log(node, error) for error in self.__report_error_list}
+            for error in self.__report_error_list:
+                self.__error_count_dict[node.ip][error] = NodeHelper.check_goxdcr_log(node, error)
         self.log.info(self.__error_count_dict)
 
     def __cleanup_previous(self):
