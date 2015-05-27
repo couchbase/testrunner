@@ -1,13 +1,10 @@
 #!/usr/bin/env python
-import getopt
 import sys
 
 sys.path.extend(('.', 'lib'))
 from lib.remote.remote_util import RemoteMachineShellConnection
-import TestInput
 import logger
-import logging.config
-import os
+
 
 
 
@@ -55,7 +52,7 @@ class MemcachetestRunner():
             output, error = self.shell.execute_command_raw("cd {0}; git clone git://github.com/membase/memcachetest.git".format(self.path))
             self.shell.log_command_output(output, error)
             if output and "git: command not found" in output[0]:
-                self.fail("Git should be installed on hosts!")
+                raise Exception("Git should be installed on hosts!")
             output, error = self.shell.execute_command_raw("cd {0}/memcachetest; ./config/autorun.sh && ./configure && make install".format(self.path))
             self.shell.log_command_output(output, error)
         else:
