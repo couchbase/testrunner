@@ -206,21 +206,34 @@ class NodeHelper:
         @param rep_direction: replication direction unidirection/bidirection
         """
         shell = RemoteMachineShellConnection(server)
-        o, r = shell.execute_command("iptables -F")
-        shell.log_command_output(o, r)
-        o, r = shell.execute_command(
-            "/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:65535 -j ACCEPT")
-        shell.log_command_output(o, r)
-        if rep_direction == REPLICATION_DIRECTION.BIDIRECTION:
-            o, r = shell.execute_command(
-                "/sbin/iptables -A OUTPUT -p tcp -o eth0 --dport 1000:65535 -j ACCEPT")
+        shell.info = shell.extract_remote_info()
+
+        if shell.info.type.lower() == "windows":
+            output, error = shell.execute_command('netsh advfirewall set publicprofile state off')
+            shell.log_command_output(output, error)
+            output, error = shell.execute_command('netsh advfirewall set privateprofile state off')
+            shell.log_command_output(output, error)
+            # for details see RemoteUtilHelper.enable_firewall for windows
+            output, error = shell.execute_command('netsh advfirewall firewall delete rule name="block erl.exe in"')
+            shell.log_command_output(output, error)
+            output, error = shell.execute_command('netsh advfirewall firewall delete rule name="block erl.exe out"')
+            shell.log_command_output(output, error)
+        else:
+            o, r = shell.execute_command("iptables -F")
             shell.log_command_output(o, r)
-        o, r = shell.execute_command(
-            "/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT")
-        shell.log_command_output(o, r)
-        # self.log.info("enabled firewall on {0}".format(server))
-        o, r = shell.execute_command("/sbin/iptables --list")
-        shell.log_command_output(o, r)
+            o, r = shell.execute_command(
+                "/sbin/iptables -A INPUT -p tcp -i eth0 --dport 1000:65535 -j ACCEPT")
+            shell.log_command_output(o, r)
+            if rep_direction == REPLICATION_DIRECTION.BIDIRECTION:
+                o, r = shell.execute_command(
+                    "/sbin/iptables -A OUTPUT -p tcp -o eth0 --dport 1000:65535 -j ACCEPT")
+                shell.log_command_output(o, r)
+            o, r = shell.execute_command(
+                "/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT")
+            shell.log_command_output(o, r)
+            # self.log.info("enabled firewall on {0}".format(server))
+            o, r = shell.execute_command("/sbin/iptables --list")
+            shell.log_command_output(o, r)
         shell.disconnect()
 
     @staticmethod
