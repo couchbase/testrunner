@@ -286,11 +286,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         if not self.is_goxdcr_migration_successful(self.src_master):
             self.fail("C1: Metadata migration failed after old nodes were removed")
 
-        if float(self.initial_version[:2]) >= 3.0 and self._demand_encryption:
-            if not self.is_ssl_over_memcached(self.src_master):
-                self.fail("C1: After old nodes were replaced, C1 still uses "
-                          "proxy connection to C2 which is >= 3.0")
-
         self._load_bucket(bucket_default, self.src_master, self.gen_update, 'create', exp=self._expires)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_update, 'create', exp=self._expires)
         self._install(self.src_nodes)
@@ -314,6 +309,9 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             self.fail("C2: Metadata migration failed after old nodes were removed")
 
         if float(self.initial_version[:2]) >= 3.0 and self._demand_encryption:
+            if not self.is_ssl_over_memcached(self.src_master):
+                self.fail("C1: After old nodes were replaced, C1 still uses "
+                          "proxy connection to C2 which is >= 3.0")
             if not self.is_ssl_over_memcached(self.dest_master):
                 self.fail("C2: After old nodes were replaced, C2 still uses "
                           "proxy connection to C1 which is >= 3.0")
