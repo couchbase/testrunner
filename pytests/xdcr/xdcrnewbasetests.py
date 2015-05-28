@@ -2442,6 +2442,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             like {ip1: {"panic": 2, "KEY_ENOENT":3}}
         """
         for node in self._input.servers:
+            self.__error_count_dict[node.ip] = {}
             for error in self.__report_error_list:
                 self.__error_count_dict[node.ip][error] = NodeHelper.check_goxdcr_log(node, error)
         self.log.info(self.__error_count_dict)
