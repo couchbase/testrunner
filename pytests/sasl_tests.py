@@ -4,7 +4,7 @@ from mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 
-AUTH_SUCCESS = "Authenticated"
+AUTH_SUCCESS = ""
 AUTH_FAILURE = "Auth failure"
 
 class SaslTest(BaseTestCase):
