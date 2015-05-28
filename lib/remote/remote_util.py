@@ -1134,8 +1134,8 @@ class RemoteMachineShellConnection:
         """   """
         ended = self.wait_till_process_ended(full_version[:10])
         if not ended:
-            self.fail("*****  Node {0} failed to upgrade  *****"
-                                               .format(self.ip))
+            assert False, "*****  Node {0} failed to upgrade  *****" \
+                                               .format(self.ip)
         self.sleep(10, "wait for server to start up completely")
         ct = time.time()
         while time.time() - ct < 10800:
