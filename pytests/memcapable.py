@@ -864,9 +864,17 @@ class WarmUpMemcachedTest(unittest.TestCase):
 
         self.assertTrue(memcached_restarted, "memcached restarted and uptime is now reset")
 
-        # Warmup till curr_items match
+        # There is a race condition from the server started until
+        # ns_server loaded ep_engine and the curr_items stat is being
+        # reported... until that trying to call int(stats["curr_items"])
+        # may cause the test to fail.
         self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
         stats = self.onenodemc.stats()
+        while not ('curr_items' in stats):
+            stats = self.onenodemc.stats()
+            time.sleep(1)
+
+        # Warmup till curr_items match
         present_count = int(stats["curr_items"])
         ep_warmup_thread = stats["ep_warmup_thread"]
         self.log.info("ep curr_items : {0}, inserted_items {1} directly after kill_memcached ".format(present_count, curr_items))
