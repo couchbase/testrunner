@@ -837,8 +837,7 @@ class WarmUpMemcachedTest(unittest.TestCase):
         curr_items = int(self.onenodemc.stats()["curr_items"])
         uptime = int(self.onenodemc.stats()["uptime"])
         RebalanceHelper.wait_for_persistence(self.master, "default")
-        self.log.info("sleeping for 10 seconds")
-        time.sleep(10)
+
         rest = RestConnection(self.master)
         command = "try ns_server_testrunner_api:kill_memcached(20000) catch _:_ -> [erlang:exit(element(2, X), kill) || X <- supervisor:which_children(ns_port_sup)] end."
         memcached_restarted, content = rest.diag_eval(command)
