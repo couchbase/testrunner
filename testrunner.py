@@ -439,7 +439,10 @@ def main():
     for t in threading.enumerate():
         if t.name != 'MainThread':
             print 'Thread', t.name, 'was not properly terminated, will be terminated now.'
-            t.shutdown(True)
+            if hasattr(t, 'shutdown'):
+                t.shutdown(True)
+            else:
+                t._Thread__stop()
 
 
 def watcher():
