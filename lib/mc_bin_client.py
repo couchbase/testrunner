@@ -665,10 +665,22 @@ def error_to_str(errno):
         return "Bad Delta"
     elif errno == 0x07:
         return "Not my vbucket"
+    elif errno == 0x08:
+        return "No bucket"
+    elif errno == 0x1f:
+        return "Auth stale"
     elif errno == 0x20:
         return "Auth error"
     elif errno == 0x21:
         return "Auth continue"
+    elif errno == 0x22:
+        return "Outside legal range"
+    elif errno == 0x23:
+        return "Rollback"
+    elif errno == 0x24:
+        return "No access"
+    elif errno == 0x25:
+        return "Not initialized"
     elif errno == 0x81:
         return "Unknown Command"
     elif errno == 0x82:
