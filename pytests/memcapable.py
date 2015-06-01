@@ -867,11 +867,21 @@ class WarmUpMemcachedTest(unittest.TestCase):
         # ns_server loaded ep_engine and the curr_items stat is being
         # reported... until that trying to call int(stats["curr_items"])
         # may cause the test to fail.
-        self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
-        stats = self.onenodemc.stats()
-        while not ('curr_items' in stats):
+        # As of Watson you'll get associated with the bucket
+        # during the initial connect, so if "default" isn't
+        # loaded when you connect you won't be "magically" bound
+        # to it when it is loaded... disconnect and try again
+        # at a later time..
+        self.log.info("Waiting for bucket to be loaded again")
+        while True:
+            self.onenodemc = MemcachedClientHelper.direct_client(self.master, "default")
             stats = self.onenodemc.stats()
-            time.sleep(1)
+            if 'curr_items' in stats:
+                break
+            self.onenodemc.close()
+            time.sleep(0.025)
+
+        self.log.info("Bucket loaded, wait for warmup to complete")
 
         # Warmup till curr_items match
         present_count = int(stats["curr_items"])
