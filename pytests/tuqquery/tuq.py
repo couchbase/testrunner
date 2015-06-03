@@ -1547,15 +1547,97 @@ class QueryTests(BaseTestCase):
     def test_comparition_not_equal(self):
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
-            "tasks_points.task1 != 1"
+            "tasks_points.task1 != 1 ORDER BY task1"
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['task']))
+            actual_result = actual_result['results']
 
             expected_result = [{"task" : doc['tasks_points']['task1']}
                                for doc in self.full_list
                                if doc['tasks_points']['task1'] != 1]
             expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_comparition_not_equal_more_less(self):
+        for bucket in self.buckets:
+            self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
+            "tasks_points.task1 <> 1 ORDER BY task1"
+            actual_result = self.run_cbq_query()
+            actual_result = actual_result['results']
+
+            expected_result = [{"task" : doc['tasks_points']['task1']}
+                               for doc in self.full_list
+                               if doc['tasks_points']['task1'] != 1]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_every_comparision_not_equal(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
+                         "(EVERY vm IN %s.VMs SATISFIES vm.memory != 5 END)" % (
+                                                            bucket.name) +\
+                         " ORDER BY name"
+
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name']}
+                               for doc in self.full_list
+                               if len([vm for vm in doc["VMs"]
+                                       if vm['memory'] != 5]) == len(doc["VMs"])]
+
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['results'], expected_result)
+
+    def test_every_comparision_not_equal_less_more(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
+                         "(EVERY vm IN %s.VMs SATISFIES vm.memory <> 5 END)" % (
+                                                            bucket.name) +\
+                         " ORDER BY name"
+
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name']}
+                               for doc in self.full_list
+                               if len([vm for vm in doc["VMs"]
+                                       if vm['memory'] != 5]) == len(doc["VMs"])]
+
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['results'], expected_result)
+
+    def test_prepared_comparision_not_equal_less_more(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
+                         "(EVERY vm IN %s.VMs SATISFIES vm.memory <> 5 END)" % (
+                                                            bucket.name) +\
+                         " ORDER BY name"
+            self.prepared_common_body()
+
+    def test_prepared_comparision_not_equal(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
+                         "(EVERY vm IN %s.VMs SATISFIES vm.memory != 5 END)" % (
+                                                            bucket.name) +\
+                         " ORDER BY name"
+            self.prepared_common_body()
+
+    def test_let_not_equal(self):
+        for bucket in self.buckets:
+            self.query = "select compare from %s let compare = (test_rate != 2)" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"compare" : doc["test_rate"] != 2}
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_let_not_equal_less_more(self):
+        for bucket in self.buckets:
+            self.query = "select compare from %s let compare = (test_rate <> 2)" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"compare" : doc["test_rate"] != 2}
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_comparition_more_less_equal(self):
