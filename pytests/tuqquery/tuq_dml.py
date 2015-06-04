@@ -565,6 +565,21 @@ class DMLQueryTests(QueryTests):
             actual_result = self.run_cbq_query()
             self.assertFalse([doc for doc in actual_result['results'] if doc['name'] != updated_value], 'Names were not changed')
 
+    def test_update_between_where(self):
+        num_docs_update = self.input.param('docs_to_update', 3)
+        num_docs = self.input.param('num_docs', 10)
+        _, values = self._insert_gen_keys(num_docs, prefix='update_where')
+        updated_value = 'new_name'
+        for bucket in self.buckets:
+            self.query = 'update %s set name="%s" where join_day between 1 and 2 returning name'  % (bucket.name, updated_value)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+            self.query = 'select name from %s where join_day between 1 and 2' % (bucket.name)
+            self.run_cbq_query()
+            self.sleep(10, 'wait for index')
+            actual_result = self.run_cbq_query()
+            self.assertFalse([doc for doc in actual_result['results'] if doc['name'] != updated_value], 'Names were not changed')
+
     def test_update_where_limit(self):
         num_docs_update = self.input.param('docs_to_update', 3)
         num_docs = self.input.param('num_docs', 10)

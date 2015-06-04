@@ -1602,6 +1602,36 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['results'], expected_result)
 
+    def test_any_between(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
+                                                                      bucket.name) +\
+                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM between 1 and 5 END)"  % (
+                                                                bucket.name) +\
+                        "AND  NOT (job_title = 'Sales') ORDER BY name"
+
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
+                               for doc in self.full_list
+                               if len([skill for skill in doc["skills"]
+                                       if skill == 'skill2010']) > 0 and\
+                                  len([vm for vm in doc["VMs"]
+                                       if vm["RAM"] in [1,2,3,4,5]]) > 0 and\
+                                  doc["job_title"] != 'Sales']
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['results'], expected_result)
+
+    def test_prepared_between(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
+                                                                      bucket.name) +\
+                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM between 1 and 5 END)"  % (
+                                                                bucket.name) +\
+                        "AND  NOT (job_title = 'Sales') ORDER BY name"
+            self.prepared_common_body()
+
     def test_prepared_comparision_not_equal_less_more(self):
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
@@ -1625,6 +1655,17 @@ class QueryTests(BaseTestCase):
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"compare" : doc["test_rate"] != 2}
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_let_between(self):
+        for bucket in self.buckets:
+            self.query = "select compare from %s let compare = (test_rate between 1 and 3)" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"compare": doc["test_rate"] >= 1 and doc["test_rate"] <= 3}
                                for doc in self.full_list]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
