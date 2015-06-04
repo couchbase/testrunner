@@ -122,7 +122,8 @@ class BuildQuery(object):
                 return build
         return None
 
-    def find_membase_release_build(self, product, deliverable_type, os_architecture, build_version, is_amazon=False):
+    def find_membase_release_build(self, product, deliverable_type, os_architecture,
+                                    build_version, is_amazon=False, os_version=""):
         build_details = build_version
         if build_version.startswith("1.7.2"):
             build_details = "1.7.2r-20-g6604356"
@@ -136,6 +137,7 @@ class BuildQuery(object):
         build.product_version = build_version
         build.architecture_type = os_architecture
         build.product = product
+        os_name = ""
         build.name = '{1}_{2}_{0}.{3}'.format(build_version, product,
                                                os_architecture, deliverable_type)
         build.build_number = 0
@@ -174,6 +176,7 @@ class BuildQuery(object):
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
                 """  in release folder
                         /3.0.1/couchbase-server-enterprise-3.0.1-centos6.x86_64.rpm
+                        /3.0.1/couchbase-server-enterprise_3.0.1-ubuntu12.04_amd64.deb
                         /3.0.2/couchbase-server-enterprise-3.0.2-centos6.x86_64.rpm
                       build release url:
                                http://builds.hq.northscale.net/releases/3.0.1/
@@ -182,21 +185,44 @@ class BuildQuery(object):
                                   couchbase-server-enterprise_x86_64_3.0.1-1444.rpm
                 """
                 if build_version[:5] in cb_release_version_3:
-                    build.url = "http://builds.hq.northscale.net/releases/{0}/"\
+                    if "rpm" in deliverable_type:
+                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
                                 "{1}-{4}-centos6.{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                 product, os_architecture, deliverable_type,
                                                               build_details[:5])
+                    elif "deb" in deliverable_type:
+                        os_architecture = "amd64"
+                        os_name = "ubuntu12.04"
+                        if  "ubuntu 14.04" in os_version:
+                            os_name = "ubuntu14.04"
+                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
+                                "{1}_{4}-{5}_{2}.{3}"\
+                                .format(build_version[:build_version.find('-')],
+                                 product, os_architecture, deliverable_type,
+                                 build_details[:5], os_name)
                 else:
                     build.url = "http://builds.hq.northscale.net/releases/{0}/"\
                         "{1}_{2}_{4}.{3}".format(build_version[:build_version.find('-')],
                                product, os_architecture, deliverable_type, build_details)
             else:
                 if build_version[:5] in cb_release_version_3:
-                    build.url = "http://builds.hq.northscale.net/releases/{0}/"\
+                    if "rpm" in deliverable_type:
+                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
                                 "{1}-{4}-centos6.{2}.{3}".format(build_version,
                                  product, os_architecture, deliverable_type,
                                                              build_details[:5])
+                    elif "deb" in deliverable_type:
+                        os_architecture = "amd64"
+                        os_name = "ubuntu12.04"
+                        if  "ubuntu 14.04" in os_version:
+                            os_name = "ubuntu14.04"
+                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
+                                "{1}_{4}-{5}_{2}.{3}".format(build_version,
+                                 product, os_architecture, deliverable_type,
+                                 build_details[:5], os_name)
+                        """ http://builds.hq.northscale.net/releases/3.0.1/
+                        couchbase-server-enterprise_3.0.1-ubuntu12.04_amd64.deb """
                 else:
                     build.url = "http://builds.hq.northscale.net/releases/{0}/"\
                                 "{1}_{2}_{4}.{3}".format(build_version, product,
