@@ -193,8 +193,12 @@ class NewUpgradeBaseTest(BaseTestCase):
             version = version + "-rel"
         if version in self.released_versions:
             appropriate_build = BuildQuery().\
-                find_membase_release_build('%s-enterprise' % (self.product), info.deliverable_type,
-                                           info.architecture_type, version.strip(), is_amazon=is_amazon)
+                find_membase_release_build('%s-enterprise' % (self.product),
+                                           info.deliverable_type,
+                                           info.architecture_type,
+                                           version.strip(),
+                                           is_amazon=is_amazon,
+                                           os_version=info.distribution_version)
         else:
              appropriate_build = BuildQuery().\
                 find_build(builds, '%s-enterprise' % (self.product), info.deliverable_type,
