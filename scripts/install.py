@@ -218,10 +218,12 @@ class Installer(object):
                                                                      build_version=version,
                                                                      product='membase-server-enterprise')
                 elif version in cb_releases_version:
-                    build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
-                                                                     os_architecture=info.architecture_type,
-                                                                     build_version=version,
-                                                                     product=name)
+                    build = BuildQuery().find_membase_release_build(
+                                            deliverable_type=info.deliverable_type,
+                                            os_architecture=info.architecture_type,
+                                            build_version=version,
+                                            product=name,
+                                            os_version = info.distribution_version)
                 else:
                     builds, changes = BuildQuery().get_all_builds(version=version, timeout=timeout, \
                                       direct_build_url=direct_build_url, \
