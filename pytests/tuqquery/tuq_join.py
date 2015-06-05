@@ -130,6 +130,36 @@ class JoinTests(QueryTests):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
+    def test_where_join_keys_equal_less(self):
+        for bucket in self.buckets:
+            self.query = "SELECT employee.join_day, employee.tasks_ids, new_project_full.project new_project " +\
+            "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
+            "ON KEYS employee.tasks_ids WHERE employee.join_day <= 2"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'])
+            expected_result = self._generate_full_joined_docs_list(join_type=self.type_join)
+            expected_result = [{"join_day" : doc['join_day'], "tasks_ids" : doc['tasks_ids'],
+                                "new_project" : doc['project']}
+                               for doc in expected_result if doc and 'join_day' in doc and\
+                               doc['join_day'] <= 2]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_where_join_keys_equal_more(self):
+        for bucket in self.buckets:
+            self.query = "SELECT employee.join_day, employee.tasks_ids, new_project_full.project new_project " +\
+            "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
+            "ON KEYS employee.tasks_ids WHERE employee.join_day <= 2"
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'])
+            expected_result = self._generate_full_joined_docs_list(join_type=self.type_join)
+            expected_result = [{"join_day" : doc['join_day'], "tasks_ids" : doc['tasks_ids'],
+                                "new_project" : doc['project']}
+                               for doc in expected_result if doc and 'join_day' in doc and\
+                               doc['join_day'] <= 2]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
     def test_join_unnest_alias(self):
         for bucket in self.buckets:
             self.query = "SELECT task2 FROM %s emp1 JOIN %s" % (bucket.name, bucket.name) +\
@@ -261,6 +291,38 @@ class JoinTests(QueryTests):
                                 'tasks_ids' : doc['tasks_ids']}
                                for doc in all_docs_list
                                if ('test_task-1' in doc['tasks_ids'] or 'test_task-2' in doc['tasks_ids'])]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_where_in_subquery_equal_more(self):
+        for bucket in self.buckets:
+            self.query = "select name, tasks_ids,join_day from %s where join_day>=2 and tasks_ids[0] IN" % bucket.name +\
+            " (select ARRAY_AGG(DISTINCT task_name) as names from %s d " % bucket.name +\
+            "use keys %s where project!='AB')[0].names" % ('["test_task-1", "test_task-2"]')
+            all_docs_list = self.generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'])
+            expected_result = [{'name' : doc['name'],
+                                'tasks_ids' : doc['tasks_ids'],
+                                'join_day': doc['join_day']}
+                               for doc in all_docs_list
+                               if ('test_task-1' in doc['tasks_ids'] or 'test_task-2' in doc['tasks_ids']) and doc['join_day'] >=2]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_where_in_subquery_equal_less(self):
+        for bucket in self.buckets:
+            self.query = "select name, tasks_ids,join_day from %s where join_day<=2 and tasks_ids[0] IN" % bucket.name +\
+            " (select ARRAY_AGG(DISTINCT task_name) as names from %s d " % bucket.name +\
+            "use keys %s where project!='AB')[0].names" % ('["test_task-1", "test_task-2"]')
+            all_docs_list = self.generate_full_docs_list(self.gens_load)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'])
+            expected_result = [{'name' : doc['name'],
+                                'tasks_ids' : doc['tasks_ids'],
+                                'join_day': doc['join_day']}
+                               for doc in all_docs_list
+                               if ('test_task-1' in doc['tasks_ids'] or 'test_task-2' in doc['tasks_ids']) and doc['join_day'] <=2]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -530,6 +592,26 @@ class JoinTests(QueryTests):
                                doc['item']['join_day'] >= 2 and doc['item']['join_day'] <=4]
             expected_result = self.sort_nested_list(expected_result, key='projects')
             expected_result = sorted(expected_result, key=lambda doc: (doc['name'], doc['projects']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_nest_keys_where_less_more_equal(self):
+        for bucket in self.buckets:
+            self.query = "select emp.name, emp.join_day, emp.join_yr, ARRAY item.project FOR item in items end projects " +\
+                         "FROM %s emp %s NEST %s items " % (
+                                                    bucket.name, self.type_join, bucket.name) +\
+                         "ON KEYS emp.tasks_ids where emp.join_day <= 4 and emp.join_yr>=2010"
+            actual_result = self.run_cbq_query()
+            actual_result = self.sort_nested_list(actual_result['results'], key='projects')
+            actual_result = sorted(actual_result)
+            full_list = self._generate_full_nested_docs_list(join_type=self.type_join)
+            expected_result = [{"name" : doc['item']['name'], "join_day" : doc['item']['join_day'],
+                                'join_yr': doc['item']['join_yr'],
+                                "projects" : [nested_doc['project'] for nested_doc in doc['items_nested']]}
+                               for doc in full_list
+                               if doc and 'join_day' in doc['item'] and\
+                               doc['item']['join_day'] <=4 and doc['item']['join_yr']>=2010]
+            expected_result = self.sort_nested_list(expected_result, key='projects')
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def _get_for_sort(self, doc):

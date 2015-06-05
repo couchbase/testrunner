@@ -1622,6 +1622,46 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['results'], expected_result)
 
+    def test_any_less_equal(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
+                                                                      bucket.name) +\
+                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM <= 5 END)"  % (
+                                                                bucket.name) +\
+                        "AND  NOT (job_title = 'Sales') ORDER BY name"
+
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
+                               for doc in self.full_list
+                               if len([skill for skill in doc["skills"]
+                                       if skill == 'skill2010']) > 0 and\
+                                  len([vm for vm in doc["VMs"]
+                                       if vm["RAM"] <=5]) > 0 and\
+                                  doc["job_title"] != 'Sales']
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['results'], expected_result)
+
+    def test_any_more_equal(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
+                                                                      bucket.name) +\
+                        " AND (ANY vm IN %s.VMs SATISFIES vm.RAM >= 5 END)"  % (
+                                                                bucket.name) +\
+                        "AND  NOT (job_title = 'Sales') ORDER BY name"
+
+            actual_result = self.run_cbq_query()
+            expected_result = [{"name" : doc['name'], "email" : doc["email"]}
+                               for doc in self.full_list
+                               if len([skill for skill in doc["skills"]
+                                       if skill == 'skill2010']) > 0 and\
+                                  len([vm for vm in doc["VMs"]
+                                       if vm["RAM"] >= 5]) > 0 and\
+                                  doc["job_title"] != 'Sales']
+            expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+            self._verify_results(actual_result['results'], expected_result)
+
     def test_prepared_between(self):
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
@@ -1644,6 +1684,22 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
                          "(EVERY vm IN %s.VMs SATISFIES vm.memory != 5 END)" % (
+                                                            bucket.name) +\
+                         " ORDER BY name"
+            self.prepared_common_body()
+
+    def test_prepared_more_equal(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
+                         "(EVERY vm IN %s.VMs SATISFIES vm.memory >= 5 END)" % (
+                                                            bucket.name) +\
+                         " ORDER BY name"
+            self.prepared_common_body()
+
+    def test_prepared_less_equal(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
+                         "(EVERY vm IN %s.VMs SATISFIES vm.memory <= 5 END)" % (
                                                             bucket.name) +\
                          " ORDER BY name"
             self.prepared_common_body()
@@ -1677,6 +1733,28 @@ class QueryTests(BaseTestCase):
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
             expected_result = [{"compare" : doc["test_rate"] != 2}
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_let_more_equal(self):
+        for bucket in self.buckets:
+            self.query = "select compare from %s let compare = (test_rate >= 2)" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"compare" : doc["test_rate"] >= 2}
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_let_less_equal(self):
+        for bucket in self.buckets:
+            self.query = "select compare from %s let compare = (test_rate <= 2)" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"compare" : doc["test_rate"] <= 2}
                                for doc in self.full_list]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
