@@ -6,10 +6,10 @@ class NULLTests(QueryTests):
         self.skip_generation = True
         super(NULLTests, self).setUp()
         self.gens_load = self.generate_docs()
-        for bucket in self.buckets:
-            self.cluster.bucket_flush(self.master, bucket=bucket,
-                                  timeout=self.wait_timeout * 5)
-        self.load(self.gens_load)
+#        for bucket in self.buckets:
+#            self.cluster.bucket_flush(self.master, bucket=bucket,
+#                                  timeout=self.wait_timeout * 5)
+#        self.load(self.gens_load)
         self.full_list = self.generate_full_docs_list(self.gens_load)
         self.create_primary_index_for_3_0_and_greater()
 
@@ -56,6 +56,70 @@ class NULLTests(QueryTests):
                         " WHERE coverage_tests.P0 IS NOT NULL ORDER BY feature_name"
             self.prepared_common_body()
 
+    def test_null_query_any(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name, jira_tickets FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY ticket IN %s.jira_tickets SATISFIES ticket.description is null END)" % (bucket.name) +\
+                        " ORDER BY feature_name"
+
+            actual_result = self.run_cbq_query()
+            expected_result = [{'feature_name' : doc['feature_name'],
+                                'jira_tickets' : doc['jira_tickets']}
+                               for doc in self.full_list
+                               if len([t for t in doc["jira_tickets"]
+                                       if 'description' in t and t['description'] is None]) > 0]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+            self._verify_results(actual_result['results'], expected_result)
+
+    def test_not_null_query_any(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name, jira_tickets FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY ticket IN %s.jira_tickets SATISFIES ticket.description is not null END)" % (bucket.name) +\
+                        " ORDER BY feature_name"
+
+            actual_result = self.run_cbq_query()
+            expected_result = [{'feature_name' : doc['feature_name'],
+                                'jira_tickets' : doc['jira_tickets']}
+                               for doc in self.full_list
+                               if len([t for t in doc["jira_tickets"]
+                                       if 'description' in t and t['description'] is not None]) > 0]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+            self._verify_results(actual_result['results'], expected_result)
+
+    def test_prepared_null_query(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name FROM %s"  % bucket.name +\
+                        " WHERE coverage_tests.P0 IS NULL ORDER BY feature_name"
+            self.prepared_common_body()
+
+    def test_prepared_not_null_query(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name FROM %s"  % bucket.name +\
+                        " WHERE coverage_tests.P0 IS NOT NULL ORDER BY feature_name"
+            self.prepared_common_body()
+
+    def test_let_null(self):
+        for bucket in self.buckets:
+            self.query = "select compare from %s let compare = (coverage_tests.P0 is null)" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"compare" : doc["coverage_tests"]['P0'] is None}
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_let_not_null(self):
+        for bucket in self.buckets:
+            self.query = "select compare from %s let compare = (coverage_tests.P0 is not null)" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"compare" : doc["coverage_tests"]['P0'] is not None}
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
     def test_missing_query(self):
         for bucket in self.buckets:
             self.query = "SELECT feature_name FROM %s"  % bucket.name +\
@@ -74,6 +138,63 @@ class NULLTests(QueryTests):
             self.query = "SELECT feature_name FROM %s"  % bucket.name +\
                         " WHERE coverage_tests.P0 IS MISSING ORDER BY feature_name"
             self.prepared_common_body()
+
+    def test_missing_query_any(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name, jira_tickets FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY ticket IN %s.jira_tickets SATISFIES ticket.description is missing END)" % (bucket.name) +\
+                        " ORDER BY feature_name"
+
+            actual_result = self.run_cbq_query()
+            expected_result = [{'feature_name' : doc['feature_name'],
+                                'jira_tickets' : doc['jira_tickets']}
+                               for doc in self.full_list
+                               if len([t for t in doc["jira_tickets"]
+                                       if 'description' not in t]) > 0]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+            self._verify_results(actual_result['results'], expected_result)
+
+    def test_not_missing_query_any(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name, jira_tickets FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY ticket IN %s.jira_tickets SATISFIES ticket.description is not missing END)" % (bucket.name) +\
+                        " ORDER BY feature_name"
+            actual_result = self.run_cbq_query()
+            expected_result = [{'feature_name' : doc['feature_name'],
+                                'jira_tickets' : doc['jira_tickets']}
+                               for doc in self.full_list
+                               if len([t for t in doc["jira_tickets"]
+                                       if 'description' not in t]) > 0]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+            self._verify_results(actual_result['results'], expected_result)
+
+    def test_prepared_not_missing_query(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name FROM %s"  % bucket.name +\
+                        " WHERE coverage_tests.P0 IS NOT missing ORDER BY feature_name"
+            self.prepared_common_body()
+
+    def test_let_missing(self):
+        for bucket in self.buckets:
+            self.query = "select compare from %s let compare = (coverage_tests.P0 is missing)" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"compare" : 'P0' not in doc["coverage_tests"]}
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_let_not_missing(self):
+        for bucket in self.buckets:
+            self.query = "select compare from %s let compare = (coverage_tests.P0 is not missing)" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"compare" : 'P0' in doc["coverage_tests"]}
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
 
     def test_not_missing_query(self):
         for bucket in self.buckets:
@@ -115,6 +236,69 @@ class NULLTests(QueryTests):
                                 doc['coverage_tests']['P0'] is None]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
             self._verify_results(actual_result['results'], expected_result)
+
+    def test_valued_query_any(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name, jira_tickets FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY ticket IN %s.jira_tickets SATISFIES ticket.description is valued END)" % (bucket.name) +\
+                        " ORDER BY feature_name"
+
+            actual_result = self.run_cbq_query()
+            expected_result = [{'feature_name' : doc['feature_name'],
+                                'jira_tickets' : doc['jira_tickets']}
+                               for doc in self.full_list
+                               if len([t for t in doc["jira_tickets"]
+                                       if 'description' in t and t['description'] is not None]) > 0]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+            self._verify_results(actual_result['results'], expected_result)
+
+    def test_not_valued_query_any(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name, jira_tickets FROM %s WHERE "  % (bucket.name) +\
+                         "(ANY ticket IN %s.jira_tickets SATISFIES ticket.description is not valued END)" % (bucket.name) +\
+                        " ORDER BY feature_name"
+            actual_result = self.run_cbq_query()
+            expected_result = [{'feature_name' : doc['feature_name'],
+                                'jira_tickets' : doc['jira_tickets']}
+                               for doc in self.full_list
+                               if len([t for t in doc["jira_tickets"]
+                                       if 'description' not in t or t['description'] is None]) > 0]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
+            self._verify_results(actual_result['results'], expected_result)
+
+    def test_prepared_valued_query(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name FROM %s"  % bucket.name +\
+                        " WHERE coverage_tests.P0 IS valued ORDER BY feature_name"
+            self.prepared_common_body()
+
+    def test_prepared_not_valued_query(self):
+        for bucket in self.buckets:
+            self.query = "SELECT feature_name FROM %s"  % bucket.name +\
+                        " WHERE coverage_tests.P0 IS NOT valued ORDER BY feature_name"
+            self.prepared_common_body()
+
+    def test_let_valued(self):
+        for bucket in self.buckets:
+            self.query = "select compare from %s let compare = (coverage_tests.P0 is valued)" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"compare" : 'P0' in doc["coverage_tests"] and doc['coverage_tests']['P0'] is not None}
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_let_not_valued(self):
+        for bucket in self.buckets:
+            self.query = "select compare from %s let compare = (coverage_tests.P0 is not valued)" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"compare" : 'P0' not in doc["coverage_tests"] or doc['coverage_tests']['P0'] is None}
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
 
     def test_precedense(self):
         for bucket in self.buckets:
@@ -323,22 +507,28 @@ class NULLTests(QueryTests):
         generators = []
         index = end/3
         template = '{{ "feature_name":"{0}", "coverage_tests" : {{"P0":{1}, "P1":{2}, "P2":{3}}},'
-        template += '"story_point" : {4}}}'
+        template += '"story_point" : {4},"jira_tickets": {5}}}'
         names = [str(i) for i in xrange(0, index)]
         rates = xrange(0, index)
         points = [[1,2,3],]
+        jira_tickets = ['[{"Number": 1, "project": "cb", "description": "test"},' +\
+                       '{"Number": 2, "project": "mb", "description": "test"}]',]
         generators.append(DocumentGenerator(name, template,
-                                            names, rates, rates, rates, points,
+                                            names, rates, rates, rates, points, jira_tickets,
                                             start=start, end=index))
         template = '{{ "feature_name":"{0}", "coverage_tests" : {{"P0": null, "P1":null, "P2":null}},'
-        template += '"story_point" : [1,2,null]}}'
+        template += '"story_point" : [1,2,null],"jira_tickets": {1}}}'
+        jira_tickets = ['[{"Number": 1, "project": "cb", "description": "test"},' +\
+                       '{"Number": 2, "project": "mb", "description": null}]',]
         names = [str(i) for i in xrange(index, index + index)]
         generators.append(DocumentGenerator(name, template,
-                                            names,
+                                            names, jira_tickets,
                                             start=index, end=index + index))
         template = '{{ "feature_name":"{0}", "coverage_tests" : {{"P4": 2}},'
-        template += '"story_point" : [null,null]}}'
+        template += '"story_point" : [null,null],"jira_tickets": {1}}}'
         names = [str(i) for i in xrange(index + index, end)]
+        jira_tickets = ['[{"Number": 1, "project": "cb", "description": "test"},' +\
+                       '{"Number": 2, "project": "mb"}]',]
         generators.append(DocumentGenerator(name, template,
-                                            names, start=index + index, end=end))
+                                            names, jira_tickets, start=index + index, end=end))
         return generators
