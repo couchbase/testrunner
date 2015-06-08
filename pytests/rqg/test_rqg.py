@@ -42,6 +42,7 @@ class RQGTests(BaseTestCase):
         self.run_explain_with_hints= self.input.param("run_explain_with_hints",False)
         self.test_file_path= self.input.param("test_file_path","default")
         self.query_helper = QueryHelper()
+        self.keyword_list = self.query_helper._read_keywords_from_file("b/resources/rqg/n1ql_info/keywords.txt")
         self._initialize_n1ql_helper()
         if self.initial_loading_to_cb:
             self._initialize_cluster_setup()
@@ -256,6 +257,8 @@ class RQGTests(BaseTestCase):
         fail_case = 0
         total= 0
         failure_map = {}
+        keyword_map = {}
+        failure_reason_map = {}
         success = True
         while not queue.empty():
             result_list.append(queue.get())
@@ -263,16 +266,35 @@ class RQGTests(BaseTestCase):
             test_case_number = result_run["test_case_number"]
             sql_query = result_run["sql_query"]
             n1ql_query = result_run["n1ql_query"]
-            check, message = self._analyze_result(result_run)
+            check, message, failure_types = self._analyze_result(result_run)
             total += 1
             success = success and check
             if check:
                 pass_case += 1
             else:
                 fail_case +=  1
+                for failure_reason_type in failure_types:
+                    if failure_reason_type not in failure_reason_map.keys():
+                        failure_reason_map[failure_reason_type] = 1
+                    else:
+                        failure_reason_map[failure_reason_type] += 1
+                keyword_list = self.query_helper.find_matching_keywords(n1ql_query, self.keyword_list)
+                for keyword in keyword_list:
+                    if keyword not in keyword_map.keys():
+                        keyword_map[keyword] = 1
+                    else:
+                        keyword_map[keyword] += 1
                 failure_map[test_case_number] = {"sql_query":sql_query, "n1ql_query": n1ql_query,
-                 "run_result" : message}
+                 "run_result" : message, "keyword_list": keyword_list}
         summary = " Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case)
+        if len(keyword_map) > 0:
+            summary += "\n [ KEYWORD FAILURE DISTRIBUTION ] \n"
+        for keyword in keyword_map.keys():
+            summary  += keyword+" :: " + str((keyword_map[keyword]*100)/total)+"%\n "
+        if len(failure_reason_map)  > 0:
+            summary += "\n [ FAILURE TYPE DISTRIBUTION ] \n"
+            for keyword in failure_reason_map.keys():
+                summary  += keyword+" :: " + str((failure_reason_map[keyword]*100)/total)+"%\n "
         self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case))
         result = self._generate_result(failure_map)
         return success, summary, result
@@ -811,14 +833,16 @@ class RQGTests(BaseTestCase):
 
     def _analyze_result(self, result):
         check = True
+        failure_types = []
         message = "\n ____________________________________________________\n "
         for key in result.keys():
             if key != "test_case_number" and key != "n1ql_query" and key != "sql_query":
                 check = check and result[key]["success"]
                 if not result[key]["success"]:
+                    failure_types.append(key)
                     message += " Scenario ::  {0} \n".format(key)
                     message += " Reason :: "+result[key]["result"]+"\n"
-        return check, message
+        return check, message, failure_types
 
     def _convert_fun_result(self, result_set):
         list = []
