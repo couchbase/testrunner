@@ -1066,6 +1066,14 @@ class QueryHelper(object):
             new_sql = new_sql.replace("SUBSTR_INDEX","0")
         return new_sql
 
+    def find_matching_keywords(self, sql = "", keyword_list = []):
+        list = []
+        sql = sql.upper()
+        for keyword in keyword_list:
+            if keyword in sql:
+                list.append(keyword)
+        return sorted(list)
+
     def _apply_functions_to_params(self, function_list = [], param = "default"):
         sql = param
         count = 0;
@@ -1174,6 +1182,13 @@ class QueryHelper(object):
         with open(file_path) as f:
             content = f.readlines()
         return content
+
+    def  _read_keywords_from_file(self, file_path):
+        content = self._read_from_file(file_path)
+        list = []
+        for keyword in content:
+            list.append(keyword.replace("\n",""))
+        return list
 
     def _read_from_file_and_convert_queries(self, file_path):
         content = self._read_from_file(file_path)
