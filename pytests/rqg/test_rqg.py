@@ -217,6 +217,70 @@ class RQGTests(BaseTestCase):
         self.log.info(result)
         self.assertTrue(success, summary)
 
+    def test_rqg_crud_update(self):
+        # Get Data Map
+        table_map = self.client._get_values_with_type_for_fields_in_table()
+        check = True
+        failure_map = {}
+        batches = []
+        batch = []
+        test_case_number = 1
+        count = 1
+        inserted_count = 0
+        self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
+        # Load All the templates
+        self.test_file_path= self.unzip_template(self.test_file_path)
+        with open(self.test_file_path) as f:
+            query_list = f.readlines()
+        if self.total_queries  == None:
+            self.total_queries = len(query_list)
+        for n1ql_query_info in query_list:
+            data = n1ql_query_info
+            batch.append({str(test_case_number):data})
+            if count == self.concurreny_count:
+                inserted_count += len(batch)
+                batches.append(batch)
+                count = 1
+                batch = []
+            else:
+                count +=1
+            test_case_number += 1
+            if test_case_number >= self.total_queries:
+                break
+        if inserted_count != len(query_list):
+            batches.append(batch)
+        result_queue = Queue.Queue()
+        # Run Test Batches
+        test_case_number = 1
+        for test_batch in batches:
+            # Build all required secondary Indexes
+            list = [data[data.keys()[0]] for data in test_batch]
+            list = self.client._convert_update_template_query_info(
+                    table_map = table_map,
+                    n1ql_queries = list)
+            if self.use_secondary_index:
+                self._generate_secondary_indexes_in_batches(list)
+            thread_list = []
+            # Create threads and run the batch
+            for test_case in list:
+                test_case_input = test_case
+                verification_query = "SELECT * from {0} ORDER by primary_key_id ".format(table_map.keys()[0])
+                t = threading.Thread(target=self._run_basic_update_test, args = (test_case_input, verification_query,  test_case_number, result_queue))
+                t.daemon = True
+                t.start()
+                thread_list.append(t)
+                test_case_number += 1
+            # Capture the results when done
+            check = False
+            for t in thread_list:
+                t.join()
+            # Drop all the secondary Indexes
+            if self.use_secondary_index:
+                self._drop_secondary_indexes_in_batches(list)
+        # Analyze the results for the failure and assert on the run
+        success, summary, result = self._test_result_analysis(result_queue)
+        self.log.info(result)
+        self.assertTrue(success, summary)
 
     def _run_basic_test(self, test_data, test_case_number, result_queue):
         data = test_data
@@ -248,6 +312,21 @@ class RQGTests(BaseTestCase):
         if self.run_explain_with_hints:
             result = self._run_queries_with_explain(n1ql_query , indexes)
             result_run.update(result)
+        result_queue.put(result_run)
+        self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
+
+    def _run_basic_update_test(self, test_data, verification_query, test_case_number, result_queue):
+        self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
+        result_run = {}
+        n1ql_query = test_data["n1ql_query"]
+        sql_query = test_data["sql_query"]
+        result_run["n1ql_query"] = n1ql_query
+        result_run["sql_query"] = sql_query
+        result_run["test_case_number"] = test_case_number
+        self.n1ql_helper.run_cbq_query(n1ql_query, self.n1ql_server)
+        self.client._db_execute_query(query = sql_query)
+        query_index_run = self._run_queries_and_verify(n1ql_query = verification_query , sql_query = verification_query, expected_result = None)
+        result_run["update_test"] = query_index_run
         result_queue.put(result_run)
         self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
 
@@ -479,6 +558,33 @@ class RQGTests(BaseTestCase):
             self.log.info(ex)
         return sql_result
 
+    def _run_no_change_queries_and_verify(self, n1ql_query = None, sql_query = None, expected_result = None):
+        self.log.info(" SQL QUERY :: {0}".format(sql_query))
+        self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
+        result_run = {}
+        # Run n1ql query
+        try:
+            actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server)
+            n1ql_result = actual_result["results"]
+            #self.log.info(actual_result)
+            # Run SQL Query
+            sql_result = expected_result
+            if expected_result == None:
+                columns, rows = self.client._execute_query(query = sql_query)
+                sql_result = self.client._gen_json_from_results(columns, rows)
+            #self.log.info(sql_result)
+            self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
+            self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
+            try:
+                self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
+            except Exception, ex:
+                self.log.info(ex)
+                return {"success":False, "result": str(ex)}
+            return {"success":True, "result": "Pass"}
+        except Exception, ex:
+            return {"success":False, "result": str(ex)}
+
+
     def _run_queries_and_verify(self, n1ql_query = None, sql_query = None, expected_result = None):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
@@ -607,6 +713,20 @@ class RQGTests(BaseTestCase):
         try:
             for key in data_set.keys():
                 o, c, d = client.set(key, 0, 0, json.dumps(data_set[key]))
+        except Exception, ex:
+            print 'WARN======================='
+            print ex
+
+    def _load_data_in_buckets_using_n1ql(self, bucket, data_set):
+        try:
+            count=0
+            for key in data_set.keys():
+                if count%2 == 0:
+                    n1ql_query = self.query_helper._insert_statement_n1ql(bucket.name, "\""+key+"\"", json.dumps(data_set[key]))
+                else:
+                    n1ql_query = self.query_helper._upsert_statement_n1ql(bucket.name, "\""+key+"\"", json.dumps(data_set[key]))
+                actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server)
+                count+=1
         except Exception, ex:
             print 'WARN======================='
             print ex
@@ -926,8 +1046,7 @@ class RQGTests(BaseTestCase):
                 primary_key = table_key_map[bucket_name])
             for bucket in self.buckets:
                 if bucket.name == bucket_name:
-                    self._load_data_in_buckets_using_mc_bin_client(bucket, dict)
-
+                    self._load_data_in_buckets_using_n1ql(bucket, dict)
 
 
 

@@ -286,6 +286,24 @@ class QueryHelper(object):
         return sql_delimiter_list
 
 
+    def _insert_statements_n1ql(self, bucket_name, map):
+        list = []
+        for key in map.keys():
+            list.append(self._insert_statement_n1ql(bucket_name, key, map[key]))
+
+    def _upsert_statements_n1ql(self, bucket_name, map):
+        list = []
+        for key in map.keys():
+            list.append(self._upsert_statement_n1ql(bucket_name, key, map[key]))
+
+    def _insert_statement_n1ql(self, bucket_name, key, value):
+        sql_template = 'INSERT INTO {0} (KEY, VALUE) VALUES ({1},{2})'
+        return sql_template.format(bucket_name, key, value)
+
+    def _upsert_statement_n1ql(self, bucket_name, key, value):
+        sql_template = 'INSERT INTO {0} (KEY, VALUE) VALUES ({1},{2})'
+        return sql_template.format(bucket_name, key, value)
+
     def _add_explain_with_hints(self, sql, index_hint):
         sql_map = self._divide_sql(sql)
         select_from = sql_map["select_from"]
@@ -490,6 +508,33 @@ class QueryHelper(object):
         random.shuffle(value)
         return "".join(value)
 
+    def _covert_field_template_for_update(self, sql = "", table_map = {}):
+        string_field_names = self._search_fields_of_given_type(["varchar","text","tinytext","char"], table_map)
+        numeric_field_names = self._search_fields_of_given_type(["int","mediumint","double", "float", "decimal"], table_map)
+        datetime_field_names = self._search_fields_of_given_type(["datetime"], table_map)
+        bool_field_names = self._search_fields_of_given_type(["tinyint"], table_map)
+        primary_key_field = "primary_key"
+        for field in string_field_names:
+            if "primary" in field:
+                primary_key_field = field
+        string_field_names.remove(primary_key_field)
+        new_sql = sql
+        value = None
+        field_name = "None"
+        if "BOOL_FIELD" in sql:
+            field_name = new_sql.replace("BOOL_FIELD", random.choice(bool_field_names))
+            value = "True"
+        if "STRING_FIELD" in sql:
+            field_name = new_sql.replace("STRING_FIELD", random.choice(string_field_names))
+            value = self._random_char()
+        if "NUMERIC_FIELD"  in sql:
+            field_name = new_sql.replace("NUMERIC_FIELD", random.choice(numeric_field_names))
+            value = str(self._random_int())
+        if "DATETIME_FIELD"  in sql:
+            field_name = new_sql.replace("DATETIME_FIELD", random.choice(datetime_field_names))
+            value = self._random_datetime()
+        return "{0} = '{1}'".format(field_name, value)
+
     def _covert_fields_template_to_value(self, sql = "", table_map = {}):
         string_field_names = self._search_fields_of_given_type(["varchar","text","tinytext","char"], table_map)
         numeric_field_names = self._search_fields_of_given_type(["int","mediumint","double", "float", "decimal"], table_map)
@@ -536,8 +581,6 @@ class QueryHelper(object):
             else:
                 new_sql += token+space
         return new_sql
-
-
 
     def _convert_sql_template_to_value_with_subqueries(self, n1ql_template ="", table_map = {}, table_name= "simple_table", define_gsi_index=False):
         map, table_map = self._gen_query_with_subquery(sql =n1ql_template, table_map = table_map)
@@ -652,6 +695,22 @@ class QueryHelper(object):
                         "definition":create_index_name_fields_only
                     }
         return map
+
+    def _convert_delete_sql_template_to_values(self, sql ="", table_map = {}):
+        tokens = sql.split("WHERE")
+        new_sql = "DELETE FROM {0} WHERE ".format(table_map.keys()[0])
+        new_sql += self._convert_condition_template_to_value(tokens[1], table_map)
+        return new_sql
+
+    def _update_sql_template_to_values(self, sql ="", table_map = {}):
+        tokens = sql.split("WHERE")
+        new_sql = " UPDATE {0} ".format(table_map.keys()[0])
+        list = []
+        for field in tokens[0].split("SET")[1].split(","):
+            list.append(self._covert_field_template_for_update(field, table_map))
+        new_sql += " SET " + ",".join(list)
+        new_sql += " WHERE "+self._convert_condition_template_to_value(tokens[1], table_map)
+        return {"sql_query":new_sql,"n1ql_query":self._gen_sql_to_nql(new_sql)}
 
     def _convert_sql_template_to_value(self, sql ="", table_map = {}, table_name= "simple_table"):
         aggregate_function_list = []
