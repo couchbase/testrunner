@@ -14,11 +14,11 @@ class DMLQueryTests(QueryTests):
     def setUp(self):
         super(DMLQueryTests, self).setUp()
         self.directory = self.input.param("directory", "/tmp/tuq_data")
-        self.shell.execute_command("killall cbq-engine")
-        for bucket in self.buckets:
-            self.cluster.bucket_flush(self.master, bucket=bucket,
-                                  timeout=self.wait_timeout * 5)
-        self.create_primary_index_for_3_0_and_greater()
+        #self.shell.execute_command("killall cbq-engine")
+        #for bucket in self.buckets:
+        #    self.cluster.bucket_flush(self.master, bucket=bucket,
+        #                          timeout=self.wait_timeout * 5)
+        #self.create_primary_index_for_3_0_and_greater()
 
 ############################################################################################################################
 #
@@ -64,6 +64,38 @@ class DMLQueryTests(QueryTests):
                 for bucket in self.buckets:
                     self.query = 'INSERT into %s (key, value) VALUES ("%s", %s)' % (bucket.name, key, value)
                     actual_result = self.run_cbq_query()
+                    self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+                keys.append(key)
+                values.append(json.loads(value))
+        for bucket in self.buckets:
+            self.query = 'select * from %s use keys %s'  % (bucket.name, keys)
+            self.run_cbq_query()
+            self.sleep(10, 'wait for indexer')
+            actual_result = self.run_cbq_query()
+            expected_result = sorted([{bucket.name: doc} for doc in values[:num_docs]])
+            actual_result = sorted(actual_result['results'])
+            self._delete_ids(actual_result)
+            self._delete_ids(expected_result)
+            self.assertEqual(actual_result, expected_result,
+                             'Item did not appear')
+
+    def test_prepared_insert_json(self):
+        num_docs = self.input.param('num_docs', 10)
+        keys = []
+        values = []
+        for gen_load in self.gens_load:
+            gen = copy.deepcopy(gen_load)
+            if len(keys) == num_docs:
+                    break
+            for i in xrange(gen.end):
+                if len(keys) == num_docs:
+                    break
+                key, value = gen.next()
+                key = "insert_json" + key
+                for bucket in self.buckets:
+                    query = 'INSERT into %s (key, value) VALUES ("%s", %s)' % (bucket.name, key, value)
+                    prepared = self.run_cbq_query(query='PREPARE %s' % query)['results'][0]
+                    actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
                     self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
                 keys.append(key)
                 values.append(json.loads(value))
@@ -178,6 +210,38 @@ class DMLQueryTests(QueryTests):
             self.assertEqual(actual_result, expected_result,
                              'Item did not appear')
 
+    def test_prepared_upsert_with_select(self):
+        num_docs = self.input.param('num_docs', 10)
+        keys = []
+        values = []
+        for gen_load in self.gens_load:
+            gen = copy.deepcopy(gen_load)
+            if len(keys) == num_docs:
+                    break
+            for i in xrange(gen.end):
+                if len(keys) == num_docs:
+                    break
+                key, value = gen.next()
+                key = "upsert_json" + key
+                for bucket in self.buckets:
+                    query = 'upsert into %s (key, value) values  ("%s", %s)' % (bucket.name, key, value)
+                    prepared = self.run_cbq_query(query='PREPARE %s' % query)['results'][0]
+                    actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
+                    self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+                keys.append(key)
+                values.append(json.loads(value))
+        for bucket in self.buckets:
+            self.query = 'select * from %s use keys %s'  % (bucket.name, keys)
+            self.run_cbq_query()
+            self.sleep(10, 'wait for indexer')
+            actual_result = self.run_cbq_query()
+            expected_result = sorted([{bucket.name: doc} for doc in values[:num_docs]])
+            actual_result = sorted(actual_result['results'])
+            self._delete_ids(actual_result)
+            self._delete_ids(expected_result)
+            self.assertEqual(actual_result, expected_result,
+                             'Item did not appear')
+
         def items_check(self, prefix, vls):
             for bucket in self.buckets:
                 self.query = 'select * from %s use keys %s'  % (bucket.name, ','.join(["%s%s" % (prefix,i)
@@ -260,6 +324,34 @@ class DMLQueryTests(QueryTests):
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
 
+    def test_prepared_delete_where_clause_json(self):
+        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
+        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_title"] == 'Engineer']
+        for bucket in self.buckets:
+            query = 'delete from %s where job_title="Engineer"'  % (bucket.name)
+            prepared = self.run_cbq_query(query='PREPARE %s' % query)['results'][0]
+            actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self._keys_are_deleted(keys_to_delete)
+
+    def test_delete_where_clause_json_not_equal(self):
+        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
+        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_title"] != 'Engineer']
+        for bucket in self.buckets:
+            self.query = 'delete from %s where job_title!="Engineer"'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self._keys_are_deleted(keys_to_delete)
+
+    def test_delete_where_clause_json_less_equal(self):
+        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
+        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_day"] <=1]
+        for bucket in self.buckets:
+            self.query = 'delete from %s where job_day<=1'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self._keys_are_deleted(keys_to_delete)
+
     def test_delete_where_satisfy_clause_json(self):
         keys, values = self._insert_gen_keys(self.num_items, prefix='delete_sat')
         keys_to_delete = [keys[i] for i in xrange(len(keys))
@@ -324,6 +416,17 @@ class DMLQueryTests(QueryTests):
         keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete')
         self.query = 'MERGE INTO %s USING %s on key "%s" when matched then delete'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
         actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self.assertEqual(len(actual_result['results']), 0, 'Query was not run successfully')
+
+    def test_prepared_merge_delete_match(self):
+        self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
+        keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete')
+        query = 'MERGE INTO %s USING %s on key "%s" when matched then delete'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
+        prepared = self.run_cbq_query(query='PREPARE %s' % query)['results'][0]
+        actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
