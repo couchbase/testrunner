@@ -646,6 +646,50 @@ class QueriesViewsTests(QueryTests):
                         except:
                             pass
 
+    def test_prepared_hints_letting(self):
+        self.run_query_prepared("SELECT join_mo, sum_test from {0} USE INDEX ({1} using {2}) WHERE join_mo>7 group by join_mo letting sum_test = sum(tasks_points.task1)")
+
+    def test_prepared_hints_array(self):
+        self.run_query_prepared("SELECT job_title, array_append(array_agg(DISTINCT name), 'new_name') as names FROM {0} USE INDEX ({1} using {2}) GROUP BY job_title" )
+
+    def test_prepared_hints_intersect(self):
+        self.run_query_prepared("select name from {0} intersect all select name from {0} s USE INDEX ({1} using {2}) where s.join_day>5")
+
+    def run_query_prepared(self, query):
+        indexes = []
+        index_name_prefix = "my_index_" + str(uuid.uuid4())[:4]
+        index_fields = self.input.param("index_field", '').split(';')
+        for bucket in self.buckets:
+            try:
+                for field in index_fields:
+                    index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
+                    self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, ','.join(field.split(';')), self.index_type)
+                    self.run_cbq_query()
+                    self._wait_for_index_online(bucket, index_name)
+                    indexes.append(index_name)
+            except:
+                for indx in indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, indx, self.index_type)
+                    try:
+                        self.run_cbq_query()
+                    except:
+                        pass
+                raise
+        try:
+            self.query = "select * from system:indexes where name = %s" % (index_name)
+            self.log.info(self.run_cbq_query())
+            for bucket in self.buckets:
+                self.query = query.format(bucket.name, indexes[0], self.index_type)
+                self.prepared_common_body()
+        finally:
+            for bucket in self.buckets:
+                for indx in indexes:
+                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, indx, self.index_type)
+                        try:
+                            self.run_cbq_query()
+                        except:
+                            pass
+
     def _verify_view_is_present(self, view_name, bucket):
         if self.primary_indx_type.lower() == 'gsi':
             return

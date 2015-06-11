@@ -15,10 +15,10 @@ class DMLQueryTests(QueryTests):
         super(DMLQueryTests, self).setUp()
         self.directory = self.input.param("directory", "/tmp/tuq_data")
         #self.shell.execute_command("killall cbq-engine")
-        #for bucket in self.buckets:
-        #    self.cluster.bucket_flush(self.master, bucket=bucket,
-        #                          timeout=self.wait_timeout * 5)
-        #self.create_primary_index_for_3_0_and_greater()
+        for bucket in self.buckets:
+            self.cluster.bucket_flush(self.master, bucket=bucket,
+                                  timeout=self.wait_timeout * 5)
+        self.create_primary_index_for_3_0_and_greater()
 
 ############################################################################################################################
 #
