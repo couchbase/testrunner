@@ -6,6 +6,7 @@ import logger
 import time
 import requests
 
+
 log = logger.Logger.get_logger()
 
 # EsRestConnection: subclasses RestConnection for use against elastic-search nodes.
@@ -239,11 +240,7 @@ class EsRestConnection(RestConnection):
             log.error('template upload failed: {0}'.format(content))
 
     def add_node(self, user='', password='', remoteIp='', port='8091',zone_name='', services=None):
-        new_node = self.get_nodes_self()
-        new_node.ip = remoteIp
-        new_node.port = port
-
-        self.start_es_node(new_node)
+        pass
 
     def update_configuration(self, node, commands):
         rmc = RemoteMachineShellConnection(node)
@@ -269,15 +266,27 @@ class EsRestConnection(RestConnection):
 
     def start_es_node(self, node):
         rmc = RemoteMachineShellConnection(node)
+        shell=rmc._ssh_client.invoke_shell()
+        es_kill = "pkill -f elasticsearch;"
+
+        shell.send(es_kill+' \n')
+        while not shell.recv_ready():
+            time.sleep(2)
+
+        rc = shell.recv(1024)
+        log.info(rc)
+        log.info("Sleep for 30 seconds")
+        time.sleep(30)
+
 
         # define es exec path if not in $PATH environment
-        es_bin = '~/elasticsearch/bin/elasticsearch'
+
+        es_bin = "~/elasticsearch/bin/elasticsearch -Dtransport.couchbase=TRACE -Dcom.couchbase=TRACE > /var/log/es.log 2>&1 &"
         if 'es_bin' in TestInputSingleton.input.test_params:
             es_bin = TestInputSingleton.input.test_params['es_bin']
 
         # connect to remote node
         log.info('Starting node: %s:%s' % (node.ip, node.port))
-        shell=rmc._ssh_client.invoke_shell()
 
         # start es service
         shell.send(es_bin+' \n')
@@ -287,6 +296,8 @@ class EsRestConnection(RestConnection):
         rc = shell.recv(1024)
         log.info(rc)
 
+        log.info("Sleep for 5 seconds before the node can appear")
+        time.sleep(5)
         # wait for new node
         tries = 0
         while tries < 10:
@@ -368,12 +379,13 @@ class EsRestConnection(RestConnection):
             self.eject_node(node)
 
     def eject_node(self, node):
-        api = "http://%s:9200/_cluster/nodes/local/_shutdown" % (node.ip)
+        api = "http://%s:9200/_cluster/nodes/local/_shutdown?delay=0s" % (node.ip)
         status, content, header = self._http_request(api, 'POST', '')
         if status:
             log.info('ejected node: '+node.ip)
         else:
             log.error('rebalance operation failed: {0}'.format(content))
+
 
 
     def monitorRebalance(self, stop_if_loop=False):
@@ -384,7 +396,6 @@ class EsRestConnection(RestConnection):
         return {'pools' : []}
 
     def add_remote_cluster(self, *args, **kwargs):
-
         # detect 2:1 mapping and do spectial cluster add
         # otherwise run super method
         pass
