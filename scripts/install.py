@@ -699,18 +699,19 @@ class SDKInstaller(Installer):
         remote_client.disconnect()
         return True
 
-class ESInstaller(Installer):
+class ESInstaller(object):
     def __init__(self):
        self.remote_client = None
        pass
 
     def initialize(self, params):
-        self.remote_client.execute_command("~/elasticsearch/bin/elasticsearch start > /var/log/es-{0}.log 2>&1 &".format(datetime.today().ctime().replace(" ","-")))
+        self.remote_client.execute_command("~/elasticsearch/bin/elasticsearch start > /var/log/es.log 2>&1 &")
 
     def install(self, params):
         self.remote_client = RemoteMachineShellConnection(params["server"])
         self.remote_client.execute_command("pkill -f elasticsearch")
         self.remote_client.execute_command("rm -rf ~/elasticsearch")
+        self.remote_client.execute_command("rm -rf ~/elasticsearch-*.tar.gz*")
         download_url = "https://download.elasticsearch.org/elasticsearch/elasticsearch/elasticsearch-{0}.tar.gz".format(params["version"])
         self.remote_client.execute_command("wget {0}".format(download_url))
         self.remote_client.execute_command("tar xvzf elasticsearch-{0}.tar.gz; mv elasticsearch-{0} elasticsearch".format(params["version"]))

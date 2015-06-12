@@ -25,6 +25,7 @@ class ESReplicationBaseTest(object):
         self._es_swap = xd_ref._input.param("es_swap", False)
         self._cb_swap = xd_ref._input.param("cb_swap", False)
         self._cb_failover = xd_ref._input.param("cb_failover", False)
+        self._run_time = xd_ref._input.param("run_time", 5)
         self._log = logger.Logger.get_logger()
 
 
@@ -42,33 +43,18 @@ class ESReplicationBaseTest(object):
 
         # prepare for verification
         xd_ref._wait_flusher_empty(src_master, src_nodes)
-
         xd_ref._expiry_pager(src_master)
-        self.sleep(30)
-
-
+        self.sleep(20)
         self._log.info("Verifing couchbase to elasticsearch replication")
-
         self.verify_es_num_docs(src_master, dest_master,1, 10, verification_count, doc_type)
-
-        #if xd_ref._doc_ops is not None:
-            # initial data has been modified
-            # check revids
-            #self._verify_es_revIds(src_master, dest_master, verification_count=verification_count)
-
-        #    if "create" in xd_ref._doc_ops:
-                # initial data values have has been modified
-        #        self._verify_es_values(src_master, dest_master,
-        #                               verification_count=verification_count)
 
 
 
     def verify_es_num_docs(self, src_server, dest_server, kv_store=1, retry=10, verification_count=0, doc_type=None):
         es_rest = RestConnection(dest_server)
-        cb_rest = RestConnection(src_server)
         buckets = self.xd_ref._get_cluster_buckets(src_server)
 
-        wait = 20
+        wait = 5
 
         for bucket in buckets:
             es_num_items = es_rest.get_bucket(bucket.name, doc_type).stats.itemCount
@@ -76,31 +62,30 @@ class ESReplicationBaseTest(object):
             self._log.info("STATUS: elastic search item count {0} verification count {1}".format(es_num_items, cb_num_items))
 
             _retry = retry
-            while _retry > 0 and cb_num_items < es_num_items and cb_num_items != 0:
+
+            while _retry > 0 and cb_num_items != es_num_items:
                 self._log.info("elasticsearch items %s, expected: %s....retry after %s seconds" % \
                                      (es_num_items, cb_num_items, wait))
                 time.sleep(wait)
                 last_es_items = es_num_items
+
                 es_num_items = es_rest.get_bucket(bucket.name, doc_type).stats.itemCount
+
                 if es_num_items == last_es_items:
                     _retry = _retry - 1
                     # if index doesn't change reduce retry count
                 elif es_num_items <= last_es_items:
                     self._log.info("%s items removed from index " % (es_num_items - last_es_items))
-                    _retry = retry
+
                 elif es_num_items >= last_es_items:
                     self._log.info("%s items added to index" % (es_num_items - last_es_items))
-                    _retry = -1
-
-
-            #if es_num_items != cb_num_items:
-            #    self.xd_ref.fail("Error: Couchbase has %s docs, ElasticSearch has %s docs " % \
-                               # (cb_num_items, es_num_items))
 
 
             if es_num_items != cb_num_items:
-                self._log.info("ERROR: Couchbase has %s docs, ElasticSearch all_docs returned %s docs " % \
+                self._log.info("ERROR: Couchbase has %s docs, ElasticSearch returned %s docs " % \
                                      (cb_num_items, es_num_items))
+
+            assert es_num_items == cb_num_items
 
 
     def _verify_es_revIds(self, src_server, dest_server, kv_store=1, verification_count=10000):
@@ -188,22 +173,66 @@ class ESReplicationBaseTest(object):
 
         self.xd_ref.fail("Failed to setup replication to remote cluster %s " % dest_master)
 
+    def _first_level_rebalance_out(self, param_nodes,
+                                   available_nodes,
+                                   do_failover = False,
+                                   monitor = True):
+
+        nodes_out = available_nodes[:1]
+        if do_failover:
+            self.cluster.failover(param_nodes, nodes_out)
+
+        tasks = self._async_rebalance(param_nodes, [], nodes_out)
+        if monitor:
+            [task.result() for task in tasks]
+        return available_nodes[1:]
+
+    def _first_level_rebalance_in(self, param_nodes,
+                                  monitor = True):
+        nodes_in = []
+        if len(param_nodes) > 1:
+            nodes_in = [param_nodes[1]]
+            tasks = self._async_rebalance(param_nodes, nodes_in, [])
+            if monitor:
+                [task.result() for task in tasks]
+
+        return nodes_in
+
+    def _second_level_rebalance_out(self, param_nodes,
+                                    available_nodes,
+                                    do_swap = False,
+                                    monitor = True):
+        if len(available_nodes) > 1:
+            nodes_in = []
+            if do_swap:
+                nodes_in = [param_nodes[1]]
+            tasks = self._async_rebalance(param_nodes, nodes_in, available_nodes)
+            if monitor:
+                [task.result() for task in tasks]
+
+    def _second_level_rebalance_in(self, param_nodes, monitor = True):
+        if len(param_nodes) > 2:
+            nodes_in = param_nodes[2:]
+            tasks = self._async_rebalance(param_nodes, nodes_in, [])
+            if monitor:
+                [task.result() for task in tasks]
+
+
     def update_configurations(self, command):
-        for node in self.xd_ref.dest_nodes:
-            es_rest = RestConnection(node)
-            es_rest.eject_node(node)
-            es_rest.update_configuration(node, commands=command)
-            es_rest.start_es_node(node)
+        node = self.xd_ref.dest_master
+        es_rest = RestConnection(node)
+        #es_rest.eject_node(node)
+        es_rest.update_configuration(node, commands=command)
+        es_rest.start_es_node(node)
 
         self.config_updates_count = len(command)
 
 
     def reset_configurations(self):
-        for node in self.xd_ref.dest_nodes:
-            es_rest = RestConnection(node)
-            es_rest.eject_node(node)
-            es_rest.reset_configuration(node, self.config_updates_count)
-            es_rest.start_es_node(node)
+        node = self.xd_ref.dest_master
+        es_rest = RestConnection(node)
+        es_rest.reset_configuration(node, self.config_updates_count)
+        es_rest.start_es_node(node)
 
 
     def upload_bad_template(self):
@@ -218,3 +247,11 @@ class ESReplicationBaseTest(object):
         for node in self.xd_ref.dest_nodes:
             es_rest = RestConnection(node)
             es_rest.replace_template(node, template_path)
+
+
+    def replication_setting(self, param, value):
+        src_master = self.xd_ref.src_master
+        rest = RestConnection(src_master)
+        buckets = rest.get_buckets()
+        for bucket in buckets:
+            rest.set_xdcr_param(bucket.name, bucket.name, param, value)

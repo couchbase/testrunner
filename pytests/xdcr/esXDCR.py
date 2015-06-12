@@ -5,6 +5,7 @@ from esbasetests import ESReplicationBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from random import randrange
 
+
 import time
 
 #Assumption that at least 2 nodes on every cluster
@@ -25,67 +26,61 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
         sites2 = ['mashable', 'techcrunch', 'hackernews', 'slashdot']
         template = '{{ "ordering": {0}, "site_name": "{1}" }}'
 
-
-        delete_start= int((self.num_items) * (float)(100 - self._percent_delete) / 100)
-        update_end = int((self.num_items) * (float)(self._percent_update) / 100)
-
         self.gen_create =\
-            DocumentGenerator('es_xdcr_docs{0}{1}'.format(self.delimiter,self.default_type), template, ordering,
-                               sites1, start=0, end=self.num_items)
+            DocumentGenerator('es_xdcr_docs', template, ordering, sites1, start=0, end=self.num_items)
 
         self.gen_recreate =\
-            DocumentGenerator('es_xdcr_docs', template, ordering,
-                               sites2, start=0, end=self.num_items)
+            DocumentGenerator('es_xdcr_docs', template, ordering, sites2, start=0, end=self.num_items)
 
-        self.gen_update =\
-            DocumentGenerator('es_xdcr_docs', template, ordering,
-                               sites1, start=0, end=update_end)
         self.gen_delete =\
             DocumentGenerator('es_xdcr_docs', template, ordering,
-                               sites1, start=delete_start, end=self.num_items)
+                               sites1, start=0, end=self.num_items)
+
 
         self.gen_blob = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self.num_items)
 
         self.gen_with_typedelimiter =\
-            DocumentGenerator('es_xdcr_docs', template, ordering,
-                               sites1, start=delete_start, end=self.num_items)
+            DocumentGenerator('es_xdcr_docs{0}{1}'.format(self.delimiter,self.default_type), template, ordering,
+                               sites1, start=0, end=self.num_items)
 
         values = ['1', '10']
         self.gen_num =\
             JSONNonDocGenerator('es_xdcr_docs', values, start=0, end=self.num_items)
 
-    def _async_modify_data(self):
+    def _async_modify_data(self, batch_size=1):
         tasks = []
 
         """Setting up creates/updates/deletes at source nodes"""
         if self._doc_ops is not None:
             # allows multiple of them but one by one
             if "update" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_recreate, "create", self._expires, batch_size=batch_size))
             if "create" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_recreate, "create", 0))
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0, batch_size=batch_size))
             if "delete" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0, batch_size=batch_size))
             if "read" in self._doc_ops:
-                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_create, "read", 0))
+                tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_create, "read", 0, batch_size=batch_size))
         return tasks
 
-    def modify_data(self):
-        tasks = self._async_modify_data()
-        for task in tasks:
-            task.result()
+    def modify_data(self, batch_size=1):
+        tasks = self._async_modify_data(batch_size=batch_size)
+        [t.result() for t in tasks]
 
 
     #overriding xdcr verify results method for specific es verification
-    def verify_results(self):
-        self.verify_es_results()
+    def verify_results(self, verification_count=0, doc_type='couchbaseDocument'):
+        self.verify_es_results(verification_count=verification_count, doc_type=doc_type)
+
 
     """Testing Unidirectional load( Loading only at source) Verifying whether ES/XDCR replication is successful on
     subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified by the user. """
     def load_with_async_ops(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.modify_data()
-        self.verify_results()
+        self._doc_ops = "update"
+        self.modify_data(batch_size=1000)
+        self.verify_results(verification_count=self.num_items)
+
 
     def test_plugin_connect(self):
         pass
@@ -97,7 +92,6 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
         tasks = []
         for bucket in buckets:
             if bucket_idx % 2 == 0:
-
                 t = self._async_load_bucket(bucket, self.src_master, self.gen_create, "create", 0)
                 tasks.append(t)
             else:
@@ -110,7 +104,6 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
     """Test coverage for elasticsearch and couchbase topology changes during data loading"""
     def test_topology(self):
-
         availableESNodes = self.dest_nodes[1:]
         availableCBNodes = self.src_nodes[1:]
 
@@ -125,7 +118,7 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
         # load data
         tasks = \
-            self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0)
+            self._async_load_all_buckets(self.src_master, self.gen_create, "create", 0, batch_size=100)
 
 
         # peform initial rebalances
@@ -146,7 +139,9 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
         # wait for initial data loading and load some more data
         [task.result() for task in tasks]
-        tasks = self._async_modify_data()
+
+        self._doc_ops = "update"
+        tasks = self._async_modify_data(batch_size=100)
 
         # add/remove remaining nodes
         if self._es_out or self._es_swap:
@@ -166,109 +161,64 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
 	    # wait for secondary data loading tasks and verify results
         [task.result() for task in tasks]
-        self.verify_results()
+        self.verify_results(verification_count=self.num_items)
 
-    def _first_level_rebalance_out(self, param_nodes,
-                                   available_nodes,
-                                   do_failover = False,
-                                   monitor = True):
-
-        nodes_out = available_nodes[:1]
-        if do_failover:
-            self.cluster.failover(param_nodes, nodes_out)
-
-        tasks = self._async_rebalance(param_nodes, [], nodes_out)
-        if monitor:
-            [task.result() for task in tasks]
-        return available_nodes[1:]
-
-    def _first_level_rebalance_in(self, param_nodes,
-                                  monitor = True):
-        nodes_in = []
-        if len(param_nodes) > 1:
-            nodes_in = [param_nodes[1]]
-            tasks = self._async_rebalance(param_nodes, nodes_in, [])
-            if monitor:
-                [task.result() for task in tasks]
-
-        return nodes_in
-
-    def _second_level_rebalance_out(self, param_nodes,
-                                    available_nodes,
-                                    do_swap = False,
-                                    monitor = True):
-        if len(available_nodes) > 1:
-            nodes_in = []
-            if do_swap:
-                nodes_in = [param_nodes[1]]
-            tasks = self._async_rebalance(param_nodes, nodes_in, available_nodes)
-            if monitor:
-                [task.result() for task in tasks]
-
-    def _second_level_rebalance_in(self, param_nodes, monitor = True):
-        if len(param_nodes) > 2:
-            nodes_in = param_nodes[2:]
-            tasks = self._async_rebalance(param_nodes, nodes_in, [])
-            if monitor:
-                [task.result() for task in tasks]
+    def test_expiry(self):
+        expiry = 10
+        self._load_all_buckets(self.src_master, self.gen_create, "create", expiry)
+        self.sleep(expiry + 5)
+        self.verify_results(verification_count=0)
 
     def test_deletes(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self._doc_ops = ['delete']
-        tasks = self._async_modify_data()
-        for task in tasks:
-            task.result()
-        self.verify_es_results(verification_count=0)
+        self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
+        self.verify_results(verification_count=0)
 
     def test_ignore_deletes(self):
-        config_commands = ['couchbase.ignore_deletes: True']
-        self.update_configurations(config_commands)
-
+        buckets = self._get_cluster_buckets(self.src_master)
+        val = ""
+        for b in buckets:
+            if val == "":
+                val = b
+            else:
+                val += ":{0}".format(b)
+        config_commands = ['couchbase.ignoreDeletes: {0}'.format(b)]
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self._doc_ops = ['delete']
-
-        tasks = self._async_modify_data()
-        for task in tasks:
-            task.result()
-
-        self.verify_es_results(verification_count=self.num_items)
-        self.reset_configurations()
+        self.verify_results(verification_count=self.num_items)
+        self.update_configurations(config_commands)
+        self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
+        self.verify_results(verification_count=self.num_items)
 
     def test_wrap_counters(self):
-        config_commands = ['couchbase.wrap_counters: True']
+        config_commands = ['couchbase.wrapCounters: True']
         self.update_configurations(config_commands)
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.verify_es_results(verification_count=self.num_items)
-        self.reset_configurations()
+        self._load_all_buckets(self.src_master, self.gen_num, "create", 0)
+        self.verify_results(verification_count=(self.num_items))
 
     def test_ignore_failures(self):
-        config_commands = ['couchbase.ignore_failures: True']
+        config_commands = ['couchbase.ignoreFailures: True']
         self.update_configurations(config_commands)
         self.upload_bad_template()
-        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
-        self.verify_es_results(verification_count=(self.num_items + 1024))
+        self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
+        self.verify_results(verification_count=self.num_items)
         self.upload_good_template()
-        self.reset_configurations()
 
     def test_delimiter_type_selector(self):
         config_commands = []
         config_commands.append('couchbase.typeSelector: org.elasticsearch.transport.couchbase.capi.DelimiterTypeSelector')
         config_commands.append('couchbase.typeSelector.documentTypeDelimiter: {0}'.format(self.delimiter))
-
         self.update_configurations(config_commands)
         self._load_all_buckets(self.src_master, self.gen_with_typedelimiter , "create", 0)
-        self.verify_es_results(verification_count=self.num_items, doc_type=self.default_type)
-        self.reset_configurations()
+        self.verify_results(verification_count=self.num_items, doc_type=self.default_type)
 
 
     def test_regex_type_selector(self):
         config_commands = []
         config_commands.append('couchbase.typeSelector: org.elasticsearch.transport.couchbase.capi.RegexTypeSelector')
         config_commands.append('couchbase.typeSelector.{0}: {1}'.format(self.default_type, self.regex))
-
         self.update_configurations(config_commands)
         self._load_all_buckets(self.src_master, self.gen_create , "create", 0)
-        self.verify_es_results(verification_count=self.num_items, doc_type=self.default_type)
+        self.verify_results(verification_count=self.num_items, doc_type=self.default_type)
         self.reset_configurations()
 
 
@@ -283,7 +233,7 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
         self.update_configurations(config_commands)
         self._load_all_buckets(self.src_master, self.gen_create , "create", 0)
-        self.verify_es_results(verification_count=self.num_items, doc_type=self.default_type)
+        self.verify_results(verification_count=self.num_items, doc_type=self.default_type)
         self.reset_configurations()
 
     def test_doc_include_filter(self):
@@ -294,7 +244,7 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
         self.update_configurations(config_commands)
         self._load_all_buckets(self.src_master, self.gen_create , "create", 0)
-        self.verify_es_results(verification_count=self.num_items)
+        self.verify_results(verification_count=self.num_items)
         self.reset_configurations()
 
     def test_doc_exclude_filter(self):
@@ -302,8 +252,53 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
         config_commands.append('couchbase.keyFilter: org.elasticsearch.transport.couchbase.capi.RegexKeyFilter')
         config_commands.append('couchbase.keyFilter.type: Exclude')
         config_commands.append('couchbase.keyFilter.keyFiltersRegex.*: {0}'.format(self.regex))
-
-        self.update_configurations(config_commands)
         self._load_all_buckets(self.src_master, self.gen_create , "create", 0)
-        self.verify_es_results(verification_count=0)
+        self.update_configurations(config_commands)
+        self._load_all_buckets(self.src_master, self.gen_create , "delete", 0)
+        self.verify_results(verification_count=self.num_items)
         self.reset_configurations()
+
+    def test_alias_index(self):
+        pass
+
+    def test_pause_resume(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.verify_results(verification_count=self.num_items)
+        self.replication_setting('pauseRequested', 'true')
+        self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
+        self.replication_setting('pauseRequested', 'false')
+        self.verify_results(verification_count=0)
+
+    def test_low_replication_streams(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.replication_setting('maxConcurrentReps', 2)
+        self._load_all_buckets(self.src_master, self.gen_delete, "delete",0)
+        self.verify_results(verification_count=0)
+
+    def test_high_replication_streams(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.replication_setting('maxConcurrentReps', 256)
+        self.verify_results(verification_count=self.num_items)
+        self._load_all_buckets(self.src_master, self.gen_delete, "delete",0)
+        self.verify_results(verification_count=0)
+
+    def test_limit_connection(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.verify_results(verification_count=self.num_items)
+        self.replication_setting('httpConnections', 1)
+        self._load_all_buckets(self.src_master, self.gen_delete, "delete",0)
+        self.verify_results(verification_count=0)
+
+    def test_low_checkpoint_interval(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.verify_results(verification_count=self.num_items)
+        self.replication_setting('checkpointInterval', 10)
+        self._load_all_buckets(self.src_master, self.gen_delete, "delete",0)
+        self.verify_results(verification_count=0)
+
+    def test_longevity(self):
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
+        self.verify_results(verification_count=self.num_items)
+        self.sleep(self._run_time)
+        self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
+        self.verify_results(verification_count=0)
