@@ -375,6 +375,13 @@ class MySQLClient(object):
             query_input_list.append(helper._update_sql_template_to_values(sql =n1ql_query, table_map = table_map))
         return query_input_list
 
+    def _convert_delete_template_query_info(self, n1ql_queries = [], table_map= {}):
+        helper = QueryHelper()
+        query_input_list = []
+        for n1ql_query in n1ql_queries:
+            query_input_list.append(helper._delete_sql_template_to_values(sql =n1ql_query, table_map = table_map))
+        return query_input_list
+
     def  _read_from_file(self, file_path):
         with open(file_path) as f:
             content = f.readlines()

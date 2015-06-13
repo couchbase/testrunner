@@ -462,6 +462,19 @@ class QueryHelper(object):
         day = random.choice(range(1, 29))
         return datetime(year, month, day)
 
+    def _generate_insert_statement_from_data(self, table_name ="TABLE_NAME", data_map ={}):
+        intial_statement = " INSERT INTO {0} ".format(table_name)
+        column_names = "( "+",".join(data_map.keys())+" ) "
+        values_string = ""
+        for value in data_map.values():
+            if str(value) == "True":
+                value = 1
+            if str(value) == "False":
+                value = 0
+            values_string += "\'"+str(value)+"\',"
+        values = "( "+values_string[0:len(values_string)-1]+" ) "
+        return intial_statement+column_names+" VALUES "+values
+
     def _generate_insert_statement(self, table_name ="TABLE_NAME", table_map ={}, primary_key=""):
         values = ""
         intial_statement = ""
@@ -709,6 +722,13 @@ class QueryHelper(object):
         for field in tokens[0].split("SET")[1].split(","):
             list.append(self._covert_field_template_for_update(field, table_map))
         new_sql += " SET " + ",".join(list)
+        new_sql += " WHERE "+self._convert_condition_template_to_value(tokens[1], table_map)
+        return {"sql_query":new_sql,"n1ql_query":self._gen_sql_to_nql(new_sql)}
+
+    def _delete_sql_template_to_values(self, sql ="", table_map = {}):
+        tokens = sql.split("WHERE")
+        new_sql = " DELETE FROM {0} ".format(table_map.keys()[0])
+        list = []
         new_sql += " WHERE "+self._convert_condition_template_to_value(tokens[1], table_map)
         return {"sql_query":new_sql,"n1ql_query":self._gen_sql_to_nql(new_sql)}
 
