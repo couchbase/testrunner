@@ -690,6 +690,94 @@ class QueriesViewsTests(QueryTests):
                         except:
                             pass
 
+    def test_intersect_scan(self):
+        test_to_run = self.input.param("test_to_run", '')
+        indexes = []
+        try:
+            indexes, query = self.run_intersect_scan_query(test_to_run)
+            self.run_intersect_scan_explain_query(indexes, query)
+        finally:
+            if indexes:
+                self._delete_indexes(indexes)
+
+    def test_intersect_scan_meta(self):
+        test_to_run = self.input.param("test_to_run", '')
+        indexes = []
+        try:
+            indexes = []
+            index_name_prefix = "inter_index_" + str(uuid.uuid4())[:4]
+            index_fields = self.input.param("index_field", '').split(';')
+            for bucket in self.buckets:
+                for field in index_fields:
+                    index_name = '%sid_meta' % (index_name_prefix)
+                    query = "CREATE INDEX %s ON %s(meta(%s).id) USING %s" % (
+                        index_name, bucket.name, bucket.name, self.index_type)
+                    self.run_cbq_query(query=query)
+                    self._wait_for_index_online(bucket, index_name)
+                    indexes.append(index_name)
+                    index_name = '%stype_meta' % (index_name_prefix)
+                    query = "CREATE INDEX %s ON %s(meta(%s).type) USING %s" % (
+                        index_name, bucket.name, bucket.name, self.index_type)
+                    self.run_cbq_query(query=query)
+                    self._wait_for_index_online(bucket, index_name)
+                    indexes.append(index_name)
+                self.test_comparition_meta()
+            for bucket in self.buckets:
+                self.query = "SELECT meta(%s).id, meta(%s).type FROM %s" % (bucket.name, bucket.name, bucket.name)
+                self.run_cbq_query()
+                query = 'EXPLAIN ' % (self.query % (bucket.name, bucket.name, bucket.name))
+                res = self.run_cbq_query(query=query)
+                self.assertTrue(res["results"][0]["~children"][0]["~children"][0]["#operator"] == 'IntersectScan',
+                                        "Index should be intersect scan and is %s" % (res["results"]))
+                actual_indexes = [scan['index'] for scan in res["results"][0]["~children"][0]["~children"][0]['scans']]
+                self.assertTrue(set(actual_indexes) == set(indexes),
+                                "Indexes should be %s, but are: %s" % (indexes, actual_indexes))
+        finally:
+            if indexes:
+                self._delete_indexes(indexes)
+
+    def run_intersect_scan_query(self, query_method):
+        indexes = []
+        query = None
+        index_name_prefix = "inter_index_" + str(uuid.uuid4())[:4]
+        index_fields = self.input.param("index_field", '').split(';')
+        try:
+            for bucket in self.buckets:
+                for field in index_fields:
+                    index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
+                    query = "CREATE INDEX %s ON %s(%s) USING %s" % (
+                    index_name, bucket.name, ','.join(field.split(';')), self.index_type)
+                    self.run_cbq_query(query=query)
+                    self._wait_for_index_online(bucket, index_name)
+                    indexes.append(index_name)
+                fn = getattr(self, query_method)
+                query = fn()
+        finally:
+            return indexes, query
+
+    def run_intersect_scan_explain_query(self, indexes_names, query):
+        for bucket in self.buckets:
+            query = 'EXPLAIN %s' % (query % (bucket.name))
+            res = self.run_cbq_query(query=query)
+            self.log.info(res)
+            result = res["results"][0]["~children"][0]["~children"][0] if "~children" in res["results"][0]["~children"][0] \
+                        else res["results"][0]["~children"][0]
+            self.assertTrue(result["#operator"] == 'IntersectScan',
+                                    "Index should be intersect scan and is %s" % (res["results"]))
+            actual_indexes = [scan['scans'][0]['index'] if 'scans' in scan else scan['index']
+                              for scan in result['scans']]
+            self.assertTrue(set(actual_indexes) == set(indexes_names),
+                            "Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
+
+    def _delete_indexes(self, indexes):
+        for bucket in self.buckets:
+            for indx in indexes:
+                query = "DROP INDEX %s.%s USING %s" % (bucket.name, indx, self.index_type)
+                try:
+                   self.run_cbq_query(query=query)
+                except:
+                   pass
+
     def _verify_view_is_present(self, view_name, bucket):
         if self.primary_indx_type.lower() == 'gsi':
             return

@@ -1759,6 +1759,82 @@ class QueryTests(BaseTestCase):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
+    def test_comparition_equal_not_equal(self):
+        template= "SELECT join_day, join_mo FROM %s WHERE " +\
+            "join_day == 1 and join_mo != 2 ORDER BY join_day, join_mo"
+        for bucket in self.buckets:
+            self.query = template % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'], key=lambda doc: (
+                                                                       doc['join_day'], doc['join_mo']))
+
+            expected_result = [{"join_mo" : doc['join_mo'], "join_day" : doc['join_day']}
+                               for doc in self.full_list
+                               if doc['join_day'] == 1 and doc["join_mo"] != 2]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['join_day'], doc['join_mo']))
+            self._verify_results(actual_result, expected_result)
+        return template
+
+    def test_comparition_more_and_less_equal(self):
+        template= "SELECT join_yr, test_rate FROM %s WHERE "+\
+            "join_yr >= 2010 AND test_rate <= 4"
+        for bucket in self.buckets:
+            self.query = template % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'], key=lambda doc: (
+                                                                       doc['test_rate'], doc['join_yr']))
+
+            expected_result = [{"test_rate" : doc['test_rate'], "join_yr" : doc['join_yr']}
+                               for doc in self.full_list
+                               if doc['test_rate'] <= 4 and
+                               doc['join_yr'] >= 2010]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['test_rate'], doc['join_yr']))
+            self._verify_results(actual_result, expected_result)
+        return template
+
+    def test_comparition_null_missing(self):
+        template= "SELECT skills, VMs FROM %s WHERE " +\
+            "skills is not null AND VMs is not missing"
+        for bucket in self.buckets:
+            self.query = template % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'], key=lambda doc: (
+                                                                       doc['VMs'], doc['skills']))
+
+            expected_result = [{"VMs" : doc['VMs'], "skills" : doc['skills']}
+                               for doc in self.full_list]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['VMs'], doc['skills']))
+            self._verify_results(actual_result, expected_result)
+        return template
+
+    def test_comparition_aggr_fns(self):
+        template= "SELECT count(join_yr) years, sum(test_rate) rate FROM %s"
+        for bucket in self.buckets:
+            self.query = template % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'])
+
+            expected_result = [{"years": len([doc['join_yr'] for doc in self.full_list]),
+                                "rate": sum([doc['test_rate'] for doc in self.full_list])}]
+            expected_result = sorted(expected_result)
+            self.assertTrue(round(actual_result[0]['rate']) == round(expected_result[0]['rate']))
+            self.assertTrue((actual_result[0]['years']) == (expected_result[0]['years']))
+        return template
+
+    def test_comparition_meta(self):
+        for bucket in self.buckets:
+            self.query = "SELECT meta(default).id, meta(default).type FROM %s" % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'], key=lambda doc: (
+                                                                       doc['years'], doc['rate']))
+
+            expected_result = [{"years": len([doc['join_yr'] for doc in self.full_list]),
+                                "rate": sum([doc['test_rate'] for doc in self.full_list])}
+                               for doc in self.full_list
+                               if len([doc['join_yr'] for doc in self.full_list])]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['years'], doc['rate']))
+            self._verify_results(actual_result, expected_result)
+
     def test_comparition_more_less_equal(self):
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
