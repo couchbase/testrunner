@@ -521,7 +521,7 @@ class QueryHelper(object):
         random.shuffle(value)
         return "".join(value)
 
-    def _covert_field_template_for_update(self, sql = "", table_map = {}):
+    def _covert_field_template_for_update(self, sql = "", table_map = {}, alias = None):
         string_field_names = self._search_fields_of_given_type(["varchar","text","tinytext","char"], table_map)
         numeric_field_names = self._search_fields_of_given_type(["int","mediumint","double", "float", "decimal"], table_map)
         datetime_field_names = self._search_fields_of_given_type(["datetime"], table_map)
@@ -546,7 +546,9 @@ class QueryHelper(object):
         if "DATETIME_FIELD"  in sql:
             field_name = new_sql.replace("DATETIME_FIELD", random.choice(datetime_field_names))
             value = self._random_datetime()
-        return "{0} = '{1}'".format(field_name, value)
+        if alias == None:
+            return "{0} = '{1}'".format(field_name, value)
+        return "{0} = '{1}'".format(alias+"."+field_name, value)
 
     def _covert_fields_template_to_value(self, sql = "", table_map = {}):
         string_field_names = self._search_fields_of_given_type(["varchar","text","tinytext","char"], table_map)
@@ -715,7 +717,66 @@ class QueryHelper(object):
         new_sql += self._convert_condition_template_to_value(tokens[1], table_map)
         return new_sql
 
-    def _update_sql_template_to_values(self, sql ="", table_map = {}):
+    def _delete_sql_template_to_values_with_merge(self,
+        source_table = "", target_table = "",
+        sql ="", table_map = {}):
+        new_map ={}
+        new_map[source_table] = table_map[source_table]
+        tokens = sql.split("WHERE")
+        new_map[source_table]["alias_name"] = target_table
+        where_condition = self._convert_condition_template_to_value(tokens[1], new_map)
+        tokens = sql.split("WHERE")
+        merge_sql = "MERGE INTO {0} USING {1} ON KEY copy_simple_table.primary_key_id".format(target_table,  source_table)
+        #merge_sql +=" WHEN MATCHED AND ({0}) THEN".format(self._gen_sql_to_nql(where_condition))
+        merge_sql +=" WHEN MATCHED THEN"
+        new_sql = " DELETE FROM {0} ".format(target_table)
+        new_sql += " WHERE "+where_condition
+        merge_sql += " DELETE WHERE "+self._gen_sql_to_nql(where_condition)
+        return {"sql_query":new_sql,"n1ql_query":merge_sql.replace(";","")}
+
+    def _update_sql_template_to_values_with_merge(self,
+        source_table = "", target_table = "",
+        sql ="", table_map = {}):
+        new_map ={}
+        new_map[source_table] = table_map[source_table]
+        new_map[source_table]["alias_name"] = target_table
+        tokens = sql.split("WHERE")
+        where_condition = self._convert_condition_template_to_value(tokens[1], new_map)
+        tokens = sql.split("WHERE")
+        merge_sql = "MERGE INTO {0} USING {1} ON KEY copy_simple_table.primary_key_id".format(target_table,  source_table)
+        merge_sql +=" WHEN MATCHED THEN"
+        new_sql = " UPDATE {0} ".format(target_table)
+        list = []
+        for field in tokens[0].split("SET")[1].split(","):
+            list.append(self._covert_field_template_for_update(field, new_map))
+        new_sql += " SET " + ",".join(list).replace("target_table.","")
+        new_sql += " WHERE "+where_condition
+        merge_sql += " UPDATE SET "+",".join(list)+" WHERE "+self._gen_sql_to_nql(where_condition)
+        return {"sql_query":new_sql,"n1ql_query":merge_sql.replace(";","")}
+
+    def _insert_sql_template_to_values_with_merge(self,
+        source_table = "", target_table = "",
+        sql ="", table_map = {}):
+        table_map[source_table]["alias_name"] = "source_table"
+        table_map[target_table]["alias_name"] = "target_table"
+        where_condition = self._convert_condition_template_to_value(tokens[1], table_map)
+        tokens = sql.split("WHERE")
+        #  merge_sql = "MERGE {0} target_table USING {1} source_table ON KEY source_table.primary_key_id".format(source_table, target_table)
+        merge_sql +=" WHEN NOT MATCHED THEN"
+        new_sql = " INSERT INTO {0} ".format(target_table)
+        field_list = []
+        value_list = []
+        for field in target_table[target_table]["fields"]:
+            field_list.append(field)
+            value_list.append(source_table+"."+field)
+        merge_sql += " (KEY, VALUE) VALUES ({0}, {1})".format("source_table.primary_key_id", )
+        new_sql +=  "({0}) SELECT {0} FROM {1}".format(",".join(field_list), source_table)
+        return {"sql_query":new_sql,"n1ql_query":self._gen_sql_to_nql(merge_sql)}
+
+    def _update_sql_template_to_values(self,
+         target_table = "simple_table",
+         source_table = "copy_simple_table",
+         sql ="", table_map = {}):
         tokens = sql.split("WHERE")
         new_sql = " UPDATE {0} ".format(table_map.keys()[0])
         list = []

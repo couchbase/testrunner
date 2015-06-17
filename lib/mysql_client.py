@@ -229,7 +229,6 @@ class MySQLClient(object):
                         }
         return final_map
 
-
     def _get_pkey_map_for_tables_with_primary_key_column(self):
         target_map = {}
         map = self._get_tables_information()
@@ -375,6 +374,24 @@ class MySQLClient(object):
             query_input_list.append(helper._update_sql_template_to_values(sql =n1ql_query, table_map = table_map))
         return query_input_list
 
+    def _convert_update_template_query_info_with_merge(self, source_table = "copy_simple_table", target_table = "simple_table" ,n1ql_queries = [], table_map= {}):
+        helper = QueryHelper()
+        query_input_list = []
+        for n1ql_query in n1ql_queries:
+            query_input_list.append(helper._update_sql_template_to_values_with_merge(
+                source_table=source_table,target_table=target_table,
+                sql =n1ql_query, table_map = table_map))
+        return query_input_list
+
+    def _convert_delete_template_query_info_with_merge(self, source_table = "copy_simple_table", target_table = "simple_table" ,n1ql_queries = [], table_map= {}):
+        helper = QueryHelper()
+        query_input_list = []
+        for n1ql_query in n1ql_queries:
+            query_input_list.append(helper._delete_sql_template_to_values_with_merge(
+                source_table=source_table,target_table=target_table,
+                sql =n1ql_query, table_map = table_map))
+        return query_input_list
+
     def _convert_delete_template_query_info(self, n1ql_queries = [], table_map= {}):
         helper = QueryHelper()
         query_input_list = []
@@ -403,6 +420,12 @@ class MySQLClient(object):
         self.database = database
         self._reset_client_connection()
         self._gen_data_simple_table(number_of_rows = items)
+
+    def database_add_data(self, database = "", items = 1000, sql_file_definiton_path= "/tmp/definition.sql"):
+        sqls = self._read_from_file(sql_file_definiton_path)
+        sqls = " ".join(sqls).replace("DATABASE_NAME",database).replace("\n","")
+        self._db_execute_query(sqls)
+
 
     def dump_database(self, data_dump_path = "/tmp"):
         zip_path= data_dump_path+"/"+self.database+".zip"
