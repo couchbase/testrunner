@@ -22,6 +22,7 @@ class RQGTests(BaseTestCase):
                       .format(self.case_number, self._testMethodName))
         self.initial_loading_to_cb= self.input.param("initial_loading_to_cb",True)
         self.database= self.input.param("database","flightstats")
+        self.merge_operation= self.input.param("merge_operation",False)
         self.user_id= self.input.param("user_id","root")
         self.password= self.input.param("password","")
         self.using_gsi= self.input.param("using_gsi",True)
@@ -217,6 +218,68 @@ class RQGTests(BaseTestCase):
         self.log.info(result)
         self.assertTrue(success, summary)
 
+    def test_rqg_crud_update_merge(self):
+        # Get Data Map
+        #Create Table
+        table_map = self.client._get_values_with_type_for_fields_in_table()
+        check = True
+        failure_map = {}
+        batches = []
+        batch = []
+        test_case_number = 1
+        count = 1
+        inserted_count = 0
+        # Load All the templates
+        self.test_file_path= self.unzip_template(self.test_file_path)
+        with open(self.test_file_path) as f:
+            query_list = f.readlines()
+        if self.total_queries  == None:
+            self.total_queries = len(query_list)
+        for n1ql_query_info in query_list:
+            data = n1ql_query_info
+            batch.append({str(test_case_number):data})
+            if count == self.concurreny_count:
+                inserted_count += len(batch)
+                batches.append(batch)
+                count = 1
+                batch = []
+            else:
+                count +=1
+            test_case_number += 1
+            if test_case_number >= self.total_queries:
+                break
+        if inserted_count != len(query_list):
+            batches.append(batch)
+        result_queue = Queue.Queue()
+        # Run Test Batches
+        test_case_number = 1
+        for test_batch in batches:
+            # Build all required secondary Indexes
+            list = [data[data.keys()[0]] for data in test_batch]
+            list = self.client._convert_update_template_query_info_with_merge(
+                    source_table = "copy_simple_table",
+                    target_table = "simple_table",
+                    table_map = table_map,
+                    n1ql_queries = list)
+            thread_list = []
+            # Create threads and run the batch
+            for test_case in list:
+                test_case_input = test_case
+                verification_query = "SELECT * from {0} ORDER by primary_key_id".format(table_map.keys()[0])
+                t = threading.Thread(target=self._run_basic_crud_test, args = (test_case_input, verification_query,  test_case_number, result_queue))
+                t.daemon = True
+                t.start()
+                thread_list.append(t)
+                test_case_number += 1
+            # Capture the results when done
+            check = False
+            for t in thread_list:
+                t.join()
+        # Analyze the results for the failure and assert on the run
+        success, summary, result = self._test_result_analysis(result_queue)
+        self.log.info(result)
+        self.assertTrue(success, summary)
+
     def test_rqg_crud_update(self):
         # Get Data Map
         table_map = self.client._get_values_with_type_for_fields_in_table()
@@ -348,6 +411,71 @@ class RQGTests(BaseTestCase):
         self.log.info(result)
         self.assertTrue(success, summary)
 
+    def test_rqg_crud_delete_merge(self):
+        # Get Data Map
+        table_map = self.client._get_values_with_type_for_fields_in_table()
+        check = True
+        failure_map = {}
+        batches = []
+        batch = []
+        test_case_number = 1
+        count = 1
+        inserted_count = 0
+        self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
+        # Load All the templates
+        self.test_file_path= self.unzip_template(self.test_file_path)
+        with open(self.test_file_path) as f:
+            query_list = f.readlines()
+        if self.total_queries  == None:
+            self.total_queries = len(query_list)
+        for n1ql_query_info in query_list:
+            data = n1ql_query_info
+            batch.append({str(test_case_number):data})
+            if count == self.concurreny_count:
+                inserted_count += len(batch)
+                batches.append(batch)
+                count = 1
+                batch = []
+            else:
+                count +=1
+            test_case_number += 1
+            if test_case_number >= self.total_queries:
+                break
+        if inserted_count != len(query_list):
+            batches.append(batch)
+        result_queue = Queue.Queue()
+        # Run Test Batches
+        test_case_number = 1
+        for test_batch in batches:
+            # Build all required secondary Indexes
+            list = [data[data.keys()[0]] for data in test_batch]
+            list = self.client._convert_delete_template_query_info_with_merge(
+                    table_map = table_map,
+                    n1ql_queries = list)
+            if self.use_secondary_index:
+                self._generate_secondary_indexes_in_batches(list)
+            thread_list = []
+            # Create threads and run the batch
+            for test_case in list:
+                test_case_input = test_case
+                verification_query = "SELECT * from {0} ORDER by primary_key_id".format(table_map.keys()[0])
+                t = threading.Thread(target=self._run_basic_crud_test, args = (test_case_input, verification_query,  test_case_number, result_queue))
+                t.daemon = True
+                t.start()
+                thread_list.append(t)
+                test_case_number += 1
+            # Capture the results when done
+            check = False
+            for t in thread_list:
+                t.join()
+            # Drop all the secondary Indexes
+            self._populate_delta_buckets()
+            if self.use_secondary_index:
+                self._drop_secondary_indexes_in_batches(list)
+        # Analyze the results for the failure and assert on the run
+        success, summary, result = self._test_result_analysis(result_queue)
+        self.log.info(result)
+        self.assertTrue(success, summary)
     def _run_basic_test(self, test_data, test_case_number, result_queue):
         data = test_data
         n1ql_query = data["n1ql"]
@@ -765,6 +893,7 @@ class RQGTests(BaseTestCase):
             self.log.info(" Will load directly from file snap-shot")
             self._setup_and_load_buckets_from_files()
         self._initialize_n1ql_helper()
+        #create copy of simple table if this is a merge operation
         self.sleep(10)
         self._build_primary_indexes(self.using_gsi)
         if self.create_secondary_indexes:
@@ -832,9 +961,20 @@ class RQGTests(BaseTestCase):
             self.database = self.database+"_"+str(self.query_helper._random_int())
             self.client.reset_database_add_data(database = self.database, items= self.items,
              sql_file_definiton_path = path)
+            self._copy_table_for_merge()
         else:
             self.client = MySQLClient(database = self.database, host = self.mysql_url,
                 user_id = self.user_id, password = self.password)
+
+    def _copy_table_for_merge(self):
+        self.log.info(" creating _copy_table_for_merge")
+        if self.merge_operation:
+            path  = "b/resources/rqg/simple_table_db/database_definition/table_definition.sql"
+            self.client.database_add_data(database = self.database, items= self.items,
+             sql_file_definiton_path = path)
+            sql = "INSERT INTO {0}.copy_simple_table SELECT * FROM {0}.simple_table".format(self.database)
+            self.client._insert_execute_query(sql)
+        self.log.info("end creating _copy_table_for_merge")
 
     def _zipdir(self, path, zip_path):
         self.log.info(zip_path)
