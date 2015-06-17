@@ -166,7 +166,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     		query_template = "",
     		groups = [])
     	check = False
-    	self.query = "CREATE PRIMARY INDEX ON {0}".format(self.buckets[0].name)
+    	self.query = "CREATE PRIMARY INDEX ON {0} USING VIEW".format(self.buckets[0].name)
     	try:
     		# create index
     		server = self.get_nodes_from_services_map(service_type = "n1ql")
@@ -205,7 +205,8 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     		server = self.get_nodes_from_services_map(service_type = "n1ql")
         	self.n1ql_helper.run_cbq_query(query = self.query, server = server)
     		# create same index again
-    		self.query += " USING GSI "
+    		self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name,
+            use_gsi_for_secondary = True)
     		self.n1ql_helper.run_cbq_query(query = self.query, server = server)
     	except Exception, ex:
     		self.log.info(ex)

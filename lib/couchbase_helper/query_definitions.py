@@ -37,13 +37,15 @@ class QueryDefinition(object):
 		self.groups = groups
 
 	def generate_index_create_query(self, bucket = "default", use_gsi_for_secondary = True,
-	 deploy_node_info = None, defer_build = None, index_where_clause = None ):
+	        deploy_node_info = None, defer_build = None, index_where_clause = None ):
 		query = "CREATE INDEX {0} ON {1}({2})".format(self.index_name,bucket, ",".join(self.index_fields))
 		if index_where_clause:
 			query += " WHERE "+index_where_clause
 		if use_gsi_for_secondary:
 			query += " USING GSI "
-		deployment_plan = {}
+                if not use_gsi_for_secondary:
+                        query += " USING VIEW "
+                deployment_plan = {}
 		if deploy_node_info  != None:
 			deployment_plan["nodes"] = deploy_node_info
 		if defer_build != None:
@@ -61,6 +63,8 @@ class QueryDefinition(object):
 			query += " USING GSI"
 		elif use_gsi_for_primary and "primary" in self.index_name:
 			query += " USING GSI"
+                if not use_gsi_for_secondary:
+			query += " USING VIEW "
 		return query
 
 	def generate_query(self, bucket):
