@@ -325,6 +325,8 @@ class N1QLHelper():
             self.query = "DROP PRIMARY INDEX ON {0}".format(bucket.name)
             if using_gsi:
                 self.query += " USING GSI"
+            if not using_gsi:
+                self.query += " USING VIEW "
             self.log.info(self.query)
             try:
                 check = self._is_index_in_list(bucket.name, "#primary", server = server)
@@ -340,6 +342,8 @@ class N1QLHelper():
             self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
             if using_gsi:
                 self.query += " USING GSI"
+            if not using_gsi:
+                self.query += " USING VIEW "
             self.log.info(self.query)
             try:
                 check = self._is_index_in_list(bucket.name, "#primary", server = server)
