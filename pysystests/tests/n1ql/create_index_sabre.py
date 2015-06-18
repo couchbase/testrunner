@@ -90,19 +90,25 @@ BUILD_INDEX = {
 def runQueryOnce(query, param, server_ip, build=False):
     url = "http://" + server_ip + ":8093/query"
     print build
+    print param
 
     stmt = '{"statement" : "' + str(query)
-    if param == "gsi" and "DROP" in query:
+    if "DROP" in query:
         stmt = stmt + " USING " + param + '"'
 
-    elif param == "gsi" and "CREATE" in query:
+    elif "CREATE" in query:
         stmt = stmt + " USING " + param
-        stmt = stmt + " WITH {\'nodes\': [\'" + server_ip+ ":8091\'], \'defer_build\': true}" + '"'
+        if param == "gsi":
+            stmt = stmt + " WITH {\'nodes\': [\'" + server_ip+ ":8091\'], \'defer_build\': true}" + '"'
+        else:
+            stmt = stmt + '"'
 
     elif "BUILD" in query:
         stmt = stmt + '"'
 
     stmt = stmt + '}'
+    print "-" *80
+    print stmt
     query = json.loads(stmt)
     print query
 
@@ -151,11 +157,12 @@ for j in range(len_query):
     k_qry = list(q)[j]
     r = runQueryOnce(q[k_qry], index_type, queryNode)
 
-b = BUILD_INDEX["sabre"]
-len_query = len(b)
-for j in range(len_query):
-    print list(b)[j]
-    k_qry = list(b)[j]
-    r = runQueryOnce(b[k_qry], index_type, queryNode, build=True)
+if index_type =="view":
+    b = BUILD_INDEX["sabre"]
+    len_query = len(b)
+    for j in range(len_query):
+        print list(b)[j]
+        k_qry = list(b)[j]
+        r = runQueryOnce(b[k_qry], index_type, queryNode, build=True)
 
 
