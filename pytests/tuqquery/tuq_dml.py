@@ -205,6 +205,36 @@ class DMLQueryTests(QueryTests):
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
 
+    def test_delete_keys_use_index_clause(self):
+        num_docs = self.input.param('docs_to_delete', 3)
+        key_prefix = 'automation%s' % str(uuid.uuid4())[:5]
+        value = {'name': 'n1ql automation'}
+        value_to_delete =  {'name': 'n1ql deletion'}
+        self._common_insert(['%s%s' % (key_prefix, i) for i in xrange(self.num_items - num_docs)],
+                            [value] * (self.num_items - num_docs))
+        self._common_insert(['%s%s' % (key_prefix, i) for i in xrange(self.num_items - num_docs, self.num_items)],
+                            [value_to_delete] * (num_docs))
+        index_name = 'automation%s' % str(uuid.uuid4())[:5]
+        for bucket in self.buckets:
+            self.query = 'create index %s on %s(name) USING %s' % (index_name, bucket.name, self.index_type)
+            self.run_cbq_query()
+        try:
+            for bucket in self.buckets:
+                self.query = 'delete from %s  use index(%s using %s) where job_title="n1ql deletion"'  % (bucket.name,
+                                                                                      index_name, self.index_type)
+                actual_result = self.run_cbq_query()
+                self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+                self.query = 'select * from %s where job_title="n1ql deletion"'  % (bucket.name)
+                actual_result = self.run_cbq_query()
+                self.assertEqual(actual_result['results'], [], 'Query was not run successfully')
+        finally:
+            for bucket in self.buckets:
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
+                try:
+                    self.run_cbq_query()
+                except:
+                    pass
+
     def test_delete_where_clause_non_doc(self):
         num_docs = self.input.param('docs_to_delete', 3)
         key_prefix = 'automation%s' % str(uuid.uuid4())[:5]
@@ -278,7 +308,7 @@ class DMLQueryTests(QueryTests):
         keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where_hints')
         keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_title"] == 'Engineer']
         for bucket in self.buckets:
-            self.query = 'delete from %s use index(%s) where job_title="Engineer"'  % (bucket.name, idx_name)
+            self.query = 'delete from %s use index(%s using %s) where job_title="Engineer"'  % (bucket.name, idx_name, self.index_type)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
@@ -355,7 +385,22 @@ class DMLQueryTests(QueryTests):
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, new_key)
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.assertEqual(actual_result['results']['rows'], 1, 'Query was not run successfully')
-        self.assertEqual(actual_result['resultset']['actual'], current_docs - 1, 'Item was not deleted')
+
+    def test_merge_select_not_match_insert(self):
+        self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
+        self.query = 'select count(*) as actual from %s where job_title="Engineer"'  % (self.buckets[0].name)
+        self.run_cbq_query()
+        self.sleep(5, 'wait for index')
+        actual_result = self.run_cbq_query()
+        current_docs = actual_result['results'][0]['actual']
+        new_key = 'NEW'
+        self.query = 'MERGE INTO %s USING (select * from %s where job_title="Engineer") on key %s when not matched then insert %s'  % (
+                                                            self.buckets[0].name, self.buckets[1].name, self.buckets[0].name, new_key, '{"name": "new"}')
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, new_key)
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['results']['rows'], 1, 'Query was not run successfully')
 ############################################################################################################################
 #
 # UPDATE
@@ -450,7 +495,7 @@ class DMLQueryTests(QueryTests):
             self.query = 'update %s use index(%s) set name="%s"'  % (bucket.name, idx_name, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.query = 'select name from %s use index(%s)' % (bucket.name, idx_name)
+            self.query = 'select name from %s use index(%s using %s)' % (bucket.name, idx_name, self.index_type)
             self.run_cbq_query()
             self.sleep(10, 'wait for index')
             actual_result = self.run_cbq_query()
@@ -464,7 +509,7 @@ class DMLQueryTests(QueryTests):
             self.query = 'update %s use index(%s) set name="%s" where join_day=1 returning name'  % (bucket.name, idx_name, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.query = 'select name from %s use index(%s) where join_day=1' % (bucket.name, idx_name)
+            self.query = 'select name from %s use index(%s using %s) where join_day=1' % (bucket.name, idx_name, self.index_type)
             self.run_cbq_query()
             self.sleep(10, 'wait for index')
             actual_result = self.run_cbq_query()
