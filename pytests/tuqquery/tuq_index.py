@@ -41,7 +41,8 @@ class QueriesViewsTests(QueryTests):
                     self._verify_results(actual_result['results'], [])
                     created_indexes.append(view_name)
                     self._wait_for_index_online(bucket, view_name)
-                    self._verify_view_is_present(view_name, bucket)
+                    if self.index_type == 'VIEW':
+                        self._verify_view_is_present(view_name, bucket)
             finally:
                 for view_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, view_name, self.index_type)
