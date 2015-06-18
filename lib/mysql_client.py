@@ -7,6 +7,7 @@ import zipfile
 import os
 from os.path import basename
 import shutil
+import json
 from mysql.connector import FieldType
 from couchbase_helper.query_helper import QueryHelper
 
@@ -428,7 +429,7 @@ class MySQLClient(object):
 
 
     def dump_database(self, data_dump_path = "/tmp"):
-        zip_path= data_dump_path+"/"+self.database+".zip"
+        zip_path= data_dump_path+"/database_dump.zip"
         data_dump_path = data_dump_path+"/"+self.database
         os.mkdir(data_dump_path)
         table_key_map = self._get_primary_key_map_for_tables()
