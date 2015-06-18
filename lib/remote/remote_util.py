@@ -1271,7 +1271,7 @@ class RemoteMachineShellConnection:
                 else:
                     output, error = self.execute_command('{0}dpkg -i /tmp/{1}'.format(environment, build.name))
 
-            if self.info.distribution_type == "openSUSE":
+            if "SUSE" in self.info.distribution_type:
                 if error and error[0] == 'insserv: Service network is missed in the runlevels 2 4 to use service couchbase-server':
                         log.info("Ignore this error for opensuse os")
                         error = []
@@ -2005,8 +2005,10 @@ class RemoteMachineShellConnection:
                     etc_issue = ''
                     # let's only read the first line
                     for line in file.xreadlines():
-                        etc_issue = line
-                        break
+                        # for SuSE that has blank first line
+                        if line.rstrip('\n'):
+                            etc_issue = line
+                            break
                         # strip all extra characters
                     etc_issue = etc_issue.rstrip('\n').rstrip('\\l').rstrip('\\n')
                     if etc_issue.lower().find('ubuntu') != -1:
@@ -2035,6 +2037,10 @@ class RemoteMachineShellConnection:
                         is_linux_distro = True
                     elif etc_issue.lower().find('opensuse') != -1:
                         os_distro = 'openSUSE'
+                        os_version = etc_issue
+                        is_linux_distro = True
+                    elif etc_issue.lower().find('suse linux') != -1:
+                        os_distro = 'SUSE'
                         os_version = etc_issue
                         is_linux_distro = True
                     elif etc_issue.lower().find('oracle linux') != -1:
@@ -2127,6 +2133,7 @@ class RemoteMachineShellConnection:
                    "Mac"     : "zip",
                    "Debian"  : "deb",
                    "openSUSE": "rpm",
+                   "SUSE"    : "rpm",
                    "Oracle Linux": "rpm"}.get(os_distro, '')
             arch = {'i686': 'x86',
                     'i386': 'x86'}.get(os_arch, os_arch)
@@ -2801,7 +2808,7 @@ class RemoteMachineShellConnection:
 
     def check_openssl_version(self, deliverable_type, openssl, version):
 
-        if self.info.distribution_type == "openSUSE":
+        if "SUSE" in self.info.distribution_type:
             o, r = self.execute_command("zypper -n if openssl 2>/dev/null| grep -i \"Installed: Yes\"")
             self.log_command_output(o, r)
 
@@ -2811,7 +2818,7 @@ class RemoteMachineShellConnection:
                 o, r = self.execute_command("zypper -n if openssl 2>/dev/null| grep -i \"Installed: Yes\"")
                 self.log_command_output(o, r)
                 if o == "":
-                    log.error("Could not install openssl in opensuse")
+                    log.error("Could not install openssl in opensuse/SUSE")
         sherlock = ["3.5", "4.0"]
         if version[:3] not in sherlock:
             if self.info.deliverable_type == "deb":
@@ -2889,7 +2896,7 @@ class RemoteMachineShellConnection:
 
     def check_pkgconfig(self, deliverable_type, openssl):
 
-        if self.info.distribution_type == "openSUSE":
+        if "SUSE" in self.info.distribution_type:
             o, r = self.execute_command("zypper -n if pkg-config 2>/dev/null| grep -i \"Installed: Yes\"")
             self.log_command_output(o, r)
             if o == "":
@@ -2898,7 +2905,7 @@ class RemoteMachineShellConnection:
                 o, r = self.execute_command("zypper -n if pkg-config 2>/dev/null| grep -i \"Installed: Yes\"")
                 self.log_command_output(o, r)
                 if o == "":
-                    log.error("Could not install pkg-config in opensuse")
+                    log.error("Could not install pkg-config in suse")
 
 
         else:
