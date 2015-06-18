@@ -562,7 +562,7 @@ class BuildQuery(object):
                 build.name = edition_type + "-" + build.product_version + \
                    "-" + centos_version + "." + build.architecture_type + \
                    "." + build.deliverable_type
-            elif "opensuse" in distribution_version:
+            elif "suse" in distribution_version:
                 build.distribution_version = "suse11"
                 os_name = "suse11"
                 build.name = edition_type + "-" + build.product_version + \
