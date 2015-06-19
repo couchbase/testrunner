@@ -2174,7 +2174,8 @@ class RemoteMachineShellConnection:
     def get_domain(self, win_info=None):
         if win_info:
             o = self.execute_batch_command('ipconfig')
-            suffix_dns_row = [row for row in o if row.find(" Connection-specific DNS Suffix") != -1]
+            suffix_dns_row = [row for row in o if row.find(" Connection-specific DNS Suffix") != -1 and \
+                             len(row.split(':')[1]) > 1]
             ret = suffix_dns_row[0].split(':')[1].strip()
         else:
             ret = self.execute_command_raw('hostname -d')
