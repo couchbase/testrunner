@@ -5,188 +5,190 @@ import argparse
 import random
 from random import randint
 import datetime
+from couchbase.bucket import Bucket
+
+doc_template = "{\\\"AirItinerary\\\":" +\
+                            "{\\\"DirectionInd\\\":$18," +\
+                            "\\\"OriginDestinationOptions\\\":" +\
+                                "{\\\"OriginDestinationOption\\\":" +\
+                                    "[{\\\"ElapsedTime\\\":$10," +\
+                                    "\\\"FlightSegment\\\":" +\
+                                        "[{\\\"ArrivalAirport\\\":" +\
+                                                "{\\\"LocationCode\\\":$3}," +\
+                                                "\\\"ArrivalDateTime\\\":$6," +\
+                                                "\\\"ArrivalTimeZone\\\":" +\
+                                                    "{\\\"GMTOffset\\\":$12}," +\
+                                                "\\\"DepartureAirport\\\":" +\
+                                                    "{\\\"LocationCode\\\":$2}," +\
+                                                "\\\"DepartureDateTime\\\":$5," +\
+                                                "\\\"DepartureTimeZone\\\":" +\
+                                                    "{\\\"GMTOffset\\\":$11}," +\
+                                                "\\\"ElapsedTime\\\":$8," +\
+                                                "\\\"Equipment\\\":" +\
+                                                    "{\\\"AirEquipType\\\":$14}," +\
+                                                "\\\"FlightNumber\\\":$16," +\
+                                                "\\\"MarketingAirline\\\":" +\
+                                                    "{\\\"Code\\\":$20}," +\
+                                                "\\\"MarriageGrp\\\":\\\"O\\\"," +\
+                                                "\\\"OperatingAirline\\\":" +\
+                                                    "{\\\"Code\\\":\\\"DL\\\"," +\
+                                                    "\\\"FlightNumber\\\":$16}," +\
+                                                "\\\"ResBookDesigCode\\\":\\\"V\\\"," +\
+                                                "\\\"StopQuantity\\\":0," +\
+                                                "\\\"TPA_Extensions\\\":" +\
+                                                    "{\\\"eTicket\\\":" +\
+                                                        "{\\\"Ind\\\":$19}}}," +\
+                                        "{\\\"ArrivalAirport\\\":" + \
+                                                "{\\\"LocationCode\\\":$4}," +\
+                                                "\\\"ArrivalDateTime\\\":$7," +\
+                                                "\\\"ArrivalTimeZone\\\":" +\
+                                                    "{\\\"GMTOffset\\\":$13}," +\
+                                                "\\\"DepartureAirport\\\":" +\
+                                                    "{\\\"LocationCode\\\":$3}," +\
+                                                "\\\"DepartureDateTime\\\":$6," +\
+                                                "\\\"DepartureTimeZone\\\":" +\
+                                                    "{\\\"GMTOffset\\\":$12}," +\
+                                                "\\\"ElapsedTime\\\":$9," +\
+                                                "\\\"Equipment\\\":" +\
+                                                    "{\\\"AirEquipType\\\":$15}," +\
+                                                "\\\"FlightNumber\\\":$17," +\
+                                                "\\\"MarketingAirline\\\":" +\
+                                                    "{\\\"Code\\\":$20}," +\
+                                                "\\\"MarriageGrp\\\":\\\"I\\\"," +\
+                                                "\\\"OperatingAirline\\\":" +\
+                                                    "{\\\"Code\\\":\\\"DL\\\"," +\
+                                                    "\\\"FlightNumber\\\":$17}," +\
+                                                "\\\"ResBookDesigCode\\\":\\\"V\\\"," +\
+                                                "\\\"StopQuantity\\\":0," +\
+                                                "\\\"TPA_Extensions\\\":" +\
+                                                    "{\\\"eTicket\\\":" +\
+                                                        "{\\\"Ind\\\":$19}}}" +\
+                                        "]}," +\
+                                    "{\\\"ElapsedTime\\\":$30," +\
+                                    "\\\"FlightSegment\\\":" +\
+                                        "[{\\\"ArrivalAirport\\\":" +\
+                                                "{\\\"LocationCode\\\":$23}," +\
+                                                "\\\"ArrivalDateTime\\\":$26," +\
+                                                "\\\"ArrivalTimeZone\\\":" +\
+                                                    "{\\\"GMTOffset\\\":$32}," +\
+                                                "\\\"DepartureAirport\\\":" +\
+                                                    "{\\\"LocationCode\\\":$22}," +\
+                                                "\\\"DepartureDateTime\\\":$25," +\
+                                                "\\\"DepartureTimeZone\\\":" +\
+                                                    "{\\\"GMTOffset\\\":$31}," +\
+                                                "\\\"ElapsedTime\\\":$28," +\
+                                                "\\\"Equipment\\\":" +\
+                                                    "{\\\"AirEquipType\\\":$34}," +\
+                                                "\\\"FlightNumber\\\":$36," +\
+                                                "\\\"MarketingAirline\\\":" +\
+                                                    "{\\\"Code\\\":$20}," +\
+                                                "\\\"MarriageGrp\\\":\\\"O\\\"," +\
+                                                "\\\"OperatingAirline\\\":" +\
+                                                    "{\\\"Code\\\":\\\"DL\\\"," +\
+                                                    "\\\"FlightNumber\\\":$36}," +\
+                                                "\\\"ResBookDesigCode\\\":\\\"X\\\"," +\
+                                                "\\\"StopQuantity\\\":0," +\
+                                                "\\\"TPA_Extensions\\\":" +\
+                                                    "{\\\"eTicket\\\":{\\\"Ind\\\":$19}}}," +\
+                                        "{\\\"ArrivalAirport\\\":" +\
+                                                "{\\\"LocationCode\\\":$24}," +\
+                                                "\\\"ArrivalDateTime\\\":$27," +\
+                                                "\\\"ArrivalTimeZone\\\":" +\
+                                                    "{\\\"GMTOffset\\\":$33}," +\
+                                                "\\\"DepartureAirport\\\":" +\
+                                                    "{\\\"LocationCode\\\":$23}," +\
+                                                "\\\"DepartureDateTime\\\":$26," +\
+                                                "\\\"DepartureTimeZone\\\"" +\
+                                                    ":{\\\"GMTOffset\\\":$32}," +\
+                                                "\\\"ElapsedTime\\\":$29," +\
+                                                "\\\"Equipment\\\":" +\
+                                                    "{\\\"AirEquipType\\\":$35}," +\
+                                                "\\\"FlightNumber\\\":419," +\
+                                                "\\\"MarketingAirline\\\"" +\
+                                                    ":{\\\"Code\\\":$20}," +\
+                                                "\\\"MarriageGrp\\\":\\\"I\\\"," +\
+                                                "\\\"OperatingAirline\\\":" +\
+                                                    "{\\\"Code\\\":\\\"DL\\\"," +\
+                                                    "\\\"FlightNumber\\\":$37}," +\
+                                                "\\\"ResBookDesigCode\\\":\\\"X\\\"," +\
+                                                "\\\"TPA_Extensions\\\":" +\
+                                                    "{\\\"eTicket\\\":{\\\"Ind\\\":$19}}}" +\
+                                        "]}]}},"   +\
+                        "\\\"AirItineraryPricingInfo\\\":" +\
+                            "{\\\"ItinTotalFare\\\":" +\
+                                    "{\\\"TotalFare\\\":"  +\
+                                        "{\\\"Amount\\\":385," +\
+                                        "\\\"CurrencyCode\\\":\\\"USD\\\"," +\
+                                        "\\\"DecimalPlaces\\\":2}}," +\
+                            "\\\"PTC_FareBreakdowns\\\":" +\
+                                    "{\\\"PTC_FareBreakdown\\\":" +\
+                                        "{\\\"FareBasisCodes\\\":" +\
+                                            "{\\\"FareBasisCode\\\":"  +\
+                                                "[" +\
+                                                "{\\\"ArrivalAirportCode\\\":$3," +\
+                                                    "\\\"BookingCode\\\":\\\"V\\\"," +\
+                                                    "\\\"DepartureAirportCode\\\":$2," +\
+                                                    "\\\"content\\\":\\\"VA07A0QZ\\\"}," +\
+                                                "{\\\"ArrivalAirportCode\\\":$4," +\
+                                                    "\\\"AvailabilityBreak\\\":true," +\
+                                                    "\\\"BookingCode\\\":\\\"V\\\"," +\
+                                                    "\\\"DepartureAirportCode\\\":$3," +\
+                                                    "\\\"content\\\":\\\"VA07A0QZ\\\"}," +\
+                                                "{\\\"ArrivalAirportCode\\\":$23," +\
+                                                    "\\\"BookingCode\\\":\\\"X\\\"," +\
+                                                    "\\\"DepartureAirportCode\\\":$22," +\
+                                                    "\\\"content\\\":\\\"XA21A0NY\\\"}," +\
+                                                "{\\\"ArrivalAirportCode\\\":$24," +\
+                                                    "\\\"AvailabilityBreak\\\":true," +\
+                                                    "\\\"BookingCode\\\":\\\"X\\\"," +\
+                                                    "\\\"DepartureAirportCode\\\":$23," +\
+                                                    "\\\"content\\\":\\\"XA21A0NY\\\"}]}," +\
+                                            "\\\"PassengerFare\\\":" +\
+                                                "{\\\"BaseFare\\\":" +\
+                                                    "{\\\"Amount\\\":$43," +\
+                                                    "\\\"CurrencyCode\\\":\\\"USD\\\"}," +\
+                                                "\\\"EquivFare\\\":" +\
+                                                    "{\\\"Amount\\\":$43," +\
+                                                    "\\\"CurrencyCode\\\":\\\"USD\\\"," +\
+                                                    "\\\"DecimalPlaces\\\":1}," +\
+                                            "\\\"Taxes\\\":" +\
+                                                "{\\\"Tax\\\":" +\
+                                                    "[" +\
+                                                    "{\\\"Amount\\\":$38," +\
+                                                        "\\\"CurrencyCode\\\":\\\"USD\\\"," +\
+                                                        "\\\"DecimalPlaces\\\":2," +\
+                                                        "\\\"TaxCode\\\":\\\"AY\\\"}," +\
+                                                    "{\\\"Amount\\\":$39," +\
+                                                        "\\\"CurrencyCode\\\":\\\"USD\\\"," +\
+                                                        "\\\"DecimalPlaces\\\":2," +\
+                                                        "\\\"TaxCode\\\":\\\"US1\\\"}," +\
+                                                    "{\\\"Amount\\\":$40," +\
+                                                        "\\\"CurrencyCode\\\":\\\"USD\\\"," +\
+                                                        "\\\"DecimalPlaces\\\":2," +\
+                                                        "\\\"TaxCode\\\":\\\"XF\\\"}," +\
+                                                    "{\\\"Amount\\\":$41," +\
+                                                        "\\\"CurrencyCode\\\":\\\"USD\\\"," +\
+                                                        "\\\"DecimalPlaces\\\":2," +\
+                                                        "\\\"TaxCode\\\":\\\"ZP\\\"}" +\
+                                                    "]," +\
+                                                "\\\"TotalTax\\\":" +\
+                                                    "{\\\"Amount\\\":$42," +\
+                                                    "\\\"CurrencyCode\\\":\\\"USD\\\"," +\
+                                                    "\\\"DecimalPlaces\\\":2}}," +\
+                                            "\\\"TotalFare\\\":" +\
+                                                "{\\\"Amount\\\":$44," +\
+                                                "\\\"CurrencyCodev\\\":\\\"USD\\\"}}," +\
+                                            "\\\"PassengerTypeQuantity\\\":" +\
+                                                    "{\\\"Code\\\":\\\"ADT\\\"," +\
+                                                    "\\\"Quantity\\\":1}}}}," +\
+                        "\\\"SequenceNumber\\\":$45," +\
+                        "\\\"TicketingInfo\\\":" +\
+                            "{\\\"TicketType\\\":$46}}"
 
 INSERT_QUERIES = \
 {
 "sabre": {
-"createNewAirItinerary": "insert into default(key, value) values (TO_STRING($1), "
-                         "{\\\"AirItinerary\\\":"
-                            "{\\\"DirectionInd\\\":$18,"
-                            "\\\"OriginDestinationOptions\\\":"
-                                "{\\\"OriginDestinationOption\\\":"
-                                    "[{\\\"ElapsedTime\\\":$10,"
-                                    "\\\"FlightSegment\\\":"
-                                        "[{\\\"ArrivalAirport\\\":" ## Purposely indented for quick identification
-                                                "{\\\"LocationCode\\\":$3},"
-                                                "\\\"ArrivalDateTime\\\":$6,"
-                                                "\\\"ArrivalTimeZone\\\":"
-                                                    "{\\\"GMTOffset\\\":$12},"
-                                                "\\\"DepartureAirport\\\":"
-                                                    "{\\\"LocationCode\\\":$2},"
-                                                "\\\"DepartureDateTime\\\":$5,"
-                                                "\\\"DepartureTimeZone\\\":"
-                                                    "{\\\"GMTOffset\\\":$11},"
-                                                "\\\"ElapsedTime\\\":$8,"
-                                                "\\\"Equipment\\\":"
-                                                    "{\\\"AirEquipType\\\":$14},"
-                                                "\\\"FlightNumber\\\":$16,"
-                                                "\\\"MarketingAirline\\\":"
-                                                    "{\\\"Code\\\":$20},"
-                                                "\\\"MarriageGrp\\\":\\\"O\\\","
-                                                "\\\"OperatingAirline\\\":"
-                                                    "{\\\"Code\\\":\\\"DL\\\","
-                                                    "\\\"FlightNumber\\\":$16},"
-                                                "\\\"ResBookDesigCode\\\":\\\"V\\\","
-                                                "\\\"StopQuantity\\\":0,"
-                                                "\\\"TPA_Extensions\\\":"
-                                                    "{\\\"eTicket\\\":"
-                                                        "{\\\"Ind\\\":$19}}},"
-                                        "{\\\"ArrivalAirport\\\":" ## Purposely indented for quick identification
-                                                "{\\\"LocationCode\\\":$4},"
-                                                "\\\"ArrivalDateTime\\\":$7,"
-                                                "\\\"ArrivalTimeZone\\\":"
-                                                    "{\\\"GMTOffset\\\":$13},"
-                                                "\\\"DepartureAirport\\\":"
-                                                    "{\\\"LocationCode\\\":$3},"
-                                                "\\\"DepartureDateTime\\\":$6,"
-                                                "\\\"DepartureTimeZone\\\":"
-                                                    "{\\\"GMTOffset\\\":$12},"
-                                                "\\\"ElapsedTime\\\":$9,"
-                                                "\\\"Equipment\\\":"
-                                                    "{\\\"AirEquipType\\\":$15},"
-                                                "\\\"FlightNumber\\\":$17,"
-                                                "\\\"MarketingAirline\\\":"
-                                                    "{\\\"Code\\\":$20},"
-                                                "\\\"MarriageGrp\\\":\\\"I\\\","
-                                                "\\\"OperatingAirline\\\":"
-                                                    "{\\\"Code\\\":\\\"DL\\\","
-                                                    "\\\"FlightNumber\\\":$17},"
-                                                "\\\"ResBookDesigCode\\\":\\\"V\\\","
-                                                "\\\"StopQuantity\\\":0,"
-                                                "\\\"TPA_Extensions\\\":"
-                                                    "{\\\"eTicket\\\":"
-                                                        "{\\\"Ind\\\":$19}}}"
-                                        "]}," # End of Flight Segments
-                                    "{\\\"ElapsedTime\\\":$30,"
-                                    "\\\"FlightSegment\\\":"
-                                        "[{\\\"ArrivalAirport\\\":"
-                                                "{\\\"LocationCode\\\":$23},"
-                                                "\\\"ArrivalDateTime\\\":$26,"
-                                                "\\\"ArrivalTimeZone\\\":"
-                                                    "{\\\"GMTOffset\\\":$32},"
-                                                "\\\"DepartureAirport\\\":"
-                                                    "{\\\"LocationCode\\\":$22},"
-                                                "\\\"DepartureDateTime\\\":$25,"
-                                                "\\\"DepartureTimeZone\\\":"
-                                                    "{\\\"GMTOffset\\\":$31},"
-                                                "\\\"ElapsedTime\\\":$28,"
-                                                "\\\"Equipment\\\":"
-                                                    "{\\\"AirEquipType\\\":$34},"
-                                                "\\\"FlightNumber\\\":$36,"
-                                                "\\\"MarketingAirline\\\":"
-                                                    "{\\\"Code\\\":$20},"
-                                                "\\\"MarriageGrp\\\":\\\"O\\\","
-                                                "\\\"OperatingAirline\\\":"
-                                                    "{\\\"Code\\\":\\\"DL\\\","
-                                                    "\\\"FlightNumber\\\":$36},"
-                                                "\\\"ResBookDesigCode\\\":\\\"X\\\","
-                                                "\\\"StopQuantity\\\":0,"
-                                                "\\\"TPA_Extensions\\\":"
-                                                    "{\\\"eTicket\\\":{\\\"Ind\\\":$19}}},"
-                                        "{\\\"ArrivalAirport\\\":"
-                                                "{\\\"LocationCode\\\":$24},"
-                                                "\\\"ArrivalDateTime\\\":$27,"
-                                                "\\\"ArrivalTimeZone\\\":"
-                                                    "{\\\"GMTOffset\\\":$33},"
-                                                "\\\"DepartureAirport\\\":"
-                                                    "{\\\"LocationCode\\\":$23},"
-                                                "\\\"DepartureDateTime\\\":$26,"
-                                                "\\\"DepartureTimeZone\\\""
-                                                    ":{\\\"GMTOffset\\\":$32},"
-                                                "\\\"ElapsedTime\\\":$29,"
-                                                "\\\"Equipment\\\":"
-                                                    "{\\\"AirEquipType\\\":$35},"
-                                                "\\\"FlightNumber\\\":419,"
-                                                "\\\"MarketingAirline\\\""
-                                                    ":{\\\"Code\\\":$20},"
-                                                "\\\"MarriageGrp\\\":\\\"I\\\","
-                                                "\\\"OperatingAirline\\\":"
-                                                    "{\\\"Code\\\":\\\"DL\\\","
-                                                    "\\\"FlightNumber\\\":$37},"
-                                                "\\\"ResBookDesigCode\\\":\\\"X\\\","
-                                                "\\\"TPA_Extensions\\\":"
-                                                    "{\\\"eTicket\\\":{\\\"Ind\\\":$19}}}"
-                                        "]}]}},"  # End of Flight Segments-All
-                        "\\\"AirItineraryPricingInfo\\\":"
-                            "{\\\"ItinTotalFare\\\":"
-                                    "{\\\"TotalFare\\\":" # Purposely indented
-                                        "{\\\"Amount\\\":385,"
-                                        "\\\"CurrencyCode\\\":\\\"USD\\\","
-                                        "\\\"DecimalPlaces\\\":2}},"
-                            "\\\"PTC_FareBreakdowns\\\":"
-                                    "{\\\"PTC_FareBreakdown\\\":"
-                                        "{\\\"FareBasisCodes\\\":"
-                                            "{\\\"FareBasisCode\\\":" ## Super Nested
-                                                "["
-                                                "{\\\"ArrivalAirportCode\\\":$3,"
-                                                    "\\\"BookingCode\\\":\\\"V\\\","
-                                                    "\\\"DepartureAirportCode\\\":$2,"
-                                                    "\\\"content\\\":\\\"VA07A0QZ\\\"},"
-                                                "{\\\"ArrivalAirportCode\\\":$4,"
-                                                    "\\\"AvailabilityBreak\\\":true,"
-                                                    "\\\"BookingCode\\\":\\\"V\\\","
-                                                    "\\\"DepartureAirportCode\\\":$3,"
-                                                    "\\\"content\\\":\\\"VA07A0QZ\\\"},"
-                                                "{\\\"ArrivalAirportCode\\\":$23,"
-                                                    "\\\"BookingCode\\\":\\\"X\\\","
-                                                    "\\\"DepartureAirportCode\\\":$22,"
-                                                    "\\\"content\\\":\\\"XA21A0NY\\\"},"
-                                                "{\\\"ArrivalAirportCode\\\":$24,"
-                                                    "\\\"AvailabilityBreak\\\":true,"
-                                                    "\\\"BookingCode\\\":\\\"X\\\","
-                                                    "\\\"DepartureAirportCode\\\":$23,"
-                                                    "\\\"content\\\":\\\"XA21A0NY\\\"}]},"
-                                            "\\\"PassengerFare\\\":"
-                                                "{\\\"BaseFare\\\":"
-                                                    "{\\\"Amount\\\":$43,"
-                                                    "\\\"CurrencyCode\\\":\\\"USD\\\"},"
-                                                "\\\"EquivFare\\\":"
-                                                    "{\\\"Amount\\\":$43,"
-                                                    "\\\"CurrencyCode\\\":\\\"USD\\\","
-                                                    "\\\"DecimalPlaces\\\":1},"
-                                            "\\\"Taxes\\\":"
-                                                "{\\\"Tax\\\":"
-                                                    "["
-                                                    "{\\\"Amount\\\":$38,"
-                                                        "\\\"CurrencyCode\\\":\\\"USD\\\","
-                                                        "\\\"DecimalPlaces\\\":2,"
-                                                        "\\\"TaxCode\\\":\\\"AY\\\"},"
-                                                    "{\\\"Amount\\\":$39,"
-                                                        "\\\"CurrencyCode\\\":\\\"USD\\\","
-                                                        "\\\"DecimalPlaces\\\":2,"
-                                                        "\\\"TaxCode\\\":\\\"US1\\\"},"
-                                                    "{\\\"Amount\\\":$40,"
-                                                        "\\\"CurrencyCode\\\":\\\"USD\\\","
-                                                        "\\\"DecimalPlaces\\\":2,"
-                                                        "\\\"TaxCode\\\":\\\"XF\\\"},"
-                                                    "{\\\"Amount\\\":$41,"
-                                                        "\\\"CurrencyCode\\\":\\\"USD\\\","
-                                                        "\\\"DecimalPlaces\\\":2,"
-                                                        "\\\"TaxCode\\\":\\\"ZP\\\"}"
-                                                    "]," ###End of Taxes
-                                                "\\\"TotalTax\\\":"
-                                                    "{\\\"Amount\\\":$42,"
-                                                    "\\\"CurrencyCode\\\":\\\"USD\\\","
-                                                    "\\\"DecimalPlaces\\\":2}},"
-                                            "\\\"TotalFare\\\":"
-                                                "{\\\"Amount\\\":$44,"
-                                                "\\\"CurrencyCodev\\\":\\\"USD\\\"}},"
-                                            "\\\"PassengerTypeQuantity\\\":"
-                                                    "{\\\"Code\\\":\\\"ADT\\\","
-                                                    "\\\"Quantity\\\":1}}}},"
-                        "\\\"SequenceNumber\\\":$45,"
-                        "\\\"TicketingInfo\\\":"
-                            "{\\\"TicketType\\\":$46}})"
+"createNewAirItinerary": "insert into default(key, value) values (TO_STRING($1), %s)" % doc_template
 }
 }
 
@@ -224,6 +226,15 @@ def runNQueryParam(query, param, server_ip):
     print r.json()
     r123 = r.json()['results']
     return r123
+
+def runSDKQuery(keys, servers_ips, buckets):
+    cbs = []
+    for bucket in buckets:
+        cbs.append(Bucket('couchbase://%s/%s' % (','.join(servers_ips), bucket)))
+
+    for cb in cbs:
+        out = cb.insert_multi(keys)
+    return out
 
 
 def calcFlightSegmentDateTime():
@@ -392,11 +403,94 @@ def load_documents(insert_documents, seed, server_ip):
 
         print "Done!"
 
+def sdk_load_documents(insert_documents, seed, server_ip, batch_size, buckets):
+    all_journey_direction = ["Return"]
+    all_marketing_airlines = ["A", "B", "V", "SW", "B1"]
+
+    q = INSERT_QUERIES["sabre"]
+
+    j = 1
+    while j <= insert_documents:
+        keys = {}
+        for doc_num in xrange(batch_size):
+            key = str(j)+ '_' +seed
+            y=calcAirportRouteInfo()
+            x=calcFlightSegmentDateTime()
+            journey_direction = random.sample(all_journey_direction,1)
+            eTicketBool=random.choice([True, False])
+            if eTicketBool:
+                ticket_type="eTicket"
+            ticket_type="paper"
+            marketingAirline = random.sample(all_marketing_airlines,1)
+            dummyvar=0 #placeholder
+            t, total_taxes = calcTaxes()
+            base_fare = round(random.uniform(250,600)) # later can add logic for varying with mileage/airports
+            total_fare = base_fare+total_taxes
+            sequence_number = j+1000 # for the lack of better understanding of sequencenUmber
+
+            param = [key, #1
+                     y[0]['dep_airport'], #2 Departure1
+                     y[0]['arrv_airport_1'], #3 Arrival 1
+                     y[0]['arrv_airport_2'],#4 Arrival 2
+                     x[0]['dep_1'], #5
+                     x[0]['arrv_1'], #6
+                     x[0]['arrv_2'], #7
+                     x[0]['elapsed_time_1'], #8
+                     x[0]['elapsed_time_2'],#9
+                     x[0]['total_elapsed_time'], #10
+                     x[0]['offset_dep_1'], #11
+                     x[0]['offset_arrv_1'], #12
+                     x[0]['offset_arrv_2'],#13
+                     y[0]['dep_airequip_code_1'],#14
+                     y[0]['dep_airequip_code_2'],#15
+                     y[0]['dep_flight_1'],#16
+                     y[0]['dep_flight_2'],#17
+                     journey_direction,#18
+                     eTicketBool,#19
+                     marketingAirline, #20
+                     dummyvar,#21
+                     y[1]['dep_airport'], #22 Departure
+                     y[1]['arrv_airport_1'], #23 Arrival 1
+                     y[1]['arrv_airport_2'],#24 Arrival 2
+                     x[1]['dep_1'], #25
+                     x[1]['arrv_1'], #26
+                     x[1]['arrv_2'], #27
+                     x[1]['elapsed_time_1'], #28
+                     x[1]['elapsed_time_2'],#29
+                     x[1]['total_elapsed_time'], #30
+                     x[1]['offset_dep_1'], #31
+                     x[1]['offset_arrv_1'], #32
+                     x[1]['offset_arrv_2'],#33
+                     y[1]['dep_airequip_code_1'],#34
+                     y[1]['dep_airequip_code_2'],#35
+                     y[1]['dep_flight_1'],#36
+                     y[1]['dep_flight_2'],#37
+                     t['ZP'],#38
+                     t['XF'],#39
+                     t['US1'],#40
+                     t['AY'],#41
+                     total_taxes,#42
+                     base_fare, #43
+                     total_fare, #44
+                     sequence_number, #45
+                     ticket_type #46
+            ]
+            keys[key] == doc_template.format(param)
+            j += 1
+        print list(q)[0]
+        r = runSDKQuery(keys, server_ip, buckets)
+        print r
+
+    print "Done!"
+
+
 
 parser = argparse.ArgumentParser(description='This script is used load sabre dataset')
 parser.add_argument('-doc','--documents',help='Number of documents', required=True)
 parser.add_argument('-q','--queryNode',help='query node ip', required=True)
 parser.add_argument('-s','--seed',help='Seed for key generation', required=False)
+parser.add_argument('-b','--queryBuckets',help='Buckets to query', required=False)
+parser.add_argument('-z','--queryBatchSize',help='Batch size to insert', required=False)
 args = vars(parser.parse_args())
 
 ## output duration and clients ##
@@ -405,9 +499,20 @@ print ("QueryNode: %s" % args['queryNode'])
 
 insert_documents = int(args['documents'])
 queryNode = str(args['queryNode'])
+if queryNode.find(';') != -1:
+    queryNode = queryNode.split(';')
+queryBuckets = 'default'
+if 'queryBuckets' in args:
+    str(args['queryBuckets']).split[';']
+batchSize = 1
+if 'queryBatchSize' in args:
+    batchSize = int(args['queryBatchSize'])
 #Create random insert key
 seed = "sabre_" + str(randint(1,100000))
 
 print "------------ Begin Inserts  ------------"
-l = load_documents(insert_documents,seed,queryNode)
+if isinstance(queryNode, list) or batchSize > 1 or isinstance(queryBuckets, list):
+    l = sdk_load_documents(insert_documents, seed, queryNode, batchSize, queryBuckets)
+else:
+    l = load_documents(insert_documents,seed,queryNode)
 print "------------ End of my insert program ------------"
