@@ -227,6 +227,19 @@ class TuqGenerators(object):
                     if attr[0] == '*':
                         condition += '"%s" : doc,' % attr[-1]
                     continue
+            elif re.match(r'MIN\(.*\)', attr[0]):
+                    attr[0] = re.sub(r'\)', '', re.sub(r'.*MIN\(', '', attr[0])).strip()
+                    self.aggr_fns['MIN'] = {}
+                    if attr[0].find('.') != -1:
+                        parent, child = attr[0].split('.')
+                        attr[0] = child
+                    if attr[0] in self.aliases:
+                        attr[0] = self.aliases[attr[0]]
+                    self.aggr_fns['MIN']['field'] = attr[0]
+                    self.aggr_fns['MIN']['alias'] = ('$1', attr[-1])[len(attr) > 1]
+                    self.aliases[('$1', attr[-1])[len(attr) > 1]] = attr[0]
+                    condition += '"%s": doc["%s"]' % (self.aggr_fns['MIN']['alias'], self.aggr_fns['MIN']['field'])
+                    continue
             elif attr[0].upper() == 'DISTINCT':
                 attr = attr[1:]
                 self.distict= True
@@ -281,7 +294,7 @@ class TuqGenerators(object):
 
     def _filter_full_set(self, select_clause, where_clause, unnest_clause):
         diff = self._order_clause_greater_than_select(select_clause)
-        if diff and not self._is_parent_selected(select_clause, diff):
+        if diff and not self._is_parent_selected(select_clause, diff) and not 'MIN' in self.query:
             if diff[0].find('][') == -1:
                 select_clause = select_clause[:-1] + ','.join(['"%s" : %s' %([at.replace('"','') for at in re.compile('"\w+"').findall(attr)][0],
                                                                             attr) for attr in self._order_clause_greater_than_select(select_clause)]) + '}'
@@ -328,14 +341,20 @@ class TuqGenerators(object):
         order_clause = self._get_order_clause()
         if not order_clause:
             return None
+        order_clause = order_clause.replace(',"', '"')
         diff = set(order_clause.split(',')) - set(re.compile('doc\["[\w\']+"\]').findall(select_clause))
-        diff = [attr for attr in diff if attr != '']
+        diff = [attr.replace(",",'"') for attr in diff if attr != '']
+        for k, v in self.aliases.iteritems():
+            if k.endswith(','):
+                self.aliases[k[:-1]] = v
+                del self.aliases[k]
         if not set(diff) - set(['doc["%s"]' % alias for alias in self.aliases]):
             return None
         else:
             diff = list(set(diff) - set(['doc["%s"]' % alias for alias in self.aliases]))
         if diff:
             self.attr_order_clause_greater_than_select = [re.sub(r'"\].*', '', re.sub(r'doc\["', '', attr)) for attr in diff]
+            self.attr_order_clause_greater_than_select = [attr for attr in self.attr_order_clause_greater_than_select if attr]
             return list(diff)
         return None
 
@@ -352,10 +371,15 @@ class TuqGenerators(object):
                     condition += 'doc["%s"],' % (self.get_alias_for(attr[0]))
                     continue
             if attr[0].find('MIN') != -1:
-                self.aggr_fns['MIN'] = {}
-                attr[0]= attr[0][4:-1]
-                self.aggr_fns['MIN']['field'] = attr[0]
-                self.aggr_fns['MIN']['alias'] = '$gr1'
+                if 'MIN' not in self.aggr_fns:
+                    self.aggr_fns['MIN'] = {}
+                    attr[0]= attr[0][4:-1]
+                    self.aggr_fns['MIN']['field'] = attr[0]
+                    self.aggr_fns['MIN']['alias'] = '$gr1'
+                else:
+                    if 'alias' in self.aggr_fns['MIN']:
+                        condition += 'doc["%s"],' % self.aggr_fns['MIN']['alias']
+                        continue
             if attr[0].find('.') != -1:
                 attributes = self.get_all_attributes()
                 if attr[0].split('.')[0] in self.aliases and (not self.aliases[attr[0].split('.')[0]] in attributes) or\
@@ -397,6 +421,8 @@ class TuqGenerators(object):
                     order_clause = order_clause.replace(att_name[1:-1],
                                                         [params['alias'] for params in self.aggr_fns.itervalues()
                                                          if params['field'] == att_name[1:-1]][0])
+            if order_clause.find(',"') != -1:
+                order_clause = order_clause.replace(',"', '"')
             key = lambda doc: eval(order_clause)
         try:
             result = sorted(result, key=key, reverse=reverse)
@@ -464,9 +490,9 @@ class TuqGenerators(object):
                               for group in groups]
                 else:
                     if attrs[0] in self.aliases.itervalues():
-                        attrs[0] = self.get_alias_for(attrs[0])
+                        attrs[0] = self.get_alias_for(attrs[0]).replace(',', '')
                     result = [{attrs[0] : group,
-                                params['alias'] : min([doc[params['field']] for doc in result
+                                params['alias'] : min([doc[params['alias']] for doc in result
                                 if doc[attrs[0]]==group])}
                           for group in groups]
         else:

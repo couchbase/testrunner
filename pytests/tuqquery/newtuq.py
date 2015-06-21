@@ -56,7 +56,7 @@ class QueryTests(BaseTestCase):
     def suite_setUp(self):
         try:
             self.load(self.gens_load, flag=self.item_flag)
-            self.create_primary_index_for_3_0_and_greater()
+#            self.create_primary_index_for_3_0_and_greater()
             if not self.input.param("skip_build_tuq", True):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
@@ -303,7 +303,7 @@ class QueryTests(BaseTestCase):
 
     def test_order_by_aggr_fn(self):
         for bucket in self.buckets:
-            query_template = 'SELECT $str1 AS TITLE FROM %s GROUP'  % (bucket.name) +\
+            query_template = 'SELECT $str1 AS TITLE, min($int1) day FROM %s GROUP'  % (bucket.name) +\
             ' BY $str1 ORDER BY MIN($int1), $str1'
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(actual_result['results'], expected_result)
