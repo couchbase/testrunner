@@ -21,6 +21,8 @@ class RQGTests(BaseTestCase):
         super(RQGTests, self).setUp()
         self.log.info("==============  RQGTests setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
+        self.record_failure= self.input.param("record_failure",False)
+        self.failure_record_path= self.input.param("failure_record_path","/tmp")
         self.use_mysql= self.input.param("use_mysql",True)
         self.initial_loading_to_cb= self.input.param("initial_loading_to_cb",True)
         self.database= self.input.param("database","flightstats")
@@ -311,6 +313,7 @@ class RQGTests(BaseTestCase):
         if inserted_count != len(query_list):
             batches.append(batch)
         result_queue = Queue.Queue()
+        failure_record_queue = Queue.Queue()
         # Run Test Batches
         test_case_number = 1
         for test_batch in batches:
@@ -327,7 +330,7 @@ class RQGTests(BaseTestCase):
             # Create threads and run the batch
             for test_case in list:
                 test_case_input = test_case
-                t = threading.Thread(target=self._run_basic_test, args = (test_case_input, test_case_number, result_queue))
+                t = threading.Thread(target=self._run_basic_test, args = (test_case_input, test_case_number, result_queue, failure_record_queue))
                 t.daemon = True
                 t.start()
                 thread_list.append(t)
@@ -342,6 +345,7 @@ class RQGTests(BaseTestCase):
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
+        self.dump_failure_data(failure_record_queue)
         self.assertTrue(success, summary)
 
     def test_rqg_crud_update_merge(self):
@@ -377,6 +381,7 @@ class RQGTests(BaseTestCase):
         if inserted_count != len(query_list):
             batches.append(batch)
         result_queue = Queue.Queue()
+        failure_record_queue = Queue.Queue()
         # Run Test Batches
         test_case_number = 1
         for test_batch in batches:
@@ -392,7 +397,7 @@ class RQGTests(BaseTestCase):
             for test_case in list:
                 test_case_input = test_case
                 verification_query = "SELECT * from {0} ORDER by primary_key_id".format(table_map.keys()[0])
-                t = threading.Thread(target=self._run_basic_crud_test, args = (test_case_input, verification_query,  test_case_number, result_queue))
+                t = threading.Thread(target=self._run_basic_crud_test, args = (test_case_input, verification_query,  test_case_number, result_queue, failure_record_queue))
                 t.daemon = True
                 t.start()
                 thread_list.append(t)
@@ -404,6 +409,7 @@ class RQGTests(BaseTestCase):
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
+        self.dump_failure_data(failure_record_queue)
         self.assertTrue(success, summary)
 
     def test_rqg_crud_update(self):
@@ -439,6 +445,7 @@ class RQGTests(BaseTestCase):
         if inserted_count != len(query_list):
             batches.append(batch)
         result_queue = Queue.Queue()
+        failure_record_queue = Queue.Queue()
         # Run Test Batches
         test_case_number = 1
         for test_batch in batches:
@@ -454,7 +461,7 @@ class RQGTests(BaseTestCase):
             for test_case in list:
                 test_case_input = test_case
                 verification_query = "SELECT * from {0} ORDER by primary_key_id".format(table_map.keys()[0])
-                t = threading.Thread(target=self._run_basic_crud_test, args = (test_case_input, verification_query,  test_case_number, result_queue))
+                t = threading.Thread(target=self._run_basic_crud_test, args = (test_case_input, verification_query,  test_case_number, result_queue, failure_record_queue))
                 t.daemon = True
                 t.start()
                 thread_list.append(t)
@@ -469,6 +476,7 @@ class RQGTests(BaseTestCase):
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
+        self.dump_failure_data(failure_record_queue)
         self.assertTrue(success, summary)
 
     def test_rqg_crud_delete(self):
@@ -504,6 +512,7 @@ class RQGTests(BaseTestCase):
         if inserted_count != len(query_list):
             batches.append(batch)
         result_queue = Queue.Queue()
+        failure_record_queue = Queue.Queue()
         # Run Test Batches
         test_case_number = 1
         for test_batch in batches:
@@ -535,6 +544,7 @@ class RQGTests(BaseTestCase):
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
+        self.dump_failure_data(failure_record_queue)
         self.assertTrue(success, summary)
 
     def test_rqg_crud_delete_merge(self):
@@ -570,6 +580,7 @@ class RQGTests(BaseTestCase):
         if inserted_count != len(query_list):
             batches.append(batch)
         result_queue = Queue.Queue()
+        failure_record_queue = Queue.Queue()
         # Run Test Batches
         test_case_number = 1
         for test_batch in batches:
@@ -585,7 +596,7 @@ class RQGTests(BaseTestCase):
             for test_case in list:
                 test_case_input = test_case
                 verification_query = "SELECT * from {0} ORDER by primary_key_id".format(table_map.keys()[0])
-                t = threading.Thread(target=self._run_basic_crud_test, args = (test_case_input, verification_query,  test_case_number, result_queue))
+                t = threading.Thread(target=self._run_basic_crud_test, args = (test_case_input, verification_query,  test_case_number, result_queue, failure_record_queue))
                 t.daemon = True
                 t.start()
                 thread_list.append(t)
@@ -601,9 +612,10 @@ class RQGTests(BaseTestCase):
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
+        self.dump_failure_data(failure_record_queue)
         self.assertTrue(success, summary)
 
-    def _run_basic_test(self, test_data, test_case_number, result_queue):
+    def _run_basic_test(self, test_data, test_case_number, result_queue, failure_record_queue = None):
         data = test_data
         n1ql_query = data["n1ql"]
         sql_query = data["sql"]
@@ -617,6 +629,7 @@ class RQGTests(BaseTestCase):
         result_run["test_case_number"] = test_case_number
         if  expected_result == None:
             expected_result = self._gen_expected_result(sql_query)
+            data["expected_result"] = expected_result
         query_index_run = self._run_queries_and_verify(n1ql_query = n1ql_query , sql_query = sql_query, expected_result = expected_result)
         result_run["run_query_without_index_hint"] = query_index_run
         if self.run_query_with_primary:
@@ -634,6 +647,7 @@ class RQGTests(BaseTestCase):
             result = self._run_queries_with_explain(n1ql_query , indexes)
             result_run.update(result)
         result_queue.put(result_run)
+        self._check_and_push_failure_record_queue(result_run, data, failure_record_queue)
         self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
 
     def _generate_test_data(self, test_data):
@@ -648,7 +662,7 @@ class RQGTests(BaseTestCase):
             data["expected_result"] = self._gen_expected_result(sql_query)
         return data
 
-    def _run_basic_crud_test(self, test_data, verification_query, test_case_number, result_queue):
+    def _run_basic_crud_test(self, test_data, verification_query, test_case_number, result_queue, failure_record_queue = None):
         self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
         result_run = {}
         n1ql_query = test_data["n1ql_query"]
@@ -661,6 +675,7 @@ class RQGTests(BaseTestCase):
         query_index_run = self._run_queries_and_verify(n1ql_query = verification_query , sql_query = verification_query, expected_result = None)
         result_run["update_test"] = query_index_run
         result_queue.put(result_run)
+        self._check_and_push_failure_record_queue(result_run, test_data, failure_record_queue)
         self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
 
     def _test_result_analysis(self, queue):
@@ -1037,6 +1052,7 @@ class RQGTests(BaseTestCase):
         self._build_indexes()
 
     def _build_indexes(self):
+        self.sec_index_map = {}
         if self.create_secondary_indexes:
             if self.use_mysql:
                 self.sec_index_map  = self.client._gen_index_combinations_for_tables()
@@ -1322,6 +1338,38 @@ class RQGTests(BaseTestCase):
                     message += " Scenario ::  {0} \n".format(key)
                     message += " Reason :: "+result[key]["result"]+"\n"
         return check, message, failure_types
+
+    def _check_and_push_failure_record_queue(self, result, data, failure_record_queue):
+        if not self.record_failure:
+            return
+        check = True
+        for key in result.keys():
+            if key != "test_case_number" and key != "n1ql_query" and key != "sql_query":
+                check = check and result[key]["success"]
+                if not result[key]["success"]:
+                    failure_record_queue.put(data)
+
+    def dump_failure_data(self, failure_record_queue):
+        if not self.record_failure:
+            return
+        import uuid
+        sub_dir = str(uuid.uuid4()).replace("-","")
+        self.data_dump_path= self.failure_record_path+"/"+sub_dir
+        os.mkdir(self.data_dump_path)
+        input_file_path=self.data_dump_path+"/input"
+        os.mkdir(input_file_path)
+        f_write_file = open(input_file_path+"/source_input_rqg_run.txt",'w')
+        secondary_index_path=self.data_dump_path+"/index"
+        os.mkdir(secondary_index_path)
+        database_dump = self.data_dump_path+"/db_dump"
+        os.mkdir(database_dump)
+        f_write_index_file = open(secondary_index_path+"/secondary_index_definitions.txt",'w')
+        self.client.dump_database(data_dump_path = database_dump)
+        f_write_index_file.write(json.dumps(self.sec_index_map))
+        f_write_index_file.close()
+        while not failure_record_queue.empty():
+            f_write_file.write(json.dumps(failure_record_queue.get())+"\n")
+        f_write_file.close()
 
     def _check_for_failcase(self, result):
         check=True
