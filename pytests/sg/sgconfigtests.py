@@ -32,12 +32,12 @@ class SGConfigTests(GatewayConfigBaseTest):
                 with open('pytests/sg/resources/gateway_config_walrus.json', 'w') as file:
                         file.write(filedata)
                 shell = RemoteMachineShellConnection(server)
-                shell.copy_files_local_to_remote('pytests/sg/resources', '/root')
+                shell.copy_files_local_to_remote('pytests/sg/resources', '/tmp')
                 # will install sg only the first time
                 self.install(shell)
                 pid = self.is_sync_gateway_process_running(shell)
                 self.assertNotEqual(pid, 0)
-                exist = shell.file_exists('/root/', 'gateway.log')
+                exist = shell.file_exists('/tmp/', 'gateway.log')
                 self.assertTrue(exist)
                 shell.disconnect()
         if self.case_number==1:
@@ -68,7 +68,7 @@ class SGConfigTests(GatewayConfigBaseTest):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             shutil.copy2('pytests/sg/resources/gateway_config_backup.json', 'pytests/sg/resources/gateway_config.json')
-            shell.copy_files_local_to_remote('pytests/sg/resources', '/root')
+            shell.copy_files_local_to_remote('pytests/sg/resources', '/tmp')
             self.assertTrue(self.start_sync_gateway(shell))
             self.assertTrue(self.check_message_in_gatewaylog(shell, self.expected_log))
             if not self.expected_error:
