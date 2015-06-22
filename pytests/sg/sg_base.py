@@ -11,10 +11,10 @@ class GatewayBaseTest(unittest.TestCase):
 
     BUILDS = {
         'http://latestbuilds.hq.couchbase.com/couchbase-sync-gateway': (
-            '0.0.0/{0}/couchbase-sync-gateway-community_{0}_x86_64.rpm',
-            '1.1.0/{0}/couchbase-sync-gateway-community_{0}_x86_64.rpm',
-            '0.0.1/{0}/couchbase-sync-gateway-community_{0}_x86_64.rpm',
-            'release/1.1.0/{0}/couchbase-sync-gateway-community_{0}_x86_64.rpm'
+            'release/1.1.0/{0}/couchbase-sync-gateway-community_{0}_{1}.{2}',
+            '1.1.0/{0}/couchbase-sync-gateway-community_{0}_{1}.{2}',
+            '0.0.0/{0}/couchbase-sync-gateway-community_{0}_{1}.{2}',
+            '0.0.1/{0}/couchbase-sync-gateway-community_{0}_{1}.{2}'
         ),
     }
 
@@ -28,13 +28,24 @@ class GatewayBaseTest(unittest.TestCase):
         self.extra_param = self.input.param("extra_param", "")
         if isinstance(self.extra_param, str):
             self.extra_param=self.extra_param.replace("$", "=")  # '=' is a delimiter in conf file
-        self.logsdir = self.input.param("logsdir", "/home/sync_gateway/logs")
-        self.datadir = self.input.param("datadir", "/home/sync_gateway")
-        self.configdir = self.input.param("configdir", "/home/sync_gateway")
+        self.logsdir = self.input.param("logsdir", "/tmp/sync_gateway/logs")
+        self.datadir = self.input.param("datadir", "/tmp/sync_gateway")
+        self.configdir = self.input.param("configdir", "/tmp/sync_gateway")
         self.configfile = self.input.param("configfile", "sync_gateway.json")
         self.expected_error = self.input.param("expected_error", "")
         self.servers = self.input.servers
         self.master = self.servers[0]
+        if self.case_number == 1:
+            shell = RemoteMachineShellConnection(self.master)
+            type = shell.extract_remote_info().distribution_type
+            shell.disconnect()
+        self.folder_prefix=""
+        if type.lower() == 'windows':
+            self.folder_prefix = "/cygdrive/c"
+            self.logsdir = self.folder_prefix + self.configdir
+            self.datadir = self.folder_prefix + self.configdir
+            self.configdir = self.folder_prefix + self.configdir
+
 
     def find_package(self, shell):
         for filename, url in self.get_expected_locations(shell):
@@ -60,6 +71,8 @@ class GatewayBaseTest(unittest.TestCase):
                 file_ext = 'deb'
             elif distribution_type == 'mac':
                 file_ext = 'tar.gz'
+        elif self.info.type.lower() == 'windows':
+            file_ext = 'exe'
 
         for location, patterns in self.BUILDS.items():
             for pattern in patterns:
@@ -75,7 +88,7 @@ class GatewayBaseTest(unittest.TestCase):
 
     def kill_processes_gateway(self, shell):
         self.log.info('=== Killing Sync Gateway')
-        shell.execute_command('killall -9 sync_gateway')
+        shell.terminate_process(process_name='sync_gateway')
 
     def uninstall_gateway(self, shell):
         self.info = shell.extract_remote_info()
@@ -90,11 +103,14 @@ class GatewayBaseTest(unittest.TestCase):
                 cmd = 'sudo launchctl unload /Library/LaunchDaemons/com.couchbase.mobile.sync_gateway.plist'
             else:
                 self.log.info('uninstall_gateway is not supported on {0}, {1}'.format(type, distribution_type))
-        else:
-            self.log.info('uninstall_gateway is not supported on {0}, {1}'.format(type, distribution_type))
-        self.log.info('=== Un-installing Sync Gateway package on {0} - cmd: {1}'.format(self.master, cmd))
-        output, error = shell.execute_command(cmd)
-        shell.log_command_output(output, error)
+            self.log.info('=== Un-installing Sync Gateway package on {0} - cmd: {1}'.format(self.master, cmd))
+            output, error = shell.execute_command(cmd)
+            shell.log_command_output(output, error)
+        elif self.info.type.lower() == 'windows':
+            cmd = "wmic product where name='Couchbase Sync Gateway' uninstall"
+            self.log.info('=== Un-installing Sync Gateway package on {0} - cmd: {1}'.format(self.master, cmd))
+            output, error = shell.execute_batch_command(cmd)
+            shell.log_command_output(output, error)
 
     def install_gateway(self, shell):
         filename, url = self.find_package(shell)
@@ -112,15 +128,23 @@ class GatewayBaseTest(unittest.TestCase):
                 cmd = 'cd /tmp; gunzip {0}; tar xopf {1}; cp -r couchbase-sync-gateway /opt'\
                     .format(filename, filename_tar, filename_tar)
                 wget_str = '/usr/local/bin/wget'
-        else:
-            self.log.info('install_gateway is not supported on {0}, {1}'.format(type, distribution_type))
-        self.log.info('=== Installing Sync Gateway package {0} on {1} - cmd: {2}'.
-                      format(filename, self.master, cmd))
-        output, error = shell.execute_command_raw('cd /tmp; {0} -q -O {1} {2};ls -lh'.format(wget_str, filename, url))
+            else:
+                self.log.info('install_gateway is not supported on {0}, {1}'.format(type, distribution_type))
+            output, error = shell.execute_command_raw('cd /tmp; {0} -q -O {1} {2};ls -lh'.format(wget_str, filename, url))
+
+        elif self.info.type.lower() == 'windows':
+            wget_str ="'c:\\automation\\wget.exe'"
+            cmd = "cd /cygdrive/c/tmp;cmd /c 'couchbase-sync-gateway.exe /S /v/qn'" #couchbase-sync-gateway.exe /v"/l*v C:\install.log /qb
+            output, error = shell.execute_command(
+                     "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q"
+                                                    " {0} -O {1}.exe';ls -lh;".format(url, "couchbase-sync-gateway"))
         shell.log_command_output(output, error)
         output, error = shell.execute_command_raw(cmd)
         shell.log_command_output(output, error)
-        exist = shell.file_exists('/opt/couchbase-sync-gateway/bin', 'sync_gateway')
+        if self.info.type.lower() == 'windows':
+            exist = shell.file_exists('/cygdrive/c/Program Files (x86)/Couchbase', 'sync_gateway.exe')
+        else:
+            exist = shell.file_exists('/opt/couchbase-sync-gateway/bin', 'sync_gateway')
         if exist:
             return True
         else:
@@ -129,9 +153,9 @@ class GatewayBaseTest(unittest.TestCase):
 
     def start_sync_gateways(self, shell):
         self.log.info('=== Starting Sync Gateway instances')
-        shell.copy_files_local_to_remote('pytests/sg/resources', '/root')
+        shell.copy_files_local_to_remote('pytests/sg/resources', self.folder_prefix + '/tmp')
         output, error = shell.execute_command_raw('nohup /opt/couchbase-sync-gateway/bin/sync_gateway'
-                                                  ' /root/gateway_config.json >/root/gateway.log 2>&1 &')
+                                                  ' /tmp/gateway_config.json >/tmp/gateway.log 2>&1 &')
         shell.log_command_output(output, error)
 
     def start_simpleServe(self, shell):
@@ -293,7 +317,7 @@ class GatewayBaseTest(unittest.TestCase):
         self.log.info('=== Cleaning Sync Gateway service and remove files')
         self.uninstall_gateway(shell)
         output, error = shell.execute_command_raw(
-            'rm -rf /root/*.log /root/*.json /root/logs /root/data /home/sync_gateway/* '
+            'rm -rf /tmp/*.log /tmp/*.json /tmp/logs /tmp/data /tmp/sync_gateway/* '
             '/dirNotExist /opt/couchbase-sync-gateway* /tmp/couchbase-sync-gateway '
             '/tmp/couchbase-sync-gateway*tar')
         # return true only if the service is not running

@@ -80,24 +80,24 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         output, error = shell.execute_command_raw('ps -ef | grep sync_gateway')
         shell.log_command_output(output, error)
         if self.config != '':
-            self.config = '/root/{0}'.format(self.config)
+            self.config = '/tmp/{0}'.format(self.config)
             output, error = shell.execute_command('cat {0}'.format(self.config))
             shell.log_command_output(output, error)
         output, error = shell.execute_command(
-                'nohup /opt/couchbase-sync-gateway/bin/sync_gateway {0} {1} >/root/gateway.log 2>&1 &'
+                'nohup /opt/couchbase-sync-gateway/bin/sync_gateway {0} {1} >/tmp/gateway.log 2>&1 &'
                 .format(self.param, self.config))
         shell.log_command_output(output, error)
         if not self.expected_error:
             obj = RemoteMachineHelper(shell).is_process_running('sync_gateway')
             if obj and obj.pid:
                 self.log.info('Sync Gateway is running with pid of {0}'.format(obj.pid))
-                if not shell.file_exists('/root/', 'gateway.log'):
+                if not shell.file_exists('/tmp/', 'gateway.log'):
                     self.log.info('Fail to find gateway.log')
                 else:
                     return True
             else:
                 self.log.info('Sync Gateway is NOT running')
-                output, error = shell.execute_command_raw('cat /root/gateway.log')
+                output, error = shell.execute_command_raw('cat /tmp/gateway.log')
                 shell.log_command_output(output, error)
             return False
         else:
@@ -108,7 +108,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         if template:
             self.config_file = 'gateway_config_test.json'
             self.generate_sync_gateways_config(template, 'pytests/sg/resources/{0}'.format(self.config))
-            shell.copy_files_local_to_remote('pytests/sg/resources', '/root')
+            shell.copy_files_local_to_remote('pytests/sg/resources', '/tmp')
         else:
             self.config_file = ''
         return self.start_sync_gateway(shell)
@@ -137,7 +137,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         if not expected_str:
             return True
         for i in range(3):
-            output, error = shell.execute_command_raw('grep \'{0}\' /root/gateway.log'.format(expected_str))
+            output, error = shell.execute_command_raw('grep \'{0}\' /tmp/gateway.log'.format(expected_str))
             shell.log_command_output(output, error)
             if not output or not output[0]:
                 if i < 2:
@@ -145,7 +145,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
                     continue
                 else:
                     self.log.info('check_message_in_gatewaylog did not find expected error - {0}'.format(expected_str))
-                    output, error = shell.execute_command_raw('cat /root/gateway.log')
+                    output, error = shell.execute_command_raw('cat /tmp/gateway.log')
                     shell.log_command_output(output, error)
                     return False
             else:

@@ -28,9 +28,9 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
                 self.install(shell)
                 pid = self.is_sync_gateway_process_running(shell)
                 self.assertNotEqual(pid, 0)
-                exist = shell.file_exists('/root/', 'gateway.log')
+                exist = shell.file_exists('/tmp/', 'gateway.log')
                 self.assertTrue(exist)
-                shell.copy_files_local_to_remote('pytests/sg/resources', '/root')
+                shell.copy_files_local_to_remote('pytests/sg/resources', '/tmp')
             self.start_simpleServe(shell)
             shell.disconnect()
 
@@ -38,12 +38,12 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
         self.log.info('=== start_sync_gateway with config file {0}.'.format(config_filename))
         shell.execute_command('killall -9 sync_gateway')
         output, error = shell.execute_command_raw('nohup /opt/couchbase-sync-gateway/bin/sync_gateway'
-                                                  ' /root/{0} >/root/gateway.log 2>&1 &'.format(config_filename))
+                                                  ' /tmp/{0} >/tmp/gateway.log 2>&1 &'.format(config_filename))
         shell.log_command_output(output, error)
         obj = RemoteMachineHelper(shell).is_process_running('sync_gateway')
         if obj and obj.pid:
             self.log.info('start_sync_gateway - Sync Gateway is running with pid of {0}'.format(obj.pid))
-            if not shell.file_exists('/root/', 'gateway.log'):
+            if not shell.file_exists('/tmp/', 'gateway.log'):
                 self.log.info('start_sync_gateway - Fail to find gateway.log')
                 return False
             else:

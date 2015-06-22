@@ -26,7 +26,7 @@ class SGInstallerTest(GatewayBaseTest):
             self.install(shell)
             pid = self.is_sync_gateway_process_running(shell)
             self.assertNotEqual(pid, 0)
-            exist = shell.file_exists('/root/', 'gateway.log')
+            exist = shell.file_exists('/tmp/', 'gateway.log')
             self.assertTrue(exist)
             shell.disconnect()
 
@@ -159,9 +159,9 @@ class SGInstallerTest(GatewayBaseTest):
             output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
             self.assertTrue(error[0].startswith(self.expected_error))
             # self.assertEqual(output, [])
-            # self.assertFalse(shell.file_exists("/home/sync_gateway", 'logs'))
-            #self.assertFalse(shell.file_exists("/home/sync_gateway", 'data'))
-            self.assertFalse(shell.file_exists("/home/sync_gateway", 'sync_gateway.json'))
+            # self.assertFalse(shell.file_exists("/tmp/sync_gateway", 'logs'))
+            #self.assertFalse(shell.file_exists("/tmp/sync_gateway", 'data'))
+            self.assertFalse(shell.file_exists("/tmp/sync_gateway", 'sync_gateway.json'))
             self.assertFalse(self.is_sync_gateway_service_running(shell))
             self.assertFalse(self.is_sync_gateway_process_running(shell))
 

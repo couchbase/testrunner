@@ -894,7 +894,7 @@ class RemoteMachineShellConnection:
     def get_windows_system_info(self):
         try:
             info = {}
-            o = self.execute_batch_command('systeminfo')
+            o, _ = self.execute_batch_command('systeminfo')
             for line in o:
                 line_list = line.split(':')
                 if len(line_list) > 2:
@@ -1132,7 +1132,7 @@ class RemoteMachineShellConnection:
         log.info("installed version:")
         output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
         """   """
-        ended = self.wait_till_process_ended(full_version[:10])
+        ended = self.wait_till_process_ended(version[:10])
         if not ended:
             assert False, "*****  Node {0} failed to upgrade  *****" \
                                                .format(self.ip)
@@ -2173,13 +2173,14 @@ class RemoteMachineShellConnection:
 
     def get_domain(self, win_info=None):
         if win_info:
-            o = self.execute_batch_command('ipconfig')
+            o, _ = self.execute_batch_command('ipconfig')
             suffix_dns_row = [row for row in o if row.find(" Connection-specific DNS Suffix") != -1 and \
                              len(row.split(':')[1]) > 1]
-            if len(suffix_dns_row) > 0:
-                ret = suffix_dns_row[0].split(':')[1].strip()
+            if suffix_dns_row ==[]:
+                #'   Connection-specific DNS Suffix  . : '
+                ret=""
             else:
-                ret = None
+                ret = suffix_dns_row[0].split(':')[1].strip()
         else:
             ret = self.execute_command_raw('hostname -d')
         return ret
@@ -2319,7 +2320,7 @@ class RemoteMachineShellConnection:
             remote_command.append(" " + process_pid)
 
         if self.info.type.lower() == "windows":
-            o, r = self.execute_command(remote_command, info)
+            o, r = self.execute_command(remote_command, self.info)
             if r:
                 log.error("Command didn't run successfully. Error: {0}".format(r))
             return o;
@@ -2761,9 +2762,9 @@ class RemoteMachineShellConnection:
     def execute_batch_command(self, command):
         remote_command = "echo \"{0}\" > /tmp/cmd.bat; /tmp/cmd.bat".format(command)
         o, r = self.execute_command_raw(remote_command)
-        if r:
+        if r and r!=['']:
             log.error("Command didn't run successfully. Error: {0}".format(r))
-        return o;
+        return o, r
 
     def remove_win_backup_dir(self):
         win_paths = [testconstants.WIN_CB_PATH, testconstants.WIN_MB_PATH]
@@ -2848,7 +2849,7 @@ class RemoteMachineShellConnection:
                             o, r = self.execute_command("apt-get install -y libssl0.9.8")
                             self.log_command_output(o, r)
                             o, r = self.execute_command("dpkg --get-selections | grep libssl")
-                            log.info("package {0} should not appear below".format(s[:11]))
+                            log.info("package {0} should not appear below".format(o[:11]))
                             self.log_command_output(o, r)
                         elif o:
                             for s in o:
