@@ -2176,7 +2176,10 @@ class RemoteMachineShellConnection:
             o = self.execute_batch_command('ipconfig')
             suffix_dns_row = [row for row in o if row.find(" Connection-specific DNS Suffix") != -1 and \
                              len(row.split(':')[1]) > 1]
-            ret = suffix_dns_row[0].split(':')[1].strip()
+            if len(suffix_dns_row) > 0:
+                ret = suffix_dns_row[0].split(':')[1].strip()
+            else:
+                ret = None
         else:
             ret = self.execute_command_raw('hostname -d')
         return ret
