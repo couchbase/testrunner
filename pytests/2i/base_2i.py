@@ -24,7 +24,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.run_create_index= self.input.param("run_create_index",True)
         self.verify_query_result= self.input.param("verify_query_result",True)
         self.verify_explain_result= self.input.param("verify_explain_result",True)
-        self.defer_build= self.input.param("defer_build",None)
+        self.defer_build= self.input.param("defer_build",True)
         self.deploy_on_particular_node= self.input.param("deploy_on_particular_node",None)
         self.run_drop_index= self.input.param("run_drop_index",True)
         self.run_query_with_explain= self.input.param("run_query_with_explain",True)
@@ -49,23 +49,27 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.memory_drop_list = []
         self.n1ql_node = self.get_nodes_from_services_map(service_type = "n1ql")
 
+
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
 
     def create_index(self, bucket, query_definition, deploy_node_info = None):
         index_where_clause = None
+        self._defer_build_analyze()
         if self.use_where_clause_in_index:
             index_where_clause = query_definition.index_where_clause
         self.query = query_definition.generate_index_create_query(bucket = bucket,
          use_gsi_for_secondary = self.use_gsi_for_secondary, deploy_node_info= deploy_node_info,
          defer_build = self.defer_build, index_where_clause = index_where_clause )
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
-        if not self.defer_build:
-            check = self.n1ql_helper.is_index_online_and_in_list(bucket, query_definition.index_name,
-             server = self.n1ql_node, timeout = self.timeout_for_index_online)
-            self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
+        if self.defer_build:
+            build_index_task = self.async_build_index(bucket, [query_definition.index_name])
+            build_index_task.result()
+        check = self.n1ql_helper.is_index_online_and_in_list(bucket, query_definition.index_name,server = self.n1ql_node, timeout = self.timeout_for_index_online)
+        self.assertTrue(check, "index {0} failed to be created".format(query_definition.index_name))
 
     def async_create_index(self, bucket, query_definition, deploy_node_info = None):
+        self._defer_build_analyze()
         index_where_clause = None
         if self.use_where_clause_in_index:
             index_where_clause = query_definition.index_where_clause
@@ -656,6 +660,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def _create_index_in_async(self, query_definitions = None, buckets = None, index_nodes = None):
         refer_index = []
+        self._defer_build_analyze()
         if buckets == None:
             buckets = self.buckets
         if query_definitions == None:
@@ -669,8 +674,10 @@ class BaseSecondaryIndexingTests(QueryTests):
         x =  len(query_definitions)-1
         while x > -1:
             tasks = []
+            build_index_map ={}
             for server in index_nodes:
                 for bucket in buckets:
+                    build_index_map[bucket.name]=[]
                     if (x > -1):
                         key = "{0}:{1}".format(bucket.name, query_definitions[x].index_name)
                         if (key not in refer_index):
@@ -679,11 +686,21 @@ class BaseSecondaryIndexingTests(QueryTests):
                             deploy_node_info = None
                             if self.use_gsi_for_secondary:
                                 deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
+                            build_index_map[bucket.name].append(query_definitions[x].index_name)
                             tasks.append(self.async_create_index(bucket.name, query_definitions[x], deploy_node_info = deploy_node_info))
                 x-=1
             for task in tasks:
                 task.result()
-
+            if self.defer_build:
+                for bucket_name in build_index_map.keys():
+                    build_index_task = self.async_build_index(bucket_name, build_index_map[bucket_name])
+                    build_index_task.result()
+                monitor_index_tasks = []
+                for bucket_name in build_index_map.keys():
+                    for index_name in build_index_map[bucket_name]:
+                        monitor_index_tasks.append(self.async_monitor_index(bucket_name, index_name))
+                for task in monitor_index_tasks:
+                    task.result()
 
     def _query_explain_in_async(self):
         tasks = self.async_run_multi_operations(buckets = self.buckets,
@@ -721,6 +738,11 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.verify_explain_result = False
             self.ops_map[phase]["query_explain_ops"] = False
         self.log.info(self.ops_map)
+
+    def _defer_build_analyze(self):
+        self.defer_build = self.defer_build and self.use_gsi_for_secondary
+        if not self.defer_build:
+            self.defer_build = None
 
     def _pick_query_definitions_employee(self):
         query_definition_generator = SQLDefinitionGenerator()
