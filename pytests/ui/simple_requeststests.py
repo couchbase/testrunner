@@ -32,7 +32,7 @@ class SimpleRequests(BaseTestCase):
                     "settings/indexes", "diag",
                     #"diag/ale", MB-15080
                     "pools/default/rebalanceProgress", "pools/default/tasks", "index.html", "sasl_logs", "sasl_logs",
-                    "erlwsh/", "couchBase", "sampleBuckets"]:
+                    "couchBase", "sampleBuckets"]:
             url = rest.baseUrl + api
             self.log.info("GET " + url)
             status, content, header = rest._http_request(url)
