@@ -60,9 +60,17 @@ class SGInstallerTest(GatewayBaseTest):
             self.check_normal_error_output(shell, output, error)
             self.assertTrue(self.is_sync_gateway_service_running(shell))
             self.assertTrue(self.is_sync_gateway_process_running(shell))
+            if not "--runbase" in self.extra_param:
+                # hardcoded for services LOGS_TEMPLATE_VAR=${RUNBASE_TEMPLATE_VAR}/logs
+                self.datadir='/home/sync_gateway'
+            if not "--logsdir" in self.extra_param:
+                self.logsdir='/home/sync_gateway/logs'
+            if not "--cfgpath" in self.extra_param:
+                self.configdir='/home/sync_gateway'
             self.assertTrue(shell.file_exists(self.logsdir, 'sync_gateway_error.log'))
             self.assertTrue(shell.file_exists(self.datadir, 'data'))
             self.assertTrue(shell.file_exists(self.configdir, self.configfile))
+
 
     def serviceInstallSGPath(self):
         for server in self.servers:
@@ -74,9 +82,9 @@ class SGInstallerTest(GatewayBaseTest):
             self.check_normal_error_output(shell, output, error)
             self.assertTrue(self.is_sync_gateway_service_running(shell))
             self.assertTrue(self.is_sync_gateway_process_running(shell))
-            self.assertTrue(shell.file_exists(self.logsdir, 'sync_gateway_error.log'))
-            self.assertTrue(shell.file_exists(self.datadir, 'data'))
-            self.assertTrue(shell.file_exists(self.configdir, self.configfile))
+            self.assertTrue(shell.file_exists('/home/sync_gateway/logs', 'sync_gateway_error.log'))
+            self.assertTrue(shell.file_exists('/home/sync_gateway', 'data'))
+            self.assertTrue(shell.file_exists('/home/sync_gateway', self.configfile))
 
     def serviceInstallMultipleTimes(self):
         for server in self.servers:
