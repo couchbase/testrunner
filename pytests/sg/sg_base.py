@@ -35,10 +35,9 @@ class GatewayBaseTest(unittest.TestCase):
         self.expected_error = self.input.param("expected_error", "")
         self.servers = self.input.servers
         self.master = self.servers[0]
-        if self.case_number == 1:
-            shell = RemoteMachineShellConnection(self.master)
-            type = shell.extract_remote_info().distribution_type
-            shell.disconnect()
+        shell = RemoteMachineShellConnection(self.master)
+        type = shell.extract_remote_info().distribution_type
+        shell.disconnect()
         self.folder_prefix=""
         if type.lower() == 'windows':
             self.folder_prefix = "/cygdrive/c"
