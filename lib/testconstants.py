@@ -7,12 +7,12 @@ COUCHBASE_DATA_PATH = "/opt/couchbase/var/lib/couchbase/data/"
 # remember update WIN_REGISTER_ID also when update COUCHBASE_VERSION
 COUCHBASE_VERSIONS = ["1.8.0r", "1.8.0", "1.8.1", "2.0.0", "2.0.1", "2.0.2", "2.1.0",
                       "2.1.1", "2.2.0", "2.2.1", "2.5.0", "2.5.1", "2.5.2", "3.0.0",
-                      "3.0.1", "3.0.2", "3.0.3", "3.5.0", "4.0.0"]
+                      "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.5.0", "4.0.0"]
 COUCHBASE_VERSION_2 = ["2.0.0", "2.0.1", "2.0.2", "2.1.0", "2.1.1", "2.2.0", "2.2.1",
                        "2.5.0", "2.5.1", "2.5.2"]
-COUCHBASE_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.5.0"]
+COUCHBASE_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.5.0"]
 COUCHBASE_VERSION_4 = ["4.0.0"]
-WIN_CB_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.5.0"]
+WIN_CB_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.5.0"]
 SHERLOCK_VERSION = ["3.5.0", "4.0.0"]
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
@@ -30,6 +30,7 @@ WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F", "170":"AF3F80E
                    "252":"6E10D93C-76E0-DCA4-2111-73265D001F56",
                    "300":"3D361F67-7170-4CB4-494C-3E4E887BC0B3", "301":"3D361F67-7170-4CB4-494C-3E4E887BC0B3",
                    "302":"DD309984-2414-FDF4-11AA-85A733064291", "303":"0410F3F3-9F5F-5614-51EC-7DC9F7050055",
+                   "310":"5E5D7293-AC1D-3424-E583-0644411FDA20",
                    "350":"24D9F882-481C-2B04-0572-00B273CE17B3", "400": "24D9F882-481C-2B04-0572-00B273CE17B3"}
 """ This "220":"CC4CF619-03B8-462A-8CCE-7CA1C22B337B" is for build 2.2.0-821 and earlier
     The new build register ID for 2.2.0-837 id is set in create_windows_capture_file in remote_util
