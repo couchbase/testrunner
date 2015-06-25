@@ -124,7 +124,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
             return output_str, error
 
     def check_status_in_gateway_log(self, shell):
-        output, error = shell.execute_command_raw('tail -1 ~/gateway.log')
+        output, error = shell.execute_command_raw('tail -1 /tmp/gateway.log')
         shell.log_command_output(output, error)
         status = re.search(".* got status (\w+)", output[0])
         if not status:
