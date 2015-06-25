@@ -155,7 +155,6 @@ class SGWebHookTest(GatewayWebhookBaseTest):
             self.assertFalse(success)
             shell.disconnect()
 
-    #https://github.com/couchbase/sync_gateway/issues/661
     def webHookBadEventHandlers(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
@@ -164,7 +163,7 @@ class SGWebHookTest(GatewayWebhookBaseTest):
             self.assertTrue(success)
             self.assertFalse(self.check_message_in_gatewaylog(shell,
                             'Event queue worker sending event Document change event for doc id'))
-            self.assertTrue(self.check_message_in_gatewaylog(shell,
+            self.assertFalse(self.check_message_in_gatewaylog(shell,
                             'FATAL:'))
             shell.disconnect()
 
