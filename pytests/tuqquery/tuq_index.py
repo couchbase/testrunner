@@ -71,10 +71,11 @@ class QueriesViewsTests(QueryTests):
                     created_indexes.append(view_name)
                     self.test_case()
             except Exception, ex:
-                content = self.cluster.query_view(self.master, "ddl_%s" % view_name, view_name, {"stale" : "ok"},
-                                                  bucket="default", retry_time=1)
-                self.log.info("Generated view has %s items" % len(content['rows']))
-                raise ex
+                if self.index_type == 'VIEW':
+                    content = self.cluster.query_view(self.master, "ddl_%s" % view_name, view_name, {"stale" : "ok"},
+                                                      bucket="default", retry_time=1)
+                    self.log.info("Generated view has %s items" % len(content['rows']))
+                    raise ex
             finally:
                 for view_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, view_name, self.index_type)

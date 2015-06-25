@@ -104,7 +104,7 @@ class NULLTests(QueryTests):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-            expected_result = [{"compare" : doc["coverage_tests"]['P0'] is None}
+            expected_result = [{"compare" : 'P0' in doc["coverage_tests"] and doc["coverage_tests"]['P0'] is None}
                                for doc in self.full_list]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
@@ -115,7 +115,7 @@ class NULLTests(QueryTests):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-            expected_result = [{"compare" : doc["coverage_tests"]['P0'] is not None}
+            expected_result = [{"compare" : 'P0' in doc["coverage_tests"] and doc["coverage_tests"]['P0'] is not None}
                                for doc in self.full_list]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
@@ -164,7 +164,7 @@ class NULLTests(QueryTests):
                                 'jira_tickets' : doc['jira_tickets']}
                                for doc in self.full_list
                                if len([t for t in doc["jira_tickets"]
-                                       if 'description' not in t]) > 0]
+                                       if 'description' in t]) > 0]
             expected_result = sorted(expected_result, key=lambda doc: (doc['feature_name']))
             self._verify_results(actual_result['results'], expected_result)
 
