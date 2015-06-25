@@ -111,7 +111,12 @@ class OptionsRestTests(QueryTests):
     def test_readonly(self):
        for bucket in self.buckets:
             self.query = 'INSERT into %s (key, value) VALUES ("%s", "%s")' % (bucket.name, 'key3', 'value3')
-            actual_result = self.run_cbq_query(query_params= {'readonly':True})
+            try:
+                actual_result = self.run_cbq_query(query_params= {'readonly':True})
+            except:
+                pass
+            else:
+                self.fail('Error for ro request expected')
 
     def test_signature(self):
         for bucket in self.buckets:
