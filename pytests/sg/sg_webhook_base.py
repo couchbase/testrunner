@@ -65,7 +65,7 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
             return dic
 
     def check_status_in_gateway_log(self, shell):
-        output, error = shell.execute_command_raw('tail -1 ~/gateway.log')
+        output, error = shell.execute_command_raw('tail -1 /tmp/gateway.log')
         shell.log_command_output(output, error)
         status = re.search(".* got status (\w+)", output[0])
         if not status:
@@ -75,7 +75,7 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
             return status.group(1)
 
     def check_message_in_gatewaylog(self, shell, expected_error):
-        output, error = shell.execute_command_raw('grep \'{0}\' ~/gateway.log'.format(expected_error))
+        output, error = shell.execute_command_raw('grep \'{0}\' /tmp/gateway.log'.format(expected_error))
         shell.log_command_output(output, error)
         if not output or not output[0]:
             self.log.info('check_message_in_gatewaylog did not find expected error - {0}'.format(expected_error))
