@@ -1,12 +1,12 @@
 #TODO: allow workers to pull this from cache
 
-RABBITMQ_IP = "127.0.0.1"
+RABBITMQ_IP = "10.1.2.77"
 RABBITMQ_LOG_LOCATION = ""
 CB_CLUSTER_TAG = "view"
 
 # Add location of cluster's .ini(from where this script is run) for installation
 CLUSTER_INI = "/root/details/n1ql_linux/system_config.ini"
-CLUSTER_RAM_QUOTA = "21000"
+CLUSTER_RAM_QUOTA = "19000"
 
 # Add cluster setup json path, templates in triple quoted strings
 SETUP_JSON = "/root/n1ql_sysTest/testrunner/pysystests/tests/n1ql/n1ql_setup.js"
@@ -30,30 +30,31 @@ OBJECT_CACHE_IP = "10.1.2.80"
 OBJECT_CACHE_PORT = "11911"
 
 # Add CBMonitor IP, absolute dir path and log location
-SERIESLY_IP = '127.0.0.1'
+SERIESLY_IP = '10.1.2.82'
 SERIESLY_LOCATION = "/opt/go/bin"
 CBMONITOR_HOME_DIR = "/root/cbmonitor"
 SERIESLY_DB_LOCATION = "/root/db"
 
 # Must-fill params
-COUCHBASE_IP = '127.0.0.1'
+COUCHBASE_IP = '10.6.2.164'
 COUCHBASE_PORT = '8091'
 COUCHBASE_USER = "Administrator"
-COUCHBASE_PWD = "password"
+COUCHBASE_PWD = ""
 COUCHBASE_OS = "windows" # linux|windows|unix
 
-COUCHBASE_SSH_USER = "root"
-COUCHBASE_SSH_PASSWORD = "couchbase"
-SSH_USER = "root"
-SSH_PASSWORD = "couchbase"
-WORKERS = ['127.0.0.1']
+COUCHBASE_SSH_USER = ""
+COUCHBASE_SSH_PASSWORD = ""
+SSH_USER = ""
+SSH_PASSWORD = ""
+WORKERS = ['10.1.2.80']
 # valid configs ["kv","query","admin"] or ["all"]
 WORKER_CONFIGS = ["all"]
 WORKER_PYSYSTESTS_PATH = "/root/n1ql_sysTest/testrunner/pysystests"
 
 # CHANGE THIS! to match all clusters will be managed by this worker
-# ex.
-CLUSTER_IPS = ["127.0.0.1:9000","127.0.0.1:9001","127.0.0.1:9002","127.0.0.1:9003"]
+# ex. CLUSTER_IPS = ["127.0.0.1:9000","127.0.0.1:9001","127.0.0.1:9002","127.0.0.1:9003"]
+CLUSTER_IPS = ["10.6.2.164","10.6.2.167","10.6.2.168","10.6.2.194","10.6.2.195","10.6.2.233"]
+#CLUSTER_IPS = ["10.6.2.234","10.6.2.233", "10.6.2.164"]
 # xdcr config
 
 """
