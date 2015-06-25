@@ -1776,8 +1776,7 @@ class QueryTests(BaseTestCase):
         return template
 
     def test_comparition_more_and_less_equal(self):
-        template= "SELECT join_yr, test_rate FROM %s WHERE "+\
-            "join_yr >= 2010 AND test_rate <= 4"
+        template= "SELECT join_yr, test_rate FROM %s WHERE join_yr >= 2010 AND test_rate <= 4"
         for bucket in self.buckets:
             self.query = template % (bucket.name)
             actual_result = self.run_cbq_query()
@@ -1825,15 +1824,7 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = "SELECT meta(default).id, meta(default).type FROM %s" % (bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'], key=lambda doc: (
-                                                                       doc['years'], doc['rate']))
-
-            expected_result = [{"years": len([doc['join_yr'] for doc in self.full_list]),
-                                "rate": sum([doc['test_rate'] for doc in self.full_list])}
-                               for doc in self.full_list
-                               if len([doc['join_yr'] for doc in self.full_list])]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['years'], doc['rate']))
-            self._verify_results(actual_result, expected_result)
+            actual_result = sorted(actual_result['results'])
 
     def test_comparition_more_less_equal(self):
         for bucket in self.buckets:
