@@ -8,7 +8,7 @@ from datetime import datetime
 import subprocess
 import platform
 
-sys.path.extend(('.', 'lib'))
+sys.path = [".", "lib"] + sys.path
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
 import TestInput
 
