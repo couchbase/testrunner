@@ -598,8 +598,8 @@ class QueriesViewsTests(QueryTests):
             try:
                 for attr in ['join_day', 'join_mo']:
                     index_name = '%s_%s' % (index_name_prefix, attr)
-                    self.query = "CREATE INDEX %s ON %s(%s) " % (index_name,
-                                                                    bucket.name, attr)
+                    self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name,
+                                                                    bucket.name, attr, self.index_type)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append('%s_%s' % (index_name_prefix, attr))
@@ -608,7 +608,10 @@ class QueriesViewsTests(QueryTests):
             finally:
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
-                    self.run_cbq_query()
+                    try:
+                        self.run_cbq_query()
+                    except:
+                        pass
 
     def test_run_query(self):
         indexes = []

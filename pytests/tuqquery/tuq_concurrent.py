@@ -132,7 +132,10 @@ class ConcurrentTests(QueryTests):
             for bucket in self.buckets:
                 for index_name in set(created_indexes):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
-                    self.run_cbq_query()
+                    try:
+                        self.run_cbq_query()
+                    except:
+                        pass
 
     def query_thread(self, method_name):
         try:
