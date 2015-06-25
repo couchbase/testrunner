@@ -6,6 +6,7 @@ import random
 from random import randint
 import datetime
 from couchbase.bucket import Bucket
+from couchbase.exceptions import TimeoutError
 
 doc_template = "{\\\"AirItinerary\\\":" +\
                             "{\\\"DirectionInd\\\":$18," +\
@@ -229,11 +230,22 @@ def runNQueryParam(query, param, server_ip):
 
 def runSDKQuery(keys, servers_ips, buckets):
     cbs = []
-    for bucket in buckets:
-        cbs.append(Bucket('couchbase://%s/%s' % (','.join(servers_ips), bucket)))
+    srv = servers_ips
+    if isinstance(servers_ips, list):
+        srv = ','.join(servers_ips)
+    if isinstance(buckets, str):
+        cbs.append(Bucket('couchbase://%s/%s' % (srv, buckets)))
+    else:
+        for bucket in buckets:
+            cbs.append(Bucket('couchbase://%s/%s' % (srv, bucket)))
 
     for cb in cbs:
-        out = cb.insert_multi(keys)
+        try:
+            print 'Inserting %s docs...' % len(keys)
+            out = cb.insert_multi(keys)
+        except TimeoutError, ex:
+            out = str(ex)
+            print 'WARNING: Not all documents were inserted because of timeout error!! Please decrease batch size'
     return out
 
 
@@ -475,7 +487,20 @@ def sdk_load_documents(insert_documents, seed, server_ip, batch_size, buckets):
                      sequence_number, #45
                      ticket_type #46
             ]
-            keys[key] == doc_template.format(param)
+            global doc_template
+            template = doc_template
+            template = template.replace('\\"', '"')
+            for p in reversed(xrange(len(param))):
+                if isinstance(param[p], (bool)):
+                    template = template.replace('$%s' % (p + 1), str.lower(str(param[p])))
+                elif isinstance(param[p], (int, float, long)) and not isinstance(param[p], (bool)):
+                    template = template.replace('$%s' % (p + 1), str(param[p]))
+                elif isinstance(param[p], list):
+                    template = template.replace('$%s' % (p + 1), str(param[p]))
+                else:
+                    template = template.replace('$%s' % (p + 1), '"' + str(param[p]) + '"')
+            template = template.replace("'", '"')
+            keys[key] = json.loads(template)
             j += 1
         print list(q)[0]
         r = runSDKQuery(keys, server_ip, buckets)
@@ -502,13 +527,14 @@ queryNode = str(args['queryNode'])
 if queryNode.find(';') != -1:
     queryNode = queryNode.split(';')
 queryBuckets = 'default'
-if 'queryBuckets' in args:
-    str(args['queryBuckets']).split[';']
+if args['queryBuckets']:
+    queryBuckets = str(args['queryBuckets']).split[';']
 batchSize = 1
 if 'queryBatchSize' in args:
     batchSize = int(args['queryBatchSize'])
+print 'Batch size: %s' % batchSize
 #Create random insert key
-seed = "sabre_" + str(randint(1,100000))
+seed = "sabre_" + str(randint(1, 100000))
 
 print "------------ Begin Inserts  ------------"
 if isinstance(queryNode, list) or batchSize > 1 or isinstance(queryBuckets, list):
