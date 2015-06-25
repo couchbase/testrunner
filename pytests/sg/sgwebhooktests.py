@@ -145,17 +145,14 @@ class SGWebHookTest(GatewayWebhookBaseTest):
                             'function processing aborted: SyntaxError: Unexpected token'))
             shell.disconnect()
 
-    #https://github.com/couchbase/sync_gateway/issues/661
     def webHookBadEvent(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
-            self.start_sync_gateway(shell, self.configfile)
-            success, revision, status = self.create_doc_no_post(shell, self.doc_id, self.doc_content)
-            self.assertTrue(success)
-            self.assertFalse(self.check_message_in_gatewaylog(shell,
-                            'Event queue worker sending event Document change event for doc id'))
+            self.assertFalse(self.start_sync_gateway(shell, self.configfile))
             self.assertTrue(self.check_message_in_gatewaylog(shell,
-                            'FATAL:'))
+                            'FATAL: Error opening database: Unsupported event property '))
+            success, _, _ = self.create_doc_no_post(shell, self.doc_id, self.doc_content)
+            self.assertFalse(success)
             shell.disconnect()
 
     #https://github.com/couchbase/sync_gateway/issues/661

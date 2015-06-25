@@ -37,6 +37,8 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
     def start_sync_gateway(self, shell, config_filename):
         self.log.info('=== start_sync_gateway with config file {0}.'.format(config_filename))
         shell.execute_command('killall -9 sync_gateway')
+        output, error = shell.execute_command('cat /tmp/{0}'.format(config_filename))
+        shell.log_command_output(output, error)
         output, error = shell.execute_command_raw('nohup /opt/couchbase-sync-gateway/bin/sync_gateway'
                                                   ' /tmp/{0} >/tmp/gateway.log 2>&1 &'.format(config_filename))
         shell.log_command_output(output, error)
@@ -50,6 +52,8 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
                 return True
         else:
             self.log.info('start_sync_gateway - Sync Gateway is NOT running')
+            output, error = shell.execute_command('cat /tmp/gateway.log')
+            shell.log_command_output(output, error)
             return False
 
     def send_request(self, shell, method, doc_name, content):
