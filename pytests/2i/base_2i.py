@@ -693,8 +693,9 @@ class BaseSecondaryIndexingTests(QueryTests):
                 task.result()
             if self.defer_build:
                 for bucket_name in build_index_map.keys():
-                    build_index_task = self.async_build_index(bucket_name, build_index_map[bucket_name])
-                    build_index_task.result()
+                    if len(build_index_map[bucket_name]) > 0:
+                        build_index_task = self.async_build_index(bucket_name, build_index_map[bucket_name])
+                        build_index_task.result()
                 monitor_index_tasks = []
                 for bucket_name in build_index_map.keys():
                     for index_name in build_index_map[bucket_name]:
