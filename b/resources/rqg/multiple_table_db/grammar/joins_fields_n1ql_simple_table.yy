@@ -15,7 +15,7 @@ direction:
 	ASC | DESC;
 
 select_from:
-	*  | field_list | DISTINCT(field);
+	OUTER_BUCKET_NAME.* ;
 
 joins:
 	join_type BUCKET_NAME ON ( PREVIOUS_TABLE.FIELD = CURRENT_TABLE.FIELD ) | joins join_type BUCKET_NAME ON ( PREVIOUS_TABLE.FIELD = CURRENT_TABLE.FIELD ) |  join_type BUCKET_NAME ON ( PREVIOUS_TABLE.FIELD = CURRENT_TABLE.FIELD ) joins ;

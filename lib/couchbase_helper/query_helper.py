@@ -576,6 +576,9 @@ class QueryHelper(object):
             new_sql = new_sql.replace("NUMERIC_FIELD", random.choice(numeric_field_names))
         if "DATETIME_FIELD"  in sql:
             new_sql = new_sql.replace("DATETIME_FIELD", random.choice(datetime_field_names))
+        if "OUTER_BUCKET_NAME.*" in new_sql:
+            projection = " "+table_map[table_map.keys()[0]]["alias_name"]+".* "
+            new_sql = new_sql.replace("OUTER_BUCKET_NAME.*",projection)
         return new_sql
 
     def _convert_sql_template_to_value_nested_subqueries(self, n1ql_template =""):
@@ -657,13 +660,6 @@ class QueryHelper(object):
                             "name":index_name_with_occur_fields_where,
                             "type":"GSI",
                             "definition":create_index_fields_occur_with_where
-                        }
-        if index_name_fields_only:
-            map["indexes"][index_name_fields_only] = \
-                        {
-                            "name":index_name_fields_only,
-                            "type":"GSI",
-                            "definition":create_index_name_fields_only
                         }
         if index_name_with_expression:
             map["indexes"][index_name_with_expression] = \
