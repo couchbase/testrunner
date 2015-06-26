@@ -107,6 +107,11 @@ class N1QLHelper():
             raise Exception(msg)
 
     def _verify_results_rqg(self, n1ql_result = [], sql_result = [], hints = ["a1"]):
+        new_n1ql_result = []
+        for result in n1ql_result:
+            if result != {}:
+                new_n1ql_result.append(result)
+        n1ql_result = new_n1ql_result
         if self._is_function_in_result(hints):
             return self._verify_results_rqg_for_function(n1ql_result, sql_result)
         check = self._check_sample(n1ql_result, hints)
