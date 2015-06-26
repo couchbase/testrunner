@@ -675,9 +675,10 @@ class BaseSecondaryIndexingTests(QueryTests):
         while x > -1:
             tasks = []
             build_index_map ={}
+            for bucket in buckets:
+                build_index_map[bucket.name]=[]
             for server in index_nodes:
                 for bucket in buckets:
-                    build_index_map[bucket.name]=[]
                     if (x > -1):
                         key = "{0}:{1}".format(bucket.name, query_definitions[x].index_name)
                         if (key not in refer_index):
