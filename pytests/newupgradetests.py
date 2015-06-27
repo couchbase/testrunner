@@ -84,6 +84,27 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
             self.fail("Upgrade should fail!")
         remote.disconnect()
 
+class Upgrade_Utils(NewUpgradeBaseTest):
+    def setUp(self):
+        super(Upgrade_Utils, self).setUp()
+        self.nodes_init = self.input.param('nodes_init', 2)
+        self.queue = Queue.Queue()
+
+
+    def tearDown(self):
+        print "teardown done"
+
+    def add_and_rebalance(self):
+        self._install(self.servers[:self.nodes_init])
+        self.operations(self.servers[:self.nodes_init])
+        self.initial_version = self.upgrade_versions[0]
+        self.product = 'couchbase-server'
+        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
+                       format(self.initial_version))
+        self._install(self.servers[self.nodes_init:self.num_servers])
+
+
+
 class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def setUp(self):
         super(MultiNodesUpgradeTests, self).setUp()
@@ -581,6 +602,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.monitor_dcp_rebalance()
 
         self.verification(new_servers)
+
 
     def online_upgrade_add_services(self):
         half_node = len(self.servers) / 2
