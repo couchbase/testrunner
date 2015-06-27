@@ -82,7 +82,7 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
 
             if self.rep_type == "xmem":
                 self.assertEqual(src_stat_ep_num_ops_del_meta_res_fail, dest_stat_ep_num_ops_del_meta, "Number of failed delete [%s] operation occurs at bucket = %s, while expected to %s" % (src_stat_ep_num_ops_del_meta_res_fail, bucket, dest_stat_ep_num_ops_del_meta))
-                self.assertTrue(src_stat_ep_num_ops_set_meta_res_fail > 0, "Number of failed set [%s] operation occurs at bucket = %s, while expected greater than 0" % (src_stat_ep_num_ops_set_meta_res_fail, bucket))
+                self.assertTrue(src_stat_ep_num_ops_set_meta_res_fail == 0, "Number of failed set [%s] operation occurs at bucket = %s, while expected 0" % (src_stat_ep_num_ops_set_meta_res_fail, bucket))
 
             elif self.rep_type == "capi":
                 self.assertTrue(src_stat_ep_num_ops_get_meta > 0, "Number of get [%s] operation occurs at bucket = %s, while expected greater than 0" % (src_stat_ep_num_ops_get_meta, bucket))
