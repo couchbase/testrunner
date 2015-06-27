@@ -475,6 +475,7 @@ class QueryHelper(object):
         values = "( "+values_string[0:len(values_string)-1]+" ) "
         return intial_statement+column_names+" VALUES "+values
 
+
     def _generate_insert_statement(self, table_name ="TABLE_NAME", table_map ={}, primary_key=""):
         values = ""
         intial_statement = ""

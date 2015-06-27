@@ -127,7 +127,32 @@ class N1QLHelper():
             raise Exception("Results are incorrect.Actual num %s. Expected num: %s.:: %s \n" % (
                                             len(actual_result), len(expected_result), extra_msg))
         msg = "The number of rows match but the results mismatch, please check"
-        if actual_result != expected_result:
+        if sorted(actual_result) != sorted(expected_result):
+            extra_msg = self._get_failure_message(expected_result, actual_result)
+            raise Exception(msg+"\n "+extra_msg)
+
+    def _verify_results_crud_rqg(self, n1ql_result = [], sql_result = [], hints = ["a1"]):
+        new_n1ql_result = []
+        for result in n1ql_result:
+            if result != {}:
+                new_n1ql_result.append(result)
+        n1ql_result = new_n1ql_result
+        if self._is_function_in_result(hints):
+            return self._verify_results_rqg_for_function(n1ql_result, sql_result)
+        check = self._check_sample(n1ql_result, hints)
+        actual_result = n1ql_result
+        if actual_result == [{}]:
+            actual_result = []
+        if check:
+            actual_result = self._gen_dict(n1ql_result)
+        actual_result = sorted(actual_result)
+        expected_result = sorted(sql_result)
+        if len(actual_result) != len(expected_result):
+            extra_msg = self._get_failure_message(expected_result, actual_result)
+            raise Exception("Results are incorrect.Actual num %s. Expected num: %s.:: %s \n" % (
+                                            len(actual_result), len(expected_result), extra_msg))
+        msg = "The number of rows match but the results mismatch, please check"
+        if not self._result_comparison_analysis(actual_result,expected_result) :
             extra_msg = self._get_failure_message(expected_result, actual_result)
             raise Exception(msg+"\n "+extra_msg)
 
@@ -142,6 +167,29 @@ class N1QLHelper():
         len_actual_result = min(5,len_actual_result)
         extra_msg = "mismatch in results :: expected :: {0}, actual :: {1} ".format(expected_result[0:len_expected_result], actual_result[0:len_actual_result])
         return extra_msg
+
+    def _result_comparison_analysis(self, expected_result, actual_result):
+        expected_map ={}
+        actual_map ={}
+        for data in expected_result:
+            primary=None
+            for key in data.keys():
+                keys = key
+                if keys.encode('ascii') == "primary_key_id":
+                    primary = keys
+            expected_map[data[primary]] = data
+        for data in actual_result:
+            primary=None
+            for key in data.keys():
+                keys = key
+                if keys.encode('ascii') == "primary_key_id":
+                    primary = keys
+            actual_map[data[primary]] = data
+        check = True
+        for key in expected_map.keys():
+            if sorted(actual_map[key]) != sorted(expected_map[key]):
+                check= False
+        return check
 
     def _analyze_for_special_case_using_func(self, expected_result, actual_result):
         if expected_result == None:

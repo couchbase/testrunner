@@ -414,6 +414,9 @@ class RQGTests(BaseTestCase):
 
     def test_rqg_crud_update(self):
         # Get Data Map
+        verification_query = "SELECT * FROM simple_table"
+        query_index_run = self._run_queries_and_verify(n1ql_query = verification_query , sql_query = verification_query, expected_result = None)
+        self.log.info(query_index_run)
         table_map = self.client._get_values_with_type_for_fields_in_table()
         check = True
         failure_map = {}
@@ -672,8 +675,8 @@ class RQGTests(BaseTestCase):
         result_run["test_case_number"] = test_case_number
         self.n1ql_helper.run_cbq_query(n1ql_query, self.n1ql_server)
         self.client._db_execute_query(query = sql_query)
-        query_index_run = self._run_queries_and_verify(n1ql_query = verification_query , sql_query = verification_query, expected_result = None)
-        result_run["update_test"] = query_index_run
+        query_index_run = self._run_queries_and_verify_crud(n1ql_query = verification_query , sql_query = verification_query, expected_result = None)
+        result_run["crud_verification_test"] = query_index_run
         result_queue.put(result_run)
         self._check_and_push_failure_record_queue(result_run, test_data, failure_record_queue)
         self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
@@ -940,7 +943,7 @@ class RQGTests(BaseTestCase):
         # Run n1ql query
         hints = self.query_helper._find_hints(sql_query)
         try:
-            actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server)
+            actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
             #self.log.info(actual_result)
             # Run SQL Query
@@ -960,6 +963,32 @@ class RQGTests(BaseTestCase):
         except Exception, ex:
             return {"success":False, "result": str(ex)}
 
+    def _run_queries_and_verify_crud(self, n1ql_query = None, sql_query = None, expected_result = None):
+        self.log.info(" SQL QUERY :: {0}".format(sql_query))
+        self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
+        result_run = {}
+        # Run n1ql query
+        hints = self.query_helper._find_hints(sql_query)
+        try:
+            actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, scan_consistency="request_plus")
+            n1ql_result = actual_result["results"]
+            #self.log.info(actual_result)
+            # Run SQL Query
+            sql_result = expected_result
+            if expected_result == None:
+                columns, rows = self.client._execute_query(query = sql_query)
+                sql_result = self.client._gen_json_from_results(columns, rows)
+            #self.log.info(sql_result)
+            self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
+            self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
+            try:
+                self.n1ql_helper._verify_results_crud_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
+            except Exception, ex:
+                self.log.info(ex)
+                return {"success":False, "result": str(ex)}
+            return {"success":True, "result": "Pass"}
+        except Exception, ex:
+            return {"success":False, "result": str(ex)}
     def _run_queries_compare(self, n1ql_query = None, sql_query = None, expected_result = None):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
@@ -1463,6 +1492,7 @@ class RQGTests(BaseTestCase):
                 if bucket.name == bucket_name:
                     self._load_data_in_buckets_using_n1ql(bucket, self.record_db[bucket_name])
 
+
     def _populate_delta_buckets(self):
         table_key_map = self.client._get_primary_key_map_for_tables()
         bucket_list = table_key_map.keys()
@@ -1484,7 +1514,6 @@ class RQGTests(BaseTestCase):
                     for key in new_db_info.keys():
                         insert_sql = self.query_helper._generate_insert_statement_from_data(bucket_name,new_db_info[key])
                         self.client._insert_execute_query(insert_sql)
-
 
 
 
