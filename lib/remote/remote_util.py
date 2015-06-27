@@ -2825,7 +2825,7 @@ class RemoteMachineShellConnection:
                 if o == "":
                     log.error("Could not install openssl in opensuse/SUSE")
         sherlock = ["3.5", "4.0"]
-        if version[:3] not in sherlock:
+        if version[:3] not in sherlock and "SUSE" not in self.info.distribution_type:
             if self.info.deliverable_type == "deb":
                 ubuntu_version = ["12.04", "13.04"]
                 o, r = self.execute_command("lsb_release -r")
@@ -2859,7 +2859,8 @@ class RemoteMachineShellConnection:
                                     o, r = self.execute_command("dpkg --get-selections | grep libssl")
                                     log.info("package {0} should not appear below".format(s[:11]))
                                     self.log_command_output(o, r)
-            if self.info.deliverable_type == "rpm":
+            if self.info.deliverable_type == "rpm" and \
+                            "SUSE" not in self.info.distribution_type:
                 centos_version = ["6.4"]
                 o, r = self.execute_command("cat /etc/redhat-release")
                 self.log_command_output(o, r)

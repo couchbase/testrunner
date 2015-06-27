@@ -607,7 +607,11 @@ class BuildQuery(object):
             build.url = repo + build.toy + "/" +build_number \
                         + "/" + build.name
         else:
+            if "suse" in distribution_version:
+                build.distribution_version = "suse11"
+                os_name = "suse11"
             build.name = edition_type + joint_char + os_name + \
+                version_join_char + \
                 build.architecture_type +  version_join_char + \
                 build.product_version + "." + setup + build.deliverable_type
             build.url = repo + build.name
