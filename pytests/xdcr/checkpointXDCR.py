@@ -188,7 +188,6 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
 
     """ From destination couchdb log tells if checkpointing was successful """
     def was_checkpointing_successful(self):
-        self.sleep(30)
         node = self.get_active_vb0_node(self.dest_master)
         total_commit_calls, success, failures = self.get_checkpoint_call_history(node)
         if success > self.num_successful_chkpts_so_far :
@@ -243,13 +242,13 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         # get vb0 active source node
         active_src_node = self.get_active_vb0_node(self.src_master)
         while count <=n:
-            self.sleep(self._checkpoint_interval + 10)
             remote_vbuuid, remote_highseqno = self.get_failover_log(self.dest_master)
             local_vbuuid, local_highseqno = self.get_failover_log(self.src_master)
             self.log.info("Local failover log: [{0}, {1}]".format(local_vbuuid,local_highseqno))
             self.log.info("Remote failover log: [{0}, {1}]".format(remote_vbuuid,remote_highseqno))
             self.log.info("################ New mutation:{0} ##################".format(self.key_counter+1))
             self.load_one_mutation_into_source_vb0(active_src_node)
+            self.sleep(self._checkpoint_interval)
             if local_highseqno == "0":
                 # avoid checking very first/empty checkpoint record
                 count += 1
@@ -261,6 +260,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                 self.log.info("Checkpointing failed - may not be an error if vb_uuid changed ")
                 return False
             count += 1
+
         return True
 
     """ Verify checkpoint 404 error thrown when the dest node containing vb0 is no more a part of cluster """
