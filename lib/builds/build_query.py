@@ -606,12 +606,31 @@ class BuildQuery(object):
                    "." + build.deliverable_type
             build.url = repo + build.toy + "/" +build_number \
                         + "/" + build.name
-        else:
+        elif version[:3] == "3.1":
+            os_name = ""
             if "suse" in distribution_version:
                 build.distribution_version = "suse11"
-                os_name = "suse11"
+                os_name = "suse11_"
+            elif "centos release 6" in distribution_version:
+                build.distribution_version = "centos6"
+                os_name = "centos6_"
+            elif  "ubuntu 12.04" in distribution_version:
+                os_name = "ubuntu_1204_"
+            elif "debian gnu/linux 7" in distribution_version:
+                build.distribution_version = "debian7"
+                os_name = "debian7_"
+            elif "windows" in distribution_version:
+                os_name = "windows"
+                if "x86_64" not in architecture_type:
+                    build.architecture_type = "x86"
+            elif "mac" in distribution_type:
+                build.architecture_type = "x86_64"
             build.name = edition_type + joint_char + os_name + \
-                version_join_char + \
+                build.architecture_type +  version_join_char + \
+                build.product_version + "." + setup + build.deliverable_type
+            build.url = repo + build.name
+        else:
+            build.name = edition_type + joint_char + os_name + \
                 build.architecture_type +  version_join_char + \
                 build.product_version + "." + setup + build.deliverable_type
             build.url = repo + build.name
