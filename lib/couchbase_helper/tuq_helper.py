@@ -127,9 +127,15 @@ class N1QLHelper():
             raise Exception("Results are incorrect.Actual num %s. Expected num: %s.:: %s \n" % (
                                             len(actual_result), len(expected_result), extra_msg))
         msg = "The number of rows match but the results mismatch, please check"
-        if sorted(actual_result) != sorted(expected_result):
+        if self._sort_data(actual_result) != self._sort_data(expected_result):
             extra_msg = self._get_failure_message(expected_result, actual_result)
             raise Exception(msg+"\n "+extra_msg)
+
+    def _sort_data(self, result):
+        new_data =[]
+        for data in result:
+            new_data.append(sorted(data))
+        return new_data
 
     def _verify_results_crud_rqg(self, n1ql_result = [], sql_result = [], hints = ["a1"]):
         new_n1ql_result = []
