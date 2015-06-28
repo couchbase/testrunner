@@ -68,25 +68,6 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
             dic = json.loads(output[0])
             return dic
 
-    def check_status_in_gateway_log(self, shell):
-        output, error = shell.execute_command_raw('tail -1 /tmp/gateway.log')
-        shell.log_command_output(output, error)
-        status = re.search(".* got status (\w+)", output[0])
-        if not status:
-            self.log.info('check_status_in_gateway_log failed, sync_gateway log has - {0}'.format(output[0]))
-            return ''
-        else:
-            return status.group(1)
-
-    def check_message_in_gatewaylog(self, shell, expected_error):
-        output, error = shell.execute_command_raw('grep \'{0}\' /tmp/gateway.log'.format(expected_error))
-        shell.log_command_output(output, error)
-        if not output or not output[0]:
-            self.log.info('check_message_in_gatewaylog did not find expected error - {0}'.format(expected_error))
-            return False
-        else:
-            return True
-
     def check_post_contents(self, doc_content, post_dic):
         doc_content_dic = json.loads(doc_content)
         if not doc_content_dic:
