@@ -160,6 +160,7 @@ class GatewayBaseTest(unittest.TestCase):
     def start_simpleServe(self, shell):
         self.log.info('=== Starting SimpleServe instances')
         shell.execute_command('killall -9 simpleServe.go')
+        shell.execute_command("kill $(ps aux | grep '8081' | awk '{print $2}')")
         shell.copy_file_local_to_remote("pytests/sg/simpleServe.go", "/tmp/simpleServe.go")
         output, error = shell.execute_command_raw('go run /tmp/simpleServe.go 8081'
                                                   '  >/tmp/simpleServe.txt 2>&1 &')
