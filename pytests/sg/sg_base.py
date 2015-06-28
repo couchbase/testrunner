@@ -3,6 +3,7 @@ import unittest
 from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 import re
+import time
 import requests
 from requests.exceptions import ConnectionError
 
@@ -431,3 +432,31 @@ class GatewayBaseTest(unittest.TestCase):
         else:
             self.log.info('check_job_already_running is not supported on {0}, {1}'.format(type, distribution_type))
             return False
+
+    def check_status_in_gateway_log(self, shell):
+        output, error = shell.execute_command_raw('tail -5 /tmp/gateway.log')
+        shell.log_command_output(output, error)
+        status = re.search(".* got status (\w+)", output[4])
+        if not status:
+            self.log.info('check_status_in_gateway_log failed, sync_gateway log has: {0}'.format(output[4]))
+            return ''
+        else:
+            return status.group(1)
+
+    def check_message_in_gatewaylog(self, shell, expected_str):
+        if not expected_str:
+            return True
+        for i in range(3):
+            output, error = shell.execute_command_raw('grep \'{0}\' /tmp/gateway.log'.format(expected_str))
+            shell.log_command_output(output, error)
+            if not output or not output[0]:
+                if i < 2:
+                    time.sleep(1)
+                    continue
+                else:
+                    self.log.info('check_message_in_gatewaylog did not find expected error - {0}'.format(expected_str))
+                    output, error = shell.execute_command_raw('cat /tmp/gateway.log')
+                    shell.log_command_output(output, error)
+                    return False
+            else:
+                return True

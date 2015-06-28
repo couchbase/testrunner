@@ -54,8 +54,8 @@ class SGInstallerTest(GatewayBaseTest):
             self.assertTrue(self.service_clean(shell))
             self.assertTrue(self.install_gateway(shell))
             shell.execute_command_raw(
-                'rm -rf {0}/* {1}/* {2}/sync_gateway.json /tmp/test*; mkdir /tmp/test /tmp/test2'.
-                format(self.logsdir, self.datadir, self.configdir))
+                'rm -rf {0}/* {1}/* {2}/sync_gateway.json {3}/tmp/test*; mkdir {3}/tmp/test {3}/tmp/test2'.
+                format(self.logsdir, self.datadir, self.configdir, self.folder_prefix ))
             output, error = self.run_sync_gateway_service_install(shell, self.extra_param)
             self.check_normal_error_output(shell, output, error)
             self.assertTrue(self.is_sync_gateway_service_running(shell))

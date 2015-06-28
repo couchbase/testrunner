@@ -1,10 +1,8 @@
 from sg.sg_base import GatewayBaseTest
 from jinja2 import Environment, FileSystemLoader
 import json
-import time
 import urllib
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
-import re
 
 class GatewayConfigBaseTest(GatewayBaseTest):
 
@@ -122,34 +120,6 @@ class GatewayConfigBaseTest(GatewayBaseTest):
             output_str = ''.join(output)
             self.log.info('Output - {0}'.format(output_str))
             return output_str, error
-
-    def check_status_in_gateway_log(self, shell):
-        output, error = shell.execute_command_raw('tail -1 /tmp/gateway.log')
-        shell.log_command_output(output, error)
-        status = re.search(".* got status (\w+)", output[0])
-        if not status:
-            self.log.info('Create_doc failed, sync_gateway log has - {0}'.format(output[0]))
-            return ''
-        else:
-            return status.group(1)
-
-    def check_message_in_gatewaylog(self, shell, expected_str):
-        if not expected_str:
-            return True
-        for i in range(3):
-            output, error = shell.execute_command_raw('grep \'{0}\' /tmp/gateway.log'.format(expected_str))
-            shell.log_command_output(output, error)
-            if not output or not output[0]:
-                if i < 2:
-                    time.sleep(1)
-                    continue
-                else:
-                    self.log.info('check_message_in_gatewaylog did not find expected error - {0}'.format(expected_str))
-                    output, error = shell.execute_command_raw('cat /tmp/gateway.log')
-                    shell.log_command_output(output, error)
-                    return False
-            else:
-                return True
 
     def create_doc(self, shell):
         self.log.info('=== create_doc({0}) - {1}'.format(self.doc_id, self.doc_content))
