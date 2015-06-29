@@ -409,7 +409,7 @@ def perform_xdcr_tasks(xdcrMsg):
 
     for bucket in buckets:
         xdcr_params={}
-        if bucket in replication_filters.keys():
+        if replication_filters and bucket in replication_filters.keys():
             xdcr_params["filterExpression"] = replication_filters[bucket]
         xdcr_start_replication(src_master, dest_cluster_name, bucket, xdcr_params)
 
