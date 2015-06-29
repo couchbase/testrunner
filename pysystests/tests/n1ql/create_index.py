@@ -154,8 +154,8 @@ BUILD_INDEX = {
     }
 }
 
-def runQueryOnce(query, param, server_ip, build=False):
-    url = "http://" + server_ip + ":8093/query"
+def runQueryOnce(query, param, query_ip, server_ip, build=False):
+    url = "http://" + query_ip + ":8093/query"
     print build
     print param
 
@@ -190,13 +190,15 @@ def runQueryOnce(query, param, server_ip, build=False):
 parser = argparse.ArgumentParser(description='This script is used for sabre indexes')
 parser.add_argument('-i', '--index_type', help='Index Type', required=True)
 parser.add_argument('-q', '--query_node', help='query node ip', required=True)
+parser.add_argument('-idx', '--index_node', help='index node ip', required=True)
 parser.add_argument('-drop', '--drop_index', help='drop index true', required=False)
 parser.add_argument('-bucket', '--bucket_type', help='For sabre| tpcc', required=True)
 
 args = vars(parser.parse_args())
 
 index_type = str(args['index_type'])
-queryNode = str(args['query_node'])
+query_node = str(args['query_node'])
+index_node = str(args['index_node'])
 drop_index = str(args['drop_index'])
 bucket_type = str(args['bucket_type'])
 
@@ -206,14 +208,14 @@ if drop_index == "true":
     for j in range(len_query):
         print list(d)[j]
         k_qry = list(d)[j]
-        r = runQueryOnce(d[k_qry], index_type, queryNode)
+        r = runQueryOnce(d[k_qry], index_type, query_node, index_node)
 
 q = CREATE_INDEX[bucket_type]
 len_query = len(q)
 for j in range(len_query):
     print list(q)[j]
     k_qry = list(q)[j]
-    r = runQueryOnce(q[k_qry], index_type, queryNode)
+    r = runQueryOnce(q[k_qry], index_type, query_node, index_node)
 
 if index_type == "gsi":
     b = BUILD_INDEX[bucket_type]
@@ -221,6 +223,6 @@ if index_type == "gsi":
     for j in range(len_query):
         print list(b)[j]
         k_qry = list(b)[j]
-        r = runQueryOnce(b[k_qry], index_type, queryNode, build=True)
+        r = runQueryOnce(b[k_qry], index_type, query_node, index_node, build=True)
 
 
