@@ -97,13 +97,13 @@ class OptionsRestTests(QueryTests):
 
     def tearDown(self):
         super(OptionsRestTests, self).tearDown()
-        if hasattr(self, 'shell'):
-           o = self.shell.execute_command("ps -aef| grep cbq-engine")
-           if len(o):
-               for cbq_engine in o[0]:
-                   if cbq_engine.find('grep') == -1:
-                       pid = [item for item in cbq_engine.split(' ') if item][1]
-                       self.shell.execute_command("kill -9 %s" % pid)
+        # if hasattr(self, 'shell'):
+        #    o = self.shell.execute_command("ps -aef| grep cbq-engine")
+        #    if len(o):
+        #        for cbq_engine in o[0]:
+        #            if cbq_engine.find('grep') == -1:
+        #                pid = [item for item in cbq_engine.split(' ') if item][1]
+        #                self.shell.execute_command("kill -9 %s" % pid)
 
     def suite_tearDown(self):
         super(OptionsRestTests, self).suite_tearDown()
@@ -130,20 +130,15 @@ class OptionsRestTests(QueryTests):
         self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
             self.query = "SELECT count(name) FROM %s" % (bucket.name)
-            try:
-                actual_result = self.run_cbq_query(query_params= {'timeout':'0.5s'})
-                print actual_result
-            except Exception, ex:
-                self.assertTrue(str(ex).find('timeout') != -1, 'Server timeout did not work')
-                self.log.info('Timeout is on')
-            else:
-                self.assertTrue(actual_result['status'] == 'stopped', 'Server timeout did not work')
+            actual_result = self.run_cbq_query(query_params={'timeout':'0.1s'})
+            print actual_result
+            self.assertEqual(actual_result['status'], 'timeout', 'Request was not timed out')
 
     def test_named_var(self):
         self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
-            self.query = "SELECT count(test_rate) FROM %s where test_rate>$rate_min" % (bucket.name)
-            actual_result = self.run_cbq_query(query_params= {'$rate_min':3})
+            self.query = "SELECT count(test_rate) FROM %s where test_rate>$rate" % (bucket.name)
+            actual_result = self.run_cbq_query(query_params= {'$rate':3})
             self.assertTrue(actual_result['results'], 'There are no results')
 
     def test_args(self):
@@ -159,6 +154,6 @@ class OptionsRestTests(QueryTests):
     def test_named_var_arg(self):
         self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
-            self.query = 'SELECT count($1) FROM %s where test_rate>$rate_min' % (bucket.name)
-            actual_result = self.run_cbq_query(query_params= {'$rate_min':3, 'args' :["test_rate"]})
+            self.query = 'SELECT count($1) FROM %s where test_rate>$rate' % (bucket.name)
+            actual_result = self.run_cbq_query(query_params= {'$rate':3, 'args' :'["test_rate"]'})
             self.assertTrue(actual_result['results'], 'There are no results')

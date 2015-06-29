@@ -104,8 +104,9 @@ class NULLTests(QueryTests):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-            expected_result = [{"compare" : 'P0' in doc["coverage_tests"] and doc["coverage_tests"]['P0'] is None}
+            expected_result = [{"compare" : None if 'P0' not in doc["coverage_tests"] else doc["coverage_tests"]['P0'] is None}
                                for doc in self.full_list]
+            expected_result = [{} if doc['compare'] is None else doc for doc in expected_result]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
@@ -115,8 +116,9 @@ class NULLTests(QueryTests):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-            expected_result = [{"compare" : 'P0' in doc["coverage_tests"] and doc["coverage_tests"]['P0'] is not None}
+            expected_result = [{"compare" : None if 'P0' not in doc["coverage_tests"] else doc["coverage_tests"]['P0'] is not None}
                                for doc in self.full_list]
+            expected_result = [{} if doc['compare'] is None else doc for doc in expected_result]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
