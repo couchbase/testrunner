@@ -101,7 +101,10 @@ numeric_value:
 	NUMERIC_VALUE | TRUNCATE( 1000 * maths_operator( NUMERIC_VALUE ), 0 ) | POWER( NUMERIC_VALUE , 2 ) | ( NUMERIC_VALUE numeric_operator digit ) ;
 
 maths_operator:
-	SIN | LOG | TAN | COS | SQRT | TAN | FLOOR | RADIANS | ASIN | ACOS | ATAN | ABS | CEIL | FLOOR;
+	SIN | LN | TAN | COS | SQRT | TAN | FLOOR | RADIANS | ABS | CEIL | FLOOR;
+
+abs_maths_operator:
+	 ASIN | ACOS | ATAN ;
 
 numeric_operator:
 	+ | - | * | / | %;
@@ -151,7 +154,6 @@ datetime_values:
 # STRING RULES
 
 string_condition:
-	CONTAINS( string_field , string_values ) |
 	string_field < string_values |
 	string_field > string_values |
 	string_field  >= string_values |
@@ -217,10 +219,10 @@ string_values:
 	STRING_VALUES |  string_function( STRING_VALUES ) | SUBSTR( STRING_VALUES, SUBSTR_INDEX ) | CONCAT( STRING_VALUES , characters ) | REPLACE( STRING_VALUES , characters , characters  ) ;
 
 string_function:
-	UPPER | LOWER | LTRIM |  RTRIM | TRIM | TITLE  ;
+	UPPER | LOWER | LTRIM |  RTRIM | TRIM   ;
 
 characters:
-	"a" | "b" | "c" | "c" | "d" | "";
+	"a" | "b" | "c" | "c" | "d" ;
 
 # BOOLEAN RULES
 
