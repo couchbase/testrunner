@@ -229,6 +229,7 @@ class QueriesOpsTests(QueryTests):
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self, wait_if_warmup=True)
             self.verify_cluster_stats(self.servers[:self.nodes_init])
             self.sleep(50)
+            self.verify_cluster_stats(self.servers[:self.nodes_init])
             self.test_union_all()
         finally:
             self._delete_multiple_indexes(indexes)
