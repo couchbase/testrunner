@@ -95,7 +95,6 @@ class RemoteMachineHelper(object):
             self.remote_shell.info = self.remote_shell.extract_remote_info()
 
         if self.remote_shell.info.type.lower() == 'windows':
-             print "process name in is process running ", process_name
              output, error = self.remote_shell.execute_command('tasklist| grep {0}'.format(process_name), debug=False)
              if error or output == [""] or output == []:
                  return None

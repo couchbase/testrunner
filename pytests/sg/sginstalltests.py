@@ -26,7 +26,7 @@ class SGInstallerTest(GatewayBaseTest):
             self.install(shell)
             pid = self.is_sync_gateway_process_running(shell)
             self.assertNotEqual(pid, 0)
-            exist = shell.file_exists('/tmp/', 'gateway.log')
+            exist = shell.file_exists('{0}/tmp/'.format(self.folder_prefix), 'gateway.log')
             self.assertTrue(exist)
             shell.disconnect()
 

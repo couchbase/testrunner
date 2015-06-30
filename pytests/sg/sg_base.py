@@ -19,7 +19,6 @@ class GatewayBaseTest(unittest.TestCase):
         ),
     }
 
-
     def setUp(self):
         super(GatewayBaseTest, self).setUp()
         self.log = logger.Logger.get_logger()
@@ -39,9 +38,11 @@ class GatewayBaseTest(unittest.TestCase):
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
-        self.folder_prefix=""
+        self.folder_prefix = ""
+        self.installed_folder = '/opt/couchbase-sync-gateway/bin'
         if type.lower() == 'windows':
             self.folder_prefix = "/cygdrive/c"
+            self.installed_folder = '/cygdrive/c/Program\ Files\ \(x86\)/Couchbase'
             self.logsdir = self.folder_prefix + self.configdir
             self.datadir = self.folder_prefix + self.configdir
             self.configdir = self.folder_prefix + self.configdir
@@ -114,11 +115,10 @@ class GatewayBaseTest(unittest.TestCase):
 
     def install_gateway(self, shell):
         filename, url = self.find_package(shell)
-        self.info = shell.extract_remote_info()
-        type = self.info.type.lower()
+        type = shell.extract_remote_info().type.lower()
         wget_str = 'wget'
         distribution_type = self.info.distribution_type.lower()
-        if self.info.type.lower() == 'linux':
+        if type == 'linux':
             if distribution_type == 'centos':
                 cmd = 'yes | rpm -i /tmp/{0}'.format(filename)
             elif distribution_type == 'ubuntu':
@@ -132,7 +132,7 @@ class GatewayBaseTest(unittest.TestCase):
                 self.log.info('install_gateway is not supported on {0}, {1}'.format(type, distribution_type))
             output, error = shell.execute_command_raw('cd /tmp; {0} -q -O {1} {2};ls -lh'.format(wget_str, filename, url))
 
-        elif self.info.type.lower() == 'windows':
+        elif type == 'windows':
             wget_str ="'c:\\automation\\wget.exe'"
             cmd = "cd /cygdrive/c/tmp;cmd /c 'couchbase-sync-gateway.exe /S /v/qn'" #couchbase-sync-gateway.exe /v"/l*v C:\install.log /qb
             output, error = shell.execute_command(
@@ -141,21 +141,30 @@ class GatewayBaseTest(unittest.TestCase):
         shell.log_command_output(output, error)
         output, error = shell.execute_command_raw(cmd)
         shell.log_command_output(output, error)
-        if self.info.type.lower() == 'windows':
+        if type == 'windows':
             exist = shell.file_exists('/cygdrive/c/Program Files (x86)/Couchbase', 'sync_gateway.exe')
         else:
-            exist = shell.file_exists('/opt/couchbase-sync-gateway/bin', 'sync_gateway')
+            exist = shell.file_exists(self.installed_folder.replace("\\\","""), 'sync_gateway')
         if exist:
             return True
         else:
-            self.log.error('Installed file not found - /opt/couchbase-sync-gateway/bin/sync_gateway')
+            self.log.error('Installed file not found - {0}/sync_gateway'.format(self.installed_folder))
             return False
 
     def start_sync_gateways(self, shell):
+        type = shell.extract_remote_info().type.lower()
         self.log.info('=== Starting Sync Gateway instances')
         shell.copy_files_local_to_remote('pytests/sg/resources', self.folder_prefix + '/tmp')
-        output, error = shell.execute_command_raw('nohup /opt/couchbase-sync-gateway/bin/sync_gateway'
-                                                  ' /tmp/gateway_config.json >/tmp/gateway.log 2>&1 &')
+        exec_ext = ""
+        if type == 'windows':
+            output, error = shell.execute_command_raw('/cygdrive/C/cygwin64/bin/nohup.exe {0}/sync_gateway.exe'
+                                                  ' c:/tmp/gateway_config.json > {1}/tmp/gateway.log 2>&1 &'.
+                                                      format(self.installed_folder, self.folder_prefix))
+        else:
+            output, error = shell.execute_command_raw('nohup {0}/sync_gateway{1}'
+                                                  ' /tmp/gateway_config.json >/tmp/gateway.log 2>&1 &'.
+                                                      format(self.installed_folder))
+            shell.execute_command_raw('nohup.exe /cygdrive/c/Program\ Files\ \(x86\)/Couchbase/sync_gateway.exe c:/tmp/gateway_config.json > /cygdrive/c/tmp/gateway.log 2>&1 &')
         shell.log_command_output(output, error)
 
     def start_simpleServe(self, shell):
