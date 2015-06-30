@@ -12,73 +12,73 @@ from datetime import timedelta
 
 SELECT_QUERIES = {
     "sabre": {
-        "findFlightsSpecificDates" : "SELECT AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode as Depart_Airport, "
-                               "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode as Arrival_Airport, "
-                               "ARRAY_LENGTH(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment) as Flight_Segment, "
-                               "DATE_DIFF_STR(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime, "
-                               "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime,\\\"hour\\\") as Flight_Time, "
-                               "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime as Depart_Time, "
-                               "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime as Arrival_Time "
-                               "FROM default "
-                               "WHERE "
-                               "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode = $1 and "
-                               "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode = $2 and "
-                               "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime between $3 "
-                               "and $4 "
-                               "ORDER BY Flight_Time, Depart_Time, Arrival_Time "
-                               "LIMIT 10"
+        "findFlightsSpecificDates": "SELECT AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode as Depart_Airport, "
+                                    "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode as Arrival_Airport, "
+                                    "ARRAY_LENGTH(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment) as Flight_Segment, "
+                                    "DATE_DIFF_STR(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime, "
+                                    "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime,\"hour\") as Flight_Time, "
+                                    "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime as Depart_Time, "
+                                    "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime as Arrival_Time "
+                                    "FROM default "
+                                    "WHERE "
+                                    "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode = $1 and "
+                                    "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode = $2 and "
+                                    "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime between $3 "
+                                    "and $4 "
+                                    "ORDER BY Flight_Time, Depart_Time, Arrival_Time "
+                                    "LIMIT 10&scan_consistency=REQUEST_PLUS"
         ,
-        "findCheapestFlightFlexDates" : "SELECT AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode as Depart_Airport, "
-                               "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode as Arrival_Airport, "
-                               "ARRAY_LENGTH(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment) as Flight_Segment, "
-                               "DATE_DIFF_STR(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime, "
-                               "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime,\\\"hour\\\") as Flight_Time, "
-                               "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime as Depart_Time, "
-                               "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime as Arrival_Time, "
-                               "AirItineraryPricingInfo.PTC_FareBreakdowns.PTC_FareBreakdown.PassengerFare.TotalFare.Amount as Fare "
-                               "FROM default "
-                               "WHERE "
-                               "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode = $1 and "
-                               "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode = $2 and "
-                               "AirItineraryPricingInfo.PTC_FareBreakdowns.PTC_FareBreakdown.PassengerFare.TotalFare.Amount between $5 and $6 "
-                               "ORDER BY Fare, Depart_Time, Arrival_Time "
-                               "LIMIT 10"
+        "findCheapestFlightFlexDates": "SELECT AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode as Depart_Airport, "
+                                       "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode as Arrival_Airport, "
+                                       "ARRAY_LENGTH(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment) as Flight_Segment, "
+                                       "DATE_DIFF_STR(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime, "
+                                       "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime,\"hour\") as Flight_Time, "
+                                       "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime as Depart_Time, "
+                                       "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime as Arrival_Time, "
+                                       "AirItineraryPricingInfo.PTC_FareBreakdowns.PTC_FareBreakdown.PassengerFare.TotalFare.Amount as Fare "
+                                       "FROM default "
+                                       "WHERE "
+                                       "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode = $1 and "
+                                       "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode = $2 and "
+                                       "AirItineraryPricingInfo.PTC_FareBreakdowns.PTC_FareBreakdown.PassengerFare.TotalFare.Amount between $5 and $6 "
+                                       "ORDER BY Fare, Depart_Time, Arrival_Time "
+                                       "LIMIT 10&scan_consistency=REQUEST_PLUS"
         ,
-        "findFlightsMinStopMinPrice" : "SELECT AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode as Depart_Airport, "
-                                        "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode as Arrival_Airport, "
-                                        "ARRAY_LENGTH(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment) as Flight_Segment, "
-                                        "DATE_DIFF_STR(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime, "
-                                        "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime,\\\"hour\\\") as Flight_Time, "
-                                        "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime as Depart_Time, "
-                                        "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime as Arrival_Time, "
-                                        "AirItineraryPricingInfo.PTC_FareBreakdowns.PTC_FareBreakdown.PassengerFare.TotalFare.Amount as Fare "
-                                        "FROM default "
-                                        "WHERE "
-                                        "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode = $1 and "
-                                        "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode = $2 and "
-                                        "AirItineraryPricingInfo.PTC_FareBreakdowns.PTC_FareBreakdown.PassengerFare.TotalFare.Amount between $5 and $6 and "
-                                        "ARRAY_LENGTH(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment) < 3 "
-                                        "ORDER BY Fare, Flight_Segment, Depart_Time, Arrival_Time "
-                                        "LIMIT 10"
+        "findFlightsMinStopMinPrice": "SELECT AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode as Depart_Airport, "
+                                      "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode as Arrival_Airport, "
+                                      "ARRAY_LENGTH(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment) as Flight_Segment, "
+                                      "DATE_DIFF_STR(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime, "
+                                      "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime,\"hour\") as Flight_Time, "
+                                      "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime as Depart_Time, "
+                                      "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime as Arrival_Time, "
+                                      "AirItineraryPricingInfo.PTC_FareBreakdowns.PTC_FareBreakdown.PassengerFare.TotalFare.Amount as Fare "
+                                      "FROM default "
+                                      "WHERE "
+                                      "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode = $1 and "
+                                      "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode = $2 and "
+                                      "AirItineraryPricingInfo.PTC_FareBreakdowns.PTC_FareBreakdown.PassengerFare.TotalFare.Amount between $5 and $6 and "
+                                      "ARRAY_LENGTH(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment) < 3 "
+                                      "ORDER BY Fare, Flight_Segment, Depart_Time, Arrival_Time "
+                                      "LIMIT 10&scan_consistency=REQUEST_PLUS"
         ,
-        "findOneWayFlights" : "SELECT AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode as Depart_Airport, "
-                                     "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode as Arrival_Airport, "
-                                     "ARRAY_LENGTH(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment) as Flight_Segment, "
-                                     "DATE_DIFF_STR(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime, "
-                                     "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime,\\\"hour\\\") as Flight_Time, "
-                                     "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime as Depart_Time, "
-                                     "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime as Arrival_Time, "
-                                     "AirItinerary.DirectionInd as DirectionInd "
-                                     "FROM default "
-                                     "WHERE "
-                                     "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode = $1 and "
-                                     "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode = $2 and "
-                                     "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime between $3 "
-                                     "and $4 and "
-                                     "AirItinerary.DirectionInd = \\\"OneWay\\\" "
-                                     "ORDER BY Flight_Time, Depart_Time, Arrival_Time "
-                                     "LIMIT 10"
-        }
+        "findOneWayFlights": "SELECT AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode as Depart_Airport, "
+                             "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode as Arrival_Airport, "
+                             "ARRAY_LENGTH(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment) as Flight_Segment, "
+                             "DATE_DIFF_STR(AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime, "
+                             "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime,\"hour\") as Flight_Time, "
+                             "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime as Depart_Time, "
+                             "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalDateTime as Arrival_Time, "
+                             "AirItinerary.DirectionInd as DirectionInd "
+                             "FROM default "
+                             "WHERE "
+                             "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureAirport.LocationCode = $1 and "
+                             "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[1].ArrivalAirport.LocationCode = $2 and "
+                             "AirItinerary.OriginDestinationOptions.OriginDestinationOption[0].FlightSegment[0].DepartureDateTime between $3 "
+                             "and $4 and "
+                             "AirItinerary.DirectionInd = \"OneWay\" "
+                             "ORDER BY Flight_Time, Depart_Time, Arrival_Time "
+                             "LIMIT 10&scan_consistency=REQUEST_PLUS"
+    }
 
 }
 
@@ -157,6 +157,53 @@ def runQueryOnce(query, param, server_ip):
     for i in range(len(r123)):
         x.append(r123[i][param])
     return x
+
+def runSQueryParam(query, param1, param2, server_ip):
+    if "SELECT" in query:
+        print "SELECT"
+        param = random.sample(param1, 2)
+        d1 = datetime.datetime(2014, 7, 10)
+        d2 = d1 + timedelta(days=60)
+        param.append(str(d1))
+        param.append(str(d2))
+        a1 = round(random.uniform(250, 300))
+        a2 = a1 + 300
+        param.append(str(a1))
+        param.append(str(a2))
+
+    url = "http://" + server_ip + ":8093/query"
+    print url
+
+
+    print "PARAM"
+    print "+" * 100
+    print param
+    print "+" * 100
+
+    #stmt = '{"statement" : "' + str(query) + '"'
+    #query="select * from default limit 1&scan_consistency=REQUEST_PLUS"
+
+    # A hack for now
+    query=query.replace("$1",param[0])
+    query=query.replace("$2",param[1])
+    rep3='"'+str(param[2])+'"'
+    rep4='"'+str(param[3])+'"'
+
+    query=query.replace("$3",rep3)
+    query=query.replace("$4",rep4)
+    query=query.replace("$5",param[4])
+    query=query.replace("$6",param[5])
+
+    print "QUERY"
+    print "+"*100
+    print query
+    print "+"*100
+
+    stmt = "'statement=" + str(query) + "'"
+
+    r= os.system("curl {0}/service -d {1}".format(url,stmt))
+    print r
+    return 0
 
 def runNQueryParam(query, param1, param2, server_ip):
 
@@ -257,46 +304,47 @@ def calcAmount():
     print "*" * 80
     return amount
 
-
-parser = argparse.ArgumentParser(description='This script is used for sabre dataset')
-parser.add_argument('-d', '--duration', help='Runtime duration', required=True)
-parser.add_argument('-c', '--clients', help='Number of clients', required=True)
+parser = argparse.ArgumentParser(description='This script is used for default(sabre) dataset')
+parser.add_argument('-t', '--duration', help='Runtime duration', default=60)
+parser.add_argument('-c', '--clients', help='Number of clients', default=1)
 parser.add_argument('-q', '--queryNode', help='query node ip', required=True)
-parser.add_argument('-o', '--ops', help='Select either (s)SELECTS | (u)UPDATES | (d) DELETEs', required=True)
-
+parser.add_argument('-s', '--selects', help='% selects', default=.85)
+parser.add_argument('-u', '--updates', help='% updates', default=.10)
+parser.add_argument('-d', '--deletes', help='% deletes', default=.5)
 
 args = vars(parser.parse_args())
 
-## output duration and clients ##
-print ("Duration: %s" % args['duration'] )
-print ("Num clients: %s" % args['clients'])
-
+duration = int(args['duration'])
 total_clients = int(args['clients'])
 queryNode = str(args['queryNode'])
-op_select = str(args['ops'])
+op_select = str(args['selects'])
+op_update = str(args['updates'])
+op_delete = str(args['deletes'])
 
-if op_select == "s":
-    print "*" * 80
-    print "Issue selects"
-    q = SELECT_QUERIES["sabre"]
-    len_query = len(q)
+## output duration and clients ##
+print "---" * 80
+print ("Duration: %s" % duration )
+print ("Num clients: %s" % total_clients)
+print ("Query Node: %s" % queryNode )
+print ("Selects: %s" % op_select)
+print ("Updates: %s" % op_update )
+print ("Deletes: %s" % op_delete)
+print "---" * 80
 
-elif op_select == "u":
-    print "*" * 80
-    print "Issue updates and deletes"
-    q = UPDATE_QUERIES["sabre"]
-    len_query = len(q)
+q_s = SELECT_QUERIES["sabre"]
+client_s = total_clients * op_select
+print client_s
+len_query_s = len(q_s)
 
-elif op_select == "d":
-    print "*" * 80
-    print "Issue deletes"
-    q = DELETE_QUERIES["sabre"]
-    len_query = len(q)
+q_u = UPDATE_QUERIES["sabre"]
+len_query_u = len(q_u)
+client_u = total_clients * op_update
+print client_u
 
-else:
-    print " SELECT by default"
-
-pool = multiprocessing.Pool(total_clients)
+q_d = DELETE_QUERIES["sabre"]
+len_query_d = len(q_d)
+client_d = total_clients * op_delete
+print client_d
 
 airport_codes = calcAirports()
 result_seq = calcSeqNumber()
@@ -304,20 +352,51 @@ keys = calcKeys()
 amount = calcAmount()
 
 ## Do not delete - Sample Single Client execution ##
-for k in range(1):
-    for j in range(len_query):
-        print list(q)[j]
-        k_qry = list(q)[j]
-        if "Key" in k_qry:
-            update_amt = random.randint(10, 100)
-            r = runNQueryParam(q[k_qry], keys, update_amt, queryNode)
+if op_select:
+    for k in range(duration):
+        for j in range(len_query_s):
+            print list(q_s)[j]
+            k_qry = list(q_s)[j]
+            if "Key" in k_qry:
+                update_amt = random.randint(10, 100)
+                r = runSQueryParam(q_s[k_qry], keys, update_amt, queryNode)
 
-        elif "Amount" in k_qry:
-            r = runNQueryParam(q[k_qry], amount, 0, queryNode)
-        else:
-            r = runNQueryParam(q[k_qry], airport_codes, 0, queryNode)
+            elif "Amount" in k_qry:
+                r = runSQueryParam(q_s[k_qry], amount, 0, queryNode)
+            else:
+                r = runSQueryParam(q_s[k_qry], airport_codes, 0, queryNode)
+            print r
 
-        print r
+if op_update:
+    for k in range(duration):
+        for j in range(len_query_u):
+            print list(q_u)[j]
+            k_qry = list(q_u)[j]
+            if "Key" in k_qry:
+                update_amt = random.randint(10, 100)
+                r = runNQueryParam(q_u[k_qry], keys, update_amt, queryNode)
+
+            elif "Amount" in k_qry:
+                r = runNQueryParam(q_u[k_qry], amount, 0, queryNode)
+            else:
+                r = runNQueryParam(q_u[k_qry], airport_codes, 0, queryNode)
+            print r
+
+if op_delete:
+    for k in range(duration):
+        for j in range(len_query_d):
+            print list(q_d)[j]
+            k_qry = list(q_d)[j]
+            if "Key" in k_qry:
+                update_amt = random.randint(10, 100)
+                r = runNQueryParam(q_d[k_qry], keys, update_amt, queryNode)
+
+            elif "Amount" in k_qry:
+                r = runNQueryParam(q_d[k_qry], amount, 0, queryNode)
+            else:
+                r = runNQueryParam(q_d[k_qry], airport_codes, 0, queryNode)
+            print r
+
 ### End ###
 
 #result = []
