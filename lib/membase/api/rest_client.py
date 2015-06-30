@@ -763,7 +763,7 @@ class RestConnection(object):
         log.info('/node/controller/setupServices params on {0}: {1}:{2}'.format(self.ip, self.port, params))
         status, content, header = self._http_request(api, 'POST', params)
         error_message = "cannot change node services after cluster is provisioned"
-        if not status and content == error_message:
+        if not status and error_message in content:
             status = True
             log.info("This node is already provisioned with services, we do not consider this as failure for test case")
         return status
@@ -2882,15 +2882,15 @@ class RestParser(object):
     def parse_index_status_response(self, parsed):
         index_map = {}
         for map in parsed:
-            bucket_name = map['bucket'].encode('ascii','ignore')
+            bucket_name = map['bucket'].encode('ascii', 'ignore')
             if bucket_name not in index_map.keys():
                 index_map[bucket_name] = {}
-            index_name = map['index'].encode('ascii','ignore')
+            index_name = map['index'].encode('ascii', 'ignore')
             index_map[bucket_name][index_name] = {}
-            index_map[bucket_name][index_name]['status'] = map['status'].encode('ascii','ignore')
-            index_map[bucket_name][index_name]['progress'] = str(map['progress']).encode('ascii','ignore')
-            index_map[bucket_name][index_name]['definition'] = map['definition'].encode('ascii','ignore')
-            index_map[bucket_name][index_name]['hosts'] = map['hosts'][0].encode('ascii','ignore')
+            index_map[bucket_name][index_name]['status'] = map['status'].encode('ascii', 'ignore')
+            index_map[bucket_name][index_name]['progress'] = str(map['progress']).encode('ascii', 'ignore')
+            index_map[bucket_name][index_name]['definition'] = map['definition'].encode('ascii', 'ignore')
+            index_map[bucket_name][index_name]['hosts'] = map['hosts'][0].encode('ascii', 'ignore')
         return index_map
 
     def parse_index_stats_response(self, parsed, index_map=None):
