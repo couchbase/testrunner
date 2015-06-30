@@ -144,7 +144,7 @@ class GatewayBaseTest(unittest.TestCase):
         if type == 'windows':
             exist = shell.file_exists('/cygdrive/c/Program Files (x86)/Couchbase', 'sync_gateway.exe')
         else:
-            exist = shell.file_exists(self.installed_folder.replace("\\\","""), 'sync_gateway')
+            exist = shell.file_exists(self.installed_folder.replace("\\",""), 'sync_gateway')
         if exist:
             return True
         else:
