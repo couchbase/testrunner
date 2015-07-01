@@ -1547,7 +1547,7 @@ class QueryTests(BaseTestCase):
     def test_comparition_not_equal(self):
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
-            "tasks_points.task1 != 1 ORDER BY task1"
+            "tasks_points.task1 != 1 ORDER BY task"
             actual_result = self.run_cbq_query()
             actual_result = actual_result['results']
 
@@ -1560,7 +1560,7 @@ class QueryTests(BaseTestCase):
     def test_comparition_not_equal_more_less(self):
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 as task FROM %s WHERE " % (bucket.name)+\
-            "tasks_points.task1 <> 1 ORDER BY task1"
+            "tasks_points.task1 <> 1 ORDER BY task"
             actual_result = self.run_cbq_query()
             actual_result = actual_result['results']
 
