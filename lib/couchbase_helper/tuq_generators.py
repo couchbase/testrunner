@@ -590,11 +590,11 @@ class JsonGenerator:
                                                start=start, end=docs_per_day))
         return generators
 
-    def generate_docs_sabre(self, docs_per_day=1, start=0, isShuffle=False, years=2):
+    def generate_docs_sabre(self, docs_per_day=1, start=0, isShuffle=False, years=2, indexes=[1,4,8]):
         generators = []
         all_airports = ["ABR", "ABI", "ATL","BOS", "BUR", "CHI", "MDW", "DAL", "SFO", "SAN", "SJC", "LGA", "JFK", "MSP",
                         "MSQ", "MIA", "LON", "DUB"]
-        dests = random.sample(all_airports,3)
+        dests = [all_airports[i] for i in indexes]
         join_yr = self._shuffle(xrange(2010, 2010 + years), isShuffle)
         join_mo = self._shuffle(xrange(1, 12 + 1),isShuffle)
         join_day = self._shuffle(xrange(1, 28 + 1),isShuffle)
