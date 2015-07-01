@@ -188,12 +188,12 @@ def create_tpcc_buckets(rest, bucketMsg):
     #tpcc_list = ["ITEM", "ORDERS", "ORDER_LINE", "NEW_ORDER", "STOCK", "CUSTOMER", "DISTRICT", "WAREHOUSE", "HISTORY"]
     tpcc_dict = {"ITEM":"2000", "ORDERS":"3000", "ORDER_LINE":"3000", "NEW_ORDER":"1000", "STOCK":"2000", "CUSTOMER":"2000", "DISTRICT":"1000", "WAREHOUSE":"500", "HISTORY":"1000"}
     for key,value in tpcc_dict.iteritems():
+    #for b_name in tpcc_list:
         rest.create_bucket(bucket=key,
-                       ramQuotaMB =value ,
+                       ramQuotaMB =value,
                        replicaNumber = bucketMsgParsed['replicas'],
                        proxyPort = 11211,
                        authType = "sasl",
-                       saslPassword = None,
                        bucketType = bucketMsgParsed['type'],
                        replica_index = bucketMsgParsed['replica_index'],
                        threadsNumber = bucketMsgParsed['priority'],
