@@ -568,7 +568,7 @@ class auditCLITest(CliBaseTest):
             remote_client = RemoteMachineShellConnection(self.master)
             cli_command = "setting-audit"
             options = " --audit-enable={0}".format(self.enableStatus)
-            options += " --audit-rotate-interval={0}".format(self.rotateInt)
+            options += " --audit-log-rotate-interval={0}".format(self.rotateInt)
             options += " --audit-log-path={0}".format(self.logPath)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
@@ -582,7 +582,7 @@ class auditCLITest(CliBaseTest):
 
     def validateSettings(self, status, log_path, rotate_interval):
         auditIns = audit(host=self.master)
-        tempLogPath = auditIns.getAuditLogPath()
+        tempLogPath = (auditIns.getAuditLogPath())[:-1]
         tempStatus = auditIns.getAuditStatus()
         tempRotateInt = auditIns.getAuditRotateInterval()
         flag = True
@@ -591,11 +591,11 @@ class auditCLITest(CliBaseTest):
             self.log.info ("Mismatch with status - Expected - {0} -- Actual - {1}".format(status, tempStatus))
             flag = False
 
-        if (log_path is not tempLogPath):
+        if (log_path != tempLogPath):
             self.log.info ("Mismatch with log path - Expected - {0} -- Actual - {1}".format(log_path, tempLogPath))
             flag = False
 
-        if (rotate_interval is not tempRotateInt):
+        if (rotate_interval != tempRotateInt):
             self.log.info ("Mismatch with rotate interval - Expected - {0} -- Actual - {1}".format(rotate_interval, tempRotateInt))
             flag = False
         return flag
