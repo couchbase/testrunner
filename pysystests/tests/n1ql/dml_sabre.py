@@ -10,7 +10,7 @@ import datetime
 from datetime import timedelta
 import logging
 
-#USAGE : python dml_sabre.py -d 2 -c 1 -q 127.0.0.1 -ops select -scan REQUEST_PLUS
+#USAGE : python dml_sabre.py -d 2 -c 1 -q 127.0.0.1 -ops select -scan REQUEST_PLUS -m 16
 
 #Fix 1 delete query
 SELECT_QUERIES = {
@@ -157,7 +157,7 @@ def runQueryOnce(query, param, server_ip):
     return x
 
 
-def runNQueryParam(query, param1, scan_consistency, server_ip):
+def runNQueryParam(query, param1, scan_consistency, max_parallelism, server_ip):
     if "SELECT" in query:
         param = random.sample(param1, 2)
         d1 = datetime.datetime(2014, 1, 10)
@@ -209,6 +209,7 @@ def runNQueryParam(query, param1, scan_consistency, server_ip):
     stmt = stmt + ']"'
     if "SELECT" in query:
         stmt = stmt + ', "scan_consistency": "' + scan_consistency + '"'
+    stmt = stmt + ', "max_parallelism":"' + max_parallelism + '"'
     stmt = stmt + '}'
     query = json.loads(stmt)
     lgr.warn("Query:%s" % query)
@@ -264,6 +265,8 @@ parser.add_argument('-c', '--clients', help='Number of clients', default=1)
 parser.add_argument('-q', '--queryNode', help='query node ip', required=True)
 parser.add_argument('-scan', '--scan_consistency', help='request_plus | statement_plus | not_bounded',
     default="NOT_BOUNDED")
+parser.add_argument('-m', '--max_parallelism', help='Specify num of max parallelism, default = num of cores',
+    default=8)
 parser.add_argument('-ops', '--operations', help='select|update|delete', default="select")
 
 args = vars(parser.parse_args())
@@ -273,6 +276,7 @@ total_clients = int(args['clients'])
 queryNode = str(args['queryNode'])
 ops = str(args['operations'])
 scan_consistency = str(args['scan_consistency'])
+max_parallelism = str(args['max_parallelism'])
 
 ## output run parameters ##
 lgr.warn('======================================')
@@ -312,11 +316,11 @@ while (time.time() - start) <= duration:
             lgr.info("Query_Type: %s" % list(q)[j])
             if "Key" in k_qry:
                 update_amt = random.randint(10, 100)
-                r = runNQueryParam(q[k_qry], keys, scan_consistency, queryNode)
+                r = runNQueryParam(q[k_qry], keys, scan_consistency, max_parallelism, queryNode)
             elif "Amount" in k_qry:
-                r = runNQueryParam(q[k_qry], amount, scan_consistency, queryNode)
+                r = runNQueryParam(q[k_qry], amount, scan_consistency, max_parallelism, queryNode)
             else:
-                r = runNQueryParam(q[k_qry], airport_codes, scan_consistency, queryNode)
+                r = runNQueryParam(q[k_qry], airport_codes, scan_consistency, max_parallelism, queryNode)
 
 #End of while
 pool.close()
