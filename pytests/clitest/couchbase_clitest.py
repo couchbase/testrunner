@@ -377,8 +377,12 @@ class CouchbaseCliTest(CliBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                                 options=options, cluster_host="localhost", \
                                 user="Administrator", password="password")
-                self.assertEqual(output, ["SUCCESS: server-add {0}:8091" \
-                                       .format(self.servers[num + 1].ip)])
+                if len(output) == 1:
+                    self.assertEqual(output, ["SUCCESS: server-add {0}:8091" \
+                                              .format(self.servers[num + 1].ip)])
+                else:
+                    self.assertEqual(output, ["SUCCESS: server-add {0}:8091" \
+                                              .format(self.servers[num + 1].ip), ""])
         else:
              raise Exception("Node add should be smaller total number vms in ini file")
 
@@ -389,18 +393,24 @@ class CouchbaseCliTest(CliBaseTest):
                             options=options, cluster_host="localhost", \
                             user="Administrator", password="password")
             self.assertTrue("INFO: rebalancing" in output[0])
-            self.assertEqual(output[1], "SUCCESS: rebalanced cluster")
+            if len(output) == 4:
+               self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+            else:
+                self.assertEqual(output[1], "SUCCESS: rebalanced cluster")
 
         if nodes_rem == 0 and nodes_add > 0:
             cli_command = "rebalance"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                             cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ["INFO: rebalancing . ", "SUCCESS: rebalanced cluster"])
+            if len(output) == 4:
+                self.assertEqual(output, ["INFO: rebalancing ", "", "SUCCESS: rebalanced cluster", ""])
+            else:
+                self.assertEqual(output, ["INFO: rebalancing . ", "SUCCESS: rebalanced cluster"])
 
         """ when no bucket, have to add option --force to failover
             since no data => no graceful failover.  Need to add test
             to detect no graceful failover if no bucket """
-        self._create_bucket(remote_client,bucket_replica=self.num_replicas)
+        self._create_bucket(remote_client, bucket_replica=self.num_replicas)
         cli_command = "failover"
         for num in xrange(nodes_failover):
             self.log.info("failover node {0}" \
@@ -413,17 +423,26 @@ class CouchbaseCliTest(CliBaseTest):
                         cli_command=cli_command, options=options, \
                         cluster_host="localhost", user="Administrator", \
                                                   password="password")
-                self.assertEqual(output, ["SUCCESS: failover ns_1@{0}" \
-                    .format(self.servers[nodes_add - nodes_rem - num].ip)])
+                if len(output) == 2:
+                    self.assertEqual(output, ["SUCCESS: failover ns_1@{0}" \
+                        .format(self.servers[nodes_add - nodes_rem - num].ip), ""])
+                else:
+                    self.assertEqual(output, ["SUCCESS: failover ns_1@{0}" \
+                        .format(self.servers[nodes_add - nodes_rem - num].ip)])
             else:
                 output, error = remote_client.execute_couchbase_cli(\
                         cli_command=cli_command, options=options, \
                         cluster_host="localhost", user="Administrator", \
                                                   password="password")
                 output[0] = output[0].rstrip(" .")
-                self.assertEqual(output, ["INFO: graceful failover", \
-                                          "SUCCESS: failover ns_1@{0}" \
-                    .format(self.servers[nodes_add - nodes_rem - num].ip)])
+                if len(output) == 2:
+                    self.assertEqual(output, ["INFO: graceful failover", \
+                                              "SUCCESS: failover ns_1@{0}" \
+                                              .format(self.servers[nodes_add - nodes_rem - num].ip), ""])
+                else:
+                    self.assertEqual(output, ["INFO: graceful failover", \
+                                              "SUCCESS: failover ns_1@{0}" \
+                                              .format(self.servers[nodes_add - nodes_rem - num].ip)])
 
 
         cli_command = "server-readd"
@@ -436,14 +455,21 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                                               options=options, cluster_host="localhost", \
                                                 user="Administrator", password="password")
-            self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}" \
-                                  .format(self.servers[nodes_add - nodes_rem - num ].ip)])
+            if len(output) == 2:
+                self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}" \
+                                          .format(self.servers[nodes_add - nodes_rem - num ].ip), ""])
+            else:
+                self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}" \
+                                          .format(self.servers[nodes_add - nodes_rem - num ].ip)])
 
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                        cluster_host="localhost", user="Administrator", password="password")
         output[0] = output[0].rstrip(" .")
-        self.assertEqual(output, ["INFO: rebalancing", "SUCCESS: rebalanced cluster"])
+        if len(output) == 4:
+            self.assertEqual(output, ["INFO: rebalancing", "", "SUCCESS: rebalanced cluster", ""])
+        else:
+            self.assertEqual(output, ["INFO: rebalancing", "SUCCESS: rebalanced cluster"])
         remote_client.disconnect()
 
 
@@ -460,7 +486,10 @@ class CouchbaseCliTest(CliBaseTest):
                 self.log.info("add node {0} to cluster".format(self.servers[num + 1].ip))
                 options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-                self.assertEqual(output, ["SUCCESS: server-add {0}:8091".format(self.servers[num + 1].ip)])
+                if len(output) == 2:
+                    self.assertEqual(output, ["SUCCESS: server-add {0}:8091".format(self.servers[num + 1].ip), ""])
+                else:
+                    self.assertEqual(output, ["SUCCESS: server-add {0}:8091".format(self.servers[num + 1].ip)])
         else:
              raise Exception("Node add should be smaller total number vms in ini file")
 
@@ -469,7 +498,10 @@ class CouchbaseCliTest(CliBaseTest):
             options = "--server-remove={0}:8091".format(self.servers[nodes_add - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
             self.assertTrue("INFO: rebalancing" in output[0])
-            self.assertEqual(output[1], "SUCCESS: rebalanced cluster")
+            if len(output) == 4:
+                self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+            else:
+                self.assertEqual(output[1], "SUCCESS: rebalanced cluster")
 
         if nodes_rem == 0 and nodes_add > 0:
             cli_command = "rebalance"
@@ -499,23 +531,36 @@ class CouchbaseCliTest(CliBaseTest):
             self.log.info("add node {0} back to cluster".format(self.servers[nodes_add - nodes_rem - num].ip))
             options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[nodes_add - nodes_rem - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip)])
+            if (len(output) == 2):
+                self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip), ""])
+            else:
+                self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip)])
             cli_command = "recovery"
             options = "--server-recovery={0}:8091 --recovery-type=delta".format(self.servers[nodes_add - nodes_rem - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ["SUCCESS: setRecoveryType for node ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip)])
+            if (len(output) == 2):
+                self.assertEqual(output, ["SUCCESS: setRecoveryType for node ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip), ""])
+            else:
+                self.assertEqual(output, ["SUCCESS: setRecoveryType for node ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num].ip)])
 
         cli_command = "server-readd"
         for num in xrange(nodes_readd):
             self.log.info("add back node {0} to cluster".format(self.servers[nodes_add - nodes_rem - num ].ip))
             options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[nodes_add - nodes_rem - num ].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num ].ip)])
+            if (len(output) == 2):
+                self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num ].ip), ""])
+            else:
+                self.assertEqual(output, ["SUCCESS: re-add ns_1@{0}".format(self.servers[nodes_add - nodes_rem - num ].ip)])
 
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, cluster_host="localhost", user="Administrator", password="password")
         self.assertTrue("INFO: rebalancing . " in output[0])
-        self.assertEqual("SUCCESS: rebalanced cluster", output[1])
+        if (len(output) == 4):
+            self.assertEqual("SUCCESS: rebalanced cluster", output[2])
+        else:
+            self.assertEqual("SUCCESS: rebalanced cluster", output[1])
+
         remote_client.disconnect()
 
 
@@ -759,7 +804,7 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                       options=options, cluster_host="localhost", user=None, password=None)
             self.sleep(7)  # time needed to reload couchbase
-            self.assertEqual(output, [u'ERROR: Both username and password are required.'] 
+            self.assertEqual(output, [u'ERROR: Both username and password are required.']
                           or output == [u'The password must be at least six characters.'])
             remote_client.disconnect()
         finally:
@@ -885,7 +930,7 @@ class CouchbaseCliTest(CliBaseTest):
         if not enable_flush:
             cli_command = "bucket-flush --force"
             options = "--bucket={0}".format(bucket)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, 
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                               options=options, cluster_host="localhost",
                                               user="Administrator", password="password")
             self.assertEqual(output, ['Database data will be purged from disk ...',
