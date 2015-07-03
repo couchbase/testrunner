@@ -64,6 +64,7 @@ class QueryHelper(object):
 
     def _gen_query_with_subquery(self, sql = "", table_map = {}):
         outer_table_map = {}
+        outer_table_maps = {}
         count = 0
         new_sql = ""
         new_n1ql = ""
@@ -82,7 +83,7 @@ class QueryHelper(object):
             if not_seen_end and start_query and ("START" in token or "END" in token):
                 start_query = False
                 table_map_new = {}
-                for key in  list(set(table_map.keys()) - set(outer_table_map.keys()) ):
+                for key in  list(set(table_map.keys()) - set(outer_table_maps.keys()) ):
                     table_map_new[key]=table_map[key]
                 if len(table_map_new) == 0:
                     table_map_new=outer_table_map
@@ -108,6 +109,7 @@ class QueryHelper(object):
                         alias_name = outer_table_map[table_name]["alias_name"]
                         sql_template = sql_template.replace("META(OUTER_BUCKET_ALIAS).id","")
                         n1ql_template = n1ql_template.replace("OUTER_BUCKET_ALIAS",alias_name)
+                outer_table_maps.update(new_table_map)
                 if outer_table_map == {}:
                     outer_table_map.update(new_table_map)
                 else:
