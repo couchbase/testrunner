@@ -56,7 +56,7 @@ select_from:
 	*   ;
 
 select_from_with_aggregate:
-	AVG(OUTER_SUBQUERY_AGG_FIELD) | SUM(OUTER_SUBQUERY_AGG_FIELD) | MAX(OUTER_SUBQUERY_AGG_FIELD) | MIN(OUTER_SUBQUERY_AGG_FIELD) | COUNT(*);
+	AVG(OUTER_SUBQUERY_AGG_FIELD) AS OUTER_SUBQUERY_AGG_FIELD | SUM(OUTER_SUBQUERY_AGG_FIELD) AS OUTER_SUBQUERY_AGG_FIELD | MAX(OUTER_SUBQUERY_AGG_FIELD) AS OUTER_SUBQUERY_AGG_FIELD| MIN(OUTER_SUBQUERY_AGG_FIELD) AS OUTER_SUBQUERY_AGG_FIELD | COUNT(*) AS OUTER_SUBQUERY_AGG_FIELD;
 
 complex_condition:
 	NOT (condition) | (condition) AND (condition) | (condition) OR (condition) | (condition) AND (condition) OR (condition) AND (condition) | condition | (complex_condition) AND (complex_condition) | (complex_condition) OR (complex_condition) | NOT (complex_condition);

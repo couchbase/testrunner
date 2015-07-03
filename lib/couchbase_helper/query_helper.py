@@ -89,7 +89,6 @@ class QueryHelper(object):
                 sql_template, new_table_map = self._convert_sql_template_to_value(sql_template, table_map_new)
                 n1ql_template = self._gen_sql_to_nql(sql_template)
                 table_name = random.choice(new_table_map.keys())[0]
-                outer_table_map.update(new_table_map)
                 if "USE KEYS" in sql_template:
                     sql_template = sql_template.replace("USE KEYS","")
                     if "OUTER_PRIMARY_KEY" in sql_template:
@@ -109,6 +108,11 @@ class QueryHelper(object):
                         alias_name = outer_table_map[table_name]["alias_name"]
                         sql_template = sql_template.replace("META(OUTER_BUCKET_ALIAS).id","")
                         n1ql_template = n1ql_template.replace("OUTER_BUCKET_ALIAS",alias_name)
+                if outer_table_map == {}:
+                    outer_table_map.update(new_table_map)
+                else:
+                    outer_table_map ={}
+                    outer_table_map.update(new_table_map)
                 if "OUTER_SUBQUERY_FIELDS" in sql_template:
                     sql_template = sql_template.replace("OUTER_SUBQUERY_FIELDS",inner_subquery_fields)
                     n1ql_template = n1ql_template.replace("OUTER_SUBQUERY_FIELDS",inner_subquery_fields)
