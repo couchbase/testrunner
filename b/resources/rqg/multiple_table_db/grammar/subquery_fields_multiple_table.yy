@@ -44,7 +44,7 @@ in_operator:
 	IN | NOT IN;
 
 comparison_operator:
-	= | <> | != | > | < | <= | >=;
+	= | !=;
 
 exists_operator_type:
 	EXISTS | NOT EXISTS;
