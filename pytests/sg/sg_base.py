@@ -156,7 +156,8 @@ class GatewayBaseTest(unittest.TestCase):
         self.log.info('=== Starting Sync Gateway instances')
         shell.copy_files_local_to_remote('pytests/sg/resources', self.folder_prefix + '/tmp')
         if type == 'windows':
-            output, error = shell.execute_command_raw('/cygdrive/C/cygwin64/bin/nohup.exe {0}/sync_gateway.exe'
+            # output, error = shell.execute_command_raw('/cygdrive/C/cygwin64/bin/nohup.exe {0}/sync_gateway.exe'
+            output, error = shell.execute_command_raw('{0}/sync_gateway.exe'
                                                   ' c:/tmp/gateway_config.json > {1}/tmp/gateway.log 2>&1 &'.
                                                       format(self.installed_folder, self.folder_prefix))
         else:
@@ -167,11 +168,17 @@ class GatewayBaseTest(unittest.TestCase):
 
     def start_simpleServe(self, shell):
         self.log.info('=== Starting SimpleServe instances')
-        shell.execute_command('killall -9 simpleServe.go')
-        shell.execute_command("kill $(ps aux | grep '8081' | awk '{print $2}')")
-        shell.copy_file_local_to_remote("pytests/sg/simpleServe.go", "/tmp/simpleServe.go")
-        output, error = shell.execute_command_raw('go run /tmp/simpleServe.go 8081'
-                                                  '  >/tmp/simpleServe.txt 2>&1 &')
+        shell.copy_file_local_to_remote("pytests/sg/simpleServe.go", "{0}/tmp/simpleServe.go".format(self.folder_prefix))
+        type = shell.extract_remote_info().type.lower()
+        if type == 'windows':
+            shell.terminate_process(process_name='simpleServe.exe')
+            output, error = shell.execute_command_raw('c:/Go/bin/go.exe run c:/tmp/simpleServe.go 8081'
+                                      ' >{0}/tmp/simpleServe.txt 2>&1 &'.format(self.folder_prefix))
+        else:
+            shell.terminate_process(process_name='simpleServe.go')
+            shell.execute_command("kill $(ps aux | grep '8081' | awk '{print $2}')")
+            output, error = shell.execute_command_raw('go run {0}/tmp/simpleServe.go 8081'
+                                                  '  >{0}/tmp/simpleServe.txt 2>&1 &'.format(self.folder_prefix))
         shell.log_command_output(output, error)
 
     def add_user(self, shell, user_name):
@@ -185,7 +192,7 @@ class GatewayBaseTest(unittest.TestCase):
                     output, error = shell.execute_command_raw('useradd -m {0}'.format(user_name))
                 return self.check_user(shell, user_name)
             else:
-                self.log.info('add_user is not supported on Mac')
+                self.log.info('add_user is not supported on Mac/Wind')
                 return False
         else:
             self.log.info('add_user is not supported on {0}, {1}'.format(type, distribution_type))
@@ -441,11 +448,11 @@ class GatewayBaseTest(unittest.TestCase):
             return False
 
     def check_status_in_gateway_log(self, shell):
-        output, error = shell.execute_command_raw('tail -5 /tmp/gateway.log')
-        shell.log_command_output(output, error)
-        status = re.search(".* got status (\w+)", output[4])
+        logs = shell.read_remote_file('{0}/tmp/'.format(self.folder_prefix), 'gateway.log')[-5:]#last 5 lines
+        self.log.info(logs)
+        status = re.search(".* got status (\w+)", logs[4])
         if not status:
-            self.log.info('check_status_in_gateway_log failed, sync_gateway log has: {0}'.format(output[4]))
+            self.log.info('check_status_in_gateway_log failed, sync_gateway log has: {0}'.format(logs[4]))
             return ''
         else:
             return status.group(1)

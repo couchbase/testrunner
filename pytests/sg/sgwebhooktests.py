@@ -28,7 +28,8 @@ class SGWebHookTest(GatewayWebhookBaseTest):
     def webHookMutipleWebHooks(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
-            shell.execute_command("kill $(ps aux | grep '8082' | awk '{print $2}')")
+            shell.execute_command("kill $(ps aux | grep '8082' | awk '{print $2}')")#linux
+            shell.execute_command("simpleServe2.exe")#windows
             self.log.info('=== Starting SimpleServe second instances')
             shell.copy_file_local_to_remote("pytests/sg/simpleServe.go", "/tmp/simpleServe2.go")
             output, error = shell.execute_command_raw('go run /tmp/simpleServe2.go 8082'
