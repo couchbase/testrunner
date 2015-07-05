@@ -4,6 +4,7 @@ from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 import re
 import time
+import os
 from pytests.sg.sg_base import GatewayBaseTest
 
 
@@ -28,37 +29,43 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
                 self.install(shell)
                 pid = self.is_sync_gateway_process_running(shell)
                 self.assertNotEqual(pid, 0)
-                exist = shell.file_exists('/tmp/', 'gateway.log')
+                exist = shell.file_exists('{0}/tmp/'.format(self.folder_prefix), 'gateway.log')
                 self.assertTrue(exist)
                 shell.copy_files_local_to_remote('pytests/sg/resources', '/tmp')
             self.start_simpleServe(shell)
             shell.disconnect()
 
     def start_sync_gateway(self, shell, config_filename):
+        self.kill_processes_gateway(shell)
         self.log.info('=== start_sync_gateway with config file {0}.'.format(config_filename))
-        shell.execute_command('killall -9 sync_gateway')
-        output, error = shell.execute_command('cat /tmp/{0}'.format(config_filename))
+        output, error = shell.execute_command('cat {0}/tmp/{1}'.format(self.folder_prefix, config_filename))
         shell.log_command_output(output, error)
-        output, error = shell.execute_command_raw('nohup /opt/couchbase-sync-gateway/bin/sync_gateway'
+        type = shell.extract_remote_info().type.lower()
+        if type == 'windows':
+            output, error = shell.execute_command_raw('{0}/sync_gateway.exe'
+                                                  ' c:/tmp/{1} > {2}/tmp/gateway.log 2>&1 &'.
+                                                      format(self.installed_folder, config_filename, self.folder_prefix))
+        else:
+            output, error = shell.execute_command_raw('nohup /opt/couchbase-sync-gateway/bin/sync_gateway'
                                                   ' /tmp/{0} >/tmp/gateway.log 2>&1 &'.format(config_filename))
         shell.log_command_output(output, error)
         obj = RemoteMachineHelper(shell).is_process_running('sync_gateway')
         if obj and obj.pid:
             self.log.info('start_sync_gateway - Sync Gateway is running with pid of {0}'.format(obj.pid))
-            if not shell.file_exists('/tmp/', 'gateway.log'):
+            if not shell.file_exists('{0}/tmp/'.format(self.folder_prefix), 'gateway.log'):
                 self.log.info('start_sync_gateway - Fail to find gateway.log')
                 return False
             else:
                 return True
         else:
             self.log.info('start_sync_gateway - Sync Gateway is NOT running')
-            output, error = shell.execute_command('cat /tmp/gateway.log')
+            output, error = shell.execute_command('cat {0}/tmp/gateway.log'.format(self.folder_prefix))
             shell.log_command_output(output, error)
             return False
 
     def send_request(self, shell, method, doc_name, content):
         self.info = shell.extract_remote_info()
-        cmd = 'curl -X {0} http://{1}:4985/db/{2}{3}'.format(method, self.info.ip, doc_name, content)
+        cmd = 'curl -X {0} http://{1}:4984/db/{2}{3}'.format(method, self.info.ip, doc_name, content)
         output, error = shell.execute_command_raw(cmd)
         if not output:
             self.log.info('No output from issuing {0}'.format(cmd))
@@ -105,17 +112,18 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
 
     def check_http_server(self, shell, doc_id, revision, doc_content, attachment_filename, deleted, go_logfiles, silent):
         if not go_logfiles:
-            go_logfiles = ['/tmp/simpleServe.txt']
+            go_logfiles = ['{0}/tmp/simpleServe.txt'.format(self.folder_prefix)]
         for go_logfile in go_logfiles:
-            output, error = shell.execute_command_raw('tail -1 {0}'.format(go_logfile))
+            head, tail = os.path.split(go_logfile)
+            logs = shell.read_remote_file(head, tail)[-1:]#last line
             if not silent:
-                self.log.info("check_http_server - checking {0} - {1}".format(go_logfile, output[0]))
+                self.log.info("check_http_server - checking {0} - {1}".format(go_logfile, logs[0]))
             else:
-                self.log.info("check_http_server - checking {0} - {1} ...".format(go_logfile, output[0][:10]))
-            simple_string = re.split(' ', output[0])
+                self.log.info("check_http_server - checking {0} - {1} ...".format(go_logfile, logs[0][:10]))
+            simple_string = re.split(' ', logs[0])
             try:
                 post_dic = json.loads(simple_string[2])
-            except ValueError as ex:
+            except ValueError:
                 self.log.info("check_http_server - log({0}) does not have a valid json format- {1}"
                               .format(go_logfile, simple_string[2]))
                 return False
