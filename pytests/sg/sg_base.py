@@ -155,16 +155,14 @@ class GatewayBaseTest(unittest.TestCase):
         type = shell.extract_remote_info().type.lower()
         self.log.info('=== Starting Sync Gateway instances')
         shell.copy_files_local_to_remote('pytests/sg/resources', self.folder_prefix + '/tmp')
-        exec_ext = ""
         if type == 'windows':
             output, error = shell.execute_command_raw('/cygdrive/C/cygwin64/bin/nohup.exe {0}/sync_gateway.exe'
                                                   ' c:/tmp/gateway_config.json > {1}/tmp/gateway.log 2>&1 &'.
                                                       format(self.installed_folder, self.folder_prefix))
         else:
-            output, error = shell.execute_command_raw('nohup {0}/sync_gateway{1}'
+            output, error = shell.execute_command_raw('nohup {0}/sync_gateway'
                                                   ' /tmp/gateway_config.json >/tmp/gateway.log 2>&1 &'.
                                                       format(self.installed_folder))
-            shell.execute_command_raw('nohup.exe /cygdrive/c/Program\ Files\ \(x86\)/Couchbase/sync_gateway.exe c:/tmp/gateway_config.json > /cygdrive/c/tmp/gateway.log 2>&1 &')
         shell.log_command_output(output, error)
 
     def start_simpleServe(self, shell):
