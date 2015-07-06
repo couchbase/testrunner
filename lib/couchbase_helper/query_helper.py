@@ -135,20 +135,16 @@ class QueryHelper(object):
                 if "INNER_SUBQUERY_IN_FIELD" in sql_template:
                     inner_subquery_in_field = self._search_fields_of_given_type(["int","mediumint","double", "float", "decimal"], new_table_map)[0]
                     inner_subquery_in_field = inner_subquery_in_field.split(".")[1]
-                    n1ql_begin = " ARRAY c.{0} FOR c in ".format(inner_subquery_in_field)
                     sql_template = sql_template.replace("INNER_SUBQUERY_IN_FIELD",inner_subquery_in_field)
-                    n1ql_template = n1ql_template.replace("INNER_SUBQUERY_IN_FIELD",inner_subquery_in_field)+" "+n1ql_begin
-                    end_map[start_count-1] = "END "
+                    n1ql_template = n1ql_template.replace("INNER_SUBQUERY_IN_FIELD",inner_subquery_in_field)+" "
                 if "OUTER_SUBQUERY_AGG_FIELD" in sql_template:
                     sql_template = sql_template.replace("OUTER_SUBQUERY_AGG_FIELD",inner_subquery_agg_field)
                     n1ql_template = n1ql_template.replace("OUTER_SUBQUERY_AGG_FIELD",inner_subquery_agg_field)
                 if "INNER_SUBQUERY_AGG_FIELD" in sql_template:
                     inner_subquery_agg_field = self._search_fields_of_given_type(["int","mediumint","double", "float", "decimal"], new_table_map)[0]
                     inner_subquery_agg_field = inner_subquery_agg_field.split(".")[1]
-                    n1ql_begin = " ( ARRAY c.{0} FOR c in ".format(inner_subquery_agg_field)
                     sql_template = sql_template.replace("INNER_SUBQUERY_AGG_FIELD",inner_subquery_agg_field)
-                    n1ql_template = n1ql_template.replace("INNER_SUBQUERY_AGG_FIELD"," TO_ARRAY( "+inner_subquery_agg_field+" ) ")+n1ql_begin
-                    end_map[start_count-1] = "END )"
+                    n1ql_template = n1ql_template.replace("INNER_SUBQUERY_AGG_FIELD",inner_subquery_agg_field)
                 if "END_" not in token:
                     new_sql += sql_template+space
                     new_n1ql += n1ql_template+space
@@ -188,7 +184,11 @@ class QueryHelper(object):
             alias_name = "tb_"+self._random_char()
             new_sql = "SELECT {0}.* FROM ({1}) {0}".format(alias_name,new_sql)
             new_n1ql = "SELECT {0}.* FROM ({1}) {0}".format(alias_name,new_n1ql)
-        return {"sql":new_sql, "n1ql":new_n1ql},outer_table_map
+        new_sql = new_sql.replace("NOT_EQUALS"," != ")
+        new_sql = new_sql.replace("EQUALS"," = ")
+        new_n1ql = new_n1ql.replace("NOT_EQUALS"," NOT IN ")
+        new_n1ql = new_n1ql.replace("EQUALS"," IN ")
+        return {"sql":new_sql, "n1ql":new_n1ql.replace("SELECT RAW *","SELECT *")},outer_table_map
 
 
     def _gen_select_tables_info(self, sql = "", table_map = {}):
