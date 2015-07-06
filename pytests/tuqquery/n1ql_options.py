@@ -144,11 +144,11 @@ class OptionsRestTests(QueryTests):
     def test_args(self):
         self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
-            self.query = "SELECT count(test_rate) FROM %s where test_rate>`$1`" % (bucket.name)
-            actual_result = self.run_cbq_query(query_params= {'positional_params':[3]})
+            self.query = "SELECT count(test_rate) FROM %s where test_rate>$1" % (bucket.name)
+            actual_result = self.run_cbq_query(query_params= {'args':[3]})
             self.assertTrue(actual_result['results'], 'There are no results')
-            self.query = "SELECT count(test_rate) FROM %s where test_rate>`?`" % (bucket.name)
-            actual_result = self.run_cbq_query(query_params= {'positional_params':[3]})
+            self.query = "SELECT count(test_rate) FROM %s where test_rate>?" % (bucket.name)
+            actual_result = self.run_cbq_query(query_params= {'args':[3]})
             self.assertTrue(actual_result['results'], 'There are no results')
 
     def test_named_var_arg(self):
