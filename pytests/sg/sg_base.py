@@ -461,7 +461,7 @@ class GatewayBaseTest(unittest.TestCase):
         if not expected_str:
             return True
         for i in range(3):
-            output, error = shell.execute_command_raw('grep \'{0}\' /tmp/gateway.log'.format(expected_str))
+            output, error = shell.execute_command_raw('grep \'{0}\' {0}/tmp/gateway.log'.format(expected_str, self.folder_prefix))
             shell.log_command_output(output, error)
             if not output or not output[0]:
                 if i < 2:
@@ -469,7 +469,7 @@ class GatewayBaseTest(unittest.TestCase):
                     continue
                 else:
                     self.log.info('check_message_in_gatewaylog did not find expected error - {0}'.format(expected_str))
-                    output, error = shell.execute_command_raw('cat /tmp/gateway.log')
+                    output, error = shell.execute_command_raw('cat {0}/tmp/gateway.log'.format(self.folder_prefix))
                     shell.log_command_output(output, error)
                     return False
             else:
