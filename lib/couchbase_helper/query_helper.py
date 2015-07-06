@@ -650,9 +650,9 @@ class QueryHelper(object):
                 if field in where_condition:
                     field_that_occur.append(field)
         if where_condition and ("OR" not in where_condition):
-            index_name_with_occur_fields_where = "{0}_where_based_fields_occur_{1}".format(table_name,self._random_alphanumeric(4))
+            index_name_with_occur_fields_where = "{0}_where_based_fields_occur_{1}".format(table_name,self._random_int())
             index_name_fields_only = "{0}_index_name_fields_only_{1}".format(table_name,"_".join(field_that_occur))
-            index_name_with_expression = "{0}_expression_based_{1}".format(table_name,self._random_alphanumeric(4))
+            index_name_with_expression = "{0}_expression_based_{1}".format(table_name,self._random_int())
             create_index_fields_occur_with_where = \
             "CREATE INDEX {0} ON {1}({2}) WHERE {3} USING GSI".format(index_name_with_occur_fields_where,
              table_name,self._convert_list(field_that_occur,"numeric") , where_condition)
