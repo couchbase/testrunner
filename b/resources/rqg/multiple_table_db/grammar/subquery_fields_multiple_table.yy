@@ -35,16 +35,16 @@ rule_subquery_fields_comparisons:
 	SELECT OUTER_SUBQUERY_FIELDS FROM BUCKET_NAME use_key_conditions WHERE complex_condition LIMIT 1;
 
 rule_subquery_in:
-	SELECT OUTER_SUBQUERY_IN_FIELD FROM BUCKET_NAME use_key_conditions WHERE subquery_where_condition ;
+	SELECT RAW OUTER_SUBQUERY_IN_FIELD FROM BUCKET_NAME use_key_conditions WHERE subquery_where_condition ;
 
 rule_subquery_agg_exists:
-	SELECT select_from_with_aggregate FROM BUCKET_NAME use_key_conditions WHERE subquery_where_condition ;
+	SELECT RAW select_from_with_aggregate FROM BUCKET_NAME use_key_conditions WHERE subquery_where_condition ;
 
 in_operator:
 	IN | NOT IN;
 
 comparison_operator:
-	= | !=;
+	EQUALS | NOT_EQUALS;
 
 exists_operator_type:
 	EXISTS | NOT EXISTS;
