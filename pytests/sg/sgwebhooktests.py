@@ -28,16 +28,22 @@ class SGWebHookTest(GatewayWebhookBaseTest):
     def webHookMutipleWebHooks(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
-            shell.execute_command("kill $(ps aux | grep '8082' | awk '{print $2}')")#linux
-            shell.execute_command("simpleServe2.exe")#windows
+            type = shell.extract_remote_info().type.lower()
+            shell.copy_file_local_to_remote("pytests/sg/simpleServe.go", "{0}/tmp/simpleServe2.go".format(self.folder_prefix))
             self.log.info('=== Starting SimpleServe second instances')
-            shell.copy_file_local_to_remote("pytests/sg/simpleServe.go", "/tmp/simpleServe2.go")
-            output, error = shell.execute_command_raw('go run /tmp/simpleServe2.go 8082'
+            if type == 'windows':
+                shell.terminate_process(process_name='simpleServe2.exe')
+                output, error = shell.execute_command_raw('c:/Go/bin/go.exe run c:/tmp/simpleServe2.go 8082'
+                                      ' >{0}/tmp/simpleServe2.txt 2>&1 &'.format(self.folder_prefix))
+            else:
+                shell.execute_command("kill $(ps aux | grep '8082' | awk '{print $2}')")
+                output, error = shell.execute_command_raw('go run /tmp/simpleServe2.go 8082'
                                                   '  >/tmp/simpleServe2.txt 2>&1 &')
             self.start_sync_gateway(shell, self.configfile)
             shell.log_command_output(output, error)
             success, revision, status = self.create_doc_logfiles(shell, self.doc_id, self.doc_content,
-                                        ['/tmp/simpleServe.txt', '/tmp/simpleServe2.txt'])
+                                        ['{0}/tmp/simpleServe.txt'.format(self.folder_prefix),
+                                         '{0}/tmp/simpleServe2.txt'.format(self.folder_prefix)])
             self.assertTrue(success)
             shell.disconnect()
 
@@ -46,6 +52,7 @@ class SGWebHookTest(GatewayWebhookBaseTest):
             shell = RemoteMachineShellConnection(server)
             self.start_sync_gateway(shell, self.configfile)
             success, revision, status = self.create_doc(shell, self.doc_id, self.doc_content)
+            #TODO status could be different and depends on which web hook has been handled first
             self.assertFalse(success)
             self.assertTrue("404", status)
             self.assertTrue(self.check_message_in_gatewaylog(shell,
