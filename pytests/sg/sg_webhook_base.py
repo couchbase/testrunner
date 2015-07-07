@@ -25,6 +25,7 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             if self.case_number == 1:
+                self.execute_command("rm -rf {0}/tmp/*".format(self.folder_pref))
                 # will install sg only the first time
                 self.install(shell)
                 pid = self.is_sync_gateway_process_running(shell)
