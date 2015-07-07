@@ -49,30 +49,30 @@ def main():
         usage("ERROR: " + str(err))
     print input
 
-    cli_command = "server-info"
 
-    # add upgraded nodes in the cluster
-    # Assumption 4 nodes in ini file and add nodes from last node upwards
     cli_command = "rebalance"
-    remote_client = RemoteMachineShellConnection(input.servers[0])
-    for server in input.servers[2:]:
-        print server.ip
-        options = "--server-add={0}:8091".format(server.ip) + " --server-add-username=Administrator --server-add-password=password"
-        output, error = remote_client.execute_couchbase_cli(cli_command, options=options, cluster_host=input.servers[0].ip, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
-        print output, error
-        time.sleep(5)
+    if "rebalance_in" in input.test_params:
+        # add upgraded nodes in the cluster
+        # Assumption 4 nodes in ini file and add nodes from last node upwards
+        remote_client = RemoteMachineShellConnection(input.servers[0])
+        for server in input.servers[2:]:
+            print server.ip
+            options = "--server-add={0}:8091".format(server.ip) + " --server-add-username=Administrator --server-add-password=password"
+            output, error = remote_client.execute_couchbase_cli(cli_command, options=options, cluster_host=input.servers[0].ip, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
+            print output, error
+            time.sleep(5)
 
-    time.sleep(5)
-    # remove old build nodes out from the cluster
-    # Assumption 4 nodes and remove nodes from the top
-    cli_command = "rebalance"
-    remote_client = RemoteMachineShellConnection(input.servers[2])
-    for server in input.servers[:2]:
-        print server.ip
-        options = "--server-remove={0}:8091".format(server.ip) + " --server-add-username=Administrator --server-add-password=password"
-        output, error = remote_client.execute_couchbase_cli(cli_command, options=options, cluster_host=input.servers[2].ip, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
-        print output, error
-        time.sleep(5)
+    if "rebalance_out" in input.test_params:
+        # remove old build nodes out from the cluster
+        # Assumption 4 nodes and remove nodes from the top
+        cli_command = "rebalance"
+        remote_client = RemoteMachineShellConnection(input.servers[2])
+        for server in input.servers[:2]:
+            print server.ip
+            options = "--server-remove={0}:8091".format(server.ip) + " --server-add-username=Administrator --server-add-password=password"
+            output, error = remote_client.execute_couchbase_cli(cli_command, options=options, cluster_host=input.servers[2].ip, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
+            print output, error
+            time.sleep(5)
 
 
 
