@@ -27,7 +27,8 @@ from testconstants import SHERLOCK_VERSION
 class NewUpgradeBaseTest(BaseTestCase):
     def setUp(self):
         super(NewUpgradeBaseTest, self).setUp()
-        self.released_versions = ["2.0.0-1976-rel", "2.0.1", "3.0.1", "3.0.2"]
+        self.released_versions = ["2.0.0-1976-rel", "2.0.1", "3.0.1", 
+                                  "3.0.1-1444", "3.0.2", "3.0.2-1603"]
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
