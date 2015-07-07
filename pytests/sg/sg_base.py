@@ -461,7 +461,7 @@ class GatewayBaseTest(unittest.TestCase):
         if not expected_str:
             return True
         for i in range(3):
-            output, error = shell.execute_command_raw('grep \'{0}\' {0}/tmp/gateway.log'.format(expected_str, self.folder_prefix))
+            output, error = shell.execute_command_raw('grep \'{0}\' {1}/tmp/gateway.log'.format(expected_str, self.folder_prefix))
             shell.log_command_output(output, error)
             if not output or not output[0]:
                 if i < 2:
