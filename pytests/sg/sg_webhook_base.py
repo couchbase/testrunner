@@ -9,7 +9,6 @@ from pytests.sg.sg_base import GatewayBaseTest
 
 
 class GatewayWebhookBaseTest(GatewayBaseTest):
-
     def setUp(self):
         super(GatewayWebhookBaseTest, self).setUp()
         self.log = logger.Logger.get_logger()
@@ -25,7 +24,7 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             if self.case_number == 1:
-                shell.execute_command("rm -rf {0}/tmp/*".format(self.folder_pref))
+                shell.execute_command("rm -rf {0}/tmp/*".format(self.folder_prefix))
                 # will install sg only the first time
                 self.install(shell)
                 pid = self.is_sync_gateway_process_running(shell)
@@ -44,11 +43,12 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
         type = shell.extract_remote_info().type.lower()
         if type == 'windows':
             output, error = shell.execute_command_raw('{0}/sync_gateway.exe'
-                                                  ' c:/tmp/{1} > {2}/tmp/gateway.log 2>&1 &'.
-                                                      format(self.installed_folder, config_filename, self.folder_prefix))
+                                                      ' c:/tmp/{1} > {2}/tmp/gateway.log 2>&1 &'.
+                                                      format(self.installed_folder, config_filename,
+                                                             self.folder_prefix))
         else:
             output, error = shell.execute_command_raw('nohup /opt/couchbase-sync-gateway/bin/sync_gateway'
-                                                  ' /tmp/{0} >/tmp/gateway.log 2>&1 &'.format(config_filename))
+                                                      ' /tmp/{0} >/tmp/gateway.log 2>&1 &'.format(config_filename))
         shell.log_command_output(output, error)
         obj = RemoteMachineHelper(shell).is_process_running('sync_gateway')
         if obj and obj.pid:
@@ -111,12 +111,13 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
         else:
             return True
 
-    def check_http_server(self, shell, doc_id, revision, doc_content, attachment_filename, deleted, go_logfiles, silent):
+    def check_http_server(self, shell, doc_id, revision, doc_content, attachment_filename, deleted, go_logfiles,
+                          silent):
         if not go_logfiles:
             go_logfiles = ['{0}/tmp/simpleServe.txt'.format(self.folder_prefix)]
         for go_logfile in go_logfiles:
             head, tail = os.path.split(go_logfile)
-            logs = shell.read_remote_file(head, tail)[-1:]#last line
+            logs = shell.read_remote_file(head, tail)[-1:]  # last line
             if not silent:
                 self.log.info("check_http_server - checking {0} - {1}".format(go_logfile, logs[0]))
             else:
@@ -140,17 +141,17 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
                 self.log.info('check_http_server - log({0}) indicates post id is {1}, but expecting {2}'
                               .format(go_logfile, post_dic['_id'], doc_id))
                 return False
-            elif doc_content and ( not self.check_post_contents(doc_content, post_dic)):
+            elif doc_content and (not self.check_post_contents(doc_content, post_dic)):
                 self.log.info('check_http_server - log({0}) indicates post content is {1}, '
                               'but expecting {2}'
                               .format(go_logfile, post_dic, doc_content))
                 return False
-            elif attachment_filename and ( not self.check_post_attachment(attachment_filename, post_dic)):
+            elif attachment_filename and (not self.check_post_attachment(attachment_filename, post_dic)):
                 self.log.info('check_http_server - log({0}) indicates post content is {1}, '
                               'but expecting {2}'
                               .format(go_logfile, post_dic, doc_content))
                 return False
-            elif deleted and ( not self.check_post_deleted(post_dic)):
+            elif deleted and (not self.check_post_deleted(post_dic)):
                 self.log.info('check_http_server - log({0}) indicates post content does not have '
                               'correct value for _deleted {1}'
                               .format(go_logfile, post_dic))
@@ -163,11 +164,11 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
             self.log.info('=== Creating a doc({0}) - {1}'.format(doc_id, doc_content))
         else:
             self.log.info('=== Creating a doc({0}) - {1}...'.format(doc_id, doc_content[:5]))
-        send_requst_dic = self.send_request(shell, 'PUT', doc_id,  ' -d \'{0}\' -H "Content-Type: application/json"'
+        send_requst_dic = self.send_request(shell, 'PUT', doc_id, ' -d \'{0}\' -H "Content-Type: application/json"'
                                             .format(doc_content))
         if not send_requst_dic or not send_requst_dic['rev']:
-             self.log.info('create_doc - create_doc failed - {0}'.format(send_requst_dic))
-             return False, '', ''
+            self.log.info('create_doc - create_doc failed - {0}'.format(send_requst_dic))
+            return False, '', ''
         else:
             revision = send_requst_dic['rev']
             if not revision:
@@ -233,8 +234,8 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
 
     def update_doc(self, shell, doc_id, doc_content, revision):
         self.log.info('=== Updating a doc({0}) - {1}'.format(doc_id, doc_content))
-        send_requst_dic = self.send_request(shell, 'PUT', doc_id,  '?rev=\'{0}\' -d \'{1}\' -H "Content-Type: '
-                                                                   'application/json"'.format(revision, doc_content))
+        send_requst_dic = self.send_request(shell, 'PUT', doc_id, '?rev=\'{0}\' -d \'{1}\' -H "Content-Type: '
+                                                                  'application/json"'.format(revision, doc_content))
         revision = send_requst_dic['rev']
         if not revision:
             self.log.info('update_doc failed - {0}'.format(send_requst_dic))
@@ -255,7 +256,7 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
 
     def update_attachment(self, shell, doc_id, doc_content, attachment_filename, revision):
         self.log.info('=== update_doc_with_attachment a doc({0}) - {1}'.format(doc_id, attachment_filename))
-        send_requst_dic = self.send_request(shell, 'PUT', doc_id,  '/{0}?rev={1}'
+        send_requst_dic = self.send_request(shell, 'PUT', doc_id, '/{0}?rev={1}'
                                             .format(attachment_filename, revision, ))
         revision = send_requst_dic['rev']
         if not revision:
@@ -279,7 +280,7 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
 
     def delete_doc(self, shell, doc_id, revision):
         self.log.info('=== delete_doc a doc({0})'.format(doc_id))
-        send_requst_dic = self.send_request(shell, 'DELETE', doc_id,  '?rev={0}'.format(revision))
+        send_requst_dic = self.send_request(shell, 'DELETE', doc_id, '?rev={0}'.format(revision))
         revision = send_requst_dic['rev']
         if not revision:
             self.log.info('delete_doc failed - {0}'.format(send_requst_dic))
