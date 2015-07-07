@@ -36,17 +36,16 @@ class GatewayBaseTest(unittest.TestCase):
         self.servers = self.input.servers
         self.master = self.servers[0]
         shell = RemoteMachineShellConnection(self.master)
-        type = shell.extract_remote_info().distribution_type
         shell.disconnect()
         self.folder_prefix = ""
         self.installed_folder = '/opt/couchbase-sync-gateway/bin'
+        type = shell.extract_remote_info().distribution_type
         if type.lower() == 'windows':
             self.folder_prefix = "/cygdrive/c"
             self.installed_folder = '/cygdrive/c/Program\ Files\ \(x86\)/Couchbase'
             self.logsdir = self.folder_prefix + self.configdir
             self.datadir = self.folder_prefix + self.configdir
             self.configdir = self.folder_prefix + self.configdir
-
 
     def find_package(self, shell):
         for filename, url in self.get_expected_locations(shell):
@@ -63,7 +62,6 @@ class GatewayBaseTest(unittest.TestCase):
 
     def get_expected_locations(self, shell):
         self.info = shell.extract_remote_info()
-        type = self.info.type.lower()
         distribution_type = self.info.distribution_type.lower()
         if self.info.type.lower() == 'linux':
             if distribution_type == 'centos':
@@ -90,6 +88,7 @@ class GatewayBaseTest(unittest.TestCase):
     def kill_processes_gateway(self, shell):
         self.log.info('=== Killing Sync Gateway')
         shell.terminate_process(process_name='sync_gateway')
+        shell.execute_command('killall sync_gateway')
 
     def uninstall_gateway(self, shell):
         self.info = shell.extract_remote_info()
@@ -116,9 +115,9 @@ class GatewayBaseTest(unittest.TestCase):
     def install_gateway(self, shell):
         filename, url = self.find_package(shell)
         type = shell.extract_remote_info().type.lower()
-        wget_str = 'wget'
         distribution_type = self.info.distribution_type.lower()
         if type == 'linux':
+            wget_str = 'wget'
             if distribution_type == 'centos':
                 cmd = 'yes | rpm -i /tmp/{0}'.format(filename)
             elif distribution_type == 'ubuntu':
@@ -133,7 +132,6 @@ class GatewayBaseTest(unittest.TestCase):
             output, error = shell.execute_command_raw('cd /tmp; {0} -q -O {1} {2};ls -lh'.format(wget_str, filename, url))
 
         elif type == 'windows':
-            wget_str ="'c:\\automation\\wget.exe'"
             cmd = "cd /cygdrive/c/tmp;cmd /c 'couchbase-sync-gateway.exe /S /v/qn'" #couchbase-sync-gateway.exe /v"/l*v C:\install.log /qb
             output, error = shell.execute_command(
                      "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q"
@@ -156,7 +154,6 @@ class GatewayBaseTest(unittest.TestCase):
         self.log.info('=== Starting Sync Gateway instances')
         shell.copy_files_local_to_remote('pytests/sg/resources', self.folder_prefix + '/tmp')
         if type == 'windows':
-            # output, error = shell.execute_command_raw('/cygdrive/C/cygwin64/bin/nohup.exe {0}/sync_gateway.exe'
             output, error = shell.execute_command_raw('{0}/sync_gateway.exe'
                                                   ' c:/tmp/gateway_config.json > {1}/tmp/gateway.log 2>&1 &'.
                                                       format(self.installed_folder, self.folder_prefix))
@@ -184,17 +181,18 @@ class GatewayBaseTest(unittest.TestCase):
     def add_user(self, shell, user_name):
         self.log.info('=== Add user {0}'.format(user_name))
         self.info = shell.extract_remote_info()
-        type = self.info.type.lower()
         distribution_type = self.info.distribution_type.lower()
         if self.info.type.lower() == 'linux':
             if distribution_type == 'centos' or distribution_type == 'ubuntu':
                 if not self.check_user(shell, user_name):
                     output, error = shell.execute_command_raw('useradd -m {0}'.format(user_name))
+                    shell.log_command_output(output, error)
                 return self.check_user(shell, user_name)
             else:
                 self.log.info('add_user is not supported on Mac/Wind')
                 return False
         else:
+            type = self.info.type.lower()
             self.log.info('add_user is not supported on {0}, {1}'.format(type, distribution_type))
             return False
 
@@ -207,6 +205,7 @@ class GatewayBaseTest(unittest.TestCase):
             if distribution_type == 'centos' or distribution_type == 'ubuntu':
                 if self.check_user(shell, user_name):
                     output, error = shell.execute_command_raw('userdel {0}'.format(user_name))
+                    shell.log_command_output(output, error)
                 return not self.check_user(shell, user_name)
             else:
                 self.log.info('remove_user is only supported on centos and ubuntu')
@@ -218,7 +217,6 @@ class GatewayBaseTest(unittest.TestCase):
     def check_user(self, shell, user_name):
         self.log.info('=== Check user {0} exists'.format(user_name))
         self.info = shell.extract_remote_info()
-        type = self.info.type.lower()
         distribution_type = self.info.distribution_type.lower()
         if self.info.type.lower() == 'linux':
             if distribution_type == 'centos' or distribution_type == 'ubuntu':
@@ -234,6 +232,7 @@ class GatewayBaseTest(unittest.TestCase):
                 self.log.info('check_user is only supported on centos and ubuntu')
                 return False
         else:
+            type = self.info.type.lower()
             self.log.info('check_user is not supported on {0}, {1}', type, distribution_type)
             return False
 
@@ -279,7 +278,7 @@ class GatewayBaseTest(unittest.TestCase):
         distribution_version = self.info.distribution_version
         if self.info.type.lower() == 'linux':
             if distribution_type == 'centos':
-                if (distribution_version == 'CentOS 7'):
+                if distribution_version == 'CentOS 7':
                     cmd = 'systemctl start sync_gateway'
                 else:
                     cmd = 'start sync_gateway'
@@ -300,7 +299,6 @@ class GatewayBaseTest(unittest.TestCase):
 
     def stop_gateway_service(self, shell):
         self.info = shell.extract_remote_info()
-        type = self.info.type.lower()
         distribution_type = self.info.distribution_type.lower()
         distribution_version = self.info.distribution_version
         if self.info.type.lower() == 'linux':
@@ -331,7 +329,7 @@ class GatewayBaseTest(unittest.TestCase):
     def service_clean(self, shell):
         self.log.info('=== Cleaning Sync Gateway service and remove files')
         self.uninstall_gateway(shell)
-        output, error = shell.execute_command_raw(
+        shell.execute_command_raw(
             'rm -rf /tmp/*.log /tmp/*.json /tmp/logs /tmp/data /tmp/sync_gateway/* '
             '/dirNotExist /opt/couchbase-sync-gateway* /tmp/couchbase-sync-gateway '
             '/tmp/couchbase-sync-gateway*tar')
@@ -348,7 +346,6 @@ class GatewayBaseTest(unittest.TestCase):
 
     def run_sync_gateway_service_install(self, shell, options=''):
         self.info = shell.extract_remote_info()
-        type = self.info.distribution_type.lower()
         if self.servers[0].ssh_username == 'root':
             cmd = 'cd /opt/couchbase-sync-gateway/service; . ./sync_gateway_service_install.sh '
         else:
@@ -407,7 +404,6 @@ class GatewayBaseTest(unittest.TestCase):
         else:
             self.log.info('check_normal_error_output is not supported on {0}, {1}'.format(type, distribution_type))
             return False
-
 
     def check_job_already_running(self, shell, output, error):
         self.info = shell.extract_remote_info()

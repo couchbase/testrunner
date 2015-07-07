@@ -14,10 +14,8 @@ class SGWebHookTest(GatewayWebhookBaseTest):
             self.start_sync_gateway(shell, self.configfile)
             success, revision, status = self.create_doc(shell, self.doc_id, self.doc_content)
             self.assertTrue(success)
-            doc_content = '{"class":"Math", "student":"John", "grade":"C", "count":99}'
             success, revision, status = self.update_doc(shell, self.doc_id, self.doc_content, revision)
             self.assertTrue(success)
-            doc_content = '{"class":"Math", "student":"John", "grade":"A", "count":99}'
             success, revision, status = self.update_attachment(shell, self.doc_id, self.doc_content,
                                                                'gateway_config.json', revision)
             self.assertTrue(success)

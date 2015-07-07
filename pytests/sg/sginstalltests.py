@@ -221,5 +221,3 @@ class SGInstallerTest(GatewayBaseTest):
         self.assertEqual(error, [])
         self.assertEqual(output, temp_help)
         shell.disconnect()
-
-
