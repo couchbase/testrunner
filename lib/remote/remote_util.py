@@ -19,6 +19,7 @@ from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import WIN_CB_VERSION_3
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
+from testconstants import COUCHBASE_RELEASE_VERSIONS_3
 from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME
 from testconstants import WIN_COUCHBASE_BIN_PATH
@@ -1535,26 +1536,39 @@ class RemoteMachineShellConnection:
                 log.info('Check if {0} is in tmp directory on {1} server'.format(build_name, self.ip))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
                 if not exist:  # if not exist in tmp dir, start to download that version build
-                    builds, changes = query.get_all_builds(version=full_version, \
-                                      deliverable_type=self.info.deliverable_type, \
-                                      architecture_type=self.info.architecture_type, \
-                                      edition_type=product_name, repo=build_repo, \
-                                      distribution_version=self.info.distribution_version.lower())
-                    build = query.find_build(builds, product_name, os_type, self.info.architecture_type, \
-                                      full_version, distribution_version=self.info.distribution_version.lower(), \
-                                      distribution_type=self.info.distribution_type.lower())
+                    if short_version in COUCHBASE_RELEASE_VERSIONS_3:
+                        build = query.find_membase_release_build(product_name,
+                                                   self.info.deliverable_type,
+                                                  self.info.architecture_type,
+                                                                short_version,
+                                                              is_amazon=False,
+                            os_version=self.info.distribution_version.lower())
+                    else:
+                        builds, changes = query.get_all_builds(version=full_version,
+                                        deliverable_type=self.info.deliverable_type,
+                                      architecture_type=self.info.architecture_type,
+                                         edition_type=product_name, repo=build_repo,
+                            distribution_version=self.info.distribution_version.lower())
+                        build = query.find_build(builds, product_name, os_type,
+                                                   self.info.architecture_type,
+                                                                  full_version,
+                            distribution_version=self.info.distribution_version.lower(),
+                                  distribution_type=self.info.distribution_type.lower())
                     downloaded = self.download_binary_in_win(build.url, short_version)
                     if downloaded:
-                        log.info('Successful download {0}.exe on {1} server'.format(short_version, self.ip))
+                        log.info('Successful download {0}.exe on {1} server'
+                                             .format(short_version, self.ip))
                     else:
                         log.error('Download {0}.exe failed'.format(short_version))
                 dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
                 self.create_multiple_dir(dir_paths)
-                self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
+                self.copy_files_local_to_remote('resources/windows/automation',
+                                                      '/cygdrive/c/automation')
                 self.stop_couchbase()
                 # modify bat file to run uninstall schedule task
                 #self.create_windows_capture_file(task, product, full_version)
-                self.modify_bat_file('/cygdrive/c/automation', bat_file, product, short_version, task)
+                self.modify_bat_file('/cygdrive/c/automation',
+                                        bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
 
                 """ Remove this workaround when bug MB-14504 is fixed """
