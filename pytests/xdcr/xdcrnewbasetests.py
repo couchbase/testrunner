@@ -447,6 +447,37 @@ class NodeHelper:
         # elif os_info == OS.WINDOWS:
         #    raise "NEED To SETUP DATE COMMAND FOR WINDOWS"
 
+    @staticmethod
+    def get_cbcollect_info(server):
+        """Collect cbcollectinfo logs for all the servers in the cluster.
+        """
+        path = TestInputSingleton.input.param("logs_folder", "/tmp")
+        print "grabbing cbcollect from {0}".format(server.ip)
+        path = path or "."
+        try:
+            cbcollectRunner(server, path).run()
+            TestInputSingleton.input.test_params[
+                "get-cbcollect-info"] = False
+        except Exception as e:
+            NodeHelper._log.error(
+                "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(
+                    server.ip,
+                    e))
+    @staticmethod
+    def collect_data_files(server):
+        """Collect bucket data files for all the servers in the cluster.
+        Data files are collected only if data is not verified on the cluster.
+        """
+        path = TestInputSingleton.input.param("logs_folder", "/tmp")
+        collect_data_files.cbdatacollectRunner(server, path).run()
+
+    @staticmethod
+    def collect_logs(server, cluster_run=False):
+        """Grab cbcollect before we cleanup
+        """
+        NodeHelper.get_cbcollect_info(server)
+        if not cluster_run:
+            NodeHelper.collect_data_files(server)
 
 class ValidateAuditEvent:
 
@@ -1020,38 +1051,6 @@ class CouchbaseCluster:
         RestConnection(self.__master_node).set_internalSetting(
             XDCR_PARAM.XDCR_CHECKPOINT_INTERVAL,
             value)
-
-    def __get_cbcollect_info(self):
-        """Collect cbcollectinfo logs for all the servers in the cluster.
-        """
-        path = TestInputSingleton.input.param("logs_folder", "/tmp")
-        for server in self.__nodes:
-            print "grabbing cbcollect from {0}".format(server.ip)
-            path = path or "."
-            try:
-                cbcollectRunner(server, path).run()
-                TestInputSingleton.input.test_params[
-                    "get-cbcollect-info"] = False
-            except Exception as e:
-                self.__log.error(
-                    "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(
-                        server.ip,
-                        e))
-
-    def __collect_data_files(self):
-        """Collect bucket data files for all the servers in the cluster.
-        Data files are collected only if data is not verified on the cluster.
-        """
-        path = TestInputSingleton.input.param("logs_folder", "/tmp")
-        for server in self.__nodes:
-            collect_data_files.cbdatacollectRunner(server, path).run()
-
-    def collect_logs(self, cluster_run):
-        """Grab cbcollect before we cleanup
-        """
-        self.__get_cbcollect_info()
-        if not cluster_run:
-            self.__collect_data_files()
 
     def __remove_all_remote_clusters(self):
         rest_remote_clusters = RestConnection(
@@ -2307,11 +2306,10 @@ class XDCRNewBaseTest(unittest.TestCase):
         # collect logs before tearing down clusters
         if self._input.param("get-cbcollect-info", False) and \
                 self.__is_test_failed():
-            for cb_cluster in self.__cb_clusters:
-                self.log.info(
-                    "Collecting logs @ {0}".format(
-                        cb_cluster.get_name()))
-                cb_cluster.collect_logs(self.__is_cluster_run())
+            for server in self._input.servers:
+                self.log.info("Collecting logs @ {0}".format(server.ip))
+                NodeHelper.collect_logs(server, self.__is_cluster_run())
+
         try:
             if self.__is_cleanup_needed():
                 self.log.warn("CLEANUP WAS SKIPPED")
