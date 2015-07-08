@@ -172,7 +172,7 @@ class GatewayBaseTest(unittest.TestCase):
             output, error = shell.execute_command_raw('c:/Go/bin/go.exe run c:/tmp/simpleServe.go 8081'
                                       ' >{0}/tmp/simpleServe.txt 2>&1 &'.format(self.folder_prefix))
         else:
-            shell.terminate_process(process_name='simpleServe.go')
+            shell.terminate_process(process_name='simpleServe')
             shell.execute_command("kill $(ps aux | grep '8081' | awk '{print $2}')")
             output, error = shell.execute_command_raw('go run {0}/tmp/simpleServe.go 8081'
                                                   '  >{0}/tmp/simpleServe.txt 2>&1 &'.format(self.folder_prefix))
