@@ -34,6 +34,7 @@ class SGWebHookTest(GatewayWebhookBaseTest):
                 output, error = shell.execute_command_raw('c:/Go/bin/go.exe run c:/tmp/simpleServe2.go 8082'
                                       ' >{0}/tmp/simpleServe2.txt 2>&1 &'.format(self.folder_prefix))
             else:
+                shell.terminate_process(process_name='simpleServe2')
                 shell.execute_command("kill $(ps aux | grep '8082' | awk '{print $2}')")
                 output, error = shell.execute_command_raw('go run /tmp/simpleServe2.go 8082'
                                                   '  >/tmp/simpleServe2.txt 2>&1 &')
