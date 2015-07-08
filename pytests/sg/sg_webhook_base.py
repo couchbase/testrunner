@@ -67,13 +67,17 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
     def send_request(self, shell, method, doc_name, content):
         self.info = shell.extract_remote_info()
         cmd = 'curl -X {0} http://{1}:4984/db/{2}{3}'.format(method, self.info.ip, doc_name, content)
+        type =shell.extract_remote_info().type.lower()
+        if type == 'windows':
+            cmd = "/cygdrive/c/cygwin64/bin/curl.exe -X {0} http://{1}:4984/db/{2}{3}".format(method, self.info.ip, doc_name, content)
         output, error = shell.execute_command_raw(cmd)
+        shell.log_command_output(output, error)
         if not output:
             self.log.info('No output from issuing {0}'.format(cmd))
             return None
         else:
-            self.log.info('Output - {0}'.format(output[0]))
-            dic = json.loads(output[0])
+            self.log.info('Output - {0}'.format(output[-1]))
+            dic = json.loads(output[-1])
             return dic
 
     def check_post_contents(self, doc_content, post_dic):
