@@ -716,7 +716,7 @@ class RQGTests(BaseTestCase):
                         keyword_map[keyword] += 1
                 failure_map[test_case_number] = {"sql_query":sql_query, "n1ql_query": n1ql_query,
                  "run_result" : message, "keyword_list": keyword_list}
-        summary = " Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case)
+        summary = " Total Queries Run = {0}, Pass = {1}, Fail = {2}, Pass Pecentage = {3} %".format(total, pass_case, fail_case, ((pass_case*100)/total))
         if len(keyword_map) > 0:
             summary += "\n [ KEYWORD FAILURE DISTRIBUTION ] \n"
         for keyword in keyword_map.keys():
@@ -725,7 +725,7 @@ class RQGTests(BaseTestCase):
             summary += "\n [ FAILURE TYPE DISTRIBUTION ] \n"
             for keyword in failure_reason_map.keys():
                 summary  += keyword+" :: " + str((failure_reason_map[keyword]*100)/total)+"%\n "
-        self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case))
+        self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}, Pass Pecentage = {3} %".format(total, pass_case, fail_case, ((pass_case*100)/total)))
         result = self._generate_result(failure_map)
         return success, summary, result
 
@@ -812,7 +812,6 @@ class RQGTests(BaseTestCase):
             expected_result = data["expected_result"]
             hints = self.query_helper._find_hints(n1ql_query)
             self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING QUERY  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(case_number))
-
             success, msg = self._run_queries_from_file_and_compare(n1ql_query = n1ql_query , sql_query = sql_query, sql_result = expected_result)
             total += 1
             check = check and success
@@ -822,7 +821,7 @@ class RQGTests(BaseTestCase):
                 fail_case +=  1
                 failure_map[case_number] = { "sql_query":sql_query, "n1ql_query": n1ql_query, "reason for failure": msg}
             self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING QUERY CASE NUMBER {0} >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(case_number))
-        self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case))
+        self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}, Pass Pecentage = {3} %".format(total, pass_case, fail_case,((100*pass_case)/total) ))
         self.assertTrue(check, failure_map)
 
     def test_n1ql_queries_only(self):
@@ -989,6 +988,7 @@ class RQGTests(BaseTestCase):
             return {"success":True, "result": "Pass"}
         except Exception, ex:
             return {"success":False, "result": str(ex)}
+
     def _run_queries_compare(self, n1ql_query = None, sql_query = None, expected_result = None):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
