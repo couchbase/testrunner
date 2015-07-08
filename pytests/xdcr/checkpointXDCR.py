@@ -439,11 +439,11 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def test_source_bucket_delete_recreate(self):
         self.mutate_and_checkpoint(n=2)
         self.src_cluster.delete_bucket('default')
+        self.sleep(30)
         self.create_buckets_on_cluster(self.src_cluster.get_name())
         RestConnection(self.src_master).start_replication(REPLICATION_TYPE.CONTINUOUS,
             'default',
             "remote_cluster_%s-%s" % (self.src_cluster.get_name(), self.dest_cluster.get_name()))
-        self.sleep(5)
         self.key_counter = 0
         self.keys_loaded = []
         if self.was_pre_rep_successful():
