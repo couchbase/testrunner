@@ -159,8 +159,9 @@ class BaseSecondaryIndexingTests(QueryTests):
             for query_definition in query_definitions:
                 if query_definition.index_name not in index_list:
                     index_list.append(query_definition.index_name)
-            build_index_task = self.async_build_index(bucket, index_list)
-            build_index_task.result()
+            for bucket in self.buckets:
+                build_index_task = self.async_build_index(bucket, index_list)
+                build_index_task.result()
             monitor_index_tasks = []
             for index_name in index_list:
                 for bucket in self.buckets:
