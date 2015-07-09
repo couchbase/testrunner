@@ -2961,32 +2961,32 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def _wait_for_replication_to_catchup(self, timeout=300):
 
+        _count1 = _count2 = 0
         for cb_cluster in self.__cb_clusters:
             cb_cluster.run_expiry_pager()
 
-        # 20 minutes by default
+        # 5 minutes by default
         end_time = time.time() + timeout
-        self.sleep(15)
 
         for cb_cluster in self.__cb_clusters:
             rest1 = RestConnection(cb_cluster.get_master_node())
             for remote_cluster in cb_cluster.get_remote_clusters():
                 rest2 = RestConnection(remote_cluster.get_dest_cluster().get_master_node())
                 for bucket in cb_cluster.get_buckets():
-                    _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
-                    _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
-                    while _count1 != _count2 and (time.time() - end_time) < 0:
+                    while time.time() < end_time :
+                        _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+                        _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
+                        if _count1 == _count2:
+                            self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
+                            break
                         self.sleep(60, "Bucket: {0}, count in one cluster : {1} items, another : {2}. "
                                        "Waiting for replication to catch up ..".
                                    format(bucket.name, _count1, _count2))
-                        _count1 = rest1.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
-                        _count2 = rest2.fetch_bucket_stats(bucket=bucket.name)["op"]["samples"]["curr_items"][-1]
-                        if _count1 != _count2:
-                            self.fail("not all items replicated in {0} sec for {1} "
-                                        "bucket. on source cluster:{2}, on dest:{3}".\
+                    else:
+                        self.fail("Not all items replicated in {0} sec for {1} "
+                                "bucket. on source cluster:{2}, on dest:{3}".\
                             format(timeout, bucket.name, _count1, _count2))
-                    self.log.info("Replication caught up for bucket {0}: {1}"
-                          .format(bucket.name, _count1))
+
 
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
