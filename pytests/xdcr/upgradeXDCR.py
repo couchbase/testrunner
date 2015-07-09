@@ -156,7 +156,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.xdcr_setup()
         if float(self.initial_version[:2]) < 3.0:
             self.pause_xdcr_cluster = None
-        self.sleep(60)
         bucket = self.src_cluster.get_bucket_by_name('default')
         self._operations()
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
@@ -166,18 +165,17 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self.num_items)
         self._load_bucket(bucket, self.dest_master, gen_create2, 'create', exp=0)
 
-        nodes_to_upgrade = []
-        if "src" in upgrade_nodes:
-            nodes_to_upgrade += self.src_nodes
-        if "dest" in upgrade_nodes:
-            nodes_to_upgrade += self.dest_nodes
-
-        self.sleep(60)
         self._wait_for_replication_to_catchup()
         if self.pause_xdcr_cluster:
             for cluster in self.get_cb_clusters():
                 for remote_cluster in cluster.get_remote_clusters():
                     remote_cluster.pause_all_replications()
+
+        nodes_to_upgrade = []
+        if "src" in upgrade_nodes:
+            nodes_to_upgrade += self.src_nodes
+        if "dest" in upgrade_nodes:
+            nodes_to_upgrade += self.dest_nodes
 
         self._offline_upgrade(nodes_to_upgrade)
 
