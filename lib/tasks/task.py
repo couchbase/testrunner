@@ -2056,7 +2056,10 @@ class N1QLQueryTask(Task):
             # Query and get results
             self.log.info(" <<<<< START Executing Query {0} >>>>>>".format(self.query))
             if not self.is_explain_query:
-                self.msg, self.isSuccess = self.n1ql_helper.run_query_and_verify_result(query = self.query, server = self.server, expected_result = self.expected_result, verify_results = self.verify_results)
+                self.msg, self.isSuccess = self.n1ql_helper.run_query_and_verify_result(
+                    query = self.query, server = self.server, expected_result = self.expected_result,
+                    scan_consistency = self.scan_consistency, scan_vector = self.scan_vector,
+                    verify_results = self.verify_results)
             else:
                 self.actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.server,
                  scan_consistency = self.scan_consistency, scan_vector = self.scan_vector)
