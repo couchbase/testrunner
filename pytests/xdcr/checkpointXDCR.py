@@ -4,9 +4,12 @@ from lib.membase.api.rest_client import RestConnection
 from membase.api.exception import XDCRCheckpointException
 from mc_bin_client import MemcachedClient, MemcachedError
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
+import time
 
 
 class XDCRCheckpointUnitTest(XDCRNewBaseTest):
+    stat_num_success_ckpts = 0
+
     def setUp(self):
         super(XDCRCheckpointUnitTest, self).setUp()
         self.src_cluster = self.get_cb_cluster_by_name('C1')
@@ -235,6 +238,30 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         except MemcachedError as e:
             self.log.error(e)
 
+    def wait_for_checkpoint_to_happen(self, timeout=180):
+        """
+        Keeps checking if num_checkpoints stat for the replication
+        was incremented, every 10 sec, times out after 2 mins
+        """
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            num_success_ckpts =self.get_stat_successful_checkpoints()
+            if num_success_ckpts > self.stat_num_success_ckpts:
+                return
+            else:
+                self.sleep(10)
+        else:
+            raise XDCRCheckpointException("Timed-out waiting for checkpoint to happen")
+
+    def get_stat_successful_checkpoints(self):
+        """
+        Get num_checkpoints xdcr stat for default replication
+        """
+        rest = RestConnection(self.src_master)
+        repl = rest.get_replication_for_buckets('default', 'default')
+        val = rest.fetch_bucket_xdcr_stats()['op']['samples']['replications/'+repl['id']+'/num_checkpoints']
+        return int(val[-1])
+
     """ Initial load, 3 further updates on same key onto vb0
         Note: Checkpointing happens during the second mutation,but only if it's time to checkpoint """
     def mutate_and_checkpoint(self, n=3):
@@ -244,18 +271,23 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         while count <=n:
             remote_vbuuid, remote_highseqno = self.get_failover_log(self.dest_master)
             local_vbuuid, local_highseqno = self.get_failover_log(self.src_master)
+
             self.log.info("Local failover log: [{0}, {1}]".format(local_vbuuid,local_highseqno))
             self.log.info("Remote failover log: [{0}, {1}]".format(remote_vbuuid,remote_highseqno))
             self.log.info("################ New mutation:{0} ##################".format(self.key_counter+1))
             self.load_one_mutation_into_source_vb0(active_src_node)
-            self.sleep(self._checkpoint_interval)
             if local_highseqno == "0":
                 # avoid checking very first/empty checkpoint record
                 count += 1
                 continue
-            if self.was_checkpointing_successful():
-                self.log.info("Validating checkpoint record ...")
-                self.get_and_validate_latest_checkpoint()
+            end_time = time.time() + self._wait_timeout
+            while time.time() < end_time:
+                if self.was_checkpointing_successful():
+                    self.log.info("Validating checkpoint record ...")
+                    self.get_and_validate_latest_checkpoint()
+                    break
+                else:
+                    self.sleep(20, "Checkpoint not recorded yet, will check after 20s")
             else:
                 self.log.info("Checkpointing failed - may not be an error if vb_uuid changed ")
                 return False
@@ -524,8 +556,8 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                     self.log.info("RevID verification successful for key {0}".format(key))
                 else:
                     self.fail("RevID verification failed for key {0}".format(key))
-            except MemcachedError:
-                self.log.error("Key {0} is missing at destination".format(key))
+            except MemcachedError as e:
+                self.log.error("Key {0} threw {1} on getMeta()".format(key, e))
                 missing_keys = True
         if missing_keys:
             self.fail("Some keys are missing at destination")
