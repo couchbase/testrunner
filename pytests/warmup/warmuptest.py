@@ -296,6 +296,7 @@ class WarmUpTests(BaseTestCase):
 
     def _check_warm_up_progress_stats(self, old_stats, stats):
         self.log.info("new stat is %s" % stats)
+        self.log.info("old stat is %s" % old_stats)
         for task in stats:
             old_task = [o_task for o_task in old_stats
                         if task["bucket"] == o_task["bucket"] and task["node"] == o_task["node"]][0]
