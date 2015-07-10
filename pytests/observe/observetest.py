@@ -161,7 +161,7 @@ class ObserveTests(BaseTestCase):
                     self.max_time = (t_end - t_start)
                     self.log.info("Max Time taken for observe is :- %s" % self.max_time)
                     self.log.info("Cas Value:- %s" % (cas))
-            query = {"stale" : "false", "full_set" : "true", "connection_timeout" : 60000}
+            query = {"stale" : "false", "full_set" : "true", "connection_timeout" : 600000}
             self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items, bucket, timeout=self.wait_timeout)
             self.log.info("Observe Validation:- view: %s in design doc dev_Doc1 and in bucket %s" % (self.default_view, bucket))
             # check whether observe has to run with delete and delete parallel with observe or not
@@ -182,7 +182,8 @@ class ObserveTests(BaseTestCase):
                     for task in tasks:
                         task.result()
 
-                query = {"stale" : "false", "full_set" : query_set, "connection_timeout" : 60000}
+                query = {"stale" : "false", "full_set" : query_set, "connection_timeout" : 600000}
+                import pdb;pdb.set_trace()
                 self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items / 2, bucket, timeout=self.wait_timeout)
                 self.log.info("Observe Validation:- view: %s in design doc dev_Doc1 and in bucket %s" % (self.default_view, self.default_bucket_name))
 
