@@ -45,7 +45,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         env = Environment(loader=loader)
         template = env.get_template('{0}'.format(template_filename))
         if self.password:
-            password_str = urllib.quote('{0}:{1}@'.format(self.bucket, self.password))
+            password_str = urllib.quote('{0}'.format(self.bucket)) +':{0}@'.format(self.password)
         else:
             password_str = ''
         if template_filename == 'gateway_config_template.json':
