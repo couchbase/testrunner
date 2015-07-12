@@ -114,6 +114,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
     def send_request(self, shell, cmd):
         output, error = shell.execute_command_raw(cmd)
         if not output:
+            shell.log_command_output(output, error)
             self.log.info('No output from issuing {0}'.format(cmd))
             return None, error
         else:

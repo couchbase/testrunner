@@ -2,6 +2,7 @@ from sg.sg_config_base import GatewayConfigBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 import shutil
+import time
 from couchbase_helper.cluster import Cluster
 
 help_string = ['Usage of /opt/couchbase-sync-gateway/bin/sync_gateway:',
@@ -141,6 +142,7 @@ class SGConfigTests(GatewayConfigBaseTest):
             shutil.copy2('pytests/sg/resources/gateway_config_backup.json', 'pytests/sg/resources/gateway_config.json')
             self.assertTrue(self.start_sync_gateway_template(shell, self.template))
             if not self.expected_error:
+                time.sleep(5)
                 success, revision = self.create_doc(shell)
                 self.assertTrue(success)
                 self.assertTrue(self.delete_doc(shell, revision))
