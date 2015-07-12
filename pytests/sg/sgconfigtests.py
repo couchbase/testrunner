@@ -152,7 +152,7 @@ class SGConfigTests(GatewayConfigBaseTest):
             shell = RemoteMachineShellConnection(server)
             shutil.copy2('pytests/sg/resources/gateway_config_backup.json', 'pytests/sg/resources/gateway_config.json')
             shell.copy_files_local_to_remote('pytests/sg/resources', '/tmp')
-            self.assertFalse(self.start_sync_gateway(shell))
+            self.assertTrue(self.start_sync_gateway(shell))
             self.assertTrue(self.check_message_in_gatewaylog(shell, self.expected_log))
             if not self.expected_error:
                 if self.admin_port:
