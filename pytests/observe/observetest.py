@@ -183,7 +183,6 @@ class ObserveTests(BaseTestCase):
                         task.result()
 
                 query = {"stale" : "false", "full_set" : query_set, "connection_timeout" : 600000}
-                import pdb;pdb.set_trace()
                 self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items / 2, bucket, timeout=self.wait_timeout)
                 self.log.info("Observe Validation:- view: %s in design doc dev_Doc1 and in bucket %s" % (self.default_view, self.default_bucket_name))
 
