@@ -439,7 +439,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 drop_index = self.ops_map["after"]["drop_index"],
                 queries = self.ops_map["after"]["query_ops"],
                 queries_with_explain = self.ops_map["after"]["query_explain_ops"],
-                scan_consistency = scan_consistency,
+                scan_consistency = "request_plus",
                 scan_vectors = scan_vectors)
 
     def run_multi_operations(self, buckets = [], query_definitions = [], expected_results = {},
