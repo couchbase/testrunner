@@ -2231,7 +2231,7 @@ class MonitorIndexTask(Task):
         except CreateIndexException as e:
             # initial query failed, try again
             self.state = FINISHED
-            task_manager.schedule(self, self.retry_time)
+            self.set_exception(e)
         # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
