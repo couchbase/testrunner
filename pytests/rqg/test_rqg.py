@@ -21,6 +21,7 @@ class RQGTests(BaseTestCase):
         super(RQGTests, self).setUp()
         self.log.info("==============  RQGTests setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
+        self.crud_batch_size= self.input.param("crud_batch_size",1)
         self.record_failure= self.input.param("record_failure",False)
         self.failure_record_path= self.input.param("failure_record_path","/tmp")
         self.use_mysql= self.input.param("use_mysql",True)
@@ -406,6 +407,8 @@ class RQGTests(BaseTestCase):
             check = False
             for t in thread_list:
                 t.join()
+            # Drop and re-insert data
+            self._populate_delta_buckets()
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
@@ -473,6 +476,8 @@ class RQGTests(BaseTestCase):
             check = False
             for t in thread_list:
                 t.join()
+            # Drop and re-insert data
+            self._populate_delta_buckets()
             # Drop all the secondary Indexes
             if self.use_secondary_index:
                 self._drop_secondary_indexes_in_batches(list)
@@ -502,7 +507,7 @@ class RQGTests(BaseTestCase):
         for n1ql_query_info in query_list:
             data = n1ql_query_info
             batch.append({str(test_case_number):data})
-            if count == self.concurreny_count:
+            if count == self.crud_batch_size:
                 inserted_count += len(batch)
                 batches.append(batch)
                 count = 1
@@ -526,15 +531,11 @@ class RQGTests(BaseTestCase):
                     n1ql_queries = list)
             if self.use_secondary_index:
                 self._generate_secondary_indexes_in_batches(list)
-            thread_list = []
             # Create threads and run the batch
             for test_case in list:
                 test_case_input = test_case
                 verification_query = "SELECT * from {0} ORDER by primary_key_id".format(table_map.keys()[0])
-                t = threading.Thread(target=self._run_basic_crud_test, args = (test_case_input, verification_query,  test_case_number, result_queue))
-                t.daemon = True
-                t.start()
-                thread_list.append(t)
+                self._run_basic_crud_test(test_case_input, verification_query,  test_case_number, result_queue, failure_record_queue)
                 test_case_number += 1
             # Capture the results when done
             check = False
@@ -594,20 +595,14 @@ class RQGTests(BaseTestCase):
                     n1ql_queries = list)
             if self.use_secondary_index:
                 self._generate_secondary_indexes_in_batches(list)
-            thread_list = []
             # Create threads and run the batch
             for test_case in list:
                 test_case_input = test_case
                 verification_query = "SELECT * from {0} ORDER by primary_key_id".format(table_map.keys()[0])
-                t = threading.Thread(target=self._run_basic_crud_test, args = (test_case_input, verification_query,  test_case_number, result_queue, failure_record_queue))
-                t.daemon = True
-                t.start()
-                thread_list.append(t)
+                self._run_basic_crud_test(test_case_input, verification_query,  test_case_number, result_queue, failure_record_queue)
                 test_case_number += 1
             # Capture the results when done
             check = False
-            for t in thread_list:
-                t.join()
             # Drop all the secondary Indexes
             self._populate_delta_buckets()
             if self.use_secondary_index:
@@ -1498,21 +1493,17 @@ class RQGTests(BaseTestCase):
         bucket_list = table_key_map.keys()
         self.new_record_db={}
         for bucket_name in bucket_list:
-            query = "select * from {0}".format(bucket_name)
-            columns, rows = self.client._execute_query(query = query)
-            new_record_db = self.client._gen_json_from_results_with_primary_key(columns, rows,
-                primary_key = table_key_map[bucket_name])
-            new_db_info ={}
-            for key in self.record_db[bucket_name].keys():
-                if key not in new_record_db.keys():
-                    new_db_info[key]=self.record_db[bucket_name][key]
-            #INSERT DATA AGAIN IN COUCHBASE
+            query = "delete from {0}".format(bucket_name)
+            self.client._insert_execute_query(query = query)
+            self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+            new_db_info = self.record_db
+            # INSERT DATA AGAIN IN COUCHBASE
             for bucket in self.buckets:
                 if bucket.name == bucket_name:
-                    self._load_data_in_buckets_using_n1ql(bucket, new_db_info)
-                    #INSERT DATA AGAIN IN MYSQL
-                    for key in new_db_info.keys():
-                        insert_sql = self.query_helper._generate_insert_statement_from_data(bucket_name,new_db_info[key])
+                    self._load_data_in_buckets_using_n1ql(bucket, new_db_info[bucket_name])
+                    # INSERT DATA AGAIN IN MYSQL
+                    for key in new_db_info[bucket_name].keys():
+                        insert_sql = self.query_helper._generate_insert_statement_from_data(bucket_name,new_db_info[bucket_name][key])
                         self.client._insert_execute_query(insert_sql)
 
 
