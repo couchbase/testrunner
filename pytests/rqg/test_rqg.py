@@ -539,8 +539,6 @@ class RQGTests(BaseTestCase):
                 test_case_number += 1
             # Capture the results when done
             check = False
-            for t in thread_list:
-                t.join()
             # Drop all the secondary Indexes
             self._populate_delta_buckets()
             if self.use_secondary_index:
