@@ -6,7 +6,6 @@ import math
 import re
 import testconstants
 from datetime import date, timedelta
-from dateutil import parser
 import datetime
 import time
 from remote.remote_util import RemoteMachineShellConnection
@@ -1926,7 +1925,7 @@ class QueryTests(BaseTestCase):
 
     def test_clock_str(self):
         self.query = "select clock_str() as now"
-        now = self._get_date_difference()
+        now = datetime.datetime.now()
         res = self.run_cbq_query()
         expected = "%s-%02d-%02dT" % (now.year, now.month, now.day)
         self.assertTrue(res["results"][0]["now"].startswith(expected),
@@ -1942,7 +1941,7 @@ class QueryTests(BaseTestCase):
 
     def test_date_add_str(self):
         self.query = "select date_add_str(clock_str(), 10, 'day') as now"
-        now = self._get_date_difference() + datetime.timedelta(days=10)
+        now = datetime.datetime.now() + datetime.timedelta(days=10)
         res = self.run_cbq_query()
         expected = "%s-%02d-%02dT%02d:" % (now.year, now.month, now.day, now.hour)
         expected_delta = "%s-%02d-%02dT%02d:" % (now.year, now.month, now.day, now.hour + 1)
@@ -1967,9 +1966,10 @@ class QueryTests(BaseTestCase):
 
     def test_now(self):
         self.query = "select now_str() as now"
-        exp_date = self._get_date_difference()
+        now = datetime.datetime.now()
+        today = date.today()
         res = self.run_cbq_query()
-        expected = "%s-%02d-%02dT" % (exp_date.year, exp_date.month, exp_date.day,)
+        expected = "%s-%02d-%02dT" % (today.year, today.month, today.day,)
         self.assertTrue(res["results"][0]["now"].startswith(expected),
                         "Result expected: %s. Actual %s" % (expected, res["results"]))
 
@@ -1977,7 +1977,7 @@ class QueryTests(BaseTestCase):
         self.query = 'select date_part_str(now_str(), "hour") as hour, ' +\
         'date_part_str(now_str(),"minute") as minute, date_part_str(' +\
         'now_str(),"second") as sec, date_part_str(now_str(),"milliseconds") as msec'
-        now = self._get_date_difference()
+        now = datetime.datetime.now()
         res = self.run_cbq_query()
         self.assertTrue(res["results"][0]["hour"] == now.hour or res["results"][0]["hour"] == (now.hour + 1),
                         "Result for hours expected: %s. Actual %s" % (now.hour, res["results"]))
@@ -1996,7 +1996,7 @@ class QueryTests(BaseTestCase):
                                                                                 doc['join_mo'],
                                                                                 doc['join_day']))
 
-            today = self._get_date_difference()
+            today = date.today()
             expected_result = [{"name" : doc['name'], "join_yr" : doc['join_yr'],
                                 "join_mo" : doc['join_mo'], "join_day" : doc['join_day']}
                                for doc in self.full_list
@@ -3090,6 +3090,3 @@ class QueryTests(BaseTestCase):
             self.sleep(5, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in res['results']])
         raise Exception('index %s is not online. last response is %s' % (index_name, res))
 
-    def _get_date_difference(self):
-        curr_date = self.shell.execute_command("date")
-        return parser.parse(curr_date[0])
