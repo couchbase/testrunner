@@ -439,6 +439,7 @@ class DMLQueryTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'create index %s on %s(name) USING %s' % (index_name, bucket.name, self.index_type)
             self.run_cbq_query()
+            self._wait_for_index_online(bucket, index_name)
         try:
             for bucket in self.buckets:
                 self.query = 'delete from %s  use index(%s using %s) where job_title="n1ql deletion"'  % (bucket.name,
