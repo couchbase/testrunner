@@ -758,9 +758,9 @@ class QueriesViewsTests(QueryTests):
         finally:
             return indexes, query
 
-    def run_intersect_scan_explain_query(self, indexes_names, query):
+    def run_intersect_scan_explain_query(self, indexes_names, query_temp):
         for bucket in self.buckets:
-            query = 'EXPLAIN %s' % (query % (bucket.name))
+            query = 'EXPLAIN %s' % (query_temp % (bucket.name))
             res = self.run_cbq_query(query=query)
             self.log.info(res)
             result = res["results"][0]["~children"][0]["~children"][0] if "~children" in res["results"][0]["~children"][0] \
