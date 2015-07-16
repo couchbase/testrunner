@@ -373,7 +373,7 @@ class AutoCompactionTests(BaseTestCase):
         compaction_task.result(self.wait_timeout)
         self.cluster.async_compact_bucket(self.master, self.default_bucket_name)
         compact_run = remote_client.wait_till_compaction_end(rest, self.default_bucket_name, timeout_in_seconds=self.wait_timeout)
-        compaction_task.result(self.wait_timeout)
+ 
         if compact_run:
             self.log.info("auto compaction run successfully")
         else:
