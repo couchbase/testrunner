@@ -1175,10 +1175,12 @@ class QueryHelper(object):
                         datetime_check = False
                         add_token = False
                         if sql_type == "n1ql":
-                            new_sql+=token.replace("DATETIME_VALUE",\
-                                self._apply_functions_to_params(function_list,"\'"+str(values[mid_value_index])+"\'"))+space
+                            value = self.gen_datetime_delta(str(values[mid_value_index]),token, "n1ql")
+                            new_sql+=token.replace(token,\
+                                self._apply_functions_to_params(function_list,value))+space
                         else:
-                            new_sql+=token.replace("DATETIME_VALUE","\'"+str(values[mid_value_index])+"\'")+space
+                            value = self.gen_datetime_delta(str(values[mid_value_index]),token, "sql")
+                            new_sql+=token.replace(token,value)+space
                     elif "UPPER_BOUND_VALUE" in token:
                         datetime_check = False
                         add_token = False
@@ -1208,6 +1210,22 @@ class QueryHelper(object):
         else:
             new_sql = new_sql.replace("SUBSTR_INDEX","0")
         return new_sql
+
+    def gen_datetime_delta(self, datetime_value, sql, type):
+        if "ADD" in sql:
+            factor = sql.split("DATETIME_VALUE_ADD_")[1]
+            sign = "+"
+            if type == "n1ql":
+                sign = ""
+        elif "SUB" in sql:
+            factor = sql.split("DATETIME_VALUE_SUB_")[1]
+            sign = "-"
+        else:
+            return "\'"+datetime_value +  "\' "
+        if type == "sql":
+            return "\'"+datetime_value +  "\' "+ sign +" INTERVAL 1 "+ factor.lower()
+        else:
+            return "DATE_ADD_STR(\'"+datetime_value+"\',"+sign+"1,\'"+factor.lower()+"\')"
 
     def find_matching_keywords(self, sql = "", keyword_list = []):
         list = []
