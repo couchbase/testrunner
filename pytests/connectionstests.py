@@ -47,6 +47,12 @@ class ConnectionTests(BaseTestCase):
         os.system(command)
 
     def create_connections_test(self):
+
+        shell = RemoteMachineShellConnection(self.master)
+        os_type = shell.extract_remote_info()
+        if os_type.type != 'Linux':
+            return
+
         num_connections = self.input.param('num_connections', 1000)
         mem_usage_delta = self.input.param('mem_usage_max_delta', 5)
         servers_in = self.input.param('servers_in', 0)
@@ -89,6 +95,11 @@ class ConnectionTests(BaseTestCase):
 
     """ this test need to install autoconf and automake on master vm """
     def multiple_connections_using_memcachetest (self):
+
+        shell = RemoteMachineShellConnection(self.master)
+        os_type = shell.extract_remote_info()
+        if os_type.type != 'Linux':
+            return
         mcsoda_items = self.input.param('mcsoda_items', 1000000)
         memcachetest_items = self.input.param('memcachetest_items', 100000)
         moxi_port = self.input.param('moxi_port', 51500)
