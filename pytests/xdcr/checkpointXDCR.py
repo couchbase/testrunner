@@ -439,8 +439,8 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         if self.was_pre_rep_successful():
             self.log.info("_pre_replicate following the source crash was successful: {0}".
                           format(self.num_successful_prereps_so_far))
-            # the replicator might still be awake, ensure adequate time gap
-            self.sleep(self._wait_timeout * 2)
+            self.load_one_mutation_into_source_vb0(
+                self.get_active_vb0_node(self.src_master))
             self.verify_next_checkpoint_passes()
         else:
             self.fail("ERROR: _pre_replicate following source crash was unsuccessful")
