@@ -306,6 +306,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         if not self.is_goxdcr_migration_successful(self.dest_master):
             self.fail("C2: Metadata migration failed after old nodes were removed")
 
+        self.sleep(self._wait_timeout)
         if float(self.initial_version[:2]) >= 3.0 and self._demand_encryption:
             if not self.is_ssl_over_memcached(self.src_master):
                 self.fail("C1: After old nodes were replaced, C1 still uses "
