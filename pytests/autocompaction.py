@@ -365,13 +365,20 @@ class AutoCompactionTests(BaseTestCase):
     def test_start_stop_DB_compaction(self):
         rest = RestConnection(self.master)
         remote_client = RemoteMachineShellConnection(self.master)
+        self.log.info('loading the buckets')
         self._load_all_buckets(self.master, self.gen_load, "create", 0, 1)
+        self.log.info('disabling compaction')
         self.disable_compaction()
+        self.log.info('monitor db fragmentation')
         self._monitor_DB_fragmentation()
+        self.log.info('async compact the bucket')
         compaction_task = self.cluster.async_compact_bucket(self.master, self.default_bucket_name)
+        self.log.info('cancel bucket compaction')
         self._cancel_bucket_compaction(rest, self.default_bucket_name)
-        compaction_task.result(self.wait_timeout)
+        #compaction_task.result(self.wait_timeout)
+        self.log.info('compact again')
         self.cluster.async_compact_bucket(self.master, self.default_bucket_name)
+        self.log.info('waiting for compaction to end')
         compact_run = remote_client.wait_till_compaction_end(rest, self.default_bucket_name, timeout_in_seconds=self.wait_timeout)
  
         if compact_run:

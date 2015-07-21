@@ -30,8 +30,9 @@ class ObserveTests(BaseTestCase):
             self.log.info("Observe Rebalance Started")
             self.cluster.rebalance(self.servers[:1], self.servs_in, [])
         except Exception, e:
-            self.tearDown()
-            self.fail(e)
+            pass
+            #self.tearDown()
+            #self.fail(e)
 
     def tearDown(self):
         super(ObserveTests, self).tearDown()
@@ -237,9 +238,13 @@ class ObserveTests(BaseTestCase):
         # Persist all the loaded data item
         self.log.info("Nodes in cluster: %s" % self.servers[:self.nodes_init])
         for bucket in self.buckets:
+            self.log.info('\n\nwaiting for persistence')
             RebalanceHelper.wait_for_persistence(self.master, bucket)
+            self.log.info('\n\n_stats_befor_warmup')
             self._stats_befor_warmup(bucket.name)
+            self.log.info('\n\n_restart_memcache')
             self._restart_memcache(bucket.name)
             # for bucket in self.buckets:
+            self.log.info('\n\n_wait_warmup_completed')
             ClusterOperationHelper._wait_warmup_completed(self, self.servers[:self.nodes_init], bucket.name)
             self._run_observe(self)
