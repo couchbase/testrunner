@@ -27,8 +27,9 @@ from testconstants import SHERLOCK_VERSION
 class NewUpgradeBaseTest(BaseTestCase):
     def setUp(self):
         super(NewUpgradeBaseTest, self).setUp()
-        self.released_versions = ["2.0.0-1976-rel", "2.0.1", "3.0.1", 
-                                  "3.0.1-1444", "3.0.2", "3.0.2-1603"]
+        self.released_versions = ["2.0.0-1976-rel", "2.0.1", "2.5.0", "2.5.1",
+                                  "2.5.2", "3.0.0", "3.0.1",
+                                  "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3"]
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
@@ -192,7 +193,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         if re.match(r'[1-9].[0-9].[0-9]-[0-9]+$', version):
             version = version + "-rel"
-        if version in self.released_versions:
+        if version[:5] in self.released_versions:
             appropriate_build = BuildQuery().\
                 find_membase_release_build('%s-enterprise' % (self.product),
                                            info.deliverable_type,
