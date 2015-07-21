@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
     server_info = {
         "ip": cfg.CLUSTER_IPS[0],
-        "port" : int(8091),
+        "port" : 8091,
         "username" : cfg.COUCHBASE_USER,
         "password" : cfg.COUCHBASE_PWD
     }
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         cluster_rest.delete_bucket(bucket_name)
         cluster_rest.create_bucket(bucket=bucket_name,
                                    ramQuotaMB=int(buckets_ram[bucket_name]),
-                                   proxyPort=port+int(i))
+                                   proxyPort=port+i)
     time.sleep(60)
 
     # index drop/create
