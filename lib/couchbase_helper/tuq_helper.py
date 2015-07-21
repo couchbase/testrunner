@@ -415,6 +415,7 @@ class N1QLHelper():
                     raise Exception(" Primary Index Already present, This looks like a bug !!!")
             except Exception, ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
+                raise ex
 
     def verify_index_with_explain(self, actual_result, index_name):
         if index_name in str(actual_result):

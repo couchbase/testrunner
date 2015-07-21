@@ -90,6 +90,7 @@ class QueryTests(BaseTestCase):
                  server = n1ql_server)
             except Exception, ex:
                 self.log.info(ex)
+                raise ex
 
     def tearDown(self):
         if hasattr(self, 'n1ql_helper'):
