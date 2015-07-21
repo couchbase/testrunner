@@ -1,4 +1,5 @@
 import sys
+import time
 sys.path = [".", "../lib"] + sys.path
 
 import testcfg as cfg
@@ -70,6 +71,8 @@ if __name__ == "__main__":
         cluster_rest.create_bucket(bucket=bucket_name,
                                    ramQuotaMB=int(buckets_ram[bucket_name]),
                                    proxyPort=port+int(i))
+    time.sleep(60)
+
     # index drop/create
     for query in index_n1ql:
         print query
