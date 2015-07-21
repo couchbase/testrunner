@@ -14,6 +14,7 @@ import sys
 from testconstants import WIN_CB_VERSION_3
 from testconstants import SHERLOCK_VERSION
 from testconstants import COUCHBASE_VERSION_2
+from testconstants import COUCHBASE_VERSION_2_WITH_REL
 
 
 class MembaseBuild(object):
@@ -125,8 +126,9 @@ class BuildQuery(object):
     def find_membase_release_build(self, product, deliverable_type, os_architecture,
                                     build_version, is_amazon=False, os_version=""):
         build_details = build_version
-        if build_version.startswith("1.7.2"):
-            build_details = "1.7.2r-20-g6604356"
+        if build_version[:5] in COUCHBASE_VERSION_2_WITH_REL:
+            if build_version[-4:] != "-rel":
+                build_details = build_details + "-rel"
         elif build_version.startswith("1.8.0"):
             build_details = "1.8.0r-55-g80f24f2"
             product = "couchbase-server-enterprise"
@@ -173,6 +175,7 @@ class BuildQuery(object):
                              "{0}_{1}_{3}.setup.{2}".format(product, os_architecture,
                                                      deliverable_type, build_details)
         else:
+            """ check match full version x.x.x-xxxx """
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
                 """  in release folder
                         /3.0.1/couchbase-server-enterprise-3.0.1-centos6.x86_64.rpm
@@ -202,8 +205,13 @@ class BuildQuery(object):
                                  product, os_architecture, deliverable_type,
                                  build_details[:5], os_name)
                 else:
-                    build.url = "http://builds.hq.northscale.net/releases/{0}/"\
-                        "{1}_{2}_{4}.{3}".format(build_version[:build_version.find('-')],
+                    if "2.5.2" in build_details[:5]:
+                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
+                            "{1}_{4}_{2}.{3}".format(build_version[:build_version.find('-')],
+                               product, os_architecture, deliverable_type, build_details[:5])
+                    else:
+                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
+                            "{1}_{2}_{4}.{3}".format(build_version[:build_version.find('-')],
                                product, os_architecture, deliverable_type, build_details)
             else:
                 if build_version[:5] in cb_release_version_3:

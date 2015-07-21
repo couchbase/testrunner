@@ -204,20 +204,19 @@ class Installer(object):
                 timeout = int(params["timeout"])
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
             cb_releases_version = ["1.8.1", "2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0",
-                                    "2.5.0", "2.5.1", "3.0.1", "3.0.1-1444",
-                                    "3.0.2", "3.0.2-1603"]
+                                    "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1", "3.0.2"]
             build_repo = MV_LATESTBUILD_REPO
             if toy is not "":
                 build_repo = COUCHBASE_REPO
             elif version[:3] == "3.5" or version[:3] == "4.0":
                 build_repo = SHERLOCK_BUILD_REPO
             for name in names:
-                if version in releases_version:
+                if version[:5] in releases_version:
                     build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
                                                                      os_architecture=info.architecture_type,
                                                                      build_version=version,
                                                                      product='membase-server-enterprise')
-                elif version in cb_releases_version:
+                elif version[:5] in cb_releases_version:
                     build = BuildQuery().find_membase_release_build(
                                             deliverable_type=info.deliverable_type,
                                             os_architecture=info.architecture_type,
