@@ -8,6 +8,8 @@ import copy
 class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def setUp(self):
+        self.use_replica =True
+        self.all_index_nodes_lost = False
         super(SecondaryIndexingRecoveryTests, self).setUp()
         self.load_query_definitions = []
         self.initial_index_number = self.input.param("initial_index_number", 10)
@@ -102,6 +104,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_server_crash(self):
         try:
+            self.use_replica=False
             self.targetProcess= self.input.param("targetProcess",'memcached')
             self._run_initial_index_tasks()
             kvOps_tasks = self._run_kvops_tasks()
@@ -281,15 +284,19 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def _redefine_index_usage(self):
         qdfs = []
+        if not self.use_replica :
+            return
         if self.use_replica_when_active_down and \
-            (self.ops_map["before"]["query_ops"] or self.ops_map["in_between"]["query_ops"]):
+            (self.ops_map["before"]["query_ops"] or self.ops_map["in_between"]["query_ops"])\
+            and not self.all_index_nodes_lost:
             for query_definition in self.query_definitions:
                 if query_definition.index_name in self.index_lost_during_move_out:
                     query_definition.index_name = query_definition.index_name+"_replica"
                 qdfs.append(query_definition)
             self.query_definitions = qdfs
         elif self.ops_map["before"]["query_ops"] \
-         or self.ops_map["in_between"]["query_ops"]:
+         or self.ops_map["in_between"]["query_ops"] \
+         or self.all_index_nodes_lost:
             for query_definition in self.query_definitions:
                 if query_definition.index_name in self.index_lost_during_move_out:
                     query_definition.index_name = "#primary"
@@ -328,7 +335,10 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             key = "{0}:{1}".format(server.ip,server.port)
             if key not in out_list:
                 list.append(server)
+        if len(index_nodes) == len(self.nodes_out_list):
+            self.all_index_nodes_lost=True
         return list
+
 
     def _find_list_of_indexes_lost(self):
         index_node_count = 0
