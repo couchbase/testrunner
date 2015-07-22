@@ -20,6 +20,7 @@ from testconstants import WIN_CB_VERSION_3
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_RELEASE_VERSIONS_3
+from testconstants import SHERLOCK_VERSION
 from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME
 from testconstants import WIN_COUCHBASE_BIN_PATH
@@ -2914,7 +2915,6 @@ class RemoteMachineShellConnection:
                                     self.log_command_output(o, r)
 
     def check_pkgconfig(self, deliverable_type, openssl):
-
         if "SUSE" in self.info.distribution_type:
             o, r = self.execute_command("zypper -n if pkg-config 2>/dev/null| grep -i \"Installed: Yes\"")
             self.log_command_output(o, r)
@@ -2929,7 +2929,7 @@ class RemoteMachineShellConnection:
 
         else:
             if self.info.deliverable_type == "rpm":
-                centos_version = ["6.4"]
+                centos_version = ["6.4", "6.5"]
                 o, r = self.execute_command("cat /etc/redhat-release")
                 self.log_command_output(o, r)
 
@@ -2939,7 +2939,7 @@ class RemoteMachineShellConnection:
                     self.log_command_output(o, r)
                 if o[0] != "":
                     o = o[0].split(" ")
-                    if o[2] in centos_version and "1" in openssl:
+                    if o[2] in centos_version:
                         o, r = self.execute_command("rpm -qa | grep pkgconfig")
                         self.log_command_output(o, r)
                         if not o:
@@ -2956,8 +2956,8 @@ class RemoteMachineShellConnection:
                                     o, r = self.execute_command("rpm -qa | grep pkgconfig")
                                     log.info("package pkgconfig should appear below")
                                     self.log_command_output(o, r)
-                    elif openssl == "":
-                        log.info("no need to install pkgconfig on couchbase binary using openssl 0.9.8")
+                    else:
+                        log.info("no need to install pkgconfig")
 
     def install_missing_lib(self):
         if self.info.deliverable_type == "deb":
