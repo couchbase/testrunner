@@ -87,7 +87,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         monitor_index_task = self.cluster.async_monitor_index(
                  server = self.n1ql_node, bucket = bucket,
                  n1ql_helper = self.n1ql_helper,
-                 index_name = index_name)
+                 index_name = index_name,
+                 timeout = self.timeout_for_index_online)
         return monitor_index_task
 
     def async_build_index(self, bucket = "default", index_list = []):
