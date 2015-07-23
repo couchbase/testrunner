@@ -156,9 +156,15 @@ class BuildQuery(object):
                             .format(build_version[:build_version.find('-')],
                             product, arch_type, deliverable_type, build_details[:5])
                 else:
-                    build.url = "http://builds.hq.northscale.net/releases/{0}/"\
-                            "{1}_{2}_{4}.setup.{3}".format(build_version, product,
-                            os_architecture, deliverable_type, build_details)
+                    if "2.5.2" in build_details[:5]:
+                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
+                            "{1}_{4}_{2}.setup.{3}".format(build_version[:build_version.find('-')],
+                               product, os_architecture, deliverable_type, build_details[:5])
+                    else:
+                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
+                          "{1}_{2}_{4}.setup.{3}".format(build_version[:build_version.find('-')],
+                            product, os_architecture, deliverable_type, build_details)
+                    print "build url   ", build.url
             else:
                 if build_version[:5] in cb_release_version_3:
                     arch_type = "amd64"
