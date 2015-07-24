@@ -20,6 +20,7 @@ class HostnameBaseTests(BaseTestCase):
         self.sleep(3, "Sleep to wait deinitialize")
 
     def rename_nodes(self, servers, names={}):
+        print '\n\nrename names servers:', servers, ' names', names
         hostnames={}
         for server in servers:
             shell = RemoteMachineShellConnection(server)
