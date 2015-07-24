@@ -16,6 +16,7 @@ from testconstants import COUCHBASE_VERSIONS
 from testconstants import MISSING_UBUNTU_LIB
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
+from testconstants import COUCHBASE_VERSIONS
 from testconstants import WIN_CB_VERSION_3
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
@@ -1514,6 +1515,7 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         log.info(self.info.distribution_type)
         type = self.info.distribution_type.lower()
+        fv, sv, bn = self.get_cbversion(type)
         if type == 'windows':
             product = "cb"
             query = BuildQuery()
@@ -1633,7 +1635,16 @@ class RemoteMachineShellConnection:
         elif type in LINUX_DISTRIBUTION_NAME:
             # uninstallation command is different
             if type == "ubuntu":
-                uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
+                if sv in SHERLOCK_VERSION:
+                    if self.is_enterprise(type):
+                        uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
+                                    .format("couchbase-server", "couchbase-server")
+                    else:
+                        uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
+                                     .format("couchbase-server-community",
+                                              "couchbase-server-community")
+                else:
+                    uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
                                      .format("couchbase-server", "couchbase-server")
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
@@ -1642,7 +1653,14 @@ class RemoteMachineShellConnection:
                     We need to kill them before doing uninstall """
                 output, error = self.execute_command("killall -9 rpm")
                 self.log_command_output(output, error)
-                uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
+                if sv in SHERLOCK_VERSION:
+                    if self.is_enterprise(type):
+                        uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
+                    else:
+                        uninstall_cmd = 'rpm -e {0}' \
+                                          .format("couchbase-server-community")
+                else:
+                    uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
                 log.info('running rpm -e to remove couchbase-server')
                 output, error = self.execute_command(uninstall_cmd)
                 self.log_command_output(output, error)
@@ -2966,9 +2984,49 @@ class RemoteMachineShellConnection:
                     log.info("prepare install library {0}".format(lib_name))
                     o, r = self.execute_command("apt-get install -y {0}".format(lib_name))
                     self.log_command_output(o, r)
-                    o, r = self.execute_command("dpkg --get-selections | grep {0}".format(lib_name))
+                    o, r = self.execute_command("dpkg --get-selections | grep {0}"
+                                                                 .format(lib_name))
                     self.log_command_output(o, r)
-                    log.info("lib {0} should appear around this line".format(lib_name))
+                    log.info("lib {0} should appear around this line"
+                                                                 .format(lib_name))
+
+    def is_enterprise(self, os_name):
+        enterprise = False
+        if os_name != 'windows':
+            if self.file_exists("/opt/couchbase/etc/", "runtime.ini"):
+                output = self.read_remote_file("/opt/couchbase/etc/","runtime.ini")
+                for x in output:
+                    x = x.strip()
+                    if x and "license = enterprise" in x:
+                        enterprise = True
+            else:
+                log.error("couchbase server may not installed yet")
+                sys.exit()
+        else:
+            log.info("only check cb edition in unix enviroment")
+        return enterprise
+
+    def get_cbversion(self, os_name):
+        """ fv = a.b.c-xxxx, sv = a.b.c, bn = xxxx """
+        fv = sv = bn = tmp = ""
+        if os_name != 'windows':
+            if self.file_exists("/opt/couchbase/", "VERSION.txt"):
+                output = self.read_remote_file("/opt/couchbase/","VERSION.txt")
+                for x in output:
+                    x = x.strip()
+                    if x and x[:5] in COUCHBASE_VERSIONS and \
+                        "-" in x:
+                        fv = x
+                        tmp = x.split("-")
+                        sv = tmp[0]
+                        bn = tmp[1]
+                    break
+            else:
+                log.error("couchbase server may not installed yet")
+                sys.exit()
+        else:
+            log.info("only check cb version in unix enviroment")
+        return fv, sv, bn
 
 
 class RemoteUtilHelper(object):
