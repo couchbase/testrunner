@@ -26,23 +26,36 @@ class HostnameMgmtMultiTests(HostnameBaseTests):
     def test_add_cluster_twice(self):
         if len(self.servers) < 2:
             self.fail("test require more than 1 node")
+
+        print '\n\nrenaming nodes'
         hostnames = self.rename_nodes(self.servers[:self.nodes_in + self.nodes_init])
         self._set_hostames_to_servers_objs(hostnames)
+        print '\n\nrebalancing...'
         self.cluster.rebalance(self.servers[:self.nodes_init],
                                self.servers[self.nodes_init:self.nodes_in + self.nodes_init], [], use_hostnames=True)
         self.verify_referenced_by_names(self.servers[:self.nodes_init], hostnames)
         remove_node = self.servers[:self.nodes_in + self.nodes_init][-1]
+
+        print '\n\nremoving', remove_node, ' and rebalancing...;'
         self.cluster.rebalance(self.servers[:self.nodes_in + self.nodes_init],
                                [], [remove_node], use_hostnames=True)
+
+        print '\n\nrenaming'
         new_name = self.rename_nodes([remove_node],
                                      {remove_node : self.name_prefix +\
                                        str(remove_node.ip.split('.')[-1]) + '_0' + '.' + self.domain})
+
+        print  '\n\nsetting hostnames to server objs'
         self._set_hostames_to_servers_objs(new_name, server=remove_node)
+        print '\n\nrebalance again'
+
         self.cluster.rebalance(self.servers[:self.nodes_in + self.nodes_init - 1],
                                [remove_node], [], use_hostnames=True)
         for srv in self.servers:
             if srv.hostname in new_name.itervalues():
                 srv.hostname = ''
+
+        print '\n\nupdating with a new name', new_name
         hostnames.update(new_name)
         self.verify_referenced_by_names(self.servers[:self.nodes_in + self.nodes_init-1], hostnames)
 
@@ -73,13 +86,15 @@ class HostnameMgmtMultiTests(HostnameBaseTests):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             try:
-                old_lines = shell.read_remote_file('/etc', 'hosts')
+                etc_file_dir = 'etc' if shell.extract_remote_info().type == 'Linux' else 'C:\WINDOWS\system32\drivers\etc'
+                old_lines = shell.read_remote_file(etc_file_dir, 'hosts')
                 self.old_files[server] = copy.deepcopy(old_lines)
                 new_lines = ['%s %s\n' % (srv.ip, names[srv])
                              for srv in set(self.servers) - set([server])]
                 new_lines.append('127.0.0.1 %s' % names[server])
-                old_lines.extend(new_lines)
-                shell.write_remote_file('/etc', 'hosts', old_lines)
+                if old_lines is not None:
+                    old_lines.extend(new_lines)
+                    shell.write_remote_file(etc_file_dir, 'hosts', old_lines)
             finally:
                 shell.disconnect()
 
@@ -87,7 +102,9 @@ class HostnameMgmtMultiTests(HostnameBaseTests):
         if hasattr(self, 'old_files') and self.old_files:
             for server in self.servers:
                 shell = RemoteMachineShellConnection(server)
+                etc_file_dir = 'etc' if shell.extract_remote_info().type == 'Linux' else 'C:\WINDOWS\system32\drivers\etc'
                 try:
-                    shell.write_remote_file('/etc', 'hosts', self.old_files[server])
+                    if server in self.old_files and self.old_files[server] is not None:
+                       shell.write_remote_file(etc_file_dir, 'hosts', self.old_files[server])
                 finally:
                     shell.disconnect()
