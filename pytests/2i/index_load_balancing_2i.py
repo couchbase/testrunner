@@ -20,13 +20,12 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
             self.query_definitions = self._create_query_definitions(index_count = num_indexes)
             x = 0
             tasks = []
+            self.defer_build=False
             for query_definition in self.query_definitions:
                 for bucket in self.buckets:
                     deploy_node_info = ["{0}:{1}".format(index_servers[x].ip,index_servers[x].port)]
-                    tasks.append(self.async_create_index(bucket.name, query_definition, deploy_node_info = deploy_node_info))
+                    self.create_index(bucket.name, query_definition, deploy_node_info = deploy_node_info)
                     x+=1
-            for task in tasks:
-                task.result()
             index_up = self.query_definitions[1].index_name
             for query_definition in self.query_definitions:
                 query_definition.index_name = index_up
@@ -42,7 +41,6 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
         finally:
             remote = RemoteMachineShellConnection(index_servers[0])
             remote.start_server()
-            self.sleep(10)
             self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = True)
 
     def test_load_balance_when_index_node_down_network_partition(self):
@@ -54,14 +52,11 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
             num_indexes=len(index_servers)*index_dist_factor
             self.query_definitions = self._create_query_definitions(index_count = num_indexes)
             x = 0
-            tasks = []
             for query_definition in self.query_definitions:
                 for bucket in self.buckets:
                     deploy_node_info = ["{0}:{1}".format(index_servers[x].ip,index_servers[x].port)]
-                    tasks.append(self.async_create_index(bucket.name, query_definition, deploy_node_info = deploy_node_info))
+                    self.create_index(bucket.name, query_definition, deploy_node_info = deploy_node_info)
                     x+=1
-            for task in tasks:
-                task.result()
             index_up = self.query_definitions[1].index_name
             for query_definition in self.query_definitions:
                 query_definition.index_name = index_up
@@ -75,7 +70,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
             raise
         finally:
             self.stop_firewall_on_node(index_servers[0])
-            self.sleep(10)
+            self.sleep(30)
             try:
                 self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = True)
             except Exception, ex:
