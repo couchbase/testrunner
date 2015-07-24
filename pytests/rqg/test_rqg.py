@@ -21,7 +21,8 @@ class RQGTests(BaseTestCase):
         super(RQGTests, self).setUp()
         self.log.info("==============  RQGTests setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
-        self.crud_batch_size= self.input.param("crud_batch_size",1)
+        self.populate_with_replay = self.input.param("populate_with_replay",False)
+        self.crud_batch_size = self.input.param("crud_batch_size",1)
         self.record_failure= self.input.param("record_failure",False)
         self.failure_record_path= self.input.param("failure_record_path","/tmp")
         self.use_mysql= self.input.param("use_mysql",True)
@@ -1067,7 +1068,10 @@ class RQGTests(BaseTestCase):
                 self._setup_and_load_buckets()
         else:
             self.log.info(" Will load directly from file snap-shot")
+            if self.populate_with_replay:
+                self._initialize_mysql_client()
             self._setup_and_load_buckets_from_files()
+
         self._initialize_n1ql_helper()
         #create copy of simple table if this is a merge operation
         self.sleep(10)
@@ -1144,8 +1148,10 @@ class RQGTests(BaseTestCase):
                 user_id = self.user_id, password = self.password)
             path  = "b/resources/rqg/{0}/database_definition/definition.sql".format(self.database)
             self.database = self.database+"_"+str(self.query_helper._random_int())
-            self.client.reset_database_add_data(database = self.database, items= self.items,
-             sql_file_definiton_path = path)
+            populate_data = False
+            if not self.populate_with_replay:
+                populate_data = True
+            self.client.reset_database_add_data(database = self.database, items= self.items, sql_file_definiton_path = path, populate_data = populate_data)
             self._copy_table_for_merge()
         else:
             self.client = MySQLClient(database = self.database, host = self.mysql_url,
@@ -1458,7 +1464,12 @@ class RQGTests(BaseTestCase):
                     with open(file_path) as data_file:
                         data = json.load(data_file)
                         self._load_data_in_buckets_using_mc_bin_client_json(bucket, data)
+                        if self.populate_with_replay:
+                            for key in data.keys():
+                                insert_sql = self.query_helper._generate_insert_statement_from_data(bucket_name,data[key])
+                                self.client._insert_execute_query(insert_sql)
         shutil.rmtree(data_file_path, ignore_errors=True)
+
 
     def _setup_and_load_buckets(self):
         # Remove any previous buckets
