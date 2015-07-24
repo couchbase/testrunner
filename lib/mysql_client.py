@@ -414,13 +414,14 @@ class MySQLClient(object):
         for database in list_databases:
             self.drop_database(database)
 
-    def reset_database_add_data(self, database = "", items = 1000, sql_file_definiton_path= "/tmp/definition.sql"):
+    def reset_database_add_data(self, database = "", items = 1000, sql_file_definiton_path= "/tmp/definition.sql", populate_data = True):
         sqls = self._read_from_file(sql_file_definiton_path)
         sqls = " ".join(sqls).replace("DATABASE_NAME",database).replace("\n","")
         self._db_execute_query(sqls)
         self.database = database
         self._reset_client_connection()
-        self._gen_data_simple_table(number_of_rows = items)
+        if populate_data:
+            self._gen_data_simple_table(number_of_rows = items)
 
     def database_add_data(self, database = "", items = 1000, sql_file_definiton_path= "/tmp/definition.sql"):
         sqls = self._read_from_file(sql_file_definiton_path)
