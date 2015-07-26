@@ -1425,7 +1425,7 @@ class CouchbaseCluster:
             )
         return tasks
 
-    def load_all_buckets_till_dgm(self, active_resident_threshold,
+    def load_all_buckets_till_dgm(self, active_resident_threshold, items=0,
                                   value_size=512, exp=0, kv_store=1, flag=0,
                                   only_store_hash=True, batch_size=1000,
                                   pause_secs=1, timeout_secs=30):
@@ -1441,6 +1441,12 @@ class CouchbaseCluster:
         @param pause_secs: pause for next batch load.
         @param timeout_secs: timeout
         """
+        items = int(items)
+        self.__log.info("First loading \"items\" {0} number keys to handle "
+                      "update/deletes in dgm cases".format(items))
+        self.load_all_buckets(items)
+
+        self.__log.info("Now loading extra keys to reach dgm limit")
         seed = "%s-key-" % self.__name
         end = 0
         for bucket in self.__buckets:
@@ -1449,7 +1455,7 @@ class CouchbaseCluster:
                 bucket,
                 '',
                 'vb_active_perc_mem_resident')[self.__master_node]
-            start = 0
+            start = items
             end = start + batch_size * 10
             while int(current_active_resident) > active_resident_threshold:
                 self.__log.info("loading %s keys ..." % (end-start))
@@ -2686,13 +2692,15 @@ class XDCRNewBaseTest(unittest.TestCase):
                 cluster.load_all_buckets(self._num_items, self._value_size)
             else:
                 cluster.load_all_buckets_till_dgm(
-                    active_resident_threshold=self._active_resident_threshold)
+                    active_resident_threshold=self._active_resident_threshold,
+                    items=self._num_items)
 
     def __load_star(self):
         hub = self.__cb_clusters[0]
         if self._dgm_run:
             hub.load_all_buckets_till_dgm(
-                active_resident_threshold=self._active_resident_threshold)
+                active_resident_threshold=self._active_resident_threshold,
+                item=self._num_items)
         else:
             hub.load_all_buckets(self._num_items, self._value_size)
 
@@ -2744,9 +2752,10 @@ class XDCRNewBaseTest(unittest.TestCase):
                 expiration=self._expires))
 
         [task.result() for task in tasks]
-        self.log.info("Batched updates loaded to cluster(s)")
-        tasks = []
+        if tasks:
+            self.log.info("Batched updates loaded to cluster(s)")
 
+        tasks = []
         # DELETES
         for doc_ops_cluster in self._del_clusters:
             cb_cluster = self.get_cb_cluster_by_name(doc_ops_cluster)
@@ -2757,7 +2766,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     perc=self._perc_del))
 
         [task.result() for task in tasks]
-        self.log.info("Batched deletes sent to cluster(s)")
+        if tasks:
+            self.log.info("Batched deletes sent to cluster(s)")
 
         if self._wait_for_expiration and self._expires:
             self.sleep(
