@@ -9,6 +9,9 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import VBucketAwareMemcached,MemcachedClientHelper
 
+
+import traceback
+
 class GetrTests(BaseTestCase):
 
     DURING_REBALANCE = 1
@@ -106,6 +109,7 @@ class GetrTests(BaseTestCase):
             if self.error and str(ex).find(self.error) != -1:
                 self.log.info("Expected error %s appeared as expected" % self.error)
             else:
+                print traceback.format_exc()
                 raise ex
         if self.rebalance == GetrTests.DURING_REBALANCE:
             rebalance.result()
