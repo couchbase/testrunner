@@ -103,12 +103,7 @@ class ClusterOperationHelper(object):
                 try:
                     mc = MemcachedClientHelper.direct_client(server, bucket_name)
                     stats = mc.stats()
-                    if stats is not None:
-                        warmup_time = int(stats["ep_warmup_time"])
-                        log.info("ep_warmup_time is %s " % warmup_time)
-                        log.info(
-                            "Collected the stats 'ep_warmup_time' %s for server %s:%s" %
-                                (stats["ep_warmup_time"], server.ip, server.port))
+                    if stats is not None and 'ep_warmup_thread' in stats and stats['ep_warmup_thread'] == 'complete':
                         break
                     else:
                         log.info(" Did not get the stats from the server yet, trying again.....")
