@@ -298,8 +298,13 @@ class WarmUpTests(BaseTestCase):
         self.log.info("new stat is %s" % stats)
         self.log.info("old stat is %s" % old_stats)
         for task in stats:
-            old_task = [o_task for o_task in old_stats
-                        if task["bucket"] == o_task["bucket"] and task["node"] == o_task["node"]][0]
+            task_candidates = [o_task for o_task in old_stats
+                        if task["bucket"] == o_task["bucket"] and task["node"] == o_task["node"]]
+            if len(task_candidates) == 0:
+                self.log.info('no task candidates %s' % task)
+                continue
+            old_task = task_candidates[0]
+
             self.assertEqual(task["status"], 'running', "Status is not expected")
             #https://github.com/membase/ep-engine/blob/master/docs/stats.json#L69
             self.assertTrue(task["stats"]["ep_warmup_state"] in ["done", "estimating database item count",
