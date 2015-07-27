@@ -895,10 +895,10 @@ class DMLQueryTests(QueryTests):
 
     def update_keys_clause_hints(self, idx_name):
         num_docs = self.input.param('num_docs', 10)
-        keys, _ = self._insert_gen_keys(num_docs, prefix='update_keys_hints')
+        keys, _ = self._insert_gen_keys(num_docs, prefix='update_keys_hints %s' % str(uuid.uuid4())[:4])
         updated_value = 'new_name'
         for bucket in self.buckets:
-            self.query = 'update %s use index(%s) set name="%s"'  % (bucket.name, idx_name, updated_value)
+            self.query = 'update %s use index(%s using %s) set name="%s"'  % (bucket.name, idx_name, self.index_type, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s use index(%s using %s)' % (bucket.name, idx_name, self.index_type)
@@ -909,10 +909,10 @@ class DMLQueryTests(QueryTests):
 
     def update_where_hints(self, idx_name):
         num_docs = self.input.param('num_docs', 10)
-        _, values = self._insert_gen_keys(num_docs, prefix='update_where')
+        _, values = self._insert_gen_keys(num_docs, prefix='update_where %s' % str(uuid.uuid4())[:4])
         updated_value = 'new_name'
         for bucket in self.buckets:
-            self.query = 'update %s use index(%s) set name="%s" where join_day=1 returning name'  % (bucket.name, idx_name, updated_value)
+            self.query = 'update %s use index(%s using %s) set name="%s" where join_day=1 returning name'  % (bucket.name, idx_name, self.index_type, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s use index(%s using %s) where join_day=1' % (bucket.name, idx_name, self.index_type)

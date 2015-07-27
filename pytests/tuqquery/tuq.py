@@ -50,6 +50,8 @@ class QueryTests(BaseTestCase):
         self.index_type = self.input.param("index_type", 'VIEW')
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
         if self.input.param("reload_data", False):
+            for bucket in self.buckets:
+                self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
             self.gens_load = self.generate_docs(self.docs_per_day)
             self.load(self.gens_load, flag=self.item_flag)
         if not (hasattr(self, 'skip_generation') and self.skip_generation):
