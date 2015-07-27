@@ -41,10 +41,10 @@ class ReadOnlyUserTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index"
             try:
-                self.query = "CREATE INDEX %s ON %s(VMs) " % (index_name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(VMs) using %s " % (index_name, bucket.name, self.index_type)
                 self.run_cbq_query()
             finally:
-                self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                self.query = "DROP INDEX %s.%s using %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
 
     def test_readonly(self):
