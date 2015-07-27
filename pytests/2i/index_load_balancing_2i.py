@@ -57,7 +57,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
                     deploy_node_info = ["{0}:{1}".format(index_servers[x].ip,index_servers[x].port)]
                     self.create_index(bucket.name, query_definition, deploy_node_info = deploy_node_info)
                     x+=1
-            index_up = self.query_definitions[1].index_name
+            index_up = self.query_definitions[0].index_name
             for query_definition in self.query_definitions:
                 query_definition.index_name = index_up
             # Bring down one node
