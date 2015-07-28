@@ -204,7 +204,8 @@ class Installer(object):
                 timeout = int(params["timeout"])
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
             cb_releases_version = ["1.8.1", "2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0",
-                                    "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1", "3.0.2"]
+                                    "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1", "3.0.2",
+                                    "3.0.3"]
             build_repo = MV_LATESTBUILD_REPO
             if toy is not "":
                 build_repo = COUCHBASE_REPO
