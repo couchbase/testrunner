@@ -30,7 +30,8 @@ class CCCP(BaseTestCase):
     def test_get_config_client(self):
         tasks = self.run_ops()
         for task in tasks:
-            task.result()
+            if self.ops != 'failover':
+                task.result()
         for bucket in self.buckets:
             _, _, config = self.clients[bucket.name].get_config()
             self.verify_config(json.loads(config), bucket)
@@ -111,7 +112,7 @@ class CCCP(BaseTestCase):
         elif self.ops == 'failover':
             tasks.append(self.cluster.failover(self.servers[:self.nodes_init],
                     self.servers[(self.nodes_init - self.nodes_out):self.nodes_init]))
-            self.sleep(10)
+            self.sleep(20)
             self.nodes_init -= self.nodes_out
         if self.ops == 'create_views':
             views_num = 10
