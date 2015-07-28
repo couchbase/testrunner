@@ -3000,8 +3000,8 @@ class RemoteMachineShellConnection:
                     if x and "license = enterprise" in x:
                         enterprise = True
             else:
-                log.error("couchbase server may not installed yet")
-                sys.exit()
+                log.info("couchbase server at {0} may not installed yet"
+                          .format(self.ip))
         else:
             log.info("only check cb edition in unix enviroment")
         return enterprise
@@ -3022,8 +3022,8 @@ class RemoteMachineShellConnection:
                         bn = tmp[1]
                     break
             else:
-                log.error("couchbase server may not installed yet")
-                sys.exit()
+                log.info("couchbase server at {0} may not installed yet"
+                          .format(self.ip))
         else:
             log.info("only check cb version in unix enviroment")
         return fv, sv, bn
