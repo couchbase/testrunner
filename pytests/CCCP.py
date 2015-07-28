@@ -37,23 +37,23 @@ class CCCP(BaseTestCase):
 
     def test_get_config_rest(self):
         tasks = self.run_ops()
+        for task in tasks:
+            task.result()
         for bucket in self.buckets:
             config = RestConnection(self.master).get_bucket_CCCP(bucket)
             self.verify_config(config, bucket)
-        for task in tasks:
-            task.result()
 
     def test_set_config(self):
         tasks = self.run_ops()
         config_expected = 'abcabc'
+        for task in tasks:
+            task.result()
         for bucket in self.buckets:
             self.clients[bucket.name].set_config(config_expected)
             _, _, config = self.clients[bucket.name].get_config()
             self.assertEquals(config_expected, config, "Expected config: %s, actual %s" %(
                                                       config_expected, config))
             self.log.info("Config was set correctly. Bucket %s" % bucket.name)
-        for task in tasks:
-            task.result()
 
     def test_not_my_vbucket_config(self):
         self.gen_load = BlobGenerator('cccp', 'cccp-', self.value_size, end=self.num_items)
