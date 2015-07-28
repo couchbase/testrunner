@@ -29,11 +29,11 @@ class CCCP(BaseTestCase):
 
     def test_get_config_client(self):
         tasks = self.run_ops()
+        for task in tasks:
+            task.result()
         for bucket in self.buckets:
             _, _, config = self.clients[bucket.name].get_config()
             self.verify_config(json.loads(config), bucket)
-        for task in tasks:
-            task.result()
 
     def test_get_config_rest(self):
         tasks = self.run_ops()
