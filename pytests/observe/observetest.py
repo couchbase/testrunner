@@ -154,10 +154,10 @@ class ObserveTests(BaseTestCase):
                 while persisted == 0:
                     opaque, rep_time, persist_time, persisted, cas = client.observe(key)
                 t_end = datetime.now()
-                self.log.info("##########key:-%s################" % (key))
-                self.log.info("Persisted:- %s" % (persisted))
-                self.log.info("Persist_Time:- %s" % (rep_time))
-                self.log.info("Time2:- %s" % (t_end - t_start))
+                #self.log.info("##########key:-%s################" % (key))
+                #self.log.info("Persisted:- %s" % (persisted))
+                #self.log.info("Persist_Time:- %s" % (rep_time))
+                #self.log.info("Time2:- %s" % (t_end - t_start))
                 if self.max_time <= (t_end - t_start):
                     self.max_time = (t_end - t_start)
                     self.log.info("Max Time taken for observe is :- %s" % self.max_time)

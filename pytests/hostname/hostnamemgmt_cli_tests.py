@@ -58,5 +58,5 @@ class HostnameMgmtTests(HostnameBaseTests):
                                                             cluster_host=self.master.hostname,
                                                             user="Administrator", password="password",
                                                             options='--bucket=default')
-        self.assertEqual(['SUCCESS: bucket-delete'], output)
+        self.assertEqual(['SUCCESS: bucket-delete'], [i for i in output if i != ''])
         remote_client.disconnect()
