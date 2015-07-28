@@ -15,6 +15,7 @@ from testconstants import WIN_CB_VERSION_3
 from testconstants import SHERLOCK_VERSION
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_2_WITH_REL
+from testconstants import COUCHBASE_RELEASE_VERSIONS_3
 
 
 class MembaseBuild(object):
@@ -143,11 +144,10 @@ class BuildQuery(object):
         build.name = '{1}_{2}_{0}.{3}'.format(build_version, product,
                                                os_architecture, deliverable_type)
         build.build_number = 0
-        cb_release_version_3 = ["3.0.1", "3.0.1-1444", "3.0.2", "3.0.2-1603"]
         if deliverable_type == "exe":
             """ /3.0.1/couchbase-server-enterprise_3.0.1-windows_amd64.exe """
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
-                if build_version[:5] in cb_release_version_3:
+                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
                     arch_type = "amd64"
                     if "x86_64" not in os_architecture:
                         arch_type = "x86"
@@ -166,7 +166,7 @@ class BuildQuery(object):
                             product, os_architecture, deliverable_type, build_details)
                     print "build url   ", build.url
             else:
-                if build_version[:5] in cb_release_version_3:
+                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
                     arch_type = "amd64"
                     if "x86_64" not in os_architecture:
                         arch_type = "x86"
@@ -193,7 +193,7 @@ class BuildQuery(object):
                                http://builds.hq.northscale.net/latestbuilds/
                                   couchbase-server-enterprise_x86_64_3.0.1-1444.rpm
                 """
-                if build_version[:5] in cb_release_version_3:
+                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
                     if "rpm" in deliverable_type:
                         build.url = "http://builds.hq.northscale.net/releases/{0}/"\
                                 "{1}-{4}-centos6.{2}.{3}"\
@@ -220,7 +220,7 @@ class BuildQuery(object):
                             "{1}_{2}_{4}.{3}".format(build_version[:build_version.find('-')],
                                product, os_architecture, deliverable_type, build_details)
             else:
-                if build_version[:5] in cb_release_version_3:
+                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
                     if "rpm" in deliverable_type:
                         build.url = "http://builds.hq.northscale.net/releases/{0}/"\
                                 "{1}-{4}-centos6.{2}.{3}".format(build_version,
