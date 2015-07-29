@@ -603,7 +603,7 @@ class XdcrStatsWaitTask(StatsWaitTask):
         self.set_result(True)
 
 class GenericLoadingTask(Thread, Task):
-    def __init__(self, server, bucket, kv_store, batch_size=1, pause_secs=1, timeout_secs=30):
+    def __init__(self, server, bucket, kv_store, batch_size=1, pause_secs=1, timeout_secs=60):
         Thread.__init__(self)
         Task.__init__(self, "load_gen_task")
         self.kv_store = kv_store
@@ -916,7 +916,7 @@ class LoadDocumentsTask(GenericLoadingTask):
 
 class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
     def __init__(self, server, bucket, generators, kv_store, op_type, exp, flag=0, only_store_hash=True,
-                 batch_size=1,pause_secs=1, timeout_secs=30):
+                 batch_size=1,pause_secs=1, timeout_secs=60):
         LoadDocumentsTask.__init__(self, server, bucket, generators[0], kv_store, op_type, exp, flag=flag,
                     only_store_hash=only_store_hash, batch_size=batch_size, pause_secs=pause_secs, timeout_secs=timeout_secs)
 
@@ -925,7 +925,7 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
         else:
             self.generators = []
             for i in generators:
-                self.generators.append( BatchedDocumentGenerator(i, batch_size))
+                self.generators.append(BatchedDocumentGenerator(i, batch_size))
 
         self.op_types = None
         self.buckets = None
@@ -958,7 +958,7 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
 
 # This will be obsolete with the implementation of batch operations in LoadDocumentsTaks
 class BatchedLoadDocumentsTask(GenericLoadingTask):
-    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=True, batch_size=100, pause_secs=1, timeout_secs=30):
+    def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=True, batch_size=100, pause_secs=1, timeout_secs=60):
         GenericLoadingTask.__init__(self, server, bucket, kv_store)
         self.batch_generator = BatchedDocumentGenerator(generator, batch_size)
         self.op_type = op_type
@@ -1562,7 +1562,7 @@ class VerifyRevIdTask(GenericLoadingTask):
                         dest_meta_data[meta_key], self.err_count))
 
         if self.err_count - prev_error_count > 0 and self.err_count < 200:
-            self.log.error("===== Verifying rev_ids failed for key: {0} =====".format(key))
+            self.log.error("===== Verifying rev_ids failed for key: {0}, bucket:{1} =====".format(key, self.bucket))
             [self.log.error(err) for err in err_msg]
             self.log.error("Source meta data: %s" % src_meta_data)
             self.log.error("Dest meta data: %s" % dest_meta_data)
