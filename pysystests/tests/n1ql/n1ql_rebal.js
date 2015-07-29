@@ -1,12 +1,19 @@
 {
     "name" : "n1ql_2i_test",
-    "desc" : "test run for n1ql and 2i",
+    "desc" : "rebalance test run for n1ql and 2i",
     "loop" : "",
     "phases" : {
-	        "1" :
+		        "0" :
                 {
-                    "name" : "rebalance_out_kv",
-                    "desc" :  "RB-1",
+                    "name" : "bucket_warmup",
+                    "desc" :  "bucket_warmup",
+                    "workload" : [{"spec" : "s:100,ops:1000"}],
+                    "runtime" : 40 
+		        },
+		        "1" :
+                {
+                    "name" : "rebalance_out_index",
+                    "desc" :  "RB-2",
                     "cluster" :  {"rm" : "10.6.2.167"}
                 },
                 "2" :
@@ -20,19 +27,19 @@
                              },
                     "runtime" : 30
                 },
-                "6" :
+                "3" : 
                 {
-                    "name" : "rebalance_in_kv",
+                    "name" : "rebalance_in_index",
                     "desc" :  "RB-1",
-                    "cluster" :  {"add" : "10.6.2.167", "services" : "kv"}
+                    "cluster" :  {"add" : "10.6.2.167", "services" : "index"}
                 },
-                "1" :
+                "4" :
                 {
                     "name" : "rebalance_out_index",
-                    "desc" :  "RB-1",
+                    "desc" :  "RB-2",
                     "cluster" :  {"rm" : "10.6.2.233"}
                 },
-		"2" :
+		        "5" :
                 {
                     "name" : "access_phase",
                     "desc" :  "run access phase for 60 seconds",
@@ -43,19 +50,19 @@
                              },
                     "runtime" : 30
                 },
-		"3" :
+		        "6" :
                 {
                     "name" : "rebalance_in_index",
                     "desc" :  "RB-1",
                     "cluster" :  {"add" : "10.6.2.233", "services" : "index"}
                 },
-		"4" :
+		        "7" :
                 {
                     "name" : "rebalance_out_query",
                     "desc" :  "RB-1",
                     "cluster" :  {"rm" : "10.6.2.195"}
                 },
-                "5" :
+                "8" :
                 {
                     "name" : "access_phase",
                     "desc" :  "run access phase for 60 seconds",
@@ -66,7 +73,7 @@
                              },
                     "runtime" : 30
                 },
-                "6" :
+                "9" :
                 {
                     "name" : "rebalance_in_query",
                     "desc" :  "RB-1",
