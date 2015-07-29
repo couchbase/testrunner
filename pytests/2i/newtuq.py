@@ -37,6 +37,14 @@ class QueryTests(BaseTestCase):
                 self.sleep(5)
                 temp = rest.cluster_status()
             self.log.info ("current status of {0}  is {1}".format(server.ip, temp['nodes'][0]['status']))
+
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.indexer_scanTimeout = self.input.param("indexer_scanTimeout", None)
+        if self.indexer_scanTimeout is not None:
+            for server in indexer_node:
+                rest = RestConnection(server)
+                rest.set_index_settings({"indexer.settings.scan_timeout": self.indexer_scanTimeout})
+
         if self.input.tuq_client and "client" in self.input.tuq_client:
             self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
         else:
@@ -65,29 +73,29 @@ class QueryTests(BaseTestCase):
         verify_data = False
         if self.scan_consistency != "request_plus":
             verify_data = True
-        self.load(self.gens_load, flag=self.item_flag, verify_data = verify_data, batch_size=self.batch_size)
+        self.load(self.gens_load, flag=self.item_flag, verify_data=verify_data, batch_size=self.batch_size)
         if self.doc_ops:
             self.ops_dist_map = self.calculate_data_change_distribution(
-                create_per = self.create_ops_per ,update_per = self.update_ops_per ,
-                delete_per = self.delete_ops_per, expiry_per = self.expiry_ops_per,
-                start =0, end = self.docs_per_day)
+                create_per=self.create_ops_per , update_per=self.update_ops_per ,
+                delete_per=self.delete_ops_per, expiry_per=self.expiry_ops_per,
+                start=0, end=self.docs_per_day)
             self.log.info(self.ops_dist_map)
             self.docs_gen_map = self.generate_ops_docs(self.docs_per_day, 0)
             self.full_docs_list_after_ops = self.generate_full_docs_list_after_ops(self.docs_gen_map)
         # Define Helper Method which will be used for running n1ql queries, create index, drop index
-        self.n1ql_helper = N1QLHelper(version = self.version, shell = self.shell,
-            use_rest = self.use_rest, max_verify = self.max_verify,
-            buckets = self.buckets, item_flag = self.item_flag,
-            n1ql_port = self.n1ql_port, full_docs_list = self.full_docs_list,
-            log = self.log, input = self.input, master = self.master)
-        n1ql_server = self.get_nodes_from_services_map(service_type = "n1ql")
+        self.n1ql_helper = N1QLHelper(version=self.version, shell=self.shell,
+            use_rest=self.use_rest, max_verify=self.max_verify,
+            buckets=self.buckets, item_flag=self.item_flag,
+            n1ql_port=self.n1ql_port, full_docs_list=self.full_docs_list,
+            log=self.log, input=self.input, master=self.master)
+        n1ql_server = self.get_nodes_from_services_map(service_type="n1ql")
         self.log.info(n1ql_server)
         #self.n1ql_helper._start_command_line_query(n1ql_server)
         # sleep to avoid race condition during bootstrap
         if self.create_primary_index:
             try:
-                self.n1ql_helper.create_primary_index(using_gsi = self.use_gsi_for_primary,
-                 server = n1ql_server)
+                self.n1ql_helper.create_primary_index(using_gsi=self.use_gsi_for_primary,
+                 server=n1ql_server)
             except Exception, ex:
                 self.log.info(ex)
                 raise ex
@@ -95,8 +103,8 @@ class QueryTests(BaseTestCase):
     def tearDown(self):
         if hasattr(self, 'n1ql_helper'):
             if hasattr(self, 'skip_cleanup') and not self.skip_cleanup:
-                n1ql_server = self.get_nodes_from_services_map(service_type = "n1ql")
-                self.n1ql_helper.drop_primary_index(using_gsi = self.use_gsi_for_primary,server = n1ql_server)
+                n1ql_server = self.get_nodes_from_services_map(service_type="n1ql")
+                self.n1ql_helper.drop_primary_index(using_gsi=self.use_gsi_for_primary, server=n1ql_server)
         if hasattr(self, 'shell'):
             if not self.skip_cleanup:
                 self.n1ql_helper._restart_indexer()
@@ -122,15 +130,15 @@ class QueryTests(BaseTestCase):
         try:
             json_generator = JsonGenerator()
             if self.dataset == "simple":
-                return self.generate_ops(num_items, start,json_generator.generate_docs_simple)
+                return self.generate_ops(num_items, start, json_generator.generate_docs_simple)
             if self.dataset == "sales":
-                return self.generate_ops(num_items, start,json_generator.generate_docs_sales)
+                return self.generate_ops(num_items, start, json_generator.generate_docs_sales)
             if self.dataset == "employee" or self.dataset == "default":
-                return self.generate_ops(num_items, start,json_generator.generate_docs_employee)
+                return self.generate_ops(num_items, start, json_generator.generate_docs_employee)
             if self.dataset == "sabre":
-                return self.generate_ops(num_items, start,json_generator.generate_docs_sabre)
+                return self.generate_ops(num_items, start, json_generator.generate_docs_sabre)
             if self.dataset == "bigdata":
-                return self.generate_ops(num_items, start,json_generator.generate_docs_bigdata)
+                return self.generate_ops(num_items, start, json_generator.generate_docs_bigdata)
         except Exception, ex:
             self.log.info(ex)
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
@@ -145,22 +153,22 @@ class QueryTests(BaseTestCase):
 
     def generate_docs_employee(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_employee(docs_per_day = docs_per_day, start = start)
+        return json_generator.generate_docs_employee(docs_per_day=docs_per_day, start=start)
 
     def generate_docs_simple(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_simple(start = start, docs_per_day = docs_per_day)
+        return json_generator.generate_docs_simple(start=start, docs_per_day=docs_per_day)
 
     def generate_docs_sales(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_sales(docs_per_day = docs_per_day, start = start)
+        return json_generator.generate_docs_sales(docs_per_day=docs_per_day, start=start)
 
     def generate_docs_bigdata(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_bigdata(docs_per_day = docs_per_day,
-            start = start, value_size = self.value_size)
+        return json_generator.generate_docs_bigdata(docs_per_day=docs_per_day,
+            start=start, value_size=self.value_size)
 
-    def generate_ops(self, docs_per_day, start=0, method = None):
+    def generate_ops(self, docs_per_day, start=0, method=None):
         gen_docs_map = {}
         for key in self.ops_dist_map.keys():
             isShuffle = False
@@ -170,9 +178,9 @@ class QueryTests(BaseTestCase):
                 gen_docs_map[key] = method(self.ops_dist_map[key]["end"],
                     self.ops_dist_map[key]["start"])
             else:
-                gen_docs_map[key] = method(value_size = self.value_size,
-                    end = self.ops_dist_map[key]["end"],
-                    start = self.ops_dist_map[key]["start"])
+                gen_docs_map[key] = method(value_size=self.value_size,
+                    end=self.ops_dist_map[key]["end"],
+                    start=self.ops_dist_map[key]["start"])
         return gen_docs_map
 
     def generate_full_docs_list_after_ops(self, gen_docs_map):
@@ -182,14 +190,14 @@ class QueryTests(BaseTestCase):
                 update = False
                 if key == "update":
                     update = True
-                gen_docs= self.generate_full_docs_list(gens_load = gen_docs_map[key], update = update)
+                gen_docs = self.generate_full_docs_list(gens_load=gen_docs_map[key], update=update)
                 for doc in gen_docs:
                     docs.append(doc)
         return docs
 
     def async_run_doc_ops(self):
         if self.doc_ops:
-            tasks = self.async_ops_all_buckets(self.docs_gen_map, batch_size = self.batch_size)
+            tasks = self.async_ops_all_buckets(self.docs_gen_map, batch_size=self.batch_size)
             self.n1ql_helper.full_docs_list = self.full_docs_list_after_ops
             self.gen_results = TuqGenerators(self.log, self.n1ql_helper.full_docs_list)
             return tasks
@@ -200,6 +208,6 @@ class QueryTests(BaseTestCase):
         if self.scan_consistency == "request_plus":
             verify_data = False
         if self.doc_ops:
-            self.sync_ops_all_buckets(self.docs_gen_map, batch_size = self.batch_size, verify_data = verify_data)
+            self.sync_ops_all_buckets(self.docs_gen_map, batch_size=self.batch_size, verify_data=verify_data)
             self.n1ql_helper.full_docs_list = self.full_docs_list_after_ops
             self.gen_results = TuqGenerators(self.log, self.n1ql_helper.full_docs_list)
