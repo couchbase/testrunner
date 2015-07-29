@@ -16,7 +16,12 @@ class QueryHelper(object):
             return [str(table_name)]
         if ".*" in select_from:
             return [select_from.split(".")[0]]
-        return []
+        hints = []
+        for select_from in n1ql_query.split("SELECT"):
+            data_point = select_from.split("FROM")[0]
+            if ".*" in data_point:
+                hints.append(data_point.split(".*").replace(" ",""))
+        return hints
 
     def _divide_sql(self, sql):
         sql = sql.replace(";","")
