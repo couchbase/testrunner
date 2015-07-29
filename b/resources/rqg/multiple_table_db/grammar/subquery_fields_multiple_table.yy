@@ -2,10 +2,10 @@ query:
  	START_MAIN select END_MAIN ;
 
 select:
-#	SELECT * FROM BUCKET_NAME WHERE subquery_fields_comparisons |
-    SELECT * FROM BUCKET_NAME WHERE subquery_condition_exists |
-	SELECT * FROM BUCKET_NAME WHERE subquery_agg_exists |
-    SELECT * FROM BUCKET_NAME  WHERE subquery_in;
+#	SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_fields_comparisons |
+    SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_condition_exists |
+	SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME WHERE subquery_agg_exists |
+    SELECT OUTER_BUCKET_NAME.* FROM BUCKET_NAME  WHERE subquery_in;
 
 subquery_fields_comparisons:
 	INNER_SUBQUERY_FIELDS comparison_operator START_FIELDS_COMPARISON_SUBQUERY ( rule_subquery_fields_comparisons ) END_FIELDS_COMPARISON_SUBQUERY ;
