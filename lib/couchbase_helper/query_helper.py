@@ -188,7 +188,8 @@ class QueryHelper(object):
         new_sql = new_sql.replace("EQUALS"," = ")
         new_n1ql = new_n1ql.replace("NOT_EQUALS"," NOT IN ")
         new_n1ql = new_n1ql.replace("EQUALS"," IN ")
-        return {"sql":new_sql, "n1ql":new_n1ql.replace("SELECT RAW *","SELECT *")},outer_table_map
+        new_sql = new_sql.replace("RAW","")
+        return {"sql":new_sql, "n1ql":new_n1ql},outer_table_map
 
 
     def _gen_select_tables_info(self, sql = "", table_map = {}):
