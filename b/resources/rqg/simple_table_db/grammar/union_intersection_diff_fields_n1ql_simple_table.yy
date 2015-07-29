@@ -9,8 +9,7 @@ set_operation:
 
 select:
 	SELECT * FROM BUCKET_NAME WHERE complex_condition ORDER BY field_list |
-	SELECT * FROM BUCKET_NAME WHERE complex_condition GROUP BY field_list |
-	SELECT * FROM BUCKET_NAME WHERE complex_condition GROUP BY field_list ORDER BY field_list direction ;
+	SELECT * FROM BUCKET_NAME WHERE complex_condition ORDER BY field_list direction ;
 
 create_index:
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(FIELD_LIST) WHERE complex_condition |
