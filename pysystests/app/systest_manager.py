@@ -370,6 +370,7 @@ def runPhase(phase, rcq = None):
             cluster = cluster[0] # there can only be one cluster task-per-site
 
         clusterMsg = parseClusterReq(cluster)
+	logger.error("{0}".format(clusterMsg))
         perform_admin_tasks(clusterMsg)
         rebalance_required = clusterMsg['rebalance_required']
 
@@ -499,6 +500,7 @@ def parseClusterReq(cluster):
         'soft_restart': '',
         'rebalance_in': '',
         'add_back': '',
+        'services' : None,
         'auto_failover': '',
         'involve_orchestrator': False}
 
@@ -511,6 +513,9 @@ def parseClusterReq(cluster):
 
     if 'add' in cluster:
         clusterMsg['rebalance_in'] = cluster['add']
+
+    if 'services' in cluster:
+        clusterMsg['services'] = cluster['services']
 
     if 'rm' in cluster:
         clusterMsg['rebalance_out'] = cluster['rm']

@@ -322,9 +322,11 @@ def perform_admin_tasks(adminMsg, cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
     # Add nodes
     servers = adminMsg["rebalance_in"]
     zone_name = adminMsg["group"]
-    add_nodes(rest, servers, cluster_id, zone_name)
-
-    # Get all nodes
+    if adminMsg["services"]:
+        add_nodes(rest, servers, cluster_id, zone_name, adminMsg["services"])
+    else:
+        add_nodes(rest, servers, cluster_id, zone_name)
+        # Get all nodes
     allNodes = []
     for node in rest.node_statuses():
         allNodes.append(node.id)
@@ -430,8 +432,7 @@ def xdcr_start_replication(src_master, dest_cluster_name, bucket_name, xdcr_para
                                                         xdcr_params=xdcr_params)
             logger.error("rep_id: %s" %rep_id)
 
-def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status", zone_name = ''):
-
+def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status", zone_name = '', services=None):
     # create zone if it does not exit
     if zone_name != '':
         if rest.is_zone_exist(zone_name) == False:
@@ -448,11 +449,13 @@ def add_nodes(rest, servers='', cluster_id=cfg.CB_CLUSTER_TAG+"_status", zone_na
             logger.error("Add nodes request invalid. # of nodes outside cluster is not enough")
             return
         servers = servers[:count]
-
     for server in servers:
         logger.error("Adding node %s" % server)
         ip, port = parse_server_arg(server)
-        rest.add_node(cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD, ip, port, zone_name)
+        if services:
+            rest.add_node(cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD, ip, port, zone_name, services)
+        else:
+            rest.add_node(cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD, ip, port, zone_name)
 
 def pick_nodesToRemove(servers='', involve_orchestrator=False, cluster_id=cfg.CB_CLUSTER_TAG+"_status"):
     if servers.find('.') != -1 or servers == '':
