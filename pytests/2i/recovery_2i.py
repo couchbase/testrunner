@@ -338,7 +338,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 list.append(server)
             else:
                 index_nodes_out.append(server)
-        if len(index_nodes_out) == len(self.nodes_out_list):
+        if len(index_nodes_out) == len(self.nodes_out_list) and len(index_nodes_out) == len(index_nodes):
             self.all_index_nodes_lost=True
         return list
 
