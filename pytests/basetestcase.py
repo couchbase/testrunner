@@ -1638,6 +1638,21 @@ class BaseTestCase(unittest.TestCase):
                     self.services_map[service] = []
                 self.services_map[service].append(key)
 
+    def get_nodes_services(self):
+        list_nodes_services = {}
+        rest = RestConnection(self.master)
+        map = rest.get_nodes_services()
+        for k, v in map.iteritems():
+            if "8091" in k:
+                k = k.replace(":8091", "")
+            if len(v) == 1:
+                v = v[0]
+            elif len(v) > 1:
+                v = ",".join(v)
+            list_nodes_services[k] = v
+        """ return {"IP": "kv", "IP": "index,kv"} """
+        return list_nodes_services
+
     def get_buckets_itemCount(self):
         server = self.get_nodes_from_services_map(service_type = "kv")
         return RestConnection(server).get_buckets_itemCount()
