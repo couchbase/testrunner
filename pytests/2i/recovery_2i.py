@@ -329,16 +329,18 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         index_nodes = copy.deepcopy(index_nodes)
         out_list = []
         list = []
+        index_nodes_out = []
         for index_node in self.nodes_out_list:
             out_list.append("{0}:{1}".format(index_node.ip,index_node.port))
         for server in index_nodes:
             key = "{0}:{1}".format(server.ip,server.port)
             if key not in out_list:
                 list.append(server)
-        if len(index_nodes) == len(self.nodes_out_list):
+            else:
+                index_nodes_out.append(server)
+        if len(index_nodes_out) == len(self.nodes_out_list):
             self.all_index_nodes_lost=True
         return list
-
 
     def _find_list_of_indexes_lost(self):
         index_node_count = 0
