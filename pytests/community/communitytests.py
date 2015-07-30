@@ -31,6 +31,8 @@ class CommunityTests(CommunityBaseTest):
         self.do_verify = self.input.param("do-verify", True)
         self.num_node = self.input.param("num_node", 4)
         self.services = self.input.param("services", None)
+        self.start_node_services = self.input.param("start_node_services", "kv")
+        self.add_node_services = self.input.param("add_node_services", "kv")
         self.timeout = 6000
 
 
@@ -82,11 +84,9 @@ class CommunityTests(CommunityBaseTest):
                       "Enterprise Edition")
 
     def check_set_services(self):
-        msg = ""
         self.rest = RestConnection(self.master)
         self.rest.force_eject_node()
         self.sleep(7, "wait for node reset done")
-        print "service  ", self.services
         try:
             status = self.rest.init_node_services(hostname=self.master.ip,
                                                  services=[self.services])
@@ -118,6 +118,39 @@ class CommunityTests(CommunityBaseTest):
                 self.fail("Failed to set kv, index and query services on CE")
         else:
             self.fail("services don't support")
+
+    def check_set_services_when_add_node(self):
+        self.rest = RestConnection(self.master)
+        self.rest.force_eject_node()
+        self.sleep(5, "wait for node reset done")
+        status = self.rest.init_node_services(hostname=self.master.ip,
+                                        services=[self.start_node_services])
+        init_node = self.cluster.async_init_node(self.master,
+                                            services = [self.start_node_services])
+        if init_node.result() != 0:
+            add_node = False
+            try:
+                add_node = self.cluster.rebalance(self.servers[:2],
+                                                  self.servers[1:2], [],
+                                      services = [self.add_node_services])
+            except Exception:
+                pass
+            if add_node:
+                self.get_services_map()
+                list_nodes = self.get_nodes_from_services_map(get_all_nodes=True)
+                map = self.get_nodes_services()
+                if map[self.master.ip] == self.start_node_services and \
+                    map[self.servers[1].ip] == self.add_node_services:
+                else:
+            elif self.start_node_services in ["kv", "index,kv,n1ql"] and \
+                 self.add_node_services in ["kv", "index,kv,n1ql"]:
+                self.log.info("services are enforced in CE")
+            else:
+                self.fail("maybe bug in add node")
+        elif self.start_node_services not in ["kv", "index,kv,n1ql"]:
+            self.log.info("services are enforced in CE")
+        else:
+            self.fail("maybe bug in node initialization")
 
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
