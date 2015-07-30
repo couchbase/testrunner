@@ -95,6 +95,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
         "indexer.settings.cpuProfile" : False,
         "indexer.settings.compaction.min_frag" : 30,
         "indexer.settings.sliceBufSize" : 50000,
+        "indexer.settings.wal_size" : 4096,
         "indexer.settings.persisted_snapshot_init_build.interval": 5000
 }
         return map
@@ -125,6 +126,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
         "indexer.settings.cpuProfile" : False,
         "indexer.settings.compaction.min_frag" : 31,
         "indexer.settings.sliceBufSize" : 50000,
+        "indexer.settings.wal_size" : 4096,
         "indexer.settings.persisted_snapshot_init_build.interval": 5000
 }
         return map
