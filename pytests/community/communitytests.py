@@ -30,6 +30,7 @@ class CommunityTests(CommunityBaseTest):
         self.shutdown_zone = self.input.param("shutdown_zone", 1)
         self.do_verify = self.input.param("do-verify", True)
         self.num_node = self.input.param("num_node", 4)
+        self.services = self.input.param("services", None)
         self.timeout = 6000
 
 
@@ -79,6 +80,44 @@ class CommunityTests(CommunityBaseTest):
         if ldap_available:
             self.fail("This feature 'ldap' only available on "
                       "Enterprise Edition")
+
+    def check_set_services(self):
+        msg = ""
+        self.rest = RestConnection(self.master)
+        self.rest.force_eject_node()
+        self.sleep(7, "wait for node reset done")
+        print "service  ", self.services
+        try:
+            status = self.rest.init_node_services(hostname=self.master.ip,
+                                                 services=[self.services])
+        except Exception, e:
+            if e:
+                print e
+        if self.services == "kv":
+            if status:
+                self.log.info("CE could set {0} only service."
+                                  .format(self.services))
+            else:
+                self.fail("Failed to set {0} only service."
+                                   .format(self.services))
+        elif self.services == "kv,index":
+            if status:
+                self.fail("CE does not support kv and index on same node")
+            else:
+                self.log.info("services enforced in CE")
+        elif self.services == "kv,n1ql":
+            if status:
+                self.fail("CE does not support kv and query on same node")
+            else:
+                self.log.info("services enforced in CE")
+        elif self.services == "kv,index,querry":
+            if status:
+                self.log.info("CE could set all services on same nodes."
+                                  .format(self.services))
+            else:
+                self.fail("Failed to set kv, index and query services on CE")
+        else:
+            self.fail("services don't support")
 
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
