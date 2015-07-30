@@ -552,3 +552,38 @@ class auditTest(BaseTestCase):
         shell.execute_command(command)
         expectedResults = {"peername":'127.0.0.1', "sockname":'127.0.0.1' + ":11210", "source":"memcached", "user":"foo", "reason":"Unknown user"}
         self.checkConfig(self.eventID, self.master, expectedResults)
+
+
+    def test_addLdapAdminRO(self):
+        ops = self.input.param("ops", None)
+        role = self.input.param("role", None)
+        adminUser = self.input.param('adminUser', None)
+        roAdminUser = self.input.param('roAdminUser', None)
+        default = self.input.param('default', None)
+        source = 'ns_server'
+        rest = RestConnection(self.master)
+        user = self.master.rest_username
+
+        #User must be pre-created in LDAP in advance
+        if (ops in ['ldapAdmin']) and (default is not None):
+            rest.ldapUserRestOperation(True, adminUser=[[adminUser]], exclude='roAdmin')
+            expectedResults = {"ro_admins":'default', "admins":[adminUser], "enabled":True, "source":source, \
+                                   "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':''}
+        elif (ops in ['ldapROAdmin']) and (default is not None):
+            rest.ldapUserRestOperation(True, ROadminUser=[[roAdminUser]], exclude='fullAdmin')
+            expectedResults = {"admins":'default', "ro_admins":[roAdminUser], "enabled":True, "source":source, \
+                                   "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':''}
+        elif (ops in ['ldapAdmin']):
+            rest.ldapUserRestOperation(True, adminUser=[[adminUser]], exclude=None)
+            expectedResults = {"ro_admins":[], "admins":[adminUser], "enabled":True, "source":source, \
+                                   "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':''}
+        elif (ops in ['ldapROAdmin']):
+            rest.ldapUserRestOperation(True, ROadminUser=[[roAdminUser]], exclude=None)
+            expectedResults = {"admins":[], "ro_admins":[roAdminUser], "enabled":True, "source":source, \
+                                   "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':''}
+        elif (ops in ['Both']):
+            rest.ldapUserRestOperation(True, ROadminUser=[[roAdminUser]], adminUser=[[adminUser]], exclude=None)
+            expectedResults = {"admins":[adminUser], "ro_admins":[roAdminUser], "enabled":True, "source":source, \
+                                   "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':''}
+
+        self.checkConfig(self.eventID, self.master, expectedResults)
