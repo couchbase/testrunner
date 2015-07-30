@@ -24,6 +24,7 @@ class SDKClient(object):
         self.password = password
         self.quiet = quiet
         self.transcoder = transcoder
+        self.default_timeout = 0
         self._createConn()
 
     def _createString(self, scheme ="couchbase", bucket = None, hosts = ["localhost"], certpath = None, uhm_options = ""):
@@ -43,6 +44,7 @@ class SDKClient(object):
         try:
             self.cb = CouchbaseBucket(self.connection_string, password = self.password,
                                   quiet = self.quiet, transcoder = self.transcoder)
+            self.default_timeout = self.cb.timeout
         except BucketNotFoundError as e:
              raise
 
@@ -230,7 +232,6 @@ class SDKClient(object):
                 self.cb.counter(key, delta=delta, initial=initial, ttl=ttl)
             except CouchbaseError as e:
                 raise
-
     def counter_multi(self, keys, delta=1, initial=None, ttl=0):
         try:
             self.cb.counter_multi(keys, delta=delta, initial=initial, ttl=ttl)
@@ -491,16 +492,29 @@ class SDKSmartClient(object):
       def getr(self, key, replica_index=0):
         return self.client.rget(key,replica_index=replica_index)
 
-      def setMulti(self, exp, flags, key_val_dic, pause = None, timeout = None, parallel=None, format = FMT_AUTO):
-          return self.client.upsert_multi(key_val_dic, ttl = exp, format = format)
+      def setMulti(self, exp, flags, key_val_dic, pause = None, timeout = 5.0, parallel=None, format = FMT_AUTO):
+          try:
+            self.client.cb.timeout = timeout
+            return self.client.upsert_multi(key_val_dic, ttl = exp, format = format)
+          finally:
+            self.client.cb.timeout = self.client.default_timeout
 
-      def getMulti(self, keys_lst, pause = None, timeout_sec = None, parallel=None):
-        map = self.client.get_multi(keys_lst)
-        return map
+      def getMulti(self, keys_lst, pause = None, timeout_sec = 5.0, parallel=None):
+          try:
+              self.client.cb.timeout = timeout_sec
+              map = self.client.get_multi(keys_lst)
+              return map
+          finally:
+              self.client.cb.timeout = self.client.default_timeout
 
-      def getrMulti(self, keys_lst, replica_index= None, pause = None, timeout_sec = None, parallel=None):
-        map = self.client.rget_multi(keys_lst, replica_index = replica_index)
-        return map
+
+      def getrMulti(self, keys_lst, replica_index= None, pause = None, timeout_sec = 5.0, parallel=None):
+          try:
+              self.client.cb.timeout = timeout_sec
+              map = self.client.rget_multi(keys_lst, replica_index = replica_index)
+              return map
+          finally:
+              self.client.cb.timeout = self.client.default_timeout
 
       def delete(self, key):
           return self.client.remove(key)
