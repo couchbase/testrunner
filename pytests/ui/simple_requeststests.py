@@ -11,11 +11,9 @@ class SimpleRequests(BaseTestCase):
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
-        if type.lower() == 'windows':
-            self.is_linux = False
-        else:
+        self.is_linux = False
+        if type.lower() == 'linux':
             self.is_linux = True
-
 
     def test_simple_ui_request(self):
         rest = RestConnection(self.master)
