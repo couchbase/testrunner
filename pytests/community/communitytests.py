@@ -100,17 +100,22 @@ class CommunityTests(CommunityBaseTest):
             else:
                 self.fail("Failed to set {0} only service."
                                    .format(self.services))
-        elif self.services == "kv,index":
+        elif self.services == "index,kv":
             if status:
                 self.fail("CE does not support kv and index on same node")
             else:
                 self.log.info("services enforced in CE")
         elif self.services == "kv,n1ql":
             if status:
-                self.fail("CE does not support kv and query on same node")
+                self.fail("CE does not support kv and n1ql on same node")
             else:
                 self.log.info("services enforced in CE")
-        elif self.services == "kv,index,querry":
+        elif self.services == "index,n1ql":
+            if status:
+                self.fail("CE does not support index and n1ql on same node")
+            else:
+                self.log.info("services enforced in CE")
+        elif self.services == "index,kv,n1ql":
             if status:
                 self.log.info("CE could set all services on same nodes."
                                   .format(self.services))
