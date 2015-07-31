@@ -146,7 +146,9 @@ class CommunityTests(CommunityBaseTest):
                 map = self.get_nodes_services()
                 if map[self.master.ip] == self.start_node_services and \
                     map[self.servers[1].ip] == self.add_node_services:
+                    self.log.info("services set correctly when node added & rebalance")
                 else:
+                    self.fail("services set incorrectly when node added & rebalance")
             elif self.start_node_services in ["kv", "index,kv,n1ql"] and \
                  self.add_node_services in ["kv", "index,kv,n1ql"]:
                 self.log.info("services are enforced in CE")
