@@ -150,7 +150,7 @@ class CommunityTests(CommunityBaseTest):
                 else:
                     self.fail("services set incorrectly when node added & rebalance")
             elif self.start_node_services in ["kv", "index,kv,n1ql"] and \
-                 self.add_node_services in ["kv", "index,kv,n1ql"]:
+                 self.add_node_services not in ["kv", "index,kv,n1ql"]:
                 self.log.info("services are enforced in CE")
             else:
                 self.fail("maybe bug in add node")
