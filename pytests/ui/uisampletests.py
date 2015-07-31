@@ -640,6 +640,9 @@ class ServerTestControls():
         self.num_pend_rebalance = self.helper.find_control('server_nodes', 'num_pend_rebalance',
                                                            parent_locator='pend_rebalance_btn')
 
+    def set_quota_btn(self):
+        return self.helper.find_control('server_nodes','set_quota')
+
     def pending_rebalance_tab(self):
         return self.helper.find_control('server_nodes', 'pending_rebalance_tab')
 
@@ -1191,6 +1194,10 @@ class ServerHelper():
             self.wait.until(lambda fn: self.controls.num_pend_rebalance.is_displayed(),
                             "Number of pending rebalance servers is not displayed in %d sec" % (self.wait._timeout))
         self.wait.until(lambda fn: self._is_btn_enabled(self.controls.rebalance_btn),
+                        "Rebalance btn is not enabled in %d sec" % (self.wait._timeout))
+        if self.controls.set_quota_btn().is_displayed():
+            self.controls.set_quota_btn().click()
+            self.wait.until(lambda fn: self._is_btn_enabled(self.controls.rebalance_btn),
                         "Rebalance btn is not enabled in %d sec" % (self.wait._timeout))
         self.controls.rebalance_btn.click()
         self.tc.log.info("Start rebalancing")
@@ -1965,7 +1972,7 @@ class SettingsHelper():
         self.controls.alerts_info().email_pass.type(input.param("alerts_email_password", None))
         self.controls.alerts_info().email_encrypt.check(setTrue=input.param("alerts_email_encrypt", True))
         self.controls.alerts_info().email_sender.type(input.param("alerts_email_sender", 'qa@couchbase.com'))
-        self.controls.alerts_info().email_recipients.type(input.param("alerts_email_recipients", 'chisheng@couchbase.com'))
+        self.controls.alerts_info().email_recipients.type(input.param("alerts_email_recipients", 'iryna@couchbase.com'))
         self.wait.until(lambda fn: self.controls.alerts_info().test_email_btn.is_displayed(),
                         "Test Mail btn is not displayed in %d sec" % (self.wait._timeout))
         self.controls.alerts_info().test_email_btn.click()
