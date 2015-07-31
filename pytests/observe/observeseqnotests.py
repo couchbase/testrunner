@@ -365,11 +365,13 @@ class ObserveSeqNoTests(BaseTestCase):
 
         self.log.info('\n\nserver should be failed over now')
 
-        time.sleep(5)
+        time.sleep(10)
         # reinstantiate the client so we get the new view of the world
         client = VBucketAwareMemcached(RestConnection(self.master), 'default')
         server_with_key = client.memcached( 'hardfailoverkey').host
         self.log.info('\n\nkey is now on server {0}'.format(server_with_key))
+
+        time.sleep(10)
 
         after_failover_results = self.observe_seqno_response_to_dict(
             client.observe_seqno('hardfailoverkey',op_data['vbucket_uuid']) )
