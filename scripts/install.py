@@ -209,7 +209,7 @@ class Installer(object):
             build_repo = MV_LATESTBUILD_REPO
             if toy is not "":
                 build_repo = COUCHBASE_REPO
-            elif version[:3] == "3.5" or version[:3] == "4.0":
+            elif version[:3] == "4.0":
                 build_repo = SHERLOCK_BUILD_REPO
             for name in names:
                 if version[:5] in releases_version:

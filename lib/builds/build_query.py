@@ -403,7 +403,7 @@ class BuildQuery(object):
                 windows:
                     couchbase_server-enterprise-windows-amd64-3.5.0-926.exe
                     couchbase-server-enterprise_3.5.0-952-windows_amd64.exe"""
-            if "3.5.0-" in build_info or "4.0.0-" in build_info:
+            if "4.0.0-" in build_info:
                 deb_words = ["debian7", "ubuntu12.04", "ubuntu14.04", "windows", "macos"]
                 if "centos" not in build_info:
                     tmp_str = build_info.split("_")
@@ -553,7 +553,7 @@ class BuildQuery(object):
         if "exe" in deliverable_type and version[:5] not in COUCHBASE_VERSION_2:
             joint_char = "-"
             version_join_char = "-"
-        if toy == "" and (version[:3] == "3.5" or version[:3] == "4.0"):
+        if toy == "" and version[:3] == "4.0":
             """ format for sherlock build name
             /684/couchbase-server-enterprise-3.5.0-684-centos6.x86_64.rpm
             /1154/couchbase-server-enterprise-3.5.0-1154-centos7.x86_64.rpm

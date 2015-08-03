@@ -1532,7 +1532,7 @@ class RemoteMachineShellConnection:
             if exist:
                 log.info("VERSION file exists.  Start to uninstall {0} on {1} server".format(product, self.ip))
                 build_name, short_version, full_version = self.find_build_version(version_path, version_file, product)
-                if full_version[:3] == "3.5" or full_version[:3] == "4.0":
+                if full_version[:3] == "4.0":
                     build_repo = SHERLOCK_BUILD_REPO
                 log.info('Build name: {0}'.format(build_name))
                 build_name = build_name.rstrip() + ".exe"
@@ -1623,7 +1623,7 @@ class RemoteMachineShellConnection:
                                                            is fixed in 3.0.1 """
                 if full_version[:5] in COUCHBASE_VERSION_2 or \
                    full_version[:5] in COUCHBASE_VERSION_3 or \
-                   full_version.startswith("4.0.0"):
+                   full_version.startswith("4.0"):
                     log.info("due to bug MB-11985, we need to delete below registry")
                     output, error = self.execute_command("reg delete \
                             'HKLM\Software\Wow6432Node\Ericsson\Erlang\ErlSrv' /f ")
