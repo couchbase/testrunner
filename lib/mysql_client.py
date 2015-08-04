@@ -174,6 +174,8 @@ class MySQLClient(object):
             for field_info in map[table_name]:
                 field_list.append({field_info['Field']:field_info['Type']})
             target_map[table_name] = field_list
+        if "copy_simple_table" in target_map:
+            target_map.pop("copy_simple_table")
         return target_map
 
     def _get_primary_key_map_for_tables(self):
@@ -233,6 +235,8 @@ class MySQLClient(object):
     def _get_pkey_map_for_tables_with_primary_key_column(self):
         target_map = {}
         map = self._get_tables_information()
+        if "copy_simple_table" in map.keys():
+            map.pop("copy_simple_table")
         number_of_tables = len(map.keys())
         count = 1
         for table_name in map.keys():

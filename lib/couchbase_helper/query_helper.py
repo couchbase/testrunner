@@ -312,6 +312,22 @@ class QueryHelper(object):
         sql_template = 'INSERT INTO {0} (KEY, VALUE) VALUES ({1},{2})'
         return sql_template.format(bucket_name, key, value)
 
+    def _builk_insert_statement_n1ql(self, bucket_name, map):
+        sql_template = 'INSERT INTO {0} (KEY, VALUE) VALUES {1}'
+        temp = ""
+        for key in map.keys():
+            temp += "({0},{1}),".format("\""+key+"\"", json.dumps(map[key]))
+        temp =  temp[0:len(temp)-1]
+        return sql_template.format(bucket_name, temp)
+
+    def _builk_upsert_statement_n1ql(self, bucket_name, map):
+        sql_template = 'UPSERT INTO {0} (KEY, VALUE) VALUES {1}'
+        temp = ""
+        for key in map.keys():
+            temp += "({0},{1}),".format("\""+key+"\"", json.dumps(map[key]))
+        temp =  temp[0:len(temp)-1]
+        return sql_template.format(bucket_name, temp)
+
     def _upsert_statement_n1ql(self, bucket_name, key, value):
         sql_template = 'INSERT INTO {0} (KEY, VALUE) VALUES ({1},{2})'
         return sql_template.format(bucket_name, key, value)
@@ -485,6 +501,23 @@ class QueryHelper(object):
                 value = 0
             values_string += "\'"+str(value)+"\',"
         values = "( "+values_string[0:len(values_string)-1]+" ) "
+        return intial_statement+column_names+" VALUES "+values
+
+    def _generate_bulk_insert_statement_from_data(self, table_name ="TABLE_NAME", data_map ={}):
+        intial_statement = " INSERT INTO {0} ".format(table_name)
+        column_names = "( "+",".join(data_map.keys())+" ) "
+        values_string = ""
+        values = ""
+        for key in data_map.keys():
+            for value in data_map[key].values():
+                if str(value) == "True":
+                    value = 1
+                if str(value) == "False":
+                    value = 0
+                values_string += "\'"+str(value)+"\',"
+            values += "( "+values_string[0:len(values_string)-1]+" ),"
+        values = values[0:len(values)-1]
+        print values
         return intial_statement+column_names+" VALUES "+values
 
 
