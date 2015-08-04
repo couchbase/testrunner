@@ -381,9 +381,9 @@ class ViewQueryTests(BaseTestCase):
         options = {"updateMinChanges" : min_changes,
                    "replicaUpdateMinChanges" : min_changes_r}
         point_1 = min(min_changes, min_changes_r) - 100
-        point_2 = point_1 + (max(min_changes, min_changes_r) - min(min_changes, min_changes_r))/2
+        point_2 = point_1 + (max(min_changes, min_changes_r) - min(min_changes, min_changes_r)) / 2
         point_3 = max(min_changes, min_changes_r) + 200
-        index_types = (('main','replica'), ('replica', 'main'))[min_changes > min_changes_r]
+        index_types = (('main', 'replica'), ('replica', 'main'))[min_changes > min_changes_r]
         data_set = SimpleDataSet(self.master, self.cluster, self.num_docs,
                                  ddoc_options=options)
         gen_load_1 = data_set.generate_docs(data_set.views[0], start=0,
@@ -422,7 +422,7 @@ class ViewQueryTests(BaseTestCase):
             changes_done += (100 * len(self.servers))
             gen_load = data_set.generate_docs(data_set.views[0],
                                             start=changes_done,
-                                            end=changes_done +(100 * len(self.servers)))
+                                            end=changes_done + (100 * len(self.servers)))
             changes_done += (100 * len(self.servers))
             self.load(data_set, gen_load)
             self.log.info("Partition sequence is: %s" % data_set.get_partition_seq(data_set.views[0]))
@@ -693,12 +693,12 @@ class ViewQueryTests(BaseTestCase):
                 self.log.info("10 seconds sleep after failover before invoking rebalance...")
                 time.sleep(10)
                 servers = self.servers[i:]
-                self.master = self.servers[i+1]
+                self.master = self.servers[i + 1]
 
                 rebalance = self.cluster.async_rebalance(servers,
                                                          [], failover_nodes)
 
-                self._query_all_views(data_set.views, gen_load, server_to_query=i+1)
+                self._query_all_views(data_set.views, gen_load, server_to_query=i + 1)
 
                 del(servers[i])
 
@@ -1720,6 +1720,7 @@ class ViewQueryTests(BaseTestCase):
         data_set = FlagsDataSet(self.master, self.cluster, self.num_docs)
         generator_load = data_set.generate_docs(data_set.views[0])
         self.load(data_set, generator_load, flag=data_set.item_flag)
+        print data_set.item_flag
         for server in self.servers:
             RebalanceHelper.wait_for_persistence(server, data_set.bucket)
         data_set.query_verify_value(self)
@@ -2728,9 +2729,9 @@ class SalesDataSet:
             views = [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn1),
                      QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn1, reduce_fn="_count")]
         elif self.custom_reduce:
-            reduce_fn = "function(key, values, rereduce) {  if (rereduce)" +\
-             " { var result = 0;  for (var i = 0; i < values.length; i++) " +\
-             "{ emit(key,values[0]);  result += values[i]; }   return result;" +\
+            reduce_fn = "function(key, values, rereduce) {  if (rereduce)" + \
+             " { var result = 0;  for (var i = 0; i < values.length; i++) " + \
+             "{ emit(key,values[0]);  result += values[i]; }   return result;" + \
              " } else { emit(key,values[0]);     return values.length;  }}"
             views = [QueryView(self.server, self.cluster, bucket=self.bucket, fn_str=vfn, reduce_fn=reduce_fn)]
             for view in views:
@@ -3008,7 +3009,7 @@ class ExpirationDataSet:
             tc.log.info("Expiration emmited correctly")
 
 class FlagsDataSet:
-    def __init__(self, server, cluster, num_docs=10000, bucket="default", item_flag=4042322160):
+    def __init__(self, server, cluster, num_docs=10000, bucket="default", item_flag=50331650):
         self.num_docs = num_docs
         self.bucket = bucket
         self.server = server
@@ -3074,7 +3075,7 @@ class BigDataSet:
         if end is None:
             end = self.num_docs
         age = range(start, end)
-        name = ['a' * self.value_size,]
+        name = ['a' * self.value_size, ]
         template = '{{ "age": {0}, "name": "{1}" }}'
 
         gen_load = DocumentGenerator(view.prefix, template, age, name, start=start,
