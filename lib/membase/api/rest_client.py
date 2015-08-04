@@ -2215,7 +2215,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'PUT', params)
         return status
 
-    def query_tool(self, query, port=8093, timeout=650, query_params={}, is_prepared=False):
+    def query_tool(self, query, port=8093, timeout=650, query_params={}, is_prepared=False, verbose = True):
         key = 'prepared' if is_prepared else 'statement'
         headers = None
         if is_prepared:
@@ -2234,7 +2234,8 @@ class RestConnection(object):
                 del query_params['creds']
             params.update(query_params)
             params = urllib.urlencode(params)
-            log.info('query params : {0}'.format(params))
+            if verbose:
+                log.info('query params : {0}'.format(params))
             api = "http://%s:%s/query?%s" % (self.ip, port, params)
         status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
         try:

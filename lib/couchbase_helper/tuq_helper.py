@@ -41,7 +41,7 @@ class N1QLHelper():
         actual_result = self.run_cbq_query()
         return actual_result, expected_result
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params = {}, is_prepared=False, scan_consistency = None, scan_vector = None):
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params = {}, is_prepared=False, scan_consistency = None, scan_vector = None, verbose= True):
         if query is None:
             query = self.query
         if server is None:
@@ -69,8 +69,9 @@ class N1QLHelper():
                 query_params['scan_consistency']=  scan_consistency
             if scan_vector:
                 query_params['scan_vector']=  scan_vector
-            self.log.info('RUN QUERY %s' % query)
-            result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared = is_prepared)
+            if verbose:
+                self.log.info('RUN QUERY %s' % query)
+            result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared = is_prepared, verbose = verbose)
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/" +\

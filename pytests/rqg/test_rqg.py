@@ -29,6 +29,7 @@ class RQGTests(BaseTestCase):
         self.initial_loading_to_cb= self.input.param("initial_loading_to_cb",True)
         self.database= self.input.param("database","flightstats")
         self.merge_operation= self.input.param("merge_operation",False)
+        self.load_copy_table= self.input.param("load_copy_table",False)
         self.user_id= self.input.param("user_id","root")
         self.password= self.input.param("password","")
         self.generate_input_only = self.input.param("generate_input_only",False)
@@ -667,6 +668,9 @@ class RQGTests(BaseTestCase):
         result_run["n1ql_query"] = n1ql_query
         result_run["sql_query"] = sql_query
         result_run["test_case_number"] = test_case_number
+        self.log.info("SQL :: {0}".format(sql_query))
+        self.log.info("N1QL :: {0}".format(n1ql_query))
+        query_index_run = self._run_queries_and_verify_crud(n1ql_query = verification_query , sql_query = verification_query, expected_result = None)
         self.n1ql_helper.run_cbq_query(n1ql_query, self.n1ql_server)
         self.client._db_execute_query(query = sql_query)
         query_index_run = self._run_queries_and_verify_crud(n1ql_query = verification_query , sql_query = verification_query, expected_result = None)
@@ -1115,6 +1119,15 @@ class RQGTests(BaseTestCase):
             print 'WARN======================='
             print ex
 
+    def _load_bulk_data_in_buckets_using_n1ql(self, bucket, data_set):
+        try:
+            count=0
+            n1ql_query = self.query_helper._builk_insert_statement_n1ql(bucket.name,data_set)
+            actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, verbose = True)
+        except Exception, ex:
+            print 'WARN======================='
+            print ex
+
     def _load_data_in_buckets_using_mc_bin_client_json(self, bucket, data_set):
         client = VBucketAwareMemcached(RestConnection(self.master), bucket)
         try:
@@ -1164,6 +1177,8 @@ class RQGTests(BaseTestCase):
              sql_file_definiton_path = path)
             sql = "INSERT INTO {0}.copy_simple_table SELECT * FROM {0}.simple_table".format(self.database)
             self.client._insert_execute_query(sql)
+
+
 
     def _zipdir(self, path, zip_path):
         self.log.info(zip_path)
@@ -1494,27 +1509,13 @@ class RQGTests(BaseTestCase):
                 primary_key = table_key_map[bucket_name])
             for bucket in self.buckets:
                 if bucket.name == bucket_name:
-                    self._load_data_in_buckets_using_n1ql(bucket, self.record_db[bucket_name])
-
+                    self._load_bulk_data_in_buckets_using_n1ql(bucket, self.record_db[bucket_name])
 
     def _populate_delta_buckets(self):
-        table_key_map = self.client._get_primary_key_map_for_tables()
-        bucket_list = table_key_map.keys()
-        self.new_record_db={}
-        for bucket_name in bucket_list:
-            query = "delete from {0}".format(bucket_name)
-            self.client._insert_execute_query(query = query)
-            self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
-            new_db_info = self.record_db
-            # INSERT DATA AGAIN IN COUCHBASE
-            for bucket in self.buckets:
-                if bucket.name == bucket_name:
-                    self._load_data_in_buckets_using_n1ql(bucket, new_db_info[bucket_name])
-                    # INSERT DATA AGAIN IN MYSQL
-                    for key in new_db_info[bucket_name].keys():
-                        insert_sql = self.query_helper._generate_insert_statement_from_data(bucket_name,new_db_info[bucket_name][key])
-                        self.client._insert_execute_query(insert_sql)
-
-
-
-
+        query = "delete from simple_table"
+        self.client._insert_execute_query(query = query)
+        self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server, verbose=False)
+        insert_sql= "insert into simple_table(KEY k ,VALUE b) SELECT meta(b).id as k, b from copy_simple_table b"
+        self.n1ql_helper.run_cbq_query(query = insert_sql, server = self.n1ql_server, verbose=False)
+        insert_sql= "INSERT INTO simple_table SELECT * FROM copy_simple_table"
+        self.client._insert_execute_query(insert_sql)
