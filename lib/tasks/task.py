@@ -2600,14 +2600,13 @@ class MonitorActiveTask(Task):
 
     def __init__(self, server, type, target_value, wait_progress=100, num_iterations=100, wait_task=True):
         Task.__init__(self, "monitor_active_task")
+
         self.server = server
         self.type = type  # indexer or bucket_compaction
         self.target_key = ""
-        if self.type == "indexer":
-            self.target_key = "designDocument"
-            if target_value.lower() in ['true', 'false']:
-                # track initial_build indexer task
-                self.target_key = "initial_build"
+
+        if self.type == 'indexer':
+            pass # no special actions
         elif self.type == "bucket_compaction":
             self.target_key = "original_target"
         elif self.type == "view_compaction":
@@ -2627,12 +2626,11 @@ class MonitorActiveTask(Task):
 
     def execute(self, task_manager):
         tasks = self.rest.active_tasks()
-        print tasks
         for task in tasks:
             if task["type"] == self.type and ((
                         self.target_key == "designDocument" and task[self.target_key] == self.target_value) or (
                         self.target_key == "original_target" and task[self.target_key]["type"] == self.target_value) or (
-                        self.target_key == "initial_build" and str(task[self.target_key]) == self.target_value)):
+                        self.type == 'indexer') ):
                 self.current_progress = task["progress"]
                 self.task = task
                 self.log.info("monitoring active task was found:" + str(task))
@@ -2654,7 +2652,7 @@ class MonitorActiveTask(Task):
         else:
             # task was completed
             self.state = FINISHED
-            self.log.info("task for monitoring %s:%s was not found" % (self.type, self.target_value))
+            self.log.info("task for monitoring %s:%s completed" % (self.type, self.target_value))
             self.set_result(True)
 
 
