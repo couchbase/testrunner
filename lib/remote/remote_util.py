@@ -518,7 +518,7 @@ class RemoteMachineShellConnection:
             """couchbase-server-enterprise_3.5.0-968-windows_amd64
                couchbase-server-enterprise_4.0.0-1655-windows_amd64
                sherlock changed from 3.5. to 4.0 """
-            if "4.0.0" in filename:
+            if "4.0." in filename:
                 tmp = filename.split("_")
                 version = tmp[1].replace("-windows", "")
             else:
@@ -1365,6 +1365,8 @@ class RemoteMachineShellConnection:
             """ Remove this workaround when bug MB-14504 is fixed """
             log.info("Kill any un/install process leftover in sherlock")
             self.execute_command('taskkill /F /T /IM 4.0.0-*')
+            log.info("Kill any un/install process leftover in watson")
+            self.execute_command('taskkill /F /T /IM 4.0.1-*')
             log.info("Kill any cbq-engine.exe in sherlock")
             self.execute_command('taskkill /F /T /IM cbq-engine.exe')
             log.info('sleep for 5 seconds before running task '
@@ -1577,6 +1579,8 @@ class RemoteMachineShellConnection:
                 """ Remove this workaround when bug MB-14504 is fixed """
                 log.info("Kill any un/install process leftover in sherlock")
                 self.execute_command('taskkill /F /T /IM 4.0.0-*')
+                log.info("Kill any un/install process leftover in watson")
+                self.execute_command('taskkill /F /T /IM 4.0.1-*')
                 log.info("Kill any cbq-engine.exe in sherlock")
                 self.execute_command('taskkill /F /T /IM cbq-engine.exe')
                 log.info('sleep for 5 seconds before running task '
