@@ -53,6 +53,10 @@ class BaseTestCase(unittest.TestCase):
             self.cluster = Cluster()
         self.pre_warmup_stats = {}
         self.cleanup = False
+        """ some tests need to bypass checking cb server at set up
+            to run installation """
+        self.skip_init_check_cbserver = \
+                 self.input.param("skip_init_check_cbserver", False)
         self.data_collector = DataCollector()
         self.data_analyzer = DataAnalyzer()
         self.result_analyzer = DataAnalysisResultAnalyzer()
@@ -117,7 +121,8 @@ class BaseTestCase(unittest.TestCase):
             self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
             self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
             self.enable_bloom_filter = self.input.param("enable_bloom_filter", False)
-            self.protocol = self.get_protocol_type()
+            if not self.skip_init_check_cbserver:
+                self.protocol = self.get_protocol_type()
             self.services_map = None
             if self.sasl_bucket_priority != None:
                 self.sasl_bucket_priority = self.sasl_bucket_priority.split(":")
@@ -126,7 +131,7 @@ class BaseTestCase(unittest.TestCase):
 
             self.log.info("==============  basetestcase setup was started for test #{0} {1}=============="\
                           .format(self.case_number, self._testMethodName))
-            if not self.skip_buckets_handle:
+            if not self.skip_buckets_handle and not self.skip_init_check_cbserver:
                 self._cluster_cleanup()
             # avoid any cluster operations in setup for new upgrade & upgradeXDCR tests
             if str(self.__class__).find('newupgradetests') != -1 or \
