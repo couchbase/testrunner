@@ -166,7 +166,7 @@ class MySQLClient(object):
             target_map[table_name] = field_list
         return target_map
 
-    def _get_field_with_types_list_map_for_tables(self):
+    def _get_field_with_types_list_map_for_tables(self, can_remove_copy_table = True):
         target_map = {}
         map = self._get_tables_information()
         for table_name in map.keys():
@@ -174,7 +174,7 @@ class MySQLClient(object):
             for field_info in map[table_name]:
                 field_list.append({field_info['Field']:field_info['Type']})
             target_map[table_name] = field_list
-        if "copy_simple_table" in target_map:
+        if can_remove_copy_table and "copy_simple_table" in target_map:
             target_map.pop("copy_simple_table")
         return target_map
 
@@ -232,10 +232,10 @@ class MySQLClient(object):
                         }
         return final_map
 
-    def _get_pkey_map_for_tables_with_primary_key_column(self):
+    def _get_pkey_map_for_tables_with_primary_key_column(self, can_remove_copy_table = True):
         target_map = {}
         map = self._get_tables_information()
-        if "copy_simple_table" in map.keys():
+        if can_remove_copy_table and "copy_simple_table" in map.keys():
             map.pop("copy_simple_table")
         number_of_tables = len(map.keys())
         count = 1
@@ -286,9 +286,9 @@ class MySQLClient(object):
             list.append(row[0])
         return list
 
-    def _get_values_with_type_for_fields_in_table(self):
-        map = self._get_field_with_types_list_map_for_tables()
-        gen_map = self._get_pkey_map_for_tables_with_primary_key_column()
+    def _get_values_with_type_for_fields_in_table(self, can_remove_copy_table = True):
+        map = self._get_field_with_types_list_map_for_tables(can_remove_copy_table)
+        gen_map = self._get_pkey_map_for_tables_with_primary_key_column(can_remove_copy_table)
         for table_name in map.keys():
             for vals in map[table_name]:
                 field_name = vals.keys()[0]

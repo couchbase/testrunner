@@ -354,7 +354,7 @@ class RQGTests(BaseTestCase):
     def test_rqg_crud_update_merge(self):
         # Get Data Map
         #Create Table
-        table_map = self.client._get_values_with_type_for_fields_in_table()
+        table_map = self.client._get_values_with_type_for_fields_in_table(can_remove_copy_table=False)
         check = True
         failure_map = {}
         batches = []
@@ -553,7 +553,7 @@ class RQGTests(BaseTestCase):
 
     def test_rqg_crud_delete_merge(self):
         # Get Data Map
-        table_map = self.client._get_values_with_type_for_fields_in_table()
+        table_map = self.client._get_values_with_type_for_fields_in_table(can_remove_copy_table=False)
         check = True
         failure_map = {}
         batches = []
