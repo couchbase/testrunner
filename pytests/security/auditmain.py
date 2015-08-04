@@ -26,7 +26,7 @@ class audit:
     MACLOGFILEPATH = "/Users/couchbase/Library/Application Support/Couchbase/var/lib/couchbase/logs"
     WINCONFIFFILEPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/config/"
     LINCONFIGFILEPATH = "/opt/couchbase/var/lib/couchbase/config/"
-    MACCONFIGFILEPATH = "/Users/couchbase/Library/Application Support/Couchbase/var/lib/couchbase/config"
+    MACCONFIGFILEPATH = "/Users/couchbase/Library/Application Support/Couchbase/var/lib/couchbase/config/"
     DOWNLOADPATH = "/tmp/"
 
     def __init__(self,
@@ -57,7 +57,7 @@ class audit:
         if os_type == 'windows':
             auditconfigpath = audit.WINCONFIFFILEPATH
             self.currentLogFile = audit.WINLOGFILEPATH
-        elif os_type == 'mac':
+        elif os_type == 'Mac':
             auditconfigpath = audit.MACCONFIGFILEPATH
             self.currentLogFile = audit.MACLOGFILEPATH
         else:
