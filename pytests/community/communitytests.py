@@ -130,6 +130,8 @@ class CommunityTests(CommunityBaseTest):
         services_in_ce = ["kv", "index,kv,n1ql"]
         self.sleep(5, "wait for node reset done")
         try:
+            self.log.info("Initialize node with services {0}"
+                                  .format(self.start_node_services))
             status = self.rest.init_node_services(hostname=self.master.ip,
                                         services=[self.start_node_services])
             init_node = self.cluster.async_init_node(self.master,
@@ -143,6 +145,8 @@ class CommunityTests(CommunityBaseTest):
         if status and init_node.result() != 0:
             add_node = False
             try:
+                self.log.info("node with services {0} try to add"
+                                  .format(self.add_node_services))
                 add_node = self.cluster.rebalance(self.servers[:2],
                                                   self.servers[1:2], [],
                                       services = [self.add_node_services])
