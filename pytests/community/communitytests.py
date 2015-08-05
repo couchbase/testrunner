@@ -127,12 +127,20 @@ class CommunityTests(CommunityBaseTest):
     def check_set_services_when_add_node(self):
         self.rest = RestConnection(self.master)
         self.rest.force_eject_node()
+        services_in_ce = ["kv", "index,kv,n1ql"]
         self.sleep(5, "wait for node reset done")
-        status = self.rest.init_node_services(hostname=self.master.ip,
+        try:
+            status = self.rest.init_node_services(hostname=self.master.ip,
                                         services=[self.start_node_services])
-        init_node = self.cluster.async_init_node(self.master,
+            init_node = self.cluster.async_init_node(self.master,
                                             services = [self.start_node_services])
-        if init_node.result() != 0:
+        except Exception, e:
+            if e:
+                print e
+        if not status and self.start_node_services not in services_in_ce:
+             self.log.info("services setting enforced in CE")
+
+        if status and init_node.result() != 0:
             add_node = False
             try:
                 add_node = self.cluster.rebalance(self.servers[:2],
