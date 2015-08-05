@@ -670,10 +670,18 @@ class RQGTests(BaseTestCase):
         result_run["test_case_number"] = test_case_number
         self.log.info("SQL :: {0}".format(sql_query))
         self.log.info("N1QL :: {0}".format(n1ql_query))
+        crud_ops_run_result = None
         query_index_run = self._run_queries_and_verify_crud(n1ql_query = verification_query , sql_query = verification_query, expected_result = None)
-        self.n1ql_helper.run_cbq_query(n1ql_query, self.n1ql_server)
-        self.client._db_execute_query(query = sql_query)
-        query_index_run = self._run_queries_and_verify_crud(n1ql_query = verification_query , sql_query = verification_query, expected_result = None)
+        try:
+            self.n1ql_helper.run_cbq_query(n1ql_query, self.n1ql_server)
+            self.client._db_execute_query(query = sql_query)
+        except Exception, ex:
+            self.log.info(ex)
+            crud_ops_run_result ={"success":False, "result": str(ex)}
+        if crud_ops_run_result == None:
+            query_index_run = self._run_queries_and_verify_crud(n1ql_query = verification_query , sql_query = verification_query, expected_result = None)
+        else:
+            query_index_run = crud_ops_run_result
         result_run["crud_verification_test"] = query_index_run
         result_queue.put(result_run)
         self._check_and_push_failure_record_queue(result_run, test_data, failure_record_queue)
