@@ -2275,6 +2275,22 @@ class RemoteMachineShellConnection:
         if o:
             return o
 
+        
+    def get_memcache_pid(self):
+         self.extract_remote_info()
+         if self.info.type == 'Linux':
+             o, _ = self.execute_command("ps -eo comm,pid | awk '$1 == \"memcached\" { print $2 }'")
+             return o[0]
+         elif self.info.type == 'windows':
+             output, error = self.execute_command('tasklist| grep memcache', debug=False)
+             if error or output == [""] or output == []:
+                  return None
+             words = output[0].split(" ")
+             words = filter(lambda x: x != "", words)
+             return words[1]
+
+
+
     def stop_couchbase(self):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':

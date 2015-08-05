@@ -399,8 +399,7 @@ class SwapRebalanceBase(unittest.TestCase):
         if self.swap_orchestrator and not self.cluster_run:
             # get PID via remote connection if master is a new node
             shell = RemoteMachineShellConnection(master)
-            o, _ = shell.execute_command("ps -eo comm,pid | awk '$1 == \"memcached\" { print $2 }'")
-            pid = o[0]
+            pid = shell.get_memcache_pid()
             shell.disconnect()
         else:
             times = 2
