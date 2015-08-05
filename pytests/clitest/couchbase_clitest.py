@@ -858,6 +858,20 @@ class CouchbaseCliTest(CliBaseTest):
 
         remote_client.disconnect()
 
+    def testIndexerSettings(self):
+        cli_command = "setting-index"
+        rest = RestConnection(self.master)
+        remote_client = RemoteMachineShellConnection(self.master)
+
+        options = (" --index-threads=3")
+        options += (" --index-max-rollback-points=6")
+        options += (" --index-stable-snapshot-interval=4900")
+        options += (" --index-memory-snapshot-interval=220")
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                                          options=options, cluster_host="localhost", \
+                                            user="Administrator", password="password")
+        self.assertEqual(output, ['SUCCESS: set index settings'])
+        remote_client.disconnect()
 
     def testBucketModification(self):
         cli_command = "bucket-edit"
