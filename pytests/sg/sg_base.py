@@ -13,6 +13,7 @@ class GatewayBaseTest(unittest.TestCase):
     BUILDS = {
         'http://latestbuilds.hq.couchbase.com/couchbase-sync-gateway': (
             'release/1.1.0/{0}/couchbase-sync-gateway-community_{0}_{1}.{2}',
+            'release/1.1.1/{0}/couchbase-sync-gateway-community_{0}_{1}.{2}',
             '1.1.0/{0}/couchbase-sync-gateway-community_{0}_{1}.{2}',
             '0.0.0/{0}/couchbase-sync-gateway-community_{0}_{1}.{2}',
             '0.0.1/{0}/couchbase-sync-gateway-community_{0}_{1}.{2}'
