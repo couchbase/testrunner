@@ -1100,7 +1100,7 @@ class NavigationHelper():
     def __init__(self, tc):
         self.tc = tc
         self.controls = NavigationTestControls(tc.driver)
-        self.wait = WebDriverWait(tc.driver, timeout=10)
+        self.wait = WebDriverWait(tc.driver, timeout=100)
 
 
     def _is_tab_selected(self, text):
@@ -1406,7 +1406,7 @@ class ServerHelper():
 class BucketHelper():
     def __init__(self, tc):
         self.tc = tc
-        self.wait = WebDriverWait(tc.driver, timeout=25)
+        self.wait = WebDriverWait(tc.driver, timeout=250)
         self.controls = BucketTestsControls(tc.driver)
 
     def create(self, bucket):
