@@ -339,6 +339,7 @@ class QueryHelper(object):
         where_condition = sql_map["where_condition"]
         order_by = sql_map["order_by"]
         group_by = sql_map["group_by"]
+        having = sql_map["having"]
         new_sql = "EXPLAIN SELECT "
         if select_from:
             new_sql += select_from +" FROM "
@@ -351,6 +352,8 @@ class QueryHelper(object):
             new_sql += " GROUP BY "+ group_by +" "
         if order_by:
             new_sql += " ORDER BY "+ order_by +" "
+        if having:
+            new_sql += " HAVING "+ having +" "
         return new_sql
 
     def _add_index_hints_to_query(self, sql, index_list = []):
@@ -360,6 +363,7 @@ class QueryHelper(object):
         where_condition = sql_map["where_condition"]
         order_by = sql_map["order_by"]
         group_by = sql_map["group_by"]
+        having = sql_map["having"]
         new_sql = "SELECT "
         new_index_list = [ index["name"]+" USING "+index["type"] for index in index_list]
         index_hint =" USE INDEX({0})".format(str(",".join(new_index_list)))
@@ -374,6 +378,8 @@ class QueryHelper(object):
             new_sql += " GROUP BY "+ group_by +" "
         if order_by:
             new_sql += " ORDER BY "+ order_by +" "
+        if having:
+            new_sql += " HAVING "+ having +" "
         return new_sql
 
     def _check_function(self, sql):
