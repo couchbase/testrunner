@@ -266,14 +266,20 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
 
         if float(prev_initial_version[:2]) < 3.0:
             self.pause_xdcr_cluster = None
+
         bucket_default = self.src_cluster.get_bucket_by_name('default')
         bucket_sasl = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
         bucket_standard = self.dest_cluster.get_bucket_by_name('standard_bucket_1')
         bucket_sasl_2 = self.dest_cluster.get_bucket_by_name('sasl_bucket_1')
+        gen_create2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, end=self.num_items)
+        gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size,
+            start=int((self.num_items) * (float)(100 - self._perc_del) / 100), end=self.num_items)
+        gen_update2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, start=0,
+            end=int(self.num_items * (float)(self._perc_upd) / 100))
+
         self._load_bucket(bucket_default, self.src_master, self.gen_create, 'create', exp=0)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_create, 'create', exp=0)
         self._load_bucket(bucket_standard, self.dest_master, self.gen_create, 'create', exp=0)
-        gen_create2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, end=self.num_items)
         self._load_bucket(bucket_sasl_2, self.dest_master, gen_create2, 'create', exp=0)
 
         if self.pause_xdcr_cluster:
@@ -292,13 +298,11 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.src_nodes, False)
         self.src_master = self.servers[0]
 
+        self.log.info("###### Upgrading C1: completed ######")
         self._load_bucket(bucket_default, self.src_master, self.gen_delete, 'delete', exp=0)
         self._load_bucket(bucket_default, self.src_master, self.gen_update, 'create', exp=self._expires)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_delete, 'delete', exp=0)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_update, 'create', exp=self._expires)
-        self.sleep(30)
-
-        self.log.info("###### Upgrading C1: completed ######")
 
         self._install(self.servers[self.src_init + self.dest_init:])
         self.sleep(60)
@@ -308,7 +312,9 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         if not self.is_goxdcr_migration_successful(self.dest_master):
             self.fail("C2: Metadata migration failed after old nodes were removed")
 
-        self.sleep(self._wait_timeout)
+        self.sleep(self._wait_timeout * 3)
+        self._install(self.dest_nodes)
+        self.sleep(60)
         if float(self.initial_version[:2]) >= 3.0 and self._demand_encryption:
             if not self.is_ssl_over_memcached(self.src_master):
                 self.fail("C1: After old nodes were replaced, C1 still uses "
@@ -317,10 +323,10 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 self.fail("C2: After old nodes were replaced, C2 still uses "
                           "proxy connection to C1 which is >= 3.0")
 
-        self._install(self.dest_nodes)
-        self.sleep(60)
         self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.dest_nodes, False)
         self.dest_master = self.servers[self.src_init]
+
+        self.log.info("###### Upgrading C2: completed ######")
 
         self._load_bucket(bucket_standard, self.dest_master, self.gen_delete, 'delete', exp=0)
         self._load_bucket(bucket_standard, self.dest_master, self.gen_update, 'create', exp=self._expires)
@@ -330,16 +336,11 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 for remote_cluster in cluster.get_remote_clusters():
                     remote_cluster.resume_all_replications()
 
-        gen_delete2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size,
-            start=int((self.num_items) * (float)(100 - self._perc_del) / 100), end=self.num_items)
-        gen_update2 = BlobGenerator('loadTwo', 'loadTwo-', self._value_size, start=0,
-            end=int(self.num_items * (float)(self._perc_upd) / 100))
         self._load_bucket(bucket_sasl_2, self.dest_master, gen_delete2, 'delete', exp=0)
         self._load_bucket(bucket_sasl_2, self.dest_master, gen_update2, 'create', exp=self._expires)
-
+        self._wait_for_replication_to_catchup()
         self.merge_all_buckets()
-        self.sleep(120)
-        self.log.info("###### Upgrading C2: completed ######")
+        self.sleep(self._wait_timeout * 5)
         self._post_upgrade_ops()
         self.sleep(120)
         self.verify_results()
