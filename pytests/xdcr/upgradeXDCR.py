@@ -41,7 +41,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.ddocs_src = []
         self.ddocs_dest = []
 
-    def xdcr_setup(self):
+    def create_buckets(self):
         XDCRNewBaseTest.setUp(self)
         self.servers = self._input.servers
         self.src_cluster = self.get_cb_cluster_by_name('C1')
@@ -57,7 +57,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             end=int(self.num_items * (float)(self._perc_upd) / 100))
         self._create_buckets(self.src_cluster)
         self._create_buckets(self.dest_cluster)
-        self._join_all_clusters()
+
 
     def tearDown(self):
         try:
@@ -153,7 +153,8 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self._install(self.servers[:self.src_init + self.dest_init ])
         upgrade_nodes = self.input.param('upgrade_nodes', "src").split(";")
 
-        self.xdcr_setup()
+        self.create_buckets()
+        self._join_all_clusters()
         if float(self.initial_version[:2]) < 3.0:
             self.pause_xdcr_cluster = None
         bucket = self.src_cluster.get_bucket_by_name('default')
@@ -260,7 +261,8 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         prev_initial_version = self.initial_version
         self.initial_version = self.upgrade_versions[0]
         self._install(self.servers[self.src_init + self.dest_init:])
-        self.xdcr_setup()
+        self.create_buckets()
+        self._join_all_clusters()
 
         if float(prev_initial_version[:2]) < 3.0:
             self.pause_xdcr_cluster = None
@@ -357,7 +359,8 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
     def incremental_offline_upgrade(self):
         upgrade_seq = self.input.param("upgrade_seq", "src>dest")
         self._install(self.servers[:self.src_init + self.dest_init ])
-        self.xdcr_setup()
+        self.create_buckets()
+        self._join_all_clusters()
         self.sleep(60)
         bucket = self.src_cluster.get_bucket_by_name('default')
         self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
@@ -517,8 +520,14 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         #install latest version on C2
         self.initial_version = self.c2_version
         self._install(self.servers[self.src_init:])
-
-        self.xdcr_setup()
+        self.initial_version = self.c1_version
+        self.create_buckets()
+        # workaround for MB-15761
+        if float(self.initial_version[:2]) < 3.0 and self._demand_encryption:
+            rest = RestConnection(self.dest_master)
+            rest.set_internalSetting('certUseSha1',"true")
+            rest.regenerate_cluster_certificate()
+        self._join_all_clusters()
 
         if float(self.c1_version[:2]) >= 3.0:
             for cluster in self.get_cb_clusters():
