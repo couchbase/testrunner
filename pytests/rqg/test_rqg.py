@@ -1524,6 +1524,9 @@ class RQGTests(BaseTestCase):
         self.client._insert_execute_query(query = query)
         self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server, verbose=False)
         insert_sql= "insert into simple_table(KEY k ,VALUE b) SELECT meta(b).id as k, b from copy_simple_table b"
-        self.n1ql_helper.run_cbq_query(query = insert_sql, server = self.n1ql_server, verbose=False)
-        insert_sql= "INSERT INTO simple_table SELECT * FROM copy_simple_table"
-        self.client._insert_execute_query(insert_sql)
+        try:
+            self.n1ql_helper.run_cbq_query(query = insert_sql, server = self.n1ql_server, verbose=False)
+            insert_sql= "INSERT INTO simple_table SELECT * FROM copy_simple_table"
+            self.client._insert_execute_query(insert_sql)
+        except Exception, ex:
+            self.log.info(ex)
