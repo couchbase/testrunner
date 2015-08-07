@@ -328,19 +328,19 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
 
         self.log.info("###### Upgrading C2: completed ######")
 
-        self._load_bucket(bucket_standard, self.dest_master, self.gen_delete, 'delete', exp=0)
-        self._load_bucket(bucket_standard, self.dest_master, self.gen_update, 'create', exp=self._expires)
-
         if self.pause_xdcr_cluster:
             for cluster in self.get_cb_clusters():
                 for remote_cluster in cluster.get_remote_clusters():
                     remote_cluster.resume_all_replications()
 
+        self._load_bucket(bucket_standard, self.dest_master, self.gen_delete, 'delete', exp=0)
+        self._load_bucket(bucket_standard, self.dest_master, self.gen_update, 'create', exp=self._expires)
         self._load_bucket(bucket_sasl_2, self.dest_master, gen_delete2, 'delete', exp=0)
         self._load_bucket(bucket_sasl_2, self.dest_master, gen_update2, 'create', exp=self._expires)
+
+        self.sleep(self._wait_timeout * 5)
         self._wait_for_replication_to_catchup()
         self.merge_all_buckets()
-        self.sleep(self._wait_timeout * 5)
         self._post_upgrade_ops()
         self.sleep(120)
         self.verify_results()
