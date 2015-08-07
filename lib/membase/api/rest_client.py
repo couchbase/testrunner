@@ -2253,6 +2253,17 @@ class RestConnection(object):
         except ValueError:
             return content
 
+    def index_tool_stats(self):
+        log.info('index n1ql stats')
+        api = "http://%s:8091/indexStatus" % (self.ip)
+        params = ""
+        status, content, header = self._http_request(api, 'GET', params)
+        log.info(content)
+        try:
+            return json.loads(content)
+        except ValueError:
+            return content
+
     # return all rack/zone info
     def get_all_zones_info(self, timeout=120):
         zones = {}
