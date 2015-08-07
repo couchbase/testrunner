@@ -300,9 +300,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
 
         self.log.info("###### Upgrading C1: completed ######")
         self._load_bucket(bucket_default, self.src_master, self.gen_delete, 'delete', exp=0)
-        self._load_bucket(bucket_default, self.src_master, self.gen_update, 'create', exp=self._expires)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_delete, 'delete', exp=0)
-        self._load_bucket(bucket_sasl, self.src_master, self.gen_update, 'create', exp=self._expires)
 
         self._install(self.servers[self.src_init + self.dest_init:])
         self.sleep(60)
@@ -334,9 +332,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                     remote_cluster.resume_all_replications()
 
         self._load_bucket(bucket_standard, self.dest_master, self.gen_delete, 'delete', exp=0)
-        self._load_bucket(bucket_standard, self.dest_master, self.gen_update, 'create', exp=self._expires)
         self._load_bucket(bucket_sasl_2, self.dest_master, gen_delete2, 'delete', exp=0)
-        self._load_bucket(bucket_sasl_2, self.dest_master, gen_update2, 'create', exp=self._expires)
 
         self.sleep(self._wait_timeout * 5)
         self._wait_for_replication_to_catchup()
