@@ -142,6 +142,73 @@ class CreateBucketTests(BaseTestCase):
         sftp.remove(file_path)
         sftp.close()
 
+    def test_travel_sample_bucket(self):
+        sample = "travel-sample"
+        num_expected = self.input.param('num_items', 31569)
+        """ reset node to set services correctly: index,kv,n1ql """
+        self.rest.force_eject_node()
+        status = False
+
+        try:
+            status = self.rest.init_node_services(hostname=self.master.ip,
+                                        services= ["index,kv,n1ql"])
+            init_node = self.cluster.async_init_node(self.master,
+                                            services = ["index,kv,n1ql"])
+        except Exception, e:
+            if e:
+                print e
+        if status:
+            shell = RemoteMachineShellConnection(self.master)
+            shell.execute_command("""curl -v -u Administrator:password \
+                         -X POST http://{0}:8091/sampleBuckets/install \
+                      -d  '["travel-sample"]'""".format(self.master.ip))
+            shell.disconnect()
+
+        buckets = RestConnection(self.master).get_buckets()
+        for bucket in buckets:
+            if bucket.name != "travel-sample":
+                self.fail("travel-sample bucket did not create")
+
+        """ check for load data into travel-sample bucket """
+        end_time = time.time() + 120
+        while time.time() < end_time:
+            self.sleep(10)
+            num_actual = self.get_item_count(self.master,"travel-sample")
+            if num_actual == num_expected:
+                break
+        self.assertTrue(num_actual == num_expected,
+                        "Items number expected %s, actual %s" % (
+                                                    num_expected, num_actual))
+
+        """ check all indexes are completed """
+        index_name = []
+        result = self.rest.index_tool_stats()
+        end_time_i = time.time() + 60
+        while time.time() < end_time_i and len(index_name) < 8:
+            for map in result:
+                if result["indexes"]:
+                    for x in result["indexes"]:
+                        if x["bucket"] == "travel-sample":
+                            if x["progress"] < 100:
+                                self.sleep(7, "waiting for indexing {0} complete"
+                                           .format(x["index"]))
+                                result = self.rest.index_tool_stats()
+                            elif x["progress"] == 100:
+                                if x["index"] not in index_name:
+                                    index_name.append(x["index"])
+                                    self.sleep(7, "waiting for other indexing complete")
+                                    result = self.rest.index_tool_stats()
+                else:
+                    self.sleep(7, "waiting for indexing start")
+                    result = self.rest.index_tool_stats()
+        if time.time() >= end_time_i and len(index_name) < 8:
+            self.log.info("index list {0}".format(index_name))
+            self.fail("some indexing may not complete")
+        elif len(index_name) == 8:
+            self.log.info("travel-sample bucket is created and complete indexing")
+            self.log.info("index list in travel-sample bucket: {0}"
+                                       .format(index_name))
+
     def _get_cb_version(self):
         rest = RestConnection(self.master)
         version = rest.get_nodes_self().version
