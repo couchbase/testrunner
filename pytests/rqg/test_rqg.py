@@ -14,6 +14,7 @@ from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.tuq_helper import N1QLHelper
 from couchbase_helper.query_helper import QueryHelper
 
+
 class RQGTests(BaseTestCase):
     """ Class for defining tests for RQG base testing """
 
@@ -53,6 +54,7 @@ class RQGTests(BaseTestCase):
         self.secondary_index_info_path= self.input.param("secondary_index_info_path",None)
         self.db_dump_path= self.input.param("db_dump_path",None)
         self.input_rqg_path= self.input.param("input_rqg_path",None)
+        self.query_count= 0
         if self.input_rqg_path != None:
             self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
             self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
@@ -316,9 +318,16 @@ class RQGTests(BaseTestCase):
         if inserted_count != len(query_list):
             batches.append(batch)
         result_queue = Queue.Queue()
+        input_queue = Queue.Queue()
         failure_record_queue = Queue.Queue()
         # Run Test Batches
         test_case_number = 1
+        thread_list = []
+        for i in xrange(self.concurreny_count):
+            t = threading.Thread(target=self._testrun_worker, args = (input_queue, result_queue, failure_record_queue))
+            t.daemon = True
+            t.start()
+            thread_list.append(t)
         for test_batch in batches:
             # Build all required secondary Indexes
             list = [data[data.keys()[0]] for data in test_batch]
@@ -329,22 +338,18 @@ class RQGTests(BaseTestCase):
                     gen_expected_result = True)
             if self.use_secondary_index:
                 self._generate_secondary_indexes_in_batches(list)
-            thread_list = []
             # Create threads and run the batch
             for test_case in list:
                 test_case_input = test_case
-                t = threading.Thread(target=self._run_basic_test, args = (test_case_input, test_case_number, result_queue, failure_record_queue))
-                t.daemon = True
-                t.start()
-                thread_list.append(t)
                 test_case_number += 1
+                input_queue.put({"test_case_number":test_case_number, "test_data":test_case_input})
             # Capture the results when done
             check = False
-            for t in thread_list:
-                t.join()
             # Drop all the secondary Indexes
             if self.use_secondary_index:
                 self._drop_secondary_indexes_in_batches(list)
+        for t in thread_list:
+            t.join()
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
@@ -613,6 +618,16 @@ class RQGTests(BaseTestCase):
         self.dump_failure_data(failure_record_queue)
         self.assertTrue(success, summary)
 
+    def _testrun_worker(self, input_queue, result_queue, failure_record_queue = None):
+        while True:
+            if self.total_queries == (self.query_count+1):
+                break
+            if not input_queue.empty():
+                data = input_queue.get()
+                test_data = data["test_data"]
+                test_case_number = data["test_case_number"]
+                self._run_basic_test(test_data, test_case_number, result_queue, failure_record_queue)
+
     def _run_basic_test(self, test_data, test_case_number, result_queue, failure_record_queue = None):
         data = test_data
         n1ql_query = data["n1ql"]
@@ -646,6 +661,8 @@ class RQGTests(BaseTestCase):
             result_run.update(result)
         result_queue.put(result_run)
         self._check_and_push_failure_record_queue(result_run, data, failure_record_queue)
+        self.query_count += 1
+        self.log.info(self.query_count)
         self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
 
     def _generate_test_data(self, test_data):
@@ -1186,8 +1203,6 @@ class RQGTests(BaseTestCase):
             sql = "INSERT INTO {0}.copy_simple_table SELECT * FROM {0}.simple_table".format(self.database)
             self.client._insert_execute_query(sql)
 
-
-
     def _zipdir(self, path, zip_path):
         self.log.info(zip_path)
         zipf = zipfile.ZipFile(zip_path, 'w')
@@ -1530,3 +1545,6 @@ class RQGTests(BaseTestCase):
             self.client._insert_execute_query(insert_sql)
         except Exception, ex:
             self.log.info(ex)
+
+
+
