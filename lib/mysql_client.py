@@ -149,16 +149,21 @@ class MySQLClient(object):
         columns, rows = self._execute_query(query = "DESCRIBE {0}".format(table_name))
         return self._gen_json_from_results(columns, rows)
 
-    def _get_tables_information(self):
+    def _get_tables_information(self, table_name = None):
         map ={}
         list = self._get_table_list()
-        for table_name in list:
-            map[table_name] = self._get_table_info(table_name)
+        if table_name != None:
+            for table_name_1 in list:
+                if table_name == table_name_1:
+                    map[table_name_1] = self._get_table_info(table_name_1)
+        else:
+            for table_name in list:
+                map[table_name] = self._get_table_info(table_name)
         return map
 
-    def _get_field_list_map_for_tables(self):
+    def _get_field_list_map_for_tables(self, table_name = None):
         target_map = {}
-        map = self._get_tables_information()
+        map = self._get_tables_information(table_name)
         for table_name in map.keys():
             field_list = []
             for field_info in map[table_name]:
@@ -166,9 +171,9 @@ class MySQLClient(object):
             target_map[table_name] = field_list
         return target_map
 
-    def _get_field_with_types_list_map_for_tables(self, can_remove_copy_table = True):
+    def _get_field_with_types_list_map_for_tables(self, can_remove_copy_table = True, table_name = None):
         target_map = {}
-        map = self._get_tables_information()
+        map = self._get_tables_information(table_name)
         for table_name in map.keys():
             field_list = []
             for field_info in map[table_name]:
@@ -178,9 +183,9 @@ class MySQLClient(object):
             target_map.pop("copy_simple_table")
         return target_map
 
-    def _get_primary_key_map_for_tables(self):
+    def _get_primary_key_map_for_tables(self, table_name = None):
         target_map = {}
-        map = self._get_tables_information()
+        map = self._get_tables_information(table_name)
         for table_name in map.keys():
             for field_info in map[table_name]:
                 if field_info['Key'] == "PRI":
@@ -232,9 +237,9 @@ class MySQLClient(object):
                         }
         return final_map
 
-    def _get_pkey_map_for_tables_with_primary_key_column(self, can_remove_copy_table = True):
+    def _get_pkey_map_for_tables_with_primary_key_column(self, can_remove_copy_table = True, table_name = None):
         target_map = {}
-        map = self._get_tables_information()
+        map = self._get_tables_information(table_name)
         if can_remove_copy_table and "copy_simple_table" in map.keys():
             map.pop("copy_simple_table")
         number_of_tables = len(map.keys())
@@ -286,9 +291,9 @@ class MySQLClient(object):
             list.append(row[0])
         return list
 
-    def _get_values_with_type_for_fields_in_table(self, can_remove_copy_table = True):
-        map = self._get_field_with_types_list_map_for_tables(can_remove_copy_table)
-        gen_map = self._get_pkey_map_for_tables_with_primary_key_column(can_remove_copy_table)
+    def _get_values_with_type_for_fields_in_table(self, can_remove_copy_table = True, table_name = None):
+        map = self._get_field_with_types_list_map_for_tables(can_remove_copy_table = can_remove_copy_table, table_name = table_name)
+        gen_map = self._get_pkey_map_for_tables_with_primary_key_column(can_remove_copy_table = can_remove_copy_table, table_name = table_name)
         for table_name in map.keys():
             for vals in map[table_name]:
                 field_name = vals.keys()[0]
@@ -304,7 +309,7 @@ class MySQLClient(object):
                 statement = helper._generate_insert_statement(table_name, map[table_name],"\""+str(x+1)+"\"")
                 self._insert_execute_query(statement)
 
-    def _gen_queries_from_template(self, query_path = "./queries.txt", table_name = "simple_table"):
+    def _gen_queries_from_template(self, query_path = "./queries.txt", table_name = None):
         helper = QueryHelper()
         map = self._get_values_with_type_for_fields_in_table()
         table_map = map[table_name]

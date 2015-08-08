@@ -335,7 +335,7 @@ class RQGTests(BaseTestCase):
                     table_map = table_map,
                     n1ql_queries = list,
                     define_gsi_index = self.use_secondary_index,
-                    gen_expected_result = True)
+                    gen_expected_result = False)
             if self.use_secondary_index:
                 self._generate_secondary_indexes_in_batches(list)
             # Create threads and run the batch
@@ -358,10 +358,13 @@ class RQGTests(BaseTestCase):
 
     def test_rqg_concurrent_with_secondary(self):
         # Get Data Map
+        table_list = self.client._get_table_list()
         table_map = self.client._get_values_with_type_for_fields_in_table()
+        for key in table_map.keys():
+            table_map[key].pop("alias_name")
         check = True
         failure_map = {}
-        batches = []
+        batches = Queue.Queue()
         batch = []
         test_case_number = 1
         count = 1
@@ -378,7 +381,7 @@ class RQGTests(BaseTestCase):
             batch.append({str(test_case_number):data})
             if count == self.concurreny_count:
                 inserted_count += len(batch)
-                batches.append(batch)
+                batches.put(batch)
                 count = 1
                 batch = []
             else:
@@ -387,38 +390,28 @@ class RQGTests(BaseTestCase):
             if test_case_number >= self.total_queries:
                 break
         if inserted_count != len(query_list):
-            batches.append(batch)
+            batches.put(batch)
         result_queue = Queue.Queue()
         input_queue = Queue.Queue()
         failure_record_queue = Queue.Queue()
         # Run Test Batches
         test_case_number = 1
         thread_list = []
-        for test_batch in batches:
+        start_test_case_number = 1
+        while not batches.empty():
             # Build all required secondary Indexes
-            list = [data[data.keys()[0]] for data in test_batch]
-            list = self.client._convert_template_query_info(
-                    table_map = table_map,
-                    n1ql_queries = list,
-                    define_gsi_index = self.use_secondary_index,
-                    gen_expected_result = True)
-            if self.use_secondary_index:
-                self._generate_secondary_indexes_in_batches(list)
-            # Create threads and run the batch
-            for test_case in list:
-                test_case_input = test_case
-                test_case_number += 1
-                t = threading.Thread(target=self._run_basic_test, args = (test_case_input,  test_case_number, result_queue, failure_record_queue))
+            for table_name in table_list:
+                test_batch = batches.get()
+                list = [data[data.keys()[0]] for data in test_batch]
+                # Create threads and run the batch
+                t = threading.Thread(target=self._testrun_secondary_index_worker, args = (table_name, table_map, list, start_test_case_number, result_queue, failure_record_queue))
+                start_test_case_number += len(list)
                 t.daemon = True
                 t.start()
                 thread_list.append(t)
-            # Capture the results when done
-            check = False
-            # Drop all the secondary Indexes
+                # Drop all the secondary Indexes
             for t in thread_list:
                 t.join()
-            if self.use_secondary_index:
-                self._drop_secondary_indexes_in_batches(list)
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
@@ -696,6 +689,28 @@ class RQGTests(BaseTestCase):
                 test_data = data["test_data"]
                 test_case_number = data["test_case_number"]
                 self._run_basic_test(test_data, test_case_number, result_queue, failure_record_queue)
+
+    def _testrun_secondary_index_worker(self, table_name, table_map, list_info , start_test_case_number, result_queue, failure_record_queue = None):
+        map = {table_name:table_map[table_name]}
+        list_info = self.client._convert_template_query_info(
+                    table_map = map,
+                    n1ql_queries = list_info,
+                    define_gsi_index = self.use_secondary_index)
+        if self.use_secondary_index:
+                self._generate_secondary_indexes_in_batches(list_info)
+        thread_list = []
+        test_case_number = start_test_case_number
+        for test_case_input in list_info:
+            t = threading.Thread(target=self._run_basic_test, args = (test_case_input,  test_case_number, result_queue, failure_record_queue))
+            test_case_number += 1
+            t.daemon = True
+            t.start()
+            thread_list.append(t)
+            # Drop all the secondary Indexes
+            for t in thread_list:
+                t.join()
+        if self.use_secondary_index:
+            self._drop_secondary_indexes_in_batches(list_info)
 
     def _run_basic_test(self, test_data, test_case_number, result_queue, failure_record_queue = None):
         data = test_data
@@ -1216,7 +1231,7 @@ class RQGTests(BaseTestCase):
         try:
             count=0
             n1ql_query = self.query_helper._builk_insert_statement_n1ql(bucket.name,data_set)
-            actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, verbose = True)
+            actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, verbose = False)
         except Exception, ex:
             print 'WARN======================='
             print ex
@@ -1350,6 +1365,17 @@ class RQGTests(BaseTestCase):
     def _generate_secondary_indexes_during_initialize(self, index_map = {}):
         if self.generate_input_only:
             return
+        thread_list = []
+        for key in index_map.keys():
+            map = {key:index_map}
+            t = threading.Thread(target=self._generate_secondary_indexes, args = (map))
+            t.daemon = True
+            t.start()
+            thread_list.append(t)
+        for t in thread_list:
+                t.join()
+
+    def _generate_secondary_indexes(self, index_map):
         defer_mode = str({"defer_build":True})
         for table_name in index_map.keys():
             build_index_list = []
