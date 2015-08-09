@@ -6,6 +6,10 @@ from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
 from couchbase_helper.documentgenerator import BlobGenerator
 from testconstants import STANDARD_BUCKET_PORT
+from testconstants import LINUX_COUCHBASE_BIN_PATH
+from testconstants import LINUX_COUCHBASE_SAMPLE_PATH
+from testconstants import WIN_COUCHBASE_BIN_PATH
+from testconstants import WIN_COUCHBASE_SAMPLE_PATH
 from scripts.install import InstallerJob
 
 class CreateBucketTests(BaseTestCase):
@@ -20,6 +24,17 @@ class CreateBucketTests(BaseTestCase):
         self.password = 'password'
         self.server = self.master
         self.rest = RestConnection(self.server)
+        shell = RemoteMachineShellConnection(self.master)
+        type = shell.extract_remote_info().distribution_type
+        shell.disconnect()
+        self.sample_path = LINUX_COUCHBASE_SAMPLE_PATH
+        self.bin_path = LINUX_COUCHBASE_BIN_PATH
+        if type.lower() == 'windows':
+            self.sample_path = WIN_COUCHBASE_SAMPLE_PATH
+            self.bin_path = WIN_COUCHBASE_BIN_PATH
+        elif type.lower() == "mac":
+            self.sample_path = MAC_COUCHBASE_SAMPLE_PATH
+            self.bin_path = MAC_COUCHBASE_BIN_PATH
 
     def tearDown(self):
         super(CreateBucketTests, self).tearDown()
@@ -202,6 +217,64 @@ class CreateBucketTests(BaseTestCase):
                     self.sleep(7, "waiting for indexing start")
                     result = self.rest.index_tool_stats()
         if time.time() >= end_time_i and len(index_name) < 8:
+            self.log.info("index list {0}".format(index_name))
+            self.fail("some indexing may not complete")
+        elif len(index_name) == 8:
+            self.log.info("travel-sample bucket is created and complete indexing")
+            self.log.info("index list in travel-sample bucket: {0}"
+                                       .format(index_name))
+
+    def test_cli_travel_sample_bucket(self):
+        sample = "travel-sample"
+        num_expected = self.input.param('num_items', 31569)
+        """ couchbase-cli does not have option to reset the node yet
+            use rest to reset node to set services correctly: index,kv,n1ql """
+        self.rest.force_eject_node()
+
+        shell = RemoteMachineShellConnection(self.master)
+        options = '--cluster-init-username="Administrator" \
+                        --cluster-init-password="password" \
+                        --cluster-init-port=8091 \
+                        --cluster-ramsize=300 \
+                        --services=data,index,query'
+        o, e = shell.execute_couchbase_cli(cli_command="cluster-init", options=options)
+        self.assertEqual(o[0], "SUCCESS: init/edit localhost")
+
+        shell = RemoteMachineShellConnection(self.master)
+        shell.execute_command("{0}cbdocloader -u Administrator -p password \
+                      -n {1} -b travel-sample -s 100 {2}travel-sample.zip" \
+                   .format(self.bin_path, self.master.ip, self.sample_path))
+        shell.disconnect()
+
+        buckets = RestConnection(self.master).get_buckets()
+        for bucket in buckets:
+            if bucket.name != "travel-sample":
+                self.fail("travel-sample bucket did not create")
+
+        """ check for load data into travel-sample bucket """
+        end_time = time.time() + 120
+        while time.time() < end_time:
+            self.sleep(10)
+            num_actual = self.get_item_count(self.master,"travel-sample")
+            if num_actual == num_expected:
+                break
+        self.assertTrue(num_actual == num_expected,
+                        "Items number expected %s, actual %s" % (
+                                                    num_expected, num_actual))
+
+        """ check all indexes are completed """
+        index_name = []
+        result = self.rest.index_tool_stats()
+        end_time_i = time.time() + 60
+        for map in result:
+            if result["indexes"]:
+                for x in result["indexes"]:
+                    if x["bucket"] == "travel-sample":
+                        if x["progress"] == 100 and x["index"] not in index_name:
+                            index_name.append(x["index"])
+            else:
+                self.fail("indexing failed to build")
+        if len(index_name) < 8:
             self.log.info("index list {0}".format(index_name))
             self.fail("some indexing may not complete")
         elif len(index_name) == 8:
