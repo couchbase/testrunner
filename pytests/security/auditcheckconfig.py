@@ -32,14 +32,13 @@ class auditcheckconfig(BaseTestCase):
     Returns ip address of the requesting machine
     '''
     def getLocalIPAddress(self):
-        '''
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("couchbase.com", 0))
         return s.getsockname()[0]
         '''
         status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
         return ipAddress
-
+        '''
 
     def getTimeStampForFile(self, audit):
         return (audit.getTimeStampFirstEvent()).replace(":", "-")
@@ -132,12 +131,20 @@ class auditcheckconfig(BaseTestCase):
                 #status = rest.setAuditSettings(enabled='true')
                 auditIns.setAuditEnable('true')
 
-        auditIns = audit(host=self.master)
-        expectedResults = {"auditd_enabled":auditIns.getAuditStatus(),
-                           "descriptors_path":self.changePathWindows(auditIns.getAuditConfigElement('descriptors_path')),
-                           "log_path":self.changePathWindows((auditIns.getAuditLogPath())[:-1]), "source":"internal",
-                           "user":"couchbase", "rotate_interval":86400, "version":1, 'hostname':self.getHostName(self.master)}
-        self.checkConfig(self.AUDITCONFIGRELOAD, self.master, expectedResults)
+        if ops == 'disable':
+            shell = RemoteMachineShellConnection(self.master)
+            try:
+                result = shell.file_exists(auditIns.getAuditLogPath(), auditIns.AUDITLOGFILENAME)
+            finally:
+                shell.disconnect()
+            self.assertFalse(result, 'Issue with file getting create in new directory')
+        else:
+            auditIns = audit(host=self.master)
+            expectedResults = {"auditd_enabled":auditIns.getAuditStatus(),
+                               "descriptors_path":self.changePathWindows(auditIns.getAuditConfigElement('descriptors_path')),
+                               "log_path":self.changePathWindows((auditIns.getAuditLogPath())[:-1]), "source":"internal",
+                               "user":"couchbase", "rotate_interval":86400, "version":1, 'hostname':self.getHostName(self.master)}
+            self.checkConfig(self.AUDITCONFIGRELOAD, self.master, expectedResults)
 
     #Test error on setting of Invalid Log file path
     def test_invalidLogPath(self):
