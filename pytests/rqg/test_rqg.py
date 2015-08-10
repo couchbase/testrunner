@@ -20,8 +20,10 @@ class RQGTests(BaseTestCase):
 
     def setUp(self):
         super(RQGTests, self).setUp()
+        self.client_map={}
         self.log.info("==============  RQGTests setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
+        self.crud_type = self.input.param("crud_type","update")
         self.populate_with_replay = self.input.param("populate_with_replay",False)
         self.crud_batch_size = self.input.param("crud_batch_size",1)
         self.record_failure= self.input.param("record_failure",False)
@@ -64,6 +66,7 @@ class RQGTests(BaseTestCase):
         self._initialize_n1ql_helper()
         if self.initial_loading_to_cb:
             self._initialize_cluster_setup()
+
 
     def tearDown(self):
         super(RQGTests, self).tearDown()
@@ -484,6 +487,54 @@ class RQGTests(BaseTestCase):
         self.dump_failure_data(failure_record_queue)
         self.assertTrue(success, summary)
 
+    def test_rqg_crud_ops(self):
+        # Get Data Map
+        table_list = self.client._get_table_list()
+        table_map = self.client._get_values_with_type_for_fields_in_table()
+        for key in table_map.keys():
+            table_map[key].pop("alias_name")
+        failure_map = {}
+        batch = []
+        test_case_number = 1
+        count = 1
+        inserted_count = 0
+        # Load All the templates
+        self.test_file_path= self.unzip_template(self.test_file_path)
+        table_list.remove("copy_simple_table")
+        with open(self.test_file_path) as f:
+            query_list = f.readlines()
+        if self.total_queries  == None:
+            self.total_queries = len(query_list)
+        batches = {}
+        for table_name in table_list:
+            batches[table_name] = []
+        test_case_number = 0
+        for n1ql_query_info in query_list:
+            data = n1ql_query_info
+            batches[table_list[test_case_number%(len(table_list))]].append({str(test_case_number):data})
+            test_case_number += 1
+            if test_case_number >= self.total_queries:
+                break
+        result_queue = Queue.Queue()
+        failure_record_queue = Queue.Queue()
+        # Build all required secondary Indexes
+        thread_list =[]
+        for table_name in table_list:
+            if len(batches[table_name]) > 0:
+                test_batch = batches[table_name]
+                t = threading.Thread(target=self._testrun_crud_worker, args = (batches[table_name], table_name, table_map, result_queue, failure_record_queue))
+                t.daemon = True
+                t.start()
+                thread_list.append(t)
+                # Capture the results when done
+        for t in thread_list:
+            t.join()
+        # Analyze the results for the failure and assert on the run
+        success, summary, result = self._test_result_analysis(result_queue)
+        self.log.info(result)
+        self.dump_failure_data(failure_record_queue)
+        self.assertTrue(success, summary)
+
     def test_rqg_crud_update(self):
         # Get Data Map
         verification_query = "SELECT * FROM simple_table"
@@ -712,6 +763,37 @@ class RQGTests(BaseTestCase):
         if self.use_secondary_index:
             self._drop_secondary_indexes_in_batches(list_info)
 
+    def _testrun_crud_worker(self, list_info, table_name, table_map, result_queue = None, failure_record_queue = None):
+        map = {table_name:table_map[table_name]}
+        for test_data in list_info:
+            test_case_number = test_data.keys()[0]
+            test_data = test_data[test_case_number]
+            data_info = [test_data]
+            if self.crud_type == "update":
+                data_info = self.client_map[table_name]._convert_update_template_query_info(
+                            table_map = map,
+                            n1ql_queries = data_info)
+            elif self.crud_type == "delete":
+                data_info = self.client_map[table_name]._convert_delete_template_query_info(
+                            table_map = map,
+                            n1ql_queries = data_info)
+            elif self.crud_type == "merge_update":
+                data_info = self.client_map[table_name]._convert_update_template_query_info_with_merge(
+                            source_table = "copy_simple_table",
+                            target_table = table_name,
+                            table_map = map,
+                            n1ql_queries = data_info)
+            elif self.crud_type == "merge_delete":
+                data_info = self.client_map[table_name]._convert_delete_template_query_info_with_merge(
+                            source_table = "copy_simple_table",
+                            target_table = table_name,
+                            table_map = map,
+                            n1ql_queries = data_info)
+            verification_query = "SELECT * from {0} ORDER by primary_key_id".format(table_name)
+            self._run_basic_crud_test(data_info[0], verification_query,  test_case_number, result_queue, failure_record_queue = failure_record_queue, table_name= table_name)
+            self._populate_delta_buckets(table_name)
+
+
     def _run_basic_test(self, test_data, test_case_number, result_queue, failure_record_queue = None):
         data = test_data
         n1ql_query = data["n1ql"]
@@ -760,8 +842,12 @@ class RQGTests(BaseTestCase):
             data["expected_result"] = self._gen_expected_result(sql_query)
         return data
 
-    def _run_basic_crud_test(self, test_data, verification_query, test_case_number, result_queue, failure_record_queue = None):
+    def _run_basic_crud_test(self, test_data, verification_query, test_case_number, result_queue, failure_record_queue = None, table_name = None):
         self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
+        if table_name != None:
+            client = self.client_map[table_name]
+        else:
+            client = self.client
         result_run = {}
         n1ql_query = test_data["n1ql_query"]
         sql_query = test_data["sql_query"]
@@ -771,15 +857,15 @@ class RQGTests(BaseTestCase):
         self.log.info("SQL :: {0}".format(sql_query))
         self.log.info("N1QL :: {0}".format(n1ql_query))
         crud_ops_run_result = None
-        query_index_run = self._run_queries_and_verify_crud(n1ql_query = verification_query , sql_query = verification_query, expected_result = None)
+        query_index_run = self._run_queries_and_verify_crud(n1ql_query = verification_query , sql_query = verification_query, expected_result = None, table_name = table_name)
         try:
             self.n1ql_helper.run_cbq_query(n1ql_query, self.n1ql_server)
-            self.client._db_execute_query(query = sql_query)
+            client._db_execute_query(query = sql_query)
         except Exception, ex:
             self.log.info(ex)
             crud_ops_run_result ={"success":False, "result": str(ex)}
         if crud_ops_run_result == None:
-            query_index_run = self._run_queries_and_verify_crud(n1ql_query = verification_query , sql_query = verification_query, expected_result = None)
+            query_index_run = self._run_queries_and_verify_crud(n1ql_query = verification_query , sql_query = verification_query, expected_result = None, table_name = table_name)
         else:
             query_index_run = crud_ops_run_result
         result_run["crud_verification_test"] = query_index_run
@@ -798,12 +884,12 @@ class RQGTests(BaseTestCase):
         success = True
         while not queue.empty():
             result_list.append(queue.get())
+        total = len(result_list)
         for result_run in result_list:
             test_case_number = result_run["test_case_number"]
             sql_query = result_run["sql_query"]
             n1ql_query = result_run["n1ql_query"]
             check, message, failure_types = self._analyze_result(result_run)
-            total += 1
             success = success and check
             if check:
                 pass_case += 1
@@ -1068,10 +1154,14 @@ class RQGTests(BaseTestCase):
         except Exception, ex:
             return {"success":False, "result": str(ex)}
 
-    def _run_queries_and_verify_crud(self, n1ql_query = None, sql_query = None, expected_result = None):
+    def _run_queries_and_verify_crud(self, n1ql_query = None, sql_query = None, expected_result = None, table_name = None):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
         result_run = {}
+        if table_name != None:
+            client = self.client_map[table_name]
+        else:
+            client = self.client
         # Run n1ql query
         hints = self.query_helper._find_hints(sql_query)
         try:
@@ -1081,8 +1171,8 @@ class RQGTests(BaseTestCase):
             # Run SQL Query
             sql_result = expected_result
             if expected_result == None:
-                columns, rows = self.client._execute_query(query = sql_query)
-                sql_result = self.client._gen_json_from_results(columns, rows)
+                columns, rows = client._execute_query(query = sql_query)
+                sql_result = client._gen_json_from_results(columns, rows)
             #self.log.info(sql_result)
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
@@ -1279,12 +1369,20 @@ class RQGTests(BaseTestCase):
                 user_id = self.user_id, password = self.password)
 
     def _copy_table_for_merge(self):
+        table_list = self.client._get_table_list()
+        reference_table = table_list[0]
         if self.merge_operation:
-            path  = "b/resources/rqg/simple_table_db/database_definition/table_definition.sql"
-            self.client.database_add_data(database = self.database, items= self.items,
-             sql_file_definiton_path = path)
-            sql = "INSERT INTO {0}.copy_simple_table SELECT * FROM {0}.simple_table".format(self.database)
-            self.client._insert_execute_query(sql)
+            path  = "b/resources/rqg/crud_db/database_definition/table_definition.sql"
+            self.client.database_add_data(database = self.database, sql_file_definiton_path = path)
+            table_list = self.client._get_table_list()
+            for table_name in table_list:
+                if table_name != reference_table:
+                    sql = "INSERT INTO {0} SELECT * FROM {1}".format(table_name, reference_table)
+                    self.client._insert_execute_query(sql)
+        table_list = self.client._get_table_list()
+        for table_name in table_list:
+            self.client_map[table_name] = MySQLClient(database = self.database, host = self.mysql_url, user_id = self.user_id, password = self.password)
+
 
     def _zipdir(self, path, zip_path):
         self.log.info(zip_path)
@@ -1616,7 +1714,7 @@ class RQGTests(BaseTestCase):
         # Create New Buckets
         self._create_buckets(self.master, bucket_list, server_id=None, bucket_size=None)
         # Wait till the buckets are up
-        self.sleep(15)
+        self.sleep(5)
         self.record_db = {}
         # Read Data from mysql database and populate the couchbase server
         for bucket_name in bucket_list:
@@ -1628,15 +1726,21 @@ class RQGTests(BaseTestCase):
                 if bucket.name == bucket_name:
                     self._load_bulk_data_in_buckets_using_n1ql(bucket, self.record_db[bucket_name])
 
-    def _populate_delta_buckets(self):
-        query = "delete from simple_table"
-        self.client._insert_execute_query(query = query)
-        self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server, verbose=False)
-        insert_sql= "insert into simple_table(KEY k ,VALUE b) SELECT meta(b).id as k, b from copy_simple_table b"
+    def _populate_delta_buckets(self, table_name = "simple_table"):
+        if table_name != "simple_table":
+            client = self.client_map[table_name]
+        else:
+            client = self.client
+        query = "delete from {0}".format(table_name)
+        client._insert_execute_query(query = query)
+        self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server, verbose=True)
+        insert_sql= "insert into {0}(KEY k ,VALUE b) SELECT meta(b).id as k, b from copy_simple_table b".format(table_name)
         try:
-            self.n1ql_helper.run_cbq_query(query = insert_sql, server = self.n1ql_server, verbose=False)
-            insert_sql= "INSERT INTO simple_table SELECT * FROM copy_simple_table"
-            self.client._insert_execute_query(insert_sql)
+            self.log.info(insert_sql)
+            self.n1ql_helper.run_cbq_query(query = insert_sql, server = self.n1ql_server, verbose=True)
+            insert_sql= "INSERT INTO {0} SELECT * FROM copy_simple_table".format(table_name)
+            self.log.info(insert_sql)
+            client._insert_execute_query(insert_sql)
         except Exception, ex:
             self.log.info(ex)
 
