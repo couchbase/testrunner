@@ -157,8 +157,8 @@ class MySQLClient(object):
                 if table_name == table_name_1:
                     map[table_name_1] = self._get_table_info(table_name_1)
         else:
-            for table_name in list:
-                map[table_name] = self._get_table_info(table_name)
+            for table_name_1 in list:
+                map[table_name_1] = self._get_table_info(table_name_1)
         return map
 
     def _get_field_list_map_for_tables(self, table_name = None):
