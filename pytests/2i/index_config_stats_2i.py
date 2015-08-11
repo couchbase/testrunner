@@ -34,8 +34,8 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
         for node in map.keys():
             val = map[node]
             gen = self._create_settings_map()
-            for key in val.keys():
-                self.assertTrue(key in gen.keys(), "{0} != {1} ".format(val, gen))
+            for key in gen.keys():
+                self.assertTrue(key in val.keys(), "{0} not in {1} ".format(key, val))
 
     def test_set_index_settings(self):
         #Check Index Settings
@@ -45,7 +45,8 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
         map = self.get_index_settings()
         for node in map.keys():
             val = map[node]
-            self.assertTrue(sorted(val) == sorted(map1), "{0} != {1} ".format(val, map1))
+            for key in map1.keys():
+                self.assertTrue(key in val.keys(), "{0} not in {1} ".format(key, val))
 
     def _create_stats_map(self, items_count = 0, total_scan_duration = 0,
         delete_bytes = 0, scan_wait_duration = 0, insert_bytes = 0,
@@ -96,6 +97,8 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
         "indexer.settings.compaction.min_frag" : 30,
         "indexer.settings.sliceBufSize" : 50000,
         "indexer.settings.wal_size" : 4096,
+        "indexer.settings.fast_flush_mode" : True,
+        "indexer.settings.smallSnapshotThreshold" : 30,
         "indexer.settings.persisted_snapshot_init_build.interval": 5000
 }
         return map
@@ -103,8 +106,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
     def _set_settings_map(self):
         map = { "indexer.settings.recovery.max_rollbacks" : 4,
         "indexer.settings.bufferPoolBlockSize" : 16384,
-        "indexer.settings.max_cpu_percent" : 400,
-        "queryport.client.settings.poolOverflow" : 30,
+        "indexer.settings.max_cpu_percent" : 400, 
         "indexer.settings.memProfile" : False,
         "indexer.settings.statsLogDumpInterval" : 60,
         "indexer.settings.persisted_snapshot.interval" : 5000,
@@ -119,14 +121,17 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
         "indexer.settings.cpuProfFname" : "",
         "indexer.settings.memory_quota" : 268435456,
         "indexer.settings.memProfFname" : "",
-        "projector.settings.log_level" : "debug",
-        "queryport.client.settings.poolSize" : 1000,
+        "indexer.settings.persisted_snapshot_init_build.interval": 5000,
         "indexer.settings.max_writer_lock_prob" : 20,
         "indexer.settings.compaction.interval" : "00:00,00:00",
         "indexer.settings.cpuProfile" : False,
         "indexer.settings.compaction.min_frag" : 31,
         "indexer.settings.sliceBufSize" : 50000,
         "indexer.settings.wal_size" : 4096,
-        "indexer.settings.persisted_snapshot_init_build.interval": 5000
+        "indexer.settings.fast_flush_mode" : True,
+        "indexer.settings.smallSnapshotThreshold" : 30,
+        "projector.settings.log_level" : "debug",
+        "queryport.client.settings.poolSize" : 1000,
+        "queryport.client.settings.poolOverflow" : 30
 }
         return map
