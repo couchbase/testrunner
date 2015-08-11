@@ -279,8 +279,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
 
         self._load_bucket(bucket_default, self.src_master, self.gen_create, 'create', exp=0)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_create, 'create', exp=0)
-        self._load_bucket(bucket_standard, self.dest_master, self.gen_create, 'create', exp=0)
-        self._load_bucket(bucket_sasl_2, self.dest_master, gen_create2, 'create', exp=0)
 
         if self.pause_xdcr_cluster:
             for cluster in self.get_cb_clusters():
@@ -292,15 +290,15 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         if not self.is_goxdcr_migration_successful(self.src_master):
             self.fail("C1: Metadata migration failed after old nodes were removed")
 
+        self._load_bucket(bucket_standard, self.dest_master, self.gen_create, 'create', exp=0)
         self._load_bucket(bucket_default, self.src_master, self.gen_update, 'create', exp=self._expires)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_update, 'create', exp=self._expires)
         self._install(self.src_nodes)
         self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.src_nodes, False)
+        self._load_bucket(bucket_sasl_2, self.dest_master, gen_create2, 'create', exp=0)
         self.src_master = self.servers[0]
 
         self.log.info("###### Upgrading C1: completed ######")
-        self._load_bucket(bucket_default, self.src_master, self.gen_delete, 'delete', exp=0)
-        self._load_bucket(bucket_sasl, self.src_master, self.gen_delete, 'delete', exp=0)
 
         self._install(self.servers[self.src_init + self.dest_init:])
         self.sleep(60)
@@ -310,7 +308,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         if not self.is_goxdcr_migration_successful(self.dest_master):
             self.fail("C2: Metadata migration failed after old nodes were removed")
 
-        self.sleep(self._wait_timeout * 3)
         self._install(self.dest_nodes)
         self.sleep(60)
         if float(self.initial_version[:2]) >= 3.0 and self._demand_encryption:
@@ -331,12 +328,12 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 for remote_cluster in cluster.get_remote_clusters():
                     remote_cluster.resume_all_replications()
 
+        self._load_bucket(bucket_default, self.src_master, self.gen_delete, 'delete', exp=0)
+        self._load_bucket(bucket_sasl, self.src_master, self.gen_delete, 'delete', exp=0)
         self._load_bucket(bucket_standard, self.dest_master, self.gen_delete, 'delete', exp=0)
         self._load_bucket(bucket_sasl_2, self.dest_master, gen_delete2, 'delete', exp=0)
 
-        self.sleep(self._wait_timeout * 5)
         self._wait_for_replication_to_catchup()
-        self.merge_all_buckets()
         self._post_upgrade_ops()
         self.sleep(120)
         self.verify_results()
