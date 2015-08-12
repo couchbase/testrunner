@@ -448,7 +448,7 @@ class auditcheckconfig(BaseTestCase):
         result = shell.file_exists(auditIns.pathLogFile, archiveFile)
         tempTime = 0
         starttime = time.time()
-        while ((number < 21089520) and (tempTime < 21600) and (result == False)):
+        while ((number < 21089520) and (tempTime < 36000) and (result == False)):
             for i in range(1, 10):
                 status, content = rest.validateLogin("Administrator", "password", True, getContent=True)
                 tempEventCounter += 1
