@@ -135,11 +135,13 @@ class audit:
     Returns:
         dictionary of actual event from audit.log
     '''
-    def returnEvent(self, eventNumber):
+    def returnEvent(self, eventNumber, audit_log_file=None):
         try:
             data = []
-            self.readFile(self.pathLogFile, audit.AUDITLOGFILENAME)
-            with open(audit.DOWNLOADPATH + audit.AUDITLOGFILENAME) as f:
+            if audit_log_file is None:
+                audit_log_file = audit.AUDITLOGFILENAME
+            self.readFile(self.pathLogFile, audit_log_file)
+            with open(audit.DOWNLOADPATH + audit_log_file) as f:
                 for line in f:
                     tempJson = json.loads(line)
                     if (tempJson['id'] == eventNumber):
