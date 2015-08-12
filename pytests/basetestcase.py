@@ -1591,8 +1591,7 @@ class BaseTestCase(unittest.TestCase):
                     # Stop node
                     self.stop_server(node)
                     # Delete Path
-                    shell.execute_command("rm -rf {0}/*".format(data_path))
-                    shell.execute_command("rm -rf {0}/*".format(data_path.replace("data","config")))
+                    shell.cleanup_data_config(data_path)
                     self.start_server(node)
                 self.sleep(30)
             except Exception, ex:
