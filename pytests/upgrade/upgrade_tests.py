@@ -16,7 +16,7 @@ from couchbase_helper.tuq_helper import N1QLHelper
 from couchbase_helper.query_helper import QueryHelper
 from TestInput import TestInputSingleton
 
-class UpgradeTests(BaseTestCase):
+class UpgradeTests(NewUpgradeBaseTest):
 
     def setUp(self):
         super(UpgradeTests, self).setUp()
@@ -155,9 +155,42 @@ class UpgradeTests(BaseTestCase):
 
     def online_upgrade(self):
         self.log.info("online_upgrade")
+        self._install(self.servers[:self.nodes_init])
+        self.initial_version = self.upgrade_versions[0]
+        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
+                       format(self.initial_version))
+        self.product = 'couchbase-server'
+        servs_in = self.servers[self.nodes_init:self.nodes_in + self.nodes_init]
+        servs_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
+        self._install(self.servers[self.nodes_init:self.num_servers])
+        self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
+        task_reb = self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, servs_out)
+        task_reb.result()
 
     def offline_upgrade(self):
         self.log.info("offline_upgrade")
+                self._install(self.servers[:self.nodes_init])
+        num_nodes_reinstall = self.input.param('num_nodes_reinstall', 1)
+        stoped_nodes = self.servers[self.nodes_init - (self.nodes_init - num_nodes_reinstall):self.nodes_init]
+        nodes_reinstall = self.servers[:num_nodes_reinstall]
+        for upgrade_version in self.upgrade_versions:
+            self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade to {0} version".\
+                       format(upgrade_version))
+            for server in stoped_nodes:
+                remote = RemoteMachineShellConnection(server)
+                remote.stop_server()
+                remote.disconnect()
+            self.sleep(self.sleep_time)
+            upgrade_threads = self._async_update(upgrade_version, stoped_nodes)
+            self.force_reinstall(nodes_reinstall)
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
+            success_upgrade = True
+            while not self.queue.empty():
+                success_upgrade &= self.queue.get()
+            if not success_upgrade:
+                self.fail("Upgrade failed!")
+            self.dcp_rebalance_in_offline_upgrade_from_version2_to_version3()
 
     def kv_ops(self):
         self.log.info("kv_ops")
