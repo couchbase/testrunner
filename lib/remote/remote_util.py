@@ -2289,7 +2289,18 @@ class RemoteMachineShellConnection:
              words = filter(lambda x: x != "", words)
              return words[1]
 
-
+    def cleanup_data_config(self, data_path):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            o, r = self.execute_command("rm -rf ""{0}""/*".format(data_path))
+            self.log_command_output(o, r)
+            o, r = self.execute_command("rm -rf ""{0}""/*".format(data_path.replace("data","config")))
+            self.log_command_output(o, r)
+        else:
+            o, r = self.execute_command("rm -rf {0}/*".format(data_path))
+            self.log_command_output(o, r)
+            o, r = self.execute_command("rm -rf {0}/*".format(data_path.replace("data","config")))
+            self.log_command_output(o, r)
 
     def stop_couchbase(self):
         self.extract_remote_info()
