@@ -2,13 +2,22 @@ __author__ = 'ashvinder'
 import re
 import os
 import gc
+import logger
+import time
+from TestInput import TestInputSingleton
 from backup.backup_base import BackupBaseTest
+from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.documentgenerator import DocumentGenerator
 from memcached.helper.kvstore import KVStore
 from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.data_analysis_helper import *
 from memcached.helper.data_helper import VBucketAwareMemcached
+from view.spatialquerytests import SimpleDataSet
+from view.spatialquerytests import SpatialQueryTests
+from membase.helper.spatial_helper import SpatialHelper
+from couchbase_helper.cluster import Cluster
+from membase.helper.bucket_helper import BucketOperationHelper
 import copy
 
 
@@ -472,4 +481,56 @@ class IBRJsonTests(BackupBaseTest):
 
         self.restoreAndVerify(bucket_names, kvs_before)
 
+class IBRSpatialTests(SpatialQueryTests):
+    def setUp(self):
+        self.input = TestInputSingleton.input
+        self.servers = self.input.servers
+        self.master = self.servers[0]
+        self.log = logger.Logger.get_logger()
+        self.helper = SpatialHelper(self, "default")
+        self.helper.setup_cluster()
+        self.cluster = Cluster()
+        self.default_bucket = self.input.param("default_bucket", True)
+        self.sasl_buckets = self.input.param("sasl_buckets", 0)
+        self.standard_buckets = self.input.param("standard_buckets", 0)
+        self.memcached_buckets = self.input.param("memcached_buckets", 0)
+        self.servers = self.helper.servers
+        self.shell = RemoteMachineShellConnection(self.master)
+        info = self.shell.extract_remote_info()
+        self.os = info.type.lower()
+        self.couchbase_login_info = "%s:%s" % (self.input.membase_settings.rest_username,
+                                               self.input.membase_settings.rest_password)
+        self.backup_location = self.input.param("backup_location", "/tmp/backup")
+        self.command_options = self.input.param("command_options", '')
 
+
+
+    def tearDown(self):
+        self.helper.cleanup_cluster()
+
+    def test_backup_with_spatial_data(self):
+        num_docs = self.helper.input.param("num-docs", 5000)
+        self.log.info("description : Make limit queries on a simple "
+                      "dataset with {0} docs".format(num_docs))
+        data_set = SimpleDataSet(self.helper, num_docs)
+        data_set.add_limit_queries()
+        self._query_test_init(data_set)
+
+        if not self.command_options:
+            self.command_options = []
+        options = self.command_options + [' -m full']
+
+        self.total_backups = 1
+        self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, options)
+        time.sleep(2)
+
+        self.buckets = RestConnection(self.master).get_buckets()
+        bucket_names = [bucket.name for bucket in self.buckets]
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+        gc.collect()
+
+        self.helper._create_default_bucket()
+        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
+
+        SimpleDataSet(self.helper, num_docs)._create_views()
+        self._query_test_init(data_set)
