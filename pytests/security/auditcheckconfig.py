@@ -213,6 +213,8 @@ class auditcheckconfig(BaseTestCase):
     def test_cbServerOps(self):
         ops = self.input.param("ops", None)
         auditIns = audit(host=self.master)
+
+
         #Capture timestamp from first event for filename
         firstEventTime = self.getTimeStampForFile(auditIns)
 
@@ -247,15 +249,11 @@ class auditcheckconfig(BaseTestCase):
         result = shell.file_exists(auditIns.pathLogFile, archiveFile)
         self.assertTrue(result, "Archive Audit.log is not created when memcached server is killed or stopped")
 
-        archiveFile = auditIns.currentLogFile + "/" + archiveFile
+        #archiveFile = auditIns.currentLogFile + "/" + archiveFile
 
         if (ops == 'shutdown'):
             expectedResult = {"source":"internal", "user":"couchbase", "id":4097, "name":"shutting down audit daemon", "description":"The audit daemon is being shutdown"}
-            command = "cat " + archiveFile + " | grep " + str(self.AUDITSHUTDOWN)
-            output = shell.execute_command(command)
-            print output
-            data = json.loads(output[0][0])
-            print data
+            data = auditIns.returnEvent(4097, archiveFile)
             flag = True
             for items in data:
                 if (items == 'timestamp'):
@@ -281,11 +279,12 @@ class auditcheckconfig(BaseTestCase):
 
         expectedResults = {"auditd_enabled":auditIns.getAuditConfigElement('auditd_enabled'),
                            "descriptors_path":self.changePathWindows(auditIns.getAuditConfigElement('descriptors_path')),
-                           "log_path":self.changePathWindows(auditIns.getAuditConfigElement('log_path')[:-1]),
+                           "log_path":self.changePathWindows(auditIns.getAuditLogPath()[:-1]),
                            'source':'internal', 'user':'couchbase',
                            "rotate_interval":auditIns.getAuditConfigElement('rotate_interval'),
                            "version":1, 'hostname':self.getHostName(self.master)}
         self.checkConfig(self.AUDITCONFIGRELOAD, self.master, expectedResults)
+
 
     #Disable audit event and check if event is printed in audit.log
     def test_eventDisabled(self):
