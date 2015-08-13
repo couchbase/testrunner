@@ -26,7 +26,7 @@ from TestInput import TestInputParser, TestInputSingleton
 from optparse import OptionParser, OptionGroup
 from scripts.collect_server_info import cbcollectRunner
 from scripts.measure_sched_delays import SchedDelays
-from scripts.getcoredumps import Getcoredumps
+from scripts.getcoredumps import Getcoredumps, Clearcoredumps
 import signal
 
 
@@ -225,18 +225,29 @@ def get_cbcollect_info(input, path):
         path = path or "."
         try:
             cbcollectRunner(server, path).run()
-        except:
-            print "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}".format(server.ip)
+        except Exception as e:
+            print "NOT POSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(server.ip, e)
 
+def clear_old_core_dumps(_input, path):
+    for server in _input.servers:
+        path = path or "."
+        try:
+            Clearcoredumps(server, path).run()
+        except Exception as e:
+            print "Unable to clear core dumps on {0} : {1}".format(server.ip, e)
 
-def get_core_dumbs(_input, path):
+def get_core_dumps(_input, path):
+    ret = False
     for server in _input.servers:
         print "grabbing core dumps files from {0}".format(server.ip)
         path = path or "."
         try:
-            Getcoredumps(server, path).run()
-        except:
-            print "IMPOSSIBLE TO GRAB CORE DUMPS FROM {0}".format(server.ip)
+            if Getcoredumps(server, path).run():
+                ret = True
+        except Exception as e:
+            print "NOT POSSIBLE TO GRAB CORE DUMPS FROM {0} : {1}".\
+                format(server.ip, e)
+    return ret
 
 
 class StoppableThreadWithResult(Thread):
@@ -330,12 +341,23 @@ def main():
         TestInputSingleton.input.test_params["logs_folder"] = logs_folder
         print "Test Input params:"
         print(TestInputSingleton.input.test_params)
+        if "get-coredumps" in TestInputSingleton.input.test_params:
+            if TestInputSingleton.input.param("get-coredumps", True):
+                clear_old_core_dumps(TestInputSingleton.input, logs_folder)
         if case_number == 1:
             before_suite_name = "%s.%s" % (name[:name.rfind('.')], BEFORE_SUITE)
             try:
                 print "Run before suite setup for %s" % name
                 suite = unittest.TestLoader().loadTestsFromName(before_suite_name)
                 result = unittest.TextTestRunner(verbosity=2).run(suite)
+                if "get-coredumps" in TestInputSingleton.input.test_params:
+                    if TestInputSingleton.input.param("get-coredumps", True):
+                        if get_core_dumps(TestInputSingleton.input, logs_folder):
+                            result = unittest.TextTestRunner(verbosity=2)._makeResult()
+                            result.errors = [(name, "Failing test : new core dump(s) "
+                                             "were found and collected."
+                                             " Check testrunner logs folder.")]
+                            print("FAIL: New core dump(s) was found and collected")
             except AttributeError as ex:
                 pass
         try:
@@ -355,6 +377,14 @@ def main():
                args=(suite))
             t.start()
             result = t.join(timeout=test_timeout)
+            if "get-coredumps" in TestInputSingleton.input.test_params:
+                if TestInputSingleton.input.param("get-coredumps", True):
+                    if get_core_dumps(TestInputSingleton.input, logs_folder):
+                        result = unittest.TextTestRunner(verbosity=2)._makeResult()
+                        result.errors = [(name, "Failing test : new core dump(s) "
+                                             "were found and collected."
+                                             " Check testrunner logs folder.")]
+                        print("FAIL: New core dump(s) was found and collected")
             if not result:
                 for t in threading.enumerate():
                     if t != threading.current_thread():
@@ -382,10 +412,6 @@ def main():
             if "get-cbcollect-info" in TestInputSingleton.input.test_params:
                 if TestInputSingleton.input.param("get-cbcollect-info", True):
                     get_cbcollect_info(TestInputSingleton.input, logs_folder)
-
-            if "get-coredumps" in TestInputSingleton.input.test_params:
-                if TestInputSingleton.input.param("get-coredumps", True):
-                    get_core_dumbs(TestInputSingleton.input, logs_folder)
 
             errors = []
             for failure in result.failures:

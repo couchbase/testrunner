@@ -654,6 +654,24 @@ class RemoteMachineShellConnection:
             files, stderro = p.communicate()
             return files
 
+    def file_ends_with(self, remotepath, pattern):
+        """
+         Check if file ending with this pattern is present in remote machine
+        """
+        sftp = self._ssh_client.open_sftp()
+        files_matched = []
+        try:
+            file_names = sftp.listdir(remotepath)
+            for name in file_names:
+                if name.endswith(pattern):
+                    files_matched.append("{0}/{1}".format(remotepath, name))
+        except IOError:
+            # ignore this error
+            pass
+        sftp.close()
+        if len(files_matched) > 0:
+            log.info("found these files : {0}".format(files_matched))
+        return files_matched
 
     # check if this file exists in the remote
     # machine or not
@@ -686,6 +704,19 @@ class RemoteMachineShellConnection:
                     sftp.remove(remotepath + filename)
             sftp.close()
             return False
+        except IOError:
+            return False
+
+    def delete_file(self, remotepath, filename):
+        sftp = self._ssh_client.open_sftp()
+        try:
+            filenames = sftp.listdir_attr(remotepath)
+            for name in filenames:
+                if name.filename == filename:
+                    log.info("File {0} will be deleted".format(filename))
+                    sftp.remove(remotepath + filename)
+                    sftp.close()
+                    return True
         except IOError:
             return False
 
@@ -2203,7 +2234,7 @@ class RemoteMachineShellConnection:
             if 'Host Name' not in win_info:
                 win_info = self.create_windows_info()
             o = win_info['Host Name']
-        o, r = self.execute_command_raw('hostname')
+        o, r = self.execute_command_raw('hostname', debug=False)
         if o:
             return o
 
@@ -2218,7 +2249,7 @@ class RemoteMachineShellConnection:
             else:
                 ret = suffix_dns_row[0].split(':')[1].strip()
         else:
-            ret = self.execute_command_raw('hostname -d')
+            ret = self.execute_command_raw('hostname -d', debug=False)
         return ret
 
     def get_full_hostname(self):
@@ -2244,7 +2275,7 @@ class RemoteMachineShellConnection:
         elif mac:
             o, r = self.execute_command_raw('/sbin/sysctl -n machdep.cpu.brand_string')
         else:
-            o, r = self.execute_command_raw('cat /proc/cpuinfo')
+            o, r = self.execute_command_raw('cat /proc/cpuinfo', debug=False)
         if o:
             return o
 
@@ -2256,9 +2287,9 @@ class RemoteMachineShellConnection:
             o += "Virtual Memory Available =" + win_info['Virtual Memory Available'] + '\n'
             o += "Virtual Memory In Use =" + win_info['Virtual Memory In Use']
         elif mac:
-            o, r = self.execute_command_raw('/sbin/sysctl -n hw.memsize')
+            o, r = self.execute_command_raw('/sbin/sysctl -n hw.memsize',debug=False)
         else:
-            o, r = self.execute_command_raw('cat /proc/meminfo')
+            o, r = self.execute_command_raw('cat /proc/meminfo', debug=False)
         if o:
             return o
 
@@ -2269,9 +2300,9 @@ class RemoteMachineShellConnection:
             o = "Total Physical Memory =" + win_info['Total Physical Memory'] + '\n'
             o += "Available Physical Memory =" + win_info['Available Physical Memory']
         elif mac:
-            o, r = self.execute_command_raw('df -h')
+            o, r = self.execute_command_raw('df -h', debug=False)
         else:
-            o, r = self.execute_command_raw('df -Th')
+            o, r = self.execute_command_raw('df -Th', debug=False)
         if o:
             return o
 
