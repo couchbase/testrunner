@@ -438,10 +438,10 @@ class unidirectional(XDCRNewBaseTest):
             crashed_nodes.append(self.dest_master)
 
         self.__kill_processes(crashed_nodes)
+        NodeHelper.wait_warmup_completed(crashed_nodes)
 
         for crashed_node in crashed_nodes:
             self.__start_cb_server(crashed_node)
-        NodeHelper.wait_warmup_completed(crashed_nodes)
 
         self.async_perform_update_delete()
         self.verify_results()
