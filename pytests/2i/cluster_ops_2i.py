@@ -58,7 +58,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
         #Remove bucket and recreate it
         for bucket in self.buckets:
             self.rest.flush_bucket(bucket.name)
-        self.sleep(60)
+        self.sleep(2)
         #Query and bucket with empty result set
         self.multi_query_using_index_with_emptyresult(query_definitions = self.query_definitions,
              buckets = self.buckets)
@@ -72,10 +72,11 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
         #Remove bucket and recreate it
         for bucket in self.buckets:
         	self.rest.delete_bucket(bucket.name)
-        self.sleep(30)
+        self.sleep(2)
         #Flush bucket and recreate it
         self._bucket_creation()
-        self.sleep(30)
+        self.sleep(2)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
         #Verify the result set is empty
         self.verify_index_absence(query_definitions = self.query_definitions, buckets = self.buckets)
         index_map = self.get_index_stats()
@@ -97,7 +98,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
                                     [], servr_out)
             rebalance.result()
             # get the items in the index and check if the data loss is reflected correctly
-            self.sleep(180)
+            self.sleep(2)
         except Exception, ex:
             raise
         finally:
@@ -122,7 +123,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
                 tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
             for task in tasks:
                 task.result()
-            self.sleep(60)
+            self.sleep(2)
             # run compaction and analyze results
             self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions,
                 create_index = True, drop_index = False, query_with_explain = True, query = True)

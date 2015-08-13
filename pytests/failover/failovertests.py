@@ -165,7 +165,7 @@ class FailoverTests(FailoverBaseTest):
         self.verify_cluster_stats(_servers_, self.master, check_bucket_stats = True, check_ep_items_remaining = True)
         # Verify all data set with meta data if failover happens after failover
         if not self.withMutationOps:
-            self.sleep(60)
+            self.sleep(6)
             self.data_analysis_all(record_static_data_set, _servers_, self.buckets, path = None, addedItems = None)
 
         # Check Cluster Stats and Data as well if max_verify > 0
@@ -199,7 +199,7 @@ class FailoverTests(FailoverBaseTest):
                 # define precondition for recoverytype
                 self.rest.set_recovery_type(otpNode=node.id, recoveryType=self.recoveryType[index])
                 index += 1
-        self.sleep(20, "After failover before invoking rebalance...")
+        self.sleep(5, "After failover before invoking rebalance...")
         self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[],deltaRecoveryBuckets = self.deltaRecoveryBuckets)
 
         # Perform Compaction
@@ -240,7 +240,7 @@ class FailoverTests(FailoverBaseTest):
 
         # Comparison of all data if required
         if not self.withMutationOps:
-            self.sleep(60)
+            self.sleep(6)
             self.data_analysis_all(record_static_data_set,self.servers, self.buckets,  path = None, addedItems = None)
 
         # Verify if vbucket sequence numbers and failover logs are as expected
@@ -340,8 +340,8 @@ class FailoverTests(FailoverBaseTest):
         # Check if failover happened as expected or re-try one more time
         if not failed_over:
             self.log.info("unable to failover the node the first time. try again in  60 seconds..")
-            # try again in 75 seconds
-            self.sleep(75)
+            # try again in 10 seconds
+            self.sleep(10)
             failed_over = self.rest.fail_over(node.id, graceful=(self.graceful and graceful_failover))
         if self.graceful and (failover_reason not in ['stop_server', 'firewall']):
             reached = RestHelper(self.rest).rebalance_reached()
@@ -635,7 +635,7 @@ class FailoverTests(FailoverBaseTest):
             stop_nodes = self.get_victim_nodes(self.servers, self.master, node, self.victim_type, self.victim_count)
             for stop_node in stop_nodes:
                 self.stop_server(stop_node)
-            self.sleep(10)
+            self.sleep(5)
             for start_node in stop_nodes:
                 self.start_server(start_node)
         if self.firewallOnNodes:
@@ -643,8 +643,8 @@ class FailoverTests(FailoverBaseTest):
             stop_nodes = self.get_victim_nodes(self.servers, self.master, node, self.victim_type, self.victim_count)
             for stop_node in stop_nodes:
                 self.start_firewall_on_node(stop_node)
-            self.sleep(120)
+            self.sleep(5)
             self.log.info(" Disable Firewall for Node ")
             for start_node in stop_nodes:
                 self.stop_firewall_on_node(start_node)
-        self.sleep(30)
+        self.sleep(5)
