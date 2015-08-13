@@ -36,7 +36,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             task.result(self.wait_timeout * 20)
         self._verify_stats_all_buckets(self.servers[:self.nodes_init], timeout=120)
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
-        self.sleep(20)
+        self.sleep(2)
         prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init], self.buckets)
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init], self.buckets)
         disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init], self.buckets, path=None)
@@ -46,7 +46,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.verify_cluster_stats(result_nodes, check_ep_items_remaining = True)
         new_failover_stats = self.compare_failovers_logs(prev_failover_stats, result_nodes, self.buckets)
         new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, result_nodes, self.buckets, perNode=False)
-        self.sleep(30)
+        self.sleep(3)
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, result_nodes, self.buckets, path=None)
         self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
         self.verify_unacked_bytes_all_buckets()
@@ -74,7 +74,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             task.result(self.wait_timeout * 20)
         self._verify_stats_all_buckets(self.servers[:self.nodes_init], timeout=120)
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
-        self.sleep(20)
+        self.sleep(2)
         prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init], self.buckets)
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init], self.buckets)
         disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.servers[:self.nodes_init], self.buckets, path=None)
@@ -96,7 +96,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self._verify_stats_all_buckets(result_nodes, timeout=120)
         self.verify_cluster_stats(result_nodes, check_ep_items_remaining = True)
         self.compare_failovers_logs(prev_failover_stats, result_nodes, self.buckets)
-        self.sleep(30)
+        self.sleep(3)
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, result_nodes, self.buckets, path=None)
         self.verify_unacked_bytes_all_buckets()
         nodes = self.get_nodes_in_cluster(self.master)
@@ -122,7 +122,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             task.result(self.wait_timeout * 20)
         self._verify_stats_all_buckets(self.servers[:self.nodes_init], timeout=120)
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
-        self.sleep(20)
+        self.sleep(2)
         ejectedNode = self.find_node_info(self.master,self.servers[self.nodes_init-1])
         prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init], self.buckets)
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init], self.buckets)
@@ -140,7 +140,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg="Rebalance failed")
         self.verify_cluster_stats(result_nodes, check_ep_items_remaining = True)
         self.compare_failovers_logs(prev_failover_stats, result_nodes, self.buckets)
-        self.sleep(30)
+        self.sleep(3)
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, result_nodes, self.buckets, path=None)
         self.verify_unacked_bytes_all_buckets()
         nodes = self.get_nodes_in_cluster(self.master)
@@ -249,7 +249,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=batch_size, timeout_secs=60)
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
-            self.sleep(10)
+            self.sleep(1)
             for task in tasks:
                 task.result(self.wait_timeout * 20)
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=batch_size, timeout_secs=60)
@@ -280,7 +280,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             for bucket in self.buckets:
                 tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
-            self.sleep(10)
+            self.sleep(1)
 
             for task in tasks:
                 task.result(self.wait_timeout * 20)
@@ -326,7 +326,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
                 rebalance = self.cluster.async_rebalance(servs_init[:self.nodes_init] + servs_in, add_in_once, servs_out + extra_servs_out)
                 add_in_once = []
                 result_nodes = set(servs_init + servs_in + extra_servs_in) - set(servs_out + extra_servs_out)
-            self.sleep(20)
+            self.sleep(2)
             expected_progress = 20 * i
             reached = RestHelper(rest).rebalance_reached(expected_progress)
             self.assertTrue(reached, "rebalance failed or did not reach {0}%".format(expected_progress))
@@ -364,7 +364,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0,batch_size=10, timeout_secs=60)
 
             self.cluster.rebalance(self.servers[:self.num_servers], self.servers[init_num_nodes:init_num_nodes + i + 1], [])
-            self.sleep(10)
+            self.sleep(1)
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    [], self.servers[init_num_nodes:init_num_nodes + i + 1])
             for task in tasks:
@@ -395,7 +395,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
                                                  pause_secs=5, batch_size=1, timeout_secs=60))
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
-            self.sleep(60)
+            self.sleep(6)
             self.cluster.rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], [])
             for task in tasks:
@@ -425,7 +425,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             tasks.extend(self._async_load_all_buckets(self.master, gen_expire, "update", 10, batch_size=1))
 
             self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
-            self.sleep(20)
+            self.sleep(2)
             tasks.append(self.cluster.async_rebalance(self.servers[:self.num_servers],
                                    self.servers[i:self.num_servers], []))
             try:
