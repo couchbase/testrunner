@@ -5,6 +5,10 @@ from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, Bucket
 from remote.remote_util import RemoteMachineShellConnection
+from testconstants import LINUX_BACKUP_PATH
+from testconstants import WIN_BACKUP_PATH
+from testconstants import LINUX_COUCHBASE_BIN_PATH
+from testconstants import WIN_COUCHBASE_BIN_PATH
 
 
 class CommunityBaseTest(BaseTestCase):
@@ -19,7 +23,9 @@ class CommunityBaseTest(BaseTestCase):
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(";")
         self.defaul_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
-
+        self.couchbase_login = "%s:%s" % (self.input.membase_settings.rest_username,
+                                          self.input.membase_settings.rest_password)
+        self.backup_option = self.input.param("backup_option", '')
         #define the data that will be used to test
         self.blob_generator = self.input.param("blob_generator", True)
         rest = RestConnection(self.master)
@@ -38,8 +44,12 @@ class CommunityBaseTest(BaseTestCase):
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
+        self.backup_location = LINUX_BACKUP_PATH
+        self.bin_path = LINUX_COUCHBASE_BIN_PATH
         if type.lower() == 'windows':
             self.is_linux = False
+            self.backup_location = WIN_BACKUP_PATH
+            self.bin_path = WIN_COUCHBASE_BIN_PATH
         else:
             self.is_linux = True
 

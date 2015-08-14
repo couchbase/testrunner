@@ -18,6 +18,7 @@ from testconstants import SHERLOCK_VERSION
 
 
 
+
 class CommunityTests(CommunityBaseTest):
     def setUp(self):
         super(CommunityTests, self).setUp()
@@ -170,6 +171,55 @@ class CommunityTests(CommunityBaseTest):
             self.log.info("services are enforced in CE")
         else:
             self.fail("maybe bug in node initialization")
+
+    def check_full_backup_only(self):
+        """ for windows vm, ask IT to put uniq.exe at
+            /cygdrive/c/Program Files (x86)/ICW/bin directory """
+
+        shell = RemoteMachineShellConnection(self.master)
+        """ put params items=0 in test param so that init items = 0 """
+        shell.execute_command("{0}cbworkloadgen -n {1}:8091 -j -i 1000"
+                                            .format(self.bin_path, self.master.ip))
+        """ delete backup location before run backup """
+        shell.execute_command("rm -rf {0}*".format(self.backup_location))
+        output, error = shell.execute_command("ls -lh {0}"
+                                                     .format(self.backup_location))
+        shell.log_command_output(output, error)
+
+        """ first full backup """
+        shell.execute_command("{0}cbbackup http://{1}:8091 {2} -m full"
+                .format(self.bin_path, self.master.ip, self.backup_location))
+        output, error = shell.execute_command("ls -lh {0}*/"
+                                        .format(self.backup_location))
+        shell.log_command_output(output, error)
+        output, error = shell.execute_command("{0}cbtransfer {1}*/*-full/ stdout: \
+                                                         | grep set | uniq | wc -l"
+                                      .format(self.bin_path, self.backup_location))
+        shell.log_command_output(output, error)
+        if int(output[0]) != 1000:
+            self.fail("full backup did not work in CE. "
+                      "Expected 1000, actual: {0}".format(output[0]))
+        shell.execute_command("{0}cbworkloadgen -n {1}:8091 -j -i 1000 --prefix=t_"
+                                            .format(self.bin_path, self.master.ip))
+        """ do different backup mode """
+        shell.execute_command("{0}cbbackup http://{1}:8091 {2} -m {3}"
+                       .format(self.bin_path, self.master.ip, self.backup_location,
+                                                               self.backup_option))
+        output, error = shell.execute_command("ls -lh {0}"
+                                                     .format(self.backup_location))
+        shell.log_command_output(output, error)
+        output, error = shell.execute_command("{0}cbtransfer {1}*/*-{2}/ stdout: \
+                                                         | grep set | uniq | wc -l"
+                                       .format(self.bin_path, self.backup_location,
+                                                               self.backup_option))
+        shell.log_command_output(output, error)
+        if int(output[0]) == 2000:
+            self.log.info("backup option 'diff' is enforced in CE")
+        elif int(output[0]) == 1000:
+            self.fail("backup option 'diff' is not enforced in CE. "
+                      "Expected 2000, actual: {0}".format(output[0]))
+        else:
+            self.fail("backup failed to backup correct items")
 
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
