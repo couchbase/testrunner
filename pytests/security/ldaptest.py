@@ -13,6 +13,21 @@ from remote.remote_util import RemoteMachineShellConnection
 from random import randint
 from clitest.cli_base import CliBaseTest
 
+class ServerInfo():
+    def __init__(self,
+                 ip,
+                 port,
+                 ssh_username,
+                 ssh_password,
+                 ssh_key=''):
+
+        self.ip = ip
+        self.ssh_username = ssh_username
+        self.ssh_password = ssh_password
+        self.port = port
+        self.ssh_key = ssh_key
+
+
 
 class ldaptest(BaseTestCase):
 
@@ -50,6 +65,7 @@ class ldaptest(BaseTestCase):
         rest = RestConnection(self.master)
         rest.clearLDAPSettings()
 
+        self.ldap_server = ServerInfo(self.ldapHost, self.ldapPort, 'root', 'couchbase')
 
     def tearDown(self):
         super(ldaptest, self).tearDown()
@@ -677,7 +693,7 @@ class ldaptest(BaseTestCase):
 
     def test_stopLDAPServer(self):
         loginState = self.input.param("loginState")
-        shell = RemoteMachineShellConnection(self.master)
+        shell = RemoteMachineShellConnection(self.ldap_server)
         try:
 
             rest = RestConnection(self.master)
