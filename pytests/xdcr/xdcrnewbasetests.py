@@ -312,29 +312,34 @@ class NodeHelper:
     def wait_warmup_completed(warmupnodes, bucket_names=["default"]):
         if isinstance(bucket_names, str):
             bucket_names = [bucket_names]
+        start = time.time()
         for server in warmupnodes:
             for bucket in bucket_names:
-                mc = MemcachedClientHelper.direct_client(server, bucket)
-                start = time.time()
                 while time.time() - start < 150:
-                    if mc.stats()["ep_warmup_thread"] == "complete":
-                        NodeHelper._log.info(
-                            "Warmed up: %s items on %s on %s" %
-                            (mc.stats("warmup")["ep_warmup_key_count"], bucket, server))
+                    try:
+                        mc = MemcachedClientHelper.direct_client(server, bucket)
+                        if mc.stats()["ep_warmup_thread"] == "complete":
+                            NodeHelper._log.info(
+                                "Warmed up: %s items on %s on %s" %
+                                (mc.stats("warmup")["ep_warmup_key_count"], bucket, server))
+                            time.sleep(10)
+                            break
+                        elif mc.stats()["ep_warmup_thread"] == "running":
+                            NodeHelper._log.info(
+                                "Still warming up .. ep_warmup_key_count : %s" % (mc.stats("warmup")["ep_warmup_key_count"]))
+                            continue
+                        else:
+                            NodeHelper._log.info(
+                                "Value of ep_warmup_thread does not exist, exiting from this server")
+                            break
+                    except Exception as e:
+                        NodeHelper._log.info(e)
                         time.sleep(10)
-                        break
-                    elif mc.stats()["ep_warmup_thread"] == "running":
-                        NodeHelper._log.info(
-                            "Still warming up .. ep_warmup_key_count : %s" % (mc.stats("warmup")["ep_warmup_key_count"]))
-                        continue
-                    else:
-                        NodeHelper._log.info(
-                            "Value of ep_warmup_thread does not exist, exiting from this server")
-                        break
                 if mc.stats()["ep_warmup_thread"] == "running":
                     NodeHelper._log.info(
-                        "ERROR: ep_warmup_thread's status not complete")
-                mc.close
+                            "ERROR: ep_warmup_thread's status not complete")
+                mc.close()
+
 
     @staticmethod
     def wait_node_restarted(
