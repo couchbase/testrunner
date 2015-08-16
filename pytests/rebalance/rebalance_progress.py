@@ -41,7 +41,7 @@ class RebalanceProgressTests(RebalanceBaseTest):
             #sum of sending and receiving vbuckets should coincide
             self._check_vb_sums(servers_init, servers_in, new_stats)
             previous_stats = copy.deepcopy(new_stats)
-            time.sleep(1)
+            time.sleep(10)
         rebalance.result()
 
     def test_progress_rebalance_out(self):
