@@ -40,6 +40,7 @@ class auditcheckconfig(BaseTestCase):
         return ipAddress
         '''
 
+
     def getTimeStampForFile(self, audit):
         return (audit.getTimeStampFirstEvent()).replace(":", "-")
 
