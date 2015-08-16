@@ -73,7 +73,10 @@ class RQGTests(BaseTestCase):
         if hasattr(self, 'reset_database'):
             self.skip_cleanup= self.input.param("skip_cleanup",False)
             if self.use_mysql and self.reset_database and (not self.skip_cleanup):
-                self.client.drop_database(self.database)
+                try:
+                    self.client.drop_database(self.database)
+                except Exception, ex:
+                    self.log.info(ex)
 
     def test_rqg_example(self):
         self._initialize_mysql_client()
@@ -1360,7 +1363,10 @@ class RQGTests(BaseTestCase):
         database_dump = self.data_dump_path+"/db_dump"
         os.mkdir(database_dump)
         f_write_index_file = open(secondary_index_path+"/secondary_index_definitions.txt",'w')
-        self.client.dump_database(data_dump_path = database_dump)
+        client = MySQLClient(database = self.database, host = self.mysql_url,
+            user_id = self.user_id, password = self.password)
+        client.dump_database(data_dump_path = database_dump)
+        client._close_mysql_connection()
         f_write_index_file.write(json.dumps(self.sec_index_map))
         f_write_index_file.close()
         while not failure_record_queue.empty():
