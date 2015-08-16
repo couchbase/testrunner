@@ -787,7 +787,7 @@ class QueryHelper(object):
         sql ="", table_map = {}):
         new_map ={}
         new_map[source_table] = table_map[target_table]
-        new_map[source_table]["alias_name"] = source_table
+        new_map[source_table]["alias_name"] = target_table
         tokens = sql.split("WHERE")
         where_condition = self._convert_condition_template_to_value(tokens[1], new_map)
         tokens = sql.split("WHERE")
