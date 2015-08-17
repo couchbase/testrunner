@@ -75,6 +75,7 @@ class ViewQueryTests(BaseTestCase):
             self.cluster.shutdown()
 
 
+
     def test_simple_dataset_stale_queries(self):
         '''
         Test uses simple data set:
@@ -418,14 +419,14 @@ class ViewQueryTests(BaseTestCase):
     def _load_until_point(self, point, changes_done, data_set):
         max_retry = 20
         retry = 0
-        while (data_set.get_partition_seq(data_set.views[0]) < point and retry < max_retry):
+        while (data_set.get_replica_partition_seq(data_set.views[0]) < point and retry < max_retry):
             changes_done += (100 * len(self.servers))
             gen_load = data_set.generate_docs(data_set.views[0],
                                             start=changes_done,
                                             end=changes_done + (100 * len(self.servers)))
             changes_done += (100 * len(self.servers))
             self.load(data_set, gen_load)
-            self.log.info("Partition sequence is: %s" % data_set.get_partition_seq(data_set.views[0]))
+            self.log.info("Partition sequence is: %s" % data_set.get_replica_partition_seq(data_set.views[0]))
         return changes_done
 
     def test_employee_dataset_key_quieres(self):
@@ -2585,6 +2586,14 @@ class SimpleDataSet:
         for value in stat['partition_seqs'].itervalues():
                     partition_seq += value
         return partition_seq
+    
+    def get_replica_partition_seq(self, view):
+        rest = RestConnection(self.server)
+        _, stat = rest.set_view_info(view.bucket, view.name)
+        replica_partition_seq = 0
+        for value in stat['replica_group_info']['partition_seqs'].itervalues():
+                    replica_partition_seq += value
+        return replica_partition_seq
 
     def add_negative_query(self, query_params, error, views=None):
         views = views or self.views
