@@ -40,7 +40,6 @@ class auditcheckconfig(BaseTestCase):
         return ipAddress
         '''
 
-
     def getTimeStampForFile(self, audit):
         return (audit.getTimeStampFirstEvent()).replace(":", "-")
 
@@ -215,7 +214,6 @@ class auditcheckconfig(BaseTestCase):
         ops = self.input.param("ops", None)
         auditIns = audit(host=self.master)
 
-
         #Capture timestamp from first event for filename
         firstEventTime = self.getTimeStampForFile(auditIns)
 
@@ -280,7 +278,7 @@ class auditcheckconfig(BaseTestCase):
 
         expectedResults = {"auditd_enabled":auditIns.getAuditConfigElement('auditd_enabled'),
                            "descriptors_path":self.changePathWindows(auditIns.getAuditConfigElement('descriptors_path')),
-                           "log_path":self.changePathWindows(auditIns.getAuditLogPath()[:-1]),
+                           "log_path":self.changePathWindows(auditIns.getAuditLogPath().strip()[:-2]),
                            'source':'internal', 'user':'couchbase',
                            "rotate_interval":auditIns.getAuditConfigElement('rotate_interval'),
                            "version":1, 'hostname':self.getHostName(self.master)}
