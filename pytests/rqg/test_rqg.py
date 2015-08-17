@@ -23,6 +23,7 @@ class RQGTests(BaseTestCase):
         self.client_map={}
         self.log.info("==============  RQGTests setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
+        self.build_secondary_index_in_seq = self.input.param("build_secondary_index_in_seq",False)
         self.crud_type = self.input.param("crud_type","update")
         self.populate_with_replay = self.input.param("populate_with_replay",False)
         self.crud_batch_size = self.input.param("crud_batch_size",1)
@@ -64,6 +65,7 @@ class RQGTests(BaseTestCase):
         self.query_helper = QueryHelper()
         self.keyword_list = self.query_helper._read_keywords_from_file("b/resources/rqg/n1ql_info/keywords.txt")
         self._initialize_n1ql_helper()
+        self.index_map = {}
         if self.initial_loading_to_cb:
             self._initialize_cluster_setup()
 
@@ -1029,7 +1031,18 @@ class RQGTests(BaseTestCase):
                 self.sec_index_map  = self._extract_secondary_index_map_from_file(self.secondary_index_info_path)
         if not self.generate_input_only:
             if self.create_secondary_indexes:
-                self._generate_secondary_indexes_during_initialize(self.sec_index_map)
+                thread_list = []
+                if self.build_secondary_index_in_seq:
+                    for table_name in self.sec_index_map.keys():
+                        self._gen_secondary_indexes_per_table(table_name, self.sec_index_map[table_name], 0)
+                else:
+                    for table_name in self.sec_index_map.keys():
+                        t = threading.Thread(target=self._gen_secondary_indexes_per_table, args = (table_name, self.sec_index_map[table_name]))
+                        t.daemon = True
+                        t.start()
+                        thread_list.append(t)
+                    for t in thread_list:
+                        t.join()
             self._build_primary_indexes(self.using_gsi)
 
     def _build_primary_indexes(self, using_gsi= True):
@@ -1205,16 +1218,52 @@ class RQGTests(BaseTestCase):
         if self.generate_input_only:
             return
         thread_list = []
-        for key in index_map.keys():
-            map = {key:index_map}
-            t = threading.Thread(target=self._generate_secondary_indexes, args = (map))
+        self.index_map = index_map
+        for table_name in index_map.keys():
+            t = threading.Thread(target=self._gen_secondary_indexes_per_table, args = (table_name))
             t.daemon = True
             t.start()
             thread_list.append(t)
         for t in thread_list:
                 t.join()
 
-    def _generate_secondary_indexes(self, index_map):
+    def _gen_secondary_indexes_per_table(self, table_name = "", index_map = {}, sleep_time = 60):
+        defer_mode = str({"defer_build":True})
+        build_index_list = []
+        batch_index_definitions = {}
+        batch_index_definitions = index_map
+        for index_name in batch_index_definitions.keys():
+            query = "{0} WITH {1}".format(
+                batch_index_definitions[index_name]["definition"], defer_mode)
+            build_index_list.append(index_name)
+            self.log.info(" Running Query {0} ".format(query))
+            try:
+                actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+                build_index_list.append(index_name)
+            except Exception, ex:
+                self.log.info(ex)
+                raise
+        # Run Build Query
+        if build_index_list != None and len(build_index_list) > 0:
+            try:
+                build_query = "BUILD INDEX on {0}({1}) USING GSI".format(table_name,",".join(build_index_list))
+                actual_result = self.n1ql_helper.run_cbq_query(query = build_query, server = self.n1ql_server)
+                self.log.info(actual_result)
+            except Exception, ex:
+                self.log.info(ex)
+                raise
+            self.sleep(sleep_time)
+            # Monitor till the index is built
+            tasks = []
+            try:
+                for index_name in build_index_list:
+                    tasks.append(self.async_monitor_index(bucket = table_name, index_name = index_name))
+                for task in tasks:
+                    task.result()
+            except Exception, ex:
+                self.log.info(ex)
+
+    def _generate_secondary_indexes(self, index_map = {}):
         defer_mode = str({"defer_build":True})
         for table_name in index_map.keys():
             build_index_list = []
