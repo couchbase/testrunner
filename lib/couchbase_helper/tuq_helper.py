@@ -468,7 +468,7 @@ class N1QLHelper():
         return query_params
 
     def _is_index_in_list(self, bucket, index_name, server = None, index_state = "pending"):
-        query = "SELECT * FROM system:indexes"
+        query = "SELECT * FROM system:indexes where name = \'{0}\'".format(index_name)
         if server == None:
             server = self.master
         res = self.run_cbq_query(query = query, server = server)
