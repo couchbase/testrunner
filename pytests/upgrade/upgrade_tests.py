@@ -1,4 +1,4 @@
-from basetestcase import BaseTestCase
+from newupgradebasetest import NewUpgradeBaseTest
 import json
 import os
 import zipfile
@@ -10,11 +10,12 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 import mc_bin_client
 import threading
 from memcached.helper.data_helper import  VBucketAwareMemcached
-from mysql_client import MySQLClient
 from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.tuq_helper import N1QLHelper
 from couchbase_helper.query_helper import QueryHelper
 from TestInput import TestInputSingleton
+from couchbase_helper.documentgenerator import BlobGenerator
+
 
 class UpgradeTests(NewUpgradeBaseTest):
 
@@ -45,11 +46,11 @@ class UpgradeTests(NewUpgradeBaseTest):
                 initialize_events = self.run_event(self.initialize_events)
             self.finish_events(initialize_events)
             if self.before_events:
-                events += self.run_event(self.before_events)
-            events += self.upgrade_event()
+                self.event_threads += self.run_event(self.before_events)
+            self.event_threads += self.upgrade_event()
             if self.in_between_events:
-                self.events += self.run_event(self.in_between_events)
-            self.finish_events(self.events)
+                self.event_threads += self.run_event(self.in_between_events)
+            self.finish_events(self.event_threads)
             self.cluster_stats()
             if self.after_events:
                 self.after_event_threads = self.run_event(self.after_events)
@@ -65,7 +66,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.cleanup_events()
 
     def stop_all_events(self, thread_list):
-        for t in ok:
+        for t in thread_list:
             try:
                 if t.isAlive():
                     t.stop()
@@ -85,10 +86,11 @@ class UpgradeTests(NewUpgradeBaseTest):
     def run_event(self, events):
         thread_list = []
         for event in events:
-            t = threading.Thread(target=self.find_function(event), args = ())
-            t.daemon = True
-            t.start()
-            thread_list.append(t)
+            if event != '':
+                t = threading.Thread(target=self.find_function(event), args = ())
+                t.daemon = True
+                t.start()
+                thread_list.append(t)
         return thread_list
 
     def find_function(self, event):
@@ -158,38 +160,6 @@ class UpgradeTests(NewUpgradeBaseTest):
                 rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                        [], servr_out)
                 rebalance.result()
-        except Exception, ex:
-            raise
-        finally:
-            self.log.info(ex)
-
-    def failover_add_back(self):
-        try:
-            self.log.info("failover_add_back")
-            rest = RestConnection(self.master)
-            recoveryType = self.input.param("recoveryType", "full")
-            servr_out = self.nodes_out_list
-            nodes_all = rest.node_statuses()
-            failover_task =self.cluster.async_failover([self.master],
-                        failover_nodes = servr_out, graceful=self.graceful)
-            failover_task.result()
-            nodes_all = rest.node_statuses()
-            nodes = []
-            if servr_out[0].ip == "127.0.0.1":
-                for failover_node in servr_out:
-                    nodes.extend([node for node in nodes_all
-                    if (str(node.port) == failover_node.port)])
-                    else:
-                        for failover_node in servr_out:
-                            nodes.extend([node for node in nodes_all
-                            if node.ip == failover_node.ip])
-            for node in nodes:
-                self.log.info(node)
-                rest.add_back_node(node.id)
-                rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
-            in_between_index_ops = self._run_in_between_tasks()
-            rebalance.result()
         except Exception, ex:
             raise
         finally:
@@ -384,10 +354,15 @@ class UpgradeTests(NewUpgradeBaseTest):
                 tmp, _, _ = self.rest.set_auto_compaction(viewFragmntThresholdPercentage=
                                          self.input.param("autocompaction", 50))
                 status &= tmp
-                if not status:
-                    self.fail("some settings were not set correctly!")
+            if not status:
+                self.fail("some settings were not set correctly!")
+        except Exception, ex:
+            self.log.info(ex)
+            raise
 
-        def online_upgrade(self):
+
+    def online_upgrade(self):
+        try:
             self.log.info("online_upgrade")
             self._install(self.servers[:self.nodes_init])
             self.initial_version = self.upgrade_versions[0]
@@ -407,7 +382,7 @@ class UpgradeTests(NewUpgradeBaseTest):
     def offline_upgrade(self):
         try:
             self.log.info("offline_upgrade")
-                    self._install(self.servers[:self.nodes_init])
+            self._install(self.servers[:self.nodes_init])
             num_nodes_reinstall = self.input.param('num_nodes_reinstall', 1)
             stoped_nodes = self.servers[self.nodes_init - (self.nodes_init - num_nodes_reinstall):self.nodes_init]
             nodes_reinstall = self.servers[:num_nodes_reinstall]
@@ -457,7 +432,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
 
-     def kv__after_ops_delete(self):
+    def kv__after_ops_delete(self):
         try:
             self.log.info("kv_after_ops_update")
             self._load_all_buckets(self.master, self.after_gen_delete, "delete", self.expire_time, flag=self.item_flag)
@@ -481,7 +456,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
 
-     def kv_ops_delete(self):
+    def kv_ops_delete(self):
         try:
             self.log.info("kv_ops_delete")
             self._load_all_buckets(self.master, self.gen_delete, "delete", self.expire_time, flag=self.item_flag)
@@ -490,4 +465,4 @@ class UpgradeTests(NewUpgradeBaseTest):
             raise
 
     def cluster_stats(self):
-        self._wait_for_stats_all_buckets(servers)
+        self._wait_for_stats_all_buckets(self.servers)
