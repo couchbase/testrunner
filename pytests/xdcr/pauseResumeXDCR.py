@@ -116,9 +116,12 @@ class PauseResumeTest(XDCRNewBaseTest):
             task.result()
 
         # wait for load to complete
-        for task in load_tasks:
-            self.log.info("Waiting for loading to complete...")
-            task.result()
+        try:
+            for task in load_tasks:
+                self.log.info("Waiting for loading to complete...")
+                task.result()
+        except Exception as e:
+            self.log.info(e)
 
         self.perform_update_delete()
         self.verify_results()
