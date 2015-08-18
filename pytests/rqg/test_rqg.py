@@ -57,7 +57,7 @@ class RQGTests(BaseTestCase):
         self.secondary_index_info_path= self.input.param("secondary_index_info_path",None)
         self.db_dump_path= self.input.param("db_dump_path",None)
         self.input_rqg_path= self.input.param("input_rqg_path",None)
-        self.build_index_batch_size= self.input.param("build_index_batch_size",10000)
+        self.build_index_batch_size= self.input.param("build_index_batch_size",10)
         self.query_count= 0
         if self.input_rqg_path != None:
             self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
