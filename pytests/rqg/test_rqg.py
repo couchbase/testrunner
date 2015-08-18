@@ -57,6 +57,7 @@ class RQGTests(BaseTestCase):
         self.secondary_index_info_path= self.input.param("secondary_index_info_path",None)
         self.db_dump_path= self.input.param("db_dump_path",None)
         self.input_rqg_path= self.input.param("input_rqg_path",None)
+        self.build_index_batch_size= self.input.param("build_index_batch_size",10000)
         self.query_count= 0
         if self.input_rqg_path != None:
             self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
@@ -65,7 +66,6 @@ class RQGTests(BaseTestCase):
         self.query_helper = QueryHelper()
         self.keyword_list = self.query_helper._read_keywords_from_file("b/resources/rqg/n1ql_info/keywords.txt")
         self._initialize_n1ql_helper()
-        self.index_map = {}
         if self.initial_loading_to_cb:
             self._initialize_cluster_setup()
 
@@ -1227,7 +1227,7 @@ class RQGTests(BaseTestCase):
         for t in thread_list:
                 t.join()
 
-    def _gen_secondary_indexes_per_table(self, table_name = "", index_map = {}, sleep_time = 60):
+    def _gen_secondary_indexes_per_table(self, table_name = "", index_map = {}, sleep_time = 0):
         defer_mode = str({"defer_build":True})
         build_index_list = []
         batch_index_definitions = {}
@@ -1245,23 +1245,34 @@ class RQGTests(BaseTestCase):
                 raise
         # Run Build Query
         if build_index_list != None and len(build_index_list) > 0:
-            try:
-                build_query = "BUILD INDEX on {0}({1}) USING GSI".format(table_name,",".join(build_index_list))
-                actual_result = self.n1ql_helper.run_cbq_query(query = build_query, server = self.n1ql_server)
-                self.log.info(actual_result)
-            except Exception, ex:
-                self.log.info(ex)
-                raise
-            self.sleep(sleep_time)
-            # Monitor till the index is built
-            tasks = []
-            try:
-                for index_name in build_index_list:
-                    tasks.append(self.async_monitor_index(bucket = table_name, index_name = index_name))
-                for task in tasks:
-                    task.result()
-            except Exception, ex:
-                self.log.info(ex)
+            batch_size = 0
+            start_index_batch = 0
+            end_index_batch = 0
+            total_indexes = 0
+            while batch_size < self.build_secondary_index_in_seq:
+                start_index_batch = end_index_batch
+                end_index_batch = min(end_index_batch+self.build_secondary_index_in_seq,len(build_index_list))
+                batch_size += 1
+                if start_index_batch == end_index_batch:
+                    break
+                list_build_index_list = build_index_list[start_index_batch:end_index_batch]
+                try:
+                    build_query = "BUILD INDEX on {0}({1}) USING GSI".format(table_name,",".join(list_build_index_list))
+                    actual_result = self.n1ql_helper.run_cbq_query(query = build_query, server = self.n1ql_server)
+                    self.log.info(actual_result)
+                except Exception, ex:
+                    self.log.info(ex)
+                    raise
+                self.sleep(sleep_time)
+                # Monitor till the index is built
+                tasks = []
+                try:
+                    for index_name in list_build_index_list:
+                        tasks.append(self.async_monitor_index(bucket = table_name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
 
     def _generate_secondary_indexes(self, index_map = {}):
         defer_mode = str({"defer_build":True})
