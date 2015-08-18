@@ -2,6 +2,8 @@ import re
 import logger
 import time
 import unittest
+from selenium.common.exceptions import StaleElementReferenceException
+from lib.testconstants import STANDARD_BUCKET_PORT
 
 from uibasetest import * 
 from selenium import webdriver
@@ -154,8 +156,9 @@ class DocumentsTest(BaseUITestCase):
 
     def test_create_doc(self):
         self.bucket = Bucket()
+        RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
+                                                              proxyPort=STANDARD_BUCKET_PORT + 1)
         NavigationHelper(self).navigate('Data Buckets')
-        BucketHelper(self).create(self.bucket)
         BucketHelper(self).open_documents(self.bucket)
 
         doc_name = self.input.param('doc_name', 'test')
@@ -168,8 +171,9 @@ class DocumentsTest(BaseUITestCase):
 
     def test_search_doc(self):
         self.bucket = Bucket()
+        RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
+                                                              proxyPort=STANDARD_BUCKET_PORT + 2)
         NavigationHelper(self).navigate('Data Buckets')
-        BucketHelper(self).create(self.bucket)
         BucketHelper(self).open_documents(self.bucket)
         doc_name = self.input.param('doc_name', 'test')
         doc_content = self.input.param('content', None)
@@ -182,8 +186,9 @@ class DocumentsTest(BaseUITestCase):
 
     def test_edit_doc(self):
         self.bucket = Bucket()
+        RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
+                                                              proxyPort=STANDARD_BUCKET_PORT + 3)
         NavigationHelper(self).navigate('Data Buckets')
-        BucketHelper(self).create(self.bucket)
         BucketHelper(self).open_documents(self.bucket)
         old_doc = Document('test', '{"test":"test"}')
         DocsHelper(self).create_doc(old_doc)
@@ -206,8 +211,9 @@ class DocumentsTest(BaseUITestCase):
 
     def test_edit_doc_from_views_screen(self):
         self.bucket = Bucket()
+        RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
+                                                              proxyPort=STANDARD_BUCKET_PORT + 4)
         NavigationHelper(self).navigate('Data Buckets')
-        BucketHelper(self).create(self.bucket)
         BucketHelper(self).open_documents(self.bucket)
         old_doc = Document('test', '{"test":"test"}')
         DocsHelper(self).create_doc(old_doc)
@@ -225,8 +231,9 @@ class DocumentsTest(BaseUITestCase):
 
     def test_pagination_docs(self):
         self.bucket = Bucket()
+        RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
+                                                              proxyPort=STANDARD_BUCKET_PORT + 5)
         NavigationHelper(self).navigate('Data Buckets')
-        BucketHelper(self).create(self.bucket)
         BucketHelper(self).open_documents(self.bucket)
 
         items_per_page = self.input.param('items-per-page', 5)
@@ -392,7 +399,9 @@ class  RebalanceProgressTests(BaseUITestCase):
         NavigationHelper(self).navigate('Data Buckets')
         for i in xrange(num_buckets):
             bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password')
-            BucketHelper(self).create(bucket)
+            RestConnection(self.servers[0]).create_bucket(bucket=bucket.name, ramQuotaMB=bucket.ram_quota or 100,
+                                                          saslPassword=bucket.sasl_password,
+                                                           proxyPort=STANDARD_BUCKET_PORT + i + 1)
             self.buckets.append(bucket)
 
     def tearDown(self):
@@ -437,7 +446,9 @@ class  GracefullFailoverTests(BaseUITestCase):
             for i in xrange(num_buckets):
                 bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password',
                                 replica=self.num_replica)
-                BucketHelper(self).create(bucket)
+                RestConnection(self.servers[0]).create_bucket(bucket=bucket.name, ramQuotaMB=bucket.ram_quota or 100,
+                                                              saslPassword=bucket.sasl_password, replicaNumber=bucket.num_replica,
+                                                              proxyPort=STANDARD_BUCKET_PORT + i + 1)
                 self.buckets.append(bucket)
         except:
             self.tearDown()
@@ -446,9 +457,27 @@ class  GracefullFailoverTests(BaseUITestCase):
     def tearDown(self):
         try:
             super(GracefullFailoverTests, self).tearDown()
+            if hasattr(self, 'driver') and self.driver:
+                self._deinitialize_api()
+                self._initialize_nodes()
+                self.sleep(3)
         finally:
             if hasattr(self, 'cluster'):
                 self.cluster.shutdown()
+
+    def _deinitialize_api(self):
+        for server in self.servers:
+            try:
+                rest = RestConnection(server)
+                rest.force_eject_node()
+                time.sleep(10)
+            except BaseException, e:
+                self.fail(e)
+
+    def _initialize_nodes(self):
+        for server in self.servers:
+            RestConnection(server).init_cluster(self.input.membase_settings.rest_username,
+                                                self.input.membase_settings.rest_password, '8091')
 
     def test_failover(self):
         confirm = self.input.param("confirm_failover", True)
@@ -518,6 +547,9 @@ class ViewsTests(BaseUITestCase):
         NavigationHelper(self).navigate('Data Buckets')
         for i in xrange(num_buckets):
             bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password')
+            RestConnection(self.servers[0]).create_bucket(bucket=bucket.name, ramQuotaMB=bucket.ram_quota or 100,
+                                                              saslPassword=bucket.sasl_password,
+                                                              proxyPort=STANDARD_BUCKET_PORT + i + 1)
             BucketHelper(self).create(bucket)
             self.buckets.append(bucket)
         self.driver.refresh()
@@ -1100,7 +1132,7 @@ class NavigationHelper():
     def __init__(self, tc):
         self.tc = tc
         self.controls = NavigationTestControls(tc.driver)
-        self.wait = WebDriverWait(tc.driver, timeout=100)
+        self.wait = WebDriverWait(tc.driver, timeout=250)
 
 
     def _is_tab_selected(self, text):
@@ -1121,7 +1153,7 @@ class NavigationHelper():
 class ServerHelper():
     def __init__(self, tc):
         self.tc = tc
-        self.wait = WebDriverWait(tc.driver, timeout=25)
+        self.wait = WebDriverWait(tc.driver, timeout=250)
         self.controls = ServerTestControls(tc.driver)
 
     def _is_btn_enabled(self, btn):
@@ -1535,7 +1567,12 @@ class BucketHelper():
             return False
 
     def open_documents(self, bucket):
-        self.controls.bucket_info(bucket.name).documents.click()
+        for i in xrange(3):
+            try:
+                self.controls.bucket_info(bucket.name).documents.click()
+                break
+            except StaleElementReferenceException:
+                pass
 
     def open_stats(self, bucket):
         self.controls.bucket_info(bucket.name).name.click()
@@ -1572,7 +1609,7 @@ class BucketHelper():
 class NodeInitializeHelper():
     def __init__(self, tc):
         self.tc = tc
-        self.wait = WebDriverWait(tc.driver, timeout=60)
+        self.wait = WebDriverWait(tc.driver, timeout=250)
         self.controls = NodeInitializeControls(tc.driver)
 
     def _get_error(self):
@@ -1676,7 +1713,7 @@ class NodeInitializeHelper():
 class DdocViewHelper():
     def __init__(self, tc):
         self.tc = tc
-        self.wait = WebDriverWait(tc.driver, timeout=60)
+        self.wait = WebDriverWait(tc.driver, timeout=250)
         self.controls = DdocViewControls(tc.driver)
 
     def create_view(self, ddoc_name, view_name, dev_view=True):
@@ -1716,7 +1753,12 @@ class DdocViewHelper():
 
     def open_view(self, view_name):
         self.tc.log.info('trying open view %s' % view_name)
-        self.controls.view_row(view_name).name.click()
+        for i in xrange(3):
+            try:
+                self.controls.view_row(view_name).name.click()
+                break
+            except StaleElementReferenceException:
+                pass
         self.wait.until(lambda fn:
                         self.controls.view_map_reduce_fn().map_fn.is_displayed(),
                         "view screen is not opened")
@@ -1819,7 +1861,7 @@ class DdocViewHelper():
 class DocsHelper():
     def __init__(self, tc):
         self.tc = tc
-        self.wait = WebDriverWait(tc.driver, timeout=60)
+        self.wait = WebDriverWait(tc.driver, timeout=250)
         self.controls = DocumentsControls(tc.driver)
 
     def create_doc(self, doc):
@@ -1955,7 +1997,7 @@ class SettingsHelper():
     def __init__(self, tc):
         self.tc = tc
         self.controls = SettingsTestControls(tc.driver)
-        self.wait = WebDriverWait(tc.driver, timeout=10)
+        self.wait = WebDriverWait(tc.driver, timeout=250)
 
     def navigate(self, tab):
         self.wait.until(lambda fn: self.controls._settings_tab_link(tab).is_displayed(),
