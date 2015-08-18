@@ -449,8 +449,18 @@ class N1QLHelper():
         check = self._is_index_in_list(bucket, index_name, server = server)
         init_time = time.time()
         while not check:
-            time.sleep(10)
+            time.sleep(1)
             check = self._is_index_in_list(bucket, index_name, server = server)
+            next_time = time.time()
+            if check or (next_time - init_time > timeout):
+                return check
+        return check
+
+    def is_index_online_and_in_list_bulk(self, bucket, index_names = [], server = None, index_state = "online", timeout = 600.0):
+        check, index_names = self._is_index_in_list_bulk(bucket, index_names, server = server)
+        init_time = time.time()
+        while not check:
+            check, index_names = self._is_index_in_list_bulk(bucket, index_names, server = server, index_state = "online")
             next_time = time.time()
             if check or (next_time - init_time > timeout):
                 return check
@@ -478,6 +488,25 @@ class N1QLHelper():
             if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] != index_state:
                 return True
         return False
+
+    def _is_index_in_list_bulk(self, bucket, index_names = [], server = None, index_state = "pending"):
+        query = "SELECT * FROM system:indexes"
+        if server == None:
+            server = self.master
+        res = self.run_cbq_query(query = query, server = server)
+        index_count=0
+        missing_index_list = []
+        for item in res['results']:
+            if 'keyspace_id' not in item['indexes']:
+                return False
+            for index_name in index_names:
+                if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] != index_state:
+                    index_count += 1
+                else:
+                    missing_index_list.append(index_name)
+        if len(index_names) == index_count:
+            return True, missing_index_list
+        return False, missing_index_list
 
     def gen_index_map(self, server = None):
         query = "SELECT * FROM system:indexes"
