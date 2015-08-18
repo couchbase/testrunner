@@ -369,7 +369,8 @@ class RQGTests(BaseTestCase):
         table_list = self.client._get_table_list()
         table_map = self.client._get_values_with_type_for_fields_in_table()
         for key in table_map.keys():
-            table_map[key].pop("alias_name")
+            if "alias_name" in table_map[key].keys():
+                table_map[key].pop("alias_name")
         check = True
         failure_map = {}
         batches = Queue.Queue()
@@ -1238,7 +1239,7 @@ class RQGTests(BaseTestCase):
             build_index_list.append(index_name)
             self.log.info(" Running Query {0} ".format(query))
             try:
-                actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+                actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server, verbose = False)
                 build_index_list.append(index_name)
             except Exception, ex:
                 self.log.info(ex)
@@ -1249,13 +1250,14 @@ class RQGTests(BaseTestCase):
             start_index_batch = 0
             end_index_batch = 0
             total_indexes = 0
-            while batch_size < self.build_secondary_index_in_seq:
+            while total_indexes < len(build_index_list):
                 start_index_batch = end_index_batch
-                end_index_batch = min(end_index_batch+self.build_secondary_index_in_seq,len(build_index_list))
+                end_index_batch = min(end_index_batch+self.build_index_batch_size,len(build_index_list))
                 batch_size += 1
                 if start_index_batch == end_index_batch:
                     break
                 list_build_index_list = build_index_list[start_index_batch:end_index_batch]
+                total_indexes += len(list_build_index_list)
                 try:
                     build_query = "BUILD INDEX on {0}({1}) USING GSI".format(table_name,",".join(list_build_index_list))
                     actual_result = self.n1ql_helper.run_cbq_query(query = build_query, server = self.n1ql_server)
