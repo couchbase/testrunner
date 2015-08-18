@@ -1270,7 +1270,7 @@ class RQGTests(BaseTestCase):
                 tasks = []
                 try:
                     check = self.n1ql_helper.is_index_online_and_in_list_bulk(table_name, list_build_index_list, server = self.n1ql_server, index_state = "online", timeout = 1200.00)
-                    if check:
+                    if not check:
                         raise Exception(" Index build timed out \n {0}".format(list_build_index_list))
                     #for index_name in list_build_index_list:
                     #    tasks.append(self.async_monitor_index(bucket = table_name, index_name = index_name))
