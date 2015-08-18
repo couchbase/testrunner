@@ -126,16 +126,15 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             for node in self.nodes_out_list:
                 remote = RemoteMachineShellConnection(node)
                 remote.stop_server()
-            self.sleep(1)
+            self.sleep(2)
+            for node in self.nodes_out_list:
+                remote = RemoteMachineShellConnection(node)
+                remote.start_server()
             in_between_index_ops = self._run_in_between_tasks()
             self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
             self._run_after_index_tasks()
         except Exception, ex:
             raise
-        finally:
-            for node in self.nodes_out_list:
-                remote = RemoteMachineShellConnection(node)
-                remote.start_server()
 
     def test_failover(self):
         try:
