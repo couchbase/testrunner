@@ -504,7 +504,7 @@ class N1QLHelper():
                     found_index_list.append(index_name)
         if len(found_index_list) == len(index_names):
             return True, []
-        return False, list(Set(index_names) - Set(found_index_list))
+        return False, list(set(index_names) - set(found_index_list))
 
     def gen_index_map(self, server = None):
         query = "SELECT * FROM system:indexes"
