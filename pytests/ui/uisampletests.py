@@ -317,7 +317,8 @@ class ROuserTests(BaseUITestCase):
             self.log.info("create bucket, view for check")
             self.bucket = Bucket()
             NavigationHelper(self).navigate('Data Buckets')
-            BucketHelper(self).create(self.bucket)
+            RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
+                                                           proxyPort=STANDARD_BUCKET_PORT + 6)
             NavigationHelper(self).navigate('Views')
             self.view_name = 'test_view_ui'
             DdocViewHelper(self).create_view(self.view_name, self.view_name)
@@ -548,9 +549,8 @@ class ViewsTests(BaseUITestCase):
         for i in xrange(num_buckets):
             bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password')
             RestConnection(self.servers[0]).create_bucket(bucket=bucket.name, ramQuotaMB=bucket.ram_quota or 100,
-                                                              saslPassword=bucket.sasl_password,
-                                                              proxyPort=STANDARD_BUCKET_PORT + i + 1)
-            BucketHelper(self).create(bucket)
+                                                          saslPassword=bucket.sasl_password,
+                                                          proxyPort=STANDARD_BUCKET_PORT + i + 1)
             self.buckets.append(bucket)
         self.driver.refresh()
 
@@ -1794,7 +1794,12 @@ class DdocViewHelper():
         self.wait.until(lambda fn:
                        self.controls.view_row(view_name).row.is_displayed(),
                       "View row %s is not displayed" % view_name)
-        self.controls.view_row(view_name).delete_btn.click()
+        for i in xrange(3):
+            try:
+                self.controls.view_row(view_name).delete_btn.click()
+                break
+            except StaleElementReferenceException:
+                pass
         self.wait.until(lambda fn:
                         self.controls.del_view_dialog().ok_btn.is_displayed(),
                         "Delete view dialog is not opened")
