@@ -322,7 +322,7 @@ class RQGTests(BaseTestCase):
             else:
                 count +=1
             test_case_number += 1
-            if test_case_number >= self.total_queries:
+            if test_case_number > self.total_queries:
                 break
         if inserted_count != len(query_list):
             batches.append(batch)
@@ -350,8 +350,8 @@ class RQGTests(BaseTestCase):
             # Create threads and run the batch
             for test_case in list:
                 test_case_input = test_case
-                test_case_number += 1
                 input_queue.put({"test_case_number":test_case_number, "test_data":test_case_input})
+                test_case_number += 1
             # Capture the results when done
             check = False
             # Drop all the secondary Indexes
@@ -397,7 +397,7 @@ class RQGTests(BaseTestCase):
             else:
                 count +=1
             test_case_number += 1
-            if test_case_number >= self.total_queries:
+            if test_case_number > self.total_queries:
                 break
         if inserted_count != len(query_list):
             batches.put(batch)
@@ -478,7 +478,7 @@ class RQGTests(BaseTestCase):
 
     def _testrun_worker(self, input_queue, result_queue, failure_record_queue = None):
         while True:
-            if self.total_queries == (self.query_count+1):
+            if self.total_queries == (self.query_count):
                 break
             if not input_queue.empty():
                 data = input_queue.get()
