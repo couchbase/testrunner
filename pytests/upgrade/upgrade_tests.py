@@ -405,7 +405,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info("current {0}".format(servers))
             self.log.info("will come inside {0}".format(servers_in))
             self.log.info("will go out {0}".format(servers_out))
-            self._install(servers_out.values())
+            self._install(servers_in.values())
             self.cluster.rebalance(servers.values(), servers_in.values(), servers_out.values())
             servers = new_servers
 
