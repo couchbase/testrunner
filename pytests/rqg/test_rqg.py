@@ -81,48 +81,6 @@ class RQGTests(BaseTestCase):
                 except Exception, ex:
                     self.log.info(ex)
 
-    def test_rqg_example(self):
-        self._initialize_mysql_client()
-        sql_query = "SELECT a1.* FROM ( `ontime_mysiam`  AS a1 INNER JOIN `carriers`  AS a2 ON ( a1.`carrier` = a2.`code` ) )"
-        n1ql_query = "SELECT a1.* FROM `ontime_mysiam`  AS a1 INNER JOIN `carriers`  AS a2 ON KEYS [ a1.`carrier` ]"
-        # Run n1ql query
-        check, msg = self._run_queries_compare(n1ql_query = n1ql_query , sql_query = sql_query)
-        self.assertTrue(check, msg)
-
-    def test_rqg_from_list(self):
-        self._initialize_mysql_client()
-        self.n1ql_file_path= self.input.param("n1ql_file_path","default")
-        self.sql_file_path= self.input.param("sql_file_path","default")
-        with open(self.n1ql_file_path) as f:
-            n1ql_query_list = f.readlines()
-        with open(self.sql_file_path) as f:
-            sql_query_list = f.readlines()
-        self._generate_secondary_indexes(n1ql_query_list)
-        i = 0
-        check = True
-        pass_case = 0
-        total =0
-        fail_case = 0
-        failure_map = {}
-        self.assertTrue(len(n1ql_query_list) == len(sql_query_list),
-         "number of query mismatch n1ql:{0}, sql:{1}".format(len(n1ql_query_list),len(sql_query_list)))
-        for n1ql_query in n1ql_query_list:
-            self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING QUERY CASE NUMBER {0} >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(i))
-            sql_query = sql_query_list[i]
-            i+=1
-            # Run n1ql query
-            success, msg = self._run_queries_compare(n1ql_query = n1ql_query , sql_query = sql_query)
-            total += 1
-            check = check and success
-            if success:
-                pass_case += 1
-            else:
-                fail_case +=  1
-                failure_map["Case :: "+str(i-1)] = { "sql_query":sql_query, "n1ql_query": n1ql_query, "reason for failure": msg}
-            self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING QUERY CASE NUMBER {0} >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(i-1))
-        self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case))
-        self.assertTrue(check, failure_map)
-
     def test_rqg_concurrent_with_predefined_input(self):
         check = True
         failure_map = {}
@@ -478,7 +436,7 @@ class RQGTests(BaseTestCase):
 
     def _testrun_worker(self, input_queue, result_queue, failure_record_queue = None):
         while True:
-            if self.total_queries == (self.query_count):
+            if self.total_queries <= (self.query_count):
                 break
             if not input_queue.empty():
                 data = input_queue.get()
