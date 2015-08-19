@@ -24,6 +24,7 @@ class RQGTests(BaseTestCase):
         self.log.info("==============  RQGTests setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
         self.build_secondary_index_in_seq = self.input.param("build_secondary_index_in_seq",False)
+        self.number_of_buckets = self.input.param("number_of_buckets",5)
         self.crud_type = self.input.param("crud_type","update")
         self.populate_with_replay = self.input.param("populate_with_replay",False)
         self.crud_batch_size = self.input.param("crud_batch_size",1)
@@ -665,69 +666,6 @@ class RQGTests(BaseTestCase):
         result = self._generate_result(failure_map)
         return success, summary, result
 
-    def test_rqg_main(self):
-        self.run_query_without_index_hint= self.input.param("run_query_without_index_hint",True)
-        self.run_query_with_primary= self.input.param("run_query_with_primary",True)
-        self.run_query_with_secondary= self.input.param("run_query_with_secondary",True)
-        self.run_explain_with_hints= self.input.param("run_explain_with_hints",True)
-        self.n1ql_file_path= self.input.param("test_file_path","default")
-        with open(self.n1ql_file_path) as f:
-            n1ql_query_list = f.readlines()
-        i = 0
-        check = True
-        pass_case = 0
-        total =0
-        fail_case = 0
-        failure_map = {}
-        for n1ql_query_info in n1ql_query_list:
-            # Run n1ql query
-            data = json.loads(n1ql_query_info)
-            n1ql_query = data["n1ql"]
-            sql_query = data["sql"]
-            indexes = data["indexes"]
-            table_name = data["bucket"]
-            expected_result = data["expected_result"]
-            run_result ={}
-            hints = self.query_helper._find_hints(n1ql_query)
-            if self.run_query_with_secondary or self.run_explain_with_hints:
-                self._generate_secondary_indexes_with_index_map(index_map = indexes, table_name = table_name)
-            self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(total))
-            result_run = {}
-            if expected_result == None:
-                expected_result = self._gen_expected_result(sql_query)
-            if self.run_query_without_index_hint:
-                query_index_run = self._run_queries_and_verify(n1ql_query = n1ql_query , sql_query = sql_query, expected_result = expected_result)
-                result_run["run_query_without_index_hint"] = query_index_run
-            if self.run_query_with_primary:
-                index_info = {"name":"`#primary`","type":"GSI"}
-                query = self.query_helper._add_index_hints_to_query(n1ql_query, [index_info])
-                query_index_run = self._run_queries_and_verify(n1ql_query = query , sql_query = sql_query, expected_result = expected_result)
-                result_run["run_query_with_primary"] = query_index_run
-            if self.run_query_with_secondary:
-                for index_name in indexes.keys():
-                    query = self.query_helper._add_index_hints_to_query(n1ql_query, [indexes[index_name]])
-                    query_index_run = self._run_queries_and_verify(n1ql_query = query , sql_query = sql_query, expected_result = expected_result)
-                    key = "run_query_with_index_name::{0}".format(index_name)
-                    result_run[key] = query_index_run
-            if self.run_explain_with_hints:
-                result = self._run_queries_with_explain(n1ql_query , indexes)
-                result_run.update(result)
-            message = "NO FAILURES \n"
-            check, message = self._analyze_result(result_run)
-            total += 1
-            if check:
-                pass_case += 1
-            else:
-                fail_case +=  1
-                failure_map[str(total)] = {"sql_query":sql_query, "n1ql_query": n1ql_query,
-                 "run_result" : message}
-            if self.run_query_with_secondary or self.run_explain_with_hints:
-                self._drop_secondary_indexes_with_index_map(index_map = indexes, table_name = table_name)
-            self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< END RUNNING QUERY CASE NUMBER {0} >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(total))
-        self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}".format(total, pass_case, fail_case))
-        result = self._generate_result(failure_map)
-        self.assertTrue(fail_case == 0, result)
-
     def test_rqg_from_file(self):
         self.n1ql_file_path= self.input.param("n1ql_file_path","default")
         with open(self.n1ql_file_path) as f:
@@ -760,22 +698,6 @@ class RQGTests(BaseTestCase):
         self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}, Pass Pecentage = {3} %".format(total, pass_case, fail_case,((100*pass_case)/total) ))
         self.assertTrue(check, failure_map)
 
-    def test_n1ql_queries_only(self):
-        self.n1ql_file_path= self.input.param("n1ql_file_path","default")
-        with open(self.n1ql_file_path) as f:
-            n1ql_query_list = f.readlines()
-        self._generate_secondary_indexes(n1ql_query_list)
-        failure_list = []
-        n1ql_query_list = self.query_helper._convert_sql_list_to_n1ql(n1ql_query_list)
-        check = True
-        for n1ql_query in n1ql_query_list:
-            try:
-                self._run_n1ql_queries(n1ql_query = n1ql_query)
-            except Exception, ex:
-                self.log.info(ex)
-                check = False
-                failure_list.append({"n1ql_query":n1ql_query, "reason":ex})
-        self.assertTrue(check, failure_list)
 
     def test_bootstrap_with_data(self):
         self.log.info(" Data has been bootstrapped !!")
@@ -1117,7 +1039,7 @@ class RQGTests(BaseTestCase):
             populate_data = False
             if not self.populate_with_replay:
                 populate_data = True
-            self.client.reset_database_add_data(database = self.database, items= self.items, sql_file_definiton_path = path, populate_data = populate_data)
+            self.client.reset_database_add_data(database = self.database, items= self.items, sql_file_definiton_path = path, populate_data = populate_data, number_of_tables  = self.number_of_buckets)
             self._copy_table_for_merge()
         else:
             self.client = MySQLClient(database = self.database, host = self.mysql_url,
