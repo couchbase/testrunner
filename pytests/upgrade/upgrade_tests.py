@@ -6,14 +6,17 @@ import pprint
 import Queue
 import json
 import logging
+import copy
 from membase.helper.cluster_helper import ClusterOperationHelper
 import mc_bin_client
 import threading
 from memcached.helper.data_helper import  VBucketAwareMemcached
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.tuq_helper import N1QLHelper
 from couchbase_helper.query_helper import QueryHelper
 from TestInput import TestInputSingleton
+from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.documentgenerator import BlobGenerator
 
 
@@ -21,11 +24,12 @@ class UpgradeTests(NewUpgradeBaseTest):
 
     def setUp(self):
         super(UpgradeTests, self).setUp()
-        self.initialize_events = self.input.param("initialize_events","server_crash:autofailover").split(":")
-        self.in_between_events = self.input.param("in_between_events","server_crash:autofailover").split(":")
-        self.after_events = self.input.param("after_events","server_crash:autofailover").split(":")
-        self.before_events = self.input.param("before_events","server_crash:autofailover").split(":")
-        self.upgrade_type = self.input.param("upgrade_type","online").split(":")
+        self.initialize_events = self.input.param("initialize_events","").split(":")
+        self.in_between_events = self.input.param("in_between_events","").split(":")
+        self.after_events = self.input.param("after_events","").split(":")
+        self.before_events = self.input.param("before_events","").split(":")
+        self.upgrade_type = self.input.param("upgrade_type","online")
+        self.online_upgrade_type = self.input.param("online_upgrade_type","swap")
         self.final_events = []
         self.gen_initial_create = BlobGenerator('upgrade', 'upgrade', self.value_size, end=self.num_items)
         self.gen_create = BlobGenerator('upgrade', 'upgrade', self.value_size, start=self.num_items + 1 , end=self.num_items * 1.5)
@@ -51,11 +55,9 @@ class UpgradeTests(NewUpgradeBaseTest):
             if self.in_between_events:
                 self.event_threads += self.run_event(self.in_between_events)
             self.finish_events(self.event_threads)
-            self.cluster_stats()
             if self.after_events:
                 self.after_event_threads = self.run_event(self.after_events)
             self.finish_events(self.after_event_threads)
-            self.cluster_stats()
         except Exception, ex:
             self.log.info(ex)
             self.stop_all_events(self.event_threads)
@@ -364,17 +366,65 @@ class UpgradeTests(NewUpgradeBaseTest):
     def online_upgrade(self):
         try:
             self.log.info("online_upgrade")
-            self._install(self.servers[:self.nodes_init])
-            self.initial_version = self.upgrade_versions[0]
-            self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
-                           format(self.initial_version))
+            #self._install(self.servers[:self.nodes_init])
+            #self.initial_version = self.upgrade_versions[0]
+            #self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
+            #               format(self.initial_version))
             self.product = 'couchbase-server'
-            servs_in = self.servers[self.nodes_init:self.nodes_in + self.nodes_init]
-            servs_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
-            self._install(self.servers[self.nodes_init:self.num_servers])
-            self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
-            task_reb = self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, servs_out)
-            task_reb.result()
+            if self.online_upgrade_type == "swap":
+                self.online_upgrade_swap_rebalance()
+            else:
+                self.online_upgrade_incremental()
+        except Exception, ex:
+            self.log.info(ex)
+            raise
+
+    def online_upgrade_swap_rebalance(self):
+        self.swap_num_servers = self.input.param('swap_num_servers', 1)
+        servers = self._convert_server_map(self.servers[:self.nodes_init])
+        out_servers = self._convert_server_map(self.servers[self.nodes_init:])
+        self.swap_num_servers = min(self.swap_num_servers, len(out_servers))
+        for i in range(self.nodes_init / self.swap_num_servers):
+            servers_in = {}
+            new_servers = copy.deepcopy(servers)
+            for key in out_servers.keys():
+                servers_in[key] = out_servers[key]
+                out_servers[key].upgraded = True
+                out_servers.pop(key)
+                if len(servers_in) == self.swap_num_servers:
+                    break
+            servers_out = {}
+            new_servers.update(servers_in)
+            for key in servers.keys():
+                if len(servers_out) == self.swap_num_servers:
+                    break
+                elif not servers[key].upgraded:
+                    servers_out[key] = servers[key]
+                    new_servers.pop(key)
+            out_servers.update(servers_out)
+            self.log.info("current {0}".format(servers))
+            self.log.info("will come inside {0}".format(servers_in))
+            self.log.info("will go out {0}".format(servers_out))
+            self._install(servers_out.values())
+            self.cluster.rebalance(servers.values(), servers_in.values(), servers_out.values())
+            servers = new_servers
+
+    def online_upgrade_incremental(self):
+        try:
+            for server in self.servers[1:]:
+                self.cluster.rebalance(self.servers, [], [server])
+                self.initial_version = self.upgrade_versions[0]
+                self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
+                       format(self.initial_version))
+                self.product = 'couchbase-server'
+                self._install([server])
+                self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
+                self.cluster.rebalance(self.servers, [server], [])
+                self.log.info("Rebalanced in upgraded nodes")
+                self.sleep(self.sleep_time)
+            self._new_master(self.servers[1])
+            self.cluster.rebalance(self.servers, [], [self.servers[0]])
+            self.log.info("Rebalanced out all old version nodes")
         except Exception, ex:
             self.log.info(ex)
             raise
@@ -439,6 +489,16 @@ class UpgradeTests(NewUpgradeBaseTest):
         except Exception, ex:
             self.log.info(ex)
             raise
+
+    def _convert_server_map(self, servers):
+        map = {}
+        for server in servers:
+            key  = self._gen_server_key(server)
+            map[key] = server
+        return map
+
+    def _gen_server_key(self, server):
+        return "{0}:{1}".format(server.ip, server.port)
 
     def kv_ops_create(self):
         try:

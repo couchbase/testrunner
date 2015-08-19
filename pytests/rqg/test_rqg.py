@@ -1228,7 +1228,7 @@ class RQGTests(BaseTestCase):
         for t in thread_list:
                 t.join()
 
-    def _gen_secondary_indexes_per_table(self, table_name = "", index_map = {}, sleep_time = 0):
+    def _gen_secondary_indexes_per_table(self, table_name = "", index_map = {}, sleep_time = 2):
         defer_mode = str({"defer_build":True})
         build_index_list = []
         batch_index_definitions = {}
