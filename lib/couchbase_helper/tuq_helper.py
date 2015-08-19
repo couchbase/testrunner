@@ -398,6 +398,7 @@ class N1QLHelper():
     def create_primary_index(self, using_gsi = True, server = None):
         if server == None:
             server = self.master
+        print "number of buckets {0}".format(len(self.buckets))
         for bucket in self.buckets:
             self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
             if using_gsi:

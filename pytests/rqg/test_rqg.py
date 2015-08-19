@@ -57,7 +57,7 @@ class RQGTests(BaseTestCase):
         self.secondary_index_info_path= self.input.param("secondary_index_info_path",None)
         self.db_dump_path= self.input.param("db_dump_path",None)
         self.input_rqg_path= self.input.param("input_rqg_path",None)
-        self.build_index_batch_size= self.input.param("build_index_batch_size",10)
+        self.build_index_batch_size= self.input.param("build_index_batch_size",1000)
         self.query_count= 0
         if self.input_rqg_path != None:
             self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
@@ -1031,6 +1031,7 @@ class RQGTests(BaseTestCase):
             else:
                 self.sec_index_map  = self._extract_secondary_index_map_from_file(self.secondary_index_info_path)
         if not self.generate_input_only:
+            self._build_primary_indexes(self.using_gsi)
             if self.create_secondary_indexes:
                 thread_list = []
                 if self.build_secondary_index_in_seq:
@@ -1044,7 +1045,6 @@ class RQGTests(BaseTestCase):
                         thread_list.append(t)
                     for t in thread_list:
                         t.join()
-            self._build_primary_indexes(self.using_gsi)
 
     def _build_primary_indexes(self, using_gsi= True):
         self.n1ql_helper.create_primary_index(using_gsi = using_gsi, server = self.n1ql_server)
