@@ -12,7 +12,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
 
     def test_rebalance_in(self):
         try:
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],self.nodes_in_list, [], services = self.services_in)
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], self.nodes_in_list, [], services=self.services_in)
             self._run_aync_tasks()
             rebalance.result()
             self.run_after_operations()
@@ -21,7 +21,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
 
     def test_rebalance_out(self):
         try:
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], self.nodes_out_list)
             self.sleep(3)
             self._run_aync_tasks()
             rebalance.result()
@@ -33,7 +33,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                     self.nodes_in_list,
-                                   self.nodes_out_list, services = self.services_in)
+                                   self.nodes_out_list, services=self.services_in)
             self.sleep(3)
             self._run_aync_tasks()
             rebalance.result()
@@ -45,9 +45,9 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                     self.nodes_in_list,
-                                   self.nodes_out_list, services = self.services_in)
+                                   self.nodes_out_list, services=self.services_in)
             self.sleep(3)
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
+            tasks = self.async_check_and_run_operations(buckets=self.buckets, in_between=True)
             # runs operations
             for task in tasks:
                 task.result()
@@ -56,7 +56,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             rebalance.result()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                     self.nodes_in_list,
-                                   self.nodes_out_list, services = self.services_in)
+                                   self.nodes_out_list, services=self.services_in)
             rebalance.result()
             self.run_after_operations()
         except Exception, ex:
@@ -64,18 +64,19 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
 
     def test_failover(self):
         try:
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
+            tasks = self.async_check_and_run_operations(buckets=self.buckets, before=True)
             for task in tasks:
                 task.result()
             servr_out = self.nodes_out_list
             failover_task = self.cluster.async_failover([self.master],
-                    failover_nodes = servr_out, graceful=self.graceful)
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True)
+                    failover_nodes=servr_out, graceful=self.graceful)
             failover_task.result()
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                   [], servr_out)
+            self.log.info ("Rebalance first time")
+            rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+            self.log.info ("Rebalance Second time")
+            rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+            tasks = self.async_check_and_run_operations(buckets=self.buckets, in_between=True)
             self._run_aync_tasks()
-            rebalance.result()
             self.run_after_operations()
         except Exception, ex:
             raise
@@ -86,11 +87,11 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             recoveryType = self.input.param("recoveryType", "full")
             servr_out = self.nodes_out_list
             nodes_all = rest.node_statuses()
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, before = True)
+            tasks = self.async_check_and_run_operations(buckets=self.buckets, before=True)
             for task in tasks:
                 task.result()
-            failover_task =self.cluster.async_failover([self.master],
-                    failover_nodes = servr_out, graceful=self.graceful)
+            failover_task = self.cluster.async_failover([self.master],
+                    failover_nodes=servr_out, graceful=self.graceful)
             failover_task.result()
             nodes_all = rest.node_statuses()
             nodes = []
@@ -131,7 +132,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             raise
         finally:
             remote.start_server()
-            tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True)
+            tasks = self.async_check_and_run_operations(buckets=self.buckets, after=True)
             for task in tasks:
                 task.result()
 
@@ -154,5 +155,5 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
 
     def run_after_operations(self):
         # Run Data verification
-        servers = self.get_nodes_from_services_map(service_type = "kv", get_all_nodes = True)
-        self.verify_cluster_stats(servers , check_ep_items_remaining = True)
+        servers = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        self.verify_cluster_stats(servers , check_ep_items_remaining=True)
