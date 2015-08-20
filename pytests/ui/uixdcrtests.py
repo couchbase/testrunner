@@ -188,7 +188,7 @@ class XDCRHelper():
     def __init__(self, tc):
         self.tc = tc
         self.controls = XDCRControls(tc.driver)
-        self.wait = WebDriverWait(tc.driver, timeout=10)
+        self.wait = WebDriverWait(tc.driver, timeout=100)
 
     def create_cluster_reference(self, cluster_name, ip, username, password, cancel=False):
         self.wait.until(lambda fn: self.controls.create_cluster_reference_btn.is_displayed(),
@@ -213,6 +213,8 @@ class XDCRHelper():
         self.wait.until(lambda fn: self._cluster_reference_pop_up_reaction(),
                         "there is no reaction in %d sec" % (self.wait._timeout))
         if self.controls.error_reference().is_displayed():
+            self.wait.until(lambda fn: self.controls.error_reference().get_text() != '',
+                        "text didn't appear in %d sec" % (self.wait._timeout))
             raise Exception('Reference is not created: %s' % self.controls.error_reference().get_text())
 
     def _cluster_reference_pop_up_reaction(self):
