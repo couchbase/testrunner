@@ -24,6 +24,7 @@ class UpgradeTests(NewUpgradeBaseTest):
 
     def setUp(self):
         super(UpgradeTests, self).setUp()
+        self.verify_vbucket_info =  self.input.param("verify_vbucket_info",True)
         self.initialize_events = self.input.param("initialize_events","").split(":")
         self.in_between_events = self.input.param("in_between_events","").split(":")
         self.after_events = self.input.param("after_events","").split(":")
@@ -38,6 +39,9 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.after_gen_create = BlobGenerator('upgrade', 'upgrade', self.value_size, start=self.num_items * 1.6 , end=self.num_items * 2)
         self.after_gen_update = BlobGenerator('upgrade', 'upgrade', self.value_size, start=1 , end=self.num_items/4)
         self.after_gen_delete = BlobGenerator('upgrade', 'upgrade', self.value_size, start=self.num_items * .5 , end=self.num_items* 0.75)
+        self._install(self.servers)
+        self.cluster.rebalance([self.master], self.servers[1:self.nodes_init], [])
+        self.create_bucket()
 
     def tearDown(self):
         super(UpgradeTests, self).tearDown()
@@ -49,6 +53,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             if self.initialize_events:
                 initialize_events = self.run_event(self.initialize_events)
             self.finish_events(initialize_events)
+            self.cluster_stats(self.servers[:self.nodes_init])
             if self.before_events:
                 self.event_threads += self.run_event(self.before_events)
             self.event_threads += self.upgrade_event()
@@ -58,6 +63,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             if self.after_events:
                 self.after_event_threads = self.run_event(self.after_events)
             self.finish_events(self.after_event_threads)
+            self.cluster_stats(self.servers)
         except Exception, ex:
             self.log.info(ex)
             self.stop_all_events(self.event_threads)
@@ -66,6 +72,20 @@ class UpgradeTests(NewUpgradeBaseTest):
         finally:
             self.log.info("any events for which we need to cleanup")
             self.cleanup_events()
+
+    def _record_vbuckets(self, master, servers):
+        map ={}
+        for bucket in self.buckets:
+            self.log.info(" record vbucket for the bucket {0}".format(bucket.name))
+            map[bucket.name] = RestHelper(RestConnection(master))._get_vbuckets(servers, bucket_name=bucket.name)
+        return map
+
+    def _find_master(self):
+        self.master = self.servers[0]
+
+    def _verify_vbuckets(self, old_vbucket_map, new_vbucket_map):
+        for bucket in self.buckets:
+            self._verify_vbucket_nums_for_swap(old_vbucket_map[bucket.name], new_vbucket_map[bucket.name])
 
     def stop_all_events(self, thread_list):
         for t in thread_list:
@@ -122,9 +142,8 @@ class UpgradeTests(NewUpgradeBaseTest):
                 remote = RemoteMachineShellConnection(node)
                 remote.terminate_process(process_name=self.targetProcess)
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
 
     def server_stop(self):
         try:
@@ -134,9 +153,9 @@ class UpgradeTests(NewUpgradeBaseTest):
                 remote.stop_server()
             self.final_events.append("start_server")
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
+
 
     def server_start(self):
         try:
@@ -145,9 +164,9 @@ class UpgradeTests(NewUpgradeBaseTest):
                 remote = RemoteMachineShellConnection(node)
                 remote.start_server()
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
+
 
     def failover(self):
         try:
@@ -163,9 +182,8 @@ class UpgradeTests(NewUpgradeBaseTest):
                                        [], servr_out)
                 rebalance.result()
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
 
     def autofailover(self):
         try:
@@ -184,9 +202,8 @@ class UpgradeTests(NewUpgradeBaseTest):
             rebalance.result()
             self.final_events.append("start_server")
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
 
     def network_partitioning(self):
         try:
@@ -195,9 +212,8 @@ class UpgradeTests(NewUpgradeBaseTest):
                 self.start_firewall_on_node(node)
             self.final_events.append("undo_network_partitioning")
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
 
     def undo_network_partitioning(self):
         try:
@@ -205,9 +221,8 @@ class UpgradeTests(NewUpgradeBaseTest):
             for node in self.nodes_out_list:
                 self.stop_firewall_on_node(node)
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
 
     def bucket_compaction(self):
         try:
@@ -216,9 +231,9 @@ class UpgradeTests(NewUpgradeBaseTest):
             for bucket in self.buckets:
                 compact_tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
+
 
     def warmup(self):
         try:
@@ -230,9 +245,8 @@ class UpgradeTests(NewUpgradeBaseTest):
                 remote.disconnect()
             ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
 
     def bucket_flush(self):
         try:
@@ -240,9 +254,8 @@ class UpgradeTests(NewUpgradeBaseTest):
             for bucket in self.buckets:
                 self.rest.flush_bucket(bucket.name)
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
 
     def delete_bucket(self):
         try:
@@ -250,18 +263,16 @@ class UpgradeTests(NewUpgradeBaseTest):
             for bucket in self.buckets:
                 self.rest.delete_bucket(bucket.name)
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
 
     def create_bucket(self):
         try:
             self.log.info("create_bucket")
             self._bucket_creation()
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
 
     def change_bucket_properties(self):
         try:
@@ -270,9 +281,8 @@ class UpgradeTests(NewUpgradeBaseTest):
                 self.rest.change_bucket_props(bucket, ramQuotaMB=None, authType=None, saslPassword=None, replicaNumber=0,
                     proxyPort=None, replicaIndex=None, flushEnabled=False)
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
 
     def rebalance_in(self):
         try:
@@ -280,9 +290,8 @@ class UpgradeTests(NewUpgradeBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],self.nodes_in_list, [], services = self.services_in)
             rebalance.result()
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
 
     def rebalance_out(self):
         try:
@@ -290,9 +299,8 @@ class UpgradeTests(NewUpgradeBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
             rebalance.result()
         except Exception, ex:
-            raise
-        finally:
             self.log.info(ex)
+            raise
 
     def swap_rebalance(self):
         try:
@@ -362,14 +370,12 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
 
-
     def online_upgrade(self):
         try:
             self.log.info("online_upgrade")
-            #self._install(self.servers[:self.nodes_init])
-            #self.initial_version = self.upgrade_versions[0]
-            #self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
-            #               format(self.initial_version))
+            self.initial_version = self.upgrade_versions[0]
+            self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
+                           format(self.initial_version))
             self.product = 'couchbase-server'
             if self.online_upgrade_type == "swap":
                 self.online_upgrade_swap_rebalance()
@@ -380,6 +386,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             raise
 
     def online_upgrade_swap_rebalance(self):
+        self.log.info("online_upgrade_swap_rebalance")
         self.swap_num_servers = self.input.param('swap_num_servers', 1)
         servers = self._convert_server_map(self.servers[:self.nodes_init])
         out_servers = self._convert_server_map(self.servers[self.nodes_init:])
@@ -406,10 +413,17 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info("will come inside {0}".format(servers_in))
             self.log.info("will go out {0}".format(servers_out))
             self._install(servers_in.values())
+            old_vbucket_map = self._record_vbuckets(self.master, servers.values())
             self.cluster.rebalance(servers.values(), servers_in.values(), servers_out.values())
             servers = new_servers
+            self.servers = servers.values()
+            self.master = self.servers[0]
+            if self.verify_vbucket_info:
+                new_vbucket_map = self._record_vbuckets(self.master, self.servers)
+                self._verify_vbuckets(old_vbucket_map, new_vbucket_map)
 
     def online_upgrade_incremental(self):
+        self.log.info("online_upgrade_incremental")
         try:
             for server in self.servers[1:]:
                 self.cluster.rebalance(self.servers, [], [server])
@@ -432,10 +446,7 @@ class UpgradeTests(NewUpgradeBaseTest):
     def offline_upgrade(self):
         try:
             self.log.info("offline_upgrade")
-            self._install(self.servers[:self.nodes_init])
-            num_nodes_reinstall = self.input.param('num_nodes_reinstall', 1)
-            stoped_nodes = self.servers[self.nodes_init - (self.nodes_init - num_nodes_reinstall):self.nodes_init]
-            nodes_reinstall = self.servers[:num_nodes_reinstall]
+            stoped_nodes = self.servers[:self.nodes_init]
             for upgrade_version in self.upgrade_versions:
                 self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade to {0} version".\
                            format(upgrade_version))
@@ -445,7 +456,7 @@ class UpgradeTests(NewUpgradeBaseTest):
                     remote.disconnect()
                 self.sleep(self.sleep_time)
                 upgrade_threads = self._async_update(upgrade_version, stoped_nodes)
-                self.force_reinstall(nodes_reinstall)
+                self.force_reinstall(stoped_nodes)
                 for upgrade_thread in upgrade_threads:
                     upgrade_thread.join()
                 success_upgrade = True
@@ -456,6 +467,35 @@ class UpgradeTests(NewUpgradeBaseTest):
                 self.dcp_rebalance_in_offline_upgrade_from_version2_to_version3()
         except Exception, ex:
             self.log.info(ex)
+            raise
+
+    def failover_add_back(self):
+        try:
+            rest = RestConnection(self.master)
+            recoveryType = self.input.param("recoveryType", "full")
+            servr_out = self.nodes_out_list
+            nodes_all = rest.node_statuses()
+            self._run_initial_index_tasks()
+            failover_task =self.cluster.async_failover([self.master],
+                    failover_nodes = servr_out, graceful=self.graceful)
+            failover_task.result()
+            nodes_all = rest.node_statuses()
+            nodes = []
+            if servr_out[0].ip == "127.0.0.1":
+                for failover_node in servr_out:
+                    nodes.extend([node for node in nodes_all
+                        if (str(node.port) == failover_node.port)])
+            else:
+                for failover_node in servr_out:
+                    nodes.extend([node for node in nodes_all
+                        if node.ip == failover_node.ip])
+            for node in nodes:
+                self.log.info(node)
+                rest.add_back_node(node.id)
+                rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
+            rebalance.result()
+        except Exception, ex:
             raise
 
     def kv_ops_initialize(self):
@@ -524,5 +564,5 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
 
-    def cluster_stats(self):
-        self._wait_for_stats_all_buckets(self.servers)
+    def cluster_stats(self, servers):
+        self._wait_for_stats_all_buckets(servers)
