@@ -522,3 +522,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.monitor_dcp_rebalance()
         else:
             self.log.info("No need to do DCP rebalance upgrade")
+
+    def generate_map_nodes_out_dist_upgrade(self, nodes_out_dist):
+        self.nodes_out_dist = nodes_out_dist
+        self.generate_map_nodes_out_dist()
