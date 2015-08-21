@@ -523,6 +523,7 @@ class unidirectional(XDCRNewBaseTest):
         """
         from xdcrnewbasetests import REPL_PARAM
         self.setup_xdcr_and_load()
+        self._wait_for_replication_to_catchup()
         for remote_cluster in self.src_cluster.get_remote_clusters():
             for replication in remote_cluster.get_replications():
                 src_bucket_name = replication.get_src_bucket().name
