@@ -435,6 +435,7 @@ class RQGTests(BaseTestCase):
         self.assertTrue(success, summary)
 
     def _testrun_worker(self, input_queue, result_queue, failure_record_queue = None):
+        count = 0
         while True:
             if self.total_queries <= (self.query_count):
                 break
@@ -443,6 +444,11 @@ class RQGTests(BaseTestCase):
                 test_data = data["test_data"]
                 test_case_number = data["test_case_number"]
                 self._run_basic_test(test_data, test_case_number, result_queue, failure_record_queue)
+                count = 0
+            else:
+                count += 1
+                if count > 1000:
+                    return
 
     def _testrun_secondary_index_worker(self, table_name, table_map, list_info , start_test_case_number, result_queue, failure_record_queue = None):
         map = {table_name:table_map[table_name]}
