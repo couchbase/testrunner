@@ -75,7 +75,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             if self.in_between_events:
                 self.event_threads += self.run_event(self.in_between_events)
             self.finish_events(self.event_threads)
-            self._install(self.out_servers_pool)
+            self._install(self.out_servers_pool.values())
             if self.after_events:
                 self.after_event_threads = self.run_event(self.after_events)
             self.finish_events(self.after_event_threads)
@@ -457,11 +457,11 @@ class UpgradeTests(NewUpgradeBaseTest):
                 start_services_num += len(servers_in.values())
             else:
                 self.cluster.rebalance(servers.values(), servers_in.values(), servers_out.values())
-                self.out_servers_pool = servers_out
-                self.in_servers_pool = new_servers
-                servers = new_servers
-                self.servers = servers.values()
-                self.master = self.servers[0]
+            self.out_servers_pool = servers_out
+            self.in_servers_pool = new_servers
+            servers = new_servers
+            self.servers = servers.values()
+            self.master = self.servers[0]
             if self.verify_vbucket_info:
                 new_vbucket_map = self._record_vbuckets(self.master, self.servers)
                 self._verify_vbuckets(old_vbucket_map, new_vbucket_map)
