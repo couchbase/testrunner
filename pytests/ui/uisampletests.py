@@ -1839,23 +1839,29 @@ class DdocViewHelper():
         self.controls.view_results_container().view_arrow.click()
         self.controls.view_results_container().show_results_btn.click()
         self.wait.until(lambda fn:
-                        self.controls.view_results_container().table_id.is_displayed(),
+                        self.reaction_with_stale_element(self.controls.view_results_container().table_id.is_displayed),
                         "View Results Table is not displayed")
         if reduce_fn == '_count':
             self.wait.until(lambda fn:
-                        self.controls.view_results_container(value).doc_count.is_displayed(),
+                        self.reaction_with_stale_element(self.controls.view_results_container(value).doc_count.is_displayed),
                         "Correct Document count is not displayed")
         elif reduce_fn == '_sum':
             self.wait.until(lambda fn:
-                        self.controls.view_results_container(value).doc_count.is_displayed(),
+                        self.reaction_with_stale_element(self.controls.view_results_container(value).doc_count.is_displayed),
                         "Correct Age Sume is not displayed")
         elif reduce_fn == '_stats':
             self.wait.until(lambda fn:
-                        self.controls.view_results_container(value).doc_count.is_displayed(),
+                        self.reaction_with_stale_element(self.controls.view_results_container(value).doc_count.is_displayed),
                         "Correct Stats are displayed")
         else:
             self.tc.log.info("No Reduce fn specified")
         self.tc.log.info('View Results are successfully verified')
+
+    def reaction_with_stale_element(self, fn):
+        try:
+            return fn()
+        except StaleElementReferenceException:
+            return False
 
     def get_error(self):
         if self.controls.error() and self.controls.error().get_text() != '':
