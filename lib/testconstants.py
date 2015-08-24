@@ -89,3 +89,4 @@ SHERLOCK_BUILD_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/she
 COUCHBASE_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
 MC_BIN_CLIENT = "mc_bin_client"
 TESTRUNNER_CLIENT = "testrunner_client"
+PYTHON_SDK = "python_sdk"

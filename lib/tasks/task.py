@@ -31,12 +31,12 @@ from TestInput import TestInputServer
 
 try:
     CHECK_FLAG = False
-    if (testconstants.TESTRUNNER_CLIENT in os.environ.keys()) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.MC_BIN_CLIENT:
-        CHECK_FLAG = True
-        from memcached.helper.data_helper import VBucketAwareMemcached,KVStoreAwareSmartClient
-    else:
+    if (testconstants.TESTRUNNER_CLIENT in os.environ.keys()) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK:
         from sdk_client import SDKSmartClient as VBucketAwareMemcached
         from sdk_client import SDKBasedKVStoreAwareSmartClient as KVStoreAwareSmartClient
+    else:
+        CHECK_FLAG = True
+        from memcached.helper.data_helper import VBucketAwareMemcached,KVStoreAwareSmartClient
 except Exception as e:
     CHECK_FLAG = True
     from memcached.helper.data_helper import VBucketAwareMemcached,KVStoreAwareSmartClient
