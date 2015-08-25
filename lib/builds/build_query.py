@@ -16,6 +16,7 @@ from testconstants import SHERLOCK_VERSION
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_2_WITH_REL
 from testconstants import COUCHBASE_RELEASE_VERSIONS_3
+from testconstants import COUCHBASE_FROM_VERSION_3
 
 
 class MembaseBuild(object):
@@ -403,8 +404,10 @@ class BuildQuery(object):
                 windows:
                     couchbase_server-enterprise-windows-amd64-3.5.0-926.exe
                     couchbase-server-enterprise_3.5.0-952-windows_amd64.exe"""
-            if "4.0.0-" in build_info:
-                deb_words = ["debian7", "ubuntu12.04", "ubuntu14.04", "windows", "macos"]
+
+            if any( x + "-" in build_info for x in COUCHBASE_FROM_VERSION_3):
+                deb_words = ["debian7", "ubuntu12.04", "ubuntu14.04",
+                             "windows", "macos"]
                 if "centos" not in build_info:
                     tmp_str = build_info.split("_")
                     product_version = tmp_str[1].split("-")
