@@ -1350,10 +1350,10 @@ class RemoteMachineShellConnection:
         elif self.info.deliverable_type in ["zip"]:
             o, r = self.execute_command("ps aux | grep Archive | awk '{print $2}' | xargs kill -9")
             self.log_command_output(o, r)
-            self.sleep(30)
+            self.sleep(10)
             output, error = self.execute_command("cd ~/Downloads ; open couchbase-server*.zip")
             self.log_command_output(output, error)
-            self.sleep(30)
+            self.sleep(10)
             output, error = self.execute_command("mv ~/Downloads/couchbase-server*/Couchbase\ Server.app /Applications/")
             self.log_command_output(output, error)
             output, error = self.execute_command("xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app")
