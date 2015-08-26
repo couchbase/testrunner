@@ -118,6 +118,25 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         except Exception, ex:
             raise
 
+    def test_server_stop(self):
+        try:
+            self._run_initial_index_tasks()
+            kvOps_tasks = self._run_kvops_tasks()
+            before_index_ops = self._run_before_index_tasks()
+            for node in self.nodes_out_list:
+                remote = RemoteMachineShellConnection(node)
+                remote.stop_server()
+            self.sleep(1)
+            in_between_index_ops = self._run_in_between_tasks()
+            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+            self._run_after_index_tasks()
+        except Exception, ex:
+            raise
+        finally:
+            for node in self.nodes_out_list:
+                remote = RemoteMachineShellConnection(node)
+                remote.start_server()
+
     def test_server_restart(self):
         try:
             self._run_initial_index_tasks()
