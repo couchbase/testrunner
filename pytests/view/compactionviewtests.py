@@ -112,8 +112,8 @@ class CompactionViewTests(BaseTestCase):
             compaction_tasks.append(self.cluster.async_compact_view(self.master, ddoc.name))
 
         remote = RemoteMachineShellConnection(self.master)
-        cli_command = "cluster-init"
-        options = "--cluster-init-ramsize=%s" % (self.quota + 10)
+        cli_command = "setting-cluster"
+        options = "--cluster-ramsize=%s" % (self.quota + 10)
         output, error = remote.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost",
                                                      user=self.master.rest_username, password=self.master.rest_password)
         self.assertTrue('\n'.join(output).find('SUCCESS') != -1, 'ram wasn\'t changed')
