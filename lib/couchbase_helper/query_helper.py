@@ -1,6 +1,7 @@
 import random
 import string
 import json
+import copy
 from random import randrange
 from random import randint
 from datetime import datetime
@@ -84,6 +85,8 @@ class QueryHelper(object):
         end_map ={}
         start_count =0
         end_count = 0
+        inner_table_alias = "CRAP"
+        outer_table_alias = "CRAP"
         for token in sql.split(" "):
             if not_seen_end and start_query and ("START" in token or "END" in token):
                 start_query = False
@@ -94,12 +97,13 @@ class QueryHelper(object):
                     table_map_new=outer_table_map
                 sql_template, new_table_map = self._convert_sql_template_to_value(sql_template, table_map_new)
                 n1ql_template = self._gen_sql_to_nql(sql_template)
-                table_name = random.choice(new_table_map.keys())[0]
+                table_name = random.choice(new_table_map.keys())
+                inner_table_alias = new_table_map[table_name]["alias_name"]
                 if "USE KEYS" in sql_template:
                     sql_template = sql_template.replace("USE KEYS","")
                     if "OUTER_PRIMARY_KEY" in sql_template:
                         table_name = random.choice(outer_table_map.keys())
-                        alias_name = outer_table_map[table_name]["alias_name"]
+                        outer_table_alias = alias_name
                         primary_key_field = outer_table_map[table_name]["primary_key_field"]
                         sql_template = sql_template.replace("OUTER_PRIMARY_KEY","")
                         n1ql_template = n1ql_template.replace("OUTER_PRIMARY_KEY",alias_name+"."+primary_key_field)
@@ -111,15 +115,22 @@ class QueryHelper(object):
                         n1ql_template = n1ql_template.replace("INNER_PRIMARY_KEYS",keys)
                     elif "OUTER_BUCKET_ALIAS" in sql_template:
                         table_name = random.choice(outer_table_map.keys())
-                        alias_name = outer_table_map[table_name]["alias_name"]
+                        outer_table_alias = outer_table_map[table_name]["alias_name"]
                         sql_template = sql_template.replace("META(OUTER_BUCKET_ALIAS).id","")
                         n1ql_template = n1ql_template.replace("OUTER_BUCKET_ALIAS",alias_name)
                 outer_table_maps.update(new_table_map)
                 if outer_table_map == {}:
                     outer_table_map.update(new_table_map)
+                    table_name_1 = random.choice(outer_table_map.keys())
+                    alias_name = outer_table_map[table_name_1]["alias_name"]
                 else:
+                    table_name_1 = random.choice(outer_table_map.keys())
+                    outer_table_alias = outer_table_map[table_name_1]["alias_name"]
                     outer_table_map ={}
                     outer_table_map.update(new_table_map)
+                if "AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON" in sql_template :
+                    value = " {0}.primary_key_id = {1}.primary_key_id   AND ".format(inner_table_alias, outer_table_alias)
+                    sql_template = sql_template.replace("AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON", value)
                 if "OUTER_SUBQUERY_FIELDS" in sql_template:
                     sql_template = sql_template.replace("OUTER_SUBQUERY_FIELDS",inner_subquery_fields)
                     n1ql_template = n1ql_template.replace("OUTER_SUBQUERY_FIELDS",inner_subquery_fields)
@@ -194,6 +205,7 @@ class QueryHelper(object):
         new_n1ql = new_n1ql.replace("NOT_EQUALS"," NOT IN ")
         new_n1ql = new_n1ql.replace("EQUALS"," IN ")
         new_sql = new_sql.replace("RAW","")
+        new_n1ql = new_n1ql.replace("AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON","")
         return {"sql":new_sql, "n1ql":new_n1ql},outer_table_map
 
 
