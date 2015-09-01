@@ -11,15 +11,16 @@ COUCHBASE_VERSIONS = ["1.8.0r", "1.8.0", "1.8.1", "2.0.0", "2.0.1", "2.0.2", "2.
                       "4.1.0"]
 COUCHBASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.5.0",
                             "4.0.0", "4.0.1", "4.1.0"]
+COUCHBASE_FROM_VERSION_4 = ["4.0.0", "4.0.1", "4.1.0"]
 COUCHBASE_RELEASE_VERSIONS_3 = ["3.0.1", "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
-                                "3.0.3-1716"]
+                                "3.0.3-1716", "3.1.0", "3.1.0-1797"]
 COUCHBASE_VERSION_2 = ["2.0.0", "2.0.1", "2.0.2", "2.1.0", "2.1.1", "2.2.0", "2.2.1",
                        "2.5.0", "2.5.1", "2.5.2"]
 COUCHBASE_VERSION_2_WITH_REL = ["2.5.0", "2.5.1"]
 COUCHBASE_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.5.0"]
 COUCHBASE_VERSION_4 = ["4.0.0"]
 WIN_CB_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.5.0"]
-SHERLOCK_VERSION = ["3.5.0", "4.0.0"]
+SHERLOCK_VERSION = ["3.5.0", "4.0.0", "4.0.1"]
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
 WIN_CB_PATH = "/cygdrive/c/Program Files/Couchbase/Server/"
@@ -89,7 +90,11 @@ CLI_COMMANDS = ["cbbackup", "cbbrowse_logs", "cbcollect_info", "cbcompact", "cbd
 # old url MV_LATESTBUILD_REPO = "http://builds.hq.northscale.net/latestbuilds/"
 MV_LATESTBUILD_REPO = "http://latestbuilds.hq.couchbase.com/"
 SHERLOCK_BUILD_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/sherlock/"
+#SHERLOCK_BUILD_REPO = "http://172.23.120.24/builds/latestbuilds/couchbase-server/sherlock/"
 COUCHBASE_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
+#COUCHBASE_REPO = "http://172.23.120.24/builds/latestbuilds/couchbase-server/"
+COUCHBASE_RELEASE_REPO = "http://172.23.120.24/builds/releases/"
+""" http://172.23.120.24/builds/latestbuilds/couchbase-server/watson/ """
 MC_BIN_CLIENT = "mc_bin_client"
 TESTRUNNER_CLIENT = "testrunner_client"
 PYTHON_SDK = "python_sdk"
