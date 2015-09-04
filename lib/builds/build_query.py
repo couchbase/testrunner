@@ -18,6 +18,8 @@ from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_VERSION_2_WITH_REL
 from testconstants import COUCHBASE_RELEASE_VERSIONS_3
 from testconstants import COUCHBASE_FROM_VERSION_3
+from testconstants import CB_RELEASE_REPO
+from testconstants import CB_LATESTBUILDS_REPO
 
 
 class MembaseBuild(object):
@@ -248,7 +250,131 @@ class BuildQuery(object):
                                                      deliverable_type, build_details)
         # This points to the Internal s3 account to look for release builds
         if is_amazon:
-            build.url = 'https://s3.amazonaws.com/packages.couchbase/releases/{0}/{1}_{2}_{0}.{3}'.format(build_version, product, os_architecture, deliverable_type)
+            build.url = 'https://s3.amazonaws.com/packages.couchbase/releases/{0}/{1}_{2}_{0}.{3}'\
+                .format(build_version, product, os_architecture, deliverable_type)
+            build.url = build.url.replace("enterprise", "community")
+            build.name = build.name.replace("enterprise", "community")
+        return build
+
+    def find_couchbase_release_build(self, product, deliverable_type, os_architecture,
+                                    build_version, is_amazon=False, os_version=""):
+        build_details = build_version
+        if build_version[:5] in COUCHBASE_VERSION_2_WITH_REL:
+            if build_version[-4:] != "-rel":
+                build_details = build_details + "-rel"
+        build = MembaseBuild()
+        build.deliverable_type = deliverable_type
+        build.time = '0'
+        build.size = '0'
+        build.product_version = build_version
+        build.architecture_type = os_architecture
+        build.product = product
+        os_name = ""
+        build.name = '{1}_{2}_{0}.{3}'.format(build_version, product,
+                                               os_architecture, deliverable_type)
+        build.build_number = 0
+        if deliverable_type == "exe":
+            """ /3.0.1/couchbase-server-enterprise_3.0.1-windows_amd64.exe """
+            if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
+                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
+                    arch_type = "amd64"
+                    if "x86_64" not in os_architecture:
+                        arch_type = "x86"
+                    build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                            product, arch_type, deliverable_type, build_details[:5],
+                            CB_RELEASE_REPO)
+                else:
+                    if "2.5.2" in build_details[:5]:
+                        build.url = "{5}/{0}/{1}_{4}_{2}.setup.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                            product, os_architecture, deliverable_type,
+                            build_details[:5], CB_RELEASE_REPO)
+                    else:
+                        build.url = "{5}{0}/{1}_{2}_{4}.setup.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                            product, os_architecture, deliverable_type,
+                            build_details, CB_RELEASE_REPO)
+            else:
+                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
+                    arch_type = "amd64"
+                    if "x86_64" not in os_architecture:
+                        arch_type = "x86"
+                    build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
+                        .format(build_version, product, arch_type,
+                         deliverable_type, build_details[:5], CB_RELEASE_REPO)
+                else:
+                    build.url = "{5}{0}/{1}_{2}_{4}.setup.{3}"\
+                        .format(build_version, product, os_architecture,
+                        deliverable_type, build_details, CB_RELEASE_REPO)
+            build.url_latest_build = "{4}{0}_{1}_{3}.setup.{2}"\
+                             .format(product, os_architecture,
+                             deliverable_type, build_details, CB_LATESTBUILDS_REPO)
+        else:
+            """ check match full version x.x.x-xxxx """
+            if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
+                """  in release folder
+                        /3.0.1/couchbase-server-enterprise-3.0.1-centos6.x86_64.rpm
+                        /3.0.1/couchbase-server-enterprise_3.0.1-ubuntu12.04_amd64.deb
+                        /3.0.2/couchbase-server-enterprise-3.0.2-centos6.x86_64.rpm
+                      build release url:
+                               http://builds.hq.northscale.net/releases/3.0.1/
+                      build latestbuilds url:
+                               http://builds.hq.northscale.net/latestbuilds/
+                                  couchbase-server-enterprise_x86_64_3.0.1-1444.rpm
+                """
+                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
+                    if "rpm" in deliverable_type:
+                        build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
+                                .format(build_version[:build_version.find('-')],
+                                product, os_architecture, deliverable_type,
+                                build_details[:5], CB_RELEASE_REPO)
+                    elif "deb" in deliverable_type:
+                        os_architecture = "amd64"
+                        os_name = "ubuntu12.04"
+                        if  "ubuntu 14.04" in os_version:
+                            os_name = "ubuntu14.04"
+                        build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
+                                .format(build_version[:build_version.find('-')],
+                                 product, os_architecture, deliverable_type,
+                                 build_details[:5], os_name, CB_RELEASE_REPO)
+                else:
+                    if "2.5.2" in build_details[:5]:
+                        build.url = "{5}{0}/{1}_{4}_{2}.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                            product, os_architecture, deliverable_type,
+                            build_details[:5], CB_RELEASE_REPO)
+                    else:
+                        build.url = "{5}{0}/{1}_{2}_{4}.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                            product, os_architecture, deliverable_type,
+                            build_details, CB_RELEASE_REPO)
+            else:
+                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
+                    if "rpm" in deliverable_type:
+                        build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
+                            .format(build_version, product, os_architecture,
+                            deliverable_type, build_details[:5], CB_RELEASE_REPO)
+                    elif "deb" in deliverable_type:
+                        os_architecture = "amd64"
+                        os_name = "ubuntu12.04"
+                        if  "ubuntu 14.04" in os_version:
+                            os_name = "ubuntu14.04"
+                        build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
+                            .format(build_version, product, os_architecture,
+                            deliverable_type, build_details[:5], os_name,
+                            CB_RELEASE_REPO)
+                else:
+                    build.url = "{5}{0}/{1}_{2}_{4}.{3}".format(build_version,
+                                product, os_architecture, deliverable_type,
+                                build_details, CB_RELEASE_REPO)
+            build.url_latest_build = "{4}{0}_{1}_{3}.{2}".format(product,
+                        os_architecture, deliverable_type, build_details,
+                        CB_LATESTBUILDS_REPO)
+        # This points to the Internal s3 account to look for release builds
+        if is_amazon:
+            build.url = 'https://s3.amazonaws.com/packages.couchbase/releases/{0}/{1}_{2}_{0}.{3}'\
+                .format(build_version, product, os_architecture, deliverable_type)
             build.url = build.url.replace("enterprise", "community")
             build.name = build.name.replace("enterprise", "community")
         return build
@@ -537,8 +663,7 @@ class BuildQuery(object):
                 build.product_version = version + "-rel"
             else:
                 build.product_version = version
-            if "couchbase-server" in edition_type and version[:5] in WIN_CB_VERSION_3 \
-                and version[:5] not in SHERLOCK_VERSION:
+            if "couchbase-server" in edition_type and version[:5] in WIN_CB_VERSION_3:
                 edition_type = edition_type.replace("couchbase-", "couchbase_")
             if version[:5] not in COUCHBASE_VERSION_2:
                 if "x86_64" in architecture_type:
