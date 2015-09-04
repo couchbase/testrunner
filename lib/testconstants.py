@@ -18,9 +18,8 @@ COUCHBASE_VERSION_2 = ["2.0.0", "2.0.1", "2.0.2", "2.1.0", "2.1.1", "2.2.0", "2.
                        "2.5.0", "2.5.1", "2.5.2"]
 COUCHBASE_VERSION_2_WITH_REL = ["2.5.0", "2.5.1"]
 COUCHBASE_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.5.0"]
-COUCHBASE_VERSION_4 = ["4.0.0"]
-WIN_CB_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.5.0"]
-SHERLOCK_VERSION = ["3.5.0", "4.0.0", "4.0.1"]
+WIN_CB_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0"]
+SHERLOCK_VERSION = ["4.0.0", "4.0.1"]
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
 WIN_CB_PATH = "/cygdrive/c/Program Files/Couchbase/Server/"
