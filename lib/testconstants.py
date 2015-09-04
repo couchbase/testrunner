@@ -38,12 +38,13 @@ WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F", "170":"AF3F80E
                    "300":"3D361F67-7170-4CB4-494C-3E4E887BC0B3", "301":"3D361F67-7170-4CB4-494C-3E4E887BC0B3",
                    "302":"DD309984-2414-FDF4-11AA-85A733064291", "303":"0410F3F3-9F5F-5614-51EC-7DC9F7050055",
                    "310":"5E5D7293-AC1D-3424-E583-0644411FDA20",
-                   "350":"24D9F882-481C-2B04-0572-00B273CE17B3", "400": "24D9F882-481C-2B04-0572-00B273CE17B3",
+                   "350":"24D9F882-481C-2B04-0572-00B273CE17B3", "400":"24D9F882-481C-2B04-0572-00B273CE17B3",
                    "401":"898C4818-1F6D-C554-1163-6DF5C0F1F7D8", "410":"A4BB2687-E63E-F424-F9F3-18D739053798"}
 """ This "220":"CC4CF619-03B8-462A-8CCE-7CA1C22B337B" is for build 2.2.0-821 and earlier
     The new build register ID for 2.2.0-837 id is set in create_windows_capture_file in remote_util
     old "211":"7EDC64EF-43AD-48BA-ADB3-3863627881B8"
     current at 2014.12.03 "211":"6B91FC0F-D98E-469D-8281-345A08D65DAF" """
+CB_VERSION_NAME = {"4.0":"sherlock", "4.1":"watson"}
 VERSION_FILE = "VERSION.txt"
 MIN_COMPACTION_THRESHOLD = 2
 MAX_COMPACTION_THRESHOLD = 100
@@ -89,11 +90,13 @@ CLI_COMMANDS = ["cbbackup", "cbbrowse_logs", "cbcollect_info", "cbcompact", "cbd
                 "memcached", "moxi", "reports", "sigar_port", "sqlite3", "to_erl", "tools", "typer", "uconv", "vbmap"]
 # old url MV_LATESTBUILD_REPO = "http://builds.hq.northscale.net/latestbuilds/"
 MV_LATESTBUILD_REPO = "http://latestbuilds.hq.couchbase.com/"
-SHERLOCK_BUILD_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/sherlock/"
-#SHERLOCK_BUILD_REPO = "http://172.23.120.24/builds/latestbuilds/couchbase-server/sherlock/"
-COUCHBASE_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
-#COUCHBASE_REPO = "http://172.23.120.24/builds/latestbuilds/couchbase-server/"
-COUCHBASE_RELEASE_REPO = "http://172.23.120.24/builds/releases/"
+#SHERLOCK_BUILD_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/sherlock/"
+SHERLOCK_BUILD_REPO = "http://172.23.120.24/builds/latestbuilds/couchbase-server/sherlock/"
+#COUCHBASE_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
+COUCHBASE_REPO = "http://172.23.120.24/builds/latestbuilds/couchbase-server/"
+CB_LATESTBUILDS_REPO = "http://172.23.120.24/builds/latestbuilds/"
+CB_REPO = "http://172.23.120.24/builds/latestbuilds/couchbase-server/"
+CB_RELEASE_REPO = "http://172.23.120.24/builds/releases/"
 """ http://172.23.120.24/builds/latestbuilds/couchbase-server/watson/ """
 MC_BIN_CLIENT = "mc_bin_client"
 TESTRUNNER_CLIENT = "testrunner_client"
