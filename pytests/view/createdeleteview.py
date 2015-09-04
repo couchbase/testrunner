@@ -1016,6 +1016,50 @@ class CreateDeleteViewTests(BaseTestCase):
             finally:
                 shell.disconnect()
 
+    """MB-11950 - When a view fails to index it prevents other views in the same design document indexing
+       1. Create a design doc with two views
+       2. Create an invalid View A (e.g that emits too long keys)
+       3. Create View B that lists all docs by id
+       4. Query View A - ensure no results are returned
+       5. Query View B - ensure that expected results are returned
+    """
+    def test_views_for_mb11950(self):
+        invalid_view_func = 'function (doc, meta) { function addnumbers(str) { for (k = 0; k < 10000; k += 1) { str += k; } return str }foo = addnumbers(meta.id);emit(foo, null);}'
+        valid_view_func = 'function (doc, meta) { emit(meta.id, null);}'
+        ddoc_name = 'mb11950'
+        view_name_prefix = 'view'
+
+        self.log.info("create a cluster of all the available servers")
+        self.cluster.rebalance(self.servers[:self.num_servers],
+                           self.servers[1:self.num_servers], [])
+
+        ddoc = DesignDocument(ddoc_name, [View(view_name_prefix + "A", invalid_view_func,
+                                               None,
+                                               dev_view=False),
+                                          View(view_name_prefix + "B", valid_view_func,
+                                               None,
+                                               dev_view=False)])
+
+        for view in ddoc.views:
+            self.cluster.create_view(self.master, ddoc.name, view, bucket=self.default_bucket_name)
+
+        self._load_doc_data_all_buckets()
+
+        rest = RestConnection(self.master)
+        query = {"stale" : "false", "full_set" : "true", "connection_timeout" : 60000}
+
+        result = rest.query_view(ddoc_name, 'viewA', self.default_bucket_name, query)
+        self.log.info("Number of rows: " + str(result['total_rows']))
+        self.assertEqual(result['total_rows'], 0, "Invalid view shouldn't return any results")
+        self.log.info("Invalid view did not return any results as expected")
+
+        result = rest.query_view(ddoc_name, 'viewB', self.default_bucket_name, query)
+        self.log.info("Number of rows: " + str(result['total_rows']))
+        self.assertEqual(result['total_rows'], self.num_items, "Valid view did not return any results")
+        self.log.info("Valid view returned results as expected")
+
+        self._verify_ddoc_ops_all_buckets()
+
     def open_nc_conn(self, view_name, port):
         try:
             shell = RemoteMachineShellConnection(self.servers[0])
