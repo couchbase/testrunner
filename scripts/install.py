@@ -23,6 +23,10 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_REPO
+from testconstants import CB_REPO
+from testconstants import COUCHBASE_VERSION_2
+from testconstants import COUCHBASE_VERSION_3
+from testconstants import CB_VERSION_NAME
 import TestInput
 
 
@@ -205,12 +209,16 @@ class Installer(object):
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
             cb_releases_version = ["1.8.1", "2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0",
                                     "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1", "3.0.2",
-                                    "3.0.3"]
+                                    "3.0.3", "3.1.0"]
             build_repo = MV_LATESTBUILD_REPO
             if toy is not "":
-                build_repo = COUCHBASE_REPO
-            elif version[:3] == "4.0":
-                build_repo = SHERLOCK_BUILD_REPO
+                build_repo = CB_REPO
+            elif version[:5] not in COUCHBASE_VERSION_2 and \
+                 version[:5] not in COUCHBASE_VERSION_3:
+                if version[:3] in CB_VERSION_NAME:
+                    build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
+                else:
+                    sys.exit("version is not support yet")
             for name in names:
                 if version[:5] in releases_version:
                     build = BuildQuery().find_membase_release_build(deliverable_type=info.deliverable_type,
