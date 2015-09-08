@@ -22,7 +22,7 @@ class HostnameMgmtTests(HostnameBaseTests):
         output, error = remote.execute_couchbase_cli(cli_command=cli_command,
                                                      cluster_host=self.master.hostname,
                                                      user="Administrator", password="password")
-        time.sleep(30)     # give time for warmup to complete
+        time.sleep(60)     # give time for warmup to complete
         self.assertEqual(''.join(output), "ns_1@{0} {0}:8091 healthy active".format(self.master.hostname))
 
     def test_hostname_mgmt_buckets_list(self):
