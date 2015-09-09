@@ -387,6 +387,41 @@ class AutoCompactionTests(BaseTestCase):
             self.fail("auto compaction does not run")
         remote_client.disconnect()
 
+
+    # Created for MB-14976 - we need more than 65536 file revisions to trigger this problem.
+
+    def test_large_file_version(self):
+        rest = RestConnection(self.master)
+        remote_client = RemoteMachineShellConnection(self.master)
+        remote_client.extract_remote_info()
+
+        self._load_all_buckets(self.master, self.gen_load, "create", 0, 1)
+        self.disable_compaction()
+        self._monitor_DB_fragmentation()
+
+        # rename here
+
+        remote_client.stop_couchbase()
+        time.sleep(5)
+        remote_client.execute_command("cd /opt/couchbase/var/lib/couchbase/data/default;rename .1 .65535 *.1")
+        remote_client.execute_command("cd /opt/couchbase/var/lib/couchbase/data/default;rename .2 .65535 *.2")
+        remote_client.start_couchbase()
+
+        for i in range(5):
+            self.log.info("starting a compaction iteration")
+            compaction_task = self.cluster.async_compact_bucket(self.master, self.default_bucket_name)
+
+            compact_run = remote_client.wait_till_compaction_end(rest, self.default_bucket_name, timeout_in_seconds=self.wait_timeout)
+            res = compaction_task.result(self.wait_timeout)
+
+
+        if compact_run:
+            self.log.info("auto compaction run successfully")
+        else:
+            self.fail("auto compaction does not run")
+
+        remote_client.disconnect()
+
     def test_start_stop_auto_DB_compaction(self):
         threads = []
         rest = RestConnection(self.master)
