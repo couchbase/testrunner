@@ -155,35 +155,36 @@ class BuildQuery(object):
                     arch_type = "amd64"
                     if "x86_64" not in os_architecture:
                         arch_type = "x86"
-                    build.url = "http://builds.hq.northscale.net/releases/{0}/"\
-                            "{1}_{4}-windows_{2}.{3}"\
-                            .format(build_version[:build_version.find('-')],
-                            product, arch_type, deliverable_type, build_details[:5])
+                    build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
+                        .format(build_version[:build_version.find('-')],
+                        product, arch_type, deliverable_type, build_details[:5],
+                        CB_RELEASE_REPO)
                 else:
                     if "2.5.2" in build_details[:5]:
-                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
-                            "{1}_{4}_{2}.setup.{3}".format(build_version[:build_version.find('-')],
-                               product, os_architecture, deliverable_type, build_details[:5])
+                        build.url = "{5}{0}/{1}_{4}_{2}.setup.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                            product, os_architecture, deliverable_type,
+                            build_details[:5], CB_RELEASE_REPO)
                     else:
-                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
-                          "{1}_{2}_{4}.setup.{3}".format(build_version[:build_version.find('-')],
-                            product, os_architecture, deliverable_type, build_details)
-                    print "build url   ", build.url
+                        build.url = "{5}{0}/{1}_{2}_{4}.setup.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                            product, os_architecture, deliverable_type,
+                            build_details, CB_RELEASE_REPO)
             else:
                 if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
                     arch_type = "amd64"
                     if "x86_64" not in os_architecture:
                         arch_type = "x86"
-                    build.url = "http://builds.hq.northscale.net/releases/{0}/"\
-                            "{1}_{4}-windows_{2}.{3}".format(build_version,
-                            product, arch_type, deliverable_type, build_details[:5])
+                    build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
+                        .format(build_version, product, arch_type,
+                        deliverable_type, build_details[:5], CB_RELEASE_REPO)
                 else:
-                    build.url = "http://builds.hq.northscale.net/releases/{0}/"\
-                          "{1}_{2}_{4}.setup.{3}".format(build_version, product,
-                               os_architecture, deliverable_type, build_details)
-            build.url_latest_build = "http://builds.hq.northscale.net/latestbuilds/"\
-                             "{0}_{1}_{3}.setup.{2}".format(product, os_architecture,
-                                                     deliverable_type, build_details)
+                    build.url = "{5}{0}/{1}_{2}_{4}.setup.{3}"\
+                        .format(build_version, product, os_architecture,
+                        deliverable_type, build_details, CB_RELEASE_REPO)
+            build.url_latest_build = "{4}{0}_{1}_{3}.setup.{2}"\
+                             .format(product, os_architecture, deliverable_type,
+                                            build_details, CB_LATESTBUILDS_REPO)
         else:
             """ check match full version x.x.x-xxxx """
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
@@ -199,55 +200,54 @@ class BuildQuery(object):
                 """
                 if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
                     if "rpm" in deliverable_type:
-                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
-                                "{1}-{4}-centos6.{2}.{3}"\
+                        build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                 product, os_architecture, deliverable_type,
-                                                              build_details[:5])
+                                        build_details[:5], CB_RELEASE_REPO)
                     elif "deb" in deliverable_type:
                         os_architecture = "amd64"
                         os_name = "ubuntu12.04"
                         if  "ubuntu 14.04" in os_version:
                             os_name = "ubuntu14.04"
-                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
-                                "{1}_{4}-{5}_{2}.{3}"\
+                        build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                  product, os_architecture, deliverable_type,
-                                 build_details[:5], os_name)
+                                 build_details[:5], os_name, CB_RELEASE_REPO)
                 else:
                     if "2.5.2" in build_details[:5]:
-                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
-                            "{1}_{4}_{2}.{3}".format(build_version[:build_version.find('-')],
-                               product, os_architecture, deliverable_type, build_details[:5])
+                        build.url = "{5}{0}/{1}_{4}_{2}.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                            product, os_architecture, deliverable_type,
+                                    build_details[:5], CB_RELEASE_REPO)
                     else:
-                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
-                            "{1}_{2}_{4}.{3}".format(build_version[:build_version.find('-')],
-                               product, os_architecture, deliverable_type, build_details)
+                        build.url = "{5}{0}/{1}_{2}_{4}.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                            product, os_architecture, deliverable_type,
+                                        build_details, CB_RELEASE_REPO)
             else:
                 if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
                     if "rpm" in deliverable_type:
-                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
-                                "{1}-{4}-centos6.{2}.{3}".format(build_version,
-                                 product, os_architecture, deliverable_type,
-                                                             build_details[:5])
+                        build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
+                            .format(build_version, product, os_architecture,
+                            deliverable_type, build_details[:5], CB_RELEASE_REPO)
                     elif "deb" in deliverable_type:
                         os_architecture = "amd64"
                         os_name = "ubuntu12.04"
                         if  "ubuntu 14.04" in os_version:
                             os_name = "ubuntu14.04"
-                        build.url = "http://builds.hq.northscale.net/releases/{0}/"\
-                                "{1}_{4}-{5}_{2}.{3}".format(build_version,
-                                 product, os_architecture, deliverable_type,
-                                 build_details[:5], os_name)
+                        build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
+                            .format(build_version, product, os_architecture,
+                            deliverable_type, build_details[:5], os_name,
+                                                         CB_RELEASE_REPO)
                         """ http://builds.hq.northscale.net/releases/3.0.1/
                         couchbase-server-enterprise_3.0.1-ubuntu12.04_amd64.deb """
                 else:
-                    build.url = "http://builds.hq.northscale.net/releases/{0}/"\
-                                "{1}_{2}_{4}.{3}".format(build_version, product,
-                                 os_architecture, deliverable_type, build_details)
-            build.url_latest_build = "http://builds.hq.northscale.net/latestbuilds/"\
-                                   "{0}_{1}_{3}.{2}".format(product, os_architecture,
-                                                     deliverable_type, build_details)
+                    build.url = "{5}{0}/{1}_{2}_{4}.{3}"\
+                        .format(build_version, product, os_architecture,
+                        deliverable_type, build_details, CB_RELEASE_REPO)
+            build.url_latest_build = "{4}{0}_{1}_{3}.{2}"\
+                      .format(product, os_architecture, deliverable_type,
+                               build_details, CB_LATESTBUILDS_REPO)
         # This points to the Internal s3 account to look for release builds
         if is_amazon:
             build.url = 'https://s3.amazonaws.com/packages.couchbase/releases/{0}/{1}_{2}_{0}.{3}'\
