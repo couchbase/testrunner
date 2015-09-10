@@ -499,12 +499,16 @@ class IBRJsonTests(BackupBaseTest):
 
             # Update data
             template = '{{ "mutated" : {0}, "age": {0}, "first_name": "{1}" }}'
-            gen_update = DocumentGenerator('load_by_id_test', template, range(5), ['james', 'john'], start=0, end=self.num_items)
-            self._load_all_buckets(self.master, gen_update, "update", 0, 1, self.item_flag, True, batch_size=20000,pause_secs=5, timeout_secs=180)
+            gen_update = DocumentGenerator('load_by_id_test', template, range(5),\
+                                   ['james', 'john'], start=0, end=self.num_items)
+            self._load_all_buckets(self.master, gen_update, "update", 0, 1,\
+                                    self.item_flag, True, batch_size=20000,\
+                                             pause_secs=5, timeout_secs=180)
             self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
             #Take a backup
-            self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, options)
+            self.shell.execute_cluster_backup(self.couchbase_login_info,\
+                                               self.backup_location, options)
 
         # Save copy of data
         kvs_before = {}
