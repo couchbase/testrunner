@@ -18,6 +18,7 @@ from view.spatialquerytests import SpatialQueryTests
 from membase.helper.spatial_helper import SpatialHelper
 from couchbase_helper.cluster import Cluster
 from membase.helper.bucket_helper import BucketOperationHelper
+from couchbase_helper.document import DesignDocument, View
 import copy
 
 
@@ -388,16 +389,35 @@ class IBRJsonTests(BackupBaseTest):
         super(IBRJsonTests, self).setUp()
         self.num_mutate_items = self.input.param("mutate_items", 1000)
         template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
-        gen_load = DocumentGenerator('load_by_id_test', template, range(5), ['james', 'john'], start=0, end=self.num_items)
-        self._load_all_buckets(self.master, gen_load, "create", 0, 1, self.item_flag, True, batch_size=20000,pause_secs=5, timeout_secs=180)
+        gen_load = DocumentGenerator('load_by_id_test', template, range(5),\
+                             ['james', 'john'], start=0, end=self.num_items)
+        self._load_all_buckets(self.master, gen_load, "create", 0, 1,\
+                              self.item_flag, True, batch_size=20000,\
+                                       pause_secs=5, timeout_secs=180)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
+        if self.test_with_view:
+            view_list = []
+            bucket = "default"
+            if self.dev_view:
+                prefix_ddoc="dev_ddoc"
+            else:
+                prefix_ddoc="ddoc"
+            ddoc_view_map = self.bucket_ddoc_map.pop(bucket, {})
+            for ddoc_count in xrange(self.num_ddocs):
+                design_doc_name = prefix_ddoc + str(ddoc_count)
+                view_list = self.make_default_views("views", self.num_views_per_ddoc)
+                self.create_views(self.master, design_doc_name, view_list,\
+                                             bucket, self.wait_timeout * 2)
+                ddoc_view_map[design_doc_name] = view_list
+            self.bucket_ddoc_map[bucket] = ddoc_view_map
 
         #Take a full backup
         if not self.command_options:
             self.command_options = []
         options = self.command_options + [' -m full']
         self.total_backups = 1
-        self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, options)
+        self.shell.execute_cluster_backup(self.couchbase_login_info,\
+                                               self.backup_location, options)
         self.sleep(2)
 
     def testFullBackup(self):
@@ -422,11 +442,31 @@ class IBRJsonTests(BackupBaseTest):
         del kvs_before
         gc.collect()
 
-        self.shell.restore_backupFile(self.couchbase_login_info, self.backup_location, bucket_names)
+        self.shell.restore_backupFile(self.couchbase_login_info,\
+                                       self.backup_location, bucket_names)
         self.sleep(10)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
         self.verify_results(self.master)
         self._verify_stats_all_buckets(self.servers[:self.num_servers])
+        """ add design doc and view """
+        if self.test_with_view:
+            result = False
+            query = {"stale" : "false", "full_set" : "true", \
+                                        "connection_timeout" : 60000}
+            for bucket, ddoc_view_map in self.bucket_ddoc_map.items():
+                for ddoc_name, view_list in ddoc_view_map.items():
+                    for view in view_list:
+                        try:
+                            result = self.cluster.query_view(self.master,\
+                                             ddoc_name, view.name, query,\
+                                               self.num_items, timeout=10)
+                        except Exception:
+                            pass
+                        if not result:
+                            self.fail("There is no: View: {0} in Design Doc:"\
+                                                        " {1} in bucket: {2}"\
+                                        .format(view.name, ddoc_name, bucket))
+            self.log.info("DDoc Data Validation Successful")
 
     def tearDown(self):
         super(IBRJsonTests, self).tearDown()

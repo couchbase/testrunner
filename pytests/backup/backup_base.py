@@ -6,6 +6,7 @@ from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, Bucket
 from memcached.helper.data_helper import VBucketAwareMemcached
+from couchbase_helper.document import DesignDocument, View
 
 class BackupBaseTest(BaseTestCase):
     def setUp(self):
@@ -17,6 +18,13 @@ class BackupBaseTest(BaseTestCase):
         self.value_size = self.input.param("value_size", 256)
         self.expire_time = self.input.param("expire_time", 60)
         self.number_of_backups = self.input.param("number_of_backups", 1)
+        self.num_ddocs = self.input.param("num_ddocs", 1)
+        self.num_views_per_ddoc = self.input.param("num_views_per_ddoc", 1)
+        self.test_with_view = self.input.param("test_with_view", False)
+        self.default_map_func = 'function (doc) { emit(doc.age, doc.first_name);}'
+        self.dev_view = self.input.param("dev_view", True)
+        self.default_view = View("View", self.default_map_func, None, False)
+        self.bucket_ddoc_map = {}
         self.backup_type = self.input.param("backup_type", None)
         self.item_flag = self.input.param("item_flag", 0)
         self.couchbase_login_info = "%s:%s" % (self.input.membase_settings.rest_username,
