@@ -22,6 +22,7 @@ from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 from testconstants import SHERLOCK_VERSION
+from testconstants import COUCHBASE_FROM_VERSION_3
 
 
 class NewUpgradeBaseTest(BaseTestCase):
@@ -476,8 +477,8 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def monitor_dcp_rebalance(self):
         if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
-           (self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3 or \
-            self.input.param('upgrade_version', '')[:5] in SHERLOCK_VERSION):
+                        self.input.param('released_upgrade_version', None)[:5] in \
+                                                         COUCHBASE_FROM_VERSION_3:
             if int(self.initial_vbuckets) >= 256:
                 if self.master.ip != self.rest.ip or \
                    self.master.ip == self.rest.ip and \
@@ -489,7 +490,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 if self.rest._rebalance_progress_status() == 'running':
                     self.log.info("Start monitoring DCP rebalance upgrade from {0} to {1}"\
                                   .format(self.input.param('initial_version', '')[:5], \
-                                   self.input.param('upgrade_version', '')[:5]))
+                                   self.input.param('released_upgrade_version', None)[:5]))
                     status = self.rest.monitorRebalance()
                 else:
                     self.fail("DCP reabalance upgrade is not running")

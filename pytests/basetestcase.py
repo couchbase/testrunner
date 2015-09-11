@@ -149,19 +149,28 @@ class BaseTestCase(unittest.TestCase):
                 self.cleanup = True
                 self.tearDown()
                 self.cluster = Cluster()
-            self.log.info("initializing cluster")
-            self.reset_cluster()
-            master_services = self.get_services(self.servers[:1],self.services_init, start_node = 0)
-            if master_services != None:
-                master_services = master_services[0].split(",")
+            if not self.skip_init_check_cbserver:
+                self.log.info("initializing cluster")
+                self.reset_cluster()
+                master_services = self.get_services(self.servers[:1],\
+                                                  self.services_init,\
+                                                      start_node = 0)
+                if master_services != None:
+                    master_services = master_services[0].split(",")
 
-            self.quota = self._initialize_nodes(self.cluster, self.servers, self.disabled_consistent_view,
-                                            self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,
-                                            self.maxParallelIndexers, self.maxParallelReplicaIndexers, self.port, self.quota_percent, services = master_services)
+                self.quota = self._initialize_nodes(self.cluster, self.servers,\
+                                                 self.disabled_consistent_view,\
+                                            self.rebalanceIndexWaitingDisabled,\
+                                            self.rebalanceIndexPausingDisabled,\
+                                                      self.maxParallelIndexers,\
+                                               self.maxParallelReplicaIndexers,\
+                                                                     self.port,\
+                                                            self.quota_percent,\
+                                                    services = master_services)
 
-            self.change_env_variables()
-            self.change_checkpoint_params()
-            self.log.info("done initializing cluster")
+                self.change_env_variables()
+                self.change_checkpoint_params()
+                self.log.info("done initializing cluster")
             if self.input.param("log_info", None):
                 self.change_log_info()
             if self.input.param("log_location", None):
@@ -183,12 +192,15 @@ class BaseTestCase(unittest.TestCase):
 
                     self.services = self.get_services(self.servers,self.services_init)
                     # rebalance all nodes into the cluster before each test
-                    self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers],
-                        [], services = self.services)
-                elif self.nodes_init > 1:
-                    self.services = self.get_services(self.servers[:self.nodes_init],self.services_init)
-                    self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init],
-                        [], services = self.services)
+                    self.cluster.rebalance(self.servers[:self.num_servers],\
+                                          self.servers[1:self.num_servers],\
+                                              [], services = self.services)
+                elif self.nodes_init > 1 and not self.skip_init_check_cbserver:
+                    self.services = self.get_services(self.servers[:self.nodes_init],\
+                                                                  self.services_init)
+                    self.cluster.rebalance(self.servers[:1],\
+                                            self.servers[1:self.nodes_init],\
+                                               [], services = self.services)
                 elif str(self.__class__).find('ViewQueryTests') != -1 and \
                         not self.input.param("skip_rebalance", False):
                     self.services = self.get_services(self.servers,self.services_init)
@@ -202,16 +214,20 @@ class BaseTestCase(unittest.TestCase):
             if self.dgm_run:
                 self.quota = 256
             if self.total_buckets > 10:
-                self.log.info("================== changing max buckets from 10 to {0} =================".format\
-                                                            (self.total_buckets))
+                self.log.info("================== changing max buckets from 10 to {0} ================="\
+                                                           .format(self.total_buckets))
                 self.change_max_buckets(self, self.total_buckets)
-            if self.total_buckets > 0:
+            if self.total_buckets > 0 and not self.skip_init_check_cbserver:
                 self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
-            if str(self.__class__).find('newupgradetests') == -1:
+
+            if str(self.__class__).find('upgrade_tests') == -1 or \
+               str(self.__class__).find('newupgradetests') == -1:
                 self._bucket_creation()
+
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
-            self._log_start(self)
+            if not self.skip_init_check_cbserver:
+                self._log_start(self)
         except Exception, e:
             self.cluster.shutdown(force=True)
             self.fail(e)
@@ -220,9 +236,11 @@ class BaseTestCase(unittest.TestCase):
             try:
                 if hasattr(self, 'skip_buckets_handle') and self.skip_buckets_handle:
                     return
-                test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
-                    or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
-
+                test_failed = (hasattr(self, '_resultForDoCleanups') and \
+                               len(self._resultForDoCleanups.failures or \
+                                   self._resultForDoCleanups.errors)) or \
+                                         (hasattr(self, '_exc_info') and \
+                                                  self._exc_info()[1] is not None)
 
                 if test_failed and TestInputSingleton.input.param("stop-on-failure", False)\
                         or self.input.param("skip_cleanup", False):
