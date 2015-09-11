@@ -53,7 +53,19 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.after_gen_update = BlobGenerator('upgrade', 'upgrade', self.value_size, start=1 , end=self.num_items/4)
         self.after_gen_delete = BlobGenerator('upgrade', 'upgrade', self.value_size, start=self.num_items * .5 , end=self.num_items* 0.75)
         self._install(self.servers)
+        self._log_start(self)
         self.cluster.rebalance([self.master], self.servers[1:self.nodes_init], [])
+        """ sometimes, when upgrade failed and node does not install couchbase
+            server yet, we could not set quota at beginning of the test.  We
+            have to wait to install new couchbase server to set it properly here """
+        self.quota = self._initialize_nodes(self.cluster, self.servers,\
+                                         self.disabled_consistent_view,\
+                                    self.rebalanceIndexWaitingDisabled,\
+                                    self.rebalanceIndexPausingDisabled,\
+                                              self.maxParallelIndexers,\
+                                       self.maxParallelReplicaIndexers,\
+                                                             self.port)
+        self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
         self.create_buckets()
         self.n1ql_server = None
         self.generate_map_nodes_out_dist_upgrade(self.after_upgrade_services_out_dist)
@@ -77,6 +89,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             if self.in_between_events:
                 self.event_threads += self.run_event(self.in_between_events)
             self.finish_events(self.event_threads)
+            self.monitor_dcp_rebalance()
             self._install(self.out_servers_pool.values())
             self.generate_map_nodes_out_dist_upgrade(self.after_upgrade_services_out_dist)
             if self.after_events:
