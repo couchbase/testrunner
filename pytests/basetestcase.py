@@ -220,7 +220,7 @@ class BaseTestCase(unittest.TestCase):
             if self.total_buckets > 0 and not self.skip_init_check_cbserver:
                 self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
 
-            if str(self.__class__).find('upgrade_tests') == -1 or \
+            if str(self.__class__).find('upgrade_tests') == -1 and \
                str(self.__class__).find('newupgradetests') == -1:
                 self._bucket_creation()
 
