@@ -62,8 +62,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.expire_time = self.input.param('expire_time', 0)
         self.wait_expire = self.input.param('wait_expire', False)
         self.default_view_name = "upgrade-test-view"
-        self.ddocs_num = self.input.param("ddocs-num", 0)
-        self.view_num = self.input.param("view-per-ddoc", 2)
+        self.ddocs_num = self.input.param("ddocs_num", 1)
+        self.view_num = self.input.param("view_per_ddoc", 2)
         self.is_dev_ddoc = self.input.param("is-dev-ddoc", False)
         self.during_ops = None
         if "during-ops" in self.input.test_params:
@@ -326,12 +326,15 @@ class NewUpgradeBaseTest(BaseTestCase):
             query["limit"] = expected_rows
         if self.input.param("wait_expiration", False):
             expected_rows = 0
+        self.log.info("Start verify queries...")
         for bucket in self.buckets:
             for ddoc in self.ddocs:
                 prefix = ("", "dev_")[ddoc.views[0].dev_view]
-                self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name, query, bucket=bucket,
-                                           wait_time=self.wait_timeout * 5, expected_rows=expected_rows,
-                                           retry_time=10)
+                self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name,
+                                                          query, bucket=bucket,
+                                               wait_time=self.wait_timeout * 5,
+                                                   expected_rows=expected_rows,
+                                                                 retry_time=10)
 
     def change_settings(self):
         status = True
@@ -385,13 +388,17 @@ class NewUpgradeBaseTest(BaseTestCase):
     def create_ddocs_and_views(self):
         self.default_view = View(self.default_view_name, None, None)
         for bucket in self.buckets:
-            for i in xrange(self.ddocs_num):
-                views = self.make_default_views(self.default_view_name, self.view_num,
-                                               self.is_dev_ddoc, different_map=True)
-                ddoc = DesignDocument(self.default_view_name + str(i), views)
-                self.ddocs.append(ddoc)
-                for view in views:
-                    self.cluster.create_view(self.master, ddoc.name, view, bucket=bucket)
+            if int(self.ddocs_num) > 0:
+                for i in xrange(self.ddocs_num):
+                    views = self.make_default_views(self.default_view_name,
+                            self.view_num, self.is_dev_ddoc, different_map=True)
+                    ddoc = DesignDocument(self.default_view_name + str(i), views)
+                    self.ddocs.append(ddoc)
+                    for view in views:
+                        self.cluster.create_view(self.master, ddoc.name, view,
+                                                                   bucket=bucket)
+            else:
+                self.fail("Check param ddocs_num value")
 
     def delete_data(self, servers, paths_to_delete):
         for server in servers:

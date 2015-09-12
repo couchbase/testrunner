@@ -33,7 +33,8 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.initialize_events = self.input.param("initialize_events","").split(":")
         self.upgrade_services_in = self.input.param("upgrade_services_in", None)
         self.after_upgrade_services_in = self.input.param("after_upgrade_services_in",None)
-        self.after_upgrade_services_out_dist = self.input.param("after_upgrade_services_out_dist",None)
+        self.after_upgrade_services_out_dist = \
+                            self.input.param("after_upgrade_services_out_dist",None)
         self.in_between_events = self.input.param("in_between_events","").split(":")
         self.after_events = self.input.param("after_events","").split(":")
         self.before_events = self.input.param("before_events","").split(":")
@@ -45,13 +46,21 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.final_events = []
         self.in_servers_pool = self._convert_server_map(self.servers[:self.nodes_init])
         self.out_servers_pool = self._convert_server_map(self.servers[self.nodes_init:])
-        self.gen_initial_create = BlobGenerator('upgrade', 'upgrade', self.value_size, end=self.num_items)
-        self.gen_create = BlobGenerator('upgrade', 'upgrade', self.value_size, start=self.num_items + 1 , end=self.num_items * 1.5)
-        self.gen_update = BlobGenerator('upgrade', 'upgrade', self.value_size, start=self.num_items / 2, end=self.num_items)
-        self.gen_delete = BlobGenerator('upgrade', 'upgrade', self.value_size, start=self.num_items / 4, end=self.num_items / 2 - 1)
-        self.after_gen_create = BlobGenerator('upgrade', 'upgrade', self.value_size, start=self.num_items * 1.6 , end=self.num_items * 2)
-        self.after_gen_update = BlobGenerator('upgrade', 'upgrade', self.value_size, start=1 , end=self.num_items/4)
-        self.after_gen_delete = BlobGenerator('upgrade', 'upgrade', self.value_size, start=self.num_items * .5 , end=self.num_items* 0.75)
+        self.gen_initial_create = BlobGenerator('upgrade', 'upgrade',\
+                                            self.value_size, end=self.num_items)
+        self.gen_create = BlobGenerator('upgrade', 'upgrade', self.value_size,\
+                            start=self.num_items + 1 , end=self.num_items * 1.5)
+        self.gen_update = BlobGenerator('upgrade', 'upgrade', self.value_size,\
+                                   start=self.num_items / 2, end=self.num_items)
+        self.gen_delete = BlobGenerator('upgrade', 'upgrade', self.value_size,\
+                           start=self.num_items / 4, end=self.num_items / 2 - 1)
+        self.after_gen_create = BlobGenerator('upgrade', 'upgrade',\
+             self.value_size, start=self.num_items * 1.6 , end=self.num_items * 2)
+        self.after_gen_update = BlobGenerator('upgrade', 'upgrade',\
+                                  self.value_size, start=1 , end=self.num_items/4)
+        self.after_gen_delete = BlobGenerator('upgrade', 'upgrade',\
+                                      self.value_size, start=self.num_items * .5,\
+                                                         end=self.num_items* 0.75)
         self._install(self.servers)
         self._log_start(self)
         self.cluster.rebalance([self.master], self.servers[1:self.nodes_init], [])
@@ -69,8 +78,10 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.create_buckets()
         self.n1ql_server = None
         self.generate_map_nodes_out_dist_upgrade(self.after_upgrade_services_out_dist)
-        self.upgrade_services_in = self.get_services(self.in_servers_pool.values(), self.upgrade_services_in, start_node = 0)
-        self.after_upgrade_services_in = self.get_services(self.out_servers_pool.values(), self.after_upgrade_services_in, start_node = 0)
+        self.upgrade_services_in = self.get_services(self.in_servers_pool.values(),
+                                          self.upgrade_services_in, start_node = 0)
+        self.after_upgrade_services_in = self.get_services(self.out_servers_pool.values(),
+                                           self.after_upgrade_services_in, start_node = 0)
 
     def tearDown(self):
         super(UpgradeTests, self).tearDown()
@@ -111,7 +122,8 @@ class UpgradeTests(NewUpgradeBaseTest):
         map ={}
         for bucket in self.buckets:
             self.log.info(" record vbucket for the bucket {0}".format(bucket.name))
-            map[bucket.name] = RestHelper(RestConnection(master))._get_vbuckets(servers, bucket_name=bucket.name)
+            map[bucket.name] = RestHelper(RestConnection(master))\
+                                   ._get_vbuckets(servers, bucket_name=bucket.name)
         return map
 
     def _find_master(self):
@@ -159,7 +171,9 @@ class UpgradeTests(NewUpgradeBaseTest):
         thread_list = []
         for event in events:
             if "-" in event:
-                t = threading.Thread(target=self.run_event_in_sequence, args = (event))
+                t = threading.Thread(target=self.run_event_in_sequence, args = (event,))
+                t.start()
+                t.join()
             elif event != '':
                 t = threading.Thread(target=self.find_function(event), args = ())
                 t.daemon = True
@@ -382,20 +396,26 @@ class UpgradeTests(NewUpgradeBaseTest):
     def create_index(self):
         self.log.info("create_index")
         self.index_list = {}
-        self.n1ql_helper.create_primary_index(using_gsi = True, server = self.n1ql_server)
-        self.n1ql_helper.create_primary_index(using_gsi = False, server = self.n1ql_server)
+        self.n1ql_helper.create_primary_index(using_gsi = True,
+                                               server = self.n1ql_server)
+        self.n1ql_helper.create_primary_index(using_gsi = False,
+                                               server = self.n1ql_server)
         for bucket in self.buckets:
             index_name = "idx_{0}_gsi".format(bucket.name)
             self.index_list[bucket.name] = index_name
-            query = "create index {0} on {1}(field_1) using gsi".format(index_name, bucket.name)
+            query = "create index {0} on {1}(field_1) using gsi"\
+                                         .format(index_name, bucket.name)
             self.n1ql_helper.run_cbq_query(query, self.n1ql_server)
 
     def create_views(self):
         self.log.info("create_views")
+        """ default is 1 ddoc. Change number of ddoc by param ddocs_num=new_number
+            default is 2 views. Change number of views by param
+            view_per_ddoc=new_view_per_doc """
         self.create_ddocs_and_views()
 
-    def view_queries(self):
-        self.log.info("view_queries")
+    def query_views(self):
+        self.log.info("query_views")
         self.verify_all_queries()
 
     def drop_views(self):
