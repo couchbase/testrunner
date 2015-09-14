@@ -44,7 +44,7 @@ WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F", "170":"AF3F80E
     The new build register ID for 2.2.0-837 id is set in create_windows_capture_file in remote_util
     old "211":"7EDC64EF-43AD-48BA-ADB3-3863627881B8"
     current at 2014.12.03 "211":"6B91FC0F-D98E-469D-8281-345A08D65DAF" """
-CB_VERSION_NAME = {"4.0":"sherlock", "4.1":"watson"}
+CB_VERSION_NAME = {"4.0":"sherlock", "4.1.0":"sherlock", "4.5":"watson"}
 VERSION_FILE = "VERSION.txt"
 MIN_COMPACTION_THRESHOLD = 2
 MAX_COMPACTION_THRESHOLD = 100
