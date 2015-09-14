@@ -557,5 +557,35 @@ class unidirectional(XDCRNewBaseTest):
                     else:
                         self.fail("Partial optimistic replication detected!")
 
+    def test_disk_full(self):
+        self.setup_xdcr_and_load()
+        self.verify_results()
 
+        self.sleep(self._wait_timeout)
 
+        zip_file = "%s.zip" % (self._input.param("file_name", "collectInfo"))
+        try:
+            for node in [self.src_master, self.dest_master]:
+                self.shell = RemoteMachineShellConnection(node)
+                self.shell.execute_cbcollect_info(zip_file)
+                if self.shell.extract_remote_info().type.lower() != "windows":
+                    command = "unzip %s" % (zip_file)
+                    output, error = self.shell.execute_command(command)
+                    self.shell.log_command_output(output, error)
+                    if len(error) > 0:
+                        raise Exception("unable to unzip the files. Check unzip command output for help")
+                    cmd = 'grep -R "Approaching full disk warning." cbcollect_info*/'
+                    output, _ = self.shell.execute_command(cmd)
+                else:
+                    cmd = "curl -0 http://{1}:{2}@{0}:8091/diag 2>/dev/null | grep 'Approaching full disk warning.'".format(
+                                                        self.src_master.ip,
+                                                        self.src_master.rest_username,
+                                                        self.src_master.rest_password)
+                    output, _ = self.shell.execute_command(cmd)
+                self.assertNotEquals(len(output), 0, "Full disk warning not generated as expected in %s" % node.ip)
+                self.log.info("Full disk warning generated as expected in %s" % node.ip)
+
+                self.shell.delete_files(zip_file)
+                self.shell.delete_files("cbcollect_info*")
+        except Exception as e:
+            self.log.info(e)
