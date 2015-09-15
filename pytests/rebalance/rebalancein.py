@@ -677,8 +677,8 @@ class RebalanceInTests(RebalanceBaseTest):
                                                  [])
         self.sleep(10, "Wait for rebalance have some progress")
         remote = RemoteMachineShellConnection(self.master)
-        cli_command = "cluster-init"
-        options = "--cluster-init-ramsize=%s" % (3000)
+        cli_command = "setting-cluster"
+        options = "--cluster-ramsize=%s" % (3000)
         output, error = remote.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost",
                                                      user=self.master.rest_username, password=self.master.rest_password)
         self.assertTrue('\n'.join(output).find('SUCCESS') != -1, 'RAM wasn\'t chnged')
