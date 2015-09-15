@@ -49,6 +49,13 @@ def raise_if(cond, ex):
         raise ex
 
 
+class OPS:
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
+    APPEND = "append"
+
+
 class EVICTION_POLICY:
     VALUE_ONLY = "valueOnly"
     FULL_EVICTION = "fullEviction"

@@ -239,7 +239,7 @@ class JsonDocGenerator(KVGenerator):
         return dept_list[random.randint(0,len(dept_list)-1)]
 
     def generate_salary(self):
-        return round(random.random()*100000, 2)
+        return round(random.random()*100000 + 50000, 2)
 
     def generate_name(self):
         return "%s %s" %(FIRST_NAMES[random.randint(1, len(FIRST_NAMES)-1)],
