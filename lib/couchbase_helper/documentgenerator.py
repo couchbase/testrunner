@@ -1,6 +1,7 @@
 import json
 import string
 import random
+from couchbase_helper.data import FIRST_NAMES, LAST_NAMES
 
 class KVGenerator(object):
     def __init__(self, name, start, end):
@@ -162,3 +163,89 @@ class Base64Generator(KVGenerator):
         value = self.values[index-1]
         self.itr += 1
         return key, value
+
+class JsonDocGenerator(KVGenerator):
+
+    def __init__(self, name, encoding="utf-8", *args, **kwargs ):
+        """Initializes the JSON document generator
+
+
+        gen = DocumentGenerator('test_docs', template, age, first, start=0, end=5)
+
+        Args:
+            name: The key name prefix
+            *args: A list for each argument in the template
+            *kwargs: Special constrains for the document generator
+        """
+        self.args = args
+        self.name = name
+        self.gen_docs= []
+        self.encoding = encoding
+
+        size = 0
+        if not len(self.args) == 0:
+            size = 1
+            for arg in self.args:
+                size *= len(arg)
+
+        KVGenerator.__init__(self, name, 0, size)
+
+        if 'start' in kwargs:
+            self.start = int(kwargs['start'])
+            self.itr = int(kwargs['start'])
+
+        if 'end' in kwargs:
+            self.end = int(kwargs['end'])
+
+        for count in xrange(self.start+1, self.end+1):
+            emp_name = self.generate_name()
+            doc_dict = {
+                        'emp_id': 10000000+count,
+                        'name': emp_name,
+                        'dept': self.generate_dept(),
+                        'email': "%s_%s@mcdiabetes.com" %
+                                 (emp_name.split(' ')[0].lower(), str(count)),
+                        'salary': self.generate_salary(),
+                        'join_date': self.generate_join_date(),
+                        'languages_known': self.generate_lang_known(),
+                        'is_manager': bool(random.getrandbits(1))
+                       }
+            if doc_dict["is_manager"]:
+                doc_dict['manages'] = {'team_size': random.randint(5,10)}
+                doc_dict['manages']['reports'] = []
+                for _ in xrange(0, doc_dict['manages']['team_size']):
+                    doc_dict['manages']['reports'].append(self.generate_name())
+            self.gen_docs.append(doc_dict)
+
+    def next(self):
+        if self.itr >= self.end:
+            raise StopIteration
+        doc = self.gen_docs[self.itr]
+        self.itr += 1
+        return self.name+str(doc['emp_id']),\
+               json.dumps(doc).encode(self.encoding, "ignore")
+
+    def generate_join_date(self):
+        import datetime
+        year = random.randint(1950, 2016)
+        month = random.randint(1, 12)
+        day = random.randint(1, 28)
+        hour = random.randint(0,23)
+        min = random.randint(0,59)
+        return str(datetime.datetime(year, month, day, hour, min))
+
+    def generate_dept(self):
+        dept_list = ['Engineering', 'Sales', 'Support', 'Marketing', 'IT', 'Finance']
+        return dept_list[random.randint(0,len(dept_list)-1)]
+
+    def generate_salary(self):
+        return round(random.random()*100000, 2)
+
+    def generate_name(self):
+        return "%s %s" %(FIRST_NAMES[random.randint(1, len(FIRST_NAMES)-1)],
+                         LAST_NAMES[random.randint(1, len(LAST_NAMES)-1)])
+
+    def generate_lang_known(self):
+        lang_list = ['English', 'Spanish', 'German', 'Italian', 'French']
+        return [lang_list[i] for i in xrange(1,random.randint(0,len(lang_list)-1))]
+
