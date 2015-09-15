@@ -199,6 +199,9 @@ class CBRecoveryFailedException(MembaseHttpException):
     def __init__(self, string=''):
         self._message = 'CBRecovery Failed: {0}'.format(string)
 
+class CBFTException(MembaseHttpException):
+    def __init__(self, string=''):
+        self._message = string
 
 class XDCRException(MembaseHttpException):
     def __init__(self, string=''):
