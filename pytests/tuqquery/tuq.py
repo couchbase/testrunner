@@ -49,6 +49,7 @@ class QueryTests(BaseTestCase):
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         self.index_type = self.input.param("index_type", 'VIEW')
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
+        self.covering_index = self.input.param("covering_index", False)
         if self.input.param("reload_data", False):
             for bucket in self.buckets:
                 self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
