@@ -1911,7 +1911,8 @@ class QueryTests(BaseTestCase):
             self.query = "EXPLAIN SELECT * FROM %s" % (bucket.name)
             res = self.run_cbq_query()
             self.assertTrue(res["results"][0]["~children"][0]["index"] == "#primary",
-                            "Type should be #primary, but is: %s" % res["results"])
+                            "Type should be #primary, but is: %s" % res["results"][0]["~children"][0]["index"])
+
 
 ##############################################################################################
 #
