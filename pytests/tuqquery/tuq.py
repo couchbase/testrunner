@@ -1916,6 +1916,31 @@ class QueryTests(BaseTestCase):
 
 ##############################################################################################
 #
+#   EXPLAIN WITH COVERING INDEXES
+##############################################################################################
+    def test_explain_covering_index(self):
+        for bucket in self.buckets:
+            self.query = "EXPLAIN SELECT * FROM %s" % (bucket.name)
+            res = self.run_cbq_query()
+            self.log.info(res)
+            self.assertTrue(res["results"][0]["~children"][0]["#operator"] == "IndexScan",
+                            "Operator should be IndexScan, but is: %s" % res["results"][0]["~children"][0]["#operator"])
+            if 'covers' in res:
+                self.log.info("covers key present in json result output ")
+            elif 'covers' not in res:
+                self.log.error("covers key missing from json result value ")
+                self.fail("covers key missing from output ")
+            if 'cover' in res["results"][0]["~children"][0]["covers"]:
+                self.log.info("cover key present in json children ")
+            elif 'cover' not in res["results"][0]["~children"][0]["covers"]:
+                self.log.error("cover keyword missing from json children ")
+                self.fail("cover key missing from json children ")
+            for x in res.iteritems():
+                self.log.info(x)
+
+
+##############################################################################################
+#
 #   DATETIME
 ##############################################################################################
 
