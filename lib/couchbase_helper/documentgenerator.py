@@ -166,20 +166,47 @@ class Base64Generator(KVGenerator):
 
 class JsonDocGenerator(KVGenerator):
 
-    def __init__(self, name, encoding="utf-8", *args, **kwargs ):
+    def __init__(self, name, op_type="create", encoding="utf-8", *args, **kwargs ):
         """Initializes the JSON document generator
-
-
-        gen = DocumentGenerator('test_docs', template, age, first, start=0, end=5)
+        gen =  JsonDocGenerator(prefix, encoding="utf-8",start=0,end=num_items)
 
         Args:
-            name: The key name prefix
+            prefix: prefix for key
+            encoding: utf-8/ascii/utf-16 encoding of JSON doc
             *args: A list for each argument in the template
             *kwargs: Special constrains for the document generator
+
+        Sample doc:
+                    {
+                      "salary": 75891.68,
+                      "name": "Safiya Morgan",
+                      "dept": "Support",
+                      "is_manager": true,
+                      "mutated": 0,
+                      "join_date": "1984-05-22 07:28:00",
+        optional-->   "manages": {
+                        "team_size": 6,
+                        "reports": [
+                          "Basha Taylor",
+                          "Antonia Cox",
+                          "Winta Campbell",
+                          "Lilith Scott",
+                          "Beryl Miller",
+                          "Ambika Reed"
+                        ]
+                      },
+                      "languages_known": [
+                        "English",
+                        "Spanish",
+                        "German"
+                      ],
+                      "emp_id": 10000001,
+                      "email": "safiya_1@mcdiabetes.com"
+                    }
         """
         self.args = args
         self.name = name
-        self.gen_docs= []
+        self.gen_docs= {}
         self.encoding = encoding
 
         size = 0
@@ -189,40 +216,82 @@ class JsonDocGenerator(KVGenerator):
                 size *= len(arg)
 
         KVGenerator.__init__(self, name, 0, size)
+        random.seed(0)
 
         if 'start' in kwargs:
             self.start = int(kwargs['start'])
             self.itr = int(kwargs['start'])
-
         if 'end' in kwargs:
             self.end = int(kwargs['end'])
 
-        for count in xrange(self.start+1, self.end+1):
-            emp_name = self.generate_name()
-            doc_dict = {
-                        'emp_id': 10000000+count,
-                        'name': emp_name,
-                        'dept': self.generate_dept(),
-                        'email': "%s_%s@mcdiabetes.com" %
-                                 (emp_name.split(' ')[0].lower(), str(count)),
-                        'salary': self.generate_salary(),
-                        'join_date': self.generate_join_date(),
-                        'languages_known': self.generate_lang_known(),
-                        'is_manager': bool(random.getrandbits(1))
-                       }
-            if doc_dict["is_manager"]:
-                doc_dict['manages'] = {'team_size': random.randint(5,10)}
+        if op_type == "create":
+            for count in xrange(self.start+1, self.end+1):
+                emp_name = self.generate_name()
+                doc_dict = {
+                            'emp_id': 10000000+count,
+                            'name': emp_name,
+                            'dept': self.generate_dept(),
+                            'email': "%s_%s@mcdiabetes.com" %
+                                     (emp_name.split(' ')[0].lower(), str(count)),
+                            'salary': self.generate_salary(),
+                            'join_date': self.generate_join_date(),
+                            'languages_known': self.generate_lang_known(),
+                            'is_manager': bool(random.getrandbits(1)),
+                            'mutated': 0
+                           }
+                if doc_dict["is_manager"]:
+                    doc_dict['manages'] = {'team_size': random.randint(5,10)}
+                    doc_dict['manages']['reports'] = []
+                    for _ in xrange(0, doc_dict['manages']['team_size']):
+                        doc_dict['manages']['reports'].append(self.generate_name())
+                self.gen_docs[count-1] = doc_dict
+        elif op_type == "delete":
+            # for deletes, just keep/return empty docs
+            for count in xrange(self.start, self.end):
+                self.gen_docs[count] = {}
+
+    def update(self, fields_to_update=None):
+        """
+            Updates the fields_to_update in the document.
+            @param fields_to_update is usually a list of fields one wants to
+                   regenerate in a doc during update. If this is 'None', by
+                   default for this dataset, 'salary' field is regenerated.
+        """
+        random.seed(1)
+        for count in xrange(self.start, self.end):
+            doc_dict = self.gen_docs[count]
+            if 'salary' in fields_to_update or\
+                    fields_to_update is None:
+                doc_dict['salary'] = self.generate_salary()
+            if 'dept' in fields_to_update:
+                doc_dict['dept'] = self.generate_dept()
+            if 'is_manager' in fields_to_update:
+                doc_dict['is_manager'] = bool(random.getrandbits(1))
+                if doc_dict["is_manager"]:
+                    doc_dict['manages'] = {'team_size': random.randint(5,10)}
+                    doc_dict['manages']['reports'] = []
+                    for _ in xrange(0, doc_dict['manages']['team_size']):
+                        doc_dict['manages']['reports'].append(self.generate_name())
+            if 'languages_known' in fields_to_update:
+                doc_dict['languages_known'] = self.generate_lang_known()
+            if 'email' in fields_to_update:
+                doc_dict['email'] = "%s_%s@mcdiabetes.com" %\
+                                    (doc_dict['name'].split(' ')[0].lower(),
+                                     str(random.randint(0,99)))
+            if 'manages.team_size' in fields_to_update or\
+                    'manages.reports' in fields_to_update:
+                doc_dict['team_size'] = random.randint(5,10)
                 doc_dict['manages']['reports'] = []
                 for _ in xrange(0, doc_dict['manages']['team_size']):
                     doc_dict['manages']['reports'].append(self.generate_name())
-            self.gen_docs.append(doc_dict)
+            self.gen_docs[count] = doc_dict
 
     def next(self):
         if self.itr >= self.end:
             raise StopIteration
         doc = self.gen_docs[self.itr]
         self.itr += 1
-        return self.name+str(doc['emp_id']),\
+        return self.name+str(10000000+self.itr),\
                json.dumps(doc).encode(self.encoding, "ignore")
 
     def generate_join_date(self):
@@ -247,5 +316,5 @@ class JsonDocGenerator(KVGenerator):
 
     def generate_lang_known(self):
         lang_list = ['English', 'Spanish', 'German', 'Italian', 'French']
-        return [lang_list[i] for i in xrange(1,random.randint(0,len(lang_list)-1))]
+        return [lang_list[i] for i in xrange(0,random.randint(1,len(lang_list)-1))]
 

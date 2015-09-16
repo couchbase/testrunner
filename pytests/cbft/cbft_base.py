@@ -402,7 +402,7 @@ class CouchbaseCluster:
         self.__data_verified = True
         self.__remote_clusters = []
         self.__clusterop = Cluster()
-        self.__kv_gen = {}
+        self._kv_gen = {}
 
     def __str__(self):
         return "Couchbase Cluster: %s, Master Ip: %s" % (
@@ -454,11 +454,11 @@ class CouchbaseCluster:
 
     def get_kv_gen(self):
         raise_if(
-            self.__kv_gen is None,
+            self._kv_gen is None,
             CBFTException(
                 "KV store is empty on couchbase cluster: %s" %
                 self))
-        return self.__kv_gen
+        return self._kv_gen
 
     def init_cluster(self):
         """Initialize cluster.
@@ -671,12 +671,12 @@ class CouchbaseCluster:
         @return: task object
         """
         seed = "%s-key-" % self.__name
-        self.__kv_gen[OPS.CREATE] = JsonDocGenerator(seed,
+        self._kv_gen[OPS.CREATE] = JsonDocGenerator(seed,
                                                      encoding="utf-8",
                                                      start=0,
                                                      end=num_items)
 
-        gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
+        gen = copy.deepcopy(self._kv_gen[OPS.CREATE])
         task = self.__clusterop.async_load_gen_docs(
             self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
             OPS.CREATE, exp, flag, only_store_hash, batch_size, pause_secs,
@@ -721,13 +721,13 @@ class CouchbaseCluster:
         @return: task objects list
         """
         prefix = "%s-" % self.__name
-        self.__kv_gen[OPS.CREATE] = JsonDocGenerator(prefix,
+        self._kv_gen[OPS.CREATE] = JsonDocGenerator(prefix,
                                                      encoding="utf-8",
                                                      start=0,
                                                      end=num_items)
         tasks = []
         for bucket in self.__buckets:
-            gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
+            gen = copy.deepcopy(self._kv_gen[OPS.CREATE])
             tasks.append(
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
@@ -760,7 +760,7 @@ class CouchbaseCluster:
 
 
     def load_all_buckets_till_dgm(self, active_resident_threshold, items=0,
-                                  value_size=512, exp=0, kv_store=1, flag=0,
+                                  exp=0, kv_store=1, flag=0,
                                   only_store_hash=True, batch_size=1000,
                                   pause_secs=1, timeout_secs=30):
         """Load data synchronously on all buckets till dgm (Data greater than memory)
@@ -821,48 +821,127 @@ class CouchbaseCluster:
                         bucket.name))
             self.__log.info("Loaded a total of %s keys into bucket %s"
                             % (end,bucket.name))
-        self.__kv_gen[OPS.CREATE] = JsonDocGenerator(seed,
+        self._kv_gen[OPS.CREATE] = JsonDocGenerator(seed,
                                                     encoding="utf-8",
                                                     start=0,
                                                     end=end)
 
+    def update_bucket(self, bucket, fields_to_update=None, exp=0,
+                    kv_store=1, flag=0, only_store_hash=True,
+                    batch_size=1000, pause_secs=1, timeout_secs=30):
+        """Load data synchronously on given bucket. Function wait for
+        load data to finish.
+        @param bucket: bucket where to load data.
+        @param fields_to_update: list of fields to update in loaded JSON
+        @param value_size: size of the one item.
+        @param exp: expiration value.
+        @param kv_store: kv store index.
+        @param flag:
+        @param only_store_hash: True to store hash of item else False.
+        @param batch_size: batch size for load data at a time.
+        @param pause_secs: pause for next batch load.
+        @param timeout_secs: timeout
+        """
+        self.__log.info("Updating fields %s in bucket %s" %(fields_to_update,
+                                                            bucket.name))
+        task = self.async_update_bucket(bucket, fields_to_update=fields_to_update,
+                                        exp=exp, kv_store=kv_store, flag=flag,
+                                        only_store_hash=only_store_hash,
+                                        batch_size=batch_size,
+                                        pause_secs=pause_secs,
+                                        timeout_secs=timeout_secs)
+        task.result()
+
+
+    def async_update_bucket(self, bucket, fields_to_update=None, exp=0,
+                          kv_store=1, flag=0, only_store_hash=True,
+                          batch_size=1000, pause_secs=1, timeout_secs=30):
+        """Update data asynchronously on given bucket. Function don't wait for
+        load data to finish, return immidiately.
+        @param bucket: bucket where to load data.
+        @param fields_to_update: list of fields to update in loaded JSON
+        @param value_size: size of the one item.
+        @param exp: expiration value.
+        @param kv_store: kv store index.
+        @param flag:
+        @param only_store_hash: True to store hash of item else False.
+        @param batch_size: batch size for load data at a time.
+        @param pause_secs: pause for next batch load.
+        @param timeout_secs: timeout
+        @return: task object
+        """
+        perc = 30
+        self._kv_gen[OPS.UPDATE] = copy.deepcopy(self._kv_gen[OPS.CREATE])
+        self._kv_gen[OPS.UPDATE].start = 0
+        self._kv_gen[OPS.UPDATE].end = int(self._kv_gen[OPS.CREATE].end
+                                                        * (float)(perc)/100)
+        self._kv_gen[OPS.UPDATE].update(fields_to_update=fields_to_update)
+
+        task = self.__clusterop.async_load_gen_docs(
+            self.__master_node, bucket.name, self._kv_gen[OPS.UPDATE],
+            bucket.kvs[kv_store],OPS.UPDATE, exp, flag, only_store_hash,
+            batch_size, pause_secs,timeout_secs)
+        return task
+
+    def update_delete_data(
+            self, op_type, fields_to_update=None, perc=30, expiration=0,
+            wait_for_expiration=True):
+        """Perform update/delete operation on all buckets. Function wait
+        operation to finish.
+        @param op_type: OPS.CREATE/OPS.UPDATE/OPS.DELETE
+        @param fields_to_update: list of fields to be updated in the JSON
+        @param perc: percentage of data to be deleted or created
+        @param expiration: time for expire items
+        @param wait_for_expiration: True if wait for expire of items after
+        update else False
+        """
+        tasks = self.async_update_delete(op_type, fields_to_update, perc, expiration)
+
+        [task.result() for task in tasks]
+
+        if wait_for_expiration and expiration:
+            self.__log.info("Waiting for expiration of updated items")
+            time.sleep(expiration)
+
     def async_update_delete(
-            self, op_type, perc=30, expiration=0, kv_store=1):
+            self, op_type, fields_to_update=None, perc=30, expiration=0,
+            kv_store=1):
         """Perform update/delete operation on all buckets. Function don't wait
         operation to finish.
         @param op_type: OPS.CREATE/OPS.UPDATE/OPS.DELETE
+        @param fields_to_update: list of fields to be updated in JSON
         @param perc: percentage of data to be deleted or created
         @param expiration: time for expire items
         @return: task object list
         """
         raise_if(
-            OPS.CREATE not in self.__kv_gen,
+            OPS.CREATE not in self._kv_gen,
             CBFTException(
                 "Data is not loaded in cluster.Load data before update/delete")
         )
         tasks = []
         for bucket in self.__buckets:
             if op_type == OPS.UPDATE:
-                self.__kv_gen[OPS.UPDATE] = JsonDocGenerator(
-                                                self.__kv_gen[OPS.CREATE].name,
-                                                encoding="utf-8",
-                                                start=0,
-                                                end=int(self.__kv_gen[OPS.CREATE].end
-                                                        * (float)(perc) / 100))
-                gen = copy.deepcopy(self.__kv_gen[OPS.UPDATE])
+                self._kv_gen[OPS.UPDATE] = copy.deepcopy(self._kv_gen[OPS.CREATE])
+                self._kv_gen[OPS.UPDATE].start = 0
+                self._kv_gen[OPS.UPDATE].end = int(self._kv_gen[OPS.CREATE].end
+                                                                * (float)(perc)/100)
+                self._kv_gen[OPS.UPDATE].update(fields_to_update=fields_to_update)
+                gen = self._kv_gen[OPS.UPDATE]
             elif op_type == OPS.DELETE:
-                self.__kv_gen[OPS.DELETE] = JsonDocGenerator(
-                                                self.__kv_gen[OPS.CREATE].name,
+                self._kv_gen[OPS.DELETE] = JsonDocGenerator(
+                                                self._kv_gen[OPS.CREATE].name,
+                                                op_type= OPS.DELETE,
                                                 encoding="utf-8",
-                                                start=int((self.__kv_gen[OPS.CREATE].end)
+                                                start=int((self._kv_gen[OPS.CREATE].end)
                                                           * (float)(100 - perc) / 100),
-                                                end=self.__kv_gen[OPS.CREATE].end)
-                gen = copy.deepcopy(self.__kv_gen[OPS.DELETE])
+                                                end=self._kv_gen[OPS.CREATE].end)
+                gen = copy.deepcopy(self._kv_gen[OPS.DELETE])
             else:
                 raise CBFTException("Unknown op_type passed: %s" % op_type)
 
             self.__log.info("At bucket '{0}' @ {1}: operation: {2}, key range {3} - {4}".
-                       format(bucket.name, self.__name, op_type, gen.start, gen.end))
+                       format(bucket.name, self.__name, op_type, gen.start, gen.end-1))
             tasks.append(
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node,
@@ -875,23 +954,6 @@ class CouchbaseCluster:
             )
         return tasks
 
-    def update_delete_data(
-            self, op_type, perc=30, expiration=0, wait_for_expiration=True):
-        """Perform update/delete operation on all buckets. Function wait
-        operation to finish.
-        @param op_type: OPS.CREATE/OPS.UPDATE/OPS.DELETE
-        @param perc: percentage of data to be deleted or created
-        @param expiration: time for expire items
-        @param wait_for_expiration: True if wait for expire of items after
-        update else False
-        """
-        tasks = self.async_update_delete(op_type, perc, expiration)
-
-        [task.result() for task in tasks]
-
-        if wait_for_expiration and expiration:
-            self.__log.info("Waiting for expiration of updated items")
-            time.sleep(expiration)
 
     def run_expiry_pager(self, val=10):
         """Run expiry pager process and set interval to 10 seconds
@@ -1494,10 +1556,8 @@ class CBFTBaseTest(unittest.TestCase):
 
     def __setup_for_test(self):
         use_hostanames = self._input.param("use_hostnames", False)
-        print self._input.clusters
         nodes =  self._input.clusters[0]
         cluster_nodes = copy.deepcopy(nodes)
-        print cluster_nodes
         self._cb_cluster = CouchbaseCluster("C1",
                                              cluster_nodes,
                                              self.log,
@@ -1535,8 +1595,8 @@ class CBFTBaseTest(unittest.TestCase):
         self._num_items = self._input.param("items", 1000)
         self._value_size = self._input.param("value_size", 512)
         self._poll_timeout = self._input.param("poll_timeout", 120)
-        self._update = self._input.param("update", "False")
-        self._delete = self._input.param("delete", "False")
+        self._update = self._input.param("update", False)
+        self._delete = self._input.param("delete", False)
         self._perc_upd = self._input.param("upd", 30)
         self._perc_del = self._input.param("del", 30)
         self._expires = self._input.param("expires", 0)
@@ -1661,6 +1721,10 @@ class CBFTBaseTest(unittest.TestCase):
 
 
     def load_cluster(self):
+        """
+            Loads the default JSON dataset
+            see JsonDocGenerator in documentgenerator.py
+        """
         if not self._dgm_run:
             self._cb_cluster.load_all_buckets(self._num_items, self._value_size)
         else:
@@ -1668,12 +1732,19 @@ class CBFTBaseTest(unittest.TestCase):
                 active_resident_threshold=self._active_resident_threshold,
                 items=self._num_items)
 
-    def perform_update_delete(self):
+    def perform_update_delete(self, fields_to_update=None):
+        """
+          Call this method to perform updates/deletes on your cluster.
+          It checks if update=True or delete=True params were passed in
+          the test.
+          @param fields_to_update - list of fields to update in JSON
+        """
         # UPDATES
         if self._update:
             self.log.info("Updating keys @ {0}".format(self._cb_cluster.get_name()))
             self._cb_cluster.update_delete_data(
                 OPS.UPDATE,
+                fields_to_update=fields_to_update,
                 perc=self._perc_upd,
                 expiration=self._expires,
                 wait_for_expiration=self._wait_for_expiration)
@@ -1683,13 +1754,20 @@ class CBFTBaseTest(unittest.TestCase):
             self.log.info("Deleting keys @ {0}".format(self._cb_cluster.get_name()))
             self._cb_cluster.update_delete_data(OPS.DELETE, perc=self._perc_del)
 
-    def async_perform_update_delete(self):
+    def async_perform_update_delete(self, fields_to_update=None):
+        """
+          Call this method to perform updates/deletes on your cluster.
+          It checks if update=True or delete=True params were passed in
+          the test.
+          @param fields_to_update - list of fields to update in JSON
+        """
         tasks = []
         # UPDATES
         if self._update:
             self.log.info("Updating keys @ {0}".format(self._cb_cluster.get_name()))
             tasks.extend(self._cb_cluster.async_update_delete(
                 OPS.UPDATE,
+                fields_to_update=fields_to_update,
                 perc=self._perc_upd,
                 expiration=self._expires))
 

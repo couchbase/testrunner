@@ -14,4 +14,5 @@ class StableTopCBFT(CBFTBaseTest):
 
     def simple_load(self):
         self.load_cluster()
+        self.async_perform_update_delete(['salary','dept'])
         self.sleep(120)
