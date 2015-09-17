@@ -23,6 +23,7 @@ class RQGTests(BaseTestCase):
         self.client_map={}
         self.log.info("==============  RQGTests setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
+        self.check_covering_index = self.input.param("check_covering_index",True)
         self.remove_alias = self.input.param("remove_alias",True)
         self.build_secondary_index_in_seq = self.input.param("build_secondary_index_in_seq",False)
         self.number_of_buckets = self.input.param("number_of_buckets",5)
@@ -958,7 +959,7 @@ class RQGTests(BaseTestCase):
             try:
                 actual_result = self.n1ql_helper.run_cbq_query(query = n1ql, server = self.n1ql_server)
                 self.log.info(actual_result)
-                check = self.n1ql_helper.verify_index_with_explain(actual_result, index_name)
+                check = self.n1ql_helper.verify_index_with_explain(actual_result, index_name, self.check_covering_index)
                 if not check:
                     message= " query {0} failed explain result, index {1} not found".format(n1ql_query,index_name)
                     self.log.info(message)
