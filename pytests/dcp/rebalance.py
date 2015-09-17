@@ -69,6 +69,7 @@ class DCPRebalanceTests(DCPBase):
         assert self.stop_node(0)
         self.stopped_nodes.append(0)
 
+
         assert self.cluster.failover([nodeB], [nodeA])
         assert self.cluster.rebalance([nodeB], [], [])
         # verify seqnos and stream mutations
@@ -83,7 +84,7 @@ class DCPRebalanceTests(DCPBase):
             key = 'vb_{0}:high_seqno'.format(vbucket)
             total_mutations += int(stats[key])
 
-        assert total_mutations == self.num_items
+        assert total_mutations == self.num_items / 2   # divide by because the items are split between 2 servers
         task = self.cluster.async_rebalance([nodeB], [], [nodeC])
         task.result()
 
