@@ -134,10 +134,13 @@ class QueriesIndexTests(QueryTests):
             try:
                 for ind in xrange(self.num_indexes):
                     index_name = "join_index%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(name, project)  USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(name, join_day)  USING GSI" % (index_name, bucket.name)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
+                    self.query = "EXPLAIN SELECT name, join_day FROM %s where name = 'employee-9'"% (bucket.name)
+                    if self.covering_index:
+                        self.test_explain_covering_index()
                     self.query = "EXPLAIN SELECT employee.name, new_task.project FROM %s as employee JOIN %s as new_task USE KEYS ['key1']" % (bucket.name, bucket.name)
                     res = self.run_cbq_query()
                     self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
@@ -146,6 +149,7 @@ class QueriesIndexTests(QueryTests):
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                     self.run_cbq_query()
+
 
     def test_explain_index_subquery(self):
         for bucket in self.buckets:
