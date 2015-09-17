@@ -1,3 +1,7 @@
+"""
+Base class for CBFT/FTS/Couchbase Full Text Search
+"""
+
 import unittest
 import time
 import copy
@@ -326,19 +330,6 @@ class NodeHelper:
         return version[:version.rfind('-')]
 
     @staticmethod
-    def set_wall_clock_time(node, date_str):
-        shell = RemoteMachineShellConnection(node)
-        # os_info = shell.extract_remote_info()
-        # if os_info == OS.LINUX:
-        # date command works on linux and windows cygwin as well.
-        shell.execute_command(
-            "sudo date -s '%s'" %
-            time.ctime(
-                date_str.tx_time))
-        # elif os_info == OS.WINDOWS:
-        #    raise "NEED To SETUP DATE COMMAND FOR WINDOWS"
-
-    @staticmethod
     def get_cbcollect_info(server):
         """Collect cbcollectinfo logs for all the servers in the cluster.
         """
@@ -460,17 +451,36 @@ class CouchbaseCluster:
                 self))
         return self._kv_gen
 
-    def init_cluster(self):
+    def init_cluster(self, cluster_services, available_nodes):
         """Initialize cluster.
         1. Initialize all nodes.
-        2. Add all nodes to the cluster..
+        2. Add all nodes to the cluster based on services list
         """
+        self.__log.info("Initializing Cluster C1")
+
+        if len(cluster_services)-1 > len(available_nodes):
+            raise CBFTException("Not enough nodes present for given cluster"
+                                    "configuration %s" % cluster_services)
         self.__init_nodes()
-        self.__clusterop.async_rebalance(
-            self.__nodes,
-            self.__nodes[1:],
-            [],
-            use_hostnames=self.__use_hostname).result()
+
+        for index, node_services in enumerate(cluster_services):
+            try:
+                if index == 0:
+                    # first node is always a data/kv node
+                    continue
+                self.__log.info("Adding %s to C1 with services %s" %(
+                                                    available_nodes[index-1].ip,
+                                                    node_services))
+                self.__clusterop.async_rebalance(
+                    self.__nodes,
+                    [available_nodes[index-1]],
+                    [],
+                    use_hostnames=self.__use_hostname,
+                    services=[node_services]).result()
+                self.__nodes.append(available_nodes[index-1])
+            except Exception as e:
+                raise CBFTException("Unable to initialize cluster with config "
+                                    "%s: %s" %(cluster_services, e))
 
     def cleanup_cluster(
             self,
@@ -1451,26 +1461,6 @@ class CouchbaseCluster:
 
         self.__data_verified = True
 
-
-class Utility:
-
-    @staticmethod
-    def make_default_views(prefix, num_views, is_dev_ddoc=False):
-        """Create default views for testing.
-        @param prefix: prefix for view name
-        @param num_views: number of views to create
-        @param is_dev_ddoc: True if Development View else False
-        """
-        default_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
-        default_view_name = (prefix, "default_view")[prefix is None]
-        return [View(default_view_name + str(i), default_map_func,
-                     None, is_dev_ddoc) for i in xrange(num_views)]
-
-    @staticmethod
-    def get_rc_name(src_cluster_name, dest_cluster_name):
-        return "remote_cluster_" + src_cluster_name + "-" + dest_cluster_name
-
-
 class CBFTBaseTest(unittest.TestCase):
 
     def setUp(self):
@@ -1556,17 +1546,34 @@ class CBFTBaseTest(unittest.TestCase):
 
     def __setup_for_test(self):
         use_hostanames = self._input.param("use_hostnames", False)
-        nodes =  self._input.clusters[0]
-        cluster_nodes = copy.deepcopy(nodes)
+        master =  self._input.servers[0]
+        first_node = copy.deepcopy(master)
         self._cb_cluster = CouchbaseCluster("C1",
-                                             cluster_nodes,
+                                             [first_node],
                                              self.log,
                                              use_hostanames)
-        self._master = self._cb_cluster.get_master_node()
         self.__cleanup_previous()
-        self.__init_clusters()
+        self._cb_cluster.init_cluster(self._cluster_services,
+                                      self._input.servers[1:])
         self.__set_free_servers()
         self.__create_buckets()
+        self._master = self._cb_cluster.get_master_node()
+
+    def construct_serv_list(self,serv_str):
+        """
+            Constructs a list of node services
+            to rebalance into cluster
+            @param serv_str: like "D,D+C,I+Q,I" where the letters
+                             stand for services defined in serv_dict
+            @return services_list: like ['kv', 'kv,fts', 'index,n1ql','index']
+        """
+        serv_dict = {'D': 'kv','C': 'fts','I': 'index','Q': 'n1ql'}
+        for letter, serv in serv_dict.iteritems():
+            serv_str = serv_str.replace(letter, serv)
+        services_list = serv_str.split(',')
+        for index, serv in enumerate(services_list):
+           services_list[index] = serv.replace('+', ',')
+        return services_list
 
     def __init_parameters(self):
         self.__case_number = self._input.param("case_number", 0)
@@ -1590,6 +1597,9 @@ class CBFTBaseTest(unittest.TestCase):
         # Move above private to this section if needed in future, but
         # Ensure to change other tests too.
 
+        # TODO: when cbft build is available, change the following to "D,D+C,C"
+        self._cluster_services = \
+            self.construct_serv_list(self._input.param("cluster", "D,D+Q,I,D"))
         self._num_replicas = self._input.param("replicas", 1)
         self._create_default_bucket = self._input.param("default_bucket",True)
         self._num_items = self._input.param("items", 1000)
@@ -1629,16 +1639,9 @@ class CBFTBaseTest(unittest.TestCase):
     def __cleanup_previous(self):
         self._cb_cluster.cleanup_cluster(self, cluster_shutdown=False)
 
-    def __init_clusters(self):
-        self.log.info("Initializing cluster 1...")
-        self._cb_cluster.init_cluster()
-
     def __set_free_servers(self):
         total_servers = self._input.servers
-        cluster_nodes = []
-        for _, nodes in self._input.clusters.iteritems():
-            cluster_nodes.extend(nodes)
-
+        cluster_nodes = self._cb_cluster.get_nodes()
         FloatingServers._serverlist = [
             server for server in total_servers if server not in cluster_nodes]
 
@@ -1685,7 +1688,7 @@ class CBFTBaseTest(unittest.TestCase):
             eviction_policy=self.__eviction_policy,
             bucket_priority=bucket_priority)
 
-    def create_buckets_on_cluster(self, cluster_name):
+    def create_buckets_on_cluster(self):
         # if mixed priority is set by user, set high priority for sasl and
         # standard buckets
         if self.__mixed_priority:
