@@ -455,8 +455,10 @@ class CouchbaseCluster:
         """Initialize cluster.
         1. Initialize all nodes.
         2. Add all nodes to the cluster based on services list
+        @param cluster_services: list of cluster node services
+        @param available_nodes: extra nodes available to be added
         """
-        self.__log.info("Initializing Cluster C1")
+        self.__log.info("Initializing Cluster ...")
 
         if len(cluster_services)-1 > len(available_nodes):
             raise CBFTException("Not enough nodes present for given cluster"
@@ -1141,7 +1143,7 @@ class CouchbaseCluster:
         task = self.__async_rebalance_out(num_nodes=num_nodes)
         task.result()
 
-    def async_rebalance_in(self, num_nodes=1):
+    def async_rebalance_in(self, num_nodes=1, services=None):
         """Rebalance-in nodes into Cluster asynchronously
         @param num_nodes: number of nodes to rebalance-in to cluster.
         """
@@ -1157,18 +1159,19 @@ class CouchbaseCluster:
         self.__log.info(
             "Starting rebalance-in nodes:{0} at {1} cluster {2}".format(
                 to_add_node, self.__name, self.__master_node.ip))
-        task = self.__clusterop.async_rebalance(self.__nodes, to_add_node, [])
+        task = self.__clusterop.async_rebalance(self.__nodes, to_add_node, [],
+                                                services=services)
         self.__nodes.extend(to_add_node)
         return task
 
-    def rebalance_in(self, num_nodes=1):
+    def rebalance_in(self, num_nodes=1, services=None):
         """Rebalance-in nodes
         @param num_nodes: number of nodes to add to cluster.
         """
-        task = self.async_rebalance_in(num_nodes)
+        task = self.async_rebalance_in(num_nodes, services=services)
         task.result()
 
-    def __async_swap_rebalance(self, master=False):
+    def __async_swap_rebalance(self, master=False, services=None):
         """Swap-rebalance nodes on Cluster
         @param master: True if swap-rebalance master node else False.
         """
@@ -1186,7 +1189,8 @@ class CouchbaseCluster:
         task = self.__clusterop.async_rebalance(
             self.__nodes,
             to_add_node,
-            to_remove_node)
+            to_remove_node,
+            services=services)
 
         [self.__nodes.remove(node) for node in to_remove_node]
         self.__nodes.extend(to_add_node)
@@ -1196,22 +1200,25 @@ class CouchbaseCluster:
 
         return task
 
-    def async_swap_rebalance_master(self):
-        return self.__async_swap_rebalance(master=True)
-
-    def async_swap_rebalance(self):
-        return self.__async_swap_rebalance()
-
-    def swap_rebalance_master(self):
-        """Swap rebalance master node.
+    def async_swap_rebalance_master(self, services=None):
         """
-        task = self.__async_swap_rebalance(master=True)
+           Returns without waiting for swap rebalance to complete
+        """
+        return self.__async_swap_rebalance(master=True, services=services)
+
+    def async_swap_rebalance(self, services=None):
+        return self.__async_swap_rebalance(services=services)
+
+    def swap_rebalance_master(self, services=None):
+        """Swap rebalance master node and wait
+        """
+        task = self.__async_swap_rebalance(master=True, services=services)
         task.result()
 
-    def swap_rebalance(self):
+    def swap_rebalance(self, services=None):
         """Swap rebalance non-master node
         """
-        task = self.__async_swap_rebalance()
+        task = self.__async_swap_rebalance(services=services)
         task.result()
 
     def __async_failover(self, master=False, num_nodes=1, graceful=False):
@@ -1283,7 +1290,7 @@ class CouchbaseCluster:
         [self.__nodes.remove(node) for node in self.__fail_over_nodes]
         self.__fail_over_nodes = []
 
-    def add_back_node(self, recovery_type=None):
+    def add_back_node(self, recovery_type=None, services=None):
         """add-back failed-over node to the cluster.
             @param recovery_type: delta/full
         """
@@ -1304,7 +1311,7 @@ class CouchbaseCluster:
         for node in self.__fail_over_nodes:
             if node not in self.__nodes:
                 self.__nodes.append(node)
-        self.__clusterop.rebalance(self.__nodes, [], [])
+        self.__clusterop.rebalance(self.__nodes, [], [], services=services)
         self.__fail_over_nodes = []
 
     def warmup_node(self, master=False):
