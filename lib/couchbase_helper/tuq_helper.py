@@ -419,9 +419,15 @@ class N1QLHelper():
                 self.log.error('ERROR during index creation %s' % str(ex))
                 raise ex
 
-    def verify_index_with_explain(self, actual_result, index_name):
+    def verify_index_with_explain(self, actual_result, index_name, check_covering_index= False):
+        check = True
+        if check_covering_index:
+            if "covering" in str(actual_result):
+                check = True
+            else:
+                check = False
         if index_name in str(actual_result):
-            return True
+            return True and check
         return False
 
     def run_query_and_verify_result(self, server = None, query = None, timeout = 120.0, max_try = 1,

@@ -696,6 +696,8 @@ class QueryHelper(object):
             return map
         sql_map = self._divide_sql(n1ql)
         where_condition = sql_map["where_condition"]
+        select = sql_map["where_condition"]
+        from_fields = sql_map["from_fields"]
         simple_create_index_n1ql_with_where = None
         simple_create_index_n1ql_with_expression = None
         table_name = random.choice(table_map.keys())
@@ -704,7 +706,7 @@ class QueryHelper(object):
         field_that_occur = []
         if where_condition and ("OR" not in where_condition):
             for field in fields:
-                if field in where_condition:
+                if (field in where_condition) or (field in from_fields):
                     field_that_occur.append(field)
         if where_condition and ("OR" not in where_condition):
             index_name_with_occur_fields_where = "{0}_where_based_fields_occur_{1}".format(table_name,self._random_int())
@@ -731,6 +733,13 @@ class QueryHelper(object):
                             "name":index_name_with_expression,
                             "type":"GSI",
                             "definition":create_index_name_with_expression
+                        }
+        if index_name_fields_only:
+            map["indexes"][index_name_fields_only] = \
+                        {
+                            "name":index_name_fields_only,
+                            "type":"GSI",
+                            "definition":create_index_name_fields_only
                         }
         return map
 
