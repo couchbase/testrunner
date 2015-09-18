@@ -128,12 +128,12 @@ class QueriesIndexTests(QueryTests):
                 self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                 self.run_cbq_query()
 
-    def test_explain_covering(self):
+    def test_covering_index(self):
         for bucket in self.buckets:
             created_indexes = []
             try:
                 for ind in xrange(self.num_indexes):
-                    index_name = "join_index%s" % ind
+                    index_name = "coveringindex%s" % ind
                     self.query = "CREATE INDEX %s ON %s(name, join_day)  USING GSI" % (index_name, bucket.name)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
@@ -141,10 +141,53 @@ class QueriesIndexTests(QueryTests):
                     self.query = "EXPLAIN SELECT name, join_day FROM %s where name = 'employee-9'"% (bucket.name)
                     if self.covering_index:
                         self.test_explain_covering_index()
+                    self.query = "SELECT name, join_day FROM %s where name = 'employee-9'"  % (bucket.name)
+                    actual_result = self.run_cbq_query()
+                    self.log.info(actual_result)
+                    self.query = "SELECT name, join_day FROM %s where name = 'employee-9'"  % (bucket.name)
+                    actual_result = self.run_cbq_query()
+                    self.log.info(actual_result)
+                    expected_result = [{"name" : doc["name"],"join_day" : doc["join_day"]}
+                               for doc in self.full_list
+                               if doc['name'] == 'employee-9']
+                    expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
+                    self._verify_results(actual_result['results'], expected_result)
             finally:
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                     self.run_cbq_query()
+
+    def test_covering_partial_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwithwhere%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(email, VMs, join_day) where join_day > 10 USING GSI" % (index_name, bucket.name)
+                    self.run_cbq_query()
+                    self._wait_for_index_online(bucket, index_name)
+                    created_indexes.append(index_name)
+                    self.query = "explain select email,VMs[0].RAM from %s where email "  % (bucket.name) +\
+                                 "LIKE '%@%.%' and VMs[0].RAM > 5 and join_day > 10"
+                    if self.covering_index:
+                        self.test_explain_covering_index()
+                    self.query = "select email,join_day from %s where email "  % (bucket.name) +\
+                                 "LIKE '%@%.%' and VMs[0].RAM > 5 and join_day > 10"
+                    actual_result = self.run_cbq_query()
+                    self.log.info(actual_result)
+                    expected_result = [{"join_day":doc["join_day"],"email" : doc["email"]}
+                               for doc in self.full_list
+                               if re.match(r'.*@.*\..*', doc['email']) and \
+                                  doc['join_day'] > 10 and \
+                                  len([vm for vm in doc["VMs"]
+                                       if vm["RAM"] > 5]) > 0]
+                    expected_result = sorted(expected_result, key=lambda doc: (doc["join_day"]))
+                    self._verify_results(actual_result['results'], expected_result)
+            finally:
+                for index_name in created_indexes:
+                    self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                    self.run_cbq_query()
+
 
     def test_explain_index_join(self):
         for bucket in self.buckets:
