@@ -1915,21 +1915,55 @@ class QueryTests(BaseTestCase):
                             "Type should be #primary, but is: %s" % res["results"][0]["~children"][0]["index"])
 
 
-##############################################################################################
+###############################################################################################
 #
-#   EXPLAIN WITH COVERING INDEXES
+#   EXPLAIN WITH UNION SCAN: Covering Indexes
 ##############################################################################################
 
-    def test_explain_covering_index(self):
+    def test_explain_union(self,index):
         for bucket in self.buckets:
             res = self.run_cbq_query()
             self.log.info(res)
-            self.assertTrue(res["results"][0]["~children"][0]["#operator"] == "IndexScan",
-                            "Operator should be IndexScan, but is: %s" % res["results"][0]["~children"][0]["#operator"])
+            s = pprint.pformat( res, indent=4 )
+            self.log.info(s)
+            if 'UnionScan' in s:
+                self.log.info("UnionScan Operator is used by this query")
+            else:
+                self.log.error("UnionScan Operator is not used by this query, Covering Indexes not used properly")
+                self.fail("UnionScan Operator is not used by this query, Covering Indexes not used properly")
+            if 'IndexScan' in s:
+                self.log.info("IndexScan Operator is also used by this query in scans")
+            else:
+                self.log.error("IndexScan Operator is not used by this query, Covering Indexes not used properly")
+                self.fail("IndexScan Operator is not used by this query, Covering Indexes not used properly")
+            if index in s:
+                self.log.info("Query is using specified index")
+            else:
+                self.log.info("Query is not using specified index")
+
+
+##############################################################################################
+#
+#   EXPLAIN WITH INDEX SCAN: COVERING INDEXES
+##############################################################################################
+
+    def test_explain_covering_index(self,index):
+        for bucket in self.buckets:
+            res = self.run_cbq_query()
+            self.log.info(res)
             for x in res.iteritems():
                 self.log.info(x)
             s = pprint.pformat( res, indent=4 )
             self.log.info(s)
+            if 'IndexScan' in s:
+                self.log.info("IndexScan Operator is also used by this query in scans")
+            else:
+                self.log.error("IndexScan Operator is not used by this query, Covering Indexes not used properly")
+                self.fail("IndexScan Operator is not used by this query, Covering Indexes not used properly")
+            if index in s:
+                self.log.info("Query is using specified index")
+            else:
+                self.log.info("Query is not using specified index")
             if 'covers' in s:
                 self.log.info("covers key present in json result ")
             else:
@@ -1940,6 +1974,7 @@ class QueryTests(BaseTestCase):
             else:
                 self.log.error("cover keyword missing from json children ")
                 self.fail("cover keyword missing from json children ")
+
 
 
 ##############################################################################################
@@ -3010,14 +3045,19 @@ class QueryTests(BaseTestCase):
         return json_generator.generate_docs_employee( docs_per_day, start)
 
     def _verify_results(self, actual_result, expected_result):
+        if self.max_verify is not None:
+            actual_result = actual_result[:self.max_verify]
+            expected_result = expected_result[:self.max_verify]
+            self.log.info(actual_result)
+            self.log.info(expected_result)
+            self.assertTrue(actual_result == expected_result, "Results are incorrect")
+            return
+
         if len(actual_result) != len(expected_result):
             missing, extra = self.check_missing_and_extra(actual_result, expected_result)
             self.log.error("Missing items: %s.\n Extra items: %s" % (missing[:100], extra[:100]))
             self.fail("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
                                             len(actual_result), len(expected_result)))
-        if self.max_verify is not None:
-            actual_result = actual_result[:self.max_verify]
-            expected_result = expected_result[:self.max_verify]
 
         msg = "Results are incorrect.\n Actual first and last 100:  %s.\n ... \n %s" +\
         "Expected first and last 100: %s.\n  ... \n %s"
