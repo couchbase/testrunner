@@ -203,21 +203,20 @@ class QueriesIndexTests(QueryTests):
                     self.test_explain_union(index_name)
                     self.query = "explain select VMs[0].os from %s where skills[0]='skill2010' and join_yr=2010 and VMs[0].os IN ['ubuntu','windows','linux'] order by VMs[0].os asc LIMIT 10 OFFSET 0;" % (bucket.name)
                     self.test_explain_covering_index(index_name)
-                    self.query = "select DISTINCT(name),skills[0] as skills from %s where skills[0]='skill2010' and join_yr=2010 and VMs[0].os IN ['ubuntu','windows','linux'] order by name LIMIT 5 OFFSET 0;" % (bucket.name)
+                    self.query = "select name,skills[0] as skills from %s where skills[0]='skill2010' and join_yr=2010 and VMs[0].os IN ['ubuntu','windows','linux'] order by name LIMIT 15 OFFSET 0;" % (bucket.name)
                     actual_result = self.run_cbq_query()
-                    self.log.info(actual_result['results'])
-                    expected_result = [{"skills" : doc["skills"][0],"name":sorted(doc["name"])}
+                    expected_result = [{"skills" : doc["skills"][0],"name":doc["name"]}
                                        for doc in self.full_list
                                        if doc['join_yr']==2010 and \
                                           doc['skills'][0]=='skill2010' and \
                                           len([vm for vm in doc["VMs"]
-                                                if vm["os"] == 'ubuntu' or vm["os"] == 'windows' or vm["os"] == "linux"])>0][:5]
+                                                if vm["os"] == 'ubuntu' or vm["os"] == 'windows' or vm["os"] == "linux"])>0]
                     actual_result = actual_result['results']
+                    self.log.info(actual_result)
+                    expected_result= sorted(expected_result,key=lambda doc: (doc["name"]))[:15]
                     self.log.info(expected_result)
-                    actual_result = sorted(actual_result,key=lambda doc: (doc["name"]))
-                    expected_result= sorted(expected_result,key=lambda doc: (doc["name"]))
-                    self.max_verify = 5
-                    #self._verify_results(actual_result, expected_result)
+                    self.max_verify = 15
+                    self._verify_results(actual_result, expected_result)
             finally:
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
