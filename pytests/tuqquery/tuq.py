@@ -2404,6 +2404,40 @@ class QueryTests(BaseTestCase):
             expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
 
+    def test_union_where_covering(self):
+        created_indexes = []
+        ind_list = ["one","two"]
+        index_name="one"
+        for bucket in self.buckets:
+            for ind in ind_list:
+                index_name = "coveringindex%s" % ind
+                if ind =="one":
+                    self.query = "CREATE INDEX %s ON %s(name, email, join_mo)  USING GSI" % (index_name, bucket.name)
+                elif ind =="two":
+                    self.query = "CREATE INDEX %s ON %s(email,join_mo) USING GSI" % (index_name, bucket.name)
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name)
+                created_indexes.append(index_name)
+        for bucket in self.buckets:
+            self.query = "explain select name from %s where name is not null union select email from %s where email is not null and join_mo >2 " % (bucket.name, bucket.name)
+            if self.covering_index:
+                self.test_explain_covering_index(index_name[0])
+            self.query = "select name from %s where name is not null union select email from %s where email is not null and join_mo >2" % (bucket.name, bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            for a in actual_result:
+                print "{0}".format(a)
+            expected_result = [{"name" : doc["name"]}
+                                for doc in self.full_list]
+            expected_result.extend([{"email" : doc["email"]}
+                                    for doc in self.full_list if doc["join_mo"] > 2])
+            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
+            self._verify_results(actual_result, expected_result)
+            for index_name in created_indexes:
+                self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                self.run_cbq_query()
+
     def test_union_aggr_fns(self):
         for bucket in self.buckets:
             self.query = "select count(name) as names from %s union select count(email) as emails from %s" % (bucket.name, bucket.name)
