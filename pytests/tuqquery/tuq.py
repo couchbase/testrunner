@@ -3082,8 +3082,6 @@ class QueryTests(BaseTestCase):
         if self.max_verify is not None:
             actual_result = actual_result[:self.max_verify]
             expected_result = expected_result[:self.max_verify]
-            self.log.info(actual_result)
-            self.log.info(expected_result)
             self.assertTrue(actual_result == expected_result, "Results are incorrect")
             return
 
