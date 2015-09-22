@@ -2449,6 +2449,32 @@ class QueryTests(BaseTestCase):
             expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
 
+    def test_union_aggr_fns_covering(self):
+        created_indexes = []
+        ind_list = ["one", "two"]
+        index_name="one"
+        for bucket in self.buckets:
+            for ind in ind_list:
+                index_name = "coveringindex%s" % ind
+                if ind =="one":
+                    self.query = "CREATE INDEX %s ON %s(name, email, join_day)  USING GSI" % (index_name, bucket.name)
+                elif ind =="two":
+                    self.query = "CREATE INDEX %s ON %s(email)  USING GSI" % (index_name, bucket.name)
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name)
+                created_indexes.append(index_name)
+        for bucket in self.buckets:
+            self.query = "explain select count(name) as names from %s where join_day is not null union select count(email) as emails from %s where email is not null" % (bucket.name, bucket.name)
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+            self.query = "select count(name) as names from %s where join_day is not null union select count(email) as emails from %s where email is not null" % (bucket.name, bucket.name)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"names" : len(self.full_list)}]
+            expected_result.extend([{"emails" : len(self.full_list)}])
+            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
+            self._verify_results(actual_result, expected_result)
+
     def test_intersect(self):
         for bucket in self.buckets:
             self.query = "select name from %s intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
