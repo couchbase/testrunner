@@ -263,3 +263,9 @@ class MemorySanity(BaseTestCase):
                 self.log.info("Memory after loaded {0}"
                               .format(mem_stats_load[bucket.name]["mem_used"]))
                 self.fail("Memory used should be greater than 0 since data is loaded.")
+            else:
+                self.log.info("Mem stats works as expected")
+                self.log.info("Initial memory used {0}"
+                              .format(mem_stats_init[bucket.name]["mem_used"]))
+                self.log.info("Memory after loaded {0}"
+                              .format(mem_stats_load[bucket.name]["mem_used"]))
