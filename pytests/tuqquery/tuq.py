@@ -2485,6 +2485,40 @@ class QueryTests(BaseTestCase):
             expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
 
+    def test_intersect_covering(self):
+        created_indexes = []
+        ind_list = ["one", "two"]
+        index_name="one"
+        for bucket in self.buckets:
+            for ind in ind_list:
+                index_name = "coveringindex%s" % ind
+                if ind =="one":
+                    self.query = "CREATE INDEX %s ON %s(job_title, name)  USING GSI" % (index_name, bucket.name)
+                elif ind =="two":
+                    self.query = "CREATE INDEX %s ON %s(join_day, name)  USING GSI" % (index_name, bucket.name)
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name)
+                created_indexes.append(index_name)
+        for bucket in self.buckets:
+            self.query = "explain select name from %s where job_title='Engineer' intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+            self.query = "select name from %s where job_title='Engineer' intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+            expected_result = [{"name" : doc["name"]}
+            for doc in self.full_list if doc['join_day'] > 5]
+            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
+            self._verify_results(actual_result, expected_result)
+
+            for ind in ind_list:
+                index_name = "coveringindex%s" % ind
+                if ind =="one":
+                    self.query = "DROP INDEX %s.%s USING GSI" % (bucket.name, index_name)
+                elif ind =="two":
+                    self.query = "DROP INDEX %s.%s USING GSI" % (bucket.name, index_name)
+                self.run_cbq_query()
+
     def test_intersect_all(self):
         for bucket in self.buckets:
             self.query = "select name from %s intersect all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
