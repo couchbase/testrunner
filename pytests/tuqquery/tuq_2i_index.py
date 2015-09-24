@@ -232,7 +232,7 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
-                    self.query = "explain SELECT name FROM %s AS test where join_yr > 2009 GROUP BY join_yr ORDER BY name';" % (bucket.name)
+                    self.query = "explain SELECT count(*),join_yr FROM %s AS test where join_yr > 2009 GROUP BY join_yr ORDER BY name';" % (bucket.name)
                     self.test_explain_covering_index(index_name)
                     self.query = "SELECT count(*),join_yr FROM %s AS test where join_yr > 2009 GROUP BY join_yr ORDER BY name;" % (bucket.name)
                     actual_result = self.run_cbq_query()
@@ -249,6 +249,78 @@ class QueriesIndexTests(QueryTests):
                     for index_name in created_indexes:
                         self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                         self.run_cbq_query()
+
+    def test_covering_groupby_having(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwithgroupbyhaving%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(job_title,join_mo,test_rate) USING GSI" % (index_name, bucket.name)
+                    self.run_cbq_query()
+                    self._wait_for_index_online(bucket, index_name)
+                    created_indexes.append(index_name)
+                    self.query = "explain SELECT join_mo, SUM(test_rate) as rate FROM %s " % (bucket.name) +\
+                         "as employees WHERE job_title='Engineer' GROUP BY join_mo " +\
+                         "HAVING SUM(employees.test_rate) > 0 and " +\
+                         "SUM(test_rate) < 100000"
+                    self.test_explain_covering_index(index_name)
+                    self.query = "SELECT join_mo, SUM(test_rate) as rate FROM %s " % (bucket.name) +\
+                         "as employees WHERE job_title='Engineer' GROUP BY join_mo " +\
+                         "HAVING SUM(employees.test_rate) > 0 and " +\
+                         "SUM(test_rate) < 100000"
+                    actual_result = self.run_cbq_query()
+                    actual_result = [{"join_mo" : doc["join_mo"], "rate" : round(doc["rate"])} for doc in actual_result['results']]
+                    actual_result = sorted(actual_result, key=lambda doc: (doc['join_mo']))
+                    tmp_groups = set([doc['join_mo'] for doc in self.full_list])
+                    expected_result = [{"join_mo" : group,
+                                "rate" : round(math.fsum([doc['test_rate']
+                                                          for doc in self.full_list
+                                                          if doc['join_mo'] == group and\
+                                                             doc['job_title'] == 'Engineer']))}
+                               for group in tmp_groups
+                               if math.fsum([doc['test_rate']
+                                            for doc in self.full_list
+                                            if doc['join_mo'] == group and\
+                                            doc['job_title'] == 'Engineer'] ) > 0 and\
+                                  math.fsum([doc['test_rate']
+                                            for doc in self.full_list
+                                            if doc['join_mo'] == group and\
+                                            doc['job_title'] == 'Engineer'] ) < 100000]
+                    expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
+                    self._verify_results(actual_result, expected_result)
+            finally:
+                    for index_name in created_indexes:
+                        self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                        self.run_cbq_query()
+
+    def test_covering_groupby_letting(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwithgroupbyhaving%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,test_rate) USING GSI" % (index_name, bucket.name)
+                    self.run_cbq_query()
+                    self._wait_for_index_online(bucket, index_name)
+                    created_indexes.append(index_name)
+                    self.query = "explain SELECT join_mo, sum_test from %s WHERE join_mo>7 group by join_mo letting sum_test = sum(test_rate) " % (bucket.name)
+                    self.test_explain_covering_index(index_name)
+                    self.query = "SELECT join_mo, sum_test from %s WHERE join_mo>7 group by join_mo letting sum_test = sum(test_rate)" % (bucket.name)
+                    actual_list = self.run_cbq_query()
+                    actual_result = sorted(actual_list['results'])
+                    tmp_groups = set([doc['join_mo'] for doc in self.full_list if doc['join_mo']>7])
+                    expected_result = [{"join_mo" : group,
+                              "sum_test" : sum([x["test_rate"] for x in self.full_list
+                                               if x["join_mo"] == group])}
+                               for group in tmp_groups]
+                    expected_result = sorted(expected_result)
+                    self._verify_results(actual_result, expected_result)
+            finally:
+                    for index_name in created_indexes:
+                        self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                        self.run_cbq_query()
+
 
 
     def test_explain_index_join(self):
