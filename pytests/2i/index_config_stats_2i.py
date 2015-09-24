@@ -10,8 +10,13 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
         super(SecondaryIndexingStatsConfigTests, self).tearDown()
 
     def test_index_stats(self):
+        """
+        Tests index stats when indexes are created and dropped
+        """
         #Create Index
-        self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = True, drop_index = False)
+        self.run_multi_operations(buckets = self.buckets, 
+            query_definitions = self.query_definitions, 
+            create_index = True, drop_index = False)
         #Check Index Stats
         index_map = self.get_index_stats()
         self.log.info(index_map)
@@ -20,13 +25,25 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
             for bucket in self.buckets:
                 bucket_name = bucket.name
                 check_keys = ['items_count', 'total_scan_duration', 'num_docs_queued',
-                 'num_requests', 'num_rows_returned', 'num_docs_queued','num_docs_pending','delete_bytes' ]
+                 'num_requests', 'num_rows_returned', 'num_docs_queued',
+                 'num_docs_pending','delete_bytes' ]
                 map = self._create_stats_map(items_count = 2016)
                 self.verify_index_stats(index_map, index_name, bucket_name, map, check_keys)
         #Drop Index
-        self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = True)
+        self.run_multi_operations(buckets = self.buckets, 
+            query_definitions = self.query_definitions, 
+            create_index = False, drop_index = True)
         index_map = self.get_index_stats()
-        self.assertTrue(len(index_map) == 0, "Index Stats still show {0}".format(index_map))
+        # Fix for CBQE-3071
+        #Only the indexes created by this test
+        #are being removed
+        for query_definition in self.query_definitions:
+            index_name = query_definition.index_name
+            for bucket in self.buckets:
+                self.assertNotIn(index_name, index_map[bucket.name].keys(), 
+                    "Index {ind} present in bucket {buc}".format(
+                        ind=index_name,
+                        buc=bucket.name))
 
     def test_get_index_settings(self):
         #Check Index Settings
