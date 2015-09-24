@@ -222,6 +222,34 @@ class QueriesIndexTests(QueryTests):
                     self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
                     self.run_cbq_query()
 
+    def test_covering_groupby(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            try:
+                for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwithgroupby%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_yr,name) where join_yr >2009 USING GSI" % (index_name, bucket.name)
+                    self.run_cbq_query()
+                    self._wait_for_index_online(bucket, index_name)
+                    created_indexes.append(index_name)
+                    self.query = "explain SELECT name FROM %s AS test where join_yr > 2009 GROUP BY join_yr ORDER BY name';" % (bucket.name)
+                    self.test_explain_covering_index(index_name)
+                    self.query = "SELECT count(*),join_yr FROM %s AS test where join_yr > 2009 GROUP BY join_yr ORDER BY name;" % (bucket.name)
+                    actual_result = self.run_cbq_query()
+                    actual_result = actual_result['results']
+                    expected_result = [{"join_yr" : doc["join_yr"]}
+                                    for doc in self.full_list
+                                    if doc["join_yr"] > 2009]
+                    expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
+                    if len(actual_result) != len(expected_result):
+                         missing, extra = self.check_missing_and_extra(actual_result, expected_result)
+                         self.log.error("Missing items: %s.\n Extra items: %s" % (missing[:100], extra[:100]))
+                         self.fail("Results are incorrect.Actual num %s. Expected num: %s.\n" % (len(actual_result), len(expected_result)))
+            finally:
+                    for index_name in created_indexes:
+                        self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                        self.run_cbq_query()
+
 
     def test_explain_index_join(self):
         for bucket in self.buckets:
