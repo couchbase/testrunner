@@ -1,6 +1,7 @@
 import time
 
 from threading import Thread
+import threading
 from rebalance.rebalance_base import RebalanceBaseTest
 from membase.api.exception import RebalanceFailedException
 from membase.api.rest_client import RestConnection, RestHelper
@@ -195,6 +196,29 @@ class RebalanceInTests(RebalanceBaseTest):
                 tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
         for task in tasks:
             task.result()
+        self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
+        self.verify_unacked_bytes_all_buckets()
+
+
+    def rebalance_in_with_compaction_and_expiration_ops(self):
+        for bucket in self.buckets:
+            RestConnection(self.master).set_auto_compaction(dbFragmentThreshold=100, bucket = bucket.name)
+        gen_exp = BlobGenerator('mike', 'mike-', self.value_size, start=0, end=self.num_items)
+        gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items, end=2*self.num_items)
+        self._load_all_buckets(self.master, gen_exp, "update", 1, batch_size=20000)
+        tasks = []
+        servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
+        tasks = [self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])]
+        self._load_all_buckets(self.master, gen_create, "create", 1, batch_size=20000, pause_secs=5)
+        thread_list = []
+        t = threading.Thread(target=self._run_compaction)
+        t.daemon = True
+        t.start()
+        thread_list.append(t)
+        for task in tasks:
+            task.result()
+        for t in thread_list:
+            t.join()
         self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
         self.verify_unacked_bytes_all_buckets()
 
