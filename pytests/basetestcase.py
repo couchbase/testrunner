@@ -1967,6 +1967,14 @@ class BaseTestCase(unittest.TestCase):
                 return True
         return False
 
+    def _run_compaction(self, number_of_times = 10):
+        try:
+            for x in range(1,number_of_times):
+                for bucket in self.buckets:
+                    RestConnection(self.master).compact_bucket(bucket.name)
+        except Exception, ex:
+            self.log.info(ex)
+
     def get_kv_nodes(self, servers = None):
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
