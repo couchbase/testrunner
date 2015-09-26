@@ -201,18 +201,18 @@ class RebalanceInTests(RebalanceBaseTest):
 
 
     def rebalance_in_with_compaction_and_expiration_ops(self):
-        self._expiry_pager(self.master, val=10000)
+        self._expiry_pager(self.master, val=1000000)
         for bucket in self.buckets:
             RestConnection(self.master).set_auto_compaction(dbFragmentThreshold=100, bucket = bucket.name)
         gen_exp = BlobGenerator('mike', 'mike-', self.value_size, start=0, end=self.num_items)
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items, end=2*self.num_items)
         self._load_all_buckets(self.master, gen_exp, "update", 1, batch_size=20000)
         self.verify_cluster_stats(self.servers[:self.nodes_init])
-        self._expiry_pager(self.master, val=5)
         tasks = []
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
         tasks = [self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])]
-        self.sleep(40)
+        self.sleep(60)
+        self._expiry_pager(self.master, val=5)
         thread_list = []
         t = threading.Thread(target=self._run_compaction)
         t.daemon = True
