@@ -51,6 +51,7 @@ class QueryTests(BaseTestCase):
         self.index_type = self.input.param("index_type", 'VIEW')
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
         self.covering_index = self.input.param("covering_index", False)
+        self.named_prepare = self.input.param("named_prepare", None)
         if self.input.param("reload_data", False):
             for bucket in self.buckets:
                 self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
@@ -1676,6 +1677,16 @@ class QueryTests(BaseTestCase):
                         "AND  NOT (job_title = 'Sales') ORDER BY name"
             self.prepared_common_body()
 
+    def test_named_prepared_between(self):
+        for bucket in self.buckets:
+            self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
+                          "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
+                                                                        bucket.name) +\
+                          " AND (ANY vm IN %s.VMs SATISFIES vm.RAM between 1 and 5 END)"  % (
+                                                                    bucket.name) +\
+                          "AND  NOT (job_title = 'Sales') ORDER BY name"
+            self.prepared_common_body()
+
     def test_prepared_comparision_not_equal_less_more(self):
         for bucket in self.buckets:
             self.query = "SELECT name FROM %s WHERE " % (bucket.name) +\
@@ -2956,7 +2967,10 @@ class QueryTests(BaseTestCase):
 
     def prepared_common_body(self):
         result_no_prepare = self.run_cbq_query()['results']
-        query = "PREPARE %s" % self.query
+        if self.named_prepare:
+            query = "PREPARE %s from %s" % (self.named_prepare,self.query)
+        else:
+            query = "PREPARE %s" % self.query
         prepared = self.run_cbq_query(query=query)['results'][0]
         result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True)['results']
         msg = "Query resut with prepare and without doesn't match.\nNo prepare: %s ... %s\nWith prepare: %s ... %s"
@@ -2988,7 +3002,8 @@ class QueryTests(BaseTestCase):
                 hint = ' USE INDEX (%s using %s) ' % (self.hint_index, self.index_type)
                 query = query.replace(from_clause, from_clause + hint)
             self.log.info('RUN QUERY %s' % query)
-            result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared=is_prepared)
+            result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared=is_prepared,
+                                                        named_prepare=self.named_prepare)
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\

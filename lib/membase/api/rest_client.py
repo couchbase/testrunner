@@ -710,6 +710,12 @@ class RestConnection(object):
                 'Authorization': 'Basic %s' % authorization,
                 'Accept': '*/*'}
 
+    # authorization must be a base64 string of username:password
+    def _create_headers_encoded_prepared(self):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        return {'Content-Type': 'Content-Type: application/json',
+                'Authorization': 'Basic %s' % authorization}
+
     def _http_request(self, api, method='GET', params='', headers=None, timeout=120):
         if not headers:
             headers = self._create_headers()
@@ -2215,17 +2221,27 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'PUT', params)
         return status
 
-    def query_tool(self, query, port=8093, timeout=650, query_params={}, is_prepared=False, verbose = True):
+    def query_tool(self, query, port=8093, timeout=650, query_params={}, is_prepared=False, named_prepare=None, verbose = True):
         key = 'prepared' if is_prepared else 'statement'
         headers = None
+        is_encoded_prepared=False
+        prepared = json.dumps(query)
         if is_prepared:
-            prepared = json.dumps(query)
-            prepared = str(prepared.encode('utf-8'))
-            params = 'prepared=' + urllib.quote(prepared, '~()')
+            if named_prepare:
+                params = 'prepared=' + urllib.quote(prepared, '~()')
+                params = 'prepared="%s"'% named_prepare
+            else:
+                prepared = json.dumps(query)
+                prepared = str(prepared.encode('utf-8'))
+                params = 'prepared=' + urllib.quote(prepared, '~()')
             if 'creds' in query_params and query_params['creds']:
                 headers = self._create_headers_with_auth(query_params['creds'][0]['user'].encode('utf-8'),
                                                          query_params['creds'][0]['pass'].encode('utf-8'))
+            elif is_encoded_prepared:
+                headers = self._create_headers_encoded_prepared()
             api = "http://%s:%s/query/service?%s" % (self.ip, port, params)
+            log.info("-------------------- Prepared Statment -----------------")
+            log.info("%s"%api)
         else:
             params = {key : query}
             if 'creds' in query_params and query_params['creds']:
