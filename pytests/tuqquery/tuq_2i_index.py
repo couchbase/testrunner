@@ -359,6 +359,7 @@ class QueriesIndexTests(QueryTests):
 
 
 
+
     def test_explain_index_join(self):
         for bucket in self.buckets:
             created_indexes = []
