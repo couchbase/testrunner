@@ -1926,17 +1926,14 @@ class QueryTests(BaseTestCase):
             self.log.info(res)
             s = pprint.pformat( res, indent=4 )
             self.log.info(s)
-            if 'UnionScan' in s:
-                self.log.info("UnionScan Operator is used by this query")
-            else:
-                self.log.error("UnionScan Operator is not used by this query, Covering Indexes not used properly")
-                self.fail("UnionScan Operator is not used by this query, Covering Indexes not used properly")
-            if 'IndexScan' in s:
+            self.assertTrue(res["results"][0]["~children"][0]["~children"][0]["#operator"] == "UnionScan",
+                        "UnionScan Operator is not used by this query")
+            if res["results"][0]["~children"][0]["~children"][0]["scans"][0]["#operator"] == "IndexScan":
                 self.log.info("IndexScan Operator is also used by this query in scans")
             else:
                 self.log.error("IndexScan Operator is not used by this query, Covering Indexes not used properly")
                 self.fail("IndexScan Operator is not used by this query, Covering Indexes not used properly")
-            if index in s:
+            if res["results"][0]["~children"][0]["~children"][0]["scans"][0]["index"] == index:
                 self.log.info("Query is using specified index")
             else:
                 self.log.info("Query is not using specified index")
@@ -1955,15 +1952,8 @@ class QueryTests(BaseTestCase):
                 self.log.info(x)
             s = pprint.pformat( res, indent=4 )
             self.log.info(s)
-            if 'IndexScan' in s:
-                self.log.info("IndexScan Operator is also used by this query in scans")
-            else:
-                self.log.error("IndexScan Operator is not used by this query, Covering Indexes not used properly")
-                self.fail("IndexScan Operator is not used by this query, Covering Indexes not used properly")
-            if index in s:
-                self.log.info("Query is using specified index")
-            else:
-                self.log.info("Query is not using specified index")
+            self.assertTrue(res["results"][0]["~children"][0]["index"] == index,
+                                    "Index should be %s, but is: %s" % (index, res["results"][0]["~children"][0]["index"]))
             if 'covers' in s:
                 self.log.info("covers key present in json result ")
             else:
@@ -1974,6 +1964,7 @@ class QueryTests(BaseTestCase):
             else:
                 self.log.error("cover keyword missing from json children ")
                 self.fail("cover keyword missing from json children ")
+
 
 
 

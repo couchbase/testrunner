@@ -1,5 +1,6 @@
 import math
 import re
+import uuid
 
 from tuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
@@ -135,7 +136,7 @@ class QueriesIndexTests(QueryTests):
             try:
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindex%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(name, join_day)  USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(name, join_day)  USING %s" % (index_name, bucket.name,self.index_type)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -155,7 +156,7 @@ class QueriesIndexTests(QueryTests):
                     self._verify_results(actual_result['results'], expected_result)
             finally:
                 for index_name in created_indexes:
-                    self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                    self.query = "DROP INDEX %s.%s USING  %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
 
     def test_covering_partial_index(self):
@@ -164,7 +165,7 @@ class QueriesIndexTests(QueryTests):
             try:
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithwhere%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(email, VMs, join_day) where join_day > 10 USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(email, VMs, join_day) where join_day > 10 USING %s" % (index_name, bucket.name,self.index_type)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -186,7 +187,7 @@ class QueriesIndexTests(QueryTests):
                     self._verify_results(actual_result['results'], expected_result)
             finally:
                 for index_name in created_indexes:
-                    self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
 
     def test_covering_orderby_limit(self):
@@ -195,14 +196,12 @@ class QueriesIndexTests(QueryTests):
             try:
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithlimit%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(skills[0], join_yr, VMs[0].os) where join_yr =2010 USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(skills[0], join_yr, VMs[0].os) where join_yr =2010 USING %s" % (index_name, bucket.name,self.index_type)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
                     self.query = "explain select * from %s where skills[0]='skill2010' and join_yr=2010 and VMs[0].os IN ['ubuntu','windows','linux'] order by _id asc LIMIT 10 OFFSET 0;" % (bucket.name)
                     self.test_explain_union(index_name)
-                    self.query = "explain select VMs[0].os from %s where skills[0]='skill2010' and join_yr=2010 and VMs[0].os IN ['ubuntu','windows','linux'] order by VMs[0].os asc LIMIT 10 OFFSET 0;" % (bucket.name)
-                    self.test_explain_covering_index(index_name)
                     self.query = "select name,skills[0] as skills from %s where skills[0]='skill2010' and join_yr=2010 and VMs[0].os IN ['ubuntu','windows','linux'] order by name LIMIT 15 OFFSET 0;" % (bucket.name)
                     actual_result = self.run_cbq_query()
                     expected_result = [{"skills" : doc["skills"][0],"name":doc["name"]}
@@ -219,7 +218,7 @@ class QueriesIndexTests(QueryTests):
                     self._verify_results(actual_result, expected_result)
             finally:
                 for index_name in created_indexes:
-                    self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
 
     def test_covering_groupby(self):
@@ -228,12 +227,13 @@ class QueriesIndexTests(QueryTests):
             try:
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithgroupby%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(join_yr,name) where join_yr >2009 USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(join_yr,name) where join_yr >2009 USING %s" % (index_name, bucket.name,self.index_type)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
                     self.query = "explain SELECT count(*),join_yr FROM %s AS test where join_yr > 2009 GROUP BY join_yr ORDER BY name';" % (bucket.name)
-                    self.test_explain_covering_index(index_name)
+                    if self.covering_index:
+                        self.test_explain_covering_index(index_name)
                     self.query = "SELECT count(*),join_yr FROM %s AS test where join_yr > 2009 GROUP BY join_yr ORDER BY name;" % (bucket.name)
                     actual_result = self.run_cbq_query()
                     actual_result = actual_result['results']
@@ -247,7 +247,7 @@ class QueriesIndexTests(QueryTests):
                          self.fail("Results are incorrect.Actual num %s. Expected num: %s.\n" % (len(actual_result), len(expected_result)))
             finally:
                     for index_name in created_indexes:
-                        self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                         self.run_cbq_query()
 
     def test_covering_groupby_having(self):
@@ -256,7 +256,7 @@ class QueriesIndexTests(QueryTests):
             try:
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithgroupbyhaving%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(job_title,join_mo,test_rate) USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(job_title,join_mo,test_rate) USING %s" % (index_name, bucket.name,self.index_type)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -264,7 +264,8 @@ class QueriesIndexTests(QueryTests):
                          "as employees WHERE job_title='Engineer' GROUP BY join_mo " +\
                          "HAVING SUM(employees.test_rate) > 0 and " +\
                          "SUM(test_rate) < 100000"
-                    self.test_explain_covering_index(index_name)
+                    if self.covering_index:
+                        self.test_explain_covering_index(index_name)
                     self.query = "SELECT join_mo, SUM(test_rate) as rate FROM %s " % (bucket.name) +\
                          "as employees WHERE job_title='Engineer' GROUP BY join_mo " +\
                          "HAVING SUM(employees.test_rate) > 0 and " +\
@@ -291,7 +292,7 @@ class QueriesIndexTests(QueryTests):
                     self._verify_results(actual_result, expected_result)
             finally:
                     for index_name in created_indexes:
-                        self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                         self.run_cbq_query()
 
     def test_covering_groupby_letting(self):
@@ -299,13 +300,14 @@ class QueriesIndexTests(QueryTests):
             created_indexes = []
             try:
                 for ind in xrange(self.num_indexes):
-                    index_name = "coveringindexwithgroupbyhaving%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(join_mo,test_rate) USING GSI" % (index_name, bucket.name)
+                    index_name = "coveringindexwithgroupbyletting%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,test_rate) USING %s" % (index_name, bucket.name,self.index_type)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
                     self.query = "explain SELECT join_mo, sum_test from %s WHERE join_mo>7 group by join_mo letting sum_test = sum(test_rate) " % (bucket.name)
-                    self.test_explain_covering_index(index_name)
+                    if self.covering_index:
+                        self.test_explain_covering_index(index_name)
                     self.query = "SELECT join_mo, sum_test from %s WHERE join_mo>7 group by join_mo letting sum_test = sum(test_rate)" % (bucket.name)
                     actual_list = self.run_cbq_query()
                     actual_result = sorted(actual_list['results'])
@@ -318,7 +320,41 @@ class QueriesIndexTests(QueryTests):
                     self._verify_results(actual_result, expected_result)
             finally:
                     for index_name in created_indexes:
-                        self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
+                        self.run_cbq_query()
+
+    def test_covering_index_hints_select_explain(self):
+        index_name_prefix_list = ['hint' + str(uuid.uuid4())[:4],'covering_hint' + str(uuid.uuid4())[:4]]
+        created_indexes = []
+        for bucket in self.buckets:
+            for ind in index_name_prefix_list:
+                    for attr in ['join_day', 'join_mo']:
+                        ind_name = '%s_%s' % (ind, attr)
+                        self.query = "CREATE INDEX %s ON %s(%s)  USING %s" % (ind_name,
+                                                                    bucket.name, attr, self.index_type)
+                        self.run_cbq_query()
+                        self._wait_for_index_online(bucket, ind_name)
+                        created_indexes.append('%s' % (ind_name))
+        for bucket in self.buckets:
+                try:
+                    for ind in created_indexes:
+                        if "covering" in ind:
+                                if "join_day" in ind:
+                                    self.query = 'EXPLAIN SELECT join_day FROM %s  USE INDEX(%s using %s) WHERE join_day>2' % (bucket.name, ind, self.index_type)
+                                    self.test_explain_covering_index(ind)
+                                elif "join_mo" in ind:
+                                    self.query = 'EXPLAIN SELECT join_mo FROM %s  USE INDEX(%s using %s) WHERE join_mo>3' % (bucket.name, ind, self.index_type)
+                                    self.test_explain_covering_index(ind)
+                        else:
+                            self.query = 'EXPLAIN SELECT name,join_day, join_mo FROM %s  USE INDEX(%s using %s) WHERE join_day>2 AND join_mo>3' % (bucket.name, ind, self.index_type)
+                            res = self.run_cbq_query()
+                            self.log.info(res)
+                            self.assertTrue(res["results"][0]["~children"][0]["index"] == ind,
+                                    "Index should be %s, but is: %s" % (ind, res["results"][0]["~children"][0]["index"]))
+
+                finally:
+                     for index_name in set(created_indexes):
+                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                         self.run_cbq_query()
 
 
