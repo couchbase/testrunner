@@ -294,18 +294,33 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.verify_unacked_bytes_all_buckets()
 
     def rebalance_in_out_with_compaction_and_expiration_ops(self):
+        self.total_loader_threads = self.input.param("total_loader_threads", 10)
+        self.expiry_items = self.input.param("expiry_items", 100000)
+        self.max_expiry = self.input.param("max_expiry", 30)
+        thread_list = []
+        self._expiry_pager(self.master, val=1000000)
         for bucket in self.buckets:
             RestConnection(self.master).set_auto_compaction(dbFragmentThreshold=100, bucket = bucket.name)
-        gen_exp = BlobGenerator('mike', 'mike-', self.value_size, start=0, end=self.num_items)
-        gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items, end=2*self.num_items)
-        self._load_all_buckets(self.master, gen_exp, "update", 1, batch_size=20000)
+        num_items = self.expiry_items
+        expiry_range = self.max_expiry
+        for x in range(1,self.total_loader_threads):
+            t = threading.Thread(target=self.run_mc_bin_client, args = (num_items, expiry_range))
+            t.daemon = True
+            t.start()
+            thread_list.append(t)
+        for t in thread_list:
+            t.join()
+        for x in range(1,self.total_loader_threads):
+            t = threading.Thread(target=self.run_mc_bin_client, args = (num_items, expiry_range))
+            t.daemon = True
+            t.start()
+            thread_list.append(t)
+        self.sleep(20)
         tasks = []
         servs_in = self.servers[self.nodes_init:self.nodes_init + 1]
         servs_out = self.servers[self.nodes_init - 1:self.nodes_init]
         result_nodes = list(set(self.servers[:self.nodes_init] + servs_in) - set(servs_out))
         tasks = [self.cluster.async_rebalance(result_nodes, servs_in, servs_out)]
-        self._load_all_buckets(self.master, gen_create, "create", 1, batch_size=20000, pause_secs=5)
-        thread_list = []
         t = threading.Thread(target=self._run_compaction)
         t.daemon = True
         t.start()
@@ -314,8 +329,6 @@ class RebalanceInOutTests(RebalanceBaseTest):
             task.result()
         for t in thread_list:
             t.join()
-        self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
-        self.verify_unacked_bytes_all_buckets()
 
     """Start-stop rebalance in/out with adding/removing aditional after stopping rebalance.
 
