@@ -357,6 +357,154 @@ class QueriesIndexTests(QueryTests):
                         self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                         self.run_cbq_query()
 
+    def async_monitor_index(self, bucket, index_name = None):
+        monitor_index_task = self.cluster.async_monitor_index(
+                 server = self.n1ql_server, bucket = bucket,
+                 n1ql_helper = self.n1ql_helper,
+                 index_name = index_name)
+        return monitor_index_task
+
+##############################################################################################
+#
+#   SCALAR FN
+##############################################################################################
+
+    def test_ceil_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwithceil%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(name,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+        for bucket in self.buckets:
+            created_indexes = []
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+
+            self.query = "explain select name,ceil(test_rate) as rate from %s where name LIKE '%s' and ceil(test_rate) > 5"  % (bucket.name,"employee")
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+            self.query = "select test_rate from %s where name = 'employee-9' and ceil(test_rate) > 5"  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['test_rate']))
+            expected_result = [{"test_rate" : doc['test_rate']} for doc in self.full_list
+                               if doc['name'] == 'employee-9' and
+                               math.ceil(doc['test_rate']) > 5]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['test_rate']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_floor_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwithfloor%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(name,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+        for bucket in self.buckets:
+            created_indexes = []
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+            self.query = "explain select name,floor(test_rate) from %s where name LIKE '%s' and floor(test_rate) > 5"  % (bucket.name,"employee")
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+            self.query = "select test_rate from %s where name = 'employee-9' and floor(test_rate) > 5"  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['test_rate']))
+            expected_result = [{"test_rate" : doc['test_rate']} for doc in self.full_list
+                               if doc['name'] == 'employee-9' and
+                               math.floor(doc['test_rate']) > 5]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['test_rate']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_greatest_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwithgreatest%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(name,skills[0], skills[1])  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+        for bucket in self.buckets:
+            created_indexes = []
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+            self.query = "explain select GREATEST(skills[0], skills[1]) as SKILL from %s where name LIKE '%s' and skills[0]='skill2010'"  % (bucket.name,"employee")
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+            self.query = "select GREATEST(skills[0], skills[1]) as SKILL from %s where name = 'employee-9' and skills[0]='skill2010'"  % (
+                                                                                bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'],
+                                   key=lambda doc: (doc['SKILL']))
+
+            expected_result = [{"SKILL" :
+                                (doc['skills'][0], doc['skills'][1])[doc['skills'][0]<doc['skills'][1]]}
+                               for doc in self.full_list
+                               if doc['skills'][0]=='skill2010' and doc['name']=='employee-9']
+            expected_result = sorted(expected_result, key=lambda doc: (doc['SKILL']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_least_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwithleast%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(name,skills[0], skills[1])  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            created_indexes = []
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+            self.query = "explain select LEAST(skills[0], skills[1]) as SKILL from %s where name LIKE '%s' and skills[0]='skill2010'"  % (bucket.name,"employee")
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+            self.query = "select   LEAST(skills[0], skills[1]) as SKILL from %s where name = 'employee-9' and skills[0]='skill2010'"  % (
+                                                                            bucket.name)
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'],
+                                   key=lambda doc: (doc['SKILL']))
+
+            expected_result = [{"SKILL" :
+                                (doc['skills'][0], doc['skills'][1])[doc['skills'][0]>doc['skills'][1]]}
+                               for doc in self.full_list
+                               if doc['skills'][0]=='skill2010' and doc['name']=='employee-9']
+            expected_result = sorted(expected_result, key=lambda doc: (doc['SKILL']))
+            self._verify_results(actual_result, expected_result)
+
 
 
 
