@@ -8,6 +8,8 @@ import random
 import logging
 import json
 import commands
+import mc_bin_client
+from memcached.helper.data_helper import  VBucketAwareMemcached
 from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.document import View
@@ -1967,7 +1969,7 @@ class BaseTestCase(unittest.TestCase):
                 return True
         return False
 
-    def _run_compaction(self, number_of_times = 10):
+    def _run_compaction(self, number_of_times = 100):
         try:
             for x in range(1,number_of_times):
                 for bucket in self.buckets:
@@ -2004,6 +2006,25 @@ class BaseTestCase(unittest.TestCase):
         for server in index_servers:
             RestConnection(server).set_index_settings(json)
 
+    def _load_data_in_buckets_using_mc_bin_client(self, bucket, data_set, max_expiry_range = None):
+        client = VBucketAwareMemcached(RestConnection(self.master), bucket)
+        try:
+            for key in data_set.keys():
+                expiry = 0
+                if max_expiry_range != None:
+                    expiry = random.randint(1, max_expiry_range)
+                o, c, d = client.set(key, expiry, 0, json.dumps(data_set[key]))
+        except Exception, ex:
+            print 'WARN======================='
+            print ex
+
+    def run_mc_bin_client(self, number_of_times = 500000,  max_expiry_range = 30):
+        data_map  = {}
+        for i in range(number_of_times):
+            name = "key_"+str(i)+str((random.randint(1, 10000)))+str((random.randint(1, 10000)))
+            data_map[name] = {"name":"none_the_less"}
+        for bucket in self.buckets:
+            self._load_data_in_buckets_using_mc_bin_client(bucket, data_map, max_expiry_range)
 
     '''
     Returns ip address of the requesting machine

@@ -1,6 +1,7 @@
 import time
 
 from threading import Thread
+import threading
 from rebalance.rebalance_base import RebalanceBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
@@ -601,3 +602,38 @@ class RebalanceOutTests(RebalanceBaseTest):
             self._load_all_buckets(self.master, gen_2, "create", 0)
             self.verify_cluster_stats(self.servers[:i])
         self.verify_unacked_bytes_all_buckets()
+
+    def rebalance_out_with_compaction_and_expiration_ops(self):
+        self.total_loader_threads = self.input.param("total_loader_threads", 10)
+        self.expiry_items = self.input.param("expiry_items", 100000)
+        self.max_expiry = self.input.param("max_expiry", 30)
+        thread_list = []
+        self._expiry_pager(self.master, val=1000000)
+        for bucket in self.buckets:
+            RestConnection(self.master).set_auto_compaction(dbFragmentThreshold=100, bucket = bucket.name)
+        num_items = self.expiry_items
+        expiry_range = self.max_expiry
+        for x in range(1,self.total_loader_threads):
+            t = threading.Thread(target=self.run_mc_bin_client, args = (num_items, expiry_range))
+            t.daemon = True
+            t.start()
+            thread_list.append(t)
+        for t in thread_list:
+            t.join()
+        for x in range(1,self.total_loader_threads):
+            t = threading.Thread(target=self.run_mc_bin_client, args = (num_items, expiry_range))
+            t.daemon = True
+            t.start()
+            thread_list.append(t)
+        self.sleep(20)
+        tasks = []
+        servs_out = self.servers[len(self.servers) - self.nodes_out:]
+        tasks = [self.cluster.async_rebalance(self.servers[:1], [], servs_out)]
+        t = threading.Thread(target=self._run_compaction)
+        t.daemon = True
+        t.start()
+        thread_list.append(t)
+        for task in tasks:
+            task.result()
+        for t in thread_list:
+            t.join()
