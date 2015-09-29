@@ -102,6 +102,44 @@ class DMLQueryTests(QueryTests):
             self.assertEqual(sorted(actual_result['results']), sorted([v['name'] for v in expected_item_values]),
                              'Results expected:%s, actual: %s' % (expected_item_values, actual_result['results']))
 
+    def test_insert_returning_raw(self):
+        keys = ['%s%s' % (k, str(uuid.uuid4())[:5]) for k in xrange(10)]
+        expected_item_values = [{'name': 'return_%s' % v} for v in xrange(10)]
+        for bucket in self.buckets:
+            values = ''
+            for k, v in zip(keys, expected_item_values):
+                inserted = v
+                if isinstance(v, str):
+                    inserted = '"%s"' % v
+                if v is None:
+                    inserted = 'null'
+                values += '("%s", %s),' % (k, inserted)
+            self.query = 'insert into %s (key , value) VALUES %s RETURNING RAW name' % (bucket.name, values[:-1])
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+            self.assertEqual(sorted(actual_result['results']), sorted([v['name'] for v in expected_item_values]),
+                'Results expected:%s, actual: %s' % (expected_item_values, actual_result['results']))
+
+    def test_insert_returning_alias(self):
+        keys = ['%s%s' % (k, str(uuid.uuid4())[:5]) for k in xrange(10)]
+        expected_item_values = [{'name': 'return_%s' % v} for v in xrange(10)]
+        for bucket in self.buckets:
+            values = ''
+            for k, v in zip(keys, expected_item_values):
+                inserted = v
+                if isinstance(v, str):
+                    inserted = '"%s"' % v
+                if v is None:
+                    inserted = 'null'
+                values += '("%s", %s),' % (k, inserted)
+            self.query = 'insert into %s (key , value) VALUES %s RETURNING name as new_name' % (bucket.name, values[:-1])
+            actual_result = self.run_cbq_query()
+            #modified to support the alias
+            expected_item_values = [{u'new_name': u'return_%s' % v} for v in xrange(10)]
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+            self.assertEqual(sorted(actual_result['results']), sorted([v[u'new_name'] for v in expected_item_values]),
+                'Results expected:%s, actual: %s' % (expected_item_values, actual_result['results']))
+
     def test_insert_values_returning_elements(self):
         keys = ['%s%s' % (k, str(uuid.uuid4())[:5]) for k in xrange(10)]
         expected_item_values = [{'name': 'return_%s' % v} for v in xrange(10)]
