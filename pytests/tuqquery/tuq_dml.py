@@ -14,6 +14,7 @@ class DMLQueryTests(QueryTests):
     def setUp(self):
         super(DMLQueryTests, self).setUp()
         self.directory = self.input.param("directory", "/tmp/tuq_data")
+        self.named_prepare = self.input.param("named_prepare", None)
         #self.shell.execute_command("killall cbq-engine")
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket,
@@ -274,7 +275,14 @@ class DMLQueryTests(QueryTests):
                 key = "insert_json" + key
                 for bucket in self.buckets:
                     query = 'INSERT into %s (key, value) VALUES ("%s", %s)' % (bucket.name, key, value)
-                    prepared = self.run_cbq_query(query='PREPARE %s' % query)['results'][0]
+                    prepare_key = "prepare_" + str(i)
+                    self.named_prepare=prepare_key
+                    if self.named_prepare:
+                        query = "PREPARE %s from %s" % (prepare_key,query)
+                    else:
+                        query = "PREPARE %s" % query
+                    prepared = self.run_cbq_query(query=query)['results'][0]
+                    #prepared = self.run_cbq_query(query='PREPARE %s' % query)['results'][0]
                     actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
                     self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
                 keys.append(key)
