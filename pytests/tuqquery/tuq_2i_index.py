@@ -378,7 +378,6 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
                     created_indexes.append(index_name)
         for bucket in self.buckets:
-            created_indexes = []
             tasks=[]
             for index_name in created_indexes:
                 try:
@@ -410,7 +409,6 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
                     created_indexes.append(index_name)
         for bucket in self.buckets:
-            created_indexes = []
             tasks=[]
             for index_name in created_indexes:
                 try:
@@ -442,7 +440,6 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
                     created_indexes.append(index_name)
         for bucket in self.buckets:
-            created_indexes = []
             tasks=[]
             for index_name in created_indexes:
                 try:
@@ -479,7 +476,6 @@ class QueriesIndexTests(QueryTests):
                     created_indexes.append(index_name)
 
         for bucket in self.buckets:
-            created_indexes = []
             tasks=[]
             for index_name in created_indexes:
                 try:
