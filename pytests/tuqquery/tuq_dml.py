@@ -120,6 +120,30 @@ class DMLQueryTests(QueryTests):
             self.assertEqual(sorted(actual_result['results']), sorted([v['name'] for v in expected_item_values]),
                              'Results expected:%s, actual: %s' % (expected_item_values, actual_result['results']))
 
+    def test_prepared_insert_values_returning_elements(self):
+        keys = ['%s%s' % (k, str(uuid.uuid4())[:5]) for k in xrange(10)]
+        expected_item_values = [{'name': 'return_%s' % v} for v in xrange(10)]
+        for bucket in self.buckets:
+            values = ''
+            for k, v in zip(keys, expected_item_values):
+                inserted = v
+                if isinstance(v, str):
+                    inserted = '"%s"' % v
+                if v is None:
+                    inserted = 'null'
+                values += 'VALUES ("%s", %s),' % (k, inserted)
+            self.query = 'insert into %s (key , value) %s RETURNING ELEMENT name' % (bucket.name, values[:-1])
+            if self.named_prepare:
+                self.named_prepare= "prepare_" + bucket.name
+                self.query = "PREPARE %s from %s" % (self.named_prepare,self.query)
+            else:
+                self.query = "PREPARE %s" % self.query
+            prepared = self.run_cbq_query(query=self.query)['results'][0]
+            actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+            self.assertEqual(sorted(actual_result['results']), sorted([v['name'] for v in expected_item_values]),
+                'Results expected:%s, actual: %s' % (expected_item_values, actual_result['results']))
+
     def test_insert_returning_elements_long(self):
         keys = ['%s%s' % (k, str(uuid.uuid4())[:2] *120) for k in xrange(10)]
         expected_item_values = [{'name': 'return_%s' % v} for v in xrange(10)]
