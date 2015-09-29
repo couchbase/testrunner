@@ -275,10 +275,9 @@ class DMLQueryTests(QueryTests):
                 key = "insert_json" + key
                 for bucket in self.buckets:
                     query = 'INSERT into %s (key, value) VALUES ("%s", %s)' % (bucket.name, key, value)
-                    prepare_key = "prepare_" + str(i)
-                    self.named_prepare=prepare_key
                     if self.named_prepare:
-                        query = "PREPARE %s from %s" % (prepare_key,query)
+                        self.named_prepare="prepare_" + str(i)
+                        query = "PREPARE %s from %s" % (self.named_prepare,query)
                     else:
                         query = "PREPARE %s" % query
                     prepared = self.run_cbq_query(query=query)['results'][0]
@@ -299,7 +298,7 @@ class DMLQueryTests(QueryTests):
             self.assertEqual(actual_result, expected_result,
                              'Item did not appear')
 
-    def test_insert_with_select(self):
+    def test_prepared_insert_with_select(self):
         num_docs = self.input.param('num_docs', 10)
         keys, values = self._insert_gen_keys(num_docs, prefix="select_i")
         prefix = 'insert%s' % str(uuid.uuid4())[:5]
@@ -307,6 +306,34 @@ class DMLQueryTests(QueryTests):
             for i in xrange(num_docs):
                 self.query = 'insert into %s (key "%s_%s", value {"name": name}) select name from %s use keys ["%s"]'  % (bucket.name, prefix, str(i),
                                                                                               bucket.name, keys[i])
+                if self.named_prepare:
+                    self.named_prepare="prepare_" + prefix + str(i)
+                    self.query = "PREPARE %s from %s" % (self.named_prepare,self.query)
+                else:
+                    self.query = "PREPARE %s" % self.query
+                prepared = self.run_cbq_query(query=self.query)['results'][0]
+                actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
+                #actual_result = self.run_cbq_query()
+                self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        for bucket in self.buckets:
+            self.query = 'select * from %s use keys [%s]'  % (bucket.name, ','.join(['"%s_%s"' % (prefix, i) for i in xrange(num_docs)]))
+            self.run_cbq_query()
+            self.sleep(10, 'wait for indexer')
+            actual_result = self.run_cbq_query()
+            expected_result = sorted([{bucket.name: {'name': doc['name']}} for doc in values[:num_docs]])
+            actual_result = sorted(actual_result['results'])
+            self._delete_ids(actual_result)
+            self._delete_ids(expected_result)
+            self.assertEqual(actual_result, expected_result, 'Item did not appear')
+
+    def test_insert_with_select(self):
+        num_docs = self.input.param('num_docs', 10)
+        keys, values = self._insert_gen_keys(num_docs, prefix="select_i")
+        prefix = 'insert%s' % str(uuid.uuid4())[:5]
+        for bucket in self.buckets:
+            for i in xrange(num_docs):
+                self.query = 'insert into %s (key "%s_%s", value {"name": name}) select name from %s use keys ["%s"]'  % (bucket.name, prefix, str(i),
+                                                                                                                          bucket.name, keys[i])
                 actual_result = self.run_cbq_query()
                 self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         for bucket in self.buckets:
@@ -319,6 +346,7 @@ class DMLQueryTests(QueryTests):
             self._delete_ids(actual_result)
             self._delete_ids(expected_result)
             self.assertEqual(actual_result, expected_result, 'Item did not appear')
+
 
 ############################################################################################################################
 #
