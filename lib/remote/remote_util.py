@@ -1895,13 +1895,22 @@ class RemoteMachineShellConnection:
             log.error(line)
             if track_words:
                 if "Warning" in line and "hugepages" in line:
-                    log.info("There is a warning about transparent_hugepage may be in used when install cb server.\
+                    log.info("There is a warning about transparent_hugepage "
+                             "may be in used when install cb server.\
                               So we will disable transparent_hugepage in this vm")
-                    output, error = self.execute_command("echo never > /sys/kernel/mm/transparent_hugepage/enabled")
+                    output, error = self.execute_command("echo never > \
+                                        /sys/kernel/mm/transparent_hugepage/enabled")
+                    self.log_command_output(output, error)
+                    success = True
+                elif "Warning" in line and "systemctl daemon-reload" in line:
+                    log.info("Unit file of couchbase-server.service changed on disk,"
+                             " we will run 'systemctl daemon-reload'")
+                    output, error = self.execute_command("systemctl daemon-reload")
                     self.log_command_output(output, error)
                     success = True
                 elif "dirname" in line:
-                    log.warning("Ignore dirname error message during couchbase startup/stop/restart for CentOS 6.6 (MB-12536)")
+                    log.warning("Ignore dirname error message during couchbase "
+                                "startup/stop/restart for CentOS 6.6 (MB-12536)")
                     success = True
                 else:
                     success = False
