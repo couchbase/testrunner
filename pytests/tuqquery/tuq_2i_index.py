@@ -501,7 +501,706 @@ class QueriesIndexTests(QueryTests):
             expected_result = sorted(expected_result, key=lambda doc: (doc['SKILL']))
             self._verify_results(actual_result, expected_result)
 
+            
 
+    def test_min_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwithmin%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(job_title,join_mo,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            created_indexes = []
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+            self.query = "explain SELECT join_mo, MIN(test_rate) as rate FROM %s " % (bucket.name) +\
+                         "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
+                         "HAVING MIN(employees.test_rate) > 0 and " +\
+                         "SUM(test_rate) < 100000"
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+            self.query = "SELECT join_mo, MIN(test_rate) as rate FROM %s " % (bucket.name) +\
+                         "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
+                         "HAVING MIN(employees.test_rate) > 0 and " +\
+                         "SUM(test_rate) < 100000"
+
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['join_mo']))
+            tmp_groups = set([doc['join_mo'] for doc in self.full_list])
+            expected_result = [{"join_mo" : group,
+                                "rate" : min([doc['test_rate']
+                                              for doc in self.full_list
+                                              if doc['join_mo'] == group and\
+                                              doc['job_title'] == 'Sales'])}
+                               for group in tmp_groups
+                               if min([doc['test_rate']
+                                       for doc in self.full_list
+                                       if doc['join_mo'] == group and\
+                                       doc['job_title'] == 'Sales']) > 0 and\
+                                  math.fsum([doc['test_rate']
+                                            for doc in self.full_list
+                                            if doc['join_mo'] == group and\
+                                            doc['job_title'] == 'Sales']) < 100000]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_max_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwithmax%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(job_title,join_mo,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            created_indexes = []
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+            self.query = "explain SELECT join_mo, MAX(test_rate) as rate FROM %s " % (bucket.name) +\
+                         "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
+                         "HAVING MAX(employees.test_rate) > 0 and " +\
+                         "SUM(test_rate) < 100000"
+
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+
+            self.query = "SELECT join_mo, MAX(test_rate) as rate FROM %s " % (bucket.name) +\
+                         "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
+                         "HAVING MAX(employees.test_rate) > 0 and " +\
+                         "SUM(test_rate) < 100000"
+
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['join_mo']))
+            tmp_groups = set([doc['join_mo'] for doc in self.full_list])
+            expected_result = [{"join_mo" : group,
+                                "rate" : max([doc['test_rate']
+                                              for doc in self.full_list
+                                              if doc['join_mo'] == group and\
+                                              doc['job_title'] == 'Sales'])}
+                               for group in tmp_groups
+                               if max([doc['test_rate']
+                                       for doc in self.full_list
+                                       if doc['join_mo'] == group and\
+                                       doc['job_title'] == 'Sales'] ) > 0 and\
+                                  math.fsum([doc['test_rate']
+                                            for doc in self.full_list
+                                            if doc['join_mo'] == group and\
+                                            doc['job_title'] == 'Sales'] ) < 100000]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
+            self._verify_results(actual_result, expected_result)
+
+
+    def test_array_agg_distinct_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharraydistinct%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            created_indexes = []
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+            self.query = "explain SELECT job_title, array_agg(DISTINCT name) as names" +\
+            " FROM %s  WHERE join_mo=7 GROUP BY job_title" % (bucket.name)
+
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+            self.query = "SELECT job_title, array_agg(DISTINCT name) as names" +\
+            " FROM %s WHERE join_mo=7 GROUP BY job_title" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = self.sort_nested_list(actual_list['results'])
+            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in self.full_list if doc['join_mo']==7])
+            expected_list = [{"job_title" : group,
+                                "names" : set([x["name"] for x in self.full_list
+                                               if x["job_title"] == group])}
+                               for group in tmp_groups]
+            expected_result = self.sort_nested_list(expected_list)
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_length_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharraylength%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+            self.query = "explain SELECT job_title, array_length(array_agg(DISTINCT name)) as num_names" +\
+            " FROM %s WHERE join_mo=7 GROUP BY job_title" % (bucket.name)
+
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+            self.query = "SELECT job_title, array_length(array_agg(DISTINCT name)) as num_names" +\
+            " FROM %s WHERE join_mo=7 GROUP BY job_title" % (bucket.name)
+
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'], key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in self.full_list if doc['join_mo']==7])
+            expected_result = [{"job_title" : group,
+                                "num_names" : len(set([x["name"] for x in self.full_list
+                                               if x["job_title"] == group]))}
+                               for group in tmp_groups]
+
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_append_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharrayappend%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+        for bucket in self.buckets:
+            self.query = "explain SELECT job_title," +\
+                         " array_append(array_agg(DISTINCT name), 'new_name') as names" +\
+                         " FROM %s WHERE join_mo=7 GROUP BY job_title" % (bucket.name)
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+            self.query = "SELECT job_title," +\
+                         " array_append(array_agg(DISTINCT name), 'new_name') as names" +\
+                         " FROM %s WHERE join_mo=7 GROUP BY job_title" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = self.sort_nested_list(actual_list['results'])
+            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in self.full_list if doc['join_mo']==7])
+            expected_result = [{"job_title" : group,
+                                "names" : sorted(set([x["name"] for x in self.full_list
+                                               if x["job_title"] == group] + ['new_name']))}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+
+
+    def test_array_concat_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharrayconcat%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name,email)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+        for bucket in self.buckets:
+            self.query = "explain SELECT job_title," +\
+                         " array_concat(array_agg(name), array_agg(email)) as names" +\
+                         " FROM %s WHERE join_mo=7  GROUP BY job_title" % (bucket.name)
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+
+    def test_array_prepend_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharrayprepend%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+
+        for bucket in self.buckets:
+            self.query = "explain SELECT job_title," +\
+                         " array_prepend(1.2, array_agg(test_rate)) as rates" +\
+                         " FROM %s WHERE join_mo=7  GROUP BY job_title" % (bucket.name)
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+
+    def test_array_remove_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharrayremove%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+
+        value = 'employee-1'
+        for bucket in self.buckets:
+            self.query = "explain SELECT job_title," +\
+                         " array_remove(array_agg(DISTINCT name), '%s') as names" % (value) +\
+                         " FROM %s WHERE join_mo=7  GROUP BY job_title" % (bucket.name)
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+            self.query = "SELECT job_title," +\
+                         " array_remove(array_agg(DISTINCT name), '%s') as names" % (value) +\
+                         " FROM %s WHERE join_mo=7  GROUP BY job_title" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = self.sort_nested_list(actual_list['results'])
+            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in self.full_list if doc['join_mo']==7])
+            expected_result = [{"job_title" : group,
+                                "names" : sorted(set([x["name"] for x in self.full_list
+                                               if x["job_title"] == group and x["name"]!= value]))}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_avg_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharrayavg%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+        for bucket in self.buckets:
+            self.query = "explain SELECT job_title, array_avg(array_agg(test_rate))" +\
+            " as rates FROM %s  WHERE join_mo=7  GROUP BY job_title" % (bucket.name)
+
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+
+    def test_array_contains_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharraycontains%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+        for bucket in self.buckets:
+            self.query = "explain SELECT job_title, array_contains(array_agg(name), 'employee-1')" +\
+            " as emp_job FROM %s  WHERE join_mo=7  GROUP BY job_title" % (bucket.name)
+
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+            self.query = "SELECT job_title, array_contains(array_agg(name), 'employee-1')" +\
+            " as emp_job FROM %s  WHERE join_mo=7  GROUP BY job_title" % (bucket.name)
+
+            actual_result = self.run_cbq_query()
+            actual_result = sorted(actual_result['results'])
+
+            tmp_groups = set([doc['job_title'] for doc in self.full_list if doc['join_mo']==7])
+            expected_result = [{"job_title" : group,
+                                "emp_job" : 'employee-1' in [x["name"] for x in self.full_list
+                                                           if x["job_title"] == group] }
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result)
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_count_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharraycount%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+        for bucket in self.buckets:
+            self.query = "explain SELECT job_title, array_count(array_agg(name)) as names" +\
+            " FROM %s WHERE join_mo=7  GROUP BY job_title" % (bucket.name)
+
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+
+    def test_array_distinct_covering_indexes(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharraydistinct%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+        for bucket in self.buckets:
+            self.query = "explain SELECT job_title, array_distinct(array_agg(name)) as names" +\
+            " FROM %s WHERE join_mo=7 GROUP BY job_title" % (bucket.name)
+
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+
+            self.query = "SELECT job_title, array_distinct(array_agg(name)) as names" +\
+            " FROM %s WHERE join_mo=7 GROUP BY job_title" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = self.sort_nested_list(actual_list['results'])
+            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in self.full_list if doc['join_mo']==7])
+            expected_result = [{"job_title" : group,
+                                "names" : sorted(set([x["name"] for x in self.full_list
+                                               if x["job_title"] == group]))}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+    def test_array_max_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharraymax%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+        for bucket in self.buckets:
+            self.query = "explain SELECT job_title, array_max(array_agg(test_rate)) as rates" +\
+            " FROM %s WHERE join_mo=7 GROUP BY job_title" % (bucket.name)
+
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+
+    def test_array_sum_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharraysum%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+        for bucket in self.buckets:
+            self.query = "explain SELECT job_title, round(array_sum(array_agg(test_rate))) as rates" +\
+            " FROM %s WHERE join_mo=7 GROUP BY job_title" % (bucket.name)
+
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+
+    def test_array_min_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharraymin%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+        for bucket in self.buckets:
+            self.query = "explain SELECT job_title, array_min(array_agg(test_rate)) as rates" +\
+            " FROM %s WHERE join_mo=7 GROUP BY job_title" % (bucket.name)
+
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+
+    def test_array_put_covering_index(self):
+         for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharrayput%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+         for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+         for bucket in self.buckets:
+            self.query = "explain SELECT job_title, array_put(array_agg(distinct name), 'employee-1') as emp_job" +\
+            " FROM %s WHERE join_mo=7 GROUP BY job_title" % (bucket.name)
+
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+            self.query = "SELECT job_title, array_put(array_agg(distinct name), 'employee-1') as emp_job" +\
+            " FROM %s WHERE join_mo=7  GROUP BY job_title" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = self.sort_nested_list(actual_list['results'])
+            actual_result = sorted(actual_result,
+                                   key=lambda doc: (doc['job_title']))
+
+            tmp_groups = set([doc['job_title'] for doc in self.full_list if doc['join_mo']==7])
+            expected_result = [{"job_title" : group,
+                                "emp_job" : sorted(set([x["name"] for x in self.full_list
+                                           if x["job_title"] == group]))}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+            self.query = "SELECT job_title, array_put(array_agg(distinct name), 'employee-47') as emp_job" +\
+            " FROM %s WHERE join_mo=7 GROUP BY job_title" % (bucket.name)
+
+            actual_list = self.run_cbq_query()
+            actual_result = self.sort_nested_list(actual_list['results'])
+            actual_result = sorted(actual_result,
+                                   key=lambda doc: (doc['job_title']))
+
+            expected_result = [{"job_title" : group,
+                                "emp_job" : sorted(set([x["name"] for x in self.full_list
+                                           if x["job_title"] == group] + ['employee-47']))}
+                               for group in tmp_groups]
+            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
+            self._verify_results(actual_result, expected_result)
+
+
+    def test_array_replace_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharrayreplace%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+
+        for bucket in self.buckets:
+            self.query = "explain SELECT job_title, array_replace(array_agg(name), 'employee-1', 'employee-47') as emp_job" +\
+            " FROM %s WHERE join_mo=7 GROUP BY job_title" % (bucket.name)
+
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+
+
+
+    def test_array_sort_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwitharraysort%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+        for bucket in self.buckets:
+            self.query = "explain SELECT job_title, array_sort(array_agg(distinct test_rate)) as emp_job" +\
+            " FROM %s WHERE join_mo=7  GROUP BY job_title" % (bucket.name)
+
+            if self.covering_index:
+                self.test_explain_covering_index(index_name)
+
+
+    def test_poly_length_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwithpolylength%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(join_mo,tasks_points,VMs,skills)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            tasks=[]
+            for index_name in created_indexes:
+                try:
+                    tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                    for task in tasks:
+                        task.result()
+                except Exception, ex:
+                    self.log.info(ex)
+        for bucket in self.buckets:
+            query_fields = ['tasks_points', 'VMs', 'skills']
+            for query_field in query_fields:
+                self.query = "explain Select length(%s) as custom_num from %s WHERE join_mo=7" % (query_field, bucket.name)
+                if self.covering_index:
+                    self.test_explain_covering_index(index_name)
+
+
+                self.query = "Select length(%s) as custom_num from %s WHERE join_mo=7" % (query_field, bucket.name)
+                actual_result = self.run_cbq_query()
+                expected_result = [{"custom_num" : None} for doc in self.full_list if doc['join_mo']==7]
+                self._verify_results(actual_result['results'], expected_result)
+
+                self.query = "Select poly_length(%s) as custom_num from %s WHERE join_mo=7 " % (query_field, bucket.name)
+                actual_result = self.run_cbq_query()
+                expected_result = [{"custom_num" : len(doc[query_field])}
+                                   for doc in self.full_list
+                                   if doc['join_mo']==7]
+                expected_result = sorted(expected_result, key=lambda doc: (doc['custom_num']))
+                self._verify_results(actual_result['results'], expected_result)
 
 
     def test_explain_index_join(self):
