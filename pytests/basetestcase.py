@@ -2024,7 +2024,10 @@ class BaseTestCase(unittest.TestCase):
             name = "key_"+str(i)+str((random.randint(1, 10000)))+str((random.randint(1, 10000)))
             data_map[name] = {"name":"none_the_less"}
         for bucket in self.buckets:
-            self._load_data_in_buckets_using_mc_bin_client(bucket, data_map, max_expiry_range)
+            try:
+                self._load_data_in_buckets_using_mc_bin_client(bucket, data_map, max_expiry_range)
+            except Exception, ex:
+                self.log.info(ex)
 
     '''
     Returns ip address of the requesting machine
