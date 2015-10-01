@@ -204,6 +204,7 @@ class RebalanceInTests(RebalanceBaseTest):
         self.total_loader_threads = self.input.param("total_loader_threads", 10)
         self.expiry_items = self.input.param("expiry_items", 100000)
         self.max_expiry = self.input.param("max_expiry", 30)
+        self.rebalance_attempts = self.input.param("rebalance_attempts", 100)
         thread_list = []
         self._expiry_pager(self.master, val=1000000)
         for bucket in self.buckets:
@@ -218,22 +219,28 @@ class RebalanceInTests(RebalanceBaseTest):
         for t in thread_list:
             t.join()
         for x in range(1,self.total_loader_threads):
+            num_items = 1000000
             t = threading.Thread(target=self.run_mc_bin_client, args = (num_items, expiry_range))
             t.daemon = True
             t.start()
             thread_list.append(t)
         self.sleep(20)
         tasks = []
-        servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
-        tasks = [self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])]
+        for x in range(1,self.rebalance_attempts):
+            servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])
+            rebalance.result()
+            self.servers  = self.servers[:self.nodes_init+len(servs_in)]
+            servs_out = self.servers[len(self.servers) - self.nodes_out:]
+            rebalance = self.cluster.async_rebalance(self.servers[:1], [], servs_out)
+            rebalance.result()
         t = threading.Thread(target=self._run_compaction)
         t.daemon = True
         t.start()
         thread_list.append(t)
         for task in tasks:
             task.result()
-        for t in thread_list:
-            t.join()
+
 
     def rebalance_in_with_ops_batch(self):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=(self.num_items / 2 - 1), end=self.num_items)
