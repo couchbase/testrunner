@@ -172,11 +172,14 @@ class DMLQueryTests(QueryTests):
                 values += 'VALUES ("%s", %s),' % (k, inserted)
             self.query = 'insert into %s (key , value) %s RETURNING ELEMENT name' % (bucket.name, values[:-1])
             if self.named_prepare:
-                self.named_prepare= "prepare_" + bucket.name
+                self.named_prepare= "prepare2_" + bucket.name
                 self.query = "PREPARE %s from %s" % (self.named_prepare,self.query)
             else:
                 self.query = "PREPARE %s" % self.query
             prepared = self.run_cbq_query(query=self.query)['results'][0]
+            print "------------------"
+            print "prepared : {0}".format(prepared)
+            print "------------------"
             actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.assertEqual(sorted(actual_result['results']), sorted([v['name'] for v in expected_item_values]),
@@ -653,6 +656,44 @@ class DMLQueryTests(QueryTests):
                 except:
                     pass
 
+    def test_prepared_delete_keys_use_index_clause(self):
+        num_docs = self.input.param('docs_to_delete', 3)
+        key_prefix = 'automation%s' % str(uuid.uuid4())[:5]
+        value = {'name': 'n1ql automation'}
+        value_to_delete =  {'name': 'n1ql deletion'}
+        self._common_insert(['%s%s' % (key_prefix, i) for i in xrange(self.num_items - num_docs)],
+            [value] * (self.num_items - num_docs))
+        self._common_insert(['%s%s' % (key_prefix, i) for i in xrange(self.num_items - num_docs, self.num_items)],
+            [value_to_delete] * (num_docs))
+        index_name = 'automation%s' % str(uuid.uuid4())[:5]
+        for bucket in self.buckets:
+            self.query = 'create index %s on %s(name) USING %s' % (index_name, bucket.name, self.index_type)
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, index_name)
+        try:
+            for bucket in self.buckets:
+                self.query = 'delete from %s  use index(%s using %s) where job_title="n1ql deletion"'  % (bucket.name,
+                                                                                                          index_name, self.index_type)
+                if self.named_prepare:
+                    self.named_prepare= "prepare_" + bucket.name
+                    self.query = "PREPARE %s from %s" % (self.named_prepare,self.query)
+                else:
+                    self.query = "PREPARE %s" % self.query
+                prepared = self.run_cbq_query(query=self.query)['results'][0]
+                actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
+                #actual_result = self.run_cbq_query()
+                self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+                self.query = 'select * from %s where job_title="n1ql deletion"'  % (bucket.name)
+                actual_result = self.run_cbq_query()
+                self.assertEqual(actual_result['results'], [], 'Query was not run successfully')
+        finally:
+            for bucket in self.buckets:
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
+                try:
+                    self.run_cbq_query()
+                except:
+                    pass
+
     def test_delete_where_clause_non_doc(self):
         num_docs = self.input.param('docs_to_delete', 3)
         key_prefix = 'automation%s' % str(uuid.uuid4())[:5]
@@ -678,49 +719,55 @@ class DMLQueryTests(QueryTests):
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
 
-    def test_prepared_delete_where_clause_json(self):
+    def test_delete_where_clause_json_not_equal(self):
         keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
-        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_title"] == 'Engineer']
+        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_title"] != 'Engineer']
         for bucket in self.buckets:
-            query = 'delete from %s where job_title="Engineer"'  % (bucket.name)
-            prepared = self.run_cbq_query(query='PREPARE %s' % query)['results'][0]
+            self.query = 'delete from %s where job_title!="Engineer"'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self._keys_are_deleted(keys_to_delete)
+
+    def test_delete_where_clause_json_less_equal(self):
+        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
+        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_day"] <=1]
+        for bucket in self.buckets:
+            self.query = 'delete from %s where job_day<=1'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self._keys_are_deleted(keys_to_delete)
+
+    def test_delete_where_clause_json_not_equal(self):
+        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
+        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_title"] != 'Engineer']
+        for bucket in self.buckets:
+            self.query = 'delete from %s where job_title!="Engineer"'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self._keys_are_deleted(keys_to_delete)
+
+    def test_delete_where_clause_json_less_equal(self):
+        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
+        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_day"] <=1]
+        for bucket in self.buckets:
+            self.query = 'delete from %s where job_day<=1'  % (bucket.name)
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self._keys_are_deleted(keys_to_delete)
+
+    def test_prepared_delete_where_clause_json_less_equal(self):
+        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
+        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["join_day"] <=1]
+        for bucket in self.buckets:
+            self._wait_for_index_online(bucket, "#primary")
+            self.query = 'delete from %s where join_day <=1'  % (bucket.name)
+            if self.named_prepare:
+                self.named_prepare= "test_prepared_delete_where" + bucket.name
+                self.query = "PREPARE %s from %s" % (self.named_prepare,self.query)
+            else:
+                self.query = "PREPARE %s" % self.query
+            prepared = self.run_cbq_query(query=self.query)['results'][0]
             actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self._keys_are_deleted(keys_to_delete)
-
-    def test_delete_where_clause_json_not_equal(self):
-        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
-        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_title"] != 'Engineer']
-        for bucket in self.buckets:
-            self.query = 'delete from %s where job_title!="Engineer"'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self._keys_are_deleted(keys_to_delete)
-
-    def test_delete_where_clause_json_less_equal(self):
-        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
-        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_day"] <=1]
-        for bucket in self.buckets:
-            self.query = 'delete from %s where job_day<=1'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self._keys_are_deleted(keys_to_delete)
-
-    def test_delete_where_clause_json_not_equal(self):
-        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
-        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_title"] != 'Engineer']
-        for bucket in self.buckets:
-            self.query = 'delete from %s where job_title!="Engineer"'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self._keys_are_deleted(keys_to_delete)
-
-    def test_delete_where_clause_json_less_equal(self):
-        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
-        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_day"] <=1]
-        for bucket in self.buckets:
-            self.query = 'delete from %s where job_day<=1'  % (bucket.name)
-            actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
 
@@ -1209,6 +1256,7 @@ class DMLQueryTests(QueryTests):
 
     def _keys_are_deleted(self, keys):
         end_time = time.time() + TIMEOUT_DELETED
+        print("Checks for keys deleted ...")
         while time.time() < end_time:
             for bucket in self.buckets:
                 self.query = 'select meta(%s).id from %s'  % (bucket.name, bucket.name)
