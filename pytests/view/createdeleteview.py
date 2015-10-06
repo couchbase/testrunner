@@ -1060,6 +1060,67 @@ class CreateDeleteViewTests(BaseTestCase):
 
         self._verify_ddoc_ops_all_buckets()
 
+    """
+        Test case for MB-16385
+
+        Querying views with reduce function on large datasets leads to huge memory usage
+        This has been fixed and this testcase validates the same - make sure to set
+        num_items to a very high value
+    """
+    def test_views_for_mb16385(self):
+        view_func = 'function (doc, meta) { emit(meta.id, null);}'
+        ddoc_name = 'mb16385'
+        view_name_prefix = 'view'
+
+        self.log.info("create a cluster of all the available servers")
+        self.cluster.rebalance(self.servers[:self.num_servers],
+                           self.servers[1:self.num_servers], [])
+
+        ddoc = DesignDocument(ddoc_name, [View(view_name_prefix, view_func,
+                                               red_func='_count',
+                                               dev_view=False)])
+
+        for view in ddoc.views:
+            self.cluster.create_view(self.master, ddoc.name, view, bucket=self.default_bucket_name)
+
+        self._load_doc_data_all_buckets()
+
+        rest = RestConnection(self.master)
+        query = {"stale" : "false", "full_set" : "true", "connection_timeout" : 60000}
+
+        result = rest.query_view(ddoc_name, 'view', self.default_bucket_name, query)
+        self.log.info("Reduce count: " + str(result['rows'][0]['value']))
+        self.assertEqual(result['rows'][0]['value'], self.num_items, "View did not return expected results")
+        self.log.info("View returned results as expected")
+
+        self.sleep(self.wait_timeout)
+
+        zip_file = "%s.zip" % (self.input.param("file_name", "collectInfo"))
+        try:
+            self.shell = RemoteMachineShellConnection(self.master)
+            self.shell.execute_cbcollect_info(zip_file)
+            if self.shell.extract_remote_info().type.lower() != "windows":
+                command = "unzip %s" % (zip_file)
+                output, error = self.shell.execute_command(command)
+                self.shell.log_command_output(output, error)
+                if len(error) > 0:
+                    raise Exception("unable to unzip the files. Check unzip command output for help")
+                cmd = 'grep -R "Caught unexpected error while serving view query" cbcollect_info*/'
+                output, _ = self.shell.execute_command(cmd)
+            else:
+                cmd = "curl -0 http://{1}:{2}@{0}:8091/diag 2>/dev/null | grep 'Approaching full disk warning.'".format(
+                                                    self.src_master.ip,
+                                                    self.src_master.rest_username,
+                                                    self.src_master.rest_password)
+                output, _ = self.shell.execute_command(cmd)
+            self.assertEquals(len(output), 0, "View engine errors found in %s" % self.master.ip)
+            self.log.info("No View engine errors in %s" % self.master.ip)
+
+            self.shell.delete_files(zip_file)
+            self.shell.delete_files("cbcollect_info*")
+        except Exception as e:
+            self.log.info(e)
+
     def open_nc_conn(self, view_name, port):
         try:
             shell = RemoteMachineShellConnection(self.servers[0])
