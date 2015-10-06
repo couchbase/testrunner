@@ -1,5 +1,5 @@
 """
-Base class for CBFT/FTS/Couchbase Full Text Search
+Base class for FTS/CBFT/Couchbase Full Text Search
 """
 
 import unittest
@@ -7,6 +7,8 @@ import time
 import copy
 import logger
 import logging
+import json
+import random
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
@@ -14,7 +16,6 @@ from membase.api.exception import ServerUnavailableException
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
 from testconstants import STANDARD_BUCKET_PORT
-from couchbase_helper.document import View
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.stats_tools import StatsCommon
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -24,26 +25,24 @@ from scripts.collect_server_info import cbcollectRunner
 from scripts import collect_data_files
 
 from couchbase_helper.documentgenerator import JsonDocGenerator
-from lib.membase.api.exception import CBFTException
-from security.auditmain import audit
+from lib.membase.api.exception import FTSException
 
-
-class RenameNodeException(CBFTException):
+class RenameNodeException(FTSException):
 
     """Exception thrown when converting ip to hostname failed
     """
 
     def __init__(self, msg=''):
-        CBFTException.__init__(self, msg)
+        FTSException.__init__(self, msg)
 
 
-class RebalanceNotStopException(CBFTException):
+class RebalanceNotStopException(FTSException):
 
     """Exception thrown when stopping rebalance failed
     """
 
     def __init__(self, msg=''):
-        CBFTException.__init__(self, msg)
+        FTSException.__init__(self, msg)
 
 
 def raise_if(cond, ex):
@@ -90,6 +89,97 @@ class STATE:
 
 class CHECK_AUDIT_EVENT:
     CHECK = False
+
+class INDEX_DEFAULTS:
+    BLEVE_MAPPING = {
+                "mapping": {
+                    "default_mapping": {
+                      "enabled": True,
+                      "dynamic": True,
+                      "default_analyzer": ""
+                    },
+                    "type_field": "_type",
+                    "default_type": "_default",
+                    "default_analyzer": "standard",
+                    "default_datetime_parser": "dateTimeOptional",
+                    "default_field": "_all",
+                    "byte_array_converter": "json",
+                    "analysis": {}
+                  },
+                  "store": {
+                    "kvStoreName": "boltdb"
+                  }
+              }
+
+    ALIAS_DEFINITION = {
+                          "targets": {
+                            "yourIndexName": {
+                              "indexUUID": ""
+                            }
+                          }
+                        }
+
+
+    PLAN_PARAMS = {
+                  "maxPartitionsPerPIndex": 20,
+                  "numReplicas": 0,
+                  "hierarchyRules": None,
+                  "nodePlanParams": None,
+                  "planFrozen": False
+                  }
+
+    SOURCE_CB_PARAMS = {
+                      "authUser": "",
+                      "authPassword": "",
+                      "authSaslUser": "",
+                      "authSaslPassword": "",
+                      "clusterManagerBackoffFactor": 0,
+                      "clusterManagerSleepInitMS": 0,
+                      "clusterManagerSleepMaxMS": 20000,
+                      "dataManagerBackoffFactor": 0,
+                      "dataManagerSleepInitMS": 0,
+                      "dataManagerSleepMaxMS": 20000,
+                      "feedBufferSizeBytes": 0,
+                      "feedBufferAckThreshold": 0
+                    }
+
+    SOURCE_FILE_PARAMS = {
+                          "regExps": [
+                            ".txt$",
+                            ".md$"
+                          ],
+                          "maxFileSize": 0,
+                          "numPartitions": 0,
+                          "sleepStartMS": 5000,
+                          "backoffFactor": 1.5,
+                          "maxSleepMS": 300000
+                        }
+
+class QUERY:
+
+    JSON = {
+              "q": "",
+              "indexName": "",
+              "size": 10,
+              "from": 0,
+              "explain": False,
+              "highlight": {},
+              "query": {
+                "boost": 1,
+                "query": ""
+              },
+              "fields": [
+                "*"
+              ],
+              "ctl": {
+                "consistency": {
+                  "level": "",
+                  "vectors": {}
+                },
+                "timeout": 0
+              }
+            }
+
 
 # Event Definition:
 # https://github.com/couchbase/goxdcr/blob/master/etc/audit_descriptor.json
@@ -278,14 +368,14 @@ class NodeHelper:
         return str(dir)
 
     @staticmethod
-    def check_cbft_log(server, str):
+    def check_fts_log(server, str):
         """ Checks if a string 'str' is present in goxdcr.log on server
             and returns the number of occurances
         """
         shell = RemoteMachineShellConnection(server)
-        cbft_log = NodeHelper.get_log_dir(server) + '/cbft.log*'
+        fts_log = NodeHelper.get_log_dir(server) + '/fts.log*'
         count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
-                                        format(str, cbft_log))
+                                        format(str, fts_log))
         if isinstance(count, list):
             count = int(count[0])
         else:
@@ -370,6 +460,109 @@ class FloatingServers:
     _serverlist = []
 
 
+class FTSIndex:
+    """
+    To create a Full Text Search index :
+    e.g., FTSIndex("beer_index", self._cluster, source_type = 'couchbase',
+                    source_name = 'beer-sample', index_type = 'bleve',
+                    index_params = {'store' : 'forestdb'},
+                    plan_params = {'maxPartitionsPerIndex' : 40}
+                  )
+
+    To create an FTS Alias:
+        FTSIndex("beer_index", self._cluster, source_type = 'couchbase',
+                 source_name = 'beer-sample', index_type = 'alias',
+                 index_params = {'store' : 'forestdb'},
+                 plan_params = {'maxPartitionsPerIndex' : 40}
+                 )
+    """
+    def __init__(self, cluster, name, source_type='couchbase',
+                 source_name='default',index_type='bleve', index_params=None,
+                 plan_params=None, source_params=None, source_uuid=None):
+
+        """
+         @param name : name of index/alias
+         @param cluster : 'this' cluster object
+         @param source_type : 'couchbase' or 'files'
+         @param source_name : name of couchbase bucket
+         @param index_type : 'bleve' or 'alias'
+         @param index_params :  to specify advanced index mapping;
+                                dictionary overiding params in
+                                INDEX_DEFAULTS.BLEVE_MAPPING or
+                                INDEX_DEFAULTS.ALIAS_DEFINITION depending on
+                                index_type
+         @param plan_params : dictionary overriding params defined in
+                                INDEX_DEFAULTS.PLAN_PARAMS
+         @param source_params: dictionary overriding params defined in
+                                INDEX_DEFAULTS.SOURCE_CB_PARAMS or
+                                INDEX_DEFAULTS.SOURCE_FILE_PARAMS
+         @param source_uuid: UUID of the source, may not be used
+
+        """
+
+        self.__cluster = cluster
+        self._source_type = source_type
+        self._source_name = source_name
+        self._one_time = False
+        self._index_type = index_type
+        self.name = name
+        self.log = logger.Logger.get_logger()
+        self.params = {
+                        "indexType" : self._index_type,
+                        "sourceType": self._source_type,
+                    }
+
+        if index_params:
+            self.params['indexParams'] = \
+                json.dumps(self.build_custom_index_params(index_params))
+
+        if plan_params:
+            self.params['planParams'] = \
+                json.dumps(self.build_custom_plan_params(plan_params))
+
+        if source_params:
+            self.params['sourceParams'] = \
+                json.dumps(self.build_source_params(source_params))
+
+        if source_uuid:
+            self.params['sourceUUID'] = source_uuid
+
+    def build_custom_index_params(self, index_params):
+        if self._index_type=="bleve":
+            mapping = INDEX_DEFAULTS.BLEVE_MAPPING
+        else:
+            mapping = INDEX_DEFAULTS.ALIAS_DEFINITION
+        return mapping.update(index_params)
+
+    def build_custom_plan_params(self, plan_params):
+        plan = INDEX_DEFAULTS.PLAN_PARAMS
+        return plan.update(plan_params)
+
+    def build_source_params(self, source_params):
+        if self._source_type =="couchbase":
+            src_params = INDEX_DEFAULTS.SOURCE_CB_PARAMS
+        else:
+            src_params = INDEX_DEFAULTS.SOURCE_FILE_PARAMS
+        return src_params.update(source_params)
+
+    def create_or_update(self, node):
+        rest = RestConnection(node)
+        self.log("Creating index/alias {0} on {1}".format(self.name, rest.ip))
+        try:
+            rest.create_update_fts_index(self, self.name, self.params)
+        except Exception as e:
+            self.log.error(e)
+
+    def delete(self, node):
+        rest = RestConnection(node)
+        self.log("Deleting index/alias {0} on {1}".format(self.name, rest.ip))
+        status = rest.create_update_fts_index()
+        if status:
+            self.log("Index {0} deleted".format(self.name))
+
+    def clone(self, clone_name):
+        pass
+
 class CouchbaseCluster:
 
     def __init__(self, name, nodes, log, use_hostname=False):
@@ -394,10 +587,27 @@ class CouchbaseCluster:
         self.__remote_clusters = []
         self.__clusterop = Cluster()
         self._kv_gen = {}
+        self.__indexes = []
+        self.__fts_nodes = []
+        self.__non_fts_nodes = []
+        self.__separate_nodes_on_services()
 
     def __str__(self):
         return "Couchbase Cluster: %s, Master Ip: %s" % (
             self.__name, self.__master_node.ip)
+
+    def __separate_nodes_on_services(self):
+        for node in self.__nodes:
+            if "fts" in node.services:
+                self.__fts_nodes.append(node)
+            else:
+                self.__non_fts_nodes.append(node)
+
+    def get_fts_nodes(self):
+        return self.__fts_nodes
+
+    def get_non_fts_nodes(self):
+        return self.__non_fts_nodes
 
     def __stop_rebalance(self):
         rest = RestConnection(self.__master_node)
@@ -431,6 +641,18 @@ class CouchbaseCluster:
     def get_master_node(self):
         return self.__master_node
 
+    def get_indexes(self):
+        return self.__indexes
+
+    def get_random_node(self):
+        return self.__nodes[random.randint(0, len(self.__nodes)-1)]
+
+    def get_random_cbft_node(self):
+        return self.__fts_nodes[random.randint(0, len(self.__fts_nodes)-1)]
+
+    def get_random_non_cbft_node(self):
+        return self.__non_fts_nodes[random.randint(0, len(self.__fts_nodes)-1)]
+
     def get_mem_quota(self):
         return self.__mem_quota
 
@@ -446,7 +668,7 @@ class CouchbaseCluster:
     def get_kv_gen(self):
         raise_if(
             self._kv_gen is None,
-            CBFTException(
+            FTSException(
                 "KV store is empty on couchbase cluster: %s" %
                 self))
         return self._kv_gen
@@ -461,8 +683,9 @@ class CouchbaseCluster:
         self.__log.info("Initializing Cluster ...")
 
         if len(cluster_services)-1 > len(available_nodes):
-            raise CBFTException("Not enough nodes present for given cluster"
-                                    "configuration %s" % cluster_services)
+            raise FTSException("Only %s nodes present for given cluster"
+                                "configuration %s"
+                               % (len(available_nodes)+1, cluster_services))
         self.__init_nodes()
 
         for index, node_services in enumerate(cluster_services):
@@ -481,7 +704,7 @@ class CouchbaseCluster:
                     services=[node_services]).result()
                 self.__nodes.append(available_nodes[index-1])
             except Exception as e:
-                raise CBFTException("Unable to initialize cluster with config "
+                raise FTSException("Unable to initialize cluster with config "
                                     "%s: %s" %(cluster_services, e))
 
     def cleanup_cluster(
@@ -622,6 +845,57 @@ class CouchbaseCluster:
                 eviction_policy=eviction_policy,
                 bucket_priority=bucket_priority
             ))
+
+    def create_fts_index(self, node, name, source_type='couchbase',
+                         source_name='default', index_type='bleve',
+                         index_params=None, plan_params=None,
+                         source_params=None, source_uuid=None):
+        """Create fts index/alias
+        @param dest_cluster: Destination cb cluster object.
+        @param name: name of remote cluster reference
+        @param encryption: True if encryption for xdcr else False
+        """
+        index = FTSIndex(
+            self,
+            name,
+            source_type,
+            source_name,
+            index_type,
+            index_params,
+            plan_params,
+            source_params,
+            source_uuid
+        )
+        index.create_or_update(node)
+        self.__indexes.append(index)
+
+    def get_fts_index_by_name(self, name):
+        """ Returns an FTSIndex object with the given name """
+        for index in self.__indexes:
+            if index.name == name:
+                return index
+
+    def delete_fts_index(self,node, name):
+        """ Delete an FTSIndex object with the given name from a given node """
+        for index in self.__indexes:
+            if index.name == name:
+                index.delete(node)
+
+    def delete_all_fts_indexes(self, node):
+        """ Delete all FTSIndexes from a given node """
+        for index in self.__indexes:
+            index.delete(node)
+
+    def run_fts_query(self, node, index_name, query_json):
+        """ Runs a query defined in query_json against an index/alias and
+        a specific node
+
+        @return total_hits : total hits for the query,
+        @return hit_list : list of docs that match the query
+        """
+        total_hits, hit_list = \
+            RestConnection(node).run_fts_query(index_name, query_json)
+        return total_hits, hit_list
 
     def get_buckets(self):
         return self.__buckets
@@ -928,7 +1202,7 @@ class CouchbaseCluster:
         """
         raise_if(
             OPS.CREATE not in self._kv_gen,
-            CBFTException(
+            FTSException(
                 "Data is not loaded in cluster.Load data before update/delete")
         )
         tasks = []
@@ -950,7 +1224,7 @@ class CouchbaseCluster:
                                                 end=self._kv_gen[OPS.CREATE].end)
                 gen = copy.deepcopy(self._kv_gen[OPS.DELETE])
             else:
-                raise CBFTException("Unknown op_type passed: %s" % op_type)
+                raise FTSException("Unknown op_type passed: %s" % op_type)
 
             self.__log.info("At bucket '{0}' @ {1}: operation: {2}, key range {3} - {4}".
                        format(bucket.name, self.__name, op_type, gen.start, gen.end-1))
@@ -1106,7 +1380,7 @@ class CouchbaseCluster:
         """
         raise_if(
             len(self.__nodes) <= num_nodes,
-            CBFTException(
+            FTSException(
                 "Cluster needs:{0} nodes for rebalance-out, current: {1}".
                 format((num_nodes + 1), len(self.__nodes)))
         )
@@ -1149,7 +1423,7 @@ class CouchbaseCluster:
         """
         raise_if(
             len(FloatingServers._serverlist) < num_nodes,
-            CBFTException(
+            FTSException(
                 "Number of free nodes: {0} is not preset to add {1} nodes.".
                 format(len(FloatingServers._serverlist), num_nodes))
         )
@@ -1183,7 +1457,8 @@ class CouchbaseCluster:
         to_add_node = [FloatingServers._serverlist.pop()]
 
         self.__log.info(
-            "Starting swap-rebalance [remove_node:{0}] -> [add_node:{1}] at {2} cluster {3}"
+            "Starting swap-rebalance [remove_node:{0}] -> [add_node:{1}] at"
+            " {2} cluster {3}"
             .format(to_remove_node[0].ip, to_add_node[0].ip, self.__name,
                     self.__master_node.ip))
         task = self.__clusterop.async_rebalance(
@@ -1229,7 +1504,7 @@ class CouchbaseCluster:
         """
         raise_if(
             len(self.__nodes) <= 1,
-            CBFTException(
+            FTSException(
                 "More than 1 node required in cluster to perform failover")
         )
         if master:
@@ -1296,7 +1571,7 @@ class CouchbaseCluster:
         """
         raise_if(
             len(self.__fail_over_nodes) < 1,
-            CBFTException("No failover nodes available to add_back")
+            FTSException("No failover nodes available to add_back")
         )
         rest = RestConnection(self.__master_node)
         server_nodes = rest.node_statuses()
@@ -1369,106 +1644,8 @@ class CouchbaseCluster:
         for task in tasks:
             task.result(timeout)
 
-    def verify_items_count(self, timeout=300):
-        """Wait for actual bucket items count reach to the count on bucket kv_store.
-        """
-        active_key_count_passed = True
-        replica_key_count_passed = True
-        curr_time = time.time()
-        end_time = curr_time + timeout
 
-        # Check active, curr key count
-        rest = RestConnection(self.__master_node)
-        buckets = copy.copy(self.get_buckets())
-
-        for bucket in buckets:
-            items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
-            while True:
-                try:
-                    active_keys = int(rest.get_active_key_count(bucket.name))
-                    if active_keys != items:
-                        self.__log.warn("Not Ready: vb_active_curr_items %s == "
-                                "%s expected on %s, %s bucket"
-                                 % (active_keys, items, self.__name, bucket.name))
-                        time.sleep(5)
-                        if time.time() > end_time:
-                            self.__log.error(
-                            "ERROR: Timed-out waiting for active item count to match")
-                            active_key_count_passed = False
-                            break
-                        continue
-                    else:
-                        self.__log.info("Saw: vb_active_curr_items %s == "
-                                "%s expected on %s, %s bucket"
-                                % (active_keys, items, self.__name, bucket.name))
-                        break
-                except Exception as e:
-                    self.__log.error(e)
-
-        # check replica count
-        curr_time = time.time()
-        end_time = curr_time + timeout
-        buckets = copy.copy(self.get_buckets())
-
-        for bucket in buckets:
-            if len(self.__nodes) > 1:
-                items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
-                items = items * bucket.numReplicas
-            else:
-                items = 0
-            while True:
-                try:
-                    replica_keys = int(rest.get_replica_key_count(bucket.name))
-                    if replica_keys != items:
-                        self.__log.warn("Not Ready: vb_replica_curr_items %s == "
-                                "%s expected on %s, %s bucket"
-                                 % (replica_keys, items ,self.__name, bucket.name))
-                        time.sleep(3)
-                        if time.time() > end_time:
-                            self.__log.error(
-                            "ERROR: Timed-out waiting for replica item count to match")
-                            replica_key_count_passed = False
-                            break
-                        continue
-                    else:
-                        self.__log.info("Saw: vb_replica_curr_items %s == "
-                                "%s expected on %s, %s bucket"
-                                % (replica_keys, items, self.__name, bucket.name))
-                        break
-                except Exception as e:
-                    self.__log.error(e)
-        return active_key_count_passed, replica_key_count_passed
-
-    def verify_data(self, kv_store=1, timeout=None,
-                    max_verify=None, only_store_hash=True, batch_size=1000):
-        """Verify data of all the buckets. Function read data from cb server and
-        compare it with bucket's kv_store.
-        @param kv_store: Index of kv_store where item values are stored on
-        bucket.
-        @param timeout: None if wait indefinitely else give timeout value.
-        @param max_verify: number of items to verify. None if verify all items
-        on bucket.
-        @param only_store_hash: True if verify hash of items else False.
-        @param batch_size: batch size to read items from server.
-        """
-        self.__data_verified = False
-        tasks = []
-        for bucket in self.__buckets:
-            tasks.append(
-                self.__clusterop.async_verify_data(
-                    self.__master_node,
-                    bucket,
-                    bucket.kvs[kv_store],
-                    max_verify,
-                    only_store_hash,
-                    batch_size,
-                    timeout_sec=60))
-        for task in tasks:
-            task.result(timeout)
-
-        self.__data_verified = True
-
-class CBFTBaseTest(unittest.TestCase):
+class FTSBaseTest(unittest.TestCase):
 
     def setUp(self):
         unittest.TestCase.setUp(self)
@@ -1478,13 +1655,13 @@ class CBFTBaseTest(unittest.TestCase):
         self.__cluster_op = Cluster()
         self.__init_parameters()
         self.log.info(
-            "==== CBFTbasetests setup is started for test #{0} {1} ===="
+            "==== FTSbasetests setup is started for test #{0} {1} ===="
             .format(self.__case_number, self._testMethodName))
 
         self.__setup_for_test()
 
         self.log.info(
-            "==== CBFTbasetests setup is finished for test #{0} {1} ===="
+            "==== FTSbasetests setup is finished for test #{0} {1} ===="
             .format(self.__case_number, self._testMethodName))
 
     def __is_test_failed(self):
@@ -1513,7 +1690,7 @@ class CBFTBaseTest(unittest.TestCase):
                 self.log.info("This is marked as a negative test and contains "
                               "errors as expected, hence not failing it")
             else:
-                raise CBFTException("Negative test passed!")
+                raise FTSException("Negative test passed!")
 
         # collect logs before tearing down clusters
         if self._input.param("get-cbcollect-info", False) and \
@@ -1527,11 +1704,11 @@ class CBFTBaseTest(unittest.TestCase):
                 self.log.warn("CLEANUP WAS SKIPPED")
                 return
             self.log.info(
-                "====  CBFTbasetests cleanup is started for test #{0} {1} ===="
+                "====  FTSbasetests cleanup is started for test #{0} {1} ===="
                 .format(self.__case_number, self._testMethodName))
             self._cb_cluster.cleanup_cluster(self)
             self.log.info(
-                "====  CBFTbasetests cleanup is finished for test #{0} {1} ==="
+                "====  FTSbasetests cleanup is finished for test #{0} {1} ==="
                 .format(self.__case_number, self._testMethodName))
         finally:
             self.__cluster_op.shutdown(force=True)
@@ -1604,7 +1781,7 @@ class CBFTBaseTest(unittest.TestCase):
         # Move above private to this section if needed in future, but
         # Ensure to change other tests too.
 
-        # TODO: when cbft build is available, change the following to "D,D+C,C"
+        # TODO: when FTS build is available, change the following to "D,D+F,F"
         self._cluster_services = \
             self.construct_serv_list(self._input.param("cluster", "D,D+Q,I,D"))
         self._num_replicas = self._input.param("replicas", 1)
@@ -1640,7 +1817,8 @@ class CBFTBaseTest(unittest.TestCase):
         for node in self._input.servers:
             self.__error_count_dict[node.ip] = {}
             for error in self.__report_error_list:
-                self.__error_count_dict[node.ip][error] = NodeHelper.check_cbft_log(node, error)
+                self.__error_count_dict[node.ip][error] = \
+                    NodeHelper.check_fts_log(node, error)
         self.log.info(self.__error_count_dict)
 
     def __cleanup_previous(self):
@@ -1729,7 +1907,6 @@ class CBFTBaseTest(unittest.TestCase):
             eviction_policy=self.__eviction_policy,
             bucket_priority=bucket_priority)
 
-
     def load_cluster(self):
         """
             Loads the default JSON dataset
@@ -1803,18 +1980,30 @@ class CBFTBaseTest(unittest.TestCase):
                 self._expires,
                 "Waiting for expiration of updated items")
 
+    def construct_query_json(self, index_name, query, fields=None,
+                             max_matches=None, timeout=None):
+        query_json = QUERY.JSON
+        query_json['q'] = query['query'] = query
+        query['index_name'] = index_name
+        if max_matches:
+            query_json['size'] = int(max_matches)
+        if timeout:
+            query_json['timeout'] = int(timeout)
+        if fields:
+            query_json['fields'] = fields
+        return json.dumps(query_json)
 
     def print_panic_stacktrace(self, node):
         """ Prints panic stacktrace from goxdcr.log*
         """
         shell = RemoteMachineShellConnection(node)
-        result, err = shell.execute_command("zgrep -A 40 'panic:' {0}/cbft.log*".
+        result, err = shell.execute_command("zgrep -A 40 'panic:' {0}/fts.log*".
                             format(NodeHelper.get_log_dir(node)))
         for line in result:
             self.log.info(line)
         shell.disconnect()
 
-    def check_errors_in_cbft_logs(self):
+    def check_errors_in_fts_logs(self):
         """
         checks if new errors from self.__report_error_list
         were found on any of the goxdcr.logs
@@ -1822,7 +2011,7 @@ class CBFTBaseTest(unittest.TestCase):
         error_found_logger = []
         for node in self._input.servers:
             for error in self.__report_error_list:
-                new_error_count = NodeHelper.check_cbft_log(node, error)
+                new_error_count = NodeHelper.check_fts_log(node, error)
                 self.log.info("Initial {0} count on {1} :{2}, now :{3}".
                             format(error,
                                 node.ip,
@@ -1836,8 +2025,6 @@ class CBFTBaseTest(unittest.TestCase):
         if error_found_logger:
             self.log.error(error_found_logger)
         return error_found_logger
-
-
 
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
