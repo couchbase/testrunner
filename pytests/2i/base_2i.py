@@ -48,6 +48,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.memory_create_list = []
         self.memory_drop_list = []
         self.n1ql_node = self.get_nodes_from_services_map(service_type = "n1ql")
+        self.skip_cleanup = self.input.param("skip_cleanup", False)
 
 
     def tearDown(self):
@@ -459,7 +460,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.info(ex)
             raise
         finally:
-            if drop_index:
+            if drop_index and not self.skip_cleanup::
                 self.multi_drop_index(buckets,query_definitions)
 
     def async_run_multi_operations(self, buckets = [], query_definitions = [], expected_results = {},
