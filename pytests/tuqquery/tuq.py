@@ -1963,8 +1963,11 @@ class QueryTests(BaseTestCase):
                 self.log.info(x)
             s = pprint.pformat( res, indent=4 )
             self.log.info(s)
-            self.assertTrue(res["results"][0]["~children"][0]["index"] == index,
-                                    "Index should be %s, but is: %s" % (index, res["results"][0]["~children"][0]["index"]))
+            if index in s:
+                self.log.info("correct index used in json result ")
+            else:
+                self.log.error("correct index not used in json result ")
+                self.fail("correct index not used in json result ")
             if 'covers' in s:
                 self.log.info("covers key present in json result ")
             else:
