@@ -614,13 +614,22 @@ class BaseSecondaryIndexingTests(QueryTests):
                     (bucket_name, "primary", expected_item_count, actual_item_count))
 
     def _verify_items_count(self):
+        """
+        Compares Items indexed count is sample
+        as items in the bucket.
+        """
         index_map = self.get_index_stats()
         bucketMap = self.get_buckets_itemCount()
         for bucket_name in index_map.keys():
             for index_name in index_map[bucket_name].keys():
-                actual_item_count = index_map[bucket_name][index_name]["items_count"]
+                actual_item_count = index_map[
+                    bucket_name][index_name]["items_count"]
+                if actual_item_count == 0:
+                    actual_item_count = index_map[bucket_name][index_name]["num_docs_pending"] + \
+                        index_map[bucket_name][index_name]["num_docs_queued"]
                 expected_item_count = bucketMap[bucket_name]
-                self.assertTrue(str(actual_item_count) == str(expected_item_count), "Bucket {0}, mismatch in item count for index :{1} : expected {2} != actual {3} ".format
+                self.assertTrue(str(actual_item_count) == str(expected_item_count), 
+                    "Bucket {0}, mismatch in item count for index :{1} : expected {2} != actual {3} ".format
                     (bucket_name, index_name, expected_item_count, actual_item_count))
 
     def _verify_stats_before_after(self):
