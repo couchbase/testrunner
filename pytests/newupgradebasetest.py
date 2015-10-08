@@ -29,7 +29,9 @@ class NewUpgradeBaseTest(BaseTestCase):
         super(NewUpgradeBaseTest, self).setUp()
         self.released_versions = ["2.0.0-1976-rel", "2.0.1", "2.5.0", "2.5.1",
                                   "2.5.2", "3.0.0", "3.0.1",
-                                  "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3"]
+                                  "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
+                                  "3.1.0", "3.1.0-1776", "3.1.1", "3.1.1-1802",
+                                  "4.0.0", "4.0.0-4052"]
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
@@ -183,7 +185,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         if info is None:
             info = remote.extract_remote_info()
         build_repo = MV_LATESTBUILD_REPO
-        if version[:3] == "3.5" or version[:3] == "4.0":
+        if version[:3] in SHERLOCK_VERSION:
             build_repo = SHERLOCK_BUILD_REPO
         builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5, \
                     deliverable_type=info.deliverable_type, architecture_type=info.architecture_type, \
