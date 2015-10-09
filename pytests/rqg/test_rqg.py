@@ -567,6 +567,7 @@ class RQGTests(BaseTestCase):
             # Drop all the secondary Indexes
             for t in thread_list:
                 t.join()
+
         if self.use_secondary_index:
             self._drop_secondary_indexes_in_batches(list_info)
 
@@ -873,6 +874,8 @@ class RQGTests(BaseTestCase):
             #self.log.info(sql_result)
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
+            if(len(n1ql_result)!=len(sql_result)):
+                self.log.info("number of results returned from sql and n1ql are different")
             try:
                 self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
             except Exception, ex:
@@ -1361,6 +1364,7 @@ class RQGTests(BaseTestCase):
                 query ="DROP INDEX {0}.{1} USING {2}".format(table_name, index_name, info["indexes"][index_name]["type"])
                 try:
                     self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+                    self.sleep(10,"Sleep to make sure index dropped properly")
                 except Exception, ex:
                     self.log.info(ex)
 
@@ -1370,6 +1374,7 @@ class RQGTests(BaseTestCase):
             query ="DROP INDEX {0}.{1} USING {2}".format(table_name, index_name, index_map[index_name]["type"])
             try:
                 self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+
             except Exception, ex:
                 self.log.info(ex)
                 raise
