@@ -1,8 +1,13 @@
 from sg.sg_base import GatewayBaseTest
-from jinja2 import Environment, FileSystemLoader
 import json
 import urllib
+try:
+    from jinja2 import Environment, FileSystemLoader
+except ImportError as e:
+    print 'please install required modules:', e
+    raise
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
+
 
 class GatewayConfigBaseTest(GatewayBaseTest):
 

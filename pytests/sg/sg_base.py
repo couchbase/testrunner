@@ -4,8 +4,12 @@ from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 import re
 import time
-import requests
-from requests.exceptions import ConnectionError
+try:
+    import requests
+    from requests.exceptions import ConnectionError
+except ImportError as e:
+    print 'please install required modules:', e
+    raise
 
 
 class GatewayBaseTest(unittest.TestCase):
