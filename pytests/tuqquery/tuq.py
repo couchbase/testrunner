@@ -2970,8 +2970,8 @@ class QueryTests(BaseTestCase):
 
     def prepared_common_body(self):
         result_no_prepare = self.run_cbq_query()['results']
-        self.named_prepare=self.named_prepare + "_" +str(uuid.uuid4())[:4]
         if self.named_prepare:
+            self.named_prepare=self.named_prepare + "_" +str(uuid.uuid4())[:4]
             query = "PREPARE %s from %s" % (self.named_prepare,self.query)
         else:
             query = "PREPARE %s" % self.query
