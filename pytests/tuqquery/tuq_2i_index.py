@@ -370,7 +370,6 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
                     created_indexes.append(index_name)
         for bucket in self.buckets:
-            try:
                 tasks=[]
                 for index_name in created_indexes:
                     try:
@@ -392,7 +391,6 @@ class QueriesIndexTests(QueryTests):
                                    math.ceil(doc['test_rate']) > 5]
                 expected_result = sorted(expected_result, key=lambda doc: (doc['test_rate']))
                 self._verify_results(actual_result, expected_result)
-            finally:
                 for index_name in set(created_indexes):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
