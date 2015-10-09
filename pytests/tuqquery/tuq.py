@@ -2970,13 +2970,14 @@ class QueryTests(BaseTestCase):
 
     def prepared_common_body(self):
         result_no_prepare = self.run_cbq_query()['results']
+        self.named_prepare=self.named_prepare + "_" +str(uuid.uuid4())[:4]
         if self.named_prepare:
             query = "PREPARE %s from %s" % (self.named_prepare,self.query)
         else:
             query = "PREPARE %s" % self.query
         prepared = self.run_cbq_query(query=query)['results'][0]
         result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True)['results']
-        msg = "Query resut with prepare and without doesn't match.\nNo prepare: %s ... %s\nWith prepare: %s ... %s"
+        msg = "Query result with prepare and without doesn't match.\nNo prepare: %s ... %s\nWith prepare: %s ... %s"
         self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare),
                           msg % (result_no_prepare[:100],result_no_prepare[-100:],
                                  result_with_prepare[:100],result_with_prepare[-100:]))
