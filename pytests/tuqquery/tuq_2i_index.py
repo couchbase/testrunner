@@ -145,10 +145,6 @@ class QueriesIndexTests(QueryTests):
                         self.test_explain_covering_index(index_name)
                     self.query = "SELECT name, join_day FROM %s where name = 'employee-9'"  % (bucket.name)
                     actual_result = self.run_cbq_query()
-                    self.log.info(actual_result)
-                    self.query = "SELECT name, join_day FROM %s where name = 'employee-9'"  % (bucket.name)
-                    actual_result = self.run_cbq_query()
-                    self.log.info(actual_result)
                     expected_result = [{"name" : doc["name"],"join_day" : doc["join_day"]}
                                for doc in self.full_list
                                if doc['name'] == 'employee-9']
@@ -156,7 +152,7 @@ class QueriesIndexTests(QueryTests):
                     self._verify_results(actual_result['results'], expected_result)
             finally:
                 for index_name in created_indexes:
-                    self.query = "DROP INDEX %s.%s USING  %s" % (bucket.name, index_name,self.index_type)
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
 
     def test_covering_partial_index(self):
@@ -176,7 +172,6 @@ class QueriesIndexTests(QueryTests):
                     self.query = "select email,join_day from %s where email "  % (bucket.name) +\
                                  "LIKE '%@%.%' and VMs[0].RAM > 5 and join_day > 10"
                     actual_result = self.run_cbq_query()
-                    self.log.info(actual_result)
                     expected_result = [{"join_day":doc["join_day"],"email" : doc["email"]}
                                for doc in self.full_list
                                if re.match(r'.*@.*\..*', doc['email']) and \
@@ -211,9 +206,7 @@ class QueriesIndexTests(QueryTests):
                                           len([vm for vm in doc["VMs"]
                                                 if vm["os"] == 'ubuntu' or vm["os"] == 'windows' or vm["os"] == "linux"])>0]
                     actual_result = actual_result['results']
-                    self.log.info(actual_result)
                     expected_result= sorted(expected_result,key=lambda doc: (doc["name"]))[:15]
-                    self.log.info(expected_result)
                     self.max_verify = 15
                     self._verify_results(actual_result, expected_result)
             finally:
@@ -348,7 +341,6 @@ class QueriesIndexTests(QueryTests):
                         else:
                             self.query = 'EXPLAIN SELECT name,join_day, join_mo FROM %s  USE INDEX(%s using %s) WHERE join_day>2 AND join_mo>3' % (bucket.name, ind, self.index_type)
                             res = self.run_cbq_query()
-                            self.log.info(res)
                             self.assertTrue(res["results"][0]["~children"][0]["index"] == ind,
                                     "Index should be %s, but is: %s" % (ind, res["results"][0]["~children"][0]["index"]))
 
@@ -1316,20 +1308,6 @@ class QueriesIndexTests(QueryTests):
                     self.query = "explain Select length(%s) as custom_num from %s WHERE join_mo=7" % (query_field, bucket.name)
                     if self.covering_index:
                         self.test_explain_covering_index(index_name)
-
-
-                    self.query = "Select length(%s) as custom_num from %s WHERE join_mo=7" % (query_field, bucket.name)
-                    actual_result = self.run_cbq_query()
-                    expected_result = [{"custom_num" : None} for doc in self.full_list if doc['join_mo']==7]
-                    self._verify_results(actual_result['results'], expected_result)
-
-                    self.query = "Select poly_length(%s) as custom_num from %s WHERE join_mo=7 " % (query_field, bucket.name)
-                    actual_result = self.run_cbq_query()
-                    expected_result = [{"custom_num" : len(doc[query_field])}
-                                       for doc in self.full_list
-                                       if doc['join_mo']==7]
-                    expected_result = sorted(expected_result, key=lambda doc: (doc['custom_num']))
-                    self._verify_results(actual_result['results'], expected_result)
             finally:
                 for index_name in set(created_indexes):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
