@@ -278,6 +278,11 @@ class QueryTests(BaseTestCase):
                           'SELECT job_title FROM %s WHERE EVERY ANY x IN ["Sales"] SATISFIES x = job_title END' : ('syntax error', 3000)}
         self.negative_common_body(queries_errors)
 
+    def test_check_is_isnot_negative(self):
+         queries_errors = {'SELECT * FROM %s WHERE name is foo' : ('syntax error', 3000),
+                          'SELECT * FROM %s WHERE name is not foo' : ('syntax error', 3000)}
+         self.negative_common_body(queries_errors)
+
     def test_array(self):
         for bucket in self.buckets:
             self.query = "SELECT ARRAY vm.memory FOR vm IN VMs END AS vm_memories" +\
