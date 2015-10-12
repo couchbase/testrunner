@@ -2,6 +2,7 @@ from base_2i import BaseSecondaryIndexingTests
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.query_definitions import QueryDefinition
 
+
 class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
 
     def setUp(self):
@@ -13,68 +14,70 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
     def test_load_balance_when_index_node_down_stop(self):
         index_dist_factor = 1
         index_servers = []
-        try:
-            #Create Index
-            index_servers = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
-            num_indexes=len(index_servers)*index_dist_factor
-            self.query_definitions = self._create_query_definitions(index_count = num_indexes)
-            x = 0
-            tasks = []
-            self.defer_build=False
-            for query_definition in self.query_definitions:
-                for bucket in self.buckets:
-                    deploy_node_info = ["{0}:{1}".format(index_servers[x].ip,index_servers[x].port)]
-                    self.create_index(bucket.name, query_definition, deploy_node_info = deploy_node_info)
-                    x+=1
-            index_up = self.query_definitions[1].index_name
-            for query_definition in self.query_definitions:
-                query_definition.index_name = index_up
-            # Bring down one node
-            remote = RemoteMachineShellConnection(index_servers[0])
-            remote.stop_server()
-            self.sleep(10)
-            # Query to see the other
-            self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, query_with_explain = True, query = True)
-        except Exception, ex:
-            self.log.info(ex)
-            raise
-        finally:
-            remote = RemoteMachineShellConnection(index_servers[0])
-            remote.start_server()
-            self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = True)
+        #Create Indexes
+        index_servers = self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True)
+        num_indexes = len(index_servers)*index_dist_factor
+        self.query_definitions = self._create_query_definitions(
+            index_count=num_indexes)
+        node_count = 0
+        tasks = []
+        self.defer_build = False
+        for query_definition in self.query_definitions:
+            for bucket in self.buckets:
+                deploy_node_info = ["{0}:{1}".format(
+                    index_servers[node_count].ip, index_servers[node_count].port)]
+                self.create_index(bucket.name,
+                    query_definition, deploy_node_info=deploy_node_info)
+                node_count += 1
+        remote = RemoteMachineShellConnection(index_servers[0])
+        remote.stop_server()
+        unavailable_query = self.query_definitions.pop(0)
+        self.sleep(10)
+        # Query to see the other
+        self.run_multi_operations(buckets=self.buckets,
+            query_definitions=self.query_definitions, query_with_explain=True, query=True)
+        remote.start_server()
+        self.sleep(30)
+        self.query_definitions.append(unavailable_query)
+        # Drop indexes
+        self.run_multi_operations(buckets = self.buckets,
+            query_definitions=self.query_definitions, create_index=False, drop_index=True)
 
     def test_load_balance_when_index_node_down_network_partition(self):
         index_dist_factor = 1
         index_servers = []
-        try:
-            #Create Index
-            index_servers = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
-            num_indexes=len(index_servers)*index_dist_factor
-            self.query_definitions = self._create_query_definitions(index_count = num_indexes)
-            x = 0
-            for query_definition in self.query_definitions:
-                for bucket in self.buckets:
-                    deploy_node_info = ["{0}:{1}".format(index_servers[x].ip,index_servers[x].port)]
-                    self.create_index(bucket.name, query_definition, deploy_node_info = deploy_node_info)
-                    x+=1
-            index_up = self.query_definitions[0].index_name
-            for query_definition in self.query_definitions:
-                query_definition.index_name = index_up
-            # Bring down one node
-            self.start_firewall_on_node(index_servers[0])
-            self.sleep(10)
-            # Query to see the other
-            self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, query_with_explain = True, query = True)
-        except Exception, ex:
-            self.log.info(ex)
-            raise
-        finally:
-            self.stop_firewall_on_node(index_servers[0])
-            self.sleep(30)
-            try:
-                self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = True)
-            except Exception, ex:
-                self.log.info(ex)
+        #Create Indexes
+        index_servers = self.get_nodes_from_services_map(service_type="index", 
+            get_all_nodes=True)
+        num_indexes=len(index_servers)*index_dist_factor
+        self.query_definitions = self._create_query_definitions(index_count=num_indexes)
+        node_count = 0
+        for query_definition in self.query_definitions:
+            for bucket in self.buckets:
+                deploy_node_info = ["{0}:{1}".format(index_servers[node_count].ip,
+                    index_servers[node_count].port)]
+                self.create_index(bucket.name, query_definition, 
+                    deploy_node_info=deploy_node_info)
+                node_count += 1
+
+        # Bring down one node
+        self.start_firewall_on_node(index_servers[0])
+        self.sleep(10)
+        # Remove index for offline node.
+        unavailable_query = self.query_definitions.pop(0)
+        # Query to see the other
+        self.run_multi_operations(buckets=self.buckets, 
+             query_definitions=self.query_definitions, query_with_explain=True, query=True)
+
+        self.stop_firewall_on_node(index_servers[0])
+        self.sleep(30)
+        # Add removed index from query
+        self.query_definitions.append(unavailable_query)
+        # Drop indexes
+        self.run_multi_operations(buckets=self.buckets, 
+            query_definitions=self.query_definitions, create_index=False, drop_index=True)
+
 
     def test_index_create_sync(self):
         index_dist_factor = 2

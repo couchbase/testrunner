@@ -246,6 +246,10 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
 
     def start_server(self, os="unix"):
+        self.extract_remote_info()
+        os = self.info.type.lower()
+        if not os:
+            os = "unix"
         if os == "windows":
             o, r = self.execute_command("net start couchbaseserver")
             self.log_command_output(o, r)
@@ -262,6 +266,10 @@ class RemoteMachineShellConnection:
             self.log.error("don't know operating system or product version")
 
     def stop_server(self, os="unix"):
+        self.extract_remote_info()
+        os = self.info.type.lower()
+        if not os:
+            os = "unix"
         if os == "windows":
             o, r = self.execute_command("net stop couchbaseserver")
             self.log_command_output(o, r)
