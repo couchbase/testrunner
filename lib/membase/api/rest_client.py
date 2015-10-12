@@ -241,7 +241,7 @@ class RestConnection(object):
             self.password = serverInfo["password"]
             self.port = serverInfo["port"]
             self.index_port = 9102
-            self.fts_port = 8095
+            self.fts_port = 9110
             if "index_port" in serverInfo.keys():
                 self.index_port = serverInfo["index_port"]
             self.hostname = ''
@@ -254,7 +254,7 @@ class RestConnection(object):
             self.port = serverInfo.port
             self.hostname = ''
             self.index_port = 9102
-            self.fts_port = 8095
+            self.fts_port = 9110
             if hasattr(serverInfo, 'index_port'):
                 self.index_port = serverInfo.index_port
             if hasattr(serverInfo, 'hostname') and serverInfo.hostname and\
@@ -2038,6 +2038,15 @@ class RestConnection(object):
         if status:
             json_parsed = json.loads(content)
         return json_parsed['count']
+
+    def get_fts_index_uuid(self, name, timeout=30):
+        """ Returns uuid of index/alias """
+        json_parsed = {}
+        api = self.fts_baseUrl + "/api/index/{0}/".format(name)
+        status, content, header = self._http_request(api, timeout=timeout)
+        if status:
+            json_parsed = json.loads(content)
+        return json_parsed['indexDef']['uuid']
 
     def delete_fts_index(self, name):
         """ delete fts index/alias """

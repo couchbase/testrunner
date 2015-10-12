@@ -12,5 +12,5 @@ class MovingTopFTS(FTSBaseTest):
         super(MovingTopFTS, self).tearDown()
 
     def simple_load(self):
-        self.load_cluster()
+        self.load_employee_dataset()
         self.sleep(120)
