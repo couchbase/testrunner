@@ -23,6 +23,7 @@ from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
 from scripts.collect_server_info import cbcollectRunner
 from scripts import collect_data_files
+from couchbase_helper.documentgenerator import *
 
 from couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.exception import FTSException
@@ -477,7 +478,7 @@ class FTSIndex:
                  )
     """
     def __init__(self, cluster, name, source_type='couchbase',
-                 source_name='default',index_type='bleve', index_params=None,
+                 source_name=None,index_type='bleve', index_params=None,
                  plan_params=None, source_params=None, source_uuid=None):
 
         """
@@ -562,6 +563,14 @@ class FTSIndex:
 
     def clone(self, clone_name):
         pass
+
+    def get_indexed_doc_count(self):
+        rest = RestConnection(self.__cluster.get_master_node())
+        return rest.get_fts_index_doc_count(self.name)
+
+    def get_uuid(self):
+        rest = RestConnection(self.__cluster.get_master_node())
+        return rest.get_fts_index_uuid(self.name)
 
 class CouchbaseCluster:
 
@@ -687,25 +696,28 @@ class CouchbaseCluster:
                                 "configuration %s"
                                % (len(available_nodes)+1, cluster_services))
         self.__init_nodes()
-
-        for index, node_services in enumerate(cluster_services):
-            try:
-                if index == 0:
-                    # first node is always a data/kv node
-                    continue
-                self.__log.info("Adding %s to C1 with services %s" %(
-                                                    available_nodes[index-1].ip,
-                                                    node_services))
-                self.__clusterop.async_rebalance(
+        nodes_to_add = []
+        node_services = []
+        for index, node_service in enumerate(cluster_services):
+            if index == 0:
+                # first node is always a data/kv node
+                continue
+            self.__log.info("%s will be configured with services %s" %(
+                                                available_nodes[index-1].ip,
+                                                node_service))
+            nodes_to_add.append(available_nodes[index-1])
+            node_services.append(node_service)
+        try:
+            self.__clusterop.async_rebalance(
                     self.__nodes,
-                    [available_nodes[index-1]],
+                    nodes_to_add,
                     [],
                     use_hostnames=self.__use_hostname,
-                    services=[node_services]).result()
-                self.__nodes.append(available_nodes[index-1])
-            except Exception as e:
+                    services=node_services).result()
+        except Exception as e:
                 raise FTSException("Unable to initialize cluster with config "
                                     "%s: %s" %(cluster_services, e))
+
 
     def cleanup_cluster(
             self,
@@ -846,15 +858,31 @@ class CouchbaseCluster:
                 bucket_priority=bucket_priority
             ))
 
-    def create_fts_index(self, node, name, source_type='couchbase',
-                         source_name='default', index_type='bleve',
+    def create_fts_index(self, name, source_type='couchbase',
+                         source_name=None, index_type='bleve',
                          index_params=None, plan_params=None,
-                         source_params=None, source_uuid=None):
+                         source_params=None, source_uuid=None,
+                         node=None):
         """Create fts index/alias
-        @param dest_cluster: Destination cb cluster object.
-        @param name: name of remote cluster reference
-        @param encryption: True if encryption for xdcr else False
+        @param node: Node on which index is created
+        @param name: name of the index/alias
+        @param source_type : 'couchbase' or 'files'
+        @param source_name : name of couchbase bucket or "" for alias
+        @param index_type : 'bleve' or 'alias'
+        @param index_params :  to specify advanced index mapping;
+                                dictionary overiding params in
+                                INDEX_DEFAULTS.BLEVE_MAPPING or
+                                INDEX_DEFAULTS.ALIAS_DEFINITION depending on
+                                index_type
+        @param plan_params : dictionary overriding params defined in
+                                INDEX_DEFAULTS.PLAN_PARAMS
+        @param source_params: dictionary overriding params defined in
+                                INDEX_DEFAULTS.SOURCE_CB_PARAMS or
+                                INDEX_DEFAULTS.SOURCE_FILE_PARAMS
+        @param source_uuid: UUID of the source, may not be used
         """
+        if not node:
+            node = self.get_random_cbft_node()
         index = FTSIndex(
             self,
             name,
@@ -868,6 +896,7 @@ class CouchbaseCluster:
         )
         index.create_or_update(node)
         self.__indexes.append(index)
+        return index
 
     def get_fts_index_by_name(self, name):
         """ Returns an FTSIndex object with the given name """
@@ -886,13 +915,16 @@ class CouchbaseCluster:
         for index in self.__indexes:
             index.delete(node)
 
-    def run_fts_query(self, node, index_name, query_json):
+    def run_fts_query(self, index_name, query_json, node=None):
         """ Runs a query defined in query_json against an index/alias and
         a specific node
 
         @return total_hits : total hits for the query,
         @return hit_list : list of docs that match the query
+
         """
+        if not node:
+            node = self.get_random_cbft_node()
         total_hits, hit_list = \
             RestConnection(node).run_fts_query(index_name, query_json)
         return total_hits, hit_list
@@ -1043,6 +1075,64 @@ class CouchbaseCluster:
         for task in tasks:
             task.result()
 
+    def load_all_buckets_from_generator(self, kv_gen, ops=OPS.CREATE, exp=0,
+                                        kv_store=1, flag=0, only_store_hash=True,
+                                        batch_size=1000, pause_secs=1, timeout_secs=30):
+        """Load data synchronously on all buckets. Function wait for
+        load data to finish.
+        @param gen: BlobGenerator() object
+        @param ops: OPS.CREATE/UPDATE/DELETE/APPEND.
+        @param exp: expiration value.
+        @param kv_store: kv store index.
+        @param flag:
+        @param only_store_hash: True to store hash of item else False.
+        @param batch_size: batch size for load data at a time.
+        @param pause_secs: pause for next batch load.
+        @param timeout_secs: timeout
+        """
+        if ops not in self._kv_gen:
+            self._kv_gen[ops] = kv_gen
+
+        tasks = []
+        for bucket in self.__buckets:
+            kv_gen = copy.deepcopy(self._kv_gen[OPS.CREATE])
+            tasks.append(
+                self.__clusterop.async_load_gen_docs(
+                    self.__master_node, bucket.name, kv_gen,
+                    bucket.kvs[kv_store], ops, exp, flag,
+                    only_store_hash, batch_size, pause_secs, timeout_secs)
+            )
+        for task in tasks:
+            task.result()
+
+    def async_load_all_buckets_from_generator(self, kv_gen, ops=OPS.CREATE, exp=0,
+                                              kv_store=1, flag=0, only_store_hash=True,
+                                              batch_size=1000, pause_secs=1, timeout_secs=30):
+        """Load data asynchronously on all buckets. Function wait for
+        load data to finish.
+        @param gen: BlobGenerator() object
+        @param ops: OPS.CREATE/UPDATE/DELETE/APPEND.
+        @param exp: expiration value.
+        @param kv_store: kv store index.
+        @param flag:
+        @param only_store_hash: True to store hash of item else False.
+        @param batch_size: batch size for load data at a time.
+        @param pause_secs: pause for next batch load.
+        @param timeout_secs: timeout
+        """
+        if ops not in self._kv_gen:
+            self._kv_gen[ops] = kv_gen
+
+        tasks = []
+        for bucket in self.__buckets:
+            kv_gen = copy.deepcopy(self._kv_gen[OPS.CREATE])
+            tasks.append(
+                self.__clusterop.async_load_gen_docs(
+                    self.__master_node, bucket.name, kv_gen,
+                    bucket.kvs[kv_store], ops, exp, flag,
+                    only_store_hash, batch_size, pause_secs, timeout_secs)
+            )
+        return tasks
 
 
     def load_all_buckets_till_dgm(self, active_resident_threshold, items=0,
@@ -1907,7 +1997,7 @@ class FTSBaseTest(unittest.TestCase):
             eviction_policy=self.__eviction_policy,
             bucket_priority=bucket_priority)
 
-    def load_cluster(self):
+    def load_employee_dataset(self):
         """
             Loads the default JSON dataset
             see JsonDocGenerator in documentgenerator.py
@@ -1918,6 +2008,36 @@ class FTSBaseTest(unittest.TestCase):
             self._cb_cluster.load_all_buckets_till_dgm(
                 active_resident_threshold=self._active_resident_threshold,
                 items=self._num_items)
+
+    def load_utf16_data(self, num_keys=None):
+        """
+        Loads the default JSON dataset in utf-16 format
+        """
+        if not num_keys:
+            num_keys = self._num_items
+
+        gen = JsonDocGenerator("C1",
+                               encoding="utf-16",
+                               start=0,
+                               end=num_keys)
+        self._cb_cluster.load_all_buckets_from_generator(gen)
+
+
+    def load_wiki(self, num_keys=None, lang="EN", encoding="utf-8"):
+        """
+        Loads the Wikipedia dump.
+        Languages supported : EN(English)/ES(Spanish)/DE(German)/FR(French)
+        """
+        if not num_keys:
+            num_keys = self._num_items
+
+        gen = WikiJSONGenerator("C1",
+                                  lang=lang,
+                                  encoding=encoding,
+                                  start=0,
+                                  end=num_keys)
+        self._cb_cluster.load_all_buckets_from_generator(gen)
+
 
     def perform_update_delete(self, fields_to_update=None):
         """
@@ -2029,3 +2149,11 @@ class FTSBaseTest(unittest.TestCase):
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
+
+    def wait_for_indexing_complete(self):
+        # TODO: Add logic based on stats
+        # for now, just sleep
+        if self._update and self._expires:
+            self.sleep(self._expires,"Waiting for keys to expire...")
+        self.sleep(120)
+

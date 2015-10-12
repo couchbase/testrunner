@@ -2,6 +2,7 @@ import json
 import string
 import random
 from couchbase_helper.data import FIRST_NAMES, LAST_NAMES
+import gzip
 
 class KVGenerator(object):
     def __init__(self, name, start, end):
@@ -206,7 +207,7 @@ class JsonDocGenerator(KVGenerator):
         """
         self.args = args
         self.name = name
-        self.gen_docs= {}
+        self.gen_docs = {}
         self.encoding = encoding
 
         size = 0
@@ -318,3 +319,97 @@ class JsonDocGenerator(KVGenerator):
         lang_list = ['English', 'Spanish', 'German', 'Italian', 'French']
         return [lang_list[i] for i in xrange(0,random.randint(1,len(lang_list)-1))]
 
+class WikiJSONGenerator(KVGenerator):
+
+    def __init__(self, name, lang='EN', encoding="utf-8", *args, **kwargs):
+
+        """Wikipedia JSON document generator
+
+        gen = WikiJSONGenerator(prefix, lang="DE","encoding="utf-8",
+                                start=0,end=1000)
+        Args:
+            prefix: prefix for key
+            encoding: utf-8/ascii/utf-16 encoding of JSON doc
+            *args: A list for each argument in the template
+            *kwargs: Special constrains for the document generator
+
+        ** For EN, generates 20000 unique docs, and then duplicates docs **
+        ** For ES, DE and FR, generates 5000 unique docs and then duplicates **
+
+
+        Sample EN doc:
+
+        {
+           "revision": {
+              "comment": "robot Modifying: [[bar:Apr\u00fc]]",
+              "timestamp": "2010-05-13T20:42:11Z",
+              "text": {
+                 "@xml:space": "preserve",
+                 "#text": "'''April''' is the fourth month of the year with 30
+                 days. The name April comes from that Latin word ''aperire''
+                 which means \"to open\". This probably refers to growing plants
+                 in spring. April begins on the same day of week as ''[[July]]''
+                 in all years and also ''[[January]]'' in leap years.\n\nApril's
+                flower is the Sweet Pea and ...<long text>
+                },
+              "contributor": {
+                 "username": "Xqbot",
+                 "id": "40158"
+              },
+              "id": "2196110",
+              "minor": null
+           },
+           "id": "1",
+           "title": "April"
+           "mutated": 0,
+        }
+
+
+        """
+
+        self.args = args
+        self.name = name
+        self.gen_docs = {}
+        self.encoding = encoding
+        self.lang = lang
+
+        size = 0
+        if not len(self.args) == 0:
+            size = 1
+            for arg in self.args:
+                size *= len(arg)
+
+        KVGenerator.__init__(self, name, 0, size)
+        random.seed(0)
+
+        if 'start' in kwargs:
+            self.start = int(kwargs['start'])
+            self.itr = int(kwargs['start'])
+        if 'end' in kwargs:
+            self.end = int(kwargs['end'])
+
+        self.read_from_wiki_dump()
+
+    def read_from_wiki_dump(self):
+        count = 0
+        done = False
+        while not done:
+            with gzip.open("lib/couchbase_helper/wiki/{0}wiki.txt.gz".
+                            format(self.lang.lower()), "r") as f:
+                for doc in f:
+                    self.gen_docs[count] = doc
+                    if count >= self.end:
+                        f.close()
+                        done = True
+                        break
+                    count += 1
+                f.close()
+
+    def next(self):
+        if self.itr >= self.end:
+            raise StopIteration
+        doc = eval(self.gen_docs[self.itr])
+        doc["mutated"] = 0
+        self.itr += 1
+        return self.name+str(10000000+self.itr),\
+               json.dumps(doc, indent=3).encode(self.encoding, "ignore")
