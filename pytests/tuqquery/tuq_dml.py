@@ -625,6 +625,16 @@ class DMLQueryTests(QueryTests):
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
 
+    def test_delete_keys_explain_clause(self):
+        num_docs = self.input.param('docs_to_delete', 3)
+        key_prefix = 'automation%s' % str(uuid.uuid4())[:5]
+        keys_to_delete = ['%s%s' % (key_prefix, i) for i in xrange(num_docs)]
+        for bucket in self.buckets:
+            self.query = 'explain delete from %s  use keys %s'  % (bucket.name, keys_to_delete)
+            actual_result = self.run_cbq_query()
+            self.log.info(actual_result["results"])
+            self.assertTrue(actual_result["results"][0]["~children"][0]["#operator"]=="KeyScan","KeysScan is not being used in delete query")
+
     def test_delete_keys_use_index_clause(self):
         num_docs = self.input.param('docs_to_delete', 3)
         key_prefix = 'automation%s' % str(uuid.uuid4())[:5]
