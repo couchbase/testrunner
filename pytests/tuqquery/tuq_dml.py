@@ -562,8 +562,13 @@ class DMLQueryTests(QueryTests):
                 key, value = gen.next()
                 key = "upsert_json" + key
                 for bucket in self.buckets:
-                    query = 'upsert into %s (key, value) values  ("%s", %s)' % (bucket.name, key, value)
-                    prepared = self.run_cbq_query(query='PREPARE %s' % query)['results'][0]
+                    self.query = 'upsert into %s (key, value) values  ("%s", %s)' % (bucket.name, key, value)
+                    if self.named_prepare:
+                        self.named_prepare= "prepare_" + bucket.name + str(uuid.uuid4())[:3]
+                        self.query = "PREPARE %s from %s" % (self.named_prepare,self.query)
+                    else:
+                        self.query = "PREPARE %s" % self.query
+                    prepared = self.run_cbq_query(query=self.query)['results'][0]
                     actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
                     self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
                 keys.append(key)
@@ -780,7 +785,6 @@ class DMLQueryTests(QueryTests):
             actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
-
     def test_delete_where_satisfy_clause_json(self):
         keys, values = self._insert_gen_keys(self.num_items, prefix='delete_sat')
         keys_to_delete = [keys[i] for i in xrange(len(keys))
