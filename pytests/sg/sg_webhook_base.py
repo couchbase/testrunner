@@ -13,7 +13,6 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
         super(GatewayWebhookBaseTest, self).setUp()
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
-        self.version = self.input.param("version", "0.0.0-358")
         self.extra_param = self.input.param("extra_param", "")
         self.configfile = self.input.param("config", "config_webhook_basic.json")
         self.doc_id = self.input.param("doc_id", "doc1")
