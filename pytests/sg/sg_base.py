@@ -4,6 +4,7 @@ from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 import re
 import time
+
 try:
     import requests
     from requests.exceptions import ConnectionError
@@ -13,7 +14,6 @@ except ImportError as e:
 
 
 class GatewayBaseTest(unittest.TestCase):
-
     BUILDS = {
         'http://latestbuilds.hq.couchbase.com/couchbase-sync-gateway': (
             'release/1.1.0/{0}/couchbase-sync-gateway-community_{0}_{1}.{2}',
@@ -32,7 +32,7 @@ class GatewayBaseTest(unittest.TestCase):
         self.version = self.input.param("version_sg", "0.0.0-358")
         self.extra_param = self.input.param("extra_param", "")
         if isinstance(self.extra_param, str):
-            self.extra_param=self.extra_param.replace("$", "=")  # '=' is a delimiter in conf file
+            self.extra_param = self.extra_param.replace("$", "=")  # '=' is a delimiter in conf file
         self.logsdir = self.input.param("logsdir", "/tmp/sync_gateway/logs")
         self.datadir = self.input.param("datadir", "/tmp/sync_gateway")
         self.configdir = self.input.param("configdir", "/tmp/sync_gateway")
@@ -94,6 +94,7 @@ class GatewayBaseTest(unittest.TestCase):
         self.log.info('=== Killing Sync Gateway')
         shell.terminate_process(process_name='sync_gateway')
         shell.execute_command('killall sync_gateway')
+        shell.execute_command('pkill sync_gateway')  # centos 7
 
     def uninstall_gateway(self, shell):
         self.info = shell.extract_remote_info()
@@ -129,25 +130,26 @@ class GatewayBaseTest(unittest.TestCase):
                 cmd = 'yes | dpkg -i /tmp/{0}'.format(filename)
             elif distribution_type == 'mac':
                 filename_tar = re.sub('\.gz$', '', filename)
-                cmd = 'cd /tmp; gunzip {0}; tar xopf {1}; cp -r couchbase-sync-gateway /opt'\
+                cmd = 'cd /tmp; gunzip {0}; tar xopf {1}; cp -r couchbase-sync-gateway /opt' \
                     .format(filename, filename_tar, filename_tar)
                 wget_str = '/usr/local/bin/wget'
             else:
                 self.log.info('install_gateway is not supported on {0}, {1}'.format(type, distribution_type))
-            output, error = shell.execute_command_raw('cd /tmp; {0} -q -O {1} {2};ls -lh'.format(wget_str, filename, url))
+            output, error = shell.execute_command_raw(
+                'cd /tmp; {0} -q -O {1} {2};ls -lh'.format(wget_str, filename, url))
 
         elif type == 'windows':
-            cmd = "cd /cygdrive/c/tmp;cmd /c 'couchbase-sync-gateway.exe /S /v/qn'" #couchbase-sync-gateway.exe /v"/l*v C:\install.log /qb
+            cmd = "cd /cygdrive/c/tmp;cmd /c 'couchbase-sync-gateway.exe /S /v/qn'"  # couchbase-sync-gateway.exe /v"/l*v C:\install.log /qb
             output, error = shell.execute_command(
-                     "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q"
-                                                    " {0} -O {1}.exe';ls -lh;".format(url, "couchbase-sync-gateway"))
+                "cd /cygdrive/c/tmp;cmd /c 'c:\\automation\\wget.exe --no-check-certificate -q"
+                " {0} -O {1}.exe';ls -lh;".format(url, "couchbase-sync-gateway"))
         shell.log_command_output(output, error)
         output, error = shell.execute_command_raw(cmd)
         shell.log_command_output(output, error)
         if type == 'windows':
             exist = shell.file_exists('/cygdrive/c/Program Files (x86)/Couchbase', 'sync_gateway.exe')
         else:
-            exist = shell.file_exists(self.installed_folder.replace("\\",""), 'sync_gateway')
+            exist = shell.file_exists(self.installed_folder.replace("\\", ""), 'sync_gateway')
         if exist:
             return True
         else:
@@ -160,27 +162,28 @@ class GatewayBaseTest(unittest.TestCase):
         shell.copy_files_local_to_remote('pytests/sg/resources', self.folder_prefix + '/tmp')
         if type == 'windows':
             output, error = shell.execute_command_raw('{0}/sync_gateway.exe'
-                                                  ' c:/tmp/gateway_config.json > {1}/tmp/gateway.log 2>&1 &'.
+                                                      ' c:/tmp/gateway_config.json > {1}/tmp/gateway.log 2>&1 &'.
                                                       format(self.installed_folder, self.folder_prefix))
         else:
             output, error = shell.execute_command_raw('nohup {0}/sync_gateway'
-                                                  ' /tmp/gateway_config.json >/tmp/gateway.log 2>&1 &'.
+                                                      ' /tmp/gateway_config.json >/tmp/gateway.log 2>&1 &'.
                                                       format(self.installed_folder))
         shell.log_command_output(output, error)
 
     def start_simpleServe(self, shell):
         self.log.info('=== Starting SimpleServe instances')
-        shell.copy_file_local_to_remote("pytests/sg/simpleServe.go", "{0}/tmp/simpleServe.go".format(self.folder_prefix))
+        shell.copy_file_local_to_remote("pytests/sg/simpleServe.go",
+                                        "{0}/tmp/simpleServe.go".format(self.folder_prefix))
         type = shell.extract_remote_info().type.lower()
         if type == 'windows':
             shell.terminate_process(process_name='simpleServe.exe')
             output, error = shell.execute_command_raw('c:/Go/bin/go.exe run c:/tmp/simpleServe.go 8081'
-                                      ' >{0}/tmp/simpleServe.txt 2>&1 &'.format(self.folder_prefix))
+                                                      ' >{0}/tmp/simpleServe.txt 2>&1 &'.format(self.folder_prefix))
         else:
             shell.terminate_process(process_name='simpleServe')
             shell.execute_command("kill $(ps aux | grep '8081' | awk '{print $2}')")
             output, error = shell.execute_command_raw('go run {0}/tmp/simpleServe.go 8081'
-                                                  '  >{0}/tmp/simpleServe.txt 2>&1 &'.format(self.folder_prefix))
+                                                      '  >{0}/tmp/simpleServe.txt 2>&1 &'.format(self.folder_prefix))
         shell.log_command_output(output, error)
 
     def add_user(self, shell, user_name):
@@ -248,9 +251,9 @@ class GatewayBaseTest(unittest.TestCase):
         distribution_version = self.info.distribution_version
         if self.info.type.lower() == 'linux':
             if distribution_type == 'centos' and distribution_version == 'CentOS 7':
-                    cmd = 'systemctl | grep sync_gateway'
-                    service_str = 'sync_gateway.service                                                       ' \
-                                  '               loaded active running'
+                cmd = 'systemctl | grep sync_gateway'
+                service_str = 'sync_gateway.service                                                       ' \
+                              '               loaded active running'
             elif distribution_type == 'ubuntu' or \
                     (distribution_type == 'centos' and distribution_version != 'CentOS 7'):
                 cmd = 'initctl list | grep sync_gateway'
@@ -263,7 +266,8 @@ class GatewayBaseTest(unittest.TestCase):
                               .format(type, distribution_type))
                 return False
         else:
-            self.log.info('is_sync_gateway_service_running is not supported on {0}, {1}'.format(type, distribution_type))
+            self.log.info(
+                'is_sync_gateway_service_running is not supported on {0}, {1}'.format(type, distribution_type))
             return False
 
         self.log.info('=== Check whether Sync Gateway service is running on {0} - cmd: {1}'.format(self.master, cmd))
@@ -354,7 +358,7 @@ class GatewayBaseTest(unittest.TestCase):
         if self.servers[0].ssh_username == 'root':
             cmd = 'cd /opt/couchbase-sync-gateway/service; . ./sync_gateway_service_install.sh '
         else:
-            cmd = 'cd /opt/couchbase-sync-gateway/service;  echo {0} | sudo . ./sync_gateway_service_install.sh '\
+            cmd = 'cd /opt/couchbase-sync-gateway/service;  echo {0} | sudo . ./sync_gateway_service_install.sh ' \
                 .format(self.servers[0].ssh_password)
         output, error = shell.execute_command(cmd + options)
         shell.log_command_output(output, error)
@@ -372,7 +376,7 @@ class GatewayBaseTest(unittest.TestCase):
                         return True
                     else:
                         self.log.error('check_normal_error_output: On CentOS 7, expect output to be null, but got {0}'
-                                   .format(output[0]))
+                                       .format(output[0]))
                         return False
                 else:
                     self.log.error('check_normal_error_output: On CentOS 7, expect error: '
@@ -422,7 +426,7 @@ class GatewayBaseTest(unittest.TestCase):
                         return True
                     else:
                         self.log.error('check_job_already_running: On CentOS 7, expect output to be null, but got {0}'
-                                   .format(output[0]))
+                                       .format(output[0]))
                         return False
                 else:
                     self.log.error('check_job_already_running: On CentOS 7, expect error to be null, but got {0}'
@@ -435,11 +439,12 @@ class GatewayBaseTest(unittest.TestCase):
                         return True
                     else:
                         self.log.error('check_job_already_running: On linux, expect output to be null, but got {0}'
-                                   .format(output[0]))
+                                       .format(output[0]))
                         return False
                 else:
-                    self.log.error('check_job_already_running: On linux, expect error to contain: \'is already running\' '
-                                   ' but get {0}'.format(error[0]))
+                    self.log.error(
+                        'check_job_already_running: On linux, expect error to contain: \'is already running\' '
+                        ' but get {0}'.format(error[0]))
                     return False
             else:
                 self.log.info('check_job_already_running is not supported on {0}, {1}'.format(type, distribution_type))
@@ -449,7 +454,7 @@ class GatewayBaseTest(unittest.TestCase):
             return False
 
     def check_status_in_gateway_log(self, shell):
-        logs = shell.read_remote_file('{0}/tmp/'.format(self.folder_prefix), 'gateway.log')[-5:]#last 5 lines
+        logs = shell.read_remote_file('{0}/tmp/'.format(self.folder_prefix), 'gateway.log')[-5:]  # last 5 lines
         self.log.info(logs)
         status = re.search(".* got status (\w+)", logs[4])
         if not status:
@@ -462,7 +467,8 @@ class GatewayBaseTest(unittest.TestCase):
         if not expected_str:
             return True
         for i in range(3):
-            output, error = shell.execute_command_raw('grep \'{0}\' {1}/tmp/gateway.log'.format(expected_str, self.folder_prefix))
+            output, error = shell.execute_command_raw(
+                'grep \'{0}\' {1}/tmp/gateway.log'.format(expected_str, self.folder_prefix))
             shell.log_command_output(output, error)
             if not output or not output[0]:
                 if i < 2:
