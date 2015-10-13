@@ -1939,9 +1939,6 @@ class QueryTests(BaseTestCase):
     def test_explain_union(self,index):
         for bucket in self.buckets:
             res = self.run_cbq_query()
-            self.log.info(res)
-            s = pprint.pformat( res, indent=4 )
-            self.log.info(s)
             self.assertTrue(res["results"][0]["~children"][0]["~children"][0]["#operator"] == "UnionScan",
                         "UnionScan Operator is not used by this query")
             if res["results"][0]["~children"][0]["~children"][0]["scans"][0]["#operator"] == "IndexScan":
@@ -1963,11 +1960,7 @@ class QueryTests(BaseTestCase):
     def test_explain_covering_index(self,index):
         for bucket in self.buckets:
             res = self.run_cbq_query()
-            self.log.info(res)
-            for x in res.iteritems():
-                self.log.info(x)
             s = pprint.pformat( res, indent=4 )
-            self.log.info(s)
             if index in s:
                 self.log.info("correct index used in json result ")
             else:
