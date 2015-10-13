@@ -29,7 +29,7 @@ class GatewayBaseTest(unittest.TestCase):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.case_number = self.input.param("case_number", 0)
-        self.version = self.input.param("version", "0.0.0-358")
+        self.version = self.input.param("version_sg", "0.0.0-358")
         self.extra_param = self.input.param("extra_param", "")
         if isinstance(self.extra_param, str):
             self.extra_param=self.extra_param.replace("$", "=")  # '=' is a delimiter in conf file

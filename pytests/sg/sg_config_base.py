@@ -13,7 +13,6 @@ class GatewayConfigBaseTest(GatewayBaseTest):
 
     def setUp(self):
         super(GatewayConfigBaseTest, self).setUp()
-        self.version = self.input.param("version", "0.0.0-358")
         self.template = self.input.param("template", "")
         self.feedtype = self.input.param("feedtype", "tap")
         self.config = self.input.param("config", "gateway_config.json")
