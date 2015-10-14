@@ -1,5 +1,5 @@
 from couchbase_helper.stats_tools import StatsCommon
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.documentgenerator import BlobGenerator
 
 from xdcrbasetests import XDCRReplicationBaseTest
@@ -135,3 +135,49 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
 
         self._verify_item_count(self.src_master, self.src_nodes)
         self._verify_data_all_buckets(self.src_master)
+
+    def test_verify_mb15892(self):
+        """
+        Test case for MB-15892
+
+        Create replication should not allow setting-up replication to remote memcached bucket
+        Make sure to set default_bucket to False as the test will create default buckets
+        on source and destination masters
+        """
+        rest_conn_src = RestConnection(self.src_master)
+        rest_conn_src.create_bucket(bucket='default', ramQuotaMB=256)
+        master_id = rest_conn_src.get_nodes_self().id
+        #if not cluster run use ip addresses instead of localhost
+        if len(set([server.ip for server in self._servers])) != 1:
+            master_id = master_id.replace("127.0.0.1", self.src_master.ip).replace("localhost", self.src_master.ip)
+        self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+                                       num_replicas=self._num_replicas, bucket_size=256, master_id=master_id,
+                                       eviction_policy=self.eviction_policy))
+
+        rest_conn_dest = RestConnection(self.dest_master)
+        rest_conn_dest.create_bucket(bucket='default', ramQuotaMB=256, bucketType='memcached')
+        master_id = rest_conn_dest.get_nodes_self().id
+        #if not cluster run use ip addresses instead of localhost
+        if len(set([server.ip for server in self._servers])) != 1:
+            master_id = master_id.replace("127.0.0.1", self.dest_master.ip).replace("localhost", self.dest_master.ip)
+        self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
+                                       num_replicas=self._num_replicas, bucket_size=256, master_id=master_id,
+                                       eviction_policy=self.eviction_policy))
+
+        remote_cluster_name = "C2"
+        self._link_clusters(self.src_master, remote_cluster_name, self.dest_master)
+
+        buckets = self._get_cluster_buckets(self.src_master)
+        src_bucket = buckets[0]
+
+        buckets = self._get_cluster_buckets(self.dest_master)
+        dest_bucket = buckets[0]
+
+        try:
+            rest_conn_src.start_replication(XDCRConstants.REPLICATION_TYPE_CONTINUOUS,
+                                        src_bucket.name, remote_cluster_name,
+                                        self.rep_type, toBucket=dest_bucket.name)
+        except Exception as e:
+            expected_error = "Incompatible target bucket"
+            self.assertTrue(expected_error in str(e), "Incompatible target bucket exception not raised as expected")
+            self.log.info("Incompatible target bucket exception raised as expected")
