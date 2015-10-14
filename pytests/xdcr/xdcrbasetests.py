@@ -575,6 +575,9 @@ class XDCRBaseTest(unittest.TestCase):
             self._mem_quota_int = 256
         master_node = nodes[0]
         total_buckets = self._sasl_buckets + self._default_bucket + self._standard_buckets + self._extra_buckets
+        #to enable tests to skip creating buckets in setup and create them later
+        if not total_buckets:
+            return
         bucket_size = self._get_bucket_size(self._mem_quota_int, total_buckets)
         rest = RestConnection(master_node)
         master_id = rest.get_nodes_self().id
