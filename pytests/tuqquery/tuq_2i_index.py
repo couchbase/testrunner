@@ -143,6 +143,10 @@ class QueriesIndexTests(QueryTests):
                     self.query = "EXPLAIN SELECT name, join_day FROM %s where name = 'employee-9'"% (bucket.name)
                     if self.covering_index:
                         self.test_explain_covering_index(index_name)
+                        self.query = "EXPLAIN SELECT * FROM %s where name = 'employee-9'"% (bucket.name)
+                        res = self.run_cbq_query()
+                        self.log.info(res["results"])
+                        self.assertTrue(res["results"][0]["~children"][0]['index'] == index_name,"correct index is not used")
                     self.query = "SELECT name, join_day FROM %s where name = 'employee-9'"  % (bucket.name)
                     actual_result = self.run_cbq_query()
                     expected_result = [{"name" : doc["name"],"join_day" : doc["join_day"]}
