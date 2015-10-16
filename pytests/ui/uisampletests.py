@@ -669,8 +669,10 @@ class ServerTestControls():
         self.helper = ControlsHelper(driver)
         self.add_server_btn = self.helper.find_control('server_nodes', 'add_server_btn')
         self.rebalance_btn = self.helper.find_control('server_nodes', 'rebalance_btn')
+
         self.num_pend_rebalance = self.helper.find_control('server_nodes', 'num_pend_rebalance',
                                                            parent_locator='pend_rebalance_btn')
+
 
     def set_quota_btn(self):
         return self.helper.find_control('server_nodes','set_quota')
