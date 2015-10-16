@@ -28,8 +28,9 @@ class BaseUITestCase(unittest.TestCase):
     def _start_selenium(self):
         host = self.machine.ip
         if host in ['localhost', '127.0.0.1']:
-            os.system("java -jar %sselenium-server-standalone*.jar -Dwebdriver.chrome.driver=%s > selenium.log 2>&1"
-                      % (self.input.ui_conf['selenium_path'], self.input.ui_conf['chrome_path']))
+
+            os.system("java -jar selenium-server-standalone-2.48.2.jar -Dwebdriver.chromedriver='~/Applications/chromedriver' > selenium.log 2>&1"
+                      )
         else:
             self.shell.execute_command('{0}start-selenium.bat > {0}selenium.log 2>&1 &'.format(self.input.ui_conf['selenium_path']))
 
@@ -98,23 +99,33 @@ class BaseUITestCase(unittest.TestCase):
                 self._start_selenium_thread()
                 self._wait_for_selenium_is_started()
             self.log.info('start selenium session')
-            if self.browser == 'ff':
+            if self.browser == 'firefox':
+                self.log.info("firefox")
+        #         self.driver = webdriver.Remote(desired_capabilities={
+        #     "browserName": "firefox",
+        #     "platform": "MAC",
+        # })
                 self.driver = webdriver.Remote(command_executor='http://{0}:{1}/wd/hub'
                                                .format(self.machine.ip,
                                                        self.machine.port),
                                                desired_capabilities=DesiredCapabilities.FIREFOX)
             elif self.browser == 'chrome':
+                self.log.info("chrome")
                 local_capabilities = DesiredCapabilities.CHROME
                 chrome_options = Options()
                 chrome_options.add_experimental_option("excludeSwitches", ["ignore-certificate-errors"])
                 local_capabilities.update(chrome_options.to_capabilities())
-                self.driver = webdriver.Remote(command_executor='http://{0}:{1}/wd/hub'
-                                               .format(self.machine.ip,
-                                                       self.machine.port),
-                                               desired_capabilities=local_capabilities)
+                self.log.info(self.machine.ip)
+                self.log.info(self.machine.port)
+                self.driver = webdriver.Remote(desired_capabilities={
+            "browserName": "chrome",
+            "platform": "MAC",
+        })
             self.log.info('start selenium started')
-            self.driver.get("http://{0}:{1}".format(self.servers[0].ip,
-                                                    self.servers[0].port))
+
+            self.driver.get("http://127.0.0.1:8091")
+            self.username = "Administrator"
+            self.password = "password"
             self.driver.maximize_window()
         except Exception as ex:
             self.input.test_params["stop-on-failure"] = True
