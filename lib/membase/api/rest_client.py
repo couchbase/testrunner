@@ -234,7 +234,7 @@ class RestConnection(object):
         return obj
 
     def __init__(self, serverInfo):
-        # serverInfo can be a json object
+        # serverInfo can be a json object/dictionary
         if isinstance(serverInfo, dict):
             self.ip = serverInfo["ip"]
             self.username = serverInfo["username"]
@@ -242,6 +242,7 @@ class RestConnection(object):
             self.port = serverInfo["port"]
             self.index_port = 9102
             self.fts_port = 9110
+            self.query_port=8094
             if "index_port" in serverInfo.keys():
                 self.index_port = serverInfo["index_port"]
             self.hostname = ''
@@ -255,18 +256,23 @@ class RestConnection(object):
             self.hostname = ''
             self.index_port = 9102
             self.fts_port = 9110
+            self.query_port = 8094
             if hasattr(serverInfo, 'index_port'):
                 self.index_port = serverInfo.index_port
+            if hasattr(serverInfo, 'query_port'):
+                self.query_port = serverInfo.query_port
             if hasattr(serverInfo, 'hostname') and serverInfo.hostname and\
                serverInfo.hostname.find(self.ip) == -1:
                 self.hostname = serverInfo.hostname
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.fts_baseUrl = "http://{0}:{1}/".format(self.ip, self.fts_port)
         self.index_baseUrl = "http://{0}:{1}/".format(self.ip, self.index_port)
+        self.query_baseUrl = "http://{0}:{1}/".format(self.ip, self.query_port)
         self.capiBaseUrl = "http://{0}:{1}/".format(self.ip, 8092)
         if self.hostname:
             self.baseUrl = "http://{0}:{1}/".format(self.hostname, self.port)
             self.capiBaseUrl = "http://{0}:{1}/".format(self.hostname, 8092)
+            self.query_baseUrl = "http://{0}:{1}/".format(self.hostname, 8094)
         # for Node is unknown to this cluster error
         for iteration in xrange(5):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
