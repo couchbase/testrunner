@@ -1357,10 +1357,9 @@ class RemoteMachineShellConnection:
                     success &= self.log_command_output(output, error, track_words)
         elif self.info.deliverable_type in ["zip"]:
             o, r = self.execute_command("ps aux | grep Archive | awk '{print $2}' | xargs kill -9")
-            self.log_command_output(o, r)
-            o, r = self.execute_command("killall -9 beam.smp")
-            self.log_command_output(o, r)
-            o, r = self.execute_command("killall -9 memcached")
+            o, r = self.execute_command("ps aux | \
+                grep '/Applications/Couchbase Server.app/Contents/MacOS/Couchbase Server' \
+                                                      | awk '{print $2}' | xargs kill -9 ")
             self.log_command_output(o, r)
             self.sleep(10)
             output, error = self.execute_command("cd ~/Downloads ; open couchbase-server*.zip")
@@ -1372,7 +1371,6 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
             output, error = self.execute_command("open /Applications/Couchbase\ Server.app")
             self.log_command_output(output, error)
-            self.sleep(30)
 
         output, error = self.execute_command("rm -f *-diag.zip")
         self.log_command_output(output, error, track_words)
