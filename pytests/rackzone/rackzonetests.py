@@ -14,8 +14,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from scripts.install import InstallerJob
 from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
-from testconstants import SHERLOCK_VERSION
+from testconstants import COUCHBASE_FROM_VERSION_3
 
 
 
@@ -384,8 +383,7 @@ class RackzoneTests(RackzoneBaseTest):
                                | sed.exe 's/eq_tapq:replication_ns_1@//g'  | sed.exe 's/:vb_filter://g' \
                                " % (cbstat_command, node, command,"default", saslPassword)
                     output, error = shell.execute_command(commands)
-                elif versions[0][:5] in COUCHBASE_VERSION_3 or \
-                     versions[0][:5] in SHERLOCK_VERSION:
+                elif versions[0][:5] in COUCHBASE_FROM_VERSION_3:
                     command = "dcp"
                     if not info.type.lower() == 'windows':
                         commands = "%s %s:11210 %s -b %s -p \"%s\" | grep :replication:ns_1@%s |  grep vb_uuid | \
