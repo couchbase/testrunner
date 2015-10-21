@@ -484,7 +484,7 @@ class N1QLHelper():
             query_params.update("scan_consistency", scan_consistency)
         return query_params
 
-    def _is_index_in_list(self, bucket, index_name, server = None, index_state = "pending"):
+    def _is_index_in_list(self, bucket, index_name, server = None, index_state = ["pending","building"]):
         query = "SELECT * FROM system:indexes where name = \'{0}\'".format(index_name)
         if server == None:
             server = self.master
@@ -492,11 +492,11 @@ class N1QLHelper():
         for item in res['results']:
             if 'keyspace_id' not in item['indexes']:
                 return False
-            if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] != index_state:
+            if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] not in index_state:
                 return True
         return False
 
-    def _is_index_in_list_bulk(self, bucket, index_names = [], server = None, index_state = "pending"):
+    def _is_index_in_list_bulk(self, bucket, index_names = [], server = None, index_state = ["pending","building"]):
         query = "SELECT * FROM system:indexes"
         if server == None:
             server = self.master
@@ -507,7 +507,7 @@ class N1QLHelper():
             if 'keyspace_id' not in item['indexes']:
                 return False
             for index_name in index_names:
-                if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] != index_state:
+                if item['indexes']['keyspace_id'] == str(bucket) and item['indexes']['name'] == index_name and item['indexes']['state'] not in index_state:
                     found_index_list.append(index_name)
         if len(found_index_list) == len(index_names):
             return True, []
