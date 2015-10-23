@@ -1,6 +1,7 @@
 import math
 import re
 import uuid
+import time
 
 from tuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
@@ -145,7 +146,6 @@ class QueriesIndexTests(QueryTests):
                         self.test_explain_covering_index(index_name)
                         self.query = "EXPLAIN SELECT * FROM %s where name = 'employee-9'"% (bucket.name)
                         res = self.run_cbq_query()
-                        self.log.info(res["results"])
                         self.assertTrue(res["results"][0]["~children"][0]['index'] == index_name,"correct index is not used")
                     self.query = "SELECT name, join_day FROM %s where name = 'employee-9'"  % (bucket.name)
                     actual_result = self.run_cbq_query()
@@ -158,6 +158,15 @@ class QueriesIndexTests(QueryTests):
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
+                self.covering_index = False
+                self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, '#primary')
+                self.query = "SELECT name, join_day FROM %s where name = 'employee-9'"  % (bucket.name)
+                result = self.run_cbq_query()
+                self.assertTrue(actual_result["metrics"]["elapsedTime"]< result["metrics"]["elapsedTime"],"Time used in queries using covering indexes should be less than time used in queries not using covering indexes")
+
+
 
     def test_covering_partial_index(self):
         for bucket in self.buckets:
@@ -188,6 +197,15 @@ class QueriesIndexTests(QueryTests):
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
+                    self.covering_index = False
+                    self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+                    self.run_cbq_query()
+                    self._wait_for_index_online(bucket, '#primary')
+                    self.query = "select email,join_day from %s where email "  % (bucket.name) +\
+                                 "LIKE '%@%.%' and VMs[0].RAM > 5 and join_day > 10"
+                    result = self.run_cbq_query()
+                    self.assertTrue(actual_result["metrics"]["elapsedTime"]< result["metrics"]["elapsedTime"],"Time used in queries using covering indexes should be less than time used in queries not using covering indexes")
+
 
     def test_covering_orderby_limit(self):
         for bucket in self.buckets:
@@ -209,14 +227,20 @@ class QueriesIndexTests(QueryTests):
                                           doc['skills'][0]=='skill2010' and \
                                           len([vm for vm in doc["VMs"]
                                                 if vm["os"] == 'ubuntu' or vm["os"] == 'windows' or vm["os"] == "linux"])>0]
-                    actual_result = actual_result['results']
                     expected_result= sorted(expected_result,key=lambda doc: (doc["name"]))[:15]
                     self.max_verify = 15
-                    self._verify_results(actual_result, expected_result)
+                    self._verify_results(actual_result['results'], expected_result)
             finally:
                 for index_name in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
+                    self.covering_index = False
+                    self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+                    self.run_cbq_query()
+                    self._wait_for_index_online(bucket, '#primary')
+                    self.query = "select name,skills[0] as skills from %s where skills[0]='skill2010' and join_yr=2010 and VMs[0].os IN ['ubuntu','windows','linux'] order by name LIMIT 15 OFFSET 0;"  % (bucket.name)
+                    result = self.run_cbq_query()
+                    self.assertTrue(actual_result["metrics"]["elapsedTime"]< result["metrics"]["elapsedTime"],"Time used in queries using covering indexes should be less than time used in queries not using covering indexes")
 
     def test_covering_groupby(self):
         for bucket in self.buckets:
