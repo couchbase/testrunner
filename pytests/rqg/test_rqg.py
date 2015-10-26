@@ -466,7 +466,8 @@ class RQGTests(BaseTestCase):
         table_list = self.client._get_table_list()
         table_map = self.client._get_values_with_type_for_fields_in_table()
         for key in table_map.keys():
-            table_map[key].pop("alias_name")
+            if "alias_name" in table_map[key]:
+                table_map[key].pop("alias_name")
         failure_map = {}
         batch = []
         test_case_number = 1
@@ -673,6 +674,7 @@ class RQGTests(BaseTestCase):
             self.log.info(ex)
             crud_ops_run_result ={"success":False, "result": str(ex)}
         if crud_ops_run_result == None:
+            #self.sleep(5)
             query_index_run = self._run_queries_and_verify_crud(n1ql_query = verification_query , sql_query = verification_query, expected_result = None, table_name = table_name)
         else:
             query_index_run = crud_ops_run_result
