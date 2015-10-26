@@ -332,7 +332,7 @@ class RQGTests(BaseTestCase):
         if self.remove_alias:
             for key in table_map.keys():
                 if "alias_name" in table_map[key].keys():
-                    table_map[key].pop("alias_name")
+                    table_map[key].pop("alias_name",None)
         check = True
         failure_map = {}
         batches = Queue.Queue()
