@@ -577,7 +577,8 @@ class auditCLITest(CliBaseTest):
             options += " --audit-log-path={0}".format(self.logPath)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
-            tempFlag = self.validateSettings(self.enableStatus, self.logPath, self.rotateInt)
+            temp_rotate_int = self.rotateInt*60
+            tempFlag = self.validateSettings(self.enableStatus, self.logPath, temp_rotate_int)
             self.assertTrue(tempFlag)
         finally:
             auditIns.setAuditEnable(self.returnBoolVal(tempEnable))
