@@ -1408,7 +1408,7 @@ class RemoteMachineShellConnection:
             log.info("Kill any un/install process leftover in sherlock")
             self.execute_command('taskkill /F /T /IM 4.0.0-*')
             log.info("Kill any un/install process leftover in watson")
-            self.execute_command('taskkill /F /T /IM 4.0.1-*')
+            self.execute_command('taskkill /F /T /IM 4.1.0-*')
             log.info("Kill any cbq-engine.exe in sherlock")
             self.execute_command('taskkill /F /T /IM cbq-engine.exe')
             log.info('sleep for 5 seconds before running task '

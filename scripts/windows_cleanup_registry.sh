@@ -2,6 +2,10 @@
 # How to run:
 # python scripts/ssh.py  -i your_bad_vms.ini -p script=scripts/windows_cleanup_registry.sh
 #
+taskkill /F /T /IM msiexec.exe
+taskkill /F /T /IM erl.exe
+taskkill /F /T /IM epmd.exe
+
 echo -e "delete HKEY_CLASSES_ROOT\Installer\UpgradeCodes\DAFE44492BF730D45B002C1133EA9A42 \n"
 reg delete "HKEY_CLASSES_ROOT\Installer\UpgradeCodes\DAFE44492BF730D45B002C1133EA9A42" /f
 echo -e "delete HKEY_CLASSES_ROOT\Installer\Products\288F9D42C18440B25027002B37EC713B \n"
