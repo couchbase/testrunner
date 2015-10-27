@@ -69,7 +69,7 @@ def main():
     query = N1QLQuery("select * from `QE-Test-Suites` where '" + options.run + "' in partOf")
     results = cb.n1ql_query( query )
 
-    print 'the query results are', results
+    #print 'the query results are', results
     for row in results:
         data = row['QE-Test-Suites']
         print 'row', data
@@ -91,6 +91,8 @@ def main():
                         'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
                          'iniFile={5}&servers={6}&parameters={7}&os={8}'
 
+    summary = []
+
     while len(testsToLaunch) > 0:
         response, content = httplib2.Http(timeout=60).request('http://172.23.105.177:8081/getavailablecount/{0}'.format(options.os), 'GET')
         if response.status != 200:
@@ -107,13 +109,12 @@ def main():
             haveTestToLaunch = False
             i = 0
             while not haveTestToLaunch and i < len(testsToLaunch):
-                print 'i', i, 'ttl sc', testsToLaunch[i]['serverCount']
+                #print 'i', i, 'ttl sc', testsToLaunch[i]['serverCount']
                 if testsToLaunch[i]['serverCount'] <= serverCount:
                     haveTestToLaunch = True
                 else:
                     i = i + 1
 
-            print 'haveTestToLaunch', haveTestToLaunch
             if haveTestToLaunch:
                 descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent']
                 # get the VMs, they should be there
@@ -137,6 +138,7 @@ def main():
                     if not options.noLaunch:  # sorry for the double negative
                         response, content = httplib2.Http(timeout=60).request(url, 'GET')
                     testsToLaunch.pop(i)
+                    summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
             else:
                 print 'no VMs at this time'
                 time.sleep(POLL_INTERVAL)
@@ -145,6 +147,8 @@ def main():
 
 
     print '\n\n\ndone, everything is launched'
+    for i in summary:
+        print i['test'], 'was launched at', i['time']
     return
 
 
