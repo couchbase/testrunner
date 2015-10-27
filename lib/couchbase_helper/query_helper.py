@@ -368,6 +368,40 @@ class QueryHelper(object):
             new_sql += " HAVING "+ having +" "
         return new_sql
 
+
+    def check_groupby_orderby(self, sql, list_of_fields):
+        sql_map = self._divide_sql(sql)
+        order_by = sql_map["order_by"]
+        group_by = sql_map["group_by"]
+        having = sql_map["having"]
+        where_condition = sql_map["where_condition"]
+        returnparam = False
+        if where_condition:
+            if sorted(where_condition) == sorted(list_of_fields):
+                returnparam = False
+            else:
+                returnparam = True
+                return returnparam
+        if group_by:
+            if sorted(group_by) == sorted(list_of_fields):
+                returnparam = False
+            else:
+                returnparam = True
+                return returnparam
+        if order_by:
+            if sorted(order_by) == sorted(list_of_fields):
+                returnparam = False
+            else:
+                returnparam = True
+                return returnparam
+        if having:
+            if sorted(having)== sorted(list_of_fields):
+                returnparam = False
+            else:
+                return returnparam
+                returnparam = True
+        return returnparam
+
     def _add_index_hints_to_query(self, sql, index_list = []):
         sql_map = self._divide_sql(sql)
         select_from = sql_map["select_from"]

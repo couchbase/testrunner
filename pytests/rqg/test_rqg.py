@@ -946,11 +946,14 @@ class RQGTests(BaseTestCase):
 
     def _run_explain_and_print_result(self, n1ql_query):
         explain_query = "EXPLAIN "+n1ql_query
-        try:
-            actual_result = self.n1ql_helper.run_cbq_query(query = explain_query, server = self.n1ql_server)
-            self.log.info(explain_query)
-        except Exception, ex:
-            self.log.info(ex)
+        if "not" in explain_query or "NOT" in explain_query and self.check_covering_index:
+            self.log.info("Not executing queries with covering indexes and using not keyword")
+        else:
+            try:
+                actual_result = self.n1ql_helper.run_cbq_query(query=explain_query, server=self.n1ql_server)
+                self.log.info(explain_query)
+            except Exception, ex:
+                self.log.info(ex)
 
     def _run_queries_with_explain(self, n1ql_query = None, indexes = {}):
         run_result = {}
@@ -958,23 +961,38 @@ class RQGTests(BaseTestCase):
         for index_name in indexes:
             hint = "USE INDEX({0} USING {1})".format(index_name,indexes[index_name]["type"])
             n1ql = self.query_helper._add_explain_with_hints(n1ql_query, hint)
-            self.log.info(n1ql_query)
+            self.log.info(n1ql)
             message = "Pass"
             check = True
-            try:
-                actual_result = self.n1ql_helper.run_cbq_query(query = n1ql, server = self.n1ql_server)
-                self.log.info(actual_result)
-                check = self.n1ql_helper.verify_index_with_explain(actual_result, index_name, self.check_covering_index)
-                if not check:
-                    message= " query {0} failed explain result, index {1} not found".format(n1ql_query,index_name)
-                    self.log.info(message)
-            except Exception, ex:
-                self.log.info(ex)
-                message = ex
-                check = False
-            finally:
+            fieldsnotcovered = False
+            if self.check_covering_index:
+                query = "select * from system:indexes where name = '%s'" % index_name
+                actual_result = self.n1ql_helper.run_cbq_query(query = query, server = self.n1ql_server)
+                n1ql_result = actual_result["results"]
+                fields = n1ql_result[0]["indexes"]["index_key"]
+                fieldsnotcovered = self.query_helper.check_groupby_orderby(n1ql_query, fields)
+
+            if "NOT" in n1ql or "not" in n1ql or fieldsnotcovered and self.check_covering_index:
                 key = "Explain for index {0}".format(index_name)
                 run_result[key] = {"success":check, "result":message}
+            else:
+                try:
+                    actual_result = self.n1ql_helper.run_cbq_query(query=n1ql, server=self.n1ql_server)
+                    self.log.info(actual_result)
+                    check = self.n1ql_helper.verify_index_with_explain(actual_result, index_name,
+                                                                       self.check_covering_index)
+                    if not check:
+                        message = " query {0} failed explain result, index {1} not found".format(n1ql_query, index_name)
+                        self.log.info(message)
+                except Exception, ex:
+                    self.log.info(ex)
+                    message = ex
+                    check = False
+                finally:
+                    key = "Explain for index {0}".format(index_name)
+                    run_result[key] = {"success":check, "result":message}
+
+
         return run_result
 
     def _run_queries_from_file_and_compare(self, n1ql_query = None, sql_query = None, sql_result = None):
