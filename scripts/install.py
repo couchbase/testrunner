@@ -422,6 +422,11 @@ class CouchbaseServerInstaller(Installer):
                     rest.init_cluster(username=server.rest_username,
                                       password=server.rest_password)
                     memory_quota = rest.get_nodes_self().mcdMemoryReserved
+                    # give the cluster time to get the memQuota
+                    while memory_quota == 0:
+                       time.sleep(1)
+                       memory_quota = rest.get_nodes_self().mcdMemoryReserved
+
                     rest.init_cluster_memoryQuota(memoryQuota=memory_quota)
 
                 # TODO: Symlink data-dir to custom path
