@@ -63,28 +63,28 @@ def main():
     queryString = "select * from `QE-Test-Suites` where component ='{0}' and subcomponent = '{1}';"
 
     for d in data:
+        for d1 in d.split():
+            #print 'd1 is', d1
+            query = N1QLQuery(queryString.format( d1.split('/')[0],  d1.split('/')[1] ) )
+            results = cb.n1ql_query( query )
+            #print results
 
+            #print 'the query results are', results
+            for row in results:
+                data = row['QE-Test-Suites']
 
-        query = N1QLQuery(queryString.format( d.split()[0],  d.split()[1] ) )
-        results = cb.n1ql_query( query )
-        print results
-
-        #print 'the query results are', results
-        for row in results:
-            data = row['QE-Test-Suites']
-
-
-            if 'os' not in data or (data['os'] == options.os) or \
-                (data['os'] == 'linux' and options.os in set(['centos','ubuntu']) ):
-                testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],'confFile':data['confFile'],
-                                   'iniFile':data['config'],
-                                 'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
-                                 'parameters':data['parameters']})
-            else:
-                print 'OS does not apply to', data['component'], data['subcomponent']
+                if 'os' not in data or (data['os'] == options.os) or \
+                    (data['os'] == 'linux' and options.os in set(['centos','ubuntu']) ):
+                    testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],'confFile':data['confFile'],
+                                       'iniFile':data['config'],
+                                     'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
+                                     'parameters':data['parameters']})
+                else:
+                    print 'OS does not apply to', data['component'], data['subcomponent']
         #endfor results
     #endfor lines in the file
     print 'testsToLaunch', testsToLaunch
+
 
 
     launchString = 'http://qa.sc.couchbase.com/job/test_suite_executor/buildWithParameters?token=test_dispatcher&' + \
