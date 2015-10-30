@@ -105,11 +105,22 @@ class QueriesViewsTests(QueryTests):
 
     def test_explain(self):
         for bucket in self.buckets:
+            self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
+            actual_result = self.run_cbq_query()
             self.query = "EXPLAIN SELECT * FROM %s" % (bucket.name)
             res = self.run_cbq_query()
             self.log.info(res)
             self.assertTrue(res["results"][0]["~children"][0]["index"] == "#primary",
                             "Type should be #primary, but is: %s" % res["results"])
+
+            self.query = "EXPLAIN SELECT * FROM %s LIMIT %s" %(bucket.name,10);
+            res = self.run_cbq_query()
+            self.log.info(res)
+            import pdb;pdb.set_trace()
+            self.assertTrue(res["results"][0]["~children"][0]["~children"][0]["limit"] == "10",
+                            "Limit is not pushed to primary scan")
+            self.query = "DROP PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
+            self.run_cbq_query()
 
     def test_explain_query_count(self):
         for bucket in self.buckets:
