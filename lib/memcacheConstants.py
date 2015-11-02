@@ -167,6 +167,34 @@ FLAG_OPEN_NOTIFIER = 0x02
 CMD_SET_CLUSTER_CONFIG = 0xb4
 CMD_GET_CLUSTER_CONFIG = 0xb5
 
+#subdoc commands
+CMD_SUBDOC_GET = 0xc5
+CMD_SUBDOC_EXISTS = 0xc6
+
+#Dictionary commands
+CMD_SUBDOC_DICT_ADD = 0xc7
+CMD_SUBDOC_DICT_UPSERT = 0xc8
+
+#Generic modification commands
+CMD_SUBDOC_DELETE = 0xc9
+CMD_SUBDOC_REPLACE = 0xca
+
+#Array commands
+CMD_SUBDOC_ARRAY_PUSH_LAST = 0xcb
+CMD_SUBDOC_ARRAY_PUSH_FIRST = 0xcc
+CMD_SUBDOC_ARRAY_INSERT = 0xcd
+CMD_SUBDOC_ARRAY_ADD_UNIQUE = 0xce
+
+# Arithmetic commands
+CMD_SUBDOC_COUNTER = 0xcf
+
+# Multi commands
+CMD_SUBDOC_MULTI_LOOKUP = 0xd0
+CMD_SUBDOC_MULTI_MUTATION = 0xd1
+
+SUBDOC_FLAGS_MKDIR_P = 0x01
+
+
 # Flags, expiration
 SET_PKT_FMT = ">II"
 META_CMD_FMT = '>IIQQ'
@@ -224,8 +252,14 @@ RES_MAGIC_BYTE = 0x81
 
 # magic, opcode, keylen, extralen, datatype, vbucket, bodylen, opaque, cas
 REQ_PKT_FMT = ">BBHBBHIIQ"
+
+# subdoc extras format
+REQ_PKT_SD_EXTRAS= ">HB"
+
 # magic, opcode, keylen, extralen, datatype, status, bodylen, opaque, cas
 RES_PKT_FMT = ">BBHBBHIIQ"
+
+
 # min recv packet size
 MIN_RECV_PACKET = struct.calcsize(REQ_PKT_FMT)
 # The header sizes don't deviate
