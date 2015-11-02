@@ -77,10 +77,15 @@ def main():
 
         if 'os' not in data or (data['os'] == options.os) or \
             (data['os'] == 'linux' and options.os in set(['centos','ubuntu']) ):
-            testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],'confFile':data['confFile'],
-                               'iniFile':data['config'],
-                             'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
-                             'parameters':data['parameters']})
+            if 'jenkins' in data:
+                # then this is sort of a special case, launch the old style Jenkins job
+                # not implemented yet
+                print 'Old style Jenkins', data['jenkins']
+            else:
+                testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],'confFile':data['confFile'],
+                                   'iniFile':data['config'],
+                                 'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
+                                 'parameters':data['parameters']})
         else:
             print 'OS does not apply to', data['component'], data['subcomponent']
 
