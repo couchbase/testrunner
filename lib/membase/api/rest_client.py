@@ -2018,19 +2018,27 @@ class RestConnection(object):
 
     """ Start of FTS rest apis"""
 
-    def create_or_update_fts_index(self, index_name, params):
+    def create_update_fts_index(self, index_name, params):
         """create or edit fts index , returns {"status":"ok"} on success"""
-        api = self.fts_baseUrl + "/api/index/{0}".format(index_name)
-        params = urllib.urlencode(params)
-        status, content, header = self._http_request(api, "POST", params)
+        api = self.fts_baseUrl + "api/index/{0}".format(index_name)
+        log.info(json.dumps(params, ensure_ascii=False, indent=3))
+        status, content, header = self._http_request(api,
+                                    'PUT',
+                                    json.dumps(params,ensure_ascii=False),
+                                    headers=self._create_capi_headers_with_auth(
+                                                self.username,
+                                                self.password),
+                                    timeout=30)
         if status:
             log.info("Index {0} created".format(index_name))
+        else:
+            raise Exception("Error creating index: {0}".format(content))
         return status
 
     def get_fts_index_definition(self, name, timeout=30):
         """ get fts index/alias definition"""
         json_parsed = {}
-        api = self.fts_baseUrl + "/api/index/{0}".format(name)
+        api = self.fts_baseUrl + "api/index/{0}".format(name)
         status, content, header = self._http_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
@@ -2039,7 +2047,7 @@ class RestConnection(object):
     def get_fts_index_doc_count(self, name, timeout=30):
         """ get number of docs indexed"""
         json_parsed = {}
-        api = self.fts_baseUrl + "/api/index/{0}/count".format(name)
+        api = self.fts_baseUrl + "api/index/{0}/count".format(name)
         status, content, header = self._http_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
@@ -2048,7 +2056,7 @@ class RestConnection(object):
     def get_fts_index_uuid(self, name, timeout=30):
         """ Returns uuid of index/alias """
         json_parsed = {}
-        api = self.fts_baseUrl + "/api/index/{0}/".format(name)
+        api = self.fts_baseUrl + "api/index/{0}/".format(name)
         status, content, header = self._http_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
@@ -2056,42 +2064,43 @@ class RestConnection(object):
 
     def delete_fts_index(self, name):
         """ delete fts index/alias """
-        api = self.fts_baseUrl + "/api/index/{0}".format(name)
+        api = self.fts_baseUrl + "api/index/{0}".format(name)
         status, content, header = self._http_request(api, 'DELETE')
         return status
 
     def stop_fts_index_update(self, name):
         """ method to stop fts index from updating"""
-        api = self.fts_baseUrl + "/api/index/{0}/ingestControl/pause".format(name)
+        api = self.fts_baseUrl + "api/index/{0}/ingestControl/pause".format(name)
         status, content, header = self._http_request(api, 'POST', '')
         return status
 
     def freeze_fts_index_partitions(self, name):
         """ method to freeze index partitions asignment"""
-        api = self.fts_baseUrl+ "/api/index/{0}/planFreezeControl".format(name)
+        api = self.fts_baseUrl+ "api/index/{0}/planFreezeControl".format(name)
         status, content, header = self._http_request(api, 'POST', '')
         return status
 
     def disable_querying_on_fts_index(self, name):
         """ method to disable querying on index"""
-        api = self.fts_baseUrl + "/api/index/{0}/queryControl/disallow".format(name)
+        api = self.fts_baseUrl + "api/index/{0}/queryControl/disallow".format(name)
         status, content, header = self._http_request(api, 'POST', '')
         return status
 
     def enable_querying_on_fts_index(self, name):
         """ method to enable querying on index"""
-        api = self.fts_baseUrl + "/api/index/{0}/queryControl/allow".format(name)
+        api = self.fts_baseUrl + "api/index/{0}/queryControl/allow".format(name)
         status, content, header = self._http_request(api, 'POST', '')
         return status
 
     def run_fts_query(self, index_name, query_json):
         """Method run an FTS query through rest api"""
-        api = self.fts_baseUrl + "/api/index/{0}/query".format(index_name)
+        api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
         params = urllib.urlencode(query_json)
         status, content, header = self._http_request(api, "POST", params)
         if status:
             content = json.loads(content)
             return content['total_hits'], content['hits']
+
 
     """ End of FTS rest APIs """
 
