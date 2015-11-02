@@ -600,7 +600,7 @@ class auditTest(BaseTestCase):
         input = self.input.param("input",None)
 
         rest.set_internalSetting(input,value)
-        expectedResults = {"user":user, "local_cluster_name":self.ipAddress+"8091", ops:value,
+        expectedResults = {"user":user, "local_cluster_name":self.ipAddress+":8091", ops:value,
                                "source":source}
 
         self.checkConfig(self.eventID,self.master,expectedResults)
