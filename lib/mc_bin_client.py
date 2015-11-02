@@ -14,7 +14,7 @@ import exceptions
 import zlib
 
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
-from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
+from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET, REQ_PKT_SD_EXTRAS, SUBDOC_FLAGS_MKDIR_P
 from memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT, INCRDECR_RES_WITH_UUID_AND_SEQNO_FMT, META_CMD_FMT
 from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT, GETL_PKT_FMT
 import memcacheConstants
@@ -78,6 +78,7 @@ class MemcachedClient(object):
         else:
             raise exceptions.EOFError("Timeout waiting for socket send. from {0}".format(self.host))
 
+
     def _recvMsg(self):
         response = ""
         while len(response) < MIN_RECV_PACKET:
@@ -125,6 +126,19 @@ class MemcachedClient(object):
         """Send a command and await its response."""
         opaque = self.r.randint(0, 2 ** 32)
         self._sendCmd(cmd, key, val, opaque, extraHeader, cas, extended_meta_data=extended_meta_data)
+        return self._handleSingleResponse(opaque)
+
+    def _doSdCmd(self, cmd, key, path, val=None, expiry=0, opaque=0, cas=0, create=False):
+        createFlag = 0
+        if opaque == 0:
+            opaque = self.r.randint(0, 2**32)
+        if create == True:
+            createFlag = SUBDOC_FLAGS_MKDIR_P
+        extraHeader = struct.pack(REQ_PKT_SD_EXTRAS, len(path), createFlag)
+        body = path
+        if val != None:
+            body += val
+        self._sendCmd(cmd, key, body, opaque, extraHeader, cas)
         return self._handleSingleResponse(opaque)
 
     def _mutate(self, cmd, key, exp, flags, cas, val):
@@ -650,6 +664,37 @@ class MemcachedClient(object):
         """Set the config within the memcached server."""
         return self._doCmd(memcacheConstants.CMD_SET_CLUSTER_CONFIG, blob_conf, '')
 
+    def GetIn(self, key, path, cas=0):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_GET, key, path, cas=cas)
+
+    def InsertIn(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DICT_UPSERT, key, path, value, expiry, opaque, cas, create)
+
+    def DeleteIn(self, key, path, opaque=0, cas=0):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DELETE, key, path, opaque=opaque, cas=cas)
+
+    def ExistsIn(self, key, path, opaque=0, cas=0):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_EXISTS, key, path, opaque=opaque, cas=cas)
+
+    def ReplaceIn(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_REPLACE, key, path, value, expiry, opaque, cas, create)
+
+    def PushIn(self, type, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        if type == "PUSH_FIRST":
+            command = memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_FIRST
+        elif type == "PUSH_LAST":
+            command = memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_LAST
+        elif type == "INSERT":
+            command = memcacheConstants.CMD_SUBDOC_ARRAY_INSERT
+        else:
+            raise ValueError
+
+        return self._doSdCmd(command, key, path, value, expiry, opaque, cas, create)
+
+    def CounterIn(self, type, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_COUNTER, key, path, value, expiry, opaque, cas, create)
+
+
 def error_to_str(errno):
     if errno == 0x01:
         return "Not found"
@@ -693,3 +738,25 @@ def error_to_str(errno):
         return "Busy"
     elif errno == 0x86:
         return "Temporary failure"
+    elif errno == 0xc0:
+        return "Path enoent"
+    elif errno == 0xc1:
+        return "Path mismatch"
+    elif errno == 0xc2:
+        return "Invalid path"
+    elif errno == 0xc3:
+        return "Path too big"
+    elif errno == 0xc4:
+        return "Doc too deep"
+    elif errno == 0xc5:
+        return "Cant insert"
+    elif errno == 0xc6:
+        return "Not json"
+    elif errno == 0xc7:
+        return "Num out of range"
+    elif errno == 0xc8:
+        return "Delta out of range"
+    elif errno == 0xc9:
+        return "Path exists already"
+    elif errno == 0xca:
+        return "Value too deep"
