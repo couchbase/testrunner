@@ -1,13 +1,14 @@
 import base64
 import json
 import urllib
-import httplib2
 import socket
 import time
-import logger
 import uuid
 from copy import deepcopy
 from threading import Thread
+
+import httplib2
+import logger
 
 try:
     from couchbase_helper.document import DesignDocument, View
@@ -16,8 +17,7 @@ except ImportError:
 
 from memcached.helper.kvstore import KVStore
 from exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException
-from membase.api.exception import BucketCreationException, ServerSelfJoinException, ClusterRemoteException, \
-    RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
+from membase.api.exception import BucketCreationException, ServerSelfJoinException, RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
     ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, AddNodeException, \
     BucketFlushFailed, CBRecoveryFailedException, XDCRException, SetRecoveryTypeFailed, BucketCompactionException
 log = logger.Logger.get_logger()
@@ -2925,7 +2925,7 @@ class NodeDiskStorage(object):
 
 class Bucket(object):
     def __init__(self, bucket_size='', name="", authType="sasl", saslPassword="", num_replicas=0, port=11211, master_id=None,
-                 type='', eviction_policy="valueOnly", bucket_priority=None):
+                 type='', eviction_policy="valueOnly", bucket_priority=None, uuid=""):
         self.name = name
         self.port = port
         self.type = type
@@ -2943,6 +2943,7 @@ class Bucket(object):
         self.master_id = master_id
         self.eviction_policy = eviction_policy
         self.bucket_priority = bucket_priority
+        self.uuid = uuid
 
     def __str__(self):
         return self.name
@@ -3109,6 +3110,7 @@ class RestParser(object):
     def parse_get_bucket_json(self, parsed):
         bucket = Bucket()
         bucket.name = parsed['name']
+        bucket.uuid = parsed['uuid']
         bucket.type = parsed['bucketType']
         bucket.port = parsed['proxyPort']
         bucket.authType = parsed["authType"]
