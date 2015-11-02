@@ -92,6 +92,7 @@ class CHECK_AUDIT_EVENT:
     CHECK = False
 
 class INDEX_DEFAULTS:
+
     BLEVE_MAPPING = {
                 "mapping": {
                     "default_mapping": {
@@ -130,7 +131,7 @@ class INDEX_DEFAULTS:
                   }
 
     SOURCE_CB_PARAMS = {
-                      "authUser": "",
+                      "authUser": "default",
                       "authPassword": "",
                       "authSaslUser": "",
                       "authSaslPassword": "",
@@ -154,6 +155,18 @@ class INDEX_DEFAULTS:
                           "sleepStartMS": 5000,
                           "backoffFactor": 1.5,
                           "maxSleepMS": 300000
+                        }
+
+    INDEX_DEFINITION = {
+                          "type": "bleve",
+                          "name": "",
+                          "uuid": "",
+                          "params": BLEVE_MAPPING,
+                          "sourceType": "couchbase",
+                          "sourceName": "default",
+                          "sourceUUID": "",
+                          "sourceParams": SOURCE_CB_PARAMS,
+                          "planParams": PLAN_PARAMS
                         }
 
 class QUERY:
@@ -506,66 +519,65 @@ class FTSIndex:
         self._source_name = source_name
         self._one_time = False
         self._index_type = index_type
-        self.name = name
-        self.log = logger.Logger.get_logger()
-        self.params = {
-                        "indexType" : self._index_type,
-                        "sourceType": self._source_type,
-                    }
+        self.index_definition = INDEX_DEFAULTS.INDEX_DEFINITION
+        self.name = self.index_definition['name'] = name
+        self.index_definition['type'] = self._index_type
+        self.index_definition['sourceType'] = self._source_type
+        self.index_definition['sourceName'] = self._source_name
 
         if index_params:
-            self.params['indexParams'] = \
-                json.dumps(self.build_custom_index_params(index_params))
+            self.index_definition['params'] = \
+                self.build_custom_index_params(index_params)
 
         if plan_params:
-            self.params['planParams'] = \
-                json.dumps(self.build_custom_plan_params(plan_params))
+            self.index_definition['planParams'] = \
+                self.build_custom_plan_params(plan_params)
 
         if source_params:
-            self.params['sourceParams'] = \
-                json.dumps(self.build_source_params(source_params))
+            self.index_definition['sourceParams'] = \
+            self.build_source_params(source_params)
 
         if source_uuid:
-            self.params['sourceUUID'] = source_uuid
+            self.index_definition['sourceUUID'] = source_uuid
 
     def build_custom_index_params(self, index_params):
         if self._index_type=="bleve":
             mapping = INDEX_DEFAULTS.BLEVE_MAPPING
         else:
             mapping = INDEX_DEFAULTS.ALIAS_DEFINITION
-        return mapping.update(index_params)
+        mapping.update(index_params)
+        return mapping
 
     def build_custom_plan_params(self, plan_params):
         plan = INDEX_DEFAULTS.PLAN_PARAMS
-        return plan.update(plan_params)
+        plan.update(plan_params)
+        return plan
 
     def build_source_params(self, source_params):
         if self._source_type =="couchbase":
             src_params = INDEX_DEFAULTS.SOURCE_CB_PARAMS
         else:
             src_params = INDEX_DEFAULTS.SOURCE_FILE_PARAMS
-        return src_params.update(source_params)
+        src_params.update(source_params)
+        return src_params
 
     def create_or_update(self, node):
         rest = RestConnection(node)
-        self.log("Creating index/alias {0} on {1}".format(self.name, rest.ip))
-        try:
-            rest.create_update_fts_index(self, self.name, self.params)
-        except Exception as e:
-            self.log.error(e)
+        print("Creating index/alias {0} on {1}".format(self.name, rest.ip))
+        rest.create_update_fts_index(self.name, self.index_definition)
 
     def delete(self, node):
         rest = RestConnection(node)
-        self.log("Deleting index/alias {0} on {1}".format(self.name, rest.ip))
-        status = rest.create_update_fts_index()
+        print("Deleting index/alias {0} on {1}".format(self.name, rest.ip))
+        status = rest.delete_fts_index(self.name)
         if status:
-            self.log("Index {0} deleted".format(self.name))
+            print("Index {0} deleted".format(self.name))
 
     def clone(self, clone_name):
         pass
 
     def get_indexed_doc_count(self):
-        rest = RestConnection(self.__cluster.get_master_node())
+        rest = RestConnection(self.__cluster.get_random_fts_node())
         return rest.get_fts_index_doc_count(self.name)
 
     def get_uuid(self):
@@ -605,9 +617,16 @@ class CouchbaseCluster:
         return "Couchbase Cluster: %s, Master Ip: %s" % (
             self.__name, self.__master_node.ip)
 
-    def __separate_nodes_on_services(self):
+    def get_node(self, ip):
         for node in self.__nodes:
-            if "fts" in node.services:
+            if ip == node.ip:
+                return node
+
+    def __separate_nodes_on_services(self):
+        service_map = RestConnection(self.__master_node).get_nodes_services()
+        for node_ip, services in service_map.iteritems():
+            node = self.get_node(node_ip.split(':')[0])
+            if "fts" in services:
                 self.__fts_nodes.append(node)
             else:
                 self.__non_fts_nodes.append(node)
@@ -656,10 +675,10 @@ class CouchbaseCluster:
     def get_random_node(self):
         return self.__nodes[random.randint(0, len(self.__nodes)-1)]
 
-    def get_random_cbft_node(self):
+    def get_random_fts_node(self):
         return self.__fts_nodes[random.randint(0, len(self.__fts_nodes)-1)]
 
-    def get_random_non_cbft_node(self):
+    def get_random_non_fts_node(self):
         return self.__non_fts_nodes[random.randint(0, len(self.__fts_nodes)-1)]
 
     def get_mem_quota(self):
@@ -717,6 +736,9 @@ class CouchbaseCluster:
         except Exception as e:
                 raise FTSException("Unable to initialize cluster with config "
                                     "%s: %s" %(cluster_services, e))
+        self.__nodes += nodes_to_add
+        print self.__nodes
+        self.__separate_nodes_on_services()
 
 
     def cleanup_cluster(
@@ -734,6 +756,8 @@ class CouchbaseCluster:
         @param cluster_shutdown: True if Task (task.py) Scheduler needs to shutdown else False
         """
         try:
+            if self.get_indexes():
+                self.delete_all_fts_indexes()
             self.__log.info("removing nodes from cluster ...")
             self.__stop_rebalance()
             self.__log.info("cleanup {0}".format(self.__nodes))
@@ -882,7 +906,7 @@ class CouchbaseCluster:
         @param source_uuid: UUID of the source, may not be used
         """
         if not node:
-            node = self.get_random_cbft_node()
+            node = self.get_random_fts_node()
         index = FTSIndex(
             self,
             name,
@@ -904,14 +928,18 @@ class CouchbaseCluster:
             if index.name == name:
                 return index
 
-    def delete_fts_index(self,node, name):
+    def delete_fts_index(self, name, node=None):
         """ Delete an FTSIndex object with the given name from a given node """
+        if not node:
+            node = self.get_random_fts_node()
         for index in self.__indexes:
             if index.name == name:
                 index.delete(node)
 
-    def delete_all_fts_indexes(self, node):
+    def delete_all_fts_indexes(self, node=None):
         """ Delete all FTSIndexes from a given node """
+        if not node:
+            node = self.get_random_fts_node()
         for index in self.__indexes:
             index.delete(node)
 
@@ -924,7 +952,7 @@ class CouchbaseCluster:
 
         """
         if not node:
-            node = self.get_random_cbft_node()
+            node = self.get_random_fts_node()
         total_hits, hit_list = \
             RestConnection(node).run_fts_query(index_name, query_json)
         return total_hits, hit_list
@@ -944,6 +972,9 @@ class CouchbaseCluster:
         raise Exception(
             "Bucket with name: %s not found on the cluster" %
             bucket_name)
+
+    def get_doc_count_in_bucket(self, bucket):
+        return RestConnection(self.__master_node).get_active_key_count(bucket)
 
     def delete_bucket(self, bucket_name):
         """Delete bucket with given name
@@ -1762,9 +1793,10 @@ class FTSBaseTest(unittest.TestCase):
                 and self._exc_info()[1] is not None)
 
     def __is_cleanup_needed(self):
-        return self.__is_test_failed() and (str(self.__class__).find(
-            'upgradeXDCR') != -1 or self._input.param("stop-on-failure", False)
-        )
+        return ((self.__is_test_failed() and
+               self._input.param("stop-on-failure", False)) or
+               self._input.param("skip-cleanup", "False"))
+
 
     def __is_cluster_run(self):
         return len(set([server.ip for server in self._input.servers])) == 1
@@ -1790,7 +1822,7 @@ class FTSBaseTest(unittest.TestCase):
                 NodeHelper.collect_logs(server, self.__is_cluster_run())
 
         try:
-            if self.__is_cleanup_needed():
+            if not self.__is_cleanup_needed():
                 self.log.warn("CLEANUP WAS SKIPPED")
                 return
             self.log.info(
@@ -1841,7 +1873,7 @@ class FTSBaseTest(unittest.TestCase):
                              stand for services defined in serv_dict
             @return services_list: like ['kv', 'kv,fts', 'index,n1ql','index']
         """
-        serv_dict = {'D': 'kv','C': 'fts','I': 'index','Q': 'n1ql'}
+        serv_dict = {'D': 'kv','F': 'fts','I': 'index','Q': 'n1ql'}
         for letter, serv in serv_dict.iteritems():
             serv_str = serv_str.replace(letter, serv)
         services_list = serv_str.split(',')
@@ -1873,7 +1905,7 @@ class FTSBaseTest(unittest.TestCase):
 
         # TODO: when FTS build is available, change the following to "D,D+F,F"
         self._cluster_services = \
-            self.construct_serv_list(self._input.param("cluster", "D,D+Q,I,D"))
+            self.construct_serv_list(self._input.param("cluster", "D,D+F,F"))
         self._num_replicas = self._input.param("replicas", 1)
         self._create_default_bucket = self._input.param("default_bucket",True)
         self._num_items = self._input.param("items", 1000)
@@ -1898,6 +1930,13 @@ class FTSBaseTest(unittest.TestCase):
             self._input.param("active_resident_threshold", 100)
         CHECK_AUDIT_EVENT.CHECK = self._input.param("verify_audit", 0)
         self._max_verify = self._input.param("max_verify", 100000)
+
+        self.lang = self._input.param("lang", "EN")
+        self.encoding = self._input.param("encoding", "utf-8")
+        self.analyzer = self._input.param("analyzer", None)
+        self.index_replicas = self._input.param("index_replicas", None)
+        self.partitions_per_pindex = \
+            self._input.param("max_partitions_pindex", None)
 
     def __initialize_error_count_dict(self):
         """
@@ -2038,7 +2077,6 @@ class FTSBaseTest(unittest.TestCase):
                                   end=num_keys)
         self._cb_cluster.load_all_buckets_from_generator(gen)
 
-
     def perform_update_delete(self, fields_to_update=None):
         """
           Call this method to perform updates/deletes on your cluster.
@@ -2103,14 +2141,16 @@ class FTSBaseTest(unittest.TestCase):
     def construct_query_json(self, index_name, query, fields=None,
                              max_matches=None, timeout=None):
         query_json = QUERY.JSON
-        query_json['q'] = query['query'] = query
-        query['index_name'] = index_name
+        query_json['q'] = query['query']['match']
+        query_json['query'] = query
+        query_json['indexName'] = index_name
         if max_matches:
             query_json['size'] = int(max_matches)
         if timeout:
             query_json['timeout'] = int(timeout)
         if fields:
             query_json['fields'] = fields
+        print json.dumps(query_json, indent=3)
         return json.dumps(query_json)
 
     def print_panic_stacktrace(self, node):
@@ -2154,6 +2194,6 @@ class FTSBaseTest(unittest.TestCase):
         # TODO: Add logic based on stats
         # for now, just sleep
         if self._update and self._expires:
-            self.sleep(self._expires,"Waiting for keys to expire...")
-        self.sleep(120)
+            self.sleep(self._expires, "Waiting for keys to expire...")
+        self.sleep(10, "Waiting for indexing to complete")
 
