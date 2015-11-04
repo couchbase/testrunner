@@ -460,7 +460,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.info(ex)
             raise
         finally:
-            if drop_index and not self.skip_cleanup::
+            if drop_index and not self.skip_cleanup:
                 self.multi_drop_index(buckets,query_definitions)
 
     def async_run_multi_operations(self, buckets = [], query_definitions = [], expected_results = {},
