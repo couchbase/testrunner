@@ -52,6 +52,7 @@ class QueryTests(BaseTestCase):
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
         self.covering_index = self.input.param("covering_index", False)
         self.named_prepare = self.input.param("named_prepare", None)
+        self.encoded_prepare = self.input.param("encoded_prepare", False)
         if self.input.param("reload_data", False):
             for bucket in self.buckets:
                 self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
@@ -2974,13 +2975,18 @@ class QueryTests(BaseTestCase):
         else:
             query = "PREPARE %s" % self.query
         prepared = self.run_cbq_query(query=query)['results'][0]
-        result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True)['results']
+        if self.encoded_prepare:
+            encoded_plan=prepared['encoded_plan']
+            result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True, encoded_plan=encoded_plan)['results']
+        else:
+            result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True)['results']
         msg = "Query result with prepare and without doesn't match.\nNo prepare: %s ... %s\nWith prepare: %s ... %s"
         self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare),
                           msg % (result_no_prepare[:100],result_no_prepare[-100:],
                                  result_with_prepare[:100],result_with_prepare[-100:]))
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False):
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False,
+                      encoded_plan=None):
         if query is None:
             query = self.query
         if server is None:
@@ -3005,7 +3011,7 @@ class QueryTests(BaseTestCase):
                 query = query.replace(from_clause, from_clause + hint)
             self.log.info('RUN QUERY %s' % query)
             result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared=is_prepared,
-                                                        named_prepare=self.named_prepare)
+                                                        named_prepare=self.named_prepare, encoded_plan=encoded_plan)
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
