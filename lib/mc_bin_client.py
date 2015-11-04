@@ -78,7 +78,6 @@ class MemcachedClient(object):
         else:
             raise exceptions.EOFError("Timeout waiting for socket send. from {0}".format(self.host))
 
-
     def _recvMsg(self):
         response = ""
         while len(response) < MIN_RECV_PACKET:
@@ -664,34 +663,31 @@ class MemcachedClient(object):
         """Set the config within the memcached server."""
         return self._doCmd(memcacheConstants.CMD_SET_CLUSTER_CONFIG, blob_conf, '')
 
-    def GetIn(self, key, path, cas=0):
+    def get_in(self, key, path, cas=0):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_GET, key, path, cas=cas)
 
-    def InsertIn(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+    def insert_in(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DICT_UPSERT, key, path, value, expiry, opaque, cas, create)
 
-    def DeleteIn(self, key, path, opaque=0, cas=0):
+    def remove_in(self, key, path, opaque=0, cas=0):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DELETE, key, path, opaque=opaque, cas=cas)
 
-    def ExistsIn(self, key, path, opaque=0, cas=0):
+    def exists_in(self, key, path, opaque=0, cas=0):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_EXISTS, key, path, opaque=opaque, cas=cas)
 
-    def ReplaceIn(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+    def replace_in(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_REPLACE, key, path, value, expiry, opaque, cas, create)
 
-    def PushIn(self, type, key, path, value, expiry=0, opaque=0, cas=0, create=False):
-        if type == "PUSH_FIRST":
-            command = memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_FIRST
-        elif type == "PUSH_LAST":
-            command = memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_LAST
-        elif type == "INSERT":
-            command = memcacheConstants.CMD_SUBDOC_ARRAY_INSERT
-        else:
-            raise ValueError
+    def append_in(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_LAST, key, path, value, expiry, opaque, cas, create)
 
-        return self._doSdCmd(command, key, path, value, expiry, opaque, cas, create)
+    def prepend_in(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_FIRST, key, path, value, expiry, opaque, cas, create)
 
-    def CounterIn(self, type, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+    def add_unique_in(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_ADD_UNIQUE, key, path, value, expiry, opaque, cas, create)
+
+    def counter_in(self, type, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_COUNTER, key, path, value, expiry, opaque, cas, create)
 
 
@@ -738,25 +734,25 @@ def error_to_str(errno):
         return "Busy"
     elif errno == 0x86:
         return "Temporary failure"
-    elif errno == 0xc0:
-        return "Path enoent"
-    elif errno == 0xc1:
+    elif errno == memcacheConstants.ERR_SUBDOC_PATH_ENOENT:
+        return "Path not exists"
+    elif errno == memcacheConstants.ERR_SUBDOC_PATH_MISMATCH:
         return "Path mismatch"
-    elif errno == 0xc2:
+    elif errno == memcacheConstants.ERR_SUBDOC_PATH_EINVAL:
         return "Invalid path"
-    elif errno == 0xc3:
+    elif errno == memcacheConstants.ERR_SUBDOC_PATH_E2BIG:
         return "Path too big"
-    elif errno == 0xc4:
+    elif errno == memcacheConstants.ERR_SUBDOC_DOC_E2DEEP:
         return "Doc too deep"
-    elif errno == 0xc5:
+    elif errno == memcacheConstants.ERR_SUBDOC_VALUE_CANTINSERT:
         return "Cant insert"
-    elif errno == 0xc6:
+    elif errno == memcacheConstants.ERR_SUBDOC_DOC_NOTJSON:
         return "Not json"
-    elif errno == 0xc7:
+    elif errno == memcacheConstants.ERR_SUBDOC_NUM_ERANGE:
         return "Num out of range"
-    elif errno == 0xc8:
+    elif errno == memcacheConstants.ERR_SUBDOC_DELTA_ERANGE:
         return "Delta out of range"
-    elif errno == 0xc9:
+    elif errno == memcacheConstants.ERR_SUBDOC_PATH_EEXISTS:
         return "Path exists already"
-    elif errno == 0xca:
+    elif errno == memcacheConstants.ERR_SUBDOC_VALUE_TOODEEP:
         return "Value too deep"
