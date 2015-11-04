@@ -2318,13 +2318,26 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'PUT', params)
         return status
 
-    def query_tool(self, query, port=8093, timeout=650, query_params={}, is_prepared=False, named_prepare=None, verbose = True):
+    def query_tool(self, query, port=8093, timeout=650, query_params={}, is_prepared=False, named_prepare=None,
+                   verbose = True, encoded_plan=None):
         key = 'prepared' if is_prepared else 'statement'
         headers = None
         is_encoded_prepared=False
+        content=""
         prepared = json.dumps(query)
         if is_prepared:
-            if named_prepare:
+            if named_prepare and encoded_plan:
+                http = httplib2.Http()
+
+                url = "http://%s:%s/query/service" % (self.ip, port)
+                headers = {'Content-type': 'application/json'}
+                body = {'prepared': named_prepare, 'encoded_plan':encoded_plan}
+
+                response, content = http.request(url, 'POST', headers=headers, body=json.dumps(body))
+
+                return eval(content)
+
+            elif named_prepare and not encoded_plan:
                 params = 'prepared=' + urllib.quote(prepared, '~()')
                 params = 'prepared="%s"'% named_prepare
             else:
