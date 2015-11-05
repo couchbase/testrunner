@@ -946,7 +946,7 @@ class RQGTests(BaseTestCase):
 
     def _run_explain_and_print_result(self, n1ql_query):
         explain_query = "EXPLAIN "+n1ql_query
-        if "not" in explain_query or "NOT" in explain_query and self.check_covering_index:
+        if "not" in explain_query or "NOT" in explain_query:
             self.log.info("Not executing queries with covering indexes and using not keyword")
         else:
             try:
