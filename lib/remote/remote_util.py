@@ -527,7 +527,14 @@ class RemoteMachineShellConnection:
             """couchbase-server-enterprise_3.5.0-968-windows_amd64
                couchbase-server-enterprise_4.0.0-1655-windows_amd64
                sherlock changed from 3.5. to 4.0 """
-            if "4.0." in filename:
+            filename_version = ""
+            if len(filename) > 40:
+                if "enterprise" in filename:
+                    filename_version = filename[28:33]
+                elif "community" in filename:
+                    filename_version = filename[27:32]
+            if filename_version in COUCHBASE_FROM_VERSION_4:
+                log.info("This version is {0}".format(filename_version))
                 tmp = filename.split("_")
                 version = tmp[1].replace("-windows", "")
             else:
