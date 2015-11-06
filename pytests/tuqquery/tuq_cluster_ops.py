@@ -62,20 +62,6 @@ class QueriesOpsTests(QueryTests):
         finally:
             self._delete_multiple_indexes(indexes)
 
-    def test_prepared_with_incr_rebalance_in(self):
-        self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
-        try:
-            for i in xrange(1, self.nodes_in + 1):
-                rebalance = self.cluster.async_rebalance(self.servers[:i],
-                    self.servers[i:i + 1],[],services=['n1ql'])
-                rebalance.result()
-                self.log.info("-"*100)
-                self.log.info("Querying alternate query node to test the encoded_prepare ....")
-                self.test_prepared_between()
-                self.log.info("-"*100)
-        finally:
-            self.log.info("Done with encoded_prepare ....")
-
     def test_incr_rebalance_out(self):
         self.assertTrue(len(self.servers[:self.nodes_init]) > self.nodes_out,
                         "Servers are not enough")
@@ -93,22 +79,6 @@ class QueriesOpsTests(QueryTests):
                 self.test_min()
         finally:
             self._delete_multiple_indexes(indexes)
-
-    def test_prepared_with_incr_rebalance_out(self):
-        self.assertTrue(len(self.servers[:self.nodes_init]) > self.nodes_out,
-            "Servers are not enough")
-        try:
-            for i in xrange(1, self.nodes_out + 1):
-                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i - 1)],
-                    [],
-                    self.servers[1])
-                rebalance.result()
-                self.log.info("-"*100)
-                self.log.info("Querying alternate query node to test the encoded_prepare ....")
-                self.test_prepared_union
-                self.log.info("-"*100)
-        finally:
-                self.log.info("Done with encoded_prepare ....")
 
     def test_swap_rebalance(self):
         self.assertTrue(len(self.servers) >= self.nodes_init + self.nodes_in,
@@ -400,6 +370,161 @@ class QueriesOpsTests(QueryTests):
                 for index_name in set(indexes):
                     self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
 
+###########################################################################################################
+    def test_prepared_with_incr_rebalance_in(self):
+        self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
+        try:
+            for i in xrange(1, self.nodes_in + 1):
+                rebalance = self.cluster.async_rebalance(self.servers[:i],
+                    self.servers[i:i + 1],[],services=['n1ql'])
+                rebalance.result()
+                self.log.info("-"*100)
+                self.log.info("Querying alternate query node to test the encoded_prepare ....")
+                self.test_prepared_between()
+                self.log.info("-"*100)
+        finally:
+            self.log.info("Done with encoded_prepare ....")
+
+    def test_prepared_with_incr_rebalance_out(self):
+        self.assertTrue(len(self.servers[:self.nodes_init]) > self.nodes_out,
+            "Servers are not enough")
+        try:
+            for i in xrange(1, self.nodes_out + 1):
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i - 1)],
+                    [],
+                    self.servers[1])
+                rebalance.result()
+                self.log.info("-"*100)
+                self.log.info("Querying alternate query node to test the encoded_prepare ....")
+                self.test_prepared_union
+                self.log.info("-"*100)
+        finally:
+            self.log.info("Done with encoded_prepare ....")
+
+    def test_prepared_with_swap_rebalance(self):
+        self.assertTrue(len(self.servers) >= self.nodes_init + self.nodes_in,
+            "Servers are not enough")
+        try:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                self.servers[self.nodes_init:self.nodes_init + self.nodes_in],
+                self.servers[self.nodes_init - self.nodes_out:self.nodes_init])
+            rebalance.result()
+            self.log.info("-"*100)
+            self.log.info("Querying alternate query node to test the encoded_prepare ....")
+            self.test_prepared_unnest()
+            self.log.info("-"*100)
+        finally:
+            self.log.info("Done with encoded_prepare ....")
+
+    def test_prepared_with_rebalance_with_server_crash(self):
+        servr_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
+        servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
+        self.test_case()
+        for i in xrange(3):
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                servr_in, servr_out)
+            self.sleep(5, "Wait some time for rebalance process and then kill memcached")
+            remote = RemoteMachineShellConnection(self.servers[self.nodes_init - 1])
+            remote.terminate_process(process_name='memcached')
+            try:
+                rebalance.result()
+                #self.log.info("-"*100)
+                #self.log.info("Querying alternate query node to test the encoded_prepare ....")
+                #self.test_prepared_unnest()
+                #self.log.info("-"*100)
+            except:
+                pass
+        self.cluster.rebalance(self.servers[:self.nodes_init], servr_in, servr_out)
+        self.log.info("-"*100)
+        self.log.info("Querying alternate query node to test the encoded_prepare ....")
+        self.test_prepared_within_list_object()
+        self.log.info("-"*100)
+
+    def test_prepared_with_failover(self):
+        try:
+            servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
+            self.cluster.failover(self.servers[:self.nodes_init], servr_out)
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                [], servr_out)
+            rebalance.result()
+            self.log.info("-"*100)
+            self.log.info("Querying alternate query node to test the encoded_prepare ....")
+            self.test_prepared_within_list_object()
+            self.log.info("-"*100)
+        finally:
+            self.log.info("Done with encoded_prepare ....")
+
+    def test_prepared_with_failover_add_back(self):
+        try:
+            servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
+
+            nodes_all = RestConnection(self.master).node_statuses()
+            nodes = []
+            for failover_node in servr_out:
+                nodes.extend([node for node in nodes_all
+                              if node.ip == failover_node.ip and str(node.port) == failover_node.port])
+            self.cluster.failover(self.servers[:self.nodes_init], servr_out)
+            for node in nodes:
+                RestConnection(self.master).add_back_node(node.id)
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
+            rebalance.result()
+            self.log.info("-"*100)
+            self.log.info("Querying alternate query node to test the encoded_prepare ....")
+            self.test_prepared_within_list_object()
+            self.log.info("-"*100)
+        finally:
+            self.log.info("Done with encoded_prepare ....")
+
+    def test_prepared_with_autofailover(self):
+        autofailover_timeout = 30
+        status = RestConnection(self.master).update_autofailover_settings(True, autofailover_timeout)
+        self.assertTrue(status, 'failed to change autofailover_settings!')
+        servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
+        remote = RemoteMachineShellConnection(self.servers[self.nodes_init - 1])
+        try:
+            remote.stop_server()
+            self.sleep(autofailover_timeout + 10, "Wait for autofailover")
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                [], servr_out)
+            rebalance.result()
+            self.log.info("-"*100)
+            self.log.info("Querying alternate query node to test the encoded_prepare ....")
+            self.test_prepared_unnest()
+            self.log.info("-"*100)
+        finally:
+            remote.start_server()
+            self.log.info("Done with encoded_prepare ....")
+
+    def test_prepared_with_warmup(self):
+        try:
+            num_srv_warm_up = self.input.param("srv_warm_up", 1)
+            if self.input.tuq_client is None:
+                self.fail("For this test external tuq server is requiered. " +\
+                          "Please specify one in conf")
+            self.test_union_all()
+            for server in self.servers[self.nodes_init - num_srv_warm_up:self.nodes_init]:
+                remote = RemoteMachineShellConnection(server)
+                remote.stop_server()
+                remote.start_server()
+                remote.disconnect()
+                #run query, result may not be as expected, but tuq shouldn't fail
+            try:
+                self.test_union_all()
+            except:
+                pass
+            ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self, wait_if_warmup=True)
+            self.verify_cluster_stats(self.servers[:self.nodes_init])
+            self.sleep(50)
+            self.verify_cluster_stats(self.servers[:self.nodes_init])
+            self.log.info("-"*100)
+            self.log.info("Querying alternate query node to test the encoded_prepare ....")
+            self.test_prepared_union()
+            self.log.info("-"*100)
+        finally:
+            self.log.info("Done with encoded_prepare ....")
+
+
+###########################################################################################################
     def _create_multiple_indexes(self, index_field):
         indexes = []
         self.assertTrue(self.buckets, 'There are no buckets! check your parameters for run')
