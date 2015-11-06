@@ -62,6 +62,20 @@ class QueriesOpsTests(QueryTests):
         finally:
             self._delete_multiple_indexes(indexes)
 
+    def test_prepared_with_incr_rebalance_in(self):
+        self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
+        try:
+            for i in xrange(1, self.nodes_in + 1):
+                rebalance = self.cluster.async_rebalance(self.servers[:i],
+                    self.servers[i:i + 1],[],services=['n1ql'])
+                rebalance.result()
+                self.log.info("-"*100)
+                self.log.info("Querying alternate query node to test the encoded_prepare ....")
+                self.test_prepared_between()
+                self.log.info("-"*100)
+        finally:
+            self.log.info("Done with encoded_prepare ....")
+
     def test_incr_rebalance_out(self):
         self.assertTrue(len(self.servers[:self.nodes_init]) > self.nodes_out,
                         "Servers are not enough")
@@ -79,6 +93,22 @@ class QueriesOpsTests(QueryTests):
                 self.test_min()
         finally:
             self._delete_multiple_indexes(indexes)
+
+    def test_prepared_with_incr_rebalance_out(self):
+        self.assertTrue(len(self.servers[:self.nodes_init]) > self.nodes_out,
+            "Servers are not enough")
+        try:
+            for i in xrange(1, self.nodes_out + 1):
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i - 1)],
+                    [],
+                    self.servers[1])
+                rebalance.result()
+                self.log.info("-"*100)
+                self.log.info("Querying alternate query node to test the encoded_prepare ....")
+                self.test_prepared_union
+                self.log.info("-"*100)
+        finally:
+                self.log.info("Done with encoded_prepare ....")
 
     def test_swap_rebalance(self):
         self.assertTrue(len(self.servers) >= self.nodes_init + self.nodes_in,
