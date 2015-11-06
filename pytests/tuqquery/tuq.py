@@ -2975,7 +2975,7 @@ class QueryTests(BaseTestCase):
         else:
             query = "PREPARE %s" % self.query
         prepared = self.run_cbq_query(query=query)['results'][0]
-        if self.encoded_prepare:
+        if self.encoded_prepare and len(self.servers) > 1:
             encoded_plan=prepared['encoded_plan']
             result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True, encoded_plan=encoded_plan)['results']
         else:
@@ -2987,6 +2987,7 @@ class QueryTests(BaseTestCase):
 
     def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False,
                       encoded_plan=None):
+        self.log.info("-"*100)
         if query is None:
             query = self.query
         if server is None:
@@ -3011,7 +3012,8 @@ class QueryTests(BaseTestCase):
                 query = query.replace(from_clause, from_clause + hint)
             self.log.info('RUN QUERY %s' % query)
             result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared=is_prepared,
-                                                        named_prepare=self.named_prepare, encoded_plan=encoded_plan)
+                                                        named_prepare=self.named_prepare, encoded_plan=encoded_plan,
+                                                        servers=self.servers)
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
