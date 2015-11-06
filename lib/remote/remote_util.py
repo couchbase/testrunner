@@ -20,6 +20,7 @@ from testconstants import COUCHBASE_VERSIONS
 from testconstants import WIN_CB_VERSION_3
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
+from testconstants import COUCHBASE_FROM_VERSION_3
 from testconstants import COUCHBASE_RELEASE_VERSIONS_3
 from testconstants import SHERLOCK_VERSION
 from testconstants import COUCHBASE_FROM_VERSION_4
@@ -1674,8 +1675,7 @@ class RemoteMachineShellConnection:
                 """ the code below need to remove when bug MB-11985
                                                            is fixed in 3.0.1 """
                 if full_version[:5] in COUCHBASE_VERSION_2 or \
-                   full_version[:5] in COUCHBASE_VERSION_3 or \
-                   full_version.startswith("4.0"):
+                   full_version[:5] in COUCHBASE_FROM_VERSION_3:
                     log.info("due to bug MB-11985, we need to delete below registry")
                     output, error = self.execute_command("reg delete \
                             'HKLM\Software\Wow6432Node\Ericsson\Erlang\ErlSrv' /f ")
