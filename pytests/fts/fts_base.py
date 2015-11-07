@@ -147,17 +147,11 @@ class INDEX_DEFAULTS:
                     "analysis": {}
                   },
                   "store": {
-                    "kvStoreName": "boltdb"
+                    "kvStoreName": "forestdb"
                   }
               }
 
-    ALIAS_DEFINITION = {
-                          "targets": {
-                            "yourIndexName": {
-                              "indexUUID": ""
-                            }
-                          }
-                        }
+    ALIAS_DEFINITION = {"targets": {}}
 
 
     PLAN_PARAMS = {
@@ -210,19 +204,12 @@ class INDEX_DEFAULTS:
 class QUERY:
 
     JSON = {
-              "q": "",
               "indexName": "",
               "size": 10,
               "from": 0,
               "explain": False,
-              "highlight": {},
-              "query": {
-                "boost": 1,
-                "query": ""
-              },
-              "fields": [
-                "*"
-              ],
+              "query": {},
+              "fields": ["*"],
               "ctl": {
                 "consistency": {
                   "level": "",
@@ -529,7 +516,7 @@ class FTSIndex:
                  )
     """
     def __init__(self, cluster, name, source_type='couchbase',
-                 source_name=None,index_type='bleve', index_params=None,
+                 source_name=None, index_type='bleve', index_params=None,
                  plan_params=None, source_params=None, source_uuid=None):
 
         """
@@ -553,15 +540,23 @@ class FTSIndex:
         """
 
         self.__cluster = cluster
+        self.__log = cluster.get_logger()
         self._source_type = source_type
         self._source_name = source_name
         self._one_time = False
         self._index_type = index_type
+        self.rest = RestConnection(self.__cluster.get_random_fts_node())
         self.index_definition = INDEX_DEFAULTS.INDEX_DEFINITION
         self.name = self.index_definition['name'] = name
         self.index_definition['type'] = self._index_type
-        self.index_definition['sourceType'] = self._source_type
-        self.index_definition['sourceName'] = self._source_name
+        if self._index_type == "alias":
+            self.index_definition['sourceType'] = "nil"
+            self.index_definition['sourceName'] = ""
+        else:
+            self.source_bucket = self.__cluster.get_bucket_by_name(source_name)
+            self.index_definition['sourceType'] = self._source_type
+            self.index_definition['sourceName'] = self._source_name
+        self.queries = []
 
         if index_params:
             self.index_definition['params'] = \
@@ -573,13 +568,13 @@ class FTSIndex:
 
         if source_params:
             self.index_definition['sourceParams'] = \
-            self.build_source_params(source_params)
+                self.build_source_params(source_params)
 
         if source_uuid:
             self.index_definition['sourceUUID'] = source_uuid
 
     def build_custom_index_params(self, index_params):
-        if self._index_type=="bleve":
+        if self._index_type == "bleve":
             mapping = INDEX_DEFAULTS.BLEVE_MAPPING
         else:
             mapping = INDEX_DEFAULTS.ALIAS_DEFINITION
@@ -592,35 +587,62 @@ class FTSIndex:
         return plan
 
     def build_source_params(self, source_params):
-        if self._source_type =="couchbase":
+        if self._source_type == "couchbase":
             src_params = INDEX_DEFAULTS.SOURCE_CB_PARAMS
         else:
             src_params = INDEX_DEFAULTS.SOURCE_FILE_PARAMS
         src_params.update(source_params)
         return src_params
 
-    def create_or_update(self, node):
-        rest = RestConnection(node)
-        print("Creating index/alias {0} on {1}".format(self.name, rest.ip))
-        rest.create_update_fts_index(self.name, self.index_definition)
+    def create(self):
+        self.__log.info("Checking if index already exists ...")
+        status, _ = self.rest.get_fts_index_definition(self.name)
+        if status != 400:
+            self.rest.delete_fts_index(self.name)
+        self.__log.info("Creating {0} {1} on {2}".format(
+            self._index_type,
+            self.name,
+            self.rest.ip))
+        self.rest.create_fts_index(self.name, self.index_definition)
 
-    def delete(self, node):
-        rest = RestConnection(node)
-        print("Deleting index/alias {0} on {1}".format(self.name, rest.ip))
-        status = rest.delete_fts_index(self.name)
+    def update(self):
+        self.__log.info("Updating {0} {1} on {2}".format(
+            self._index_type,
+            self.name,
+            self.rest.ip))
+        self.rest.update_fts_index(self.name, self.index_definition)
+
+    def delete(self):
+        self.__log.info("Deleting {0} {1} on {2}".format(
+            self._index_type,
+            self.name,
+            self.rest.ip))
+        status = self.rest.delete_fts_index(self.name)
         if status:
-            print("Index {0} deleted".format(self.name))
+            self.__log.info("{0} deleted".format(self.name))
+
+    def get_index_defn(self):
+        return self.rest.get_fts_index_definition(self.name)
 
     def clone(self, clone_name):
         pass
 
     def get_indexed_doc_count(self):
-        rest = RestConnection(self.__cluster.get_random_fts_node())
-        return rest.get_fts_index_doc_count(self.name)
+        return self.rest.get_fts_index_doc_count(self.name)
 
     def get_uuid(self):
-        rest = RestConnection(self.__cluster.get_master_node())
-        return rest.get_fts_index_uuid(self.name)
+        return self.rest.get_fts_index_uuid(self.name)
+
+    def is_distributed(self):
+        #TODO
+        pass
+
+    def is_balanced(self):
+        #TODO
+        pass
+
+    def is_distributed_balanced(self):
+        return self.is_balanced() and self.is_distributed()
 
 class CouchbaseCluster:
 
@@ -660,7 +682,12 @@ class CouchbaseCluster:
             if ip == node.ip:
                 return node
 
+    def get_logger(self):
+        return self.__log
+
     def __separate_nodes_on_services(self):
+        self.__fts_nodes = []
+        self.__non_fts_nodes = []
         service_map = RestConnection(self.__master_node).get_nodes_services()
         for node_ip, services in service_map.iteritems():
             node = self.get_node(node_ip.split(':')[0])
@@ -668,6 +695,8 @@ class CouchbaseCluster:
                 self.__fts_nodes.append(node)
             else:
                 self.__non_fts_nodes.append(node)
+        if not self.__fts_nodes:
+            print service_map
 
     def get_fts_nodes(self):
         return self.__fts_nodes
@@ -714,6 +743,8 @@ class CouchbaseCluster:
         return self.__nodes[random.randint(0, len(self.__nodes)-1)]
 
     def get_random_fts_node(self):
+        if not self.__fts_nodes:
+            self.__separate_nodes_on_services()
         return self.__fts_nodes[random.randint(0, len(self.__fts_nodes)-1)]
 
     def get_random_non_fts_node(self):
@@ -775,7 +806,6 @@ class CouchbaseCluster:
                 raise FTSException("Unable to initialize cluster with config "
                                     "%s: %s" %(cluster_services, e))
         self.__nodes += nodes_to_add
-        print self.__nodes
         self.__separate_nodes_on_services()
 
 
@@ -943,8 +973,6 @@ class CouchbaseCluster:
                                 INDEX_DEFAULTS.SOURCE_FILE_PARAMS
         @param source_uuid: UUID of the source, may not be used
         """
-        if not node:
-            node = self.get_random_fts_node()
         index = FTSIndex(
             self,
             name,
@@ -956,7 +984,7 @@ class CouchbaseCluster:
             source_params,
             source_uuid
         )
-        index.create_or_update(node)
+        index.create()
         self.__indexes.append(index)
         return index
 
@@ -966,20 +994,16 @@ class CouchbaseCluster:
             if index.name == name:
                 return index
 
-    def delete_fts_index(self, name, node=None):
+    def delete_fts_index(self, name):
         """ Delete an FTSIndex object with the given name from a given node """
-        if not node:
-            node = self.get_random_fts_node()
         for index in self.__indexes:
             if index.name == name:
-                index.delete(node)
+                index.delete()
 
-    def delete_all_fts_indexes(self, node=None):
+    def delete_all_fts_indexes(self):
         """ Delete all FTSIndexes from a given node """
-        if not node:
-            node = self.get_random_fts_node()
         for index in self.__indexes:
-            index.delete(node)
+            index.delete()
 
     def run_fts_query(self, index_name, query_json, node=None):
         """ Runs a query defined in query_json against an index/alias and
@@ -1830,10 +1854,10 @@ class FTSBaseTest(unittest.TestCase):
             or (hasattr(self, '_exc_info')
                 and self._exc_info()[1] is not None)
 
-    def __is_cleanup_needed(self):
+    def __is_cleanup_not_needed(self):
         return ((self.__is_test_failed() and
                self._input.param("stop-on-failure", False)) or
-               self._input.param("skip-cleanup", "False"))
+               self._input.param("skip-cleanup", False))
 
 
     def __is_cluster_run(self):
@@ -1860,7 +1884,7 @@ class FTSBaseTest(unittest.TestCase):
                 NodeHelper.collect_logs(server, self.__is_cluster_run())
 
         try:
-            if not self.__is_cleanup_needed():
+            if self.__is_cleanup_not_needed():
                 self.log.warn("CLEANUP WAS SKIPPED")
                 return
             self.log.info(
@@ -1890,6 +1914,7 @@ class FTSBaseTest(unittest.TestCase):
 
     def __setup_for_test(self):
         use_hostanames = self._input.param("use_hostnames", False)
+        no_buckets = self._input.param("no_buckets", False)
         master =  self._input.servers[0]
         first_node = copy.deepcopy(master)
         self._cb_cluster = CouchbaseCluster("C1",
@@ -1900,7 +1925,8 @@ class FTSBaseTest(unittest.TestCase):
         self._cb_cluster.init_cluster(self._cluster_services,
                                       self._input.servers[1:])
         self.__set_free_servers()
-        self.__create_buckets()
+        if not no_buckets:
+            self.__create_buckets()
         self._master = self._cb_cluster.get_master_node()
 
     def construct_serv_list(self,serv_str):
@@ -1975,6 +2001,12 @@ class FTSBaseTest(unittest.TestCase):
         self.index_replicas = self._input.param("index_replicas", None)
         self.partitions_per_pindex = \
             self._input.param("max_partitions_pindex", None)
+        self.upd_del_fields = self._input.param("upd_del_fields", None)
+        self.num_queries = self._input.param("num_queries", 1)
+        self.query_types = self._input.param("query_types", ["match"])
+        self.index_per_bucket = self._input.param("index_per_bucket", 1)
+
+        self.sample_query = {"match": "Safiya Morgan", "field": "name"}
 
     def __initialize_error_count_dict(self):
         """
@@ -2074,13 +2106,25 @@ class FTSBaseTest(unittest.TestCase):
             eviction_policy=self.__eviction_policy,
             bucket_priority=bucket_priority)
 
-    def load_employee_dataset(self):
+    def load_data(self):
+        dataset = self._input.param("dataset", "emp")
+        if dataset == "all":
+            self.load_employee_dataset(self._num_items/2)
+            self.load_wiki(self._num_items/2)
+        if dataset == "emp":
+            self.load_employee_dataset(self._num_items)
+        if dataset == "wiki":
+            self.load_wiki(self._num_items, self.lang)
+
+    def load_employee_dataset(self, num_items=None):
         """
             Loads the default JSON dataset
             see JsonDocGenerator in documentgenerator.py
         """
+        if not num_items:
+            num_items = self._num_items
         if not self._dgm_run:
-            self._cb_cluster.load_all_buckets(self._num_items, self._value_size)
+            self._cb_cluster.load_all_buckets(num_items, self._value_size)
         else:
             self._cb_cluster.load_all_buckets_till_dgm(
                 active_resident_threshold=self._active_resident_threshold,
@@ -2108,7 +2152,7 @@ class FTSBaseTest(unittest.TestCase):
         if not num_keys:
             num_keys = self._num_items
 
-        gen = WikiJSONGenerator("C1",
+        gen = WikiJSONGenerator("wiki",
                                   lang=lang,
                                   encoding=encoding,
                                   start=0,
@@ -2147,7 +2191,8 @@ class FTSBaseTest(unittest.TestCase):
         tasks = []
         # UPDATES
         if self._update:
-            self.log.info("Updating keys @ {0}".format(self._cb_cluster.get_name()))
+            self.log.info("Updating keys @ {0} with expiry={1}".
+                          format(self._cb_cluster.get_name(), self._expires))
             tasks.extend(self._cb_cluster.async_update_delete(
                 OPS.UPDATE,
                 fields_to_update=fields_to_update,
@@ -2175,11 +2220,11 @@ class FTSBaseTest(unittest.TestCase):
             self.sleep(
                 self._expires,
                 "Waiting for expiration of updated items")
+            self._cb_cluster.run_expiry_pager()
 
     def construct_query_json(self, index_name, query, fields=None,
                              max_matches=None, timeout=None):
         query_json = QUERY.JSON
-        query_json['q'] = query['query']['match']
         query_json['query'] = query
         query_json['indexName'] = index_name
         if max_matches:
@@ -2189,7 +2234,7 @@ class FTSBaseTest(unittest.TestCase):
         if fields:
             query_json['fields'] = fields
         print json.dumps(query_json, indent=3)
-        return json.dumps(query_json)
+        return query_json
 
     def print_panic_stacktrace(self, node):
         """ Prints panic stacktrace from goxdcr.log*
@@ -2231,7 +2276,118 @@ class FTSBaseTest(unittest.TestCase):
     def wait_for_indexing_complete(self):
         # TODO: Add logic based on stats
         # for now, just sleep
-        if self._update and self._expires:
-            self.sleep(self._expires, "Waiting for keys to expire...")
-        self.sleep(10, "Waiting for indexing to complete")
+        wait_time = self._input.param("wait", 0)
+        if not wait_time:
+            if self._num_items < 1000:
+                wait_time = 10
+            elif self._num_items > 1000 and self._num_items < 10000:
+                wait_time = 120
+        wait_time *= len(self._cb_cluster.get_buckets()) + (self.index_per_bucket-1)
+        self.sleep(wait_time, "Waiting for indexing to complete")
 
+    def construct_plan_params(self):
+        plan_params = {}
+        plan_params['numReplicas'] = self.index_replicas
+        plan_params['maxPartitionsPerPindex'] = self.partitions_per_pindex
+        return plan_params
+
+    def generate_random_query(self, index, num_queries=1, query_type=["match"]):
+        """
+         Calls FTS Query Generator for employee dataset
+         @param num_queries: number of queries to return
+         @query_type: a list of different types of queries to generate
+                      like: query_type=["match", "match_phrase","bool",
+                                        "conjunction", "disjunction"]
+        """
+        from emp_rand_query_gen import FTSQueryGenerator
+        query_gen = FTSQueryGenerator(num_queries, query_type=query_type)
+        for query in query_gen.queries:
+            index.queries.append(
+                json.loads(
+                    json.dumps(query).replace("manager_", "manager.")))
+        return index.queries
+
+    def execute_query(self, index_name, query, zero_results_ok=True):
+        """
+         Takes a query dict, constructs a json, runs and returns results
+        """
+        show_query_results = self._input.param("show_query_results", False)
+        query_json = self.construct_query_json(index_name, query)
+        try:
+            self.log.info("Running query:")
+            hits, matches = self._cb_cluster.run_fts_query(index_name, query_json)
+            self.log.info("%s hit(s)" % hits)
+            if show_query_results:
+                self.log.info("Doc matches : %s" % json.dumps(matches, indent=3))
+            if int(hits) == 0 and not zero_results_ok:
+                self.fail("No docs returned for query : %s" % query_json)
+            return hits, matches
+        except Exception as e:
+            self.log.error("Error running query: %s" % e)
+            self.fail("Error running query: %s" % e)
+
+    def create_default_index(self, bucket, index_name, plan_params=None):
+        """
+        Creates a default index given bucket, index_name and plan_params
+        """
+        bucket_password = ""
+        if bucket.authType == "sasl":
+            bucket_password = bucket.saslPassword
+        index = self._cb_cluster.create_fts_index(
+            name=index_name,
+            source_name=bucket.name,
+            source_params={"authUser": bucket.name,
+                           "authPassword": bucket_password},
+            plan_params=plan_params)
+        return index
+
+    def create_default_indexes_all_buckets(self, plan_params=None):
+        """
+        Creates 'n' default indexes for all buckets.
+        'n' is defined by 'index_per_bucket' test param.
+        """
+        for bucket in self._cb_cluster.get_buckets():
+            for count in range(self.index_per_bucket):
+                self.create_default_index(
+                    bucket,
+                    "%s_index_%s" % (bucket.name, count+1),
+                    plan_params)
+
+    def create_alias(self, target_indexes, alias_def=None):
+        """
+        Creates an alias spanning one or many target indexes
+        """
+        if not alias_def:
+            alias_def = INDEX_DEFAULTS.ALIAS_DEFINITION
+            for index in target_indexes:
+                alias_def['targets'][index.name] = {}
+                alias_def['targets'][index.name]['indexUUID'] = index.get_uuid()
+
+        return self._cb_cluster.create_fts_index(name='alias_%s' % time.time(),
+                                                 index_type='alias',
+                                                 index_params=alias_def)
+
+    def validate_index_count(self, equal_bucket_doc_count=True,
+                             zero_rows_ok=False, must_equal=None):
+        """
+         Handle validation and error logging for docs indexed
+         returns a map containing index_names and docs indexed
+        """
+        index_name_count_map = {}
+        for index in self._cb_cluster.get_indexes():
+            docs_indexed = index.get_indexed_doc_count()
+            bucket_count = self._cb_cluster.get_doc_count_in_bucket(
+                                    index.source_bucket)
+            self.log.info("Docs in index {0}={1}, bucket docs={2}".
+                      format(index.name, docs_indexed, bucket_count))
+            if must_equal and docs_indexed != int(must_equal):
+                self.fail("Number of docs indexed is not %s" % must_equal)
+            if docs_indexed == 0 and not zero_rows_ok:
+                self.fail("No docs were indexed for index %s" % index.name)
+            if equal_bucket_doc_count:
+
+                if docs_indexed != bucket_count:
+                    self.fail("Bucket doc count = %s, index doc count=%s" %
+                              (bucket_count, docs_indexed))
+            index_name_count_map[index.name] = docs_indexed
+        return index_name_count_map

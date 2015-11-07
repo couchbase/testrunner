@@ -1,4 +1,5 @@
 # Used by JsonDocGenerator in documentgenerator.py
+# coding=utf-8
 
 FIRST_NAMES = ['Adara', 'Adena', 'Adrianne', 'Alarice', 'Alvita', 'Amara',
                 'Ambika', 'Antonia', 'Araceli', 'Balandria', 'Basha',
@@ -14,13 +15,24 @@ FIRST_NAMES = ['Adara', 'Adena', 'Adrianne', 'Alarice', 'Alvita', 'Amara',
                 'Sirena', 'Solita', 'Tempest', 'Thea', 'Treva', 'Trista',
                 'Vala', 'Winta']
 
-LAST_NAMES = [  'Smith', 'Brown', 'Johnson', 'Jones', 'Williams',
-                'Davis', 'Miller', 'Wilson', 'Taylor', 'Clark', 'White',
-                'Moore', 'Thompson', 'Allen', 'Martin', 'Hall', 'Adams',
-                'Thomas', 'Wright', 'Baker', 'Walker', 'Anderson', 'Lewis',
-                'Harris', 'Hill', 'King', 'Jackson', 'Lee', 'Green', 'Wood',
-                'Parker', 'Campbell', 'Young', 'Robinson', 'Stewart',
-                'Scott','Rogers','Roberts', 'Cook','Phillips', 'Turner',
-                'Carter', 'Ward', 'Foster', 'Morgan', 'Howard', 'Cox',
-                'Bailey', 'Richardson', 'Reed', 'Russell', 'Edwards',
-                'Cooper', 'Wells', 'Palmer', 'Ann', 'Mitchell', 'Evans']
+LAST_NAMES = ['Smith', 'Brown', 'Johnson', 'Jones', 'Williams',
+            'Davis', 'Miller XII', 'Wilson', 'Taylor', 'Clark', 'White',
+            'Moore', 'Thompson', 'Allen', 'Martin', 'Hall', 'Adams',
+            'Thomas', 'Wright', 'Baker III', 'Walker II', 'Anderson', 'Lewis',
+            'Harris', 'Hill', 'King Jr.', 'Jackson', 'Lee', 'Green', 'Wood',
+            'Parker X', 'Campbell', 'Young', 'Robinson Sr.', 'Stewart',
+            'Scott','Rogers','Roberts', 'Cook','Phillips', 'Turner',
+            'Carter', 'Ward', 'Foster', 'Morgan', 'Howard Jr.', 'Cox',
+            'Bailey', 'Richardson IX', 'Reed', 'Russell', 'Edwards Sr.',
+            'Cooper', 'Wells', 'Palmer', 'Ann', 'Mitchell', 'Evans',
+            'Simón', 'Josué', 'Damián', 'Julián', 'Aarón', 'Ángel',
+            'Gerónimo', 'Juan José', 'Tomás', 'Nicolás', 'Sebastián',
+            'Jr.', 'Sr.']
+
+LANGUAGES = ['English', 'Spanish', 'German', 'Italian', 'French',
+             'Arabic', 'Africans', 'Hindi', 'Vietnamese', 'Urdu', 'Dutch',
+             'Quechua', 'Japanese', 'Chinese', 'Nepalese', 'Thai', 'Malay',
+             'Sinhalese', 'Portuguese', 'Romanian']
+
+DEPT = ['Engineering', 'Sales', 'Support', 'Marketing', 'IT', 'Finance', 'HR',
+        'Pre-Sales', 'Accounts', 'Dev-ops', 'Training']
