@@ -1,6 +1,7 @@
 from fts_base import FTSBaseTest
-from couchbase_helper.documentgenerator import *
-from lib.membase.api.exception import FTSException
+from lib.membase.api.rest_client import RestConnection
+from lib.membase.api.exception import FTSException,ServerUnavailableException
+
 
 class StableTopFTS(FTSBaseTest):
 
@@ -10,54 +11,38 @@ class StableTopFTS(FTSBaseTest):
     def tearDown(self):
         super(StableTopFTS, self).tearDown()
 
-    def create_simple_index(self):
-        self.load_employee_dataset()
-        index = self._cb_cluster.create_fts_index('sample_index3',
-                                                  source_name='default')
-        self.wait_for_indexing_complete()
-        docs_indexed = index.get_indexed_doc_count()
-        if docs_indexed == 0:
-                self.fail("No docs were indexed")
-        self.log.info("Docs indexed for index {0}  = {1}".
-                      format(index.name, docs_indexed))
-        return index
-
-    def simple_index_query(self):
-        index = self.create_simple_index()
-        query = {"query":{"match": "Safiya Morgan", "field": "name"}}
-        query_json = self.construct_query_json(index.name, query)
+    def check_fts_service_started(self):
         try:
-            hits, matches = self._cb_cluster.run_fts_query(index.name, query_json)
-            self.log.info("%s hits, document matches: %s" %(hits, matches))
-            if int(hits) == 0:
-                self.fail("No docs returned for query : %s" % query_json)
-        except Exception as e:
-            self.fail("Error running query: %s" % e)
+            rest = RestConnection(self._cb_cluster.get_random_fts_node())
+            rest.get_fts_index_definition("invalid_index")
+        except ServerUnavailableException as e:
+            raise FTSException("FTS has not started on : %s" %e)
 
-
-    def simple_index_query_against_non_cbft_node(self):
-        self.load_employee_dataset()
-        node = self._cb_cluster.get_random_non_fts_node()
-        try:
-            index = self._cb_cluster.create_fts_index('sample_index', node=node,
-                                                        source_name='default')
-            if self._update or self._delete:
-                self.async_perform_update_delete(['salary', 'manages.team_size'])
+    def create_simple_default_index(self):
+        self.load_data()
+        plan_params = self.construct_plan_params()
+        self.create_default_indexes_all_buckets(plan_params=plan_params)
+        if self._update or self._delete:
             self.wait_for_indexing_complete()
-            docs_indexed = index.get_indexed_doc_count()
-            if docs_indexed == 0:
-                self.fail("No docs were indexed")
-            self.log.info("Docs indexed for index {0}  = {1}".
-                      format(index.name, docs_indexed))
-            query_json = self.construct_query_json('sample_index','Safiya Morgan')
-            hits, _ = self._cb_cluster.run_fts_query(node,
-                                                     'sample_index',
-                                                     query_json)
-            if int(hits) == 0:
-                self.fail("No docs returned for query : Safiya Morgan")
-        except Exception as e:
-            self.fail("Encountered error while indexing/querying on a "
-                      "non-cbft node : %s" % e)
+            self.validate_index_count(equal_bucket_doc_count=True,
+                                  zero_rows_ok=False)
+            self.async_perform_update_delete(self.upd_del_fields)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True,
+                                  zero_rows_ok=False)
+
+    def run_default_index_query(self):
+        query = eval(self._input.param("query", str(self.sample_query)))
+        for index in self._cb_cluster.get_indexes():
+            self.execute_query(index.name, query, zero_results_ok=False)
+
+    def test_query_type(self):
+        index = self.create_default_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.generate_random_query(index, self.num_queries, self.query_types)
+        for query in index.queries:
+            self.execute_query(index.name, query)
 
     def index_utf16_dataset(self):
         self.load_utf16_data()
@@ -66,117 +51,61 @@ class StableTopFTS(FTSBaseTest):
                                               source_name='default')
             # an exception will most likely be thrown from waiting
             self.wait_for_indexing_complete()
-            query_json = self.construct_query_json('sample_index','Safiya Morgan')
-            hits, _ = self._cb_cluster.run_fts_query('sample_index', query_json)
+            self.validate_index_count(
+                equal_bucket_doc_count=False,
+                zero_rows_ok=True,
+                must_equal=0)
         except Exception as e:
-            raise FTSException("Error in utf-16 test :{0}".format(e))
+            raise FTSException("Exception thrown in utf-16 test :{0}".format(e))
 
     def create_simple_alias(self):
-        self.load_employee_dataset()
-        index = self._cb_cluster.create_fts_index('sample_index',
-                                                  source_name='default')
+        self.load_data()
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        index = self.create_default_index(bucket, "default_index")
         self.wait_for_indexing_complete()
-        docs_indexed = index.get_indexed_doc_count()
-        if docs_indexed == 0:
-                self.fail("No docs were indexed")
-        self.log.info("Docs indexed for index {0}  = {1}".
-                      format(index.name, docs_indexed))
-        query_json = self.construct_query_json(index.name,'Safiya Morgan')
-        hits, _ = self._cb_cluster.run_fts_query( index.name, query_json)
-        if int(hits) == 0:
-            self.fail("No docs returned for query : {0}".format(query_json))
-        alias_def = {
-                      "{0}".format(index.name): {
-                        "indexUUID": index.get_UUID()
-                      }
-                    }
-        alias = self._cb_cluster.create_fts_index(name='sample_alias',
-                                                  source_type='couchbase',
-                                                  source_name='',
-                                                  index_type='alias',
-                                                  index_params=alias_def)
-        query_json = self.construct_query_json(alias.name,'Safiya Morgan')
-        hits2, _ = self._cb_cluster.run_fts_query(alias.name, query_json)
+        self.validate_index_count(equal_bucket_doc_count=True)
+        hits, _ = self.execute_query(index.name,
+                                     self.sample_query,
+                                     zero_results_ok=False)
+        alias = self.create_alias([index])
+        hits2, _ = self.execute_query(alias.name,
+                                      self.sample_query,
+                                      zero_results_ok=False)
         if hits != hits2:
             self.fail("Index query yields {0} hits while alias on same index "
                       "yields only {1} hits".format(hits, hits2))
+        return index, alias
 
     def index_wiki(self):
         self.load_wiki(lang=self.lang)
-        index = self._cb_cluster.create_fts_index('wiki_index',
-                                                  source_name='default')
+        self._cb_cluster.create_fts_index('wiki_index', source_name='default')
         self.wait_for_indexing_complete()
-        docs_indexed = index.get_indexed_doc_count()
-        if docs_indexed == 0:
-            self.fail("No docs were indexed")
-        #self.sleep(300)
-
-    def test_configure_plan_params(self):
-        plan_params = {}
-        plan_params['numReplicas'] = self.index_replicas
-        plan_params['maxPartitionsPerPindex'] = self.partitions_per_pindex
-        index = self._cb_cluster.create_fts_index('sample_index',
-                                                  source_name='default',
-                                                  plan_params=plan_params)
-        if self._update or self._delete:
-            self.async_perform_update_delete(['salary', 'dept'])
-        self.wait_for_indexing_complete()
-        #TODO : Add some plan validation method
-        docs_indexed = index.get_indexed_doc_count()
-        if docs_indexed == 0:
-                self.fail("No docs were indexed")
-        self.log.info("Docs indexed for index {0}  = {1}".
-                      format(index.name, docs_indexed))
-        query_json = self.construct_query_json(index.name,'Safiya Morgan')
-        hits, _ = self._cb_cluster.run_fts_query('sample_index', query_json)
-        if int(hits) == 0:
-            self.fail("No docs returned for query : Safiya Morgan")
-
-    def test_parallel_index_building(self):
-        self.load_employee_dataset()
-        for bucket in self._cb_cluster.get_buckets():
-            self._cb_cluster.create_fts_index(
-                        "{0}-index".format(bucket.name),
-                        source_name=bucket.name)
-        if self._update or self._delete:
-            self.async_perform_update_delete(['salary', 'dept'])
-        self.wait_for_indexing_complete()
-        docs_expected_in_index = self._cb_cluster.get_doc_count_in_bucket(
-            self._cb_cluster.get_buckets()[0])
-        for index in self._cb_cluster.get_indexes():
-            index_count = index.get_indexed_doc_count()
-            if index_count != docs_expected_in_index:
-               raise Exception("No of docs indexed in {0} is {1}, expected: {2}"
-                               .format(index_count, docs_expected_in_index))
+        self.validate_index_count(equal_bucket_doc_count=True,
+                                  zero_rows_ok=False)
 
     def delete_index_then_query(self):
-        index = self.create_simple_index()
+        index = self.create_default_index()
         self._cb_cluster.delete_fts_index(index.name)
-        query_json = self.construct_query_json(index.name, 'Safiya Morgan')
         try:
-            hits2, _ = self._cb_cluster.run_fts_query('sample_alias', query_json)
+            hits2, _ = self.execute_query(index.name, self.sample_query)
         except Exception as e:
             # expected, pass test
             self.log.error(" Expected exception: {0}".format(e))
 
     def drop_bucket_check_index(self):
-        index = self.create_simple_index()
+        index = self.create_default_index()
         self._cb_cluster.delete_bucket("default")
-        try:
-            index_count = index.get_indexed_doc_count()
-            self.log.info("Docs present in index whose source bucket has "
-                          "been deleted: %s" % index_count)
-            self.fail("Able to retrieve index json and doc count %s from index "
-                      "built on bucket that was deleted" % index_count)
-        except Exception as e:
-            self.log.error("Expected exception: {0}".format(e))
+        self.sleep(60, "waiting for bucket deletion to be known by fts")
+        status, _ = index.get_index_defn()
+        if status:
+            self.fail("Able to retrieve index json from index "
+                      "built on bucket that was deleted")
 
     def delete_index_having_alias(self):
-        self.create_simple_alias()
-        self._cb_cluster.delete_fts_index('sample_index')
-        query_json = self.construct_query_json('sample_alias','Safiya Morgan')
+        index, alias = self.create_simple_alias()
+        self._cb_cluster.delete_fts_index(index.name)
         try:
-            hits, _ = self._cb_cluster.run_fts_query('sample_alias', query_json)
+            hits, _ = self.execute_query(index.name, self.sample_query)
             if hits != 0:
                 self.fail("Query alias with deleted target returns query results!")
         except Exception as e:
@@ -184,23 +113,16 @@ class StableTopFTS(FTSBaseTest):
 
     def create_alias_on_deleted_index(self):
         self.load_employee_dataset()
-        index = self._cb_cluster.create_fts_index('sample_index',
-                                                  source_name='default')
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        index = self.create_default_index(bucket, "default_index")
         self.wait_for_indexing_complete()
-        index_name = index.name
-        index_uuid = index.get_uuid()
+        from fts_base import INDEX_DEFAULTS
+        alias_def = INDEX_DEFAULTS.ALIAS_DEFINITION
+        alias_def['targets'][index.name] = {}
+        alias_def['targets'][index.name]['indexUUID'] = index.get_uuid()
         index.delete()
-        alias_def = {
-                  "{0}".format(index_name): {
-                      "indexUUID": index_uuid
-                    }
-            }
         try:
-            alias = self._cb_cluster.create_fts_index(name='sample_alias',
-                                                  source_type='couchbase',
-                                                  source_name='',
-                                                  index_type='alias',
-                                                  index_params=alias_def)
+            self.create_alias([index], alias_def)
             self.fail("Was able to create alias on deleted target")
         except Exception as e:
             self.log.info("Expected exception :{0}".format(e))
@@ -210,9 +132,9 @@ class StableTopFTS(FTSBaseTest):
         index = self._cb_cluster.create_fts_index('sample_index',
                                                   source_name='default')
         self.wait_for_indexing_complete()
-        index.name = "new_alias"
+        index.name = "new_index"
         try:
-            index.create_or_update()
+            index.update()
         except Exception as e:
             self.log.info("Expected exception: {0}".format(e))
 
@@ -221,13 +143,12 @@ class StableTopFTS(FTSBaseTest):
         index = self._cb_cluster.create_fts_index('sample_index',
                                                   source_name='default')
         self.wait_for_indexing_complete()
-        query_json = self.construct_query_json('sample_index', 'Safiya Morgan')
-        hits, _ = self._cb_cluster.run_fts_query('sample_index', query_json)
+        hits, _ = self.execute_query(index.name, self.sample_query)
         new_plan_param = {"maxPartitionsPerPIndex": 30}
         index.index_definition['params'] = \
             index.build_custom_plan_params(new_plan_param)
-        index.create_or_update(self._cb_cluster.get_random_fts_node())
-        hits2, _ = self._cb_cluster.run_fts_query('sample_index', query_json)
+        index.update()
+        hits2, _ = self.execute_query(index.name, self.sample_query)
         if hits != hits2:
             self.fail("Changing maxPartitionsPerIndex results in wrong hits for"
                       "same query")
