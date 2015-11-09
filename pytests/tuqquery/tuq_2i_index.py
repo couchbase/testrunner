@@ -165,7 +165,8 @@ class QueriesIndexTests(QueryTests):
                 self.query = "SELECT name, join_day FROM %s where name = 'employee-9'"  % (bucket.name)
                 result = self.run_cbq_query()
                 self.assertTrue(actual_result["metrics"]["elapsedTime"]< result["metrics"]["elapsedTime"],"Time used in queries using covering indexes should be less than time used in queries not using covering indexes")
-
+                self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+                self.run_cbq_query()
 
 
     def test_covering_partial_index(self):
@@ -205,7 +206,8 @@ class QueriesIndexTests(QueryTests):
                                  "LIKE '%@%.%' and VMs[0].RAM > 5 and join_day > 10"
                     result = self.run_cbq_query()
                     self.assertTrue(actual_result["metrics"]["elapsedTime"]< result["metrics"]["elapsedTime"],"Time used in queries using covering indexes should be less than time used in queries not using covering indexes")
-
+                    self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+                    self.run_cbq_query()
 
     def test_covering_orderby_limit(self):
         for bucket in self.buckets:
@@ -241,6 +243,8 @@ class QueriesIndexTests(QueryTests):
                     self.query = "select name,skills[0] as skills from %s where skills[0]='skill2010' and join_yr=2010 and VMs[0].os IN ['ubuntu','windows','linux'] order by name LIMIT 15 OFFSET 0;"  % (bucket.name)
                     result = self.run_cbq_query()
                     self.assertTrue(actual_result["metrics"]["elapsedTime"]< result["metrics"]["elapsedTime"],"Time used in queries using covering indexes should be less than time used in queries not using covering indexes")
+                    self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+                    self.run_cbq_query()
 
     def test_covering_groupby(self):
         for bucket in self.buckets:
