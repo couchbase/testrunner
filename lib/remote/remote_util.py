@@ -2735,6 +2735,21 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
+
+    # works for linux only
+    def execute_couch_dbinfo(self, file):
+        couch_dbinfo_command = "%scouch_dbinfo" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            couch_dbinfo_command = "%scouch_dbinfo.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+        if self.info.distribution_type.lower() == 'mac':
+            couch_dbinfo_command = "%scouch_dbinfo" % (testconstants.MAC_COUCHBASE_BIN_PATH)
+
+        command =  couch_dbinfo_command +' -i /opt/couchbase/var/lib/couchbase/data/*/*[0-9] >' + file
+        output, error = self.execute_command(command, use_channel=True)
+        self.log_command_output(output, error)
+        return output, error
+
     def execute_cbepctl(self, bucket, persistence, param_type, param, value):
         cbepctl_command = "%scbepctl" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()

@@ -40,6 +40,45 @@ def time_stamp():
     date_time = "%s%02d%02d-%02d%02d" % (year, month, day, hour, min)
     return date_time
 
+
+class couch_dbinfo_Runner(object):
+    def __init__(self, server, path, local=False):
+        self.server = server
+        self.path = path
+        self.local = local
+
+    def run(self):
+        file_name = "%s-%s-couch-dbinfo.txt" % (self.server.ip, time_stamp())
+        if not self.local:
+            from lib.remote.remote_util import RemoteMachineShellConnection
+            remote_client = RemoteMachineShellConnection(self.server)
+            print "Collecting dbinfo from %s\n" % self.server.ip
+            output, error = remote_client.execute_couch_dbinfo(file_name)
+            print "\n".join(output)
+            print "\n".join(error)
+
+            user_path = "/home/"
+            if remote_client.info.distribution_type.lower() == 'mac':
+                user_path = "/Users/"
+            else:
+                if self.server.ssh_username == "root":
+                    user_path = "/"
+
+            remote_path = "%s%s" % (user_path, self.server.ssh_username)
+            status = remote_client.file_exists(remote_path, file_name)
+            if not status:
+                raise Exception("%s doesn't exists on server" % file_name)
+            status = remote_client.get_file(remote_path, file_name,
+                                        "%s/%s" % (self.path, file_name))
+            if status:
+                print "Downloading dbinfo logs from %s" % self.server.ip
+            else:
+                raise Exception("Fail to download db logs from %s"
+                                                     % self.server.ip)
+            remote_client.execute_command("rm -f %s" % os.path.join(remote_path, file_name))
+            remote_client.disconnect()
+
+
 class cbcollectRunner(object):
     def __init__(self, server, path, local=False):
         self.server = server
