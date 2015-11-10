@@ -45,6 +45,7 @@ class auditTest(BaseTestCase):
         super(auditTest, self).tearDown()
 
     def getLocalIPAddress(self):
+        '''
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
@@ -53,8 +54,6 @@ class auditTest(BaseTestCase):
         if '1' not in ipAddress:
             status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
-        '''
-
 
     #Wrapper around auditmain
     def checkConfig(self, eventID, host, expectedResults):
@@ -602,5 +601,22 @@ class auditTest(BaseTestCase):
         rest.set_internalSetting(input,value)
         expectedResults = {"user":user, "local_cluster_name":self.master.ip+":8091", ops:value,
                                "source":source}
+
+        self.checkConfig(self.eventID,self.master,expectedResults)
+
+    def test_internalSettingLocal(self):
+        ops = self.input.param("ops",None)
+        if ":" in ops:
+            ops = ops.replace(":",",")
+            ops = '{' + ops + '}'
+        value = self.input.param("value",None)
+        rest = RestConnection(self.master)
+        user = self.master.rest_username
+        source = 'ns_server'
+        input = self.input.param("input",None)
+
+
+        rest.set_internalSetting(input,value)
+        expectedResults = {"user":user, ops:value,"source":source,"ip":self.ipAddress, "port":57457}
 
         self.checkConfig(self.eventID,self.master,expectedResults)
