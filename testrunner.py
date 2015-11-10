@@ -24,7 +24,7 @@ from threading import Thread, Event
 from xunit import XUnitTestResult
 from TestInput import TestInputParser, TestInputSingleton
 from optparse import OptionParser, OptionGroup
-from scripts.collect_server_info import cbcollectRunner
+from scripts.collect_server_info import cbcollectRunner, couch_dbinfo_Runner
 from scripts.measure_sched_delays import SchedDelays
 from scripts.getcoredumps import Getcoredumps, Clearcoredumps
 import signal
@@ -228,6 +228,15 @@ def get_cbcollect_info(input, path):
         except Exception as e:
             print "NOT POSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(server.ip, e)
 
+def get_couch_dbinfo(input, path):
+    for server in input.servers:
+        print "grabbing dbinfo from {0}".format(server.ip)
+        path = path or "."
+        try:
+            couch_dbinfo_Runner(server, path).run()
+        except Exception as e:
+            print "NOT POSSIBLE TO GRAB dbinfo FROM {0}: {1}".format(server.ip, e)
+
 def clear_old_core_dumps(_input, path):
     for server in _input.servers:
         path = path or "."
@@ -412,6 +421,10 @@ def main():
             if "get-cbcollect-info" in TestInputSingleton.input.test_params:
                 if TestInputSingleton.input.param("get-cbcollect-info", True):
                     get_cbcollect_info(TestInputSingleton.input, logs_folder)
+
+            if "get-couch-dbinfo" in TestInputSingleton.input.test_params and \
+                TestInputSingleton.input.param("get-couch-dbinfo", True):
+                    get_couch_dbinfo(TestInputSingleton.input, logs_folder)
 
             errors = []
             for failure in result.failures:
