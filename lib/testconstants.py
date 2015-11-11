@@ -31,7 +31,7 @@ WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F", "170":"AF3F80E
                    "172":"374CF2EC-1FBE-4BF1-880B-B58A86522BC8", "180":"D21F6541-E7EA-4B0D-B20B-4DDBAF56882B",
                    "181":"A68267DB-875D-43FA-B8AB-423039843F02", "200":"9E3DC4AA-46D9-4B30-9643-2A97169F02A7",
                    "201":"4D3F9646-294F-4167-8240-768C5CE2157A", "202":"7EDC64EF-43AD-48BA-ADB3-3863627881B8",
-                   "210":"7EDC64EF-43AD-48BA-ADB3-3863627881B8", "211":"6B91FC0F-D98E-469D-8281-345A08D65DAF",
+                   "210":"7EDC64EF-43AD-48BA-ADB3-3863627881B8", "211":"4D92395A-BB95-4E46-9D95-B7BFB97F7446",
                    "220":"CC4CF619-03B8-462A-8CCE-7CA1C22B337B", "221":"3A60B9BB-977B-0424-2955-75346C04C586",
                    "250":"22EF5D40-7518-4248-B932-4536AAB7293E", "251":"AB8A4E81-D502-AE14-6979-68E4C4658CF7",
                    "252":"6E10D93C-76E0-DCA4-2111-73265D001F56",
@@ -45,7 +45,8 @@ WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F", "170":"AF3F80E
 """ This "220":"CC4CF619-03B8-462A-8CCE-7CA1C22B337B" is for build 2.2.0-821 and earlier
     The new build register ID for 2.2.0-837 id is set in create_windows_capture_file in remote_util
     old "211":"7EDC64EF-43AD-48BA-ADB3-3863627881B8"
-    current at 2014.12.03 "211":"6B91FC0F-D98E-469D-8281-345A08D65DAF" """
+    old one at 2014.12.03 "211":"6B91FC0F-D98E-469D-8281-345A08D65DAF"
+    change one more time; current at 2015.11.10 "211":"4D92395A-BB95-4E46-9D95-B7BFB97F7446" """
 CB_VERSION_NAME = {"4.0":"sherlock", "4.1":"sherlock", "4.5":"watson"}
 VERSION_FILE = "VERSION.txt"
 MIN_COMPACTION_THRESHOLD = 2
@@ -97,7 +98,9 @@ SHERLOCK_BUILD_REPO = "http://172.23.120.24/builds/latestbuilds/couchbase-server
 #COUCHBASE_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
 COUCHBASE_REPO = "http://172.23.120.24/builds/latestbuilds/couchbase-server/"
 CB_LATESTBUILDS_REPO = "http://172.23.120.24/builds/latestbuilds/"
+#CB_LATESTBUILDS_REPO = "http://latestbuilds.hq.couchbase.com/latestbuilds/"
 CB_REPO = "http://172.23.120.24/builds/latestbuilds/couchbase-server/"
+#CB_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
 CB_RELEASE_REPO = "http://172.23.120.24/builds/releases/"
 """ http://172.23.120.24/builds/latestbuilds/couchbase-server/watson/ """
 MC_BIN_CLIENT = "mc_bin_client"
