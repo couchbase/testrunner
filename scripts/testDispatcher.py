@@ -39,6 +39,8 @@ def main():
     parser.add_option('-r','--run', dest='run')
     parser.add_option('-o','--os', dest='os')
     parser.add_option('-n','--noLaunch', action="store_true", dest='noLaunch', default=False)
+    parser.add_option('-c','--component', dest='component', default=None)
+
 
     options, args = parser.parse_args()
 
@@ -49,6 +51,9 @@ def main():
 
     print 'nolaunch', options.noLaunch
     print 'os', options.os
+
+    print 'component is', options.component
+
 
 
     #f = open(options.suiteFile)
@@ -65,15 +70,18 @@ def main():
 
     cb = Bucket('couchbase://' + TEST_SUITE_DB + '/QE-Test-Suites')
 
-
-    query = N1QLQuery("select * from `QE-Test-Suites` where '" + options.run + "' in partOf")
+    if options.component is None or options.component == 'None':
+        query = N1QLQuery("select * from `QE-Test-Suites` where '" + options.run + "' in partOf")
+    else:
+        queryString = "select * from `QE-Test-Suites` where '{0}' in partOf and component ='{1}';"
+        print 'the query is', queryString.format(options.run, options.component )
+        query = N1QLQuery(queryString.format(options.run, options.component ))
     results = cb.n1ql_query( query )
 
-    #print 'the query results are', results
+
     for row in results:
         data = row['QE-Test-Suites']
         print 'row', data
-
 
         if 'os' not in data or (data['os'] == options.os) or \
             (data['os'] == 'linux' and options.os in set(['centos','ubuntu']) ):
