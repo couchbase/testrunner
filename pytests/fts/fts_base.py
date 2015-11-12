@@ -2280,10 +2280,8 @@ class FTSBaseTest(unittest.TestCase):
         if wait_time == 0:
             if self._num_items <= 1000:
                 wait_time = 10
-            elif self._num_items > 1000 and self._num_items <= 10000:
+            elif self._num_items > 1000:
                 wait_time = 120
-            elif self._num_items > 10000:
-                wait_time = 240
         wait_time *= len(self._cb_cluster.get_buckets()) + \
                      (self.index_per_bucket-1)
         self.sleep(wait_time, "Waiting for indexing to complete")
