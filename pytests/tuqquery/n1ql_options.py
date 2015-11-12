@@ -6,7 +6,6 @@ from tuqquery.tuq import QueryTests
 class OptionsTests(QueryTests):
     def setUp(self):
         super(OptionsTests, self).setUp()
-        self.create_primary_index_for_3_0_and_greater()
 
     def suite_setUp(self):
         super(OptionsTests, self).suite_setUp()
@@ -27,7 +26,6 @@ class OptionsTests(QueryTests):
     def test_metrics(self):
         self.shell.execute_command("killall cbq-engine")
         self._start_command_line_query(self.master, options='-metrics=false')
-        self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
             self.query = "SELECT name, CASE WHEN join_mo < 3 OR join_mo > 11 THEN" +\
             " 'winter' ELSE 'other' END AS period FROM %s WHERE CASE WHEN" % (bucket.name) +\
@@ -45,7 +43,6 @@ class OptionsTests(QueryTests):
     def test_namespace(self):
         self.shell.execute_command("killall cbq-engine")
         self._start_command_line_query(self.master, options='-namespace=default')
-        self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
             self.query = "SELECT count(name) FROM %s" % (bucket.name)
             actual_result = self.run_cbq_query()
@@ -54,7 +51,6 @@ class OptionsTests(QueryTests):
     def test_signature(self):
         self.shell.execute_command("killall cbq-engine")
         self._start_command_line_query(self.master, options='-signature=false')
-        self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
             self.query = "SELECT name, CASE WHEN join_mo < 3 OR join_mo > 11 THEN" +\
             " 'winter' ELSE 'other' END AS period FROM %s WHERE CASE WHEN" % (bucket.name) +\
@@ -65,7 +61,6 @@ class OptionsTests(QueryTests):
     def test_timeout(self):
         self.shell.execute_command("killall cbq-engine")
         self._start_command_line_query(self.master, options='-timeout=1ms')
-        self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
             self.query = "SELECT count(name) FROM %s" % (bucket.name)
             try:
@@ -81,7 +76,6 @@ class OptionsTests(QueryTests):
         self.shell.execute_command("killall cbq-engine")
         self.n1ql_port = 8094
         self._start_command_line_query(self.master, options='-http=:%s' % self.n1ql_port)
-        self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
             self.query = "SELECT count(name) FROM %s" % (bucket.name)
             actual_result = self.run_cbq_query()
@@ -90,7 +84,6 @@ class OptionsTests(QueryTests):
 class OptionsRestTests(QueryTests):
     def setUp(self):
         super(OptionsRestTests, self).setUp()
-        self.create_primary_index_for_3_0_and_greater()
 
     def suite_setUp(self):
         super(OptionsRestTests, self).suite_setUp()
@@ -127,7 +120,6 @@ class OptionsRestTests(QueryTests):
             self.assertFalse('signature' in actual_result, 'signature are shown!')
 
     def test_timeout(self):
-        self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
             self.query = "SELECT count(name) FROM %s" % (bucket.name)
             actual_result = self.run_cbq_query(query_params={'timeout':'0.1s'})
@@ -135,14 +127,12 @@ class OptionsRestTests(QueryTests):
             self.assertEqual(actual_result['status'], 'timeout', 'Request was not timed out')
 
     def test_named_var(self):
-        self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
             self.query = "SELECT count(test_rate) FROM %s where test_rate>$rate" % (bucket.name)
             actual_result = self.run_cbq_query(query_params= {'$rate':3})
             self.assertTrue(actual_result['results'], 'There are no results')
 
     def test_args(self):
-        self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
             self.query = "SELECT count(test_rate) FROM %s where test_rate>$1" % (bucket.name)
             actual_result = self.run_cbq_query(query_params= {'args':[3]})
@@ -152,7 +142,6 @@ class OptionsRestTests(QueryTests):
             self.assertTrue(actual_result['results'], 'There are no results')
 
     def test_named_var_arg(self):
-        self.create_primary_index_for_3_0_and_greater()
         for bucket in self.buckets:
             self.query = 'SELECT count($1) FROM %s where test_rate>$rate' % (bucket.name)
             actual_result = self.run_cbq_query(query_params= {'$rate':3, 'args' :'["test_rate"]'})

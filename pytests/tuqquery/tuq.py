@@ -62,8 +62,9 @@ class QueryTests(BaseTestCase):
             self.full_list = self.generate_full_docs_list(self.gens_load)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
-        if str(self.__class__).find('QueriesUpgradeTests') == -1:
+        if str(self.__class__).find('QueriesUpgradeTests') == -1 and self.primary_index_created == False:
             self.create_primary_index_for_3_0_and_greater()
+
 
     def suite_setUp(self):
         try:
@@ -75,8 +76,6 @@ class QueryTests(BaseTestCase):
                     self.load_directory(self.gens_load)
                 else:
                     self.load(self.gens_load, flag=self.item_flag)
-            if str(self.__class__).find('QueriesUpgradeTests') == -1:
-                self.create_primary_index_for_3_0_and_greater()
             if not self.input.param("skip_build_tuq", True):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
@@ -3228,7 +3227,7 @@ class QueryTests(BaseTestCase):
                                                                                                 bucket.name, key))
                 self.log.info("LOAD IS FINISHED")
             finally:
-                shell.disconnect()
+               shell.disconnect()
 
     def create_primary_index_for_3_0_and_greater(self):
         if self.skip_index:
@@ -3254,6 +3253,7 @@ class QueryTests(BaseTestCase):
                         self._wait_for_index_online(bucket, '#primary')
                 except Exception, ex:
                     self.log.info(str(ex))
+        self.primary_index_created = True
 
     def _wait_for_index_online(self, bucket, index_name, timeout=6000):
         end_time = time.time() + timeout

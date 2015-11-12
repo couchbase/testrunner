@@ -6,7 +6,6 @@ from tuq import QueryTests
 class ReadOnlyUserTests(QueryTests):
     def setUp(self):
         super(ReadOnlyUserTests, self).setUp()
-        self.create_primary_index_for_3_0_and_greater()
         self.username = self.input.param('username', 'RON1ql')
         self.password = self.input.param('password', 'RO$Pass')
         cli_cmd = "user-manage"

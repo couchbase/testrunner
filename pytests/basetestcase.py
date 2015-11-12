@@ -36,6 +36,7 @@ class BaseTestCase(unittest.TestCase):
     def setUp(self):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
+        self.primary_index_created = False
         if self.input.param("log_level", None):
             self.log.setLevel(level=0)
             for hd in self.log.handlers:
@@ -140,6 +141,7 @@ class BaseTestCase(unittest.TestCase):
                             str(self.__class__).find('upgradeXDCR') != -1 or \
                             hasattr(self, 'skip_buckets_handle') and self.skip_buckets_handle:
                 self.log.info("any cluster operation in setup will be skipped")
+                self.primary_index_created = True
                 self.log.info("==============  basetestcase setup was finished for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
                 return
