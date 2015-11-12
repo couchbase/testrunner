@@ -544,12 +544,12 @@ class FTSIndex:
         self._source_type = source_type
         self._source_name = source_name
         self._one_time = False
-        self._index_type = index_type
+        self.index_type = index_type
         self.rest = RestConnection(self.__cluster.get_random_fts_node())
         self.index_definition = INDEX_DEFAULTS.INDEX_DEFINITION
         self.name = self.index_definition['name'] = name
-        self.index_definition['type'] = self._index_type
-        if self._index_type == "alias":
+        self.index_definition['type'] = self.index_type
+        if self.index_type == "alias":
             self.index_definition['sourceType'] = "nil"
             self.index_definition['sourceName'] = ""
         else:
@@ -574,7 +574,7 @@ class FTSIndex:
             self.index_definition['sourceUUID'] = source_uuid
 
     def build_custom_index_params(self, index_params):
-        if self._index_type == "bleve":
+        if self.index_type == "bleve":
             mapping = INDEX_DEFAULTS.BLEVE_MAPPING
         else:
             mapping = INDEX_DEFAULTS.ALIAS_DEFINITION
@@ -600,21 +600,21 @@ class FTSIndex:
         if status != 400:
             self.rest.delete_fts_index(self.name)
         self.__log.info("Creating {0} {1} on {2}".format(
-            self._index_type,
+            self.index_type,
             self.name,
             self.rest.ip))
         self.rest.create_fts_index(self.name, self.index_definition)
 
     def update(self):
         self.__log.info("Updating {0} {1} on {2}".format(
-            self._index_type,
+            self.index_type,
             self.name,
             self.rest.ip))
         self.rest.update_fts_index(self.name, self.index_definition)
 
     def delete(self):
         self.__log.info("Deleting {0} {1} on {2}".format(
-            self._index_type,
+            self.index_type,
             self.name,
             self.rest.ip))
         status = self.rest.delete_fts_index(self.name)
@@ -629,6 +629,9 @@ class FTSIndex:
 
     def get_indexed_doc_count(self):
         return self.rest.get_fts_index_doc_count(self.name)
+
+    def get_src_bucket_doc_count(self):
+        return self.__cluster.get_doc_count_in_bucket(self.source_bucket)
 
     def get_uuid(self):
         return self.rest.get_fts_index_uuid(self.name)
@@ -2275,16 +2278,23 @@ class FTSBaseTest(unittest.TestCase):
 
     def wait_for_indexing_complete(self):
         # TODO: Add logic based on stats
-        # for now, just sleep
-        wait_time = self._input.param("wait", 0)
-        if wait_time == 0:
-            if self._num_items <= 1000:
-                wait_time = 10
-            elif self._num_items > 1000:
-                wait_time = 120
-        wait_time *= len(self._cb_cluster.get_buckets()) + \
-                     (self.index_per_bucket-1)
-        self.sleep(wait_time, "Waiting for indexing to complete")
+        self.sleep(5, "wait for index to get created")
+        for index in self._cb_cluster.get_indexes():
+            if index.index_type == "alias":
+                continue
+            retry_count = 3
+            prev_count = 0
+            while retry_count > 0:
+                index_doc_count = index.get_indexed_doc_count()
+                self.log.info("Index %s doc count: %s bucket doc count = %s"
+                        % (index.name,
+                        index.get_indexed_doc_count(),
+                        index.get_src_bucket_doc_count()))
+                if prev_count < index_doc_count:
+                    prev_count = index_doc_count
+                else:
+                    retry_count -= 1
+                time.sleep(10)
 
     def construct_plan_params(self):
         plan_params = {}
