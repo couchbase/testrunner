@@ -11,7 +11,6 @@ class NULLTests(QueryTests):
 #                                  timeout=self.wait_timeout * 5)
 #        self.load(self.gens_load)
         self.full_list = self.generate_full_docs_list(self.gens_load)
-        self.create_primary_index_for_3_0_and_greater()
 
     def suite_setUp(self):
         super(NULLTests, self).suite_setUp()
