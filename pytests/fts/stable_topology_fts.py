@@ -32,6 +32,7 @@ class StableTopFTS(FTSBaseTest):
                                   zero_rows_ok=False)
 
     def run_default_index_query(self):
+        self.create_simple_default_index()
         query = eval(self._input.param("query", str(self.sample_query)))
         for index in self._cb_cluster.get_indexes():
             self.execute_query(index.name, query, zero_results_ok=False)
