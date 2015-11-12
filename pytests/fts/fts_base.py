@@ -2277,12 +2277,15 @@ class FTSBaseTest(unittest.TestCase):
         # TODO: Add logic based on stats
         # for now, just sleep
         wait_time = self._input.param("wait", 0)
-        if not wait_time:
-            if self._num_items < 1000:
+        if wait_time == 0:
+            if self._num_items <= 1000:
                 wait_time = 10
-            elif self._num_items > 1000 and self._num_items < 10000:
+            elif self._num_items > 1000 and self._num_items <= 10000:
                 wait_time = 120
-        wait_time *= len(self._cb_cluster.get_buckets()) + (self.index_per_bucket-1)
+            elif self._num_items > 10000:
+                wait_time = 240
+        wait_time *= len(self._cb_cluster.get_buckets()) + \
+                     (self.index_per_bucket-1)
         self.sleep(wait_time, "Waiting for indexing to complete")
 
     def construct_plan_params(self):
