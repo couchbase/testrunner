@@ -2646,6 +2646,26 @@ class QueryTests(BaseTestCase):
             self.query = "select name from %s intersect all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
             self.prepared_common_body()
 
+    def test_except_secondsetempty(self):
+        for bucket in self.buckets:
+            self.query = "drop primary index on %s" % bucket.name;
+            self.run_cbq_query()
+        self.query = "(select id keyspace_id from system:keyspaces) except (select indexes.keyspace_id from system:indexes)"
+        actual_list = self.run_cbq_query()
+        import pdb;pdb.set_trace()
+        bucket_names=[]
+        for bucket in self.buckets:
+            bucket_names.append(bucket.name)
+        count = 0
+        for bucket in self.buckets:
+            if((actual_list['results'][count]['keyspace_id']) in bucket_names):
+                count +=1
+            else:
+              self.log.error("Wrong keyspace id returned or empty keyspace id returned")
+        for bucket in self.buckets:
+            self.query = "create primary index on %s" % bucket.name;
+            self.run_cbq_query()
+
     def test_except(self):
         for bucket in self.buckets:
             self.query = "select name from %s except select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
@@ -3313,6 +3333,7 @@ class QueryTests(BaseTestCase):
         for server in self.servers:
             shell_connection = RemoteMachineShellConnection(self.master)
             shell_connection.execute_command(cmd)
+
 
     def load_directory(self, generators_load):
         gens_load = []
