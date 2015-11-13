@@ -11,7 +11,9 @@
         "bucket-config.json": "bucket-config.json",
         "data": {
           "shard_0.fdb": "shard_0.fdb",
-          "shard_1.fdb": "shard_1.fdb"
+          "shard_1.fdb": "shard_1.fdb",
+          "shard_2.fdb": "shard_2.fdb",
+          "shard_3.fdb": "shard_3.fdb"
         }
       }
     }
