@@ -1269,22 +1269,23 @@ class RQGTests(BaseTestCase):
                     build_query = "BUILD INDEX on {0}({1}) USING GSI".format(table_name,",".join(list_build_index_list))
                     actual_result = self.n1ql_helper.run_cbq_query(query = build_query, server = self.n1ql_server)
                     self.log.info(actual_result)
+                    self.sleep(15,"sleep after building index")
                 except Exception, ex:
                     self.log.info(ex)
                     raise
                 self.sleep(sleep_time)
                 # Monitor till the index is built
                 tasks = []
-                try:
-                    check = self.n1ql_helper.is_index_online_and_in_list_bulk(table_name, list_build_index_list, server = self.n1ql_server, index_state = "online", timeout = 1200.00)
-                    if not check:
-                        raise Exception(" Index build timed out \n {0}".format(list_build_index_list))
-                    #for index_name in list_build_index_list:
-                    #    tasks.append(self.async_monitor_index(bucket = table_name, index_name = index_name))
-                    #for task in tasks:
-                    #    task.result()
-                except Exception, ex:
-                    self.log.info(ex)
+                # try:
+                #     check = self.n1ql_helper.is_index_online_and_in_list_bulk(table_name, list_build_index_list, server = self.n1ql_server, index_state = "online", timeout = 1200.00)
+                #     if not check:
+                #         raise Exception(" Index build timed out \n {0}".format(list_build_index_list))
+                #     #for index_name in list_build_index_list:
+                #     #    tasks.append(self.async_monitor_index(bucket = table_name, index_name = index_name))
+                #     #for task in tasks:
+                #     #    task.result()
+                # except Exception, ex:
+                #     self.log.info(ex)
 
     def _generate_secondary_indexes(self, index_map = {}):
         defer_mode = str({"defer_build":"true"})
