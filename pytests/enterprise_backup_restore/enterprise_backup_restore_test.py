@@ -12,12 +12,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         super(EnterpriseBackupRestoreTest, self).tearDown()
 
     def test_enterprise_backup_restore_sanity(self):
-        #nodes_in = self.servers[self.nodes_init + 1:self.nodes_init + 2]
-        #opt_nodes = [self.servers[0]] + self.servers[self.nodes_init + 1: self.nodes_init + 2]
-        #self.cluster.create_default_bucket(self.servers[0], 100)
+        nodes_in = self.servers[self.nodes_init + 1:self.nodes_init + 2]
+        opt_nodes = [self.servers[0]] + self.servers[self.nodes_init + 1: self.nodes_init + 2]
         self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                    num_replicas=1, bucket_size=100))
-        #self.cluster.rebalance(opt_nodes, nodes_in, [])
+        self.cluster.rebalance(opt_nodes, nodes_in, [])
         gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         status, output, message = self.backup_create()
