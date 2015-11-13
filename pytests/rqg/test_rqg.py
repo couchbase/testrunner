@@ -1236,7 +1236,7 @@ class RQGTests(BaseTestCase):
                 t.join()
 
     def _gen_secondary_indexes_per_table(self, table_name = "", index_map = {}, sleep_time = 2):
-        defer_mode = str({"defer_build":True})
+        defer_mode = str({"defer_build":"true"})
         build_index_list = []
         batch_index_definitions = {}
         batch_index_definitions = index_map
@@ -1287,7 +1287,7 @@ class RQGTests(BaseTestCase):
                     self.log.info(ex)
 
     def _generate_secondary_indexes(self, index_map = {}):
-        defer_mode = str({"defer_build":True})
+        defer_mode = str({"defer_build":"true"})
         for table_name in index_map.keys():
             build_index_list = []
             batch_index_definitions = {}
@@ -1330,7 +1330,7 @@ class RQGTests(BaseTestCase):
     def _generate_secondary_indexes_in_batches(self, batches):
         if self.generate_input_only:
             return
-        defer_mode = str({"defer_build":True})
+        defer_mode = str({"defer_build":"true"})
         batch_index_definitions = {}
         build_index_list = []
         for info in batches:
