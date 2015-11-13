@@ -2522,7 +2522,6 @@ class QueryTests(BaseTestCase):
             for ind in ind_list:
                 index_name = "meta_where%s" % ind
                 if ind =="one":
-                    #import pdb; pdb.set_trace()
                     self.query = "CREATE INDEX {0} ON {1}(meta().id)  where meta().id like 'query-testemployee6%' USING {2}".format(index_name, bucket.name, self.index_type)
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
@@ -2718,7 +2717,6 @@ class QueryTests(BaseTestCase):
             self.run_cbq_query()
         self.query = "(select id keyspace_id from system:keyspaces) except (select indexes.keyspace_id from system:indexes)"
         actual_list = self.run_cbq_query()
-        import pdb;pdb.set_trace()
         bucket_names=[]
         for bucket in self.buckets:
             bucket_names.append(bucket.name)
