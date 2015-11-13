@@ -50,6 +50,7 @@ class QueryTests(BaseTestCase):
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
         self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
+        self.create_primary_index_for_3_0_and_greater()
 
     def suite_setUp(self):
         try:
@@ -673,6 +674,25 @@ class QueryTests(BaseTestCase):
         for server in self.servers:
             shell_connection = RemoteMachineShellConnection(self.master)
             shell_connection.execute_command(cmd)
+
+    def create_primary_index_for_3_0_and_greater(self):
+        self.log.info("CREATE PRIMARY INDEX")
+        rest = RestConnection(self.master)
+        versions = rest.get_nodes_versions()
+        if versions[0].startswith("4") or versions[0].startswith("3"):
+            for bucket in self.buckets:
+                if self.primary_indx_drop:
+                    self.log.info("Dropping primary index for %s ..." % bucket.name)
+                    self.query = "DROP PRIMARY INDEX ON %s" % (bucket.name)
+                    self.sleep(3, 'Sleep for some time after index drop')
+                self.log.info("Creating primary index for %s ..." % bucket.name)
+                self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
+                try:
+                    self.run_cbq_query()
+                    if self.primary_indx_type.lower() == 'gsi':
+                        self._wait_for_index_online(bucket, '#primary')
+                except Exception, ex:
+                    self.log.info(str(ex))
 
     def _get_keys(self, key_num):
         keys = []
