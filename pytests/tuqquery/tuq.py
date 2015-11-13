@@ -2478,6 +2478,115 @@ class QueryTests(BaseTestCase):
             expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
 
+        ############## META NEW ###################
+    def test_meta_basic(self):
+        created_indexes = []
+        ind_list = ["one"]
+        index_name="one"
+
+        for bucket in self.buckets:
+            for ind in ind_list:
+                index_name = "metaindex%s" % ind
+                if ind =="one":
+                    self.query = "CREATE INDEX %s ON %s(meta().id)  USING %s" % (index_name, bucket.name, self.index_type)
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name)
+                created_indexes.append(index_name)
+        for bucket in self.buckets:
+            self.query="select meta().id, meta().cas from {0} where meta().id is not null order by meta().id".format(bucket.name)
+            if self.covering_index:
+                self.test_explain_covering_index(index_name[0])
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+
+            for index_name in created_indexes:
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
+                self.run_cbq_query()
+
+            self.covering_index = False
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, '#primary')
+            self.query = "select meta().id, meta().cas from {0} where meta().id is not null order by meta().id".format(bucket.name)
+            expected_list = self.run_cbq_query()
+            expected_result = sorted(actual_list['results'])
+
+            self._verify_results(actual_result, expected_result)
+
+    def test_meta_where(self):
+        created_indexes = []
+        ind_list = ["one"]
+        index_name="one"
+        for bucket in self.buckets:
+            for ind in ind_list:
+                index_name = "meta_where%s" % ind
+                if ind =="one":
+                    #import pdb; pdb.set_trace()
+                    self.query = "CREATE INDEX {0} ON {1}(meta().id)  where meta().id like 'query-testemployee6%' USING {2}".format(index_name, bucket.name, self.index_type)
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name)
+                created_indexes.append(index_name)
+        for bucket in self.buckets:
+            self.query="select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id".format(bucket.name)
+            if self.covering_index:
+                self.test_explain_covering_index(index_name[0])
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+
+            for index_name in created_indexes:
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
+                self.run_cbq_query()
+
+            self.covering_index = False
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, '#primary')
+
+            self.query = "select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id".format(bucket.name)
+            expected_list = self.run_cbq_query()
+            expected_result = sorted(actual_list['results'])
+
+            self._verify_results(actual_result, expected_result)
+
+    def test_meta_where_greater_than(self):
+        created_indexes = []
+        ind_list = ["one"]
+        index_name="one"
+        for bucket in self.buckets:
+            for ind in ind_list:
+                index_name = "meta_where%s" % ind
+                if ind =="one":
+                    self.query = "CREATE INDEX {0} ON {1}(meta().id)  where meta().id >10 USING {2}".format(index_name, bucket.name, self.index_type)
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name)
+                created_indexes.append(index_name)
+        for bucket in self.buckets:
+            self.query="select meta().id, meta().cas from {0} where meta().id >10 order by meta().id".format(bucket.name)
+            if self.covering_index:
+                self.test_explain_covering_index(index_name[0])
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+
+            for index_name in created_indexes:
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
+                self.run_cbq_query()
+
+            self.covering_index = False
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, '#primary')
+
+            self.query = "select meta().id, meta().cas from {0} where meta().id > 10 order by meta().id".format(bucket.name)
+            expected_list = self.run_cbq_query()
+            expected_result = sorted(actual_list['results'])
+
+            self._verify_results(actual_result, expected_result)
+
+######################## META NEW END ######################################
+
     def test_intersect(self):
         for bucket in self.buckets:
             self.query = "select name from %s intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
