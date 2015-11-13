@@ -2585,6 +2585,72 @@ class QueryTests(BaseTestCase):
 
             self._verify_results(actual_result, expected_result)
 
+    def test_meta_partial(self):
+        created_indexes = []
+        ind_list = ["one"]
+        index_name="one"
+        for bucket in self.buckets:
+            for ind in ind_list:
+                index_name = "meta_where%s" % ind
+                if ind =="one":
+                    self.query = "CREATE INDEX {0} ON {1}(meta().id, name)  where meta().id >10 USING {2}".format(index_name, bucket.name, self.index_type)
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name)
+                created_indexes.append(index_name)
+
+        for bucket in self.buckets:
+            self.query="select meta().id, name from {0} where meta().id >10 and name is not null order by meta().id".format(bucket.name)
+            if self.covering_index:
+                self.test_explain_covering_index(index_name[0])
+
+            actual_list = self.run_cbq_query()
+            actual_result = sorted(actual_list['results'])
+
+            for index_name in created_indexes:
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
+                self.run_cbq_query()
+
+            self.covering_index = False
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, '#primary')
+
+            self.query = "select meta().id, name from {0} where meta().id > 10 and name is not null order by meta().id".format(bucket.name)
+            expected_list = self.run_cbq_query()
+            expected_result = sorted(actual_list['results'])
+
+            self._verify_results(actual_result, expected_result)
+
+    def test_meta_non_supported(self):
+        created_indexes = []
+        ind_list = ["one"]
+        index_name="one"
+        for bucket in self.buckets:
+            for ind in ind_list:
+                index_name = "meta_cas_%s" % ind
+                if ind =="one":
+                    #self.query = "CREATE INDEX {0} ON {1}(meta().cas) USING {2}".format(index_name, bucket.name, self.index_type)
+                    queries_errors = {'CREATE INDEX ONE ON default(meta().cas) using GSI' : ('syntax error', 3000),
+                                      'CREATE INDEX ONE ON default(meta().flags) using GSI' : ('syntax error', 3000),
+                                      'CREATE INDEX ONE ON default(meta().expiry) using GSI' : ('syntax error', 3000),
+                                      'CREATE INDEX ONE ON default(meta().cas) using VIEW' : ('syntax error', 3000)}
+                    self.negative_common_body(queries_errors)
+
+    def test_meta_negative_namespace(self):
+        created_indexes = []
+        ind_list = ["one"]
+        index_name="one"
+        for bucket in self.buckets:
+            for ind in ind_list:
+                index_name = "meta_cas_%s" % ind
+                if ind =="one":
+                    #self.query = "CREATE INDEX {0} ON {1}(meta().cas) USING {2}".format(index_name, bucket.name, self.index_type)
+                    queries_errors = {'CREATE INDEX ONE ON default(meta(invalid).id) using GSI' : ('syntax error', 3000),
+                                      'CREATE INDEX ONE ON default(meta(invalid).id) using VIEW' : ('syntax error', 3000),
+                                      'CREATE INDEX ONE ON default(meta()) using GSI' : ('syntax error', 3000),
+                                      'CREATE INDEX ONE ON default(meta()) using VIEW' : ('syntax error', 3000)}
+                    self.negative_common_body(queries_errors)
+
 ######################## META NEW END ######################################
 
     def test_intersect(self):
