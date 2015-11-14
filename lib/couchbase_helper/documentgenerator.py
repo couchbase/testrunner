@@ -284,6 +284,7 @@ class JsonDocGenerator(KVGenerator):
                 if 'manages.team_size' in fields_to_update or\
                         'manages.reports' in fields_to_update:
                     doc_dict['team_size'] = random.randint(5,10)
+                    doc_dict['manages'] = {}
                     doc_dict['manages']['reports'] = []
                     for _ in xrange(0, doc_dict['manages']['team_size']):
                         doc_dict['manages']['reports'].append(self.generate_name())
