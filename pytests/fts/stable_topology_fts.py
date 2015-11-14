@@ -38,9 +38,11 @@ class StableTopFTS(FTSBaseTest):
             self.execute_query(index.name, query, zero_results_ok=False)
 
     def test_query_type(self):
+        self.load_data()
         index = self.create_default_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
+        self.wait_for_indexing_complete()
         self.generate_random_query(index, self.num_queries, self.query_types)
         for query in index.queries:
             self.execute_query(index.name, query)
@@ -85,7 +87,9 @@ class StableTopFTS(FTSBaseTest):
                                   zero_rows_ok=False)
 
     def delete_index_then_query(self):
-        index = self.create_default_index()
+        self.load_data()
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        index = self.create_default_index(bucket, "default_index")
         self._cb_cluster.delete_fts_index(index.name)
         try:
             hits2, _ = self.execute_query(index.name, self.sample_query)
@@ -94,7 +98,9 @@ class StableTopFTS(FTSBaseTest):
             self.log.error(" Expected exception: {0}".format(e))
 
     def drop_bucket_check_index(self):
-        index = self.create_default_index()
+        self.load_data()
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        index = self.create_default_index(bucket, "default_index")
         self._cb_cluster.delete_bucket("default")
         self.sleep(60, "waiting for bucket deletion to be known by fts")
         status, _ = index.get_index_defn()

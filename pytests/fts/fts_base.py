@@ -190,7 +190,7 @@ class INDEX_DEFAULTS:
                         }
 
     INDEX_DEFINITION = {
-                          "type": "bleve",
+                          "type": "fulltext-index",
                           "name": "",
                           "uuid": "",
                           "params": BLEVE_MAPPING,
@@ -503,7 +503,7 @@ class FTSIndex:
     """
     To create a Full Text Search index :
     e.g., FTSIndex("beer_index", self._cluster, source_type = 'couchbase',
-                    source_name = 'beer-sample', index_type = 'bleve',
+                    source_name = 'beer-sample', index_type = 'fulltext-index',
                     index_params = {'store' : 'forestdb'},
                     plan_params = {'maxPartitionsPerIndex' : 40}
                   )
@@ -516,7 +516,7 @@ class FTSIndex:
                  )
     """
     def __init__(self, cluster, name, source_type='couchbase',
-                 source_name=None, index_type='bleve', index_params=None,
+                 source_name=None, index_type='fulltext-index', index_params=None,
                  plan_params=None, source_params=None, source_uuid=None):
 
         """
@@ -524,7 +524,7 @@ class FTSIndex:
          @param cluster : 'this' cluster object
          @param source_type : 'couchbase' or 'files'
          @param source_name : name of couchbase bucket
-         @param index_type : 'bleve' or 'alias'
+         @param index_type : 'fulltext-index' or 'fulltext-alias'
          @param index_params :  to specify advanced index mapping;
                                 dictionary overiding params in
                                 INDEX_DEFAULTS.BLEVE_MAPPING or
@@ -549,7 +549,7 @@ class FTSIndex:
         self.index_definition = INDEX_DEFAULTS.INDEX_DEFINITION
         self.name = self.index_definition['name'] = name
         self.index_definition['type'] = self.index_type
-        if self.index_type == "alias":
+        if self.index_type == "fulltext-alias":
             self.index_definition['sourceType'] = "nil"
             self.index_definition['sourceName'] = ""
         else:
@@ -574,7 +574,7 @@ class FTSIndex:
             self.index_definition['sourceUUID'] = source_uuid
 
     def build_custom_index_params(self, index_params):
-        if self.index_type == "bleve":
+        if self.index_type == "fulltext-index":
             mapping = INDEX_DEFAULTS.BLEVE_MAPPING
         else:
             mapping = INDEX_DEFAULTS.ALIAS_DEFINITION
@@ -954,7 +954,7 @@ class CouchbaseCluster:
             ))
 
     def create_fts_index(self, name, source_type='couchbase',
-                         source_name=None, index_type='bleve',
+                         source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
                          source_params=None, source_uuid=None,
                          node=None):
@@ -963,7 +963,7 @@ class CouchbaseCluster:
         @param name: name of the index/alias
         @param source_type : 'couchbase' or 'files'
         @param source_name : name of couchbase bucket or "" for alias
-        @param index_type : 'bleve' or 'alias'
+        @param index_type : 'fulltext-index' or 'fulltext-alias'
         @param index_params :  to specify advanced index mapping;
                                 dictionary overiding params in
                                 INDEX_DEFAULTS.BLEVE_MAPPING or
@@ -1844,6 +1844,9 @@ class FTSBaseTest(unittest.TestCase):
             "==== FTSbasetests setup is started for test #{0} {1} ===="
             .format(self.__case_number, self._testMethodName))
 
+        # workaround for MB-16794
+        self.sleep(30, "working around MB-16794")
+
         self.__setup_for_test()
 
         self.log.info(
@@ -2006,7 +2009,8 @@ class FTSBaseTest(unittest.TestCase):
             self._input.param("max_partitions_pindex", None)
         self.upd_del_fields = self._input.param("upd_del_fields", None)
         self.num_queries = self._input.param("num_queries", 1)
-        self.query_types = self._input.param("query_types", ["match"])
+        self.query_types = (self._input.param("query_types", "match")).split(',')
+        print self.query_types
         self.index_per_bucket = self._input.param("index_per_bucket", 1)
 
         self.sample_query = {"match": "Safiya Morgan", "field": "name"}
@@ -2277,12 +2281,15 @@ class FTSBaseTest(unittest.TestCase):
         time.sleep(timeout)
 
     def wait_for_indexing_complete(self):
+        """
+        Wait for index_count for any index to stabilize
+        """
         # TODO: Add logic based on stats
         self.sleep(5, "wait for index to get created")
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "alias":
                 continue
-            retry_count = 3
+            retry_count = 6
             prev_count = 0
             while retry_count > 0:
                 index_doc_count = index.get_indexed_doc_count()
@@ -2290,7 +2297,7 @@ class FTSBaseTest(unittest.TestCase):
                         % (index.name,
                         index.get_indexed_doc_count(),
                         index.get_src_bucket_doc_count()))
-                if prev_count < index_doc_count:
+                if prev_count < index_doc_count or prev_count > index_doc_count:
                     prev_count = index_doc_count
                 else:
                     retry_count -= 1
@@ -2302,7 +2309,8 @@ class FTSBaseTest(unittest.TestCase):
         plan_params['maxPartitionsPerPindex'] = self.partitions_per_pindex
         return plan_params
 
-    def generate_random_query(self, index, num_queries=1, query_type=["match"]):
+    def generate_random_query(self, index, num_queries=1, query_type=["match"],
+                              seed=0):
         """
          Calls FTS Query Generator for employee dataset
          @param num_queries: number of queries to return
@@ -2311,7 +2319,8 @@ class FTSBaseTest(unittest.TestCase):
                                         "conjunction", "disjunction"]
         """
         from emp_rand_query_gen import FTSQueryGenerator
-        query_gen = FTSQueryGenerator(num_queries, query_type=query_type)
+        query_gen = FTSQueryGenerator(num_queries, query_type=query_type,
+                                      seed=seed)
         for query in query_gen.queries:
             index.queries.append(
                 json.loads(
@@ -2323,6 +2332,7 @@ class FTSBaseTest(unittest.TestCase):
          Takes a query dict, constructs a json, runs and returns results
         """
         show_query_results = self._input.param("show_query_results", False)
+        expected_hits = self._input.param("expected_hits", None)
         query_json = self.construct_query_json(index_name, query)
         try:
             self.log.info("Running query:")
@@ -2332,6 +2342,9 @@ class FTSBaseTest(unittest.TestCase):
                 self.log.info("Doc matches : %s" % json.dumps(matches, indent=3))
             if int(hits) == 0 and not zero_results_ok:
                 self.fail("No docs returned for query : %s" % query_json)
+            if expected_hits and expected_hits != hits:
+                    self.fail("Expected hits: %s, fts returned: %s"
+                              % (expected_hits, hits))
             return hits, matches
         except Exception as e:
             self.log.error("Error running query: %s" % e)
@@ -2375,7 +2388,7 @@ class FTSBaseTest(unittest.TestCase):
                 alias_def['targets'][index.name]['indexUUID'] = index.get_uuid()
 
         return self._cb_cluster.create_fts_index(name='alias_%s' % time.time(),
-                                                 index_type='alias',
+                                                 index_type='fulltext-alias',
                                                  index_params=alias_def)
 
     def validate_index_count(self, equal_bucket_doc_count=True,

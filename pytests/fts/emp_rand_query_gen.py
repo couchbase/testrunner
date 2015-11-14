@@ -176,7 +176,8 @@ class FTSQueryGenerator:
 
     def get_queryable_full_name(self):
         return "%s %s" %(self.get_random_value(FIRST_NAMES),
-                         self.get_random_value(LAST_NAMES))
+                        (self.get_random_value(LAST_NAMES).encode('utf8',
+                                                                  'replace')))
 
     def get_queryable_dept(self):
         """
