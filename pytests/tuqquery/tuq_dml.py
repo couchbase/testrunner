@@ -136,8 +136,7 @@ class DMLQueryTests(QueryTests):
             #modified to support the alias
             expected_item_values = [{u'new_name': u'return_%s' % v} for v in xrange(10)]
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.assertEqual(sorted(actual_result['results']), sorted([v[u'new_name'] for v in expected_item_values]),
-                'Results expected:%s, actual: %s' % (expected_item_values, actual_result['results']))
+            self.assertEqual(sorted(actual_result['results']),sorted(expected_item_values))
 
     def test_insert_values_returning_elements(self):
         keys = ['%s%s' % (k, str(uuid.uuid4())[:5]) for k in xrange(10)]
@@ -875,14 +874,15 @@ class DMLQueryTests(QueryTests):
         self.assertEqual(len(actual_result['results']), 0, 'Query was not run successfully')
 
     def test_merge_delete_where_match(self):
-        self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
+        #self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
         keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete_where')
-        self.query = 'MERGE INTO %s USING %s on key "%s" when matched then delete where name LIKE "empl%"'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
+        self.log.info(keys)
+        self.query = 'MERGE INTO %s USING %s s0 on key "%s" when matched then delete where s0.name LIKE "%s"'  % (self.buckets[0].name, self.buckets[1].name, keys[0],"employee")
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.assertEqual(actual_result['results']['rows'], 0, 'Query was not run successfully')
+        self.assertEqual(len(actual_result['results']), 0, 'Query was not run successfully')
 
     def test_merge_update_match_set(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
