@@ -636,17 +636,6 @@ class FTSIndex:
     def get_uuid(self):
         return self.rest.get_fts_index_uuid(self.name)
 
-    def is_distributed(self):
-        #TODO
-        pass
-
-    def is_balanced(self):
-        #TODO
-        pass
-
-    def is_distributed_balanced(self):
-        return self.is_balanced() and self.is_distributed()
-
 class CouchbaseCluster:
 
     def __init__(self, name, nodes, log, use_hostname=False):
@@ -1845,7 +1834,7 @@ class FTSBaseTest(unittest.TestCase):
             .format(self.__case_number, self._testMethodName))
 
         # workaround for MB-16794
-        self.sleep(30, "working around MB-16794")
+        #self.sleep(30, "working around MB-16794")
 
         self.__setup_for_test()
 
@@ -2000,13 +1989,13 @@ class FTSBaseTest(unittest.TestCase):
             self._input.param("active_resident_threshold", 100)
         CHECK_AUDIT_EVENT.CHECK = self._input.param("verify_audit", 0)
         self._max_verify = self._input.param("max_verify", 100000)
-
+        self._num_vbuckets = self._input.param("vbuckets", 1024)
         self.lang = self._input.param("lang", "EN")
         self.encoding = self._input.param("encoding", "utf-8")
         self.analyzer = self._input.param("analyzer", None)
         self.index_replicas = self._input.param("index_replicas", None)
         self.partitions_per_pindex = \
-            self._input.param("max_partitions_pindex", None)
+            self._input.param("max_partitions_pindex", 20)
         self.upd_del_fields = self._input.param("upd_del_fields", None)
         self.num_queries = self._input.param("num_queries", 1)
         self.query_types = (self._input.param("query_types", "match")).split(',')
@@ -2309,6 +2298,74 @@ class FTSBaseTest(unittest.TestCase):
         plan_params['maxPartitionsPerPindex'] = self.partitions_per_pindex
         return plan_params
 
+    def is_index_partitioned_balanced(self, index):
+        """
+        Perform some plan validation to make sure the index is
+        partitioned and balanced on all nodes.
+        Check the following -
+        1. if number of pindexes = num_vbuckets/max_partitions_per_pindex
+        2. if each pindex is servicing not more than max_partitions_per_pindex
+        3. if index is distributed - present on all fts nodes, almost equally?
+        4. if index balanced - every fts node services almost equal num of vbs?
+        """
+        _, defn = index.get_index_defn()
+
+        # check 1 - test number of pindexes
+        import math
+        exp_num_pindexes = math.ceil(
+            self._num_vbuckets/self.partitions_per_pindex + 0.5)
+        if len(defn['planPIndexes']) != exp_num_pindexes:
+            self.fail("Number of pindexes for %s is %s while"
+                      " expected value is %s" %(index.name,
+                                                len(defn['planPIndexes']),
+                                                exp_num_pindexes))
+        self.log.info("Validated: Number of PIndexes = %s" % len(defn['planPIndexes']))
+
+        # check 2 - each pindex servicing "self.partitions_per_pindex" vbs
+        num_fts_nodes = len(self._cb_cluster.get_fts_nodes())
+        nodes_partitions = {}
+        for pindex in defn['planPIndexes']:
+            node = pindex['nodes'].keys()[0]
+            if node not in nodes_partitions.keys():
+                nodes_partitions[node] = {'pindex_count': 0, 'partitions':[]}
+            nodes_partitions[node]['pindex_count'] += 1
+            for partition in pindex['sourcePartitions'].split(','):
+                nodes_partitions[node]['partitions'].append(partition)
+            if len(pindex['sourcePartitions'].split(',')) > \
+                    self.partitions_per_pindex:
+                self.fail("sourcePartitions for pindex %s more than "
+                          "max_partitions_per_pindex %s" %
+                          (pindex['name'], self.partitions_per_pindex))
+        self.log.info("Validated: Every pIndex serves %s partitions or lesser" %
+                          self.partitions_per_pindex)
+
+        # check 3 - distributed - pindex present on all fts nodes?
+        if len(nodes_partitions.keys()) != num_fts_nodes:
+            self.fail("Index is not distributed, pindexes spread across %s while"
+                      "fts nodes are %s" % (nodes_partitions.keys(),
+                                           self._cb_cluster.get_fts_nodes()))
+        self.log.info("Validated: pIndexes are distributed across %s " %
+                      nodes_partitions.keys())
+
+        # check 4 - balance check(almost equal no of pindexes on all fts nodes)
+        exp_partitions_per_node = self._num_vbuckets/num_fts_nodes
+        self.log.info("Expecting num of partitions in each node in range %s-%s"
+                      % (exp_partitions_per_node - self.partitions_per_pindex,
+                         exp_partitions_per_node + self.partitions_per_pindex))
+
+        for node, pindex_partitions in nodes_partitions.iteritems():
+            if abs(len(pindex_partitions['partitions']) - \
+                    exp_partitions_per_node) > self.partitions_per_pindex:
+                self.fail("The source partitions are not evenly distributed "
+                          "among nodes, seeing %s"
+                          % len(pindex_partitions['partitions']))
+            self.log.info("Validated: Node %s houses %s pindexes which serve"
+                          " %s partitions" %
+                          (node,
+                           pindex_partitions['pindex_count'],
+                           len(pindex_partitions['partitions'])))
+        return True
+
     def generate_random_query(self, index, num_queries=1, query_type=["match"],
                               seed=0):
         """
@@ -2363,6 +2420,7 @@ class FTSBaseTest(unittest.TestCase):
             source_params={"authUser": bucket.name,
                            "authPassword": bucket_password},
             plan_params=plan_params)
+        self.is_index_partitioned_balanced(index)
         return index
 
     def create_default_indexes_all_buckets(self, plan_params=None):
