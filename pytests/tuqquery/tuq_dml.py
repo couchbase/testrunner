@@ -925,19 +925,19 @@ class DMLQueryTests(QueryTests):
 
     def test_merge_not_match_insert(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
-        self.query = 'select count(*) as actual from %s where job_title="Engineer"'  % (self.buckets[0].name)
-        self.run_cbq_query()
-        self.sleep(5, 'wait for index')
-        actual_result = self.run_cbq_query()
-        current_docs = actual_result['results'][0]['actual']
-        new_key = 'NEW'
-        self.query = 'MERGE INTO %s USING %s on key %s when not matched then insert %s'  % (
-                                                            self.buckets[0].name, self.buckets[1].name, self.buckets[0].name, new_key, '{"name": "new"}')
+        key = "test"
+        value = '{"name": "new1"}'
+        self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name, key, value)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, new_key)
+        self.query = 'MERGE INTO %s b1 USING %s b2 on key b2.%s when not matched then insert %s'  % (
+
+                                                            self.buckets[0].name, self.buckets[1].name, 'name', '{"name": "new"}')
+        actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.assertEqual(actual_result['results']['rows'], 1, 'Query was not run successfully')
+        self.query = 'SELECT count(*) as rows FROM %s'  % (self.buckets[0].name)
+        actual_result = self.run_cbq_query()
+        self.assertEqual(len(actual_result['results']), 1, 'Query was not run successfully')
 
     def test_merge_select_not_match_insert(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
