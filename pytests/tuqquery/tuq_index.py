@@ -113,9 +113,7 @@ class QueriesViewsTests(QueryTests):
 
             self.query = "EXPLAIN SELECT * FROM %s LIMIT %s" %(bucket.name,10);
             res = self.run_cbq_query()
-            self.log.info(res)
-            import pdb;pdb.set_trace()
-            self.assertTrue(res["results"][0]["~children"][0]["~children"][0]["limit"] == "10",
+            self.assertTrue('limit' in str(res['results']),
                             "Limit is not pushed to primary scan")
 
     def test_explain_query_count(self):
