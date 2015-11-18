@@ -906,13 +906,22 @@ class DMLQueryTests(QueryTests):
 
     def test_merge_update_match_unset(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
-        keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_unset')
-        self.query = 'MERGE INTO %s USING %s on key "%s" when matched then update unset name'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
+        key = "test"
+        value = '{"name": "new1"}'
+        self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name, key, value)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.query = 'SELECT * as doc FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
+        value = '{"name": "new2"}'
+        self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[0].name, "new1", value)
+        actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.assertTrue('name' not in actual_result['results']['doc'], 'Name was not unset')
+        self.query = 'MERGE INTO %s b1 USING %s b2 on key name when matched then update unset b1.name'  % (self.buckets[0].name, self.buckets[1].name)
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self.query = 'SELECT * FROM %s '  % (self.buckets[0].name)
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self.assertTrue('name' not in actual_result['results'], 'Name was not unset')
 
     def test_merge_not_match_insert(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
