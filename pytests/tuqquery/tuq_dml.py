@@ -121,8 +121,8 @@ class DMLQueryTests(QueryTests):
 
     def test_insert_returning_alias(self):
         keys = ['%s%s' % (k, str(uuid.uuid4())[:5]) for k in xrange(10)]
-        expected_item_values = [{'name': 'return_%s' % v} for v in xrange(10)]
         for bucket in self.buckets:
+            expected_item_values = [{'name': 'return_%s' % v} for v in xrange(10)]
             values = ''
             for k, v in zip(keys, expected_item_values):
                 inserted = v
