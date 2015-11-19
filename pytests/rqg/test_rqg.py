@@ -876,8 +876,11 @@ class RQGTests(BaseTestCase):
             #self.log.info(sql_result)
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
+
             if(len(n1ql_result)!=len(sql_result)):
                 self.log.info("number of results returned from sql and n1ql are different")
+                if len(sql_result) == 0 or len(n1ql_result) == 1000:
+                        return {"success":True, "result": "Pass"}
             try:
                 self.n1ql_helper._verify_results_rqg(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
             except Exception, ex:
