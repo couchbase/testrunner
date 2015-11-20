@@ -1166,33 +1166,45 @@ class DMLQueryTests(QueryTests):
                              if len([vm['os'] for vm in row['VMs']
                                      if vm['os'] == updated_value]) == 1], 'Os of vms were not changed')
 
-    def update_keys_clause_hints(self, idx_name):
+    def update_keys_clause_hints(self):
         num_docs = self.input.param('num_docs', 10)
         keys, _ = self._insert_gen_keys(num_docs, prefix='update_keys_hints %s' % str(uuid.uuid4())[:4])
         updated_value = 'new_name'
+        index_name = 'idx_name'
         for bucket in self.buckets:
-            self.query = 'update %s use index(%s using %s) set name="%s"'  % (bucket.name, idx_name, self.index_type, updated_value)
+            self.query = "CREATE INDEX %s ON %s(name) USING %s" % (index_name, bucket.name,self.index_type)
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, index_name)
+            self.query = 'update %s use index(%s using %s) set name="%s"'  % (bucket.name, index_name, self.index_type, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.query = 'select name from %s use index(%s using %s)' % (bucket.name, idx_name, self.index_type)
+            self.query = 'select name from %s use index(%s using %s)' % (bucket.name, index_name, self.index_type)
             self.run_cbq_query()
             self.sleep(10, 'wait for index')
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['results'],[{'name':updated_value}] * num_docs, 'Names were not changed')
+            self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
+            self.run_cbq_query()
 
-    def update_where_hints(self, idx_name):
+    def update_where_hints(self):
         num_docs = self.input.param('num_docs', 10)
         _, values = self._insert_gen_keys(num_docs, prefix='update_where %s' % str(uuid.uuid4())[:4])
         updated_value = 'new_name'
+        index_name = 'idx_name'
         for bucket in self.buckets:
-            self.query = 'update %s use index(%s using %s) set name="%s" where join_day=1 returning name'  % (bucket.name, idx_name, self.index_type, updated_value)
+            self.query = "CREATE INDEX %s ON %s(join_day) USING %s" % (index_name, bucket.name,self.index_type)
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, index_name)
+            self.query = 'update %s use index(%s using %s) set name="%s" where join_day=1 returning name'  % (bucket.name, index_name, self.index_type, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.query = 'select name from %s use index(%s using %s) where join_day=1' % (bucket.name, idx_name, self.index_type)
+            self.query = 'select name from %s use index(%s using %s) where join_day=1' % (bucket.name, index_name, self.index_type)
             self.run_cbq_query()
             self.sleep(10, 'wait for index')
             actual_result = self.run_cbq_query()
             self.assertFalse([doc for doc in actual_result['results'] if doc['name'] != updated_value], 'Names were not changed')
+            self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
+            self.run_cbq_query()
 
 ########################################################################################################################
 #
