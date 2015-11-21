@@ -2021,10 +2021,9 @@ class RestConnection(object):
     def create_fts_index(self, index_name, params):
         """create or edit fts index , returns {"status":"ok"} on success"""
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)
-        log.info(json.dumps(params, ensure_ascii=False, indent=3))
         status, content, header = self._http_request(api,
                                     'PUT',
-                                    json.dumps(params,ensure_ascii=False),
+                                    json.dumps(params, ensure_ascii=False),
                                     headers=self._create_capi_headers_with_auth(
                                                 self.username,
                                                 self.password),
@@ -2113,17 +2112,19 @@ class RestConnection(object):
     def run_fts_query(self, index_name, query_json):
         """Method run an FTS query through rest api"""
         api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
+        headers = self._create_capi_headers_with_auth(
+                    self.username,
+                    self.password)
+
         status, content, header = self._http_request(
             api,
             "POST",
-            json.dumps(query_json, ensure_ascii=False),
-            headers=self._create_capi_headers_with_auth(
-                self.username,
-                self.password),
+            json.dumps(query_json, ensure_ascii=False).encode('utf8'),
+            headers,
             timeout=30)
         if status:
             content = json.loads(content)
-            return content['total_hits'], content['hits']
+            return content['total_hits'], content['hits'], content['took']
 
 
     """ End of FTS rest APIs """

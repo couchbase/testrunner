@@ -190,6 +190,13 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
+    def async_run_fts_query_compare(self, fts_index, es_instance, query_index):
+        _task = ESRunQueryCompare(fts_index,
+                                  es_instance,
+                                  query_index=query_index)
+        self.task_manager.schedule(_task)
+        return _task
+
     def async_rebalance(self, servers, to_add, to_remove, use_hostnames=False, services = None):
         """Asyncronously rebalances a cluster
 
