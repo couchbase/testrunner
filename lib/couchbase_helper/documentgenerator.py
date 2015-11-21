@@ -229,7 +229,7 @@ class JsonDocGenerator(KVGenerator):
             for count in xrange(self.start+1, self.end+1, 1):
                 emp_name = self.generate_name()
                 doc_dict = {
-                            'emp_id': 10000000+int(count),
+                            'emp_id': str(10000000+int(count)),
                             'name': emp_name,
                             'dept': self.generate_dept(),
                             'email': "%s@mcdiabetes.com" %
@@ -238,7 +238,8 @@ class JsonDocGenerator(KVGenerator):
                             'join_date': self.generate_join_date(),
                             'languages_known': self.generate_lang_known(),
                             'is_manager': bool(random.getrandbits(1)),
-                            'mutated': 0
+                            'mutated': 0,
+                            '_type': 'emp'
                            }
                 if doc_dict["is_manager"]:
                     doc_dict['manages'] = {'team_size': random.randint(5, 10)}
@@ -305,7 +306,7 @@ class JsonDocGenerator(KVGenerator):
         day = random.randint(1, 28)
         hour = random.randint(0,23)
         min = random.randint(0,59)
-        return str(datetime.datetime(year, month, day, hour, min))
+        return datetime.datetime(year, month, day, hour, min).isoformat()
 
     def generate_dept(self):
         return DEPT[random.randint(0, len(DEPT)-1)]
@@ -412,6 +413,7 @@ class WikiJSONGenerator(KVGenerator):
             raise StopIteration
         doc = eval(self.gen_docs[self.itr])
         doc["mutated"] = 0
+        doc['_type'] = 'wiki'
         self.itr += 1
         return self.name+str(10000000+self.itr),\
                json.dumps(doc, indent=3).encode(self.encoding, "ignore")

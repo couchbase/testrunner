@@ -8,10 +8,9 @@ import copy
 import logger
 import logging
 import json
-import random
 import multiprocessing
-import collections
-import itertools
+import re
+
 
 
 from couchbase_helper.cluster import Cluster
@@ -31,39 +30,9 @@ from couchbase_helper.documentgenerator import *
 
 from couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.exception import FTSException
+from es_base import ElasticSearchBase
 
 
-
-class test_parallel(object):
-
-    def __init__(self,map_fucntion,reduce_function,num_workers):
-        self.__mapper =  map_fucntion
-        self.__reducer=  reduce_function
-        if num_workers <= 0:
-            num_workers = 1
-        self.__mp_pool = multiprocessing.Pool(num_workers)
-        self.__intermediate_result = None
-        self.__combine_container=collections.defaultdict(list)
-        self.__result=None
-        self.__shuffle_data=None
-
-    def mapper_call(self,input_data):
-        self.__intermediate_result= self.__mp_pool.map(self.__mapper, input_data)
-        return self.combiner_call()
-
-    def combiner_call(self):
-        for val in self.__intermediate_result:
-           for k,v in val.iteritems():
-               self.__combine_container[k].append(v)
-        self.__shuffle_data=self.__combine_container.items()
-
-    def reducer_call(self):
-        self.__result=self.__mp_pool.map(self.__reducer,self.__shuffle_data)
-        return self.__result
-
-    def __del__(self):
-        self.__mp_pool.close()
-        self.__mp_pool.terminate()
 
 
 class RenameNodeException(FTSException):
@@ -132,7 +101,7 @@ class CHECK_AUDIT_EVENT:
 class INDEX_DEFAULTS:
 
     BLEVE_MAPPING = {
-                "mapping": {
+                  "mapping": {
                     "default_mapping": {
                       "enabled": True,
                       "dynamic": True,
@@ -556,7 +525,7 @@ class FTSIndex:
             self.source_bucket = self.__cluster.get_bucket_by_name(source_name)
             self.index_definition['sourceType'] = self._source_type
             self.index_definition['sourceName'] = self._source_name
-        self.queries = []
+        self.fts_queries = []
 
         if index_params:
             self.index_definition['params'] = \
@@ -636,6 +605,45 @@ class FTSIndex:
     def get_uuid(self):
         return self.rest.get_fts_index_uuid(self.name)
 
+    def construct_cbft_query_json(self, query, fields=None,
+                             max_matches=10000000, timeout=None):
+        query_json = QUERY.JSON
+        # query is a unicode dict
+        query_json['query'] = query
+        query_json['indexName'] = self.name
+        if max_matches:
+            query_json['size'] = int(max_matches)
+        if timeout:
+            query_json['timeout'] = int(timeout)
+        if fields:
+            query_json['fields'] = fields
+        return query_json
+
+    def execute_query(self, query, zero_results_ok=True,
+                      show_query_results=False, expected_hits=None):
+        """
+        Takes a query dict, constructs a json, runs and returns results
+        """
+        query_dict = self.construct_cbft_query_json(query)
+        try:
+            doc_ids = []
+            hits, matches, time_taken =\
+                self.__cluster.run_fts_query(self.name, query_dict)
+            for doc in matches:
+                doc_ids.append(doc['id'])
+            self.__log.info("%s hit(s)" % hits)
+            if show_query_results:
+                self.__log.info("Doc matches : %s" % json.dumps(matches, indent=3))
+            if int(hits) == 0 and not zero_results_ok:
+                raise FTSException("No docs returned for query : %s" %query_dict)
+            if expected_hits and expected_hits != hits:
+                raise FTSException("Expected hits: %s, fts returned: %s"
+                                   % (expected_hits, hits))
+            return hits, doc_ids, time_taken
+        except Exception as e:
+            self.__log.error("Error running query: %s" % e)
+            #raise FTSException("Error running query: %s" % e)
+
 class CouchbaseCluster:
 
     def __init__(self, name, nodes, log, use_hostname=False):
@@ -687,8 +695,6 @@ class CouchbaseCluster:
                 self.__fts_nodes.append(node)
             else:
                 self.__non_fts_nodes.append(node)
-        if not self.__fts_nodes:
-            print service_map
 
     def get_fts_nodes(self):
         return self.__fts_nodes
@@ -916,8 +922,7 @@ class CouchbaseCluster:
     def create_default_bucket(
             self, bucket_size, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
-            bucket_priority=BUCKET_PRIORITY.HIGH
-    ):
+            bucket_priority=BUCKET_PRIORITY.HIGH):
         """Create default bucket.
         @param bucket_size: size of the bucket.
         @param num_replicas: number of replicas (1-3).
@@ -997,7 +1002,7 @@ class CouchbaseCluster:
         for index in self.__indexes:
             index.delete()
 
-    def run_fts_query(self, index_name, query_json, node=None):
+    def run_fts_query(self, index_name, query_dict, node=None):
         """ Runs a query defined in query_json against an index/alias and
         a specific node
 
@@ -1007,9 +1012,12 @@ class CouchbaseCluster:
         """
         if not node:
             node = self.get_random_fts_node()
-        total_hits, hit_list = \
-            RestConnection(node).run_fts_query(index_name, query_json)
-        return total_hits, hit_list
+        self.__log.info("Running query %s on node: %s"
+                        % (json.dumps(query_dict['query'], ensure_ascii=False),
+                           node.ip))
+        total_hits, hit_list, time_taken = \
+            RestConnection(node).run_fts_query(index_name, query_dict)
+        return total_hits, hit_list, time_taken
 
     def get_buckets(self):
         return self.__buckets
@@ -1175,18 +1183,7 @@ class CouchbaseCluster:
         @param pause_secs: pause for next batch load.
         @param timeout_secs: timeout
         """
-        if ops not in self._kv_gen:
-            self._kv_gen[ops] = kv_gen
-
-        tasks = []
-        for bucket in self.__buckets:
-            kv_gen = copy.deepcopy(self._kv_gen[OPS.CREATE])
-            tasks.append(
-                self.__clusterop.async_load_gen_docs(
-                    self.__master_node, bucket.name, kv_gen,
-                    bucket.kvs[kv_store], ops, exp, flag,
-                    only_store_hash, batch_size, pause_secs, timeout_secs)
-            )
+        tasks = self.async_load_all_buckets_from_generator(kv_gen)
         for task in tasks:
             task.result()
 
@@ -1218,7 +1215,6 @@ class CouchbaseCluster:
                     only_store_hash, batch_size, pause_secs, timeout_secs)
             )
         return tasks
-
 
     def load_all_buckets_till_dgm(self, active_resident_threshold, items=0,
                                   exp=0, kv_store=1, flag=0,
@@ -1415,6 +1411,15 @@ class CouchbaseCluster:
             )
         return tasks
 
+    def async_run_fts_query_compare(self, fts_index, es, query_index):
+        """
+        Asynchronously run query against FTS and ES and compare result
+        note: every task runs a single query
+        """
+        task = self.__clusterop.async_run_fts_query_compare(fts_index=fts_index,
+                                                            es_instance=es,
+                                                            query_index=query_index)
+        return task
 
     def run_expiry_pager(self, val=10):
         """Run expiry pager process and set interval to 10 seconds
@@ -1430,49 +1435,6 @@ class CouchbaseCluster:
             self.__log.info("wait for expiry pager to run on all these nodes")
         time.sleep(val)
 
-    def async_create_views(
-            self, design_doc_name, views, bucket=BUCKET_NAME.DEFAULT):
-        """Create given views on Cluster.
-        @param design_doc_name: name of design doc.
-        @param views: views objects.
-        @param bucket: bucket name.
-        @return: task list for CreateViewTask
-        """
-        tasks = []
-        if len(views):
-            for view in views:
-                task = self.__clusterop.async_create_view(
-                    self.__master_node,
-                    design_doc_name,
-                    view,
-                    bucket)
-                tasks.append(task)
-        else:
-            task = self.__clusterop.async_create_view(
-                self.__master_node,
-                design_doc_name,
-                None,
-                bucket)
-            tasks.append(task)
-        return tasks
-
-    def async_compact_view(
-            self, design_doc_name, bucket=BUCKET_NAME.DEFAULT,
-            with_rebalance=False):
-        """Create given views on Cluster.
-        @param design_doc_name: name of design doc.
-        @param bucket: bucket name.
-        @param with_rebalance: True if compaction is called during
-        rebalance or False.
-        @return: task object
-        """
-        task = self.__clusterop.async_compact_view(
-            self.__master_node,
-            design_doc_name,
-            bucket,
-            with_rebalance)
-        return task
-
     def disable_compaction(self, bucket=BUCKET_NAME.DEFAULT):
         """Disable view compaction
         @param bucket: bucket name.
@@ -1486,67 +1448,6 @@ class CouchbaseCluster:
             new_config,
             bucket)
 
-    def async_monitor_view_fragmentation(
-            self,
-            design_doc_name,
-            fragmentation_value,
-            bucket=BUCKET_NAME.DEFAULT):
-        """Monitor view fragmantation during compation.
-        @param design_doc_name: name of design doc.
-        @param fragmentation_value: fragmentation threshold to monitor.
-        @param bucket: bucket name.
-        """
-        task = self.__clusterop.async_monitor_view_fragmentation(
-            self.__master_node,
-            design_doc_name,
-            fragmentation_value,
-            bucket)
-        return task
-
-    def async_query_view(
-            self, design_doc_name, view_name, query,
-            expected_rows=None, bucket="default", retry_time=2):
-        """Perform View Query for given view asynchronously.
-        @param design_doc_name: design_doc name.
-        @param view_name: view name
-        @param query: query expression
-        @param expected_rows: number of rows expected returned in query.
-        @param bucket: bucket name.
-        @param retry_time: retry to perform view query
-        @return: task object of ViewQueryTask class
-        """
-        task = self.__clusterop.async_query_view(
-            self.__master_node,
-            design_doc_name,
-            view_name,
-            query,
-            expected_rows,
-            bucket=bucket,
-            retry_time=retry_time)
-        return task
-
-    def query_view(
-            self, design_doc_name, view_name, query,
-            expected_rows=None, bucket="default", retry_time=2, timeout=None):
-        """Perform View Query for given view synchronously.
-        @param design_doc_name: design_doc name.
-        @param view_name: view name
-        @param query: query expression
-        @param expected_rows: number of rows expected returned in query.
-        @param bucket: bucket name.
-        @param retry_time: retry to perform view query
-        @param timeout: None if wait for query result until returned
-        else pass timeout value.
-        """
-
-        task = self.__clusterop.async_query_view(
-            self.__master_node,
-            design_doc_name,
-            view_name,
-            query,
-            expected_rows,
-            bucket=bucket, retry_time=retry_time)
-        task.result(timeout)
 
     def __async_rebalance_out(self, master=False, num_nodes=1):
         """Rebalance-out nodes from Cluster
@@ -1825,10 +1726,12 @@ class FTSBaseTest(unittest.TestCase):
     def setUp(self):
         unittest.TestCase.setUp(self)
         self._input = TestInputSingleton.input
+        self.elastic_node = self._input.elastic
         self.log = logger.Logger.get_logger()
         self.__init_logger()
         self.__cluster_op = Cluster()
         self.__init_parameters()
+
         self.log.info(
             "==== FTSbasetests setup is started for test #{0} {1} ===="
             .format(self.__case_number, self._testMethodName))
@@ -1886,6 +1789,8 @@ class FTSBaseTest(unittest.TestCase):
                 "====  FTSbasetests cleanup is started for test #{0} {1} ===="
                 .format(self.__case_number, self._testMethodName))
             self._cb_cluster.cleanup_cluster(self)
+            if self.compare_es:
+                self.teardown_es()
             self.log.info(
                 "====  FTSbasetests cleanup is finished for test #{0} {1} ==="
                 .format(self.__case_number, self._testMethodName))
@@ -1917,6 +1822,8 @@ class FTSBaseTest(unittest.TestCase):
                                              self.log,
                                              use_hostanames)
         self.__cleanup_previous()
+        if self.compare_es:
+            self.setup_es()
         self._cb_cluster.init_cluster(self._cluster_services,
                                       self._input.servers[1:])
         self.__set_free_servers()
@@ -1924,18 +1831,19 @@ class FTSBaseTest(unittest.TestCase):
             self.__create_buckets()
         self._master = self._cb_cluster.get_master_node()
 
+
     def construct_serv_list(self,serv_str):
         """
             Constructs a list of node services
             to rebalance into cluster
-            @param serv_str: like "D,D+C,I+Q,I" where the letters
+            @param serv_str: like "D,D+F,I+Q,F" where the letters
                              stand for services defined in serv_dict
             @return services_list: like ['kv', 'kv,fts', 'index,n1ql','index']
         """
         serv_dict = {'D': 'kv','F': 'fts','I': 'index','Q': 'n1ql'}
         for letter, serv in serv_dict.iteritems():
             serv_str = serv_str.replace(letter, serv)
-        services_list = serv_str.split(',')
+        services_list = re.split('[-,:]', serv_str)
         for index, serv in enumerate(services_list):
            services_list[index] = serv.replace('+', ',')
         return services_list
@@ -1994,15 +1902,28 @@ class FTSBaseTest(unittest.TestCase):
         self.encoding = self._input.param("encoding", "utf-8")
         self.analyzer = self._input.param("analyzer", None)
         self.index_replicas = self._input.param("index_replicas", None)
+        self.index_kv_store = self._input.param("kvstore", None)
         self.partitions_per_pindex = \
             self._input.param("max_partitions_pindex", 20)
         self.upd_del_fields = self._input.param("upd_del_fields", None)
         self.num_queries = self._input.param("num_queries", 1)
         self.query_types = (self._input.param("query_types", "match")).split(',')
-        print self.query_types
         self.index_per_bucket = self._input.param("index_per_bucket", 1)
 
         self.sample_query = {"match": "Safiya Morgan", "field": "name"}
+        self.compare_es = self._input.param("compare_es", False)
+        if self.compare_es:
+            if not self.elastic_node:
+                self.fail("For ES result validation, pls add in the"
+                          " [elastic] section in your ini file,"
+                          " else set \"compare_es\" as False")
+            self.es = ElasticSearchBase(self.elastic_node, self.log)
+            if not self.es.is_running():
+                self.fail("Could not reach Elastic Search server on %s"
+                          % self.elastic_node.ip)
+        else:
+            self.es = None
+        self.create_gen = None
 
     def __initialize_error_count_dict(self):
         """
@@ -2102,15 +2023,6 @@ class FTSBaseTest(unittest.TestCase):
             eviction_policy=self.__eviction_policy,
             bucket_priority=bucket_priority)
 
-    def load_data(self):
-        dataset = self._input.param("dataset", "emp")
-        if dataset == "all":
-            self.load_employee_dataset(self._num_items/2)
-            self.load_wiki(self._num_items/2)
-        if dataset == "emp":
-            self.load_employee_dataset(self._num_items)
-        if dataset == "wiki":
-            self.load_wiki(self._num_items, self.lang)
 
     def load_employee_dataset(self, num_items=None):
         """
@@ -2121,6 +2033,7 @@ class FTSBaseTest(unittest.TestCase):
             num_items = self._num_items
         if not self._dgm_run:
             self._cb_cluster.load_all_buckets(num_items, self._value_size)
+
         else:
             self._cb_cluster.load_all_buckets_till_dgm(
                 active_resident_threshold=self._active_resident_threshold,
@@ -2218,19 +2131,7 @@ class FTSBaseTest(unittest.TestCase):
                 "Waiting for expiration of updated items")
             self._cb_cluster.run_expiry_pager()
 
-    def construct_query_json(self, index_name, query, fields=None,
-                             max_matches=None, timeout=None):
-        query_json = QUERY.JSON
-        query_json['query'] = query
-        query_json['indexName'] = index_name
-        if max_matches:
-            query_json['size'] = int(max_matches)
-        if timeout:
-            query_json['timeout'] = int(timeout)
-        if fields:
-            query_json['fields'] = fields
-        print json.dumps(query_json, indent=3)
-        return query_json
+
 
     def print_panic_stacktrace(self, node):
         """ Prints panic stacktrace from goxdcr.log*
@@ -2290,7 +2191,11 @@ class FTSBaseTest(unittest.TestCase):
                     prev_count = index_doc_count
                 else:
                     retry_count -= 1
-                time.sleep(10)
+                time.sleep(5)
+        if self.compare_es:
+            self.es.update_index('default_es_index')
+            self.log.info("Docs in ES index: %s" %
+                          self.es.get_index_count('default_es_index'))
 
     def construct_plan_params(self):
         plan_params = {}
@@ -2309,6 +2214,9 @@ class FTSBaseTest(unittest.TestCase):
         4. if index balanced - every fts node services almost equal num of vbs?
         """
         _, defn = index.get_index_defn()
+        while not defn['planPIndexes']:
+            self.sleep(5, "No pindexes found, waiting for index to get created")
+            _, defn = index.get_index_defn()
 
         # check 1 - test number of pindexes
         import math
@@ -2341,9 +2249,10 @@ class FTSBaseTest(unittest.TestCase):
 
         # check 3 - distributed - pindex present on all fts nodes?
         if len(nodes_partitions.keys()) != num_fts_nodes:
-            self.fail("Index is not distributed, pindexes spread across %s while"
-                      "fts nodes are %s" % (nodes_partitions.keys(),
-                                           self._cb_cluster.get_fts_nodes()))
+            self.fail("Index is not properly distributed, pindexes spread across"
+                      " %s while fts nodes are %s"
+                      % (nodes_partitions.keys(),
+                        self._cb_cluster.get_fts_nodes()))
         self.log.info("Validated: pIndexes are distributed across %s " %
                       nodes_partitions.keys())
 
@@ -2357,8 +2266,8 @@ class FTSBaseTest(unittest.TestCase):
             if abs(len(pindex_partitions['partitions']) - \
                     exp_partitions_per_node) > self.partitions_per_pindex:
                 self.fail("The source partitions are not evenly distributed "
-                          "among nodes, seeing %s"
-                          % len(pindex_partitions['partitions']))
+                          "among nodes, seeing %s on %s"
+                          % (len(pindex_partitions['partitions']), node.ip))
             self.log.info("Validated: Node %s houses %s pindexes which serve"
                           " %s partitions" %
                           (node,
@@ -2366,57 +2275,50 @@ class FTSBaseTest(unittest.TestCase):
                            len(pindex_partitions['partitions'])))
         return True
 
-    def generate_random_query(self, index, num_queries=1, query_type=["match"],
+    def generate_random_queries(self, index, num_queries=1, query_type=["match"],
                               seed=0):
         """
-         Calls FTS Query Generator for employee dataset
+         Calls FTS-ES Query Generator for employee dataset
          @param num_queries: number of queries to return
          @query_type: a list of different types of queries to generate
                       like: query_type=["match", "match_phrase","bool",
                                         "conjunction", "disjunction"]
         """
-        from emp_rand_query_gen import FTSQueryGenerator
-        query_gen = FTSQueryGenerator(num_queries, query_type=query_type,
+        from emp_rand_query_gen import FTSESQueryGenerator
+        query_gen = FTSESQueryGenerator(num_queries, query_type=query_type,
                                       seed=seed)
-        for query in query_gen.queries:
-            index.queries.append(
+        for fts_query in query_gen.fts_queries:
+            index.fts_queries.append(
                 json.loads(
-                    json.dumps(query).replace("manager_", "manager.")))
-        return index.queries
+                    json.dumps(fts_query, ensure_ascii=False).
+                    replace("manages_", "manages.")))
 
-    def execute_query(self, index_name, query, zero_results_ok=True):
-        """
-         Takes a query dict, constructs a json, runs and returns results
-        """
-        show_query_results = self._input.param("show_query_results", False)
-        expected_hits = self._input.param("expected_hits", None)
-        query_json = self.construct_query_json(index_name, query)
-        try:
-            self.log.info("Running query:")
-            hits, matches = self._cb_cluster.run_fts_query(index_name, query_json)
-            self.log.info("%s hit(s)" % hits)
-            if show_query_results:
-                self.log.info("Doc matches : %s" % json.dumps(matches, indent=3))
-            if int(hits) == 0 and not zero_results_ok:
-                self.fail("No docs returned for query : %s" % query_json)
-            if expected_hits and expected_hits != hits:
-                    self.fail("Expected hits: %s, fts returned: %s"
-                              % (expected_hits, hits))
-            return hits, matches
-        except Exception as e:
-            self.log.error("Error running query: %s" % e)
-            self.fail("Error running query: %s" % e)
+        if self.compare_es:
+            for es_query in query_gen.es_queries:
+                # unlike fts, es queries are not nested before sending to fts
+                # so enclose in query dict here
+                es_query = {'query': es_query}
+                self.es.es_queries.append(json.loads(
+                    json.dumps(es_query, ensure_ascii=False).
+                    replace("manages_", "manages.")))
+            return index.fts_queries, self.es.es_queries
+
+        return index.fts_queries
 
     def create_default_index(self, bucket, index_name, plan_params=None):
         """
         Creates a default index given bucket, index_name and plan_params
         """
+        index_params = None
         bucket_password = ""
         if bucket.authType == "sasl":
             bucket_password = bucket.saslPassword
+        if self.index_kv_store:
+            index_params = {"store": {"kvStoreName": self.index_kv_store}}
         index = self._cb_cluster.create_fts_index(
             name=index_name,
             source_name=bucket.name,
+            index_params=index_params,
             source_params={"authUser": bucket.name,
                            "authPassword": bucket_password},
             plan_params=plan_params)
@@ -2473,3 +2375,113 @@ class FTSBaseTest(unittest.TestCase):
                               (bucket_count, docs_indexed))
             index_name_count_map[index.name] = docs_indexed
         return index_name_count_map
+
+    def setup_es(self):
+        """
+        Setup Elastic search - create empty index node defined under
+        'elastic' section in .ini
+        """
+        self.create_index_es()
+
+    def teardown_es(self):
+        self.es.delete_indices()
+
+    def load_data_es_from_generator(self, generator,
+                                    index_name="default_es_index"):
+        """
+            Loads json docs into ES from a generator, does a blocking load
+        """
+
+        for key, doc in generator:
+            doc = json.loads(doc)
+            self.es.load_data(index_name,
+                              json.dumps(doc, encoding='utf-8'),
+                              doc['_type'],
+                              key)
+
+
+    def create_index_es(self, index_name="default_es_index"):
+        self.es.create_empty_index(index_name)
+        self.log.info("Created empty index %s on Elastic Search node"
+                      % index_name)
+
+    def get_generator(self, dataset, num_items, start=0, encoding="utf-8",
+                      lang="EN"):
+        """
+           Returns a generator depending on the dataset
+        """
+        if dataset == "emp":
+            return JsonDocGenerator("emp",
+                                    encoding=encoding,
+                                    start=start,
+                                    end=start+num_items)
+        elif dataset == "wiki":
+            return WikiJSONGenerator("wiki",
+                                     lang=lang,
+                                     encoding=encoding,
+                                     start=start,
+                                     end=start+num_items)
+
+    def populate_create_gen(self):
+        dataset = self._input.param("dataset", "emp")
+
+        if dataset == "emp":
+            self.create_gen = self.get_generator(dataset="emp",
+                                                 num_items=self._num_items)
+        elif dataset == "wiki":
+            self.create_gen += self.get_generator(dataset="wiki",
+                                                  num_items=self._num_items)
+        if dataset == "all":
+            self.create_gen = self.get_generator(dataset="emp",
+                                                 num_items=self._num_items/2)
+            self.create_gen += self.get_generator(dataset="wiki",
+                                                  num_items=self._num_items/2)
+
+    def load_data(self):
+        """
+         Blocking call to load data to Couchbase and ES
+        """
+        load_tasks = self.async_load_data()
+        for task in load_tasks:
+            task.result()
+        self.log.info("Loading phase complete!")
+
+    def async_load_data(self):
+        """
+         For use to run with parallel tasks like rebalance, failover etc
+        """
+        load_tasks = []
+        self.populate_create_gen()
+        if self.compare_es:
+            load_tasks.append(self.es.async_load_ES(index_name='default_es_index',
+                                               gen=self.create_gen,
+                                               op_type='create'))
+        load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(
+            self.create_gen)
+        return load_tasks
+
+    def run_query_and_compare(self, index):
+        """
+        Runs every fts query and es_query and compares them as a single task
+        Runs as many tasks as there are queries
+        """
+        tasks = []
+        fail_count = 0
+        for count in range(0, len(index.fts_queries)):
+            tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                fts_index=index,
+                es=self.es,
+                query_index=count))
+
+        num_queries = len(tasks)
+
+        for task in tasks:
+            task.result()
+            if not task.passed:
+                fail_count += 1
+
+        if fail_count:
+            self.fail("%s out of %s queries failed!" % (fail_count, num_queries))
+        else:
+            self.log.info("SUCCESS: %s out of %s queries passed"
+                          %(num_queries-fail_count, num_queries))
