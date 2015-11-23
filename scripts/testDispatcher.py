@@ -72,7 +72,7 @@ def main():
     cb = Bucket('couchbase://' + TEST_SUITE_DB + '/QE-Test-Suites')
 
     if options.component is None or options.component == 'None':
-        query = N1QLQuery("select * from `QE-Test-Suites` where '" + options.run + "' in partOf")
+        query = N1QLQuery("select * from `QE-Test-Suites` where '" + options.run + "' in partOf order by component")
     else:
         queryString = "select * from `QE-Test-Suites` where '{0}' in partOf and component ='{1}';"
         print 'the query is', queryString.format(options.run, options.component )
@@ -99,6 +99,7 @@ def main():
             print 'OS does not apply to', data['component'], data['subcomponent']
 
     print 'tests to launch',testsToLaunch
+
 
 
     launchString = 'http://qa.sc.couchbase.com/job/test_suite_executor/buildWithParameters?token=test_dispatcher&' + \
