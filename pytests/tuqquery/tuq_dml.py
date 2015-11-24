@@ -121,8 +121,8 @@ class DMLQueryTests(QueryTests):
 
     def test_insert_returning_alias(self):
         keys = ['%s%s' % (k, str(uuid.uuid4())[:5]) for k in xrange(10)]
-        expected_item_values = [{'name': 'return_%s' % v} for v in xrange(10)]
         for bucket in self.buckets:
+            expected_item_values = [{'name': 'return_%s' % v} for v in xrange(10)]
             values = ''
             for k, v in zip(keys, expected_item_values):
                 inserted = v
@@ -136,8 +136,7 @@ class DMLQueryTests(QueryTests):
             #modified to support the alias
             expected_item_values = [{u'new_name': u'return_%s' % v} for v in xrange(10)]
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.assertEqual(sorted(actual_result['results']), sorted([v[u'new_name'] for v in expected_item_values]),
-                'Results expected:%s, actual: %s' % (expected_item_values, actual_result['results']))
+            self.assertEqual(sorted(actual_result['results']),sorted(expected_item_values))
 
     def test_insert_values_returning_elements(self):
         keys = ['%s%s' % (k, str(uuid.uuid4())[:5]) for k in xrange(10)]
@@ -837,6 +836,22 @@ class DMLQueryTests(QueryTests):
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
 
+    def test_delete_where(self):
+        self.key1 = "n1qlDelW1"
+        self.key2 = "n1qlDelW2"
+        self.doc1 = {"type": "abc"}
+        self.doc2 = {"type": "def"}
+        self.query = 'INSERT into %s (key , value) VALUES ("%s", %s),("%s",%s)' % (self.buckets[1].name, self.key1, self.doc1,self.key2,self.doc2)
+        actual_result= self.run_cbq_query()
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result["metrics"]["mutationCount"],2,"Mutation Count is correct")
+        self.query = "delete from %s WHERE type = 'def' "  % (self.buckets[1].name)
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result["metrics"]["mutationCount"],1,"Mutation Count is correct")
+        self.query = "delete from %s WHERE type = 'abc' "  % (self.buckets[1].name)
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result["metrics"]["mutationCount"],1,"Mutation Count is correct")
+
 ############################################################################################################################
 #
 # MERGE
@@ -875,67 +890,85 @@ class DMLQueryTests(QueryTests):
         self.assertEqual(len(actual_result['results']), 0, 'Query was not run successfully')
 
     def test_merge_delete_where_match(self):
-        self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
+        #self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
         keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete_where')
-        self.query = 'MERGE INTO %s USING %s on key "%s" when matched then delete where name LIKE "empl%"'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
+        self.log.info(keys)
+        self.query = 'MERGE INTO %s USING %s s0 on key "%s" when matched then delete where s0.name LIKE "%s"'  % (self.buckets[0].name, self.buckets[1].name, keys[0],"employee")
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.assertEqual(actual_result['results']['rows'], 0, 'Query was not run successfully')
+        self.assertEqual(len(actual_result['results']), 0, 'Query was not run successfully')
 
     def test_merge_update_match_set(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
-        keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_update')
-        new_name = 'edited'
-        self.query = 'MERGE INTO %s USING %s on key "%s" when matched then update set name="%s"'  % (self.buckets[0].name, self.buckets[1].name, keys[0], new_name)
+        key = "test"
+        value = '{"name": "new1"}'
+        self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name, key, value)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.query = 'SELECT name FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
+        value = '{"name": "new2"}'
+        self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[0].name, "new1", value)
+        actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.assertEqual(actual_result['results']['name'], new_name, 'Name was not updated')
+        new_name = 'edit'
+        self.query = 'MERGE INTO %s b1 USING %s b2 on key name when matched then update set b1.name="%s"'  % (self.buckets[0].name, self.buckets[1].name, new_name)
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self.query = 'SELECT name FROM %s'  % (self.buckets[0].name)
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result['results'][0]['name'], new_name, 'Name was not updated')
 
     def test_merge_update_match_unset(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
-        keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_unset')
-        self.query = 'MERGE INTO %s USING %s on key "%s" when matched then update unset name'  % (self.buckets[0].name, self.buckets[1].name, keys[0])
+        key = "test"
+        value = '{"name": "new1"}'
+        self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name, key, value)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.query = 'SELECT * as doc FROM %s KEY %s'  % (self.buckets[0].name, keys[0])
+        value = '{"name": "new2"}'
+        self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[0].name, "new1", value)
+        actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.assertTrue('name' not in actual_result['results']['doc'], 'Name was not unset')
+        self.query = 'MERGE INTO %s b1 USING %s b2 on key name when matched then update unset b1.name'  % (self.buckets[0].name, self.buckets[1].name)
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self.query = 'SELECT * FROM %s '  % (self.buckets[0].name)
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self.assertTrue('name' not in actual_result['results'], 'Name was not unset')
 
     def test_merge_not_match_insert(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
-        self.query = 'select count(*) as actual from %s where job_title="Engineer"'  % (self.buckets[0].name)
-        self.run_cbq_query()
-        self.sleep(5, 'wait for index')
-        actual_result = self.run_cbq_query()
-        current_docs = actual_result['results'][0]['actual']
-        new_key = 'NEW'
-        self.query = 'MERGE INTO %s USING %s on key %s when not matched then insert %s'  % (
-                                                            self.buckets[0].name, self.buckets[1].name, self.buckets[0].name, new_key, '{"name": "new"}')
+        key = "test"
+        value = '{"name": "new1"}'
+        self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name, key, value)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, new_key)
+        self.query = 'MERGE INTO %s b1 USING %s b2 on key b2.%s when not matched then insert %s'  % (
+
+                                                            self.buckets[0].name, self.buckets[1].name, 'name', '{"name": "new"}')
+        actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.assertEqual(actual_result['results']['rows'], 1, 'Query was not run successfully')
+        self.query = 'SELECT count(*) FROM %s'  % (self.buckets[0].name)
+        actual_result = self.run_cbq_query()
+        self.assertEqual(len(actual_result['results']), 1, 'Query was not run successfully')
 
     def test_merge_select_not_match_insert(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
-        self.query = 'select count(*) as actual from %s where job_title="Engineer"'  % (self.buckets[0].name)
-        self.run_cbq_query()
-        self.sleep(5, 'wait for index')
-        actual_result = self.run_cbq_query()
-        current_docs = actual_result['results'][0]['actual']
-        new_key = 'NEW'
-        self.query = 'MERGE INTO %s USING (select * from %s where job_title="Engineer") on key %s when not matched then insert %s'  % (
-                                                            self.buckets[0].name, self.buckets[1].name, self.buckets[0].name, new_key, '{"name": "new"}')
+        key = "test"
+        value = '{"name": "new1"}'
+        self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name, key, value)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.query = 'SELECT count(*) as rows FROM %s KEY %s'  % (self.buckets[0].name, new_key)
+        self.query = 'MERGE INTO %s b1 USING (select * from %s b2) as s on key b2.%s when not matched then insert %s'  % (
+                                                            self.buckets[0].name, self.buckets[1].name,'name', '{"name": "new"}')
+        actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self.assertEqual(actual_result['results']['rows'], 1, 'Query was not run successfully')
+        self.query = 'SELECT count(*) FROM %s '  % (self.buckets[0].name)
+        actual_result = self.run_cbq_query()
+        self.assertEqual(len(actual_result['results']), 1, 'Query was not run successfully')
 ############################################################################################################################
 #
 # UPDATE
@@ -1149,33 +1182,45 @@ class DMLQueryTests(QueryTests):
                              if len([vm['os'] for vm in row['VMs']
                                      if vm['os'] == updated_value]) == 1], 'Os of vms were not changed')
 
-    def update_keys_clause_hints(self, idx_name):
+    def update_keys_clause_hints(self,idx_name):
         num_docs = self.input.param('num_docs', 10)
         keys, _ = self._insert_gen_keys(num_docs, prefix='update_keys_hints %s' % str(uuid.uuid4())[:4])
         updated_value = 'new_name'
+        index_name = 'idx_name'
         for bucket in self.buckets:
-            self.query = 'update %s use index(%s using %s) set name="%s"'  % (bucket.name, idx_name, self.index_type, updated_value)
+            self.query = "CREATE INDEX %s ON %s(name) USING %s" % (index_name, bucket.name,self.index_type)
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, index_name)
+            self.query = 'update %s use index(%s using %s) set name="%s"'  % (bucket.name, index_name, self.index_type, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.query = 'select name from %s use index(%s using %s)' % (bucket.name, idx_name, self.index_type)
+            self.query = 'select name from %s use index(%s using %s)' % (bucket.name, index_name, self.index_type)
             self.run_cbq_query()
             self.sleep(10, 'wait for index')
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['results'],[{'name':updated_value}] * num_docs, 'Names were not changed')
+            self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
+            self.run_cbq_query()
 
-    def update_where_hints(self, idx_name):
+    def update_where_hints(self,idx_name):
         num_docs = self.input.param('num_docs', 10)
         _, values = self._insert_gen_keys(num_docs, prefix='update_where %s' % str(uuid.uuid4())[:4])
         updated_value = 'new_name'
+        index_name = 'idx_name'
         for bucket in self.buckets:
-            self.query = 'update %s use index(%s using %s) set name="%s" where join_day=1 returning name'  % (bucket.name, idx_name, self.index_type, updated_value)
+            self.query = "CREATE INDEX %s ON %s(join_day) USING %s" % (index_name, bucket.name,self.index_type)
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, index_name)
+            self.query = 'update %s use index(%s using %s) set name="%s" where join_day=1 returning name'  % (bucket.name, index_name, self.index_type, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.query = 'select name from %s use index(%s using %s) where join_day=1' % (bucket.name, idx_name, self.index_type)
+            self.query = 'select name from %s use index(%s using %s) where join_day=1' % (bucket.name, index_name, self.index_type)
             self.run_cbq_query()
             self.sleep(10, 'wait for index')
             actual_result = self.run_cbq_query()
             self.assertFalse([doc for doc in actual_result['results'] if doc['name'] != updated_value], 'Names were not changed')
+            self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
+            self.run_cbq_query()
 
 ########################################################################################################################
 #

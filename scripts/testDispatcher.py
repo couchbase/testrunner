@@ -7,6 +7,7 @@ import json
 import string
 import time
 from optparse import OptionParser
+import traceback
 
 from couchbase import Couchbase
 from couchbase.bucket import Bucket
@@ -19,7 +20,7 @@ from couchbase.n1ql import N1QLQuery
 
 # need a timeout param
 
-POLL_INTERVAL = 15
+POLL_INTERVAL = 60
 SERVER_MANAGER = '172.23.105.177:8081'
 TEST_SUITE_DB = '172.23.105.177'
 
@@ -71,7 +72,7 @@ def main():
     cb = Bucket('couchbase://' + TEST_SUITE_DB + '/QE-Test-Suites')
 
     if options.component is None or options.component == 'None':
-        query = N1QLQuery("select * from `QE-Test-Suites` where '" + options.run + "' in partOf")
+        query = N1QLQuery("select * from `QE-Test-Suites` where '" + options.run + "' in partOf order by component")
     else:
         queryString = "select * from `QE-Test-Suites` where '{0}' in partOf and component ='{1}';"
         print 'the query is', queryString.format(options.run, options.component )
@@ -100,6 +101,7 @@ def main():
     print 'tests to launch',testsToLaunch
 
 
+
     launchString = 'http://qa.sc.couchbase.com/job/test_suite_executor/buildWithParameters?token=test_dispatcher&' + \
                         'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
                          'iniFile={5}&servers={6}&parameters={7}&os={8}'
@@ -107,56 +109,62 @@ def main():
     summary = []
 
     while len(testsToLaunch) > 0:
-        response, content = httplib2.Http(timeout=60).request('http://172.23.105.177:8081/getavailablecount/{0}'.format(options.os), 'GET')
-        if response.status != 200:
-           print time.asctime( time.localtime(time.time()) ), 'invalid server response', content
-           time.sleep(POLL_INTERVAL)
-        elif int(content) == 0:
-            print time.asctime( time.localtime(time.time()) ), 'no VMs'
-            time.sleep(POLL_INTERVAL)
-        else:
-            #see if we can match a test
-            serverCount = int(content)
-            print time.asctime( time.localtime(time.time()) ), 'there are', serverCount, ' servers available'
-
-            haveTestToLaunch = False
-            i = 0
-            while not haveTestToLaunch and i < len(testsToLaunch):
-                #print 'i', i, 'ttl sc', testsToLaunch[i]['serverCount']
-                if testsToLaunch[i]['serverCount'] <= serverCount:
-                    haveTestToLaunch = True
-                else:
-                    i = i + 1
-
-            if haveTestToLaunch:
-                descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent']
-                # get the VMs, they should be there
-                response, content = httplib2.Http(timeout=60).request('http://' + SERVER_MANAGER +
-                        '/getservers/{0}?count={1}&expiresin={2}&os={3}'.
-                   format(descriptor, testsToLaunch[i]['serverCount'],testsToLaunch[i]['timeLimit'],options.os), 'GET')
-
-                if response.status == 499:
-                    time.sleep(POLL_INTERVAL) # some error checking here at some point
-                else:
-                    r2 = json.loads(content)
-                    url = launchString.format(options.version, testsToLaunch[i]['confFile'],
-                                         descriptor, testsToLaunch[i]['component'],
-                                         testsToLaunch[i]['subcomponent'], testsToLaunch[i]['iniFile'],
-                                         urllib.quote(json.dumps(r2).replace(' ','')),
-                                         urllib.quote(testsToLaunch[i]['parameters']), options.os)
-                    print 'launching', url
-                    print time.asctime( time.localtime(time.time()) ), 'launching ', descriptor
-
-
-                    if not options.noLaunch:  # sorry for the double negative
-                        response, content = httplib2.Http(timeout=60).request(url, 'GET')
-                    testsToLaunch.pop(i)
-                    summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
-            else:
-                print 'no VMs at this time'
+        try:
+            response, content = httplib2.Http(timeout=60).request('http://172.23.105.177:8081/getavailablecount/{0}'.format(options.os), 'GET')
+            if response.status != 200:
+               print time.asctime( time.localtime(time.time()) ), 'invalid server response', content
+               time.sleep(POLL_INTERVAL)
+            elif int(content) == 0:
+                print time.asctime( time.localtime(time.time()) ), 'no VMs'
                 time.sleep(POLL_INTERVAL)
-        #endif checking for servers
+            else:
+                #see if we can match a test
+                serverCount = int(content)
+                print time.asctime( time.localtime(time.time()) ), 'there are', serverCount, ' servers available'
+
+                haveTestToLaunch = False
+                i = 0
+                while not haveTestToLaunch and i < len(testsToLaunch):
+                    #print 'i', i, 'ttl sc', testsToLaunch[i]['serverCount']
+                    if testsToLaunch[i]['serverCount'] <= serverCount:
+                        haveTestToLaunch = True
+                    else:
+                        i = i + 1
+
+                if haveTestToLaunch:
+                    descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent']
+                    # get the VMs, they should be there
+                    response, content = httplib2.Http(timeout=60).request('http://' + SERVER_MANAGER +
+                            '/getservers/{0}?count={1}&expiresin={2}&os={3}'.
+                       format(descriptor, testsToLaunch[i]['serverCount'],testsToLaunch[i]['timeLimit'],options.os), 'GET')
+
+                    if response.status == 499:
+                        time.sleep(POLL_INTERVAL) # some error checking here at some point
+                    else:
+                        r2 = json.loads(content)
+                        url = launchString.format(options.version, testsToLaunch[i]['confFile'],
+                                             descriptor, testsToLaunch[i]['component'],
+                                             testsToLaunch[i]['subcomponent'], testsToLaunch[i]['iniFile'],
+                                             urllib.quote(json.dumps(r2).replace(' ','')),
+                                             urllib.quote(testsToLaunch[i]['parameters']), options.os)
+                        print 'launching', url
+                        print time.asctime( time.localtime(time.time()) ), 'launching ', descriptor
+
+
+                        if not options.noLaunch:  # sorry for the double negative
+                            response, content = httplib2.Http(timeout=60).request(url, 'GET')
+                        testsToLaunch.pop(i)
+                        summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
+                else:
+                    print 'no VMs at this time'
+                    time.sleep(POLL_INTERVAL)
+            #endif checking for servers
+
+        except Exception as e:
+            print 'have an exception'
+            print traceback.format_exc()
     #endwhile
+
 
 
     print '\n\n\ndone, everything is launched'
