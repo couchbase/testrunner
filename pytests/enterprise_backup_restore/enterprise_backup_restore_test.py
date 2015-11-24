@@ -3,7 +3,6 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from enterprise_backup_restore.enterprise_backup_base import EnterpriseBackupRestoreBase
 from enterprise_backup_restore.validation_helpers.valdation_base import ValidationBase
 from membase.api.rest_client import RestConnection
-from memcached.helper.data_helper import VBucketAwareMemcached
 
 
 class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
@@ -26,23 +25,20 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         if not status:
             self.fail(msg)
         self.log.info(msg)
+        prev_seq_no = self.get_vbucket_seqnos(opt_nodes, self.buckets)
         rest = RestConnection(self.servers[0])
         buckets = rest.get_buckets()
         bucketnames = []
         for bucket in buckets:
-            client = VBucketAwareMemcached(RestConnection(self.master), bucket)
             bucketname = "{0}-{1}".format(bucket.name, bucket.uuid)
             bucketnames.append(bucketname)
-            temp = bucket.kvs[1]
-            valid_key, deleted_keys = temp.key_set()
-            valid_keys = client.getMulti(valid_key)
-            valid = {key: list(valid_keys[key])[2:] for key in valid_keys}
         self.backupset.buckets_list(bucketnames)
         status, msg = self.validation_helper.validate_backup()
         if not status:
             self.fail(msg)
         self.log.info(msg)
         self._load_all_buckets(self.master, gen, "update", 0)
+        cur_seq_no = self.get_vbucket_seqnos(opt_nodes, self.buckets)
         self.backup_restore()
         status, msg = self.validation_helper.validate_restore()
         if not status:
