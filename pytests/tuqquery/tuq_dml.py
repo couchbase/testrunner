@@ -836,6 +836,22 @@ class DMLQueryTests(QueryTests):
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
 
+    def test_delete_where(self):
+        self.key1 = "n1qlDelW1"
+        self.key2 = "n1qlDelW2"
+        self.doc1 = {"type": "abc"}
+        self.doc2 = {"type": "def"}
+        self.query = 'INSERT into %s (key , value) VALUES ("%s", %s),("%s",%s)' % (self.buckets[1].name, self.key1, self.doc1,self.key2,self.doc2)
+        actual_result= self.run_cbq_query()
+        self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+        self.assertEqual(actual_result["metrics"]["mutationCount"],2,"Mutation Count is correct")
+        self.query = "delete from %s WHERE type = 'def' "  % (self.buckets[1].name)
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result["metrics"]["mutationCount"],1,"Mutation Count is correct")
+        self.query = "delete from %s WHERE type = 'abc' "  % (self.buckets[1].name)
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result["metrics"]["mutationCount"],1,"Mutation Count is correct")
+
 ############################################################################################################################
 #
 # MERGE
