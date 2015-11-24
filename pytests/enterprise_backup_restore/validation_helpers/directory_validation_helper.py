@@ -96,8 +96,7 @@ class DirectoryValidationHelper:
         return directory_structure
 
     def generate_directory_structure(self):
-        json_helper = JSONGenerator("/pytests/enterprise_backup_restore/validation_helpers/"
-                                    "directory_structure.json", self.backupset.__dict__)
+        json_helper = JSONGenerator("directory_structure.json", self.backupset.__dict__)
         json_helper.generate()
         backupset = json_helper.object[self.backupset.name]
         for backup in backupset:
