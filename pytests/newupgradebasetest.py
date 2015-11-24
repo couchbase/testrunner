@@ -85,6 +85,9 @@ class NewUpgradeBaseTest(BaseTestCase):
         if type.lower() == "ubuntu":
             self.is_ubuntu = True
         self.queue = Queue.Queue()
+        rest = RestConnection(self.master)
+        self.initial_version = self.input.param("initial_version", version)
+        self.upgrade_servers = []
 
     def tearDown(self):
         test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
@@ -112,18 +115,23 @@ class NewUpgradeBaseTest(BaseTestCase):
                         temp.append(server)
                 self.servers = temp
             except Exception, e:
+                log.info("Exception " + e)
                 self.cluster.shutdown(force=True)
                 self.fail(e)
             super(NewUpgradeBaseTest, self).tearDown()
+            if self.upgrade_servers:
+                self._install(self.upgrade_servers,version=self.initial_version)
         self.sleep(20, "sleep 20 seconds before run next test")
 
-    def _install(self, servers):
+    def _install(self, servers, version=None):
         params = {}
         params['num_nodes'] = len(servers)
         params['product'] = self.product
         params['version'] = self.initial_version
         params['vbuckets'] = [self.initial_vbuckets]
         params['init_nodes'] = self.init_nodes
+        if version:
+            params['version'] = version
         if self.initial_build_type is not None:
             params['type'] = self.initial_build_type
         self.log.info("will install {0} on {1}".format(self.initial_version, [s.ip for s in servers]))
@@ -225,8 +233,9 @@ class NewUpgradeBaseTest(BaseTestCase):
             if self.is_ubuntu:
                 remote.start_server()
             """ remove end here """
-            remote.disconnect()
-            self.sleep(10)
+            #remote.disconnect()
+            #self.sleep(10)
+            self.rest = RestConnection(server)
             if self.is_linux:
                 self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 4, wait_if_warmup=True)
             else:
