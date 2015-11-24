@@ -5,7 +5,7 @@ from os import path
 class JSONGenerator:
     def __init__(self, template, input_dict):
         pwd = path.dirname(__file__)
-        file_path = path.join(pwd, "directory_structure.json")
+        file_path = path.join(pwd, template)
         self.template = file_path
 
         self.input = input_dict
@@ -14,18 +14,22 @@ class JSONGenerator:
     def test(self, obj, template_json):
         if isinstance(template_json, dict):
             for key in template_json.keys():
-                if isinstance(template_json[key], unicode):
-                    if template_json[key]:
+                if not isinstance(template_json[key], list) and not isinstance(template_json[key], dict):
+                    if key in self.input and self.input[key] != "":
+                        obj[key] = self.input[key]
+                    elif key in template_json:
                         obj[key] = template_json[key]
                     else:
-                        obj[key] = self.input[key]
+                        obj[key] = ""
                     continue
                 if isinstance(template_json[key], list):
                     obj[key] = []
-                    if template_json[key]:
-                        obj[key].extend(template_json[key])
-                    elif self.input[key]:
+                    if key in self.input and self.input[key]:
                         obj[key].extend(self.input[key])
+                    elif key in template_json and template_json[key]:
+                        obj[key].extend(template_json[key])
+                    else:
+                        obj[key] = []
                     continue
                 if isinstance(template_json[key], dict):
                     if key in self.input:
