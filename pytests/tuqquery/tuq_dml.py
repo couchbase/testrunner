@@ -1182,7 +1182,7 @@ class DMLQueryTests(QueryTests):
                              if len([vm['os'] for vm in row['VMs']
                                      if vm['os'] == updated_value]) == 1], 'Os of vms were not changed')
 
-    def update_keys_clause_hints(self,idx_name):
+    def update_keys_clause_hints(self):
         num_docs = self.input.param('num_docs', 10)
         keys, _ = self._insert_gen_keys(num_docs, prefix='update_keys_hints %s' % str(uuid.uuid4())[:4])
         updated_value = 'new_name'
@@ -1202,7 +1202,7 @@ class DMLQueryTests(QueryTests):
             self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
             self.run_cbq_query()
 
-    def update_where_hints(self,idx_name):
+    def update_where_hints(self):
         num_docs = self.input.param('num_docs', 10)
         _, values = self._insert_gen_keys(num_docs, prefix='update_where %s' % str(uuid.uuid4())[:4])
         updated_value = 'new_name'

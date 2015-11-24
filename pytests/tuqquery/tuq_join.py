@@ -70,6 +70,7 @@ class JoinTests(QueryTests):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
+
     def test_where_join_keys(self):
         for bucket in self.buckets:
             self.query = "SELECT employee.name, employee.tasks_ids, new_project_full.project new_project " +\
@@ -84,6 +85,21 @@ class JoinTests(QueryTests):
                                doc['project'] == 'IT']
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+
+    def test_bidirectional_join(self):
+        for bucket in self.buckets:
+            self.query = "create index idx on default(tasks_ids)";
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+            self.query = "SELECT employee.name, employee.tasks_ids " +\
+            "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
+            "ON KEY new_project_full.tasks_ids FOR employee"
+            import pdb;pdb.set_trace()
+            actual_result = self.run_cbq_query()
+            self.assertTrue(actual_result['metrics']['resultCount'] == 0, 'Query was not run successfully')
+            self.query = "drop index default.idx";
+            actual_result = self.run_cbq_query()
+
 
     def test_where_join_keys_covering(self):
         created_indexes = []
