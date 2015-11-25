@@ -36,7 +36,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
-        self.upgrade_versions = self.input.param('upgrade_version', '2.0.1-170-rel')
+        self.upgrade_versions = self.input.param('upgrade_version', '4.1.0-4963')
         self.upgrade_versions = self.upgrade_versions.split(";")
         self.init_nodes = self.input.param('init_nodes', True)
 
@@ -85,13 +85,19 @@ class NewUpgradeBaseTest(BaseTestCase):
         if type.lower() == "ubuntu":
             self.is_ubuntu = True
         self.queue = Queue.Queue()
-        rest = RestConnection(self.master)
-        self.initial_version = self.input.param("initial_version", version)
+        """ in upgrade, we do not check couchbase server running or not
+            since we install couchbase server right at start """
+        if not self.skip_init_check_cbserver:
+            rest = RestConnection(self.master)
+            self.initial_version = self.input.param("initial_version", version)
         self.upgrade_servers = []
 
     def tearDown(self):
-        test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
-                    or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
+        test_failed = (hasattr(self, '_resultForDoCleanups') and \
+                       len(self._resultForDoCleanups.failures or \
+                           self._resultForDoCleanups.errors)) or \
+                                 (hasattr(self, '_exc_info') and \
+                                  self._exc_info()[1] is not None)
         if test_failed:
                 self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
                 self.cluster.shutdown(force=True)
@@ -99,7 +105,8 @@ class NewUpgradeBaseTest(BaseTestCase):
                 pprint(self.input.test_params)
 
                 if self.input.param('BUGS', False):
-                    self.log.warn("Test failed. Possible reason is: {0}".format(self.input.param('BUGS', False)))
+                    self.log.warn("Test failed. Possible reason is: {0}"
+                                           .format(self.input.param('BUGS', False)))
         else:
             if not hasattr(self, 'rest'):
                 return
