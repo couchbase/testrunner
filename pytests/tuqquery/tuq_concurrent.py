@@ -28,8 +28,8 @@ class ConcurrentTests(QueryTests):
             super(ConcurrentTests, self).tearDown()
         except:
             pass
-        ClusterOperationHelper.cleanup_cluster(self.servers)
-        self.sleep(10)
+        #ClusterOperationHelper.cleanup_cluster(self.servers)
+        #self.sleep(10)
 
     def suite_tearDown(self):
         super(ConcurrentTests, self).suite_tearDown()
