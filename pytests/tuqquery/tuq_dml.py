@@ -1243,7 +1243,11 @@ class DMLQueryTests(QueryTests):
         try:
             for indx in indexes:
                 fn = getattr(self, method_name)
-                fn(indx)
+                if("update_where_hints" in str(fn) or "update_keys_clause_hints" in str(fn)):
+                    fn()
+                else:
+                    fn(indx)
+
         finally:
             for bucket in self.buckets:
                 for indx in indexes:
