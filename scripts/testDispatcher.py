@@ -74,9 +74,17 @@ def main():
     if options.component is None or options.component == 'None':
         query = N1QLQuery("select * from `QE-Test-Suites` where '" + options.run + "' in partOf order by component")
     else:
-        queryString = "select * from `QE-Test-Suites` where '{0}' in partOf and component ='{1}';"
-        print 'the query is', queryString.format(options.run, options.component )
-        query = N1QLQuery(queryString.format(options.run, options.component ))
+        splitComponents = options.component.split(',')
+        componentString = ''
+        for i in range( len(splitComponents) ):
+            componentString = componentString + "'" + splitComponents[i] + "'"
+            if i < len(splitComponents) - 1:
+                componentString = componentString + ','
+
+
+        queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in [{1}] order by component;".format(options.run, componentString)
+        print 'the query is', queryString #.format(options.run, componentString)
+        query = N1QLQuery(queryString ) #.format(options.run, options.component, componentString ))
     results = cb.n1ql_query( query )
 
 
@@ -98,8 +106,9 @@ def main():
         else:
             print 'OS does not apply to', data['component'], data['subcomponent']
 
-    print 'tests to launch',testsToLaunch
-
+    print 'tests to launch:'
+    for i in testsToLaunch: print i['component'], i['subcomponent']
+    print '\n\n'
 
 
     launchString = 'http://qa.sc.couchbase.com/job/test_suite_executor/buildWithParameters?token=test_dispatcher&' + \
@@ -134,6 +143,8 @@ def main():
                 if haveTestToLaunch:
                     descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent']
                     # get the VMs, they should be there
+
+
                     response, content = httplib2.Http(timeout=60).request('http://' + SERVER_MANAGER +
                             '/getservers/{0}?count={1}&expiresin={2}&os={3}'.
                        format(descriptor, testsToLaunch[i]['serverCount'],testsToLaunch[i]['timeLimit'],options.os), 'GET')
@@ -147,14 +158,21 @@ def main():
                                              testsToLaunch[i]['subcomponent'], testsToLaunch[i]['iniFile'],
                                              urllib.quote(json.dumps(r2).replace(' ','')),
                                              urllib.quote(testsToLaunch[i]['parameters']), options.os)
-                        print 'launching', url
+                        #print 'launching', url
                         print time.asctime( time.localtime(time.time()) ), 'launching ', descriptor
 
 
-                        if not options.noLaunch:  # sorry for the double negative
+                        if options.noLaunch:
+                            # free the VMs
+                            time.sleep(3)
+                            response, content = httplib2.Http(timeout=60).\
+                                request('http://172.23.105.177:8081/releaseservers/' + descriptor, 'GET')
+                        else:
                             response, content = httplib2.Http(timeout=60).request(url, 'GET')
+
                         testsToLaunch.pop(i)
                         summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
+                        #time.sleep(5)
                 else:
                     print 'no VMs at this time'
                     time.sleep(POLL_INTERVAL)
