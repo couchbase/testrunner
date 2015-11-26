@@ -764,23 +764,18 @@ class QueriesViewsTests(QueryTests):
             return indexes, query
 
     def run_intersect_scan_explain_query(self, indexes_names, query_temp):
+        actual_index = []
         for bucket in self.buckets:
-            query = 'EXPLAIN %s' % (query_temp % (bucket.name))
+            query = 'EXPLAIN %s' % (query_temp)
             res = self.run_cbq_query(query=query)
-            self.log.info(res)
-            result = res["results"][0]["~children"][0]["~children"][0] if "~children" in res["results"][0]["~children"][0] \
-                        else res["results"][0]["~children"][0]
-            self.assertTrue(result["#operator"] == 'IntersectScan',
-                                    "Index should be intersect scan and is %s" % (res["results"]))
-            actual_indexes = [scan['scans'][0]['index'] if 'scans' in scan else scan['index']
-                              for scan in result['scans']]
-            self.assertTrue(set(actual_indexes) == set(indexes_names),
-                            "Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
+            actual_index.append(res['results'][0]['node']['name'])
+        self.assertTrue(len(set(actual_index).intersection(indexes_names)) > 0)
 
     def _delete_indexes(self, indexes):
+        count = 0
         for bucket in self.buckets:
-            for indx in indexes:
-                query = "DROP INDEX %s.%s USING %s" % (bucket.name, indx, self.index_type)
+                query = "DROP INDEX %s.%s USING %s" % (bucket.name, indexes[count], self.index_type)
+                count =count+1
                 try:
                    self.run_cbq_query(query=query)
                 except:
