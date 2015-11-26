@@ -20,7 +20,7 @@ from couchbase.n1ql import N1QLQuery
 
 # need a timeout param
 
-POLL_INTERVAL = 60
+POLL_INTERVAL = 120
 SERVER_MANAGER = '172.23.105.177:8081'
 TEST_SUITE_DB = '172.23.105.177'
 
@@ -172,7 +172,7 @@ def main():
 
                         testsToLaunch.pop(i)
                         summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
-                        #time.sleep(5)
+                        time.sleep(5)
                 else:
                     print 'no VMs at this time'
                     time.sleep(POLL_INTERVAL)
