@@ -743,30 +743,13 @@ class DMLQueryTests(QueryTests):
 
     def test_delete_where_clause_json_less_equal(self):
         keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
-        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_day"] <=1]
+        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["join_day"] <=1]
         for bucket in self.buckets:
-            self.query = 'delete from %s where job_day<=1'  % (bucket.name)
+            self.query = 'delete from %s where join_day<=1'  % (bucket.name)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
 
-    def test_delete_where_clause_json_not_equal(self):
-        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
-        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_title"] != 'Engineer']
-        for bucket in self.buckets:
-            self.query = 'delete from %s where job_title!="Engineer"'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self._keys_are_deleted(keys_to_delete)
-
-    def test_delete_where_clause_json_less_equal(self):
-        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
-        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_day"] <=1]
-        for bucket in self.buckets:
-            self.query = 'delete from %s where job_day<=1'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self._keys_are_deleted(keys_to_delete)
 
     def test_prepared_delete_where_clause_json_less_equal(self):
         keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
