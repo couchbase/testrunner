@@ -85,11 +85,6 @@ class NewUpgradeBaseTest(BaseTestCase):
         if type.lower() == "ubuntu":
             self.is_ubuntu = True
         self.queue = Queue.Queue()
-        """ in upgrade, we do not check couchbase server running or not
-            since we install couchbase server right at start """
-        if not self.skip_init_check_cbserver:
-            rest = RestConnection(self.master)
-            self.initial_version = self.input.param("initial_version", version)
         self.upgrade_servers = []
 
     def tearDown(self):
