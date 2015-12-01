@@ -44,6 +44,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.cli_command_location = "/opt/couchbase/bin"
         self.backups = []
         self.validation_helper = ValidationBase(self.backupset)
+        self.number_of_backups = backup_number_times
+        self.number_of_backups_taken = 0
 
     def tearDown(self):
         super(EnterpriseBackupRestoreBase, self).tearDown()
@@ -83,9 +85,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if error or "Backup `{0}` created successfully".format(self.backupset.name) not in output:
-            return False, error, "Creating backupset failed."
-        else:
-            return True, output, "Created backupset with args: {0}".format(args)
+            self.fail("Creating backupset failed.")
+        status, msg = self.validation_helper.validate_backup_create()
+        if not status:
+            self.fail(msg)
+        self.log.info(msg)
 
     def backup_cluster(self):
         args = "cluster --dir {0} --name {1} --host http://{2}:{3} --username {4} --password {5}". \
@@ -101,15 +105,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if output:
-            return False, output, "Taking cluster backup failed."
-        else:
-            command = "ls -tr {0}/{1} | tail -1".format(self.backupset.dir, self.backupset.name)
-            output, error = remote_client.execute_command(command)
-            if output:
-                self.backups.append(output[0])
-            elif error:
-                self.backups.append(output[0])
-            return True, error, "Finished taking backup  with args: {0}".format(args)
+            self.fail("Taking cluster backup failed.")
+        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.dir, self.backupset.name)
+        output, error = remote_client.execute_command(command)
+        if output:
+            self.backups.append(output[0])
+        elif error:
+            self.backups.append(error[0])
+        self.number_of_backups_taken += 1
+        self.log.info("Finished taking backup  with args: {0}".format(args))
+        status, msg = self.validation_helper.validate_backup()
+        if not status:
+            self.fail(msg)
+        self.log.info(msg)
 
     def backup_restore(self):
         try:
@@ -147,9 +155,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if output or "Transfer plan finished successfully" not in error[-1]:
-            return False, output, "Restoring backup failed."
-        else:
-            return True, error, "Restored backup with args: {0}".format(args)
+            self.fail("Restoring backup failed.")
+        self.log.info("Restored backup with args: {0}".format(args))
+        status, msg = self.validation_helper.validate_restore()
+        if not status:
+            self.fail(msg)
+        self.log.info(msg)
 
     def backup_list(self):
         args = "list --dir {0}".format(self.backupset.dir)

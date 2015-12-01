@@ -1,5 +1,3 @@
-from unittest.util import safe_repr
-
 from couchbase_helper.data_analysis_helper import DataAnalyzer, DataAnalysisResultAnalyzer
 from enterprise_backup_restore.validation_helpers.directory_validation_helper import DirectoryValidationHelper
 from remote.remote_util import RemoteMachineShellConnection
@@ -68,12 +66,12 @@ class ValidationBase():
     def validate_vbucket_stats(self, prev_vbuckets_stats, cur_vbuckets_stats):
         return
 
-    def compare_vbucket_stats(self, prev_vbucket_stats, cur_vbucket_stats, compare_uuid=False):
+    def compare_vbucket_stats(self, prev_vbucket_stats, cur_vbucket_stats, compare_uuid=False, seqno_compare="=="):
         compare = "=="
         # if self.withMutationOps:
         #     compare = "<="
         comp_map = {}
-        comp_map["abs_high_seqno"] = {'type': "long", 'operation': compare}
+        comp_map["abs_high_seqno"] = {'type': "long", 'operation': seqno_compare}
         comp_map["purge_seqno"] = {'type': "string", 'operation': compare}
         if compare_uuid:
             comp_map["uuid"] = {'type': "string", 'operation': "=="}
@@ -91,6 +89,6 @@ class ValidationBase():
                                                                              deletedItems=False,
                                                                              updatedItems=False)
         if not isNotSame:
-            msg = self._formatMessage(summary, "%s is not true" % safe_repr(summary))
+            msg = "{0} is not true".format(summary)
             raise AssertionError(msg)
         return True, "End Verification for vbucket sequence numbers comparison "
