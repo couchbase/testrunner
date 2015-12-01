@@ -38,6 +38,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.upgrade_versions = self.input.param('upgrade_version', '4.1.0-4963')
         self.upgrade_versions = self.upgrade_versions.split(";")
+        self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.init_nodes = self.input.param('init_nodes', True)
 
         self.is_downgrade = self.input.param('downgrade', False)
@@ -93,7 +94,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                            self._resultForDoCleanups.errors)) or \
                                  (hasattr(self, '_exc_info') and \
                                   self._exc_info()[1] is not None)
-        if test_failed:
+        if test_failed and self.skip_cleanup:
                 self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
                 self.cluster.shutdown(force=True)
                 self.log.info("Test Input params were:")
