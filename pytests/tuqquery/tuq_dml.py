@@ -20,7 +20,7 @@ class DMLQueryTests(QueryTests):
         self.shell.execute_command("ps aux | grep cbq")
         self.shell.execute_command("ps aux | grep indexer")
         self.shell.execute_command("killall -9 cbq-engine")
-        self.shell.execute_comment("killall -9 indexer")
+        self.shell.execute_command("killall -9 indexer")
         self.sleep(60, 'wait for indexer')
         self.shell.execute_command("ps aux | grep indexer")
         self.shell.execute_command("ps aux | grep cbq")
