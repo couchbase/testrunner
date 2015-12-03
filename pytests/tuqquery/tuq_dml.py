@@ -15,7 +15,16 @@ class DMLQueryTests(QueryTests):
         super(DMLQueryTests, self).setUp()
         self.directory = self.input.param("directory", "/tmp/tuq_data")
         self.named_prepare = self.input.param("named_prepare", None)
-        #self.shell.execute_command("killall cbq-engine")
+        print "-"*100
+        print "Temp process shutdown to debug MB-16888"
+        self.shell.execute_command("ps aux | grep cbq")
+        self.shell.execute_command("ps aux | grep indexer")
+        self.shell.execute_command("killall -9 cbq-engine")
+        self.shell.execute_comment("killall -9 indexer")
+        self.sleep(60, 'wait for indexer')
+        self.shell.execute_command("ps aux | grep indexer")
+        self.shell.execute_command("ps aux | grep cbq")
+        print "-"*100
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket,
                                   timeout=self.wait_timeout * 5)
