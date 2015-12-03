@@ -169,30 +169,40 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
             task.result()
 
     def test(self):
-        new_cluster_nodes = self.servers[self.nodes_init + 1:self.nodes_init + 2]
+        new_cluster_nodes = self.input.clusters[0]
         cluster = Cluster()
-        self._initialize_nodes(cluster, new_cluster_nodes)
-        initial_seq_no = self.get_vbucket_seqnos([self.servers[0]], self.buckets)
+        master_services = self.get_services(self.servers[:1], \
+                                            self.services_init, \
+                                            start_node=0)
+        if master_services != None:
+            master_services = master_services[0].split(",")
+        self._initialize_nodes(cluster, new_cluster_nodes, services=master_services)
         gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         seq_no_1 = self.get_vbucket_seqnos([self.servers[0]], self.buckets)
-        self.backup_create()
-        self.backup_cluster()
         rest = RestConnection(self.servers[0])
         buckets = rest.get_buckets()
         bucketnames = []
         bucket_list = []
+        itemsnum = {}
         for bucket in buckets:
             bucketname = "{0}-{1}".format(bucket.name, bucket.uuid)
             bucketnames.append(bucketname)
             bucket_list.append(bucket.name)
         self.backupset.buckets_list(bucketnames)
+        for bucket in self.buckets:
+            itemsnum[bucket.name] = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+        self.backup_create()
+        self.backup_cluster()
+        self.verify_stats_all_buckets(self.servers, self.buckets, itemsnum)
         self.backupset.restore_host = new_cluster_nodes[0]
         self.backupset.restore_host_username = new_cluster_nodes[0].rest_username
         self.backupset.restore_host_password = new_cluster_nodes[0].rest_password
         self._create_buckets(new_cluster_nodes[0], bucket_list)
         self.backup_restore()
         restore_client = RestConnection(new_cluster_nodes[0])
+        self.verify_stats_all_buckets(new_cluster_nodes, restore_client.get_buckets(), itemsnum)
+        new_cluster_nodes = self.get_kv_nodes(new_cluster_nodes, new_cluster_nodes[0])
         restored_seq_no = self.get_vbucket_seqnos(new_cluster_nodes, restore_client.get_buckets())
         status, msg = self.validation_helper.compare_vbucket_stats(seq_no_1, restored_seq_no)
         if status:

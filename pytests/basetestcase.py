@@ -1,4 +1,3 @@
-import logger
 import unittest
 import copy
 import datetime
@@ -8,7 +7,8 @@ import random
 import logging
 import json
 import commands
-import mc_bin_client
+
+import logger
 from memcached.helper.data_helper import VBucketAwareMemcached
 from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.cluster import Cluster
@@ -16,19 +16,16 @@ from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
 from TestInput import TestInputSingleton
-from membase.api.rest_client import RestConnection, Bucket
+from membase.api.rest_client import Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
-from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
-from memcached.helper.data_helper import MemcachedClientHelper
-from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+from remote.remote_util import RemoteUtilHelper
 from membase.api.exception import ServerUnavailableException
 from couchbase_helper.data_analysis_helper import *
 from testconstants import STANDARD_BUCKET_PORT
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD
 from membase.helper.cluster_helper import ClusterOperationHelper
-
 import testconstants
 
 
@@ -505,9 +502,11 @@ class BaseTestCase(unittest.TestCase):
             task.result()
         self.buckets = []
 
-    def _verify_stats_all_buckets(self, servers, timeout=60):
+    def _verify_stats_all_buckets(self, servers, master=None, timeout=60):
         stats_tasks = []
-        servers = self.get_kv_nodes(servers)
+        if master is None:
+            master = self.master
+        servers = self.get_kv_nodes(servers, master)
         for bucket in self.buckets:
             items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
             if bucket.type == 'memcached':
@@ -1806,12 +1805,14 @@ class BaseTestCase(unittest.TestCase):
             victim_nodes = victim_nodes[:victim_count]
         return victim_nodes
 
-    def get_services_map(self, reset=True):
+    def get_services_map(self, reset=True, master=None):
         if not reset:
             return
         else:
             self.services_map = {}
-        rest = RestConnection(self.master)
+        if master is None:
+            master = self.master
+        rest = RestConnection(master)
         map = rest.get_nodes_services()
         for key, val in map.iteritems():
             for service in val:
@@ -1865,8 +1866,12 @@ class BaseTestCase(unittest.TestCase):
         for server in servers:
             RestConnection(server).set_index_settings(settings)
 
-    def get_nodes_from_services_map(self, service_type="n1ql", get_all_nodes=False):
-        self.get_services_map()
+    def get_nodes_from_services_map(self, service_type="n1ql", get_all_nodes=False, servers=None, master=None):
+        if servers is None:
+            servers = self.servers
+        if master is None:
+            master = self.master
+        self.get_services_map(master=master)
         if (service_type not in self.services_map):
             self.log.info("cannot find service node {0} in cluster " \
                           .format(service_type))
@@ -1876,7 +1881,7 @@ class BaseTestCase(unittest.TestCase):
                 tokens = server_info.split(":")
                 ip = tokens[0]
                 port = int(tokens[1])
-                for server in self.servers:
+                for server in servers:
                     """ In tests use hostname, if IP in ini file use IP, we need
                         to convert it to hostname to compare it with hostname
                         in cluster """
@@ -2139,15 +2144,17 @@ class BaseTestCase(unittest.TestCase):
         except Exception, ex:
             self.log.info(ex)
 
-    def get_kv_nodes(self, servers=None):
-        rest = RestConnection(self.master)
+    def get_kv_nodes(self, servers=None, master=None):
+        if master is None:
+            master = self.master
+        rest = RestConnection(master)
         versions = rest.get_nodes_versions()
         for version in versions:
             if "3.5" > version:
                 return servers
         if servers == None:
             servers = self.servers
-        kv_servers = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        kv_servers = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True,servers=servers, master=master)
         new_servers = []
         for server in servers:
             for kv_server in kv_servers:

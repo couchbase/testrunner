@@ -1,12 +1,17 @@
 from basetestcase import BaseTestCase
 from enterprise_backup_restore.validation_helpers.valdation_base import ValidationBase
+from membase.api.rest_client import RestConnection
+from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
+from membase.helper.rebalance_helper import RebalanceHelper
+from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
     def setUp(self):
         super(EnterpriseBackupRestoreBase, self).setUp()
-        backup_host = self.input.param("backup-host", self.servers[self.nodes_init])
+        backup_host = self.input.clusters[1][0]
         directory = self.input.param("dir", "/tmp/entbackup")
         backup_name = self.input.param("name", "backup")
         backup_cluster_host = self.input.param("host", self.servers[0])
@@ -49,19 +54,28 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def tearDown(self):
         super(EnterpriseBackupRestoreBase, self).tearDown()
-        remote_client = RemoteMachineShellConnection(self.servers[self.nodes_init])
+        remote_client = RemoteMachineShellConnection(self.input.clusters[1][0])
         command = "rm -rf {0}".format(self.input.param("dir", "/tmp/entbackup"))
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        if self.input.clusters :
+            for key in self.input.clusters.keys():
+                servers = self.input.clusters[key]
+                self.reset_clusters(servers)
 
     def number_of_processors(self):
-        remote_client = RemoteMachineShellConnection(self.servers[self.nodes_init])
+        remote_client = RemoteMachineShellConnection(self.input.clusters[1][0])
         command = "nproc"
         output, error = remote_client.execute_command(command)
         if output:
             return output[0]
         else:
             return error[0]
+
+    def reset_clusters(self, servers):
+        BucketOperationHelper.delete_all_buckets_or_assert(servers, self)
+        ClusterOperationHelper.cleanup_cluster(servers, master=servers[0])
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, self)
 
 
     def backup_create(self):
@@ -200,11 +214,47 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{0}/backup {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        self.verify_cluster_stats()
         if error:
             return False, error, "Removing backup failed."
         else:
             return True, output, "Removing of backup success"
 
+    def verify_stats_all_buckets(self, servers, buckets, itemsnum, timeout=60):
+        stats_tasks = []
+        servers = self.get_kv_nodes(servers, servers[0])
+        for bucket in buckets:
+            items = itemsnum[bucket.name]
+            if bucket.type == 'memcached':
+                items_actual =0
+                for server in servers:
+                    client = MemcachedClientHelper.direct_client(server, bucket)
+                    items_actual += int(client.stats())["curr_items"]
+                self.assertEquals(items, items_actual, "Number of items are not correct")
+                continue
+            stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '', 'curr_items', '==', items))
+            stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '', 'vb_active_curr_items', '==', items))
+            available_replicas = self.num_replicas
+            if len(servers) == self.num_replicas or len(servers) <= self.num_replicas:
+                available_replicas = len(servers) - 1
+        stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
+                                                                     'vb_replica_curr_items', '==',
+                                                                     items * available_replicas))
+        stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
+                                                             'curr_items_tot', '==',
+                                                             items * (available_replicas + 1)))
+        try:
+            for task in stats_tasks:
+                task.result(timeout)
+        except Exception as e:
+            print e;
+            for task in stats_tasks:
+                task.cancel()
+            self.log.error("unable to get expected stats for any node! Print taps for all nodes:")
+            rest = RestConnection(self.master)
+            for bucket in buckets:
+                RebalanceHelper.print_taps_from_all_nodes(rest, bucket)
+            raise Exception("unable to get expected stats during {0} sec".format(timeout))
 
 class BackupSet(object):
     def __init__(self, backup_host, cluster_host, cluster_host_username,
