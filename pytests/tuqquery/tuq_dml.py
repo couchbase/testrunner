@@ -17,17 +17,18 @@ class DMLQueryTests(QueryTests):
         self.named_prepare = self.input.param("named_prepare", None)
         print "-"*100
         print "Temp process shutdown to debug MB-16888"
-        self.shell.execute_command("ps aux | grep cbq")
-        self.shell.execute_command("ps aux | grep indexer")
-        self.shell.execute_command("killall -9 cbq-engine")
-        self.shell.execute_command("killall -9 indexer")
-        self.sleep(60, 'wait for indexer')
-        self.shell.execute_command("ps aux | grep indexer")
-        self.shell.execute_command("ps aux | grep cbq")
         print "-"*100
+        print(self.shell.execute_command("ps aux | grep cbq"))
+        print(self.shell.execute_command("ps aux | grep indexer"))
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket,
                                   timeout=self.wait_timeout * 5)
+        self.shell.execute_command("killall -9 cbq-engine")
+        self.shell.execute_command("killall -9 indexer")
+        self.sleep(60, 'wait for indexer')
+        print(self.shell.execute_command("ps aux | grep indexer"))
+        print(self.shell.execute_command("ps aux | grep cbq"))
+        print "-"*100
 
 ############################################################################################################################
 #
