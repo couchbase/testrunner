@@ -19,6 +19,14 @@ class QueriesViewsTests(QueryTests):
             self.input.test_params["stop-on-failure"] = True
             self.log.error("MAX NUMBER OF INDEXES IS 3. ALL TESTS WILL BE SKIPPED")
             self.fail('MAX NUMBER OF INDEXES IS 3. ALL TESTS WILL BE SKIPPED')
+        self.log.info('-'*100)
+        self.log.info('Temp fix for MB-16888')
+        self.log.info('-'*100)
+
+        self.shell.execute_command("killall -9 cbq-engine")
+        self.shell.execute_command("killall -9 indexes")
+        self.sleep(60, 'wait for indexer, cbq processes to come back up ..')
+        self.log.info('-'*100)
 
     def suite_setUp(self):
         super(QueriesViewsTests, self).suite_setUp()
