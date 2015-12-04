@@ -64,7 +64,12 @@ class QueryTests(BaseTestCase):
             self.configure_gomaxprocs()
         if str(self.__class__).find('QueriesUpgradeTests') == -1 and self.primary_index_created == False:
             self.create_primary_index_for_3_0_and_greater()
-
+        self.log.info('-'*100)
+        self.log.info('Temp fix for MB-16888')
+        self.shell.execute_command("killall -9 cbq-engine")
+        self.shell.execute_command("killall -9 indexer")
+        self.sleep(10, 'wait for indexer')
+        self.log.info('-'*100)
 
     def suite_setUp(self):
         try:
