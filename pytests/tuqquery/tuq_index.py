@@ -32,6 +32,8 @@ class QueriesViewsTests(QueryTests):
     def test_simple_create_delete_index(self):
         for bucket in self.buckets:
             created_indexes = []
+            self.log.info('Temp fix for create index failures MB-16888')
+            self.sleep(30, 'sleep before create indexes .. ')
             try:
                 for ind in xrange(self.num_indexes):
                     view_name = "my_index%s" % ind
@@ -766,10 +768,25 @@ class QueriesViewsTests(QueryTests):
     def run_intersect_scan_explain_query(self, indexes_names, query_temp):
         actual_index = []
         for bucket in self.buckets:
-            query = 'EXPLAIN %s' % (query_temp)
+            query = 'EXPLAIN %s' % (query_temp % (bucket.name))
             res = self.run_cbq_query(query=query)
-            actual_index.append(res['results'][0]['node']['name'])
-        self.assertTrue(len(set(actual_index).intersection(indexes_names)) > 0)
+            self.log.info('-'*100)
+            result = res["results"][0]["~children"][0]["~children"][0] if "~children" in res["results"][0]["~children"][0] \
+                        else res["results"][0]["~children"][0]
+
+            self.assertTrue(result["#operator"] == 'IntersectScan',
+                                    "Index should be intersect scan and is %s" % (res["results"]))
+
+            actual_indexes = [scan['scans'][0]['index'] if 'scans' in scan else scan['index']
+                            for scan in result['scans']]
+
+            actual_indexes = [x.encode('UTF8') for x in actual_indexes]
+
+            self.log.info('actual indexes {}'.format(actual_indexes))
+            self.log.info('compared against {}'.format(indexes_names))
+            self.assertTrue(set(actual_indexes) == set(indexes_names),"Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
+
+            self.log.info('-'*100)
 
     def _delete_indexes(self, indexes):
         count = 0
