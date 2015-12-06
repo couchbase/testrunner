@@ -14,7 +14,7 @@ COUCHBASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1"
                             "4.1.0", "4.5.0"]
 COUCHBASE_FROM_VERSION_4 = ["4.0.0", "4.0.1", "4.1.0", "4.5.0"]
 COUCHBASE_RELEASE_VERSIONS_3 = ["3.0.1", "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
-                                "3.0.3-1716", "3.1.0", "3.1.0-1797", "3.1.1", "3.1.2"]
+                                "3.0.3-1716", "3.1.0", "3.1.0-1797"]
 COUCHBASE_VERSION_2 = ["2.0.0", "2.0.1", "2.0.2", "2.1.0", "2.1.1", "2.2.0", "2.2.1",
                        "2.5.0", "2.5.1", "2.5.2"]
 COUCHBASE_VERSION_2_WITH_REL = ["2.5.0", "2.5.1"]
@@ -104,6 +104,7 @@ CB_LATESTBUILDS_REPO = "http://172.23.120.24/builds/latestbuilds/"
 CB_REPO = "http://172.23.120.24/builds/latestbuilds/couchbase-server/"
 #CB_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
 CB_RELEASE_REPO = "http://172.23.120.24/builds/releases/"
+#MV_RELEASE_REPO = "http://latestbuilds.hq.couchbase.com/release"
 """ http://172.23.120.24/builds/latestbuilds/couchbase-server/watson/ """
 MC_BIN_CLIENT = "mc_bin_client"
 TESTRUNNER_CLIENT = "testrunner_client"
