@@ -136,7 +136,7 @@ class MemcachedClient(object):
         extraHeader = struct.pack(REQ_PKT_SD_EXTRAS, len(path), createFlag)
         body = path
         if val != None:
-            body += val
+            body += str(val)
         self._sendCmd(cmd, key, body, opaque, extraHeader, cas)
         return self._handleSingleResponse(opaque)
 
