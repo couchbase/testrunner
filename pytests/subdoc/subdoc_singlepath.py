@@ -2,6 +2,7 @@ from subdoc_base import SubdocBaseTest
 from lib.mc_bin_client import MemcachedClient, MemcachedError
 from lib.memcacheConstants import *
 import copy, json
+import time
 
 class SubdocSinglePathTests(SubdocBaseTest):
     def setUp(self):
@@ -56,7 +57,7 @@ class GetInTests(SubdocSinglePathTests):
     def setUp(self):
         super(GetInTests, self).setUp()
         self.insertJsonDocument(self.basicDocKey, 16, 0)
-        self.insertJsonDocument(self.deepNestedDocKey, 32, 0)
+        self.insertJsonDocument(self.deepNestedDocKey, 30, 0)
         self.insertJsonDocument(self.deepNestedGreaterThanAllowedDocKey, 64, 0)
 
     def tearDown(self):
@@ -96,7 +97,6 @@ class GetInTests(SubdocSinglePathTests):
         except MemcachedError as error:
             assert error.status == ERR_SUBDOC_PATH_EINVAL
 
-
     def getsInNonJsonDocument(self):
         pass
 
@@ -113,3 +113,66 @@ class GetInTests(SubdocSinglePathTests):
     def getsInPathTooDeep(self):
         pass
 
+    ''' Start of Sample Structure Functions'''
+    def removeInArrayValue(self):
+        try:
+            opaque, cas, data = self.client.remove_in(self.basicDocKey, 'child.child.child.child.child.array[0]')
+        except Exception as exception:
+            raise exception
+
+    def removeInNestedDoc(self):
+        try:
+            opaque, cas, data = self.client.remove_in(self.deepNestedDocKey, 'child.child.child.child.child.array[0]')
+        except Exception as exception:
+            raise exception
+
+    ### Does not work - Need to add type
+    def counterInNestedDoc(self):
+        try:
+            opaque, cas, data = self.client.counter_in(self.basicDocKey, 'child.child.child.child.child.array[0]','-5',0)
+        except Exception as exception:
+            raise exception
+        finally:
+            opaque, cas, data = self.client.get_in(self.basicDocKey, 'child.child.child.child.child.array[0]')
+
+    def insert_inInArrayValue(self):
+        try:
+            random_string = '"hello"'
+            blank_string = '" "'
+            opaque, cas, data = self.client.insert_in(self.basicDocKey, 'child.child.child.child.child.array[0]',blank_string)
+        except Exception as exception:
+            raise exception
+
+    def replace_inInArrayValue(self):
+        try:
+            random_string = '"hello"'
+            blank_string = '" "'
+            opaque, cas, data = self.client.replace_in(self.basicDocKey, 'child.child.child.child.child.array[0]',random_string)
+        except Exception as exception:
+            raise exception
+
+    def exists_inInArrayValue(self):
+        try:
+            opaque, cas, data = self.client.exists_in(self.deepNestedDocKey,'child.child.child.child.child.array[0]')
+        except Exception as exception:
+            raise exception
+
+    ''' Error- Path Mismatch'''
+    def append_inInArrayValue(self):
+        try:
+            random_string = '"hello"'
+            blank_string = '" "'
+            opaque, cas, data = self.client.append_in(self.basicDocKey, 'child.child.child.child.child.array[0]',1)
+        except Exception as exception:
+            raise exception
+
+    ''' Error- Path Mismatch'''
+    def prepend_inInArrayValue(self):
+        try:
+            random_string = '"hello"'
+            blank_string = '" "'
+            opaque, cas, data = self.client.prepend_in(self.basicDocKey, 'child.child.child.child.child.array[0]',random_string)
+        except Exception as exception:
+            raise exception
+
+    ''' End of Sample Structure Functions'''
