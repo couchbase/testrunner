@@ -1,7 +1,7 @@
 import random
 import json
-import sys
-sys.path.append("/Users/apiravi/testrunner")
+#import sys
+#sys.path.append("/Users/apiravi/testrunner")
 from lib.couchbase_helper.data import FIRST_NAMES, LAST_NAMES, LANGUAGES, DEPT
 
 class DATASET:

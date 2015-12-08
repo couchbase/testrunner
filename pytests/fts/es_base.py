@@ -1,7 +1,7 @@
 import httplib2
-import requests
 from tasks.taskmanager import TaskManager
 from tasks.task import *
+
 
 class ElasticSearchBase(object):
 

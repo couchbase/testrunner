@@ -7,11 +7,7 @@ import time
 import copy
 import logger
 import logging
-import json
-import multiprocessing
 import re
-
-
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
