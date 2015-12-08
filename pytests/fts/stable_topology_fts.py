@@ -1,6 +1,6 @@
 from fts_base import FTSBaseTest
 from lib.membase.api.rest_client import RestConnection
-from lib.membase.api.exception import FTSException,ServerUnavailableException
+from lib.membase.api.exception import FTSException, ServerUnavailableException
 
 
 class StableTopFTS(FTSBaseTest):
