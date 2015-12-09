@@ -2,6 +2,7 @@ from newtuq import QueryTests
 import random
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from couchbase_helper.query_definitions import QueryDefinition
+from membase.api.rest_client import RestConnection
 
 class BaseSecondaryIndexingTests(QueryTests):
 
@@ -49,6 +50,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.memory_drop_list = []
         self.n1ql_node = self.get_nodes_from_services_map(service_type = "n1ql")
         self.skip_cleanup = self.input.param("skip_cleanup", False)
+        self.index_loglevel = self.input.param("index_loglevel", None)
+        if self.index_loglevel:
+            self.set_indexer_logLevel(self.index_loglevel)
 
 
     def tearDown(self):
@@ -754,3 +758,22 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.use_where_clause_in_index = True
         else:
             self.query_definitions =  query_definition_generator.generate_employee_data_query_definitions()
+
+    def set_indexer_logLevel(self, loglevel="info"):
+        """
+        :param loglevel:
+        Possible Values
+            -- info
+            -- debug
+            -- warn
+            -- verbose
+            -- Silent
+            -- Fatal
+            -- Error 
+            -- Timing
+            -- Trace
+        """
+        self.log.info("Setting indexer log level to {0}".format(loglevel))
+        server = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(server)
+        status = rest.set_indexer_params("logLevel", loglevel)

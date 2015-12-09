@@ -2270,6 +2270,23 @@ class RestConnection(object):
         return self._http_request(api=api, method='POST', params=request_body,
                                   headers=self._create_headers())
 
+    def set_indexer_params(self, parameter, val):
+        """
+        :Possible  parameters:
+            -- indexerThreads
+            -- memorySnapshotInterval
+            -- stableSnapshotInterval
+            -- maxRollbackPoints
+            -- logLevel
+        """
+        params = {}
+        api = self.baseUrl + 'settings/indexes'
+        params[parameter] = val
+        params = urllib.urlencode(params)
+        status, content, header = self._http_request(api, "POST", params)
+        log.info('Indexer {0} set to {1}'.format(parameter, val))
+        return status
+
     def set_couchdb_option(self, section, option, value):
         """Dynamic settings changes"""
 
