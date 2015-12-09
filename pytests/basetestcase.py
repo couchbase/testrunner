@@ -230,6 +230,7 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
             if not self.skip_init_check_cbserver:
                 self._log_start(self)
+            self.sleep(30)
         except Exception, e:
             self.cluster.shutdown(force=True)
             self.fail(e)
