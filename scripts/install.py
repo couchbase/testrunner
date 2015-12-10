@@ -209,7 +209,7 @@ class Installer(object):
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
             cb_releases_version = ["1.8.1", "2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0",
                                     "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1", "3.0.2",
-                                    "3.0.3", "3.1.0"]
+                                    "3.0.3", "3.1.0", "3.1.1", "3.1.2"]
             build_repo = MV_LATESTBUILD_REPO
             if toy is not "":
                 build_repo = CB_REPO
@@ -226,7 +226,7 @@ class Installer(object):
                                                                      build_version=version,
                                                                      product='membase-server-enterprise')
                 elif version[:5] in cb_releases_version:
-                    build = BuildQuery().find_membase_release_build(
+                    build = BuildQuery().find_couchbase_release_build(
                                             deliverable_type=info.deliverable_type,
                                             os_architecture=info.architecture_type,
                                             build_version=version,
