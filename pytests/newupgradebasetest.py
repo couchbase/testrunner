@@ -17,11 +17,15 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from pprint import pprint
+from testconstants import CB_REPO
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
+from testconstants import COUCHBASE_VERSIONS
 from testconstants import SHERLOCK_VERSION
+from testconstants import CB_VERSION_NAME
+from testconstants import COUCHBASE_MP_VERSION
 
 
 class NewUpgradeBaseTest(BaseTestCase):
@@ -30,8 +34,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.released_versions = ["2.0.0-1976-rel", "2.0.1", "2.5.0", "2.5.1",
                                   "2.5.2", "3.0.0", "3.0.1",
                                   "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
-                                  "3.1.0", "3.1.0-1776",
-                                  "4.0.0", "4.0.0-4051"]
+                                  "3.1.0", "3.1.0-1776", "3.1.1", "3.1.1-1807",
+                                  "3.1.2", "3.1.2-1815", "4.0.0", "4.0.0-4051"]
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
@@ -195,9 +199,12 @@ class NewUpgradeBaseTest(BaseTestCase):
     def _get_build(self, server, version, remote, is_amazon=False, info=None):
         if info is None:
             info = remote.extract_remote_info()
-        build_repo = MV_LATESTBUILD_REPO
-        if version[:3] in SHERLOCK_VERSION:
-            build_repo = SHERLOCK_BUILD_REPO
+        build_repo = CB_REPO
+        if version[:5] in COUCHBASE_VERSIONS:
+            if version[:3] in CB_VERSION_NAME:
+                build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
+            elif version[:5] in COUCHBASE_MP_VERSION:
+                build_repo = MV_LATESTBUILD_REPO
         builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5, \
                     deliverable_type=info.deliverable_type, architecture_type=info.architecture_type, \
                     edition_type="couchbase-server-enterprise", repo=build_repo, \
@@ -208,7 +215,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             version = version + "-rel"
         if version[:5] in self.released_versions:
             appropriate_build = BuildQuery().\
-                find_membase_release_build('%s-enterprise' % (self.product),
+                find_couchbase_release_build('%s-enterprise' % (self.product),
                                            info.deliverable_type,
                                            info.architecture_type,
                                            version.strip(),
