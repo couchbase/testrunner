@@ -81,6 +81,7 @@ class TestInputServer(object):
         self.index_path = ''
         self.n1ql_port = ''
         self.index_port = ''
+        self.fts_port = ''
         self.es_username = ''
         self.es_password = ''
         self.upgraded = False
@@ -365,6 +366,8 @@ class TestInputParser():
                         server.n1ql_port = config.get(section, option)
                     if option == 'index_port':
                         server.index_port = config.get(section, option)
+                    if option == 'fts_port':
+                        server.fts_port = config.get(section, option)
                 break
                 #get username
                 #get password
