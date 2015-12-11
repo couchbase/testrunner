@@ -67,7 +67,7 @@ class DocumentGenerator(KVGenerator):
     """Creates the next generated document and increments the iterator.
 
     Returns:
-        The doucument generated"""
+        The document generated"""
     def next(self):
         if self.itr >= self.end:
             raise StopIteration
@@ -83,6 +83,57 @@ class DocumentGenerator(KVGenerator):
         json_doc['_id'] = self.name + '-' + str(self.itr)
         self.itr += 1
         return json_doc['_id'], json.dumps(json_doc).encode("ascii", "ignore")
+
+class SubdocDocumentGenerator(KVGenerator):
+    """ An idempotent document generator."""
+
+    def __init__(self, name, template, *args, **kwargs):
+        """Initializes the document generator
+
+        Example:
+        Creates 10 documents, but only iterates through the first 5.
+
+        age = range(5)
+        first = ['james', 'sharon']
+        template = '{{ "age": {0}, "first_name": "{1}" }}'
+        gen = DocumentGenerator('test_docs', template, age, first, start=0, end=5)
+
+        Args:
+            name: The key name prefix
+            template: A formated string that can be used to generate documents
+            *args: A list for each argument in the template
+            *kwargs: Special constrains for the document generator
+        """
+        self.args = args
+        self.template = template
+
+        print type(self.template)
+
+        size = 0
+        if not len(self.args) == 0:
+            size = 1
+            for arg in self.args:
+                size *= len(arg)
+
+        KVGenerator.__init__(self, name, 0, size)
+
+        if 'start' in kwargs:
+            self.start = kwargs['start']
+            self.itr = kwargs['start']
+
+        if 'end' in kwargs:
+            self.end = kwargs['end']
+
+    """Creates the next generated document and increments the iterator.
+
+    Returns:
+        The document generated"""
+    def next(self):
+        if self.itr >= self.end:
+            raise StopIteration
+
+        self.itr += 1
+        return self.name + '-' + str(self.itr), json.dumps(self.template).encode("ascii", "ignore")
 
 class BlobGenerator(KVGenerator):
     def __init__(self, name, seed, value_size, start=0, end=10000):

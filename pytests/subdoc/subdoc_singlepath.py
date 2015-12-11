@@ -2,7 +2,9 @@ from subdoc_base import SubdocBaseTest
 from lib.mc_bin_client import MemcachedClient, MemcachedError
 from lib.memcacheConstants import *
 import copy, json
-import time
+from couchbase_helper.documentgenerator import SubdocDocumentGenerator
+from basetestcase import BaseTestCase
+import random
 
 class SubdocSinglePathTests(SubdocBaseTest):
     def setUp(self):
@@ -49,6 +51,16 @@ class SubdocSinglePathTests(SubdocBaseTest):
     def deleteDoc(self, key):
         self.client.delete(key)
 
+    def _load_all_docs(self, key=None, levels=0, num_items=0):
+        dict = {'doc' : {}, 'levels' : levels }
+        self._createNestedJson(key, dict)
+        template = dict['doc']
+        gen_load = SubdocDocumentGenerator(key, template,start=0, end=num_items)
+
+        print "Inserting json data into bucket"
+        self._load_all_buckets(self.server, gen_load, "create", 0)
+        self._wait_for_stats_all_buckets([self.server])
+
 class GetInTests(SubdocSinglePathTests):
     basicDocKey = 'basicDocKey'
     deepNestedDocKey =  'deepNestedDocKey'
@@ -56,6 +68,13 @@ class GetInTests(SubdocSinglePathTests):
 
     def setUp(self):
         super(GetInTests, self).setUp()
+
+        '''change this to configurable, currently set as 10000 documents'''
+        self._load_all_docs(self.basicDocKey,16,10000)
+        self._load_all_docs(self.deepNestedDocKey,30,10000)
+        self._load_all_docs(self.deepNestedGreaterThanAllowedDocKey,64,100)
+
+        ''' Issue w/ gets, retain below until fixed '''
         self.insertJsonDocument(self.basicDocKey, 16, 0)
         self.insertJsonDocument(self.deepNestedDocKey, 30, 0)
         self.insertJsonDocument(self.deepNestedGreaterThanAllowedDocKey, 64, 0)
