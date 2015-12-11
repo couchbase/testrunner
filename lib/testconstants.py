@@ -8,11 +8,11 @@ COUCHBASE_DATA_PATH = "/opt/couchbase/var/lib/couchbase/data/"
 COUCHBASE_VERSIONS = ["1.8.0r", "1.8.0", "1.8.1", "2.0.0", "2.0.1", "2.0.2", "2.1.0",
                       "2.1.1", "2.2.0", "2.2.1", "2.5.0", "2.5.1", "2.5.2", "3.0.0",
                       "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2", "3.1.3",
-                      "3.1.4", "3.5.0", "4.0.0", "4.0.1", "4.1.0", "4.5.0"]
+                      "3.1.4", "3.5.0", "4.0.0", "4.0.1", "4.1.0", "4.5.0", "4.7.0"]
 COUCHBASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1",
                             "3.1.2", "3.1.3", "3.1.4", "3.5.0", "4.0.0", "4.0.1",
-                            "4.1.0", "4.5.0"]
-COUCHBASE_FROM_VERSION_4 = ["4.0.0", "4.0.1", "4.1.0", "4.5.0"]
+                            "4.1.0", "4.5.0", "4.7.0"]
+COUCHBASE_FROM_VERSION_4 = ["4.0.0", "4.0.1", "4.1.0", "4.5.0", "4.7.0"]
 COUCHBASE_RELEASE_VERSIONS_3 = ["3.0.1", "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
                                 "3.0.3-1716", "3.1.0", "3.1.0-1797", "3.1.1", "3.1.1-1807",
                                 "3.1.2", "3.1.2-1815"]
@@ -25,6 +25,7 @@ COUCHBASE_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.
 WIN_CB_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1","3.1.2",
                     "3.1.3"]
 SHERLOCK_VERSION = ["4.0.0", "4.0.1", "4.0", "4.1.0", "4.1","4.5.0","4.5"]
+CB_VERSION_NAME = {"4.0":"sherlock", "4.1":"sherlock", "4.5":"watson", "4.7":"spock"}
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
 WIN_CB_PATH = "/cygdrive/c/Program Files/Couchbase/Server/"
@@ -51,7 +52,6 @@ WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F", "170":"AF3F80E
     old "211":"7EDC64EF-43AD-48BA-ADB3-3863627881B8"
     old one at 2014.12.03 "211":"6B91FC0F-D98E-469D-8281-345A08D65DAF"
     change one more time; current at 2015.11.10 "211":"4D92395A-BB95-4E46-9D95-B7BFB97F7446" """
-CB_VERSION_NAME = {"4.0":"sherlock", "4.1":"sherlock", "4.5":"watson"}
 VERSION_FILE = "VERSION.txt"
 MIN_COMPACTION_THRESHOLD = 2
 MAX_COMPACTION_THRESHOLD = 100
