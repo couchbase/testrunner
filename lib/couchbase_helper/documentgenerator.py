@@ -162,6 +162,7 @@ class BatchedDocumentGenerator(object):
     def __init__(self, document_generator, batch_size_int=100):
         self._doc_gen = document_generator
         self._batch_size = batch_size_int
+        self._doc_gen.itr = 0
         if self._batch_size <= 0 :
             raise ValueError("Invalid Batch size {0}".format(self._batch_size))
 
