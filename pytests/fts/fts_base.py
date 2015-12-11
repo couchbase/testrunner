@@ -673,9 +673,9 @@ class CouchbaseCluster:
         return "Couchbase Cluster: %s, Master Ip: %s" % (
             self.__name, self.__master_node.ip)
 
-    def get_node(self, ip):
+    def get_node(self, ip, port):
         for node in self.__nodes:
-            if ip == node.ip:
+            if ip == node.ip and port == node.port:
                 return node
 
     def get_logger(self):
@@ -686,7 +686,7 @@ class CouchbaseCluster:
         self.__non_fts_nodes = []
         service_map = RestConnection(self.__master_node).get_nodes_services()
         for node_ip, services in service_map.iteritems():
-            node = self.get_node(node_ip.split(':')[0])
+            node = self.get_node(node_ip.split(':')[0], node_ip.split(':')[1])
             if "fts" in services:
                 self.__fts_nodes.append(node)
             else:
