@@ -4,34 +4,26 @@ import urllib
 import uuid
 import time
 import logging
-import unittest
-from datetime import datetime
-import logger
 from subprocess import Popen, PIPE
+
+import logger
 from builds.build_query import BuildQuery
 import testconstants
 from testconstants import WIN_REGISTER_ID
 from testconstants import MEMBASE_VERSIONS
-from testconstants import COUCHBASE_VERSIONS
 from testconstants import MISSING_UBUNTU_LIB
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_VERSIONS
-from testconstants import WIN_CB_VERSION_3
 from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_FROM_VERSION_3
 from testconstants import COUCHBASE_RELEASE_VERSIONS_3
-from testconstants import SHERLOCK_VERSION
 from testconstants import COUCHBASE_FROM_VERSION_4
 from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
-
-
-from membase.api.rest_client import RestConnection, RestHelper
-
+from membase.api.rest_client import RestConnection
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -2656,9 +2648,9 @@ class RemoteMachineShellConnection:
         # Iterate per bucket and generate maps
         for bucket in buckets:
             if data_path == None:
-                options = " -b " + bucket.name + " -u " + userId + " -p password --single-node"
+                options = " -b " + bucket.name + " -u " + userId + " -p "+ password +" --single-node"
             else:
-                options = " -b " + bucket.name + " -u " + userId + " -p password" + replicaOption
+                options = " -b " + bucket.name + " -u " + userId + " -p" + password + replicaOption
             suffix = "_" + bucket.name + "_N%2FA.csv"
             if mode == "memory" or mode == "backup":
                suffix = "_" + bucket.name + "_" + self.ip + "%3A8091.csv"
