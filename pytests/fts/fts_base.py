@@ -1206,7 +1206,7 @@ class CouchbaseCluster:
 
         tasks = []
         for bucket in self.__buckets:
-            kv_gen = copy.deepcopy(self._kv_gen[OPS.CREATE])
+            kv_gen = copy.deepcopy(self._kv_gen[ops])
             tasks.append(
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, kv_gen,
@@ -2436,6 +2436,9 @@ class FTSBaseTest(unittest.TestCase):
             self.create_gen += self.get_generator(dataset="wiki",
                                                   num_items=self._num_items/2)
 
+        self.create_gen.start = 0
+        self.create_gen.end = self._num_items
+
     def load_data(self):
         """
          Blocking call to load data to Couchbase and ES
@@ -2466,6 +2469,7 @@ class FTSBaseTest(unittest.TestCase):
         """
         tasks = []
         fail_count = 0
+        failed_queries = []
         for count in range(0, len(index.fts_queries)):
             tasks.append(self._cb_cluster.async_run_fts_query_compare(
                 fts_index=index,
@@ -2478,9 +2482,12 @@ class FTSBaseTest(unittest.TestCase):
             task.result()
             if not task.passed:
                 fail_count += 1
+                failed_queries.append(task.query_index+1)
 
         if fail_count:
-            self.fail("%s out of %s queries failed!" % (fail_count, num_queries))
+            self.fail("%s out of %s queries failed! - %s" % (fail_count,
+                                                             num_queries,
+                                                             failed_queries))
         else:
             self.log.info("SUCCESS: %s out of %s queries passed"
                           %(num_queries-fail_count, num_queries))
