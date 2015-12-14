@@ -41,6 +41,7 @@ def main():
     parser.add_option('-o','--os', dest='os')
     parser.add_option('-n','--noLaunch', action="store_true", dest='noLaunch', default=False)
     parser.add_option('-c','--component', dest='component', default=None)
+    parser.add_option('-p','--poolId', dest='poolId', default='12hour')
 
 
     options, args = parser.parse_args()
@@ -53,7 +54,7 @@ def main():
     print 'nolaunch', options.noLaunch
     print 'os', options.os
 
-    print 'component is', options.component
+    print 'poolId is', options.poolId
 
 
 
@@ -119,7 +120,8 @@ def main():
 
     while len(testsToLaunch) > 0:
         try:
-            response, content = httplib2.Http(timeout=60).request('http://172.23.105.177:8081/getavailablecount/{0}'.format(options.os), 'GET')
+            response, content = httplib2.Http(timeout=60).request('http://' + SERVER_MANAGER +
+                           '/getavailablecount/{0}?poolId={1}'.format(options.os,options.poolId), 'GET')
             if response.status != 200:
                print time.asctime( time.localtime(time.time()) ), 'invalid server response', content
                time.sleep(POLL_INTERVAL)
@@ -144,10 +146,13 @@ def main():
                     descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent']
                     # get the VMs, they should be there
 
+                    getVMURL = 'http://' + SERVER_MANAGER + \
+                            '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={4}'. \
+                       format(descriptor, testsToLaunch[i]['serverCount'],testsToLaunch[i]['timeLimit'], \
+                              options.os, options.poolId)
+                    print 'getVMURL', getVMURL
 
-                    response, content = httplib2.Http(timeout=60).request('http://' + SERVER_MANAGER +
-                            '/getservers/{0}?count={1}&expiresin={2}&os={3}'.
-                       format(descriptor, testsToLaunch[i]['serverCount'],testsToLaunch[i]['timeLimit'],options.os), 'GET')
+                    response, content = httplib2.Http(timeout=60).request(getVMURL, 'GET')
 
                     if response.status == 499:
                         time.sleep(POLL_INTERVAL) # some error checking here at some point
@@ -158,6 +163,7 @@ def main():
                                              testsToLaunch[i]['subcomponent'], testsToLaunch[i]['iniFile'],
                                              urllib.quote(json.dumps(r2).replace(' ','')),
                                              urllib.quote(testsToLaunch[i]['parameters']), options.os)
+
                         #print 'launching', url
                         print time.asctime( time.localtime(time.time()) ), 'launching ', descriptor
 
@@ -166,7 +172,7 @@ def main():
                             # free the VMs
                             time.sleep(3)
                             response, content = httplib2.Http(timeout=60).\
-                                request('http://172.23.105.177:8081/releaseservers/' + descriptor, 'GET')
+                                request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor, 'GET')
                         else:
                             response, content = httplib2.Http(timeout=60).request(url, 'GET')
 
@@ -181,6 +187,7 @@ def main():
         except Exception as e:
             print 'have an exception'
             print traceback.format_exc()
+            time.sleep(POLL_INTERVAL)
     #endwhile
 
 
