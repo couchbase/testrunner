@@ -174,7 +174,7 @@ class QUERY:
               "from": 0,
               "explain": False,
               "query": {},
-              "fields": ["*"],
+              "fields": [],
               "ctl": {
                 "consistency": {
                   "level": "",
@@ -739,6 +739,8 @@ class CouchbaseCluster:
     def get_random_fts_node(self):
         if not self.__fts_nodes:
             self.__separate_nodes_on_services()
+        if len(self.__fts_nodes) == 1:
+            return self.__fts_nodes[0]
         return self.__fts_nodes[random.randint(0, len(self.__fts_nodes)-1)]
 
     def get_random_non_fts_node(self):
@@ -778,28 +780,29 @@ class CouchbaseCluster:
                                 "configuration %s"
                                % (len(available_nodes)+1, cluster_services))
         self.__init_nodes()
-        nodes_to_add = []
-        node_services = []
-        for index, node_service in enumerate(cluster_services):
-            if index == 0:
-                # first node is always a data/kv node
-                continue
-            self.__log.info("%s will be configured with services %s" %(
-                                                available_nodes[index-1].ip,
-                                                node_service))
-            nodes_to_add.append(available_nodes[index-1])
-            node_services.append(node_service)
-        try:
-            self.__clusterop.async_rebalance(
-                    self.__nodes,
-                    nodes_to_add,
-                    [],
-                    use_hostnames=self.__use_hostname,
-                    services=node_services).result()
-        except Exception as e:
-                raise FTSException("Unable to initialize cluster with config "
-                                    "%s: %s" %(cluster_services, e))
-        self.__nodes += nodes_to_add
+        if available_nodes:
+            nodes_to_add = []
+            node_services = []
+            for index, node_service in enumerate(cluster_services):
+                if index == 0:
+                    # first node is always a data/kv node
+                    continue
+                self.__log.info("%s will be configured with services %s" %(
+                                                    available_nodes[index-1].ip,
+                                                    node_service))
+                nodes_to_add.append(available_nodes[index-1])
+                node_services.append(node_service)
+            try:
+                self.__clusterop.async_rebalance(
+                        self.__nodes,
+                        nodes_to_add,
+                        [],
+                        use_hostnames=self.__use_hostname,
+                        services=node_services).result()
+            except Exception as e:
+                    raise FTSException("Unable to initialize cluster with config "
+                                        "%s: %s" %(cluster_services, e))
+            self.__nodes += nodes_to_add
         self.__separate_nodes_on_services()
 
 
