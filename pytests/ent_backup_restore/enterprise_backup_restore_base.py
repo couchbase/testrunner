@@ -62,7 +62,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "rm -rf {0}".format(self.input.param("dir", "/tmp/entbackup"))
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if self.input.clusters:
+        if self.input.clusters and not self.input.param("skip_cleanup", False):
             for key in self.input.clusters.keys():
                 servers = self.input.clusters[key]
                 self.backup_reset_clusters(servers)
@@ -158,9 +158,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail(msg)
         self.log.info(msg)
         self.store_vbucket_seqno()
-        self.validation_helper.store_keys(self.servers, self.buckets, self.number_of_backups_taken,
+        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                           self.backup_validation_files_location)
-        self.validation_helper.store_latest(self.servers, self.buckets, self.number_of_backups_taken,
+        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                             self.backup_validation_files_location)
 
     def backup_restore(self):
