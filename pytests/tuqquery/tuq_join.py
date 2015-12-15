@@ -110,6 +110,8 @@ class JoinTests(QueryTests):
                 index_name = "coveringindex%s" % ind
                 if ind =="one":
                     self.query = "CREATE INDEX %s ON %s(project, name, tasks_ids)  USING GSI" % (index_name, bucket.name)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -216,6 +218,8 @@ class JoinTests(QueryTests):
                 index_name = "coveringindex%s" % ind
                 if ind =="one":
                     self.query = "CREATE INDEX %s ON %s(join_day, tasks_ids, project)  USING GSI" % (index_name, bucket.name)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -274,6 +278,8 @@ class JoinTests(QueryTests):
                 index_name = "coveringindex%s" % ind
                 if ind =="one":
                     self.query = "CREATE INDEX %s ON %s(name, task, tasks_ids)  USING GSI" % (index_name, bucket.name)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
