@@ -205,7 +205,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def backup_restore_validate(self, compare_uuid=False, seqno_compare_function="==", replicas=False, mode="memory"):
         output, error = self.backup_restore()
-        if output or "Transfer plan finished successfully" not in error[-1]:
+        if error or "Transfer plan finished successfully" not in output:
             self.fail("Restoring backup failed.")
         self.log.info("Finished restoring backup")
         current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets)
