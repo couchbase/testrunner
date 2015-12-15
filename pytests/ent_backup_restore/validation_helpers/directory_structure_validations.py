@@ -51,6 +51,7 @@ class DirectoryStructureValidations(BackupRestoreValidationBase):
         json_helper = JSONGenerator("directory_structure.json", self.backupset.__dict__)
         json_helper.generate_json()
         backupset = json_helper.object[self.backupset.name]
+        self.log.info("generate_directory_structure: " + str(backupset))
         for backup in backupset:
             b = backupset[backup]
             if not isinstance(b, dict):
