@@ -58,16 +58,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def tearDown(self):
         super(EnterpriseBackupRestoreBase, self).tearDown()
-        remote_client = RemoteMachineShellConnection(self.input.clusters[1][0])
-        command = "rm -rf {0}".format(self.input.param("dir", "/tmp/entbackup"))
-        output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
-        if self.input.clusters and not self.input.param("skip_cleanup", False):
-            for key in self.input.clusters.keys():
-                servers = self.input.clusters[key]
-                self.backup_reset_clusters(servers)
-        if os.path.exists("/tmp/backuprestore"):
-            shutil.rmtree("/tmp/backuprestore")
+        if not self.input.param("skip_cleanup", False):
+            remote_client = RemoteMachineShellConnection(self.input.clusters[1][0])
+            command = "rm -rf {0}".format(self.input.param("dir", "/tmp/entbackup"))
+            output, error = remote_client.execute_command(command)
+            remote_client.log_command_output(output, error)
+            if self.input.clusters:
+                for key in self.input.clusters.keys():
+                    servers = self.input.clusters[key]
+                    self.backup_reset_clusters(servers)
+            if os.path.exists("/tmp/backuprestore"):
+                shutil.rmtree("/tmp/backuprestore")
 
     @property
     def cluster_to_backup(self):
