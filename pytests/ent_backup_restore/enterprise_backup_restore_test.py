@@ -26,28 +26,28 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
             elif self.ops_type == "delete":
                 self._load_all_buckets(self.master, gen, "delete", 0)
             self.backup_cluster_validate()
-        self.targetMaster = True
-        self.backup_reset_clusters(self.cluster_to_backup)
-        self._initialize_nodes(Cluster(), self.servers[:self.nodes_init])
-        start = randrange(0, self.backupset.number_of_backups) + 1
-        if start == self.backupset.number_of_backups:
-            end = start
-        else:
-            end = randrange(start, self.backupset.number_of_backups + 1)
-        restored = {"{0}/{1}".format(start, end): ""}
-        for i in range(1, self.backupset.number_of_backups + 1):
-            self.backupset.start = start
-            self.backupset.end = end
-            self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
-            if self.backupset.number_of_backups == 1:
-                continue
-            while "{0}/{1}".format(start, end) in restored:
-                start = randrange(0, self.backupset.number_of_backups) + 1
-                if start == self.backupset.number_of_backups:
-                    end = start
-                else:
-                    end = randrange(start, self.backupset.number_of_backups + 1)
-            restored["{0}/{1}".format(start, end)] = ""
+        #self.targetMaster = True
+        #self.backup_reset_clusters(self.cluster_to_backup)
+        #self._initialize_nodes(Cluster(), self.servers[:self.nodes_init])
+        #start = randrange(0, self.backupset.number_of_backups) + 1
+        #if start == self.backupset.number_of_backups:
+        #    end = start
+        #else:
+        #    end = randrange(start, self.backupset.number_of_backups + 1)
+        #restored = {"{0}/{1}".format(start, end): ""}
+        #for i in range(1, self.backupset.number_of_backups + 1):
+        #    self.backupset.start = start
+        #    self.backupset.end = end
+        #    self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+        #    if self.backupset.number_of_backups == 1:
+        #        continue
+        #    while "{0}/{1}".format(start, end) in restored:
+        #        start = randrange(0, self.backupset.number_of_backups) + 1
+        #        if start == self.backupset.number_of_backups:
+        #            end = start
+        #        else:
+        #            end = randrange(start, self.backupset.number_of_backups + 1)
+        #    restored["{0}/{1}".format(start, end)] = ""
 
     def test_backup_restore_with_rebalance(self):
         serv_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
