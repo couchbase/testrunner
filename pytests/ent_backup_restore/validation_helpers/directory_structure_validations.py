@@ -77,6 +77,8 @@ class DirectoryStructureValidations(BackupRestoreValidationBase):
     def validate_directory_structure(self):
         expected_directory_structure = self.generate_directory_structure()
         actual_directory_structure = self.get_directory_structure()
+        self.log.info("expected_directory_structure: " + str(expected_directory_structure))
+        self.log.info("actual_directory_structure: " + str(actual_directory_structure))
         is_equal, not_equal, extra, not_present = self.compare_dictionary(expected_directory_structure,
                                                                           actual_directory_structure)
         return self.compare_dictionary_result_analyser(is_equal, not_equal, extra, not_present, "Directory Structure")
