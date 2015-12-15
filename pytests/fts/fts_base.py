@@ -2350,8 +2350,8 @@ class FTSBaseTest(unittest.TestCase):
                                                  index_type='fulltext-alias',
                                                  index_params=alias_def)
 
-    def validate_index_count(self, equal_bucket_doc_count=True,
-                             zero_rows_ok=False, must_equal=None):
+    def validate_index_count(self, equal_bucket_doc_count=False,
+                             zero_rows_ok=True, must_equal=None):
         """
          Handle validation and error logging for docs indexed
          returns a map containing index_names and docs indexed
