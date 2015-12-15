@@ -241,10 +241,9 @@ class FTSESQueryGenerator:
         """
         fts_compound_query = []
         es_compound_query = []
-        if bool(random.getrandbits(1)):
-            fts, es = self.construct_match_query()
-            fts_compound_query.append(fts)
-            es_compound_query.append(es)
+        fts, es = self.construct_match_query()
+        fts_compound_query.append(fts)
+        es_compound_query.append(es)
         if bool(random.getrandbits(1)):
             fts, es = self.construct_prefix_query()
             fts_compound_query.append(fts)
@@ -348,9 +347,9 @@ class FTSESQueryGenerator:
         else:
             while len(reports) < num_reports:
                 if num_reports == 1:
-                    return self.get_queryable_full_name()
+                    return self.return_unicode(self.get_queryable_full_name())
 
-                reports.append(self.get_queryable_full_name())
+                reports.append(self.return_unicode(self.get_queryable_full_name()))
             return ' '.join(reports)
 
 if __name__ == "__main__":

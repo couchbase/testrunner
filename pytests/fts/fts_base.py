@@ -627,7 +627,6 @@ class FTSIndex:
                 self.__cluster.run_fts_query(self.name, query_dict)
             for doc in matches:
                 doc_ids.append(doc['id'])
-            self.__log.info("%s hit(s)" % hits)
             if show_query_results:
                 self.__log.info("Doc matches : %s" % json.dumps(matches, indent=3))
             if int(hits) == 0 and not zero_results_ok:
@@ -2297,9 +2296,10 @@ class FTSBaseTest(unittest.TestCase):
                 # unlike fts, es queries are not nested before sending to fts
                 # so enclose in query dict here
                 es_query = {'query': es_query}
-                self.es.es_queries.append(json.loads(
-                    json.dumps(es_query, ensure_ascii=False).
-                    replace("manages_", "manages.")))
+                self.es.es_queries.append(
+                    json.loads(
+                        json.dumps(es_query, ensure_ascii=False).
+                        replace("manages_", "manages.")))
             return index.fts_queries, self.es.es_queries
 
         return index.fts_queries

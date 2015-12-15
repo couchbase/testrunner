@@ -25,17 +25,16 @@ class StableTopFTS(FTSBaseTest):
         if self._update or self._delete:
             self.wait_for_indexing_complete()
             self.validate_index_count(equal_bucket_doc_count=True,
-                                  zero_rows_ok=False)
+                                      zero_rows_ok=False)
             self.async_perform_update_delete(self.upd_del_fields)
         self.wait_for_indexing_complete()
-        self.validate_index_count(equal_bucket_doc_count=True,
-                                  zero_rows_ok=False)
+        self.validate_index_count(equal_bucket_doc_count=True)
 
     def run_default_index_query(self):
         self.create_simple_default_index()
         query = eval(self._input.param("query", str(self.sample_query)))
         for index in self._cb_cluster.get_indexes():
-            index.execute_query(query, zero_results_ok=False)
+            index.execute_query(query, zero_results_ok=True)
 
     def test_query_type(self):
         self.load_data()
