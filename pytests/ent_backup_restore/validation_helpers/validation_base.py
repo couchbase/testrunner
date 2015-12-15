@@ -1,11 +1,13 @@
 import json
 import os
+import logger
 
 from couchbase_helper.data_analysis_helper import DataAnalyzer, DataAnalysisResultAnalyzer, DataCollector
 
 
 class BackupRestoreValidationBase:
     def __init__(self):
+        self.log = logger.Logger.get_logger()
         return
 
     @staticmethod
