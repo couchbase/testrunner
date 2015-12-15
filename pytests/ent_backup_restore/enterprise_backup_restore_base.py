@@ -158,11 +158,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if not status:
             self.fail(msg)
         self.log.info(msg)
-        #self.store_vbucket_seqno()
-        #self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-        #                                  self.backup_validation_files_location)
-        #self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-        #                                    self.backup_validation_files_location)
+        self.store_vbucket_seqno()
+        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                          self.backup_validation_files_location)
+        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
+                                            self.backup_validation_files_location)
 
     def backup_restore(self):
         try:
