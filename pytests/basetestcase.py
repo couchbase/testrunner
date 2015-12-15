@@ -285,8 +285,7 @@ class BaseTestCase(unittest.TestCase):
             # increase case_number to retry tearDown in setup for the next test
             self.case_number += 1000
         finally:
-            if not self.input.param("skip_cleanup", False):
-                self.reset_cluster()
+            #self.reset_cluster()
             # stop all existing task manager threads
             if self.cleanup:
                 self.cleanup = False
