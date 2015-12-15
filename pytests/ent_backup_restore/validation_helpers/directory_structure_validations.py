@@ -51,6 +51,10 @@ class DirectoryStructureValidations(BackupRestoreValidationBase):
         json_helper = JSONGenerator("directory_structure.json", self.backupset.__dict__)
         json_helper.generate_json()
         backupset = json_helper.object[self.backupset.name]
+        curr_backup_len = len(backupset) - 1
+        if curr_backup_len != self.backupset.number_of_backups:
+            for i in range(curr_backup_len, self.backupset.number_of_backups):
+                backupset["backups" + str(i)] = backupset["backups"]
         self.log.info("generate_directory_structure: " + str(backupset))
         for backup in backupset:
             b = backupset[backup]
