@@ -759,7 +759,7 @@ class RestConnection(object):
                 log.error("ServerNotFoundError error while connecting to {0} error {1} ".format(api, e))
                 if time.time() > end_time:
                     raise ServerUnavailableException(ip=self.ip)
-            time.sleep(1)
+            time.sleep(3)
 
     def init_cluster(self, username='Administrator', password='password', port='8091'):
         api = self.baseUrl + 'settings/web'
