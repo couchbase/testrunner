@@ -199,14 +199,14 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     		query_template = "",
     		groups = [])
     	self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name,
-    	 use_gsi_for_secondary = False)
+    	 use_gsi_for_secondary = False, gsi_type=self.gsi_type)
     	try:
     		# create index
     		server = self.get_nodes_from_services_map(service_type = "n1ql")
         	self.n1ql_helper.run_cbq_query(query = self.query, server = server)
     		# create same index again
     		self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name,
-            use_gsi_for_secondary = True)
+            use_gsi_for_secondary = True, gsi_type=self.gsi_type)
     		self.n1ql_helper.run_cbq_query(query = self.query, server = server)
     	except Exception, ex:
     		self.log.info(ex)
@@ -223,7 +223,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             index_fields = field_name,
             query_template = "",
             groups = [])
-        self.query = query_definition.generate_index_create_query(bucket = self.buckets[0])
+        self.query = query_definition.generate_index_create_query(bucket = self.buckets[0], gsi_type=self.gsi_type)
         try:
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
@@ -240,7 +240,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             index_fields = self.indexes,
             query_template = "",
             groups = [])
-        self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name)
+        self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name, gsi_type=self.gsi_type)
         try:
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
@@ -257,7 +257,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     		index_fields = self.indexes,
     		query_template = "",
     		groups = [])
-    	self.query = query_definition.generate_index_create_query(bucket = "not_present_bucket")
+    	self.query = query_definition.generate_index_create_query(bucket = "not_present_bucket", gsi_type=self.gsi_type)
     	try:
     		# create index
     		server = self.get_nodes_from_services_map(service_type = "n1ql")
@@ -306,7 +306,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     		index_fields = self.indexes,
     		query_template = "",
     		groups = [])
-    	self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name)
+    	self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name, gsi_type=self.gsi_type)
     	try:
     		# create index
     		server = self.get_nodes_from_services_map(service_type = "n1ql")
@@ -328,7 +328,8 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             remote.stop_server()
             self.sleep(10)
             index_name = self.query_definitions[0].index_name
-            self.query = self.query_definitions[0].generate_index_create_query(bucket = self.buckets[0].name)
+            self.query = self.query_definitions[0].generate_index_create_query(bucket = self.buckets[0].name,
+                                                                               gsi_type=self.gsi_type)
             res = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             self.log.info(res)
         except Exception, ex:

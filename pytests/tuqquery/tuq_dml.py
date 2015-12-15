@@ -660,6 +660,8 @@ class DMLQueryTests(QueryTests):
         index_name = 'automation%s' % str(uuid.uuid4())[:5]
         for bucket in self.buckets:
             self.query = 'create index %s on %s(name) USING %s' % (index_name, bucket.name, self.index_type)
+            if self.gsi_type:
+                self.query += " WITH {'index_type': 'memdb'}"
             self.run_cbq_query()
             self._wait_for_index_online(bucket, index_name)
         try:
@@ -691,6 +693,8 @@ class DMLQueryTests(QueryTests):
         index_name = 'automation%s' % str(uuid.uuid4())[:5]
         for bucket in self.buckets:
             self.query = 'create index %s on %s(name) USING %s' % (index_name, bucket.name, self.index_type)
+            if self.gsi_type:
+                self.query += " WITH {'index_type': 'memdb'}"
             self.run_cbq_query()
             self._wait_for_index_online(bucket, index_name)
         try:
@@ -1182,6 +1186,8 @@ class DMLQueryTests(QueryTests):
         index_name = 'idx_name'
         for bucket in self.buckets:
             self.query = "CREATE INDEX %s ON %s(name) USING %s" % (index_name, bucket.name,self.index_type)
+            if self.gsi_type:
+                self.query += " WITH {'index_type': 'memdb'}"
             self.run_cbq_query()
             self._wait_for_index_online(bucket, index_name)
             self.query = 'update %s use index(%s using %s) set name="%s"'  % (bucket.name, index_name, self.index_type, updated_value)
@@ -1202,6 +1208,8 @@ class DMLQueryTests(QueryTests):
         index_name = 'idx_name'
         for bucket in self.buckets:
             self.query = "CREATE INDEX %s ON %s(join_day) USING %s" % (index_name, bucket.name,self.index_type)
+            if self.gsi_type:
+                self.query += " WITH {'index_type': 'memdb'}"
             self.run_cbq_query()
             self._wait_for_index_online(bucket, index_name)
             self.query = 'update %s use index(%s using %s) set name="%s" where join_day=1 returning name'  % (bucket.name, index_name, self.index_type, updated_value)
@@ -1230,6 +1238,8 @@ class DMLQueryTests(QueryTests):
                 index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
                 self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (
                 index_name, bucket.name, ','.join(field.split(';')), self.index_type)
+                if self.gsi_type:
+                    self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 indexes.append(index_name)
@@ -1260,6 +1270,8 @@ class DMLQueryTests(QueryTests):
                 index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0].replace('~', '_'))
                 self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (
                 index_name, bucket.name, ','.join(field.split('~')), self.index_type)
+                if self.gsi_type:
+                    self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 indexes.append(index_name)

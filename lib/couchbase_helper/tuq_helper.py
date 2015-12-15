@@ -395,7 +395,7 @@ class N1QLHelper():
             except Exception, ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
 
-    def create_primary_index(self, using_gsi = True, server = None):
+    def create_primary_index(self, using_gsi = True, server = None, gsi_type=None):
         if server == None:
             server = self.master
         print "number of buckets {0}".format(len(self.buckets))
@@ -405,6 +405,8 @@ class N1QLHelper():
                 self.query += " USING GSI"
             if not using_gsi:
                 self.query += " USING VIEW "
+            if gsi_type == "memdb":
+                self.query += " WITH {'index_type': 'memdb'}"
             self.log.info(self.query)
             try:
                 check = self._is_index_in_list(bucket.name, "#primary", server = server)

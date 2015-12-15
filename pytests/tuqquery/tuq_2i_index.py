@@ -38,6 +38,8 @@ class QueriesIndexTests(QueryTests):
                     view_name = "my_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s) USING GSI" % (
                                             view_name, bucket.name, ','.join(self.FIELDS_TO_INDEX[ind - 1]))
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     actual_result = self.run_cbq_query()
                     self._wait_for_index_online(bucket, view_name)
                     self._verify_results(actual_result['results'], [])
@@ -57,6 +59,8 @@ class QueriesIndexTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     view_name = "tuq_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s)  USING GSI" % (view_name, bucket.name, ','.join(self.FIELDS_TO_INDEX[ind - 1]))
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     actual_result = self.run_cbq_query()
                     self._wait_for_index_online(bucket, view_name)
                     self._verify_results(actual_result['results'], [])
@@ -85,6 +89,8 @@ class QueriesIndexTests(QueryTests):
             index_name = "my_index_child"
             try:
                 self.query = "CREATE INDEX %s ON %s(VMs, name)  USING GSI" % (index_name, bucket.name)
+                if self.gsi_type:
+                    self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT count(VMs) FROM %s where VMs is not null union SELECT count(name) FROM %s where name is not null' % (bucket.name, bucket.name)
@@ -103,6 +109,8 @@ class QueriesIndexTests(QueryTests):
             index_name = "my_index_child"
             try:
                 self.query = "CREATE INDEX %s ON %s(VMs, join_yr)  USING GSI" % (index_name, bucket.name)
+                if self.gsi_type:
+                    self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT count(*) FROM %s GROUP BY VMs, join_yr' % (bucket.name)
@@ -121,6 +129,8 @@ class QueriesIndexTests(QueryTests):
             index_name = "my_index_meta"
             try:
                 self.query = "CREATE INDEX %s ON %s(meta(%s).type, name)  USING GSI" % (index_name, bucket.name, bucket.name)
+                if self.gsi_type:
+                    self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT name FROM %s WHERE meta(%s).type = "json" and name is not null' % (bucket.name, bucket.name)
@@ -138,6 +148,8 @@ class QueriesIndexTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindex%s" % ind
                     self.query = "CREATE INDEX %s ON %s(name, join_day)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -176,6 +188,8 @@ class QueriesIndexTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithwhere%s" % ind
                     self.query = "CREATE INDEX %s ON %s(email, VMs, join_day) where join_day > 10 USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -216,6 +230,8 @@ class QueriesIndexTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithlimit%s" % ind
                     self.query = "CREATE INDEX %s ON %s(skills[0], join_yr, VMs[0].os) where join_yr =2010 USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -253,6 +269,8 @@ class QueriesIndexTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithgroupby%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_yr,name) where join_yr >2009 USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -282,6 +300,8 @@ class QueriesIndexTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithgroupbyhaving%s" % ind
                     self.query = "CREATE INDEX %s ON %s(job_title,join_mo,test_rate) USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -327,6 +347,8 @@ class QueriesIndexTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithgroupbyletting%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,test_rate) USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -357,6 +379,8 @@ class QueriesIndexTests(QueryTests):
                         ind_name = '%s_%s' % (ind, attr)
                         self.query = "CREATE INDEX %s ON %s(%s)  USING %s" % (ind_name,
                                                                     bucket.name, attr, self.index_type)
+                        if self.gsi_type:
+                            self.query += " WITH {'index_type': 'memdb'}"
                         self.run_cbq_query()
                         self._wait_for_index_online(bucket, ind_name)
                         created_indexes.append('%s' % (ind_name))
@@ -399,6 +423,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithceil%s" % ind
                     self.query = "CREATE INDEX %s ON %s(name,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
         for bucket in self.buckets:
@@ -433,6 +459,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithfloor%s" % ind
                     self.query = "CREATE INDEX %s ON %s(name,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
         for bucket in self.buckets:
@@ -469,6 +497,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithgreatest%s" % ind
                     self.query = "CREATE INDEX %s ON %s(name,skills[0], skills[1])  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
         for bucket in self.buckets:
@@ -511,6 +541,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithleast%s" % ind
                     self.query = "CREATE INDEX %s ON %s(name,skills[0], skills[1])  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -558,6 +590,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithmin%s" % ind
                     self.query = "CREATE INDEX %s ON %s(job_title,join_mo,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -616,6 +650,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithmax%s" % ind
                     self.query = "CREATE INDEX %s ON %s(job_title,join_mo,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -675,6 +711,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharraydistinct%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -722,6 +760,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharraylength%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -768,6 +808,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharrayappend%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name) USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -819,6 +861,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharrayconcat%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name,email)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -852,6 +896,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharrayprepend%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -886,6 +932,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharrayremove%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -937,6 +985,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharrayavg%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -969,6 +1019,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharraycontains%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -1015,6 +1067,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharraycount%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -1048,6 +1102,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharraydistinct%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -1096,6 +1152,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharraymax%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -1129,6 +1187,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharraysum%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -1161,6 +1221,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharraymin%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -1194,6 +1256,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharrayput%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -1257,6 +1321,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharrayreplace%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -1288,6 +1354,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwitharraysort%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,job_title,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -1319,6 +1387,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithpolylength%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,tasks_points,VMs,skills)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -1349,6 +1419,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithmaximumlimit%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_mo,name,mutated,skills,join_day,email,test_rate,join_yr,_id,VMs[0].RAM,VMs[1].os,job_title)  USING %s" % (index_name, bucket.name,self.index_type)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -1396,6 +1468,8 @@ class QueriesIndexTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "join_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(name, project)  USING GSI" % (index_name, bucket.name)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -1415,6 +1489,8 @@ class QueriesIndexTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "join_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_day, name)  USING GSI" % (index_name, bucket.name)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -1432,6 +1508,8 @@ class QueriesIndexTests(QueryTests):
             index_name = "my_index_child2"
             try:
                 self.query = "CREATE INDEX %s ON %s(VMs[0].RAM, VMS[1].RAM)  USING GSI" % (index_name, bucket.name)
+                if self.gsi_type:
+                    self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT VMs FROM %s ' % (bucket.name) + \
@@ -1451,6 +1529,8 @@ class QueriesIndexTests(QueryTests):
             index_name = "my_index_obj"
             try:
                 self.query = "CREATE INDEX %s ON %s(tasks_points, join_mo)  USING GSI" % (index_name, bucket.name)
+                if self.gsi_type:
+                    self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
@@ -1470,6 +1550,8 @@ class QueriesIndexTests(QueryTests):
             index_name = "my_index_obj_el"
             try:
                 self.query = "CREATE INDEX %s ON %s(tasks_points.task1, join_mo)  USING GSI" % (index_name, bucket.name)
+                if self.gsi_type:
+                    self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
