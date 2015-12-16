@@ -82,18 +82,27 @@ class FTSESQueryGenerator:
         if bool(random.getrandbits(1)):
             must_fts_query, must_es_query = self.construct_match_query(
                 ret_list=bool(random.getrandbits(1)))
-            fts_bool_query['must'] = {"conjuncts": must_fts_query}
+            if isinstance(must_fts_query, list):
+                fts_bool_query['must'] = {"conjuncts": must_fts_query}
+            else:
+                fts_bool_query['must'] = {"conjuncts": [must_fts_query]}
             es_bool_query['bool']['must'] = must_es_query
 
         if bool(random.getrandbits(1)):
             must_not_fts, must_not_es = self.construct_match_query(
                 ret_list=bool(random.getrandbits(1)))
-            fts_bool_query['must_not'] = {"disjuncts": must_not_fts}
+            if isinstance(must_not_fts, list):
+                fts_bool_query['must_not'] = {"disjuncts": must_not_fts}
+            else:
+                fts_bool_query['must_not'] = {"disjuncts": [must_not_fts]}
             es_bool_query['bool']['must_not'] = must_not_es
 
         should_fts, should_es = self.construct_match_query(
             ret_list=bool(random.getrandbits(1)))
-        fts_bool_query['should'] = {"disjuncts": should_fts}
+        if isinstance(should_fts, list):
+            fts_bool_query['should'] = {"disjuncts": should_fts}
+        else:
+            fts_bool_query['should'] = {"disjuncts": [should_fts]}
         es_bool_query['bool']['should'] = should_es
 
         return fts_bool_query, es_bool_query
