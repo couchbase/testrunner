@@ -56,6 +56,20 @@ class SubdocSanityTests(unittest.TestCase):
         data_set.upsert_all_docs(inserted_keys, "999", path='height')
         data_set.upsert_all_docs(inserted_keys, replace_string, path='array[-1]')
 
+    def test_simple_dataset_remove(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Issue simple remove sub doc single path "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        inserted_keys = data_set.load()
+
+        data_set.remove_all_docs(inserted_keys, path='isDict')
+        data_set.remove_all_docs(inserted_keys, path='geometry.coordinates[0]')
+        data_set.remove_all_docs(inserted_keys, path='dict_value.name')
+        data_set.remove_all_docs(inserted_keys, path='array[0]')
+        data_set.remove_all_docs(inserted_keys, path='array[-1]')
+
     def test_deeply_nested_dataset_get(self):
         pass
 
@@ -94,6 +108,17 @@ class SimpleDataSet:
                 print '[ERROR] {}'.format(e)
                 self.helper.testcase.fail(
                     "Unable to upsert key {0} for path {1} after {2} tries"
+                    .format(in_key, path, num_tries))
+
+    def remove_all_docs(self, inserted_keys, path):
+        for in_key in inserted_keys:
+            num_tries = 1
+            try:
+                opaque, cas, data = self.helper.client.remove_in(in_key, path)
+            except Exception as e:
+                print '[ERROR] {}'.format(e)
+                self.helper.testcase.fail(
+                    "Unable to remove value for key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))
 
     def replace_all_paths(self):
