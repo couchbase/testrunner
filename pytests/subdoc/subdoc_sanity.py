@@ -38,25 +38,32 @@ class SubdocSanityTests(unittest.TestCase):
         #self.assertFalse(data_set.get_all_docs(inserted_keys, path='array[-5]'))
         #self.assertFalse(data_set.get_all_docs(inserted_keys, path='  '))
 
-    def test_simple_dataset_insert(self):
+    def test_simple_dataset_upsert(self):
         num_docs = self.helper.input.param("num-docs")
-        self.log.info("description : Issue simple insert sub doc single path "
+        self.log.info("description : Issue simple upsert sub doc single path "
                       "dataset with {0} docs".format(num_docs))
 
         data_set = SimpleDataSet(self.helper, num_docs)
         inserted_keys = data_set.load()
 
         ''' Randomly generate 1000 long string to replace existing path strings '''
-        long_string = ''.join(chr(97 + randint(0, 25)) for i in range(1000))
-        long_string = '"' + long_string + '"'
-        data_set.insert_all_paths(inserted_keys, long_string, path='isDict')
-        data_set.insert_all_paths(inserted_keys, long_string, path='geometry.coordinates[0]')
-        data_set.insert_all_paths(inserted_keys, long_string, path='dict_value.name')
-        data_set.insert_all_paths(inserted_keys, "999", path='height')
-        data_set.insert_all_paths(inserted_keys, long_string, path='array[-1]')
+
+        replace_string = self.generate_string(1000)
+
+        data_set.upsert_all_docs(inserted_keys, replace_string, path='isDict')
+        data_set.upsert_all_docs(inserted_keys, replace_string, path='geometry.coordinates[0]')
+        data_set.upsert_all_docs(inserted_keys, replace_string, path='dict_value.name')
+        data_set.upsert_all_docs(inserted_keys, "999", path='height')
+        data_set.upsert_all_docs(inserted_keys, replace_string, path='array[-1]')
 
     def test_deeply_nested_dataset_get(self):
         pass
+
+    def generate_string(self, range_val=100):
+        long_string = ''.join(chr(97 + randint(0, 25)) for i in range(range_val))
+        return '"' + long_string + '"'
+
+
 
 class SimpleDataSet:
     def __init__(self, helper, num_docs):
@@ -73,21 +80,18 @@ class SimpleDataSet:
                 num_tries = 1
                 try:
                     opaque, cas, data = self.helper.client.get_in(in_key, path)
-                    print data
                 except Exception as e:
                     self.helper.testcase.fail(
                         "Unable to get key {0} for path {1} after {2} tries"
                         .format(in_key, path, num_tries))
 
-    def insert_all_paths(self, inserted_keys, long_string, path):
+    def upsert_all_docs(self, inserted_keys, long_string, path):
         for in_key in inserted_keys:
             num_tries = 1
             try:
-                opaque, cas, data = self.helper.client.insert_in(in_key, path ,long_string)
-
-                print data
+                opaque, cas, data = self.helper.client.upsert_in(in_key, path ,long_string)
             except Exception as e:
-                print e
+                print '[ERROR] {}'.format(e)
                 self.helper.testcase.fail(
                     "Unable to upsert key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))
