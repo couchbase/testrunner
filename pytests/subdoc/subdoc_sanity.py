@@ -7,7 +7,7 @@ from basetestcase import BaseTestCase
 from remote.remote_util import RemoteMachineShellConnection
 
 from membase.helper.subdoc_helper import SubdocHelper
-
+from random import randint
 
 class SubdocSanityTests(unittest.TestCase):
     def setUp(self):
@@ -45,7 +45,15 @@ class SubdocSanityTests(unittest.TestCase):
 
         data_set = SimpleDataSet(self.helper, num_docs)
         inserted_keys = data_set.load()
-        # TBD
+
+        ''' Randomly generate 1000 long string to replace existing path strings '''
+        long_string = ''.join(chr(97 + randint(0, 25)) for i in range(1000))
+        long_string = '"' + long_string + '"'
+        data_set.insert_all_paths(inserted_keys, long_string, path='isDict')
+        data_set.insert_all_paths(inserted_keys, long_string, path='geometry.coordinates[0]')
+        data_set.insert_all_paths(inserted_keys, long_string, path='dict_value.name')
+        data_set.insert_all_paths(inserted_keys, "999", path='height')
+        data_set.insert_all_paths(inserted_keys, long_string, path='array[-1]')
 
     def test_deeply_nested_dataset_get(self):
         pass
@@ -71,8 +79,18 @@ class SimpleDataSet:
                         "Unable to get key {0} for path {1} after {2} tries"
                         .format(in_key, path, num_tries))
 
-    def insert_all_paths(self):
-        pass
+    def insert_all_paths(self, inserted_keys, long_string, path):
+        for in_key in inserted_keys:
+            num_tries = 1
+            try:
+                opaque, cas, data = self.helper.client.insert_in(in_key, path ,long_string)
+
+                print data
+            except Exception as e:
+                print e
+                self.helper.testcase.fail(
+                    "Unable to upsert key {0} for path {1} after {2} tries"
+                    .format(in_key, path, num_tries))
 
     def replace_all_paths(self):
         pass
