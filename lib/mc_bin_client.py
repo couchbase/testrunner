@@ -669,6 +669,9 @@ class MemcachedClient(object):
     def insert_in(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DICT_UPSERT, key, path, value, expiry, opaque, cas, create)
 
+    def upsert_in(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DICT_UPSERT, key, path, value, expiry, opaque, cas, create)
+
     def remove_in(self, key, path, opaque=0, cas=0):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DELETE, key, path, opaque=opaque, cas=cas)
 
