@@ -21,7 +21,6 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
 from scripts.collect_server_info import cbcollectRunner
-from scripts import collect_data_files
 from couchbase_helper.documentgenerator import *
 
 from couchbase_helper.documentgenerator import JsonDocGenerator
@@ -439,21 +438,12 @@ class NodeHelper:
                 "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(
                     server.ip,
                     e))
-    @staticmethod
-    def collect_data_files(server):
-        """Collect bucket data files for all the servers in the cluster.
-        Data files are collected only if data is not verified on the cluster.
-        """
-        path = TestInputSingleton.input.param("logs_folder", "/tmp")
-        collect_data_files.cbdatacollectRunner(server, path).run()
 
     @staticmethod
-    def collect_logs(server, cluster_run=False):
+    def collect_logs(server):
         """Grab cbcollect before we cleanup
         """
         NodeHelper.get_cbcollect_info(server)
-        if not cluster_run:
-            NodeHelper.collect_data_files(server)
 
 
 class FloatingServers:
@@ -1775,9 +1765,10 @@ class FTSBaseTest(unittest.TestCase):
         # collect logs before tearing down clusters
         if self._input.param("get-cbcollect-info", False) and \
                 self.__is_test_failed():
+            self.grab_fts_diag()
             for server in self._input.servers:
                 self.log.info("Collecting logs @ {0}".format(server.ip))
-                NodeHelper.collect_logs(server, self.__is_cluster_run())
+                NodeHelper.collect_logs(server)
 
         try:
             if self.__is_cleanup_not_needed():
@@ -2168,16 +2159,14 @@ class FTSBaseTest(unittest.TestCase):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
 
-    def wait_for_indexing_complete(self):
+    def wait_for_indexing_complete(self, retry=5):
         """
         Wait for index_count for any index to stabilize
         """
-        # TODO: Add logic based on stats
-        self.sleep(5, "wait for index to get created")
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "alias":
                 continue
-            retry_count = 6
+            retry_count = retry
             prev_count = 0
             while retry_count > 0:
                 index_doc_count = index.get_indexed_doc_count()
@@ -2187,9 +2176,10 @@ class FTSBaseTest(unittest.TestCase):
                         index.get_src_bucket_doc_count()))
                 if prev_count < index_doc_count or prev_count > index_doc_count:
                     prev_count = index_doc_count
+                    retry_count = retry
                 else:
                     retry_count -= 1
-                time.sleep(5)
+                time.sleep(10)
         if self.compare_es:
             self.es.update_index('default_es_index')
             self.log.info("Docs in ES index: %s" %
@@ -2212,7 +2202,11 @@ class FTSBaseTest(unittest.TestCase):
         4. if index balanced - every fts node services almost equal num of vbs?
         """
         _, defn = index.get_index_defn()
+        start_time = time.time()
         while not defn['planPIndexes']:
+            if time.time() - start_time > 180:
+                self.fail("planPIndexes=null for index {0} even after 3 mins"
+                          .format(index.name))
             self.sleep(5, "No pindexes found, waiting for index to get created")
             _, defn = index.get_index_defn()
 
@@ -2437,6 +2431,7 @@ class FTSBaseTest(unittest.TestCase):
                                                   num_items=self._num_items/2)
 
         self.create_gen.start = 0
+        self.create_gen.itr = 0
         self.create_gen.end = self._num_items
 
     def load_data(self):
@@ -2455,9 +2450,10 @@ class FTSBaseTest(unittest.TestCase):
         load_tasks = []
         self.populate_create_gen()
         if self.compare_es:
+            gen = copy.copy(self.create_gen)
             load_tasks.append(self.es.async_load_ES(index_name='default_es_index',
-                                               gen=self.create_gen,
-                                               op_type='create'))
+                                                    gen=gen,
+                                                    op_type='create'))
         load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(
             self.create_gen)
         return load_tasks
@@ -2491,3 +2487,52 @@ class FTSBaseTest(unittest.TestCase):
         else:
             self.log.info("SUCCESS: %s out of %s queries passed"
                           %(num_queries-fail_count, num_queries))
+
+    def grab_fts_diag(self):
+        """
+         Grab fts diag until it is handled by cbcollect info
+        """
+        from httplib import BadStatusLine
+        import os
+        import urllib2
+        import gzip
+        import base64
+        path = TestInputSingleton.input.param("logs_folder", "/tmp")
+        for serverInfo in self._cb_cluster.get_fts_nodes():
+            self.log.info("Grabbing fts diag from {0}...".format(serverInfo.ip))
+            diag_url = "http://{0}:{1}/api/diag".format(serverInfo.ip,
+                                                        serverInfo.fts_port)
+            self.log.info(diag_url)
+            try:
+                req = urllib2.Request(diag_url)
+                authorization = base64.encodestring('%s:%s' % (
+                    self._input.membase_settings.rest_username,
+                    self._input.membase_settings.rest_password))
+                req.headers = {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Authorization': 'Basic %s' % authorization,
+                    'Accept': '*/*'}
+                filename = "{0}-fts-diag.json".format(serverInfo.ip)
+                page = urllib2.urlopen(req)
+                with open(path+'/'+filename, 'wb') as output:
+                    os.write(1, "downloading {0} ...".format(serverInfo.ip))
+                    while True:
+                        buffer = page.read(65536)
+                        if not buffer:
+                            break
+                        output.write(buffer)
+                        os.write(1, ".")
+                file_input = open('{0}/{1}'.format(path, filename), 'rb')
+                zipped = gzip.open("{0}/{1}.gz".format(path, filename), 'wb')
+                zipped.writelines(file_input)
+                file_input.close()
+                zipped.close()
+                os.remove(filename)
+                print "downloaded and zipped diags @ : {0}/{1}".format(path,
+                                                                       filename)
+            except urllib2.URLError as error:
+                print "unable to obtain fts diags from {0}".format(diag_url)
+            except BadStatusLine:
+                print "unable to obtain fts diags from {0}".format(diag_url)
+            except Exception as e:
+                print "unable to obtain fts diags from {0} :{1}".format(diag_url, e)
