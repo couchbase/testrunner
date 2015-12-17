@@ -42,6 +42,8 @@ def main():
     parser.add_option('-n','--noLaunch', action="store_true", dest='noLaunch', default=False)
     parser.add_option('-c','--component', dest='component', default=None)
     parser.add_option('-p','--poolId', dest='poolId', default='12hour')
+    parser.add_option('-t','--test', dest='test', default=False)
+    parser.add_option('-s','--subcomponent', dest='subcomponent', default=None)
 
 
     options, args = parser.parse_args()
@@ -54,7 +56,8 @@ def main():
     print 'nolaunch', options.noLaunch
     print 'os', options.os
 
-    print 'poolId is', options.poolId
+    print 'subcomponent is', options.subcomponent
+
 
 
 
@@ -73,20 +76,28 @@ def main():
     cb = Bucket('couchbase://' + TEST_SUITE_DB + '/QE-Test-Suites')
 
     if options.component is None or options.component == 'None':
-        query = N1QLQuery("select * from `QE-Test-Suites` where '" + options.run + "' in partOf order by component")
+        queryString = "select * from `QE-Test-Suites` where '" + options.run + "' in partOf order by component"
     else:
-        splitComponents = options.component.split(',')
-        componentString = ''
-        for i in range( len(splitComponents) ):
-            componentString = componentString + "'" + splitComponents[i] + "'"
-            if i < len(splitComponents) - 1:
-                componentString = componentString + ','
+        if options.subcomponent is None or options.subcomponent == 'None':
+            splitComponents = options.component.split(',')
+            componentString = ''
+            for i in range( len(splitComponents) ):
+                componentString = componentString + "'" + splitComponents[i] + "'"
+                if i < len(splitComponents) - 1:
+                    componentString = componentString + ','
 
 
-        queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in [{1}] order by component;".format(options.run, componentString)
-        print 'the query is', queryString #.format(options.run, componentString)
-        query = N1QLQuery(queryString ) #.format(options.run, options.component, componentString ))
-    results = cb.n1ql_query( query )
+            queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in [{1}] order by component;".format(options.run, componentString)
+
+        else:
+            # have a subcomponent, assume only 1 component
+            queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in ['{1}'] and subcomponent ='{2}';".\
+                format(options.run, options.component, options.subcomponent)
+
+
+    print 'the query is', queryString #.format(options.run, componentString)
+    query = N1QLQuery(queryString )
+    results = cb.n1ql_query( queryString )
 
 
     for row in results:
@@ -100,10 +111,15 @@ def main():
                 # not implemented yet
                 print 'Old style Jenkins', data['jenkins']
             else:
+                if 'initNodes' in data:
+                    initNodes = data['initNodes'].lower() == 'true'
+                else:
+                    initNodes = False
+
                 testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],'confFile':data['confFile'],
                                    'iniFile':data['config'],
                                  'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
-                                 'parameters':data['parameters']})
+                                 'parameters':data['parameters'], 'initNodes':initNodes})
         else:
             print 'OS does not apply to', data['component'], data['subcomponent']
 
@@ -112,9 +128,13 @@ def main():
     print '\n\n'
 
 
-    launchString = 'http://qa.sc.couchbase.com/job/test_suite_executor/buildWithParameters?token=test_dispatcher&' + \
+    launchStringBase = 'http://qa.sc.couchbase.com/job/test_suite_executor'
+    if options.test:
+        launchStringBase = launchStringBase + '-test'
+
+    launchString = launchStringBase + '/buildWithParameters?token=test_dispatcher&' + \
                         'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
-                         'iniFile={5}&servers={6}&parameters={7}&os={8}'
+                         'iniFile={5}&servers={6}&parameters={7}&os={8}&initNodes={9}'
 
     summary = []
 
@@ -143,7 +163,7 @@ def main():
                         i = i + 1
 
                 if haveTestToLaunch:
-                    descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent']
+                    descriptor = urllib.quote(testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] + '-' + time.strftime('%b-%d-%X') )
                     # get the VMs, they should be there
 
                     getVMURL = 'http://' + SERVER_MANAGER + \
@@ -154,6 +174,9 @@ def main():
 
                     response, content = httplib2.Http(timeout=60).request(getVMURL, 'GET')
 
+
+                    print 'response.status', response.status
+
                     if response.status == 499:
                         time.sleep(POLL_INTERVAL) # some error checking here at some point
                     else:
@@ -162,7 +185,8 @@ def main():
                                              descriptor, testsToLaunch[i]['component'],
                                              testsToLaunch[i]['subcomponent'], testsToLaunch[i]['iniFile'],
                                              urllib.quote(json.dumps(r2).replace(' ','')),
-                                             urllib.quote(testsToLaunch[i]['parameters']), options.os)
+                                             urllib.quote(testsToLaunch[i]['parameters']), options.os,
+                                             testsToLaunch[i]['initNodes'])
 
                         #print 'launching', url
                         print time.asctime( time.localtime(time.time()) ), 'launching ', descriptor
@@ -180,7 +204,7 @@ def main():
                         summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
                         time.sleep(5)
                 else:
-                    print 'no VMs at this time'
+                    print 'not enough VMs at this time'
                     time.sleep(POLL_INTERVAL)
             #endif checking for servers
 
