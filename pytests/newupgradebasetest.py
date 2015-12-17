@@ -122,7 +122,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                         temp.append(server)
                 self.servers = temp
             except Exception, e:
-                log.info("Exception " + e)
+                self.log.info("Exception " + e)
                 self.cluster.shutdown(force=True)
                 self.fail(e)
             super(NewUpgradeBaseTest, self).tearDown()
