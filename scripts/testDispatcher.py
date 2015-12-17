@@ -114,7 +114,7 @@ def main():
                 if 'initNodes' in data:
                     initNodes = data['initNodes'].lower() == 'true'
                 else:
-                    initNodes = False
+                    initNodes = True
 
                 testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],'confFile':data['confFile'],
                                    'iniFile':data['config'],
@@ -193,6 +193,7 @@ def main():
 
 
                         if options.noLaunch:
+                            print 'would launch', url
                             # free the VMs
                             time.sleep(3)
                             response, content = httplib2.Http(timeout=60).\
