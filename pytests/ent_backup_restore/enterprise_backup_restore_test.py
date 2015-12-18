@@ -115,5 +115,5 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
             self.backup_restore_validate(compare_uuid=compare_uuid, seqno_compare_function=compare_function,
                                          replicas=replicas, mode=mode)
         self.log.info("waiting for tasks")
-        for task in tasks:
-            task.result()
+        #for task in tasks:
+        #    task.result()
