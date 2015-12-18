@@ -314,7 +314,7 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("taskkill /F /T /IM memcached*")
             self.log_command_output(o, r)
         else:
-            o, r = self.execute_command("killall -9 memcached")
+            o, r = self.execute_command("kill $(ps aux | grep 'memcached' | awk '{print $2}')")
             self.log_command_output(o, r)
         return o, r
 
