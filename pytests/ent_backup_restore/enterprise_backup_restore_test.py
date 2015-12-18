@@ -106,14 +106,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
                                  mode="memory"):
         self.ops_type = self.input.param("ops-type", "update")
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
-        tasks = self._load_all_buckets(self.master, gen, self.ops_type, exp)
+        self._load_all_buckets(self.master, gen, self.ops_type, exp)
         if backup:
-            self.log.info("calling backup_cluster_validate")
             self.backup_cluster_validate()
         else:
-            self.log.info("calling backup_restore_validate")
             self.backup_restore_validate(compare_uuid=compare_uuid, seqno_compare_function=compare_function,
                                          replicas=replicas, mode=mode)
-        self.log.info("waiting for tasks")
-        #for task in tasks:
-        #    task.result()
