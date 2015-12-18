@@ -42,8 +42,6 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
     def validate_restore(self, backup_number, backup_vbucket_seqno, restored_vbucket_seqno, compare_uuid=False,
                          compare="==", get_replica=False, mode="memory"):
         self.log.info("backup_number: " + str(backup_number))
-        self.log.info("backup_vbucket_seqno: " + str(backup_vbucket_seqno))
-        self.log.info("restored_vbucket_seqno: " + str(restored_vbucket_seqno))
         status, msg = self.compare_vbucket_stats(backup_vbucket_seqno[backup_number - 1], restored_vbucket_seqno,
                                                  compare_uuid=compare_uuid, seqno_compare=compare)
         if not status:

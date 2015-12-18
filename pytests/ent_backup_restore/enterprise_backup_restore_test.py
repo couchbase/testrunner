@@ -56,11 +56,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create_validate()
         self.backupset.number_of_backups = 1
-        tasks = self.cluster.async_rebalance(self.cluster_to_backup, serv_in, serv_out)
+        self.cluster.async_rebalance(self.cluster_to_backup, serv_in, serv_out)
         self.sleep(10, "Waiting for 10 sec for rebalance to be in progress before tyring to take backup")
         self.backup_cluster_validate()
-        for task in tasks:
-            task.result()
         if self.same_cluster:
             self.backup_reset_clusters(self.cluster_to_backup)
             self._initialize_nodes(Cluster(), self.servers[:self.nodes_init])
@@ -70,10 +68,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
             serv_in = self.input.clusters[0][self.nodes_init: self.nodes_init + self.nodes_in]
             serv_out = self.input.clusters[0][self.nodes_init - self.nodes_out: self.nodes_init]
             compare_uuid = False
-        tasks = self.cluster.async_rebalance(self.cluster_to_restore, serv_in, serv_out)
+        self.cluster.async_rebalance(self.cluster_to_restore, serv_in, serv_out)
         self.backup_restore_validate(compare_uuid=compare_uuid, seqno_compare_function="<=")
-        for task in tasks:
-            task.result()
 
     def test_backup_restore_with_ops(self):
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
