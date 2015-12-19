@@ -3,6 +3,7 @@ import random
 import logger
 import time
 import unittest
+import copy
 
 from TestInput import TestInputSingleton
 from couchbase_helper.document import DesignDocument, View
@@ -68,13 +69,88 @@ class SubdocHelper:
             ClusterOperationHelper.wait_for_ns_servers_or_assert(
                 self.servers, self.testcase)
 
+    '''Recursive call to create a deep nested Dictionary JSON document '''
+    def _createNestedJson(self, key, dict):
+        if dict['levels'] == 0:
+            return
+        if dict['doc'] == {}:
+            dict['doc'] = copy.copy(self.jsonSchema)
+        else:
+            dict['doc']['child'] = copy.copy(self.jsonSchema)
+            dict['doc']['child']['array'] = []
+            dict['doc'] = dict['doc']['child']
+
+        dict['doc']['id'] = key
+        dict['doc']['number'] = dict['levels']
+
+        for level in xrange(0, dict['levels']):
+            dict['doc']['array'].append(level)
+        return self._createNestedJson(key, {'doc': dict['doc'], 'levels': dict['levels']-1})
+
+    '''Recursive call to create a deep nested Array JSON document
+    This should be changed to make it as recursive for array'''
+    def _createNestedJsonArray(self, key, dict):
+        self.array = [[[1, 2, 3, True, True],200,300],20,30,[1000,2000,3000]]
+        if dict['levels'] == 0:
+            return
+        if dict['doc'] == {}:
+            dict['doc'] = copy.copy(self.jsonSchema)
+        else:
+            dict['doc']['child'] = copy.copy(self.jsonSchema)
+            dict['doc']['child']['array'] = []
+            dict['doc'] = dict['doc']['child']
+
+        dict['doc']['id'] = key
+        dict['doc']['number'] = dict['levels']
+
+        for level in xrange(0, dict['levels']):
+            dict['doc']['array'].append(level)
+            dict['doc']['array'][level] = self.array
+        return self._createNestedJson(key, {'doc': dict['doc'], 'levels': dict['levels']-1})
+
+    def insert_nested_docs(self, num_of_docs, prefix='doc', levels=16, size=512, return_docs=False):
+        rest = RestConnection(self.master)
+        smart = VBucketAwareMemcached(rest, self.bucket)
+        doc_names = []
+
+        dict = {'doc' : {}, 'levels' : levels }
+
+        for i in range(0, num_of_docs):
+            key = doc_name = "{0}-{1}".format(prefix, i)
+            self._createNestedJson(key, dict)
+            value = dict['doc']
+            if not return_docs:
+                doc_names.append(doc_name)
+            else:
+                doc_names.append(value)
+                # loop till value is set
+            fail_count = 0
+            while True:
+                try:
+                    smart.set(key, 0, 0, json.dumps(value))
+                    break
+                except MemcachedError as e:
+                    fail_count += 1
+                    if (e.status == 133 or e.status == 132) and fail_count < 60:
+                        if i == 0:
+                            self.log.error("waiting 5 seconds. error {0}"
+                            .format(e))
+                            time.sleep(5)
+                        else:
+                            self.log.error(e)
+                            time.sleep(1)
+                    else:
+                        raise e
+        self.log.info("Inserted {0} json documents".format(num_of_docs))
+        return doc_names
+
     # If you insert docs that are already there, they are simply
     # overwritten.
     # extra_values are key value pairs that will be added to the
     # JSON document
     # If `return_docs` is true, it'll return the full docs and not
     # only the keys
-    def insert_docs(self, num_of_docs, prefix='doc', extra_values={},
+    def insert_nested_specific_docs(self, num_of_docs, prefix='doc', extra_values={},
                     return_docs=False):
         random.seed(12345)
         rest = RestConnection(self.master)
@@ -86,7 +162,34 @@ class SubdocHelper:
                         [random.randrange(-180, 180),
                          random.randrange(-90, 90)]}
             value = {
-                "name": doc_name,
+                "padding": None,
+                "d1" :{
+                    "padding": None,
+                    "d2" :{
+                        "int_array" : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                        "str_array" :["john", "doe", "john", "block", "jim", "john"],
+                        "mix_array" : [1, 2, True, False, 'bird', 5.0, 6.0, `123`],
+                        "d3" : {
+                            "d4_01" : 1,
+                            "d4_02" : [21, 22, 23, 24, 25 ],
+                            "d4_03" : False,
+                            "d4_04" : "San Francisco",
+                            "d4_05" : {
+                                "d5_01" : random.randrange(6, 13),
+                                "d5_02" : [ random.randrange(5, 10), random.randrange(6, 13)],
+                                "d5_03" : "abcdefghi",
+                                "d5_04" : {
+                                   "d6_01" : random.randrange(6, 13),
+                                   "d6_02" : [1, 2, True, False, 'bird', 5.0, 6.0, `123`]
+                                }
+                            }
+                        },
+                        "d2_02" : {"d2_02_01":"name"},
+                        "d2_03" :geom
+                    },
+                    "d1_02" :[1, 2, True, False, 'bird', 5.0, 6.0, `123`],
+                    "d1_03" : False
+                },
                 "age": random.randrange(1, 1000),
                 "geometry": geom,
                 "array" :[0,1,2,3,4,5,6,7,8,9,20],
@@ -112,6 +215,53 @@ class SubdocHelper:
                         if i == 0:
                             self.log.error("waiting 5 seconds. error {0}"
                                            .format(e))
+                            time.sleep(5)
+                        else:
+                            self.log.error(e)
+                            time.sleep(1)
+                    else:
+                        raise e
+        self.log.info("Inserted {0} json documents".format(num_of_docs))
+        return doc_names
+
+    def insert_docs(self, num_of_docs, prefix='doc', extra_values={},
+                    return_docs=False):
+        random.seed(12345)
+        rest = RestConnection(self.master)
+        smart = VBucketAwareMemcached(rest, self.bucket)
+        doc_names = []
+        for i in range(0, num_of_docs):
+            key = doc_name = "{0}-{1}".format(prefix, i)
+            geom = {"type": "Point", "coordinates":
+                [random.randrange(-180, 180),
+                 random.randrange(-90, 90)]}
+            value = {
+                "name": doc_name,
+                "age": random.randrange(1, 1000),
+                "geometry": geom,
+                "array" :[0,1,2,3,4,5,6,7,8,9,20],
+                "isDict" : True,
+                "dict_value" : {"name":"abc", "age":1},
+                "height": random.randrange(1, 13000),
+                "bloom": random.randrange(1, 6),
+                "shed_leaves": random.randrange(6, 13)}
+            value.update(extra_values)
+            if not return_docs:
+                doc_names.append(doc_name)
+            else:
+                doc_names.append(value)
+                # loop till value is set
+            fail_count = 0
+            while True:
+                try:
+                    smart.set(key, 0, 0, json.dumps(value))
+                    break
+                except MemcachedError as e:
+                    fail_count += 1
+                    if (e.status == 133 or e.status == 132) and fail_count < 60:
+                        if i == 0:
+                            self.log.error("waiting 5 seconds. error {0}"
+                            .format(e))
                             time.sleep(5)
                         else:
                             self.log.error(e)
