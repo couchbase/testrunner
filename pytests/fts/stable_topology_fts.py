@@ -1,6 +1,6 @@
 from fts_base import FTSBaseTest
 from lib.membase.api.rest_client import RestConnection
-from lib.membase.api.exception import FTSException,ServerUnavailableException
+from lib.membase.api.exception import FTSException, ServerUnavailableException
 
 
 class StableTopFTS(FTSBaseTest):
@@ -16,7 +16,7 @@ class StableTopFTS(FTSBaseTest):
             rest = RestConnection(self._cb_cluster.get_random_fts_node())
             rest.get_fts_index_definition("invalid_index")
         except ServerUnavailableException as e:
-            raise FTSException("FTS has not started on : %s" %e)
+            raise FTSException("FTS service has not started: %s" %e)
 
     def create_simple_default_index(self):
         self.load_data()
@@ -25,17 +25,16 @@ class StableTopFTS(FTSBaseTest):
         if self._update or self._delete:
             self.wait_for_indexing_complete()
             self.validate_index_count(equal_bucket_doc_count=True,
-                                  zero_rows_ok=False)
+                                      zero_rows_ok=False)
             self.async_perform_update_delete(self.upd_del_fields)
         self.wait_for_indexing_complete()
-        self.validate_index_count(equal_bucket_doc_count=True,
-                                  zero_rows_ok=False)
+        self.validate_index_count(equal_bucket_doc_count=True)
 
     def run_default_index_query(self):
         self.create_simple_default_index()
         query = eval(self._input.param("query", str(self.sample_query)))
         for index in self._cb_cluster.get_indexes():
-            self.execute_query(index.name, query, zero_results_ok=False)
+            index.execute_query(query, zero_results_ok=True)
 
     def test_query_type(self):
         self.load_data()
@@ -43,9 +42,8 @@ class StableTopFTS(FTSBaseTest):
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
         self.wait_for_indexing_complete()
-        self.generate_random_query(index, self.num_queries, self.query_types)
-        for query in index.queries:
-            self.execute_query(index.name, query)
+        self.generate_random_queries(index, self.num_queries, self.query_types)
+        self.run_query_and_compare(index)
 
     def index_utf16_dataset(self):
         self.load_utf16_data()
@@ -67,12 +65,10 @@ class StableTopFTS(FTSBaseTest):
         index = self.create_default_index(bucket, "default_index")
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
-        hits, _ = self.execute_query(index.name,
-                                     self.sample_query,
+        hits, _ = index.execute_query(self.sample_query,
                                      zero_results_ok=False)
         alias = self.create_alias([index])
-        hits2, _ = self.execute_query(alias.name,
-                                      self.sample_query,
+        hits2, _ = alias.execute_query(self.sample_query,
                                       zero_results_ok=False)
         if hits != hits2:
             self.fail("Index query yields {0} hits while alias on same index "
@@ -92,7 +88,7 @@ class StableTopFTS(FTSBaseTest):
         index = self.create_default_index(bucket, "default_index")
         self._cb_cluster.delete_fts_index(index.name)
         try:
-            hits2, _ = self.execute_query(index.name, self.sample_query)
+            hits2, _ = index.execute_query(self.sample_query)
         except Exception as e:
             # expected, pass test
             self.log.error(" Expected exception: {0}".format(e))
@@ -112,7 +108,7 @@ class StableTopFTS(FTSBaseTest):
         index, alias = self.create_simple_alias()
         self._cb_cluster.delete_fts_index(index.name)
         try:
-            hits, _ = self.execute_query(index.name, self.sample_query)
+            hits, _ = index.execute_query(self.sample_query)
             if hits != 0:
                 self.fail("Query alias with deleted target returns query results!")
         except Exception as e:
@@ -150,12 +146,12 @@ class StableTopFTS(FTSBaseTest):
         index = self._cb_cluster.create_fts_index('sample_index',
                                                   source_name='default')
         self.wait_for_indexing_complete()
-        hits, _ = self.execute_query(index.name, self.sample_query)
+        hits, _ = index.execute_query(self.sample_query)
         new_plan_param = {"maxPartitionsPerPIndex": 30}
         index.index_definition['params'] = \
             index.build_custom_plan_params(new_plan_param)
         index.update()
-        hits2, _ = self.execute_query(index.name, self.sample_query)
+        hits2, _ = index.execute_query(self.sample_query)
         if hits != hits2:
             self.fail("Changing maxPartitionsPerIndex results in wrong hits for"
                       "same query")

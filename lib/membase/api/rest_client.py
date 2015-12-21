@@ -245,6 +245,9 @@ class RestConnection(object):
             self.query_port=8094
             if "index_port" in serverInfo.keys():
                 self.index_port = serverInfo["index_port"]
+            if "fts_port" in serverInfo.keys():
+                if serverInfo['fts_port']:
+                    self.fts_port = serverInfo["fts_port"]
             self.hostname = ''
             if "hostname" in serverInfo:
                 self.hostname = serverInfo["hostname"]
@@ -261,6 +264,9 @@ class RestConnection(object):
                 self.index_port = serverInfo.index_port
             if hasattr(serverInfo, 'query_port'):
                 self.query_port = serverInfo.query_port
+            if hasattr(serverInfo, 'fts_port'):
+                if serverInfo.fts_port:
+                    self.fts_port = serverInfo.fts_port
             if hasattr(serverInfo, 'hostname') and serverInfo.hostname and\
                serverInfo.hostname.find(self.ip) == -1:
                 self.hostname = serverInfo.hostname
@@ -753,7 +759,7 @@ class RestConnection(object):
                 log.error("ServerNotFoundError error while connecting to {0} error {1} ".format(api, e))
                 if time.time() > end_time:
                     raise ServerUnavailableException(ip=self.ip)
-            time.sleep(1)
+            time.sleep(3)
 
     def init_cluster(self, username='Administrator', password='password', port='8091'):
         api = self.baseUrl + 'settings/web'
@@ -2021,10 +2027,9 @@ class RestConnection(object):
     def create_fts_index(self, index_name, params):
         """create or edit fts index , returns {"status":"ok"} on success"""
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)
-        log.info(json.dumps(params, ensure_ascii=False, indent=3))
         status, content, header = self._http_request(api,
                                     'PUT',
-                                    json.dumps(params,ensure_ascii=False),
+                                    json.dumps(params, ensure_ascii=False),
                                     headers=self._create_capi_headers_with_auth(
                                                 self.username,
                                                 self.password),
@@ -2113,17 +2118,19 @@ class RestConnection(object):
     def run_fts_query(self, index_name, query_json):
         """Method run an FTS query through rest api"""
         api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
+        headers = self._create_capi_headers_with_auth(
+                    self.username,
+                    self.password)
+
         status, content, header = self._http_request(
             api,
             "POST",
-            json.dumps(query_json, ensure_ascii=False),
-            headers=self._create_capi_headers_with_auth(
-                self.username,
-                self.password),
+            json.dumps(query_json, ensure_ascii=False).encode('utf8'),
+            headers,
             timeout=30)
         if status:
             content = json.loads(content)
-            return content['total_hits'], content['hits']
+            return content['total_hits'], content['hits'], content['took']
 
 
     """ End of FTS rest APIs """
@@ -2268,6 +2275,23 @@ class RestConnection(object):
                         rebalance, cluster, views, stderr]] end, []]).'.format(loglevel)
         return self._http_request(api=api, method='POST', params=request_body,
                                   headers=self._create_headers())
+
+    def set_indexer_params(self, parameter, val):
+        """
+        :Possible  parameters:
+            -- indexerThreads
+            -- memorySnapshotInterval
+            -- stableSnapshotInterval
+            -- maxRollbackPoints
+            -- logLevel
+        """
+        params = {}
+        api = self.baseUrl + 'settings/indexes'
+        params[parameter] = val
+        params = urllib.urlencode(params)
+        status, content, header = self._http_request(api, "POST", params)
+        log.info('Indexer {0} set to {1}'.format(parameter, val))
+        return status
 
     def set_couchdb_option(self, section, option, value):
         """Dynamic settings changes"""

@@ -2,6 +2,7 @@ from newtuq import QueryTests
 import random
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from couchbase_helper.query_definitions import QueryDefinition
+from membase.api.rest_client import RestConnection
 
 class BaseSecondaryIndexingTests(QueryTests):
 
@@ -49,6 +50,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.memory_drop_list = []
         self.n1ql_node = self.get_nodes_from_services_map(service_type = "n1ql")
         self.skip_cleanup = self.input.param("skip_cleanup", False)
+        self.index_loglevel = self.input.param("index_loglevel", None)
+        if self.index_loglevel:
+            self.set_indexer_logLevel(self.index_loglevel)
 
 
     def tearDown(self):
@@ -61,7 +65,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             index_where_clause = query_definition.index_where_clause
         self.query = query_definition.generate_index_create_query(bucket = bucket,
          use_gsi_for_secondary = self.use_gsi_for_secondary, deploy_node_info= deploy_node_info,
-         defer_build = self.defer_build, index_where_clause = index_where_clause )
+         defer_build = self.defer_build, index_where_clause = index_where_clause, gsi_type = self.gsi_type)
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
         if self.defer_build:
             build_index_task = self.async_build_index(bucket, [query_definition.index_name])
@@ -76,7 +80,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             index_where_clause = query_definition.index_where_clause
         self.query = query_definition.generate_index_create_query(bucket = bucket,
             use_gsi_for_secondary = self.use_gsi_for_secondary, deploy_node_info = deploy_node_info,
-            defer_build = self.defer_build, index_where_clause = index_where_clause)
+            defer_build = self.defer_build, index_where_clause = index_where_clause, gsi_type = self.gsi_type)
         create_index_task = self.cluster.async_create_index(
                  server = self.n1ql_node, bucket = bucket,
                  query = self.query , n1ql_helper = self.n1ql_helper,
@@ -103,7 +107,7 @@ class BaseSecondaryIndexingTests(QueryTests):
     def sync_create_index(self, bucket, query_definition, deploy_node_info = None):
         self.query = query_definition.generate_index_create_query(bucket = bucket,
             use_gsi_for_secondary = self.use_gsi_for_secondary, deploy_node_info = deploy_node_info,
-            defer_build = self.defer_build)
+            defer_build = self.defer_build, gsi_type = self.gsi_type)
         create_index_task = self.cluster.create_index(self,
                  server = self.n1ql_node, bucket = bucket,
                  query = self.query , n1ql_helper = self.n1ql_helper,
@@ -175,7 +179,7 @@ class BaseSecondaryIndexingTests(QueryTests):
     def sync_multi_create_index(self, buckets = [], query_definitions =[]):
         for bucket in buckets:
             for query_definition in query_definitions:
-                index_info = query_definition.generate_index_create_query(bucket = bucket.name)
+                index_info = query_definition.generate_index_create_query(bucket=bucket.name, gsi_type=self.gsi_type)
                 if index_info not in self.memory_create_list:
                     self.memory_create_list.append(index_info)
                     self.sync_create_index(bucket.name, query_definition)
@@ -754,3 +758,22 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.use_where_clause_in_index = True
         else:
             self.query_definitions =  query_definition_generator.generate_employee_data_query_definitions()
+
+    def set_indexer_logLevel(self, loglevel="info"):
+        """
+        :param loglevel:
+        Possible Values
+            -- info
+            -- debug
+            -- warn
+            -- verbose
+            -- Silent
+            -- Fatal
+            -- Error 
+            -- Timing
+            -- Trace
+        """
+        self.log.info("Setting indexer log level to {0}".format(loglevel))
+        server = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(server)
+        status = rest.set_indexer_params("logLevel", loglevel)

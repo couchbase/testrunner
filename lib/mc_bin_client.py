@@ -136,7 +136,7 @@ class MemcachedClient(object):
         extraHeader = struct.pack(REQ_PKT_SD_EXTRAS, len(path), createFlag)
         body = path
         if val != None:
-            body += val
+            body += str(val)
         self._sendCmd(cmd, key, body, opaque, extraHeader, cas)
         return self._handleSingleResponse(opaque)
 
@@ -663,33 +663,41 @@ class MemcachedClient(object):
         """Set the config within the memcached server."""
         return self._doCmd(memcacheConstants.CMD_SET_CLUSTER_CONFIG, blob_conf, '')
 
-    def get_in(self, key, path, cas=0):
+    def get_sd(self, key, path, cas=0):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_GET, key, path, cas=cas)
 
-    def insert_in(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
-        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DICT_UPSERT, key, path, value, expiry, opaque, cas, create)
-
-    def remove_in(self, key, path, opaque=0, cas=0):
-        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DELETE, key, path, opaque=opaque, cas=cas)
-
-    def exists_in(self, key, path, opaque=0, cas=0):
+    def exists_sd(self, key, path, opaque=0, cas=0):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_EXISTS, key, path, opaque=opaque, cas=cas)
 
-    def replace_in(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+    def dict_add_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DICT_ADD, key, path, value, expiry, opaque, cas, create)
+
+    def dict_upsert_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DICT_UPSERT, key, path, value, expiry, opaque, cas, create)
+
+    def delete_sd(self, key, path, opaque=0, cas=0):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DELETE, key, path, opaque=opaque, cas=cas)
+
+    def replace_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_REPLACE, key, path, value, expiry, opaque, cas, create)
 
-    def append_in(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+    def array_push_last_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_LAST, key, path, value, expiry, opaque, cas, create)
 
-    def prepend_in(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+    def array_push_first_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_FIRST, key, path, value, expiry, opaque, cas, create)
 
-    def add_unique_in(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+    def array_add_unique_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_ADD_UNIQUE, key, path, value, expiry, opaque, cas, create)
 
-    def counter_in(self, type, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+    def counter_sd(self, type, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_COUNTER, key, path, value, expiry, opaque, cas, create)
 
+    def multi_mutation_sd(self, type, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_MULTI_MUTATION, key, path, value, expiry, opaque, cas, create)
+
+    def multi_lookup_sd(self, type, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_MULTI_LOOKUP, key, path, value, expiry, opaque, cas, create)
 
 def error_to_str(errno):
     if errno == 0x01:
@@ -738,12 +746,12 @@ def error_to_str(errno):
         return "Path not exists"
     elif errno == memcacheConstants.ERR_SUBDOC_PATH_MISMATCH:
         return "Path mismatch"
+    elif errno == memcacheConstants.ERR_SUBDOC_PATH_EEXISTS:
+        return "Path exists already"
     elif errno == memcacheConstants.ERR_SUBDOC_PATH_EINVAL:
         return "Invalid path"
     elif errno == memcacheConstants.ERR_SUBDOC_PATH_E2BIG:
         return "Path too big"
-    elif errno == memcacheConstants.ERR_SUBDOC_DOC_E2DEEP:
-        return "Doc too deep"
     elif errno == memcacheConstants.ERR_SUBDOC_VALUE_CANTINSERT:
         return "Cant insert"
     elif errno == memcacheConstants.ERR_SUBDOC_DOC_NOTJSON:
@@ -752,7 +760,18 @@ def error_to_str(errno):
         return "Num out of range"
     elif errno == memcacheConstants.ERR_SUBDOC_DELTA_ERANGE:
         return "Delta out of range"
-    elif errno == memcacheConstants.ERR_SUBDOC_PATH_EEXISTS:
-        return "Path exists already"
+    elif errno == memcacheConstants.ERR_SUBDOC_DOC_ETOODEEP:
+        return "Doc too deep"
     elif errno == memcacheConstants.ERR_SUBDOC_VALUE_TOODEEP:
         return "Value too deep"
+    elif errno == memcacheConstants.ERR_SUBDOC_INVALID_CMD_COMBO:
+        return "Invalid combinations of commands"
+    elif errno == memcacheConstants.ERR_SUBDOC_MULTI_PATH_FAILURE:
+        return "Specified key was successfully found, but one or more path operations failed"
+
+
+
+
+
+
+

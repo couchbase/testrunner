@@ -40,6 +40,8 @@ class QueryTests(BaseTestCase):
         self.primary_indx_type = self.input.param("primary_indx_type", 'VIEW')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
+        if self.primary_indx_type.lower() == "gsi":
+            self.gsi_type = self.input.param("gsi_type", None)
         if self.input.param("reload_data", False):
             for bucket in self.buckets:
                 self.cluster.bucket_flush(self.master, bucket=bucket,
@@ -687,6 +689,8 @@ class QueryTests(BaseTestCase):
                     self.sleep(3, 'Sleep for some time after index drop')
                 self.log.info("Creating primary index for %s ..." % bucket.name)
                 self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
+                if self.gsi_type:
+                    self.query += " WITH {'index_type': 'memdb'}"
                 try:
                     self.run_cbq_query()
                     if self.primary_indx_type.lower() == 'gsi':

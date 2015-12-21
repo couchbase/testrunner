@@ -956,6 +956,108 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
         self.state = FINISHED
         self.set_result(True)
 
+
+class ESLoadGeneratorTask(Task):
+    """
+        Class to load/update/delete documents into/from Elastic Search
+    """
+
+    def __init__(self, es_instance, index_name, generator, op_type="create"):
+        Task.__init__(self, "ES_loader_task")
+        self.es_instance = es_instance
+        self.index_name = index_name
+        self.generator = generator
+        self.iterator = 0
+        self.log.info("Starting to load data into Elastic Search ...")
+
+    def check(self, task_manager):
+        self.state = FINISHED
+        self.set_result(True)
+
+    def execute(self, task_manager):
+        for key, doc in self.generator:
+            doc = json.loads(doc)
+            self.es_instance.load_data(self.index_name,
+                                       json.dumps(doc, encoding='utf-8'),
+                                       doc['_type'],
+                                       key)
+            self.iterator += 1
+            if math.fmod(self.iterator, 500) == 0.0:
+                self.log.info("{0} documents loaded into ES".
+                              format(self.iterator))
+        self.state = FINISHED
+        self.set_result(True)
+
+class ESRunQueryCompare(Task):
+    def __init__(self, fts_index, es_instance, query_index):
+        Task.__init__(self, "Query_runner_task")
+        self.fts_index = fts_index
+        self.fts_query = fts_index.fts_queries[query_index]
+        self.es = es_instance
+        if self.es:
+            self.es_query = es_instance.es_queries[query_index]
+        self.max_verify = None
+        self.show_results = False
+        self.query_index = query_index
+        self.passed = True
+        self.log.info("Query verification in progress for %s..."
+                      % json.dumps(self.fts_query, ensure_ascii=False))
+
+    def check(self, task_manager):
+        self.state = FINISHED
+        self.set_result(self.result)
+
+    def execute(self, task_manager):
+        try:
+            self.log.info("---------------------------------------------------"
+                          "--------------- Query # %s -----------------------"
+                          "------------------------------------------"
+                          % str(self.query_index+1))
+            fts_hits, fts_doc_ids, fts_time = self.run_fts_query(self.fts_query)
+            self.log.info("FTS hits for query: %s is %s (took %sms)" % \
+                          (json.dumps(self.fts_query, ensure_ascii=False),
+                           fts_hits,
+                           float(fts_time)/1000000))
+            if self.es and self.es_query['query']:
+                es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query)
+                self.log.info("ES hits for query: %s is %s (took %sms)" % \
+                              (json.dumps(self.es_query['query'],  ensure_ascii=False),
+                              es_hits,
+                              es_time))
+                if int(es_hits) != int(fts_hits):
+                    msg = "FAIL: FTS hits: %s, while ES hits: %s"\
+                          % (fts_hits, es_hits)
+                    self.log.error(msg)
+                es_but_not_fts = list(set(es_doc_ids) - set(fts_doc_ids))
+                fts_but_not_es = list(set(fts_doc_ids) - set(es_doc_ids))
+                if not (es_but_not_fts or fts_but_not_es):
+                    self.log.info("SUCCESS: Docs returned by FTS = docs"
+                                  " returned by ES, doc_ids verified")
+                else:
+                    if fts_but_not_es:
+                        msg = "FAIL: Following %s doc(s) were not returned" \
+                              " by ES,but FTS: %s" \
+                              % (len(fts_but_not_es), fts_but_not_es)
+                    else:
+                        msg = "FAIL: Following %s docs were not returned" \
+                              " by FTS, but ES: %s" \
+                              % (len(es_but_not_fts), es_but_not_fts)
+                    self.log.error(msg)
+                    self.passed = False
+            self.state = CHECKING
+            task_manager.schedule(self)
+        except Exception as e:
+            self.log.error(e)
+            self.set_exception(e)
+            self.state = FINISHED
+
+    def run_fts_query(self, query):
+        return self.fts_index.execute_query(query)
+
+    def run_es_query(self, query):
+        return self.es.search(index_name='default_es_index', query=query)
+
+
 # This will be obsolete with the implementation of batch operations in LoadDocumentsTaks
 class BatchedLoadDocumentsTask(GenericLoadingTask):
     def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=True, batch_size=100, pause_secs=1, timeout_secs=60):
@@ -2105,7 +2207,6 @@ class N1QLQueryTask(Task):
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
             self.set_exception(e)
-
 
 class CreateIndexTask(Task):
     def __init__(self,

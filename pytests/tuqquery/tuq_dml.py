@@ -15,10 +15,20 @@ class DMLQueryTests(QueryTests):
         super(DMLQueryTests, self).setUp()
         self.directory = self.input.param("directory", "/tmp/tuq_data")
         self.named_prepare = self.input.param("named_prepare", None)
-        #self.shell.execute_command("killall cbq-engine")
+        print "-"*100
+        print "Temp process shutdown to debug MB-16888"
+        print "-"*100
+        print(self.shell.execute_command("ps aux | grep cbq"))
+        print(self.shell.execute_command("ps aux | grep indexer"))
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket,
                                   timeout=self.wait_timeout * 5)
+        self.shell.execute_command("killall -9 cbq-engine")
+        self.shell.execute_command("killall -9 indexer")
+        self.sleep(60, 'wait for indexer')
+        print(self.shell.execute_command("ps aux | grep indexer"))
+        print(self.shell.execute_command("ps aux | grep cbq"))
+        print "-"*100
 
 ############################################################################################################################
 #
@@ -650,6 +660,8 @@ class DMLQueryTests(QueryTests):
         index_name = 'automation%s' % str(uuid.uuid4())[:5]
         for bucket in self.buckets:
             self.query = 'create index %s on %s(name) USING %s' % (index_name, bucket.name, self.index_type)
+            if self.gsi_type:
+                self.query += " WITH {'index_type': 'memdb'}"
             self.run_cbq_query()
             self._wait_for_index_online(bucket, index_name)
         try:
@@ -681,6 +693,8 @@ class DMLQueryTests(QueryTests):
         index_name = 'automation%s' % str(uuid.uuid4())[:5]
         for bucket in self.buckets:
             self.query = 'create index %s on %s(name) USING %s' % (index_name, bucket.name, self.index_type)
+            if self.gsi_type:
+                self.query += " WITH {'index_type': 'memdb'}"
             self.run_cbq_query()
             self._wait_for_index_online(bucket, index_name)
         try:
@@ -743,30 +757,13 @@ class DMLQueryTests(QueryTests):
 
     def test_delete_where_clause_json_less_equal(self):
         keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
-        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_day"] <=1]
+        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["join_day"] <=1]
         for bucket in self.buckets:
-            self.query = 'delete from %s where job_day<=1'  % (bucket.name)
+            self.query = 'delete from %s where join_day<=1'  % (bucket.name)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
 
-    def test_delete_where_clause_json_not_equal(self):
-        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
-        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_title"] != 'Engineer']
-        for bucket in self.buckets:
-            self.query = 'delete from %s where job_title!="Engineer"'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self._keys_are_deleted(keys_to_delete)
-
-    def test_delete_where_clause_json_less_equal(self):
-        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
-        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_day"] <=1]
-        for bucket in self.buckets:
-            self.query = 'delete from %s where job_day<=1'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self._keys_are_deleted(keys_to_delete)
 
     def test_prepared_delete_where_clause_json_less_equal(self):
         keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
@@ -1182,13 +1179,15 @@ class DMLQueryTests(QueryTests):
                              if len([vm['os'] for vm in row['VMs']
                                      if vm['os'] == updated_value]) == 1], 'Os of vms were not changed')
 
-    def update_keys_clause_hints(self,idx_name):
+    def update_keys_clause_hints(self):
         num_docs = self.input.param('num_docs', 10)
         keys, _ = self._insert_gen_keys(num_docs, prefix='update_keys_hints %s' % str(uuid.uuid4())[:4])
         updated_value = 'new_name'
         index_name = 'idx_name'
         for bucket in self.buckets:
             self.query = "CREATE INDEX %s ON %s(name) USING %s" % (index_name, bucket.name,self.index_type)
+            if self.gsi_type:
+                self.query += " WITH {'index_type': 'memdb'}"
             self.run_cbq_query()
             self._wait_for_index_online(bucket, index_name)
             self.query = 'update %s use index(%s using %s) set name="%s"'  % (bucket.name, index_name, self.index_type, updated_value)
@@ -1202,13 +1201,15 @@ class DMLQueryTests(QueryTests):
             self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
             self.run_cbq_query()
 
-    def update_where_hints(self,idx_name):
+    def update_where_hints(self):
         num_docs = self.input.param('num_docs', 10)
         _, values = self._insert_gen_keys(num_docs, prefix='update_where %s' % str(uuid.uuid4())[:4])
         updated_value = 'new_name'
         index_name = 'idx_name'
         for bucket in self.buckets:
             self.query = "CREATE INDEX %s ON %s(join_day) USING %s" % (index_name, bucket.name,self.index_type)
+            if self.gsi_type:
+                self.query += " WITH {'index_type': 'memdb'}"
             self.run_cbq_query()
             self._wait_for_index_online(bucket, index_name)
             self.query = 'update %s use index(%s using %s) set name="%s" where join_day=1 returning name'  % (bucket.name, index_name, self.index_type, updated_value)
@@ -1237,13 +1238,19 @@ class DMLQueryTests(QueryTests):
                 index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
                 self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (
                 index_name, bucket.name, ','.join(field.split(';')), self.index_type)
+                if self.gsi_type:
+                    self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 indexes.append(index_name)
         try:
             for indx in indexes:
                 fn = getattr(self, method_name)
-                fn(indx)
+                if("update_where_hints" in str(fn) or "update_keys_clause_hints" in str(fn)):
+                    fn()
+                else:
+                    fn(indx)
+
         finally:
             for bucket in self.buckets:
                 for indx in indexes:
@@ -1263,6 +1270,8 @@ class DMLQueryTests(QueryTests):
                 index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0].replace('~', '_'))
                 self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (
                 index_name, bucket.name, ','.join(field.split('~')), self.index_type)
+                if self.gsi_type:
+                    self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 indexes.append(index_name)
