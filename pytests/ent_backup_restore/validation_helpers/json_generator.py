@@ -11,6 +11,11 @@ class JSONGenerator:
         self.object = None
 
     def generate(self, obj, template_json):
+        """
+        Recursively generates map for the given json template
+        :param obj: map
+        :param template_json: json
+        """
         if isinstance(template_json, dict):
             for key in template_json.keys():
                 if not isinstance(template_json[key], list) and not isinstance(template_json[key], dict):

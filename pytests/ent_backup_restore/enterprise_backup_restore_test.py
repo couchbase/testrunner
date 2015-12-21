@@ -16,6 +16,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.backup_create_validate()
 
     def test_backup_restore_sanity(self):
+        """
+        1. Create default bucket on the cluster and loads it with given number of items
+        2. Perform updates and create backups for specified number of times (test param number_of_backups)
+        3. Perform restores for the same number of times with random start and end values
+        """
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.ops_type = self.input.param("ops-type", "update")
@@ -52,6 +57,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
             restored["{0}/{1}".format(start, end)] = ""
 
     def test_backup_restore_after_rebalance(self):
+        """
+        1. Create default bucket on the cluster and loads it with given number of items
+        2. Does a rebalance with specified number of servers in (test param nodes_in) and servers out
+        (test param nodes_out)
+        3. Takes a backup
+        4. Resets cluster if it is same cluster (test param same_cluster) and Rebalances again
+        5. Performs a restore on the restore cluster
+        """
         serv_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
         serv_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
         gen = BlobGenerator("ent-backup", "ent-backup", self.value_size, end=self.num_items)
@@ -75,6 +88,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.backup_restore_validate(compare_uuid=compare_uuid, seqno_compare_function="<=")
 
     def test_backup_restore_with_ops(self):
+        """
+        1. Create default bucket on the cluster and loads it with given number of items
+        2. Perform the specified ops (test param ops-type) and create backups for specified number of times
+        (test param number_of_backups)
+        3. Perform restores for the same number of times with random start and end values
+        """
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.ops_type = self.input.param("ops-type", "update")

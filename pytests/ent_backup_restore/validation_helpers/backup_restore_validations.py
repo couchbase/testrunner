@@ -20,6 +20,11 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         self.log = logger.Logger.get_logger()
 
     def validate_backup_create(self):
+        """
+        Validates that the backup directory is created as expected
+        Validates the backup metadata using backup-meta.json
+        :return: status and message
+        """
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "ls -R {0}/{1}".format(self.backupset.directory, self.backupset.name)
         o, e = remote_client.execute_command(command)
@@ -33,6 +38,10 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         return status, msg
 
     def validate_backup(self):
+        """
+        Validates directory structure for backup
+        :return: status and message
+        """
         directory_validator = DirectoryStructureValidations(self.backupset)
         status, msg = directory_validator.validate_directory_structure()
         if not status:
@@ -41,6 +50,17 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
 
     def validate_restore(self, backup_number, backup_vbucket_seqno, restored_vbucket_seqno, compare_uuid=False,
                          compare="==", get_replica=False, mode="memory"):
+        """
+        Validates ep-engine stats and restored data
+        :param backup_number: backup end number
+        :param backup_vbucket_seqno: vbucket map of all backups
+        :param restored_vbucket_seqno: vbucket map of restored cluster
+        :param compare_uuid: bool to decide whether to compare uuid or not
+        :param compare: comparator function
+        :param get_replica: bool to decide whether to compare replicas or not
+        :param mode: where to get the items from - can be "disk" or "memory"
+        :return: status and message
+        """
         self.log.info("backup start: " + str(self.backupset.start))
         self.log.info("backup end: " + str(self.backupset.end))
         status, msg = self.compare_vbucket_stats(backup_vbucket_seqno[backup_number - 1], restored_vbucket_seqno,
