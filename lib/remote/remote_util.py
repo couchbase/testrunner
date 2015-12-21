@@ -8,6 +8,8 @@ import unittest
 from datetime import datetime
 import logger
 from subprocess import Popen, PIPE
+
+import logger
 from builds.build_query import BuildQuery
 import testconstants
 from testconstants import WIN_REGISTER_ID
@@ -28,10 +30,7 @@ from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
-
-
 from membase.api.rest_client import RestConnection, RestHelper
-
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -2656,9 +2655,9 @@ class RemoteMachineShellConnection:
         # Iterate per bucket and generate maps
         for bucket in buckets:
             if data_path == None:
-                options = " -b " + bucket.name + " -u " + userId + " -p password --single-node"
+                options = " -b " + bucket.name + " -u " + userId + " -p "+ password +" --single-node"
             else:
-                options = " -b " + bucket.name + " -u " + userId + " -p password" + replicaOption
+                options = " -b " + bucket.name + " -u " + userId + " -p" + password + replicaOption
             suffix = "_" + bucket.name + "_N%2FA.csv"
             if mode == "memory" or mode == "backup":
                suffix = "_" + bucket.name + "_" + self.ip + "%3A8091.csv"
