@@ -227,6 +227,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.backupset.bucket_backup:
             args += "--bucket-backup {0}".format(self.backupset.bucket_backup)
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/backup {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
