@@ -282,6 +282,9 @@ class SubdocSanityTests(unittest.TestCase):
         subdoc_path = subdoc_elt
         for i in xrange(levels-1):
             subdoc_path +='.'+subdoc_elt
+        print '-'*100
+        print subdoc_path
+        print '-'*100
         return subdoc_path
 
 class SimpleDataSet(SubdocSanityTests):
@@ -423,9 +426,10 @@ class DeeplyNestedDataSet(SubdocSanityTests):
         self.name = "deeplynested_dataset"
         self.levels = 30
         self.log = logger.Logger.get_logger()
+        self.long_path=False
 
-    def load(self):
-        inserted_keys = self.helper.insert_nested_docs(self.num_docs, self.name, self.levels)
+    def load(self, long_path=False):
+        inserted_keys = self.helper.insert_nested_docs(self.num_docs, self.name, self.levels, long_path)
         return inserted_keys, self.levels
 
     def get_all_docs(self, inserted_keys, path):
