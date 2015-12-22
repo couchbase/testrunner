@@ -18,7 +18,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.cluster_host = self.servers[0]
         self.backupset.cluster_host_username = self.servers[0].rest_username
         self.backupset.cluster_host_password = self.servers[0].rest_password
-        self.same_cluster = self.input.param("same-cluster", True)
+        self.same_cluster = self.input.param("same-cluster", False)
+        self.reset_restore_cluster = self.input.param("reset-restore-cluster", True)
         if self.same_cluster:
             self.backupset.restore_cluster_host = self.servers[0]
             self.backupset.restore_cluster_host_username = self.servers[0].rest_username
@@ -34,6 +35,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.disable_gsi_indexes = self.input.param("disable-gsi-indexes", False)
         self.backupset.disable_ft_indexes = self.input.param("disable-ft-indexes", False)
         self.backupset.disable_data = self.input.param("disable-data", False)
+        self.backupset.force_updates = self.input.param("force-updates", False)
         self.backupset.resume = self.input.param("resume", False)
         self.backupset.purge = self.input.param("purge", False)
         self.backupset.threads = self.input.param("threads", self.number_of_processors())
@@ -174,30 +176,32 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         except IndexError:
             backup_end = "{0}{1}".format(self.backups[-1], self.backupset.end)
         args = "restore --dir {0} --name {1} --host http://{2}:{3} --username {4} --password {5} --start {6} " \
-               "--end {7} --force-updates".format(self.backupset.directory, self.backupset.name,
+               "--end {7}".format(self.backupset.directory, self.backupset.name,
                                                   self.backupset.restore_cluster_host.ip,
                                                   self.backupset.restore_cluster_host.port,
                                                   self.backupset.restore_cluster_host_username,
                                                   self.backupset.restore_cluster_host_password, backup_start,
                                                   backup_end)
         if self.backupset.exclude_buckets:
-            args += "--exclude-buckets".format(self.backupset.exclude_buckets)
+            args += " --exclude-buckets {0}".format(self.backupset.exclude_buckets)
         if self.backupset.include_buckets:
-            args += "--include-buckets {0}".format(self.backupset.include_buckets)
+            args += " --include-buckets {0}".format(self.backupset.include_buckets)
         if self.backupset.disable_bucket_config:
-            args += "--disable-bucket-config {0}".format(self.backupset.disable_bucket_config)
+            args += " --disable-bucket-config {0}".format(self.backupset.disable_bucket_config)
         if self.backupset.disable_views:
-            args += "--disable-views {0}".format(self.backupset.disable_views)
+            args += " --disable-views {0}".format(self.backupset.disable_views)
         if self.backupset.disable_gsi_indexes:
-            args += "--disable-gsi-indexes {0}".format(self.backupset.disable_gsi_indexes)
+            args += " --disable-gsi-indexes {0}".format(self.backupset.disable_gsi_indexes)
         if self.backupset.disable_ft_indexes:
-            args += "--disable-ft-indexes {0}".format(self.backupset.disable_ft_indexes)
+            args += " --disable-ft-indexes {0}".format(self.backupset.disable_ft_indexes)
         if self.backupset.disable_data:
-            args += "--disable-data {0}".format(self.backupset.disable_data)
+            args += " --disable-data {0}".format(self.backupset.disable_data)
         if self.backupset.filter_keys:
-            args += "--filter_keys {0}".format(self.backupset.filter_keys)
+            args += " --filter_keys {0}".format(self.backupset.filter_keys)
         if self.backupset.filter_values:
-            args += "--filter_values {0}".format(self.backupset.filter_values)
+            args += " --filter_values {0}".format(self.backupset.filter_values)
+        if self.backupset.force_updates:
+            args += " --force-updates"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/backup {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
