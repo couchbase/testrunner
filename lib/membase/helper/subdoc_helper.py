@@ -140,9 +140,6 @@ class SubdocHelper:
         smart = VBucketAwareMemcached(rest, self.bucket)
         doc_names = []
 
-        print '*'*100
-        print long_path
-        print '*'*100
         dict = {'doc' : {}, 'levels' : levels }
 
         for i in range(0, num_of_docs):

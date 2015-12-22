@@ -80,7 +80,6 @@ class SubdocSanityTests(unittest.TestCase):
         last_path ='child'
         for i in xrange(levels-1):
             last_path +='.child'
-        print last_path
         data_set.get_all_docs(inserted_keys, path = last_path)
 
         '''Last element Array of Array'''
@@ -88,7 +87,6 @@ class SubdocSanityTests(unittest.TestCase):
         for i in xrange(levels-3):
             last_path +='.child'
         last_path +='.array[-1][-1][-1]'
-        print last_path
         data_set.get_all_docs(inserted_keys, path = last_path)
 
         '''Intermediate element Array'''
@@ -96,7 +94,6 @@ class SubdocSanityTests(unittest.TestCase):
         for i in xrange(levels/2):
             last_path +='.child'
         last_path +='.array[0][-1]'
-        print last_path
         data_set.get_all_docs(inserted_keys, path = last_path)
 
     def test_simple_dataset_dict_upsert(self):
@@ -282,9 +279,6 @@ class SubdocSanityTests(unittest.TestCase):
         subdoc_path = subdoc_elt
         for i in xrange(levels-1):
             subdoc_path +='.'+subdoc_elt
-        print '-'*100
-        print subdoc_path
-        print '-'*100
         return subdoc_path
 
 class SimpleDataSet(SubdocSanityTests):
@@ -426,7 +420,6 @@ class DeeplyNestedDataSet(SubdocSanityTests):
         self.name = "deeplynested_dataset"
         self.levels = 30
         self.log = logger.Logger.get_logger()
-        self.long_path=False
 
     def load(self, long_path=False):
         inserted_keys = self.helper.insert_nested_docs(self.num_docs, self.name, self.levels, long_path)
