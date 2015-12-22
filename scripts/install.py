@@ -656,21 +656,29 @@ class SDKInstaller(Installer):
     def initialize(self, params):
         log.info('There is no initialize phase for sdk installation')
 
+    def uninstall(self):
+        pass
+
     def install(self, params):
         remote_client = RemoteMachineShellConnection(params["server"])
         info = remote_client.extract_remote_info()
         os = info.type.lower()
         type = info.deliverable_type.lower()
         version = info.distribution_version.lower()
-        sdk_url = "git+git://github.com/couchbase/couchbase-python-client.git@2.0.0-beta2"
-        if os == "linux":
-            if type == "rpm":
-                repo_file = "/etc/yum.repos.d/couchbase.repo"
-                baseurl = ""
-                if (version.find("centos") != -1 and version.find("6.2") != -1):
-                    baseurl = "http://packages.couchbase.com/rpm/6.2/x86-64"
-                elif (version.find("centos") != -1 and version.find("7") != -1):
-                    baseurl = "http://packages.couchbase.com/rpm/7/x86_64"
+        if params['subdoc'] == 'True':
+            sdk_url = 'git+git://github.com/mnunberg/couchbase-python-client.git@subdoc'
+        else:
+            sdk_url = 'git+git://github.com/couchbase/couchbase-python-client.git'
+        if os == 'linux':
+            if (type == 'rpm' and params['subdoc'] == 'False'):
+                repo_file = '/etc/yum.repos.d/couchbase.repo'
+                baseurl = ''
+                if (version.find('centos') != -1 and version.find('6.2') != -1):
+                    baseurl = 'http://packages.couchbase.com/rpm/6.2/x86-64'
+                elif (version.find('centos') != -1 and version.find('6.4') != -1):
+                    baseurl = 'http://packages.couchbase.com/rpm/6.4/x86-64'
+                elif (version.find('centos') != -1 and version.find('7') != -1):
+                    baseurl = 'http://packages.couchbase.com/rpm/7/x86_64'
                 else:
                     log.info("os version {0} not supported".format(version))
                     exit(1)
@@ -678,13 +686,56 @@ class SDKInstaller(Installer):
                 remote_client.execute_command("touch {0}".format(repo_file))
                 remote_client.execute_command("echo [couchbase] >> {0}".format(repo_file))
                 remote_client.execute_command("echo enabled=1 >> {0}".format(repo_file))
-                remote_client.execute_command("echo name = Couchbase package repository >> {0}".format(repo_file))
-                remote_client.execute_command("baseurl = {0} >> {1}".format(baseurl, repo_file))
-                remote_client.execute_command("yum -y install libcouchbase2-libevent libcouchbase-devel libcouchbase2-bin")
-                remote_client.execute_command("yum -y install pip")
-                remote_client.execute_command("pip uninstall couchbase")
-                remote_client.execute_command("pip install {0}".format(sdk_url))
-            elif type == "deb":
+                remote_client.execute_command("echo name = Couchbase package repository \
+                        >> {0}".format(repo_file))
+                remote_client.execute_command("echo baseurl = {0} >> \
+                        {1}".format(baseurl, repo_file))
+                remote_client.execute_command("yum -n update")
+                remote_client.execute_command("yum -y install \
+                        libcouchbase2-libevent libcouchbase-devel libcouchbase2-bin")
+                remote_client.execute_command("yum -y install python-pip")
+                remote_client.execute_command("pip -y uninstall couchbase")
+                remote_client.execute_command("pip -y install {0}".format(sdk_url))
+
+            elif (type == 'rpm' and params['subdoc'] == 'True'):
+                package_url = ''
+                lcb_core = ''
+                lcb_libevent  = ''
+                lcb_devel = ''
+                lcb_bin = ''
+
+                if (version.find('centos') != -1 and version.find('6') != -1):
+                    package_url = 'http://172.23.105.153/228/DIST/el6/'
+                    lcb_core =  'libcouchbase2-core-2.5.4-11.r10ga37efd8.SP.el6.x86_64.rpm'
+                    lcb_libevent = 'libcouchbase2-libevent-2.5.4-11.r10ga37efd8.SP.el6.x86_64.rpm'
+                    lcb_devel = 'libcouchbase-devel-2.5.4-11.r10ga37efd8.SP.el6.x86_64.rpm'
+                    lcb_bin = 'libcouchbase2-bin-2.5.4-11.r10ga37efd8.SP.el6.x86_64.rpm'
+                    remote_client.execute_command('rpm -ivh http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm')
+
+                elif (version.find('centos') != -1 and version.find('7') != -1):
+                    package_url = 'http://172.23.105.153/228/DIST/el7/'
+                    lcb_core = 'libcouchbase2-core-2.5.4-11.r10ga37efd8.SP.el7.centos.x86_64.rpm'
+                    lcb_libevent = 'libcouchbase2-libevent-2.5.4-11.r10ga37efd8.SP.el7.centos.x86_64.rpm'
+                    lcb_devel = 'libcouchbase-devel-2.5.4-11.r10ga37efd8.SP.el7.centos.x86_64.rpm'
+                    lcb_bin = 'libcouchbase2-bin-2.5.4-11.r10ga37efd8.SP.el7.centos.x86_64.rpm'
+
+                    remote_client.execute_command('yum -y  install epel-release')
+
+                remote_client.execute_command('yum -y remove "libcouchbase*"')
+                remote_client.execute_command('rm -rf {0} {1} {2} {3}'.format(lcb_core,
+                    lcb_libevent, lcb_devel, lcb_bin))
+                remote_client.execute_command('wget {0}{1}'.format(package_url, lcb_core))
+                remote_client.execute_command('wget {0}{1}'.format(package_url,
+                    lcb_libevent))
+                remote_client.execute_command('wget {0}{1}'.format(package_url,lcb_devel))
+                remote_client.execute_command('wget {0}{1}'.format(package_url,lcb_bin))
+                remote_client.execute_command('rpm -ivh {0} {1} {2}'.format(lcb_core,
+                    lcb_libevent,lcb_devel,lcb_bin))
+                remote_client.execute_command('yum -y install python-pip')
+                remote_client.execute_command('pip -y uninstall couchbase')
+                remote_client.execute_command('pip -y install {0}'.format(sdk_url))
+
+            elif (type == "deb" and params['subdoc'] == 'False'):
                 repo_file = "/etc/sources.list.d/couchbase.list"
                 entry = ""
                 if (version.find("ubuntu") != -1 and version.find("12.04") != -1):
@@ -699,19 +750,22 @@ class SDKInstaller(Installer):
                 remote_client.execute_command("rm -rf {0}".format(repo_file))
                 remote_client.execute_command("touch {0}".format(repo_file))
                 remote_client.execute_command("deb {0} >> {1}".format(entry, repo_file))
-                remote_client.execute_command("apt-get -y install libcouchbase2-libevent libcouchbase-devel libcouchbase2-bin")
+                remote_client.execute_command("apt-get update")
+                remote_client.execute_command("apt-get -y install libcouchbase2-libevent \
+                        libcouchbase-devel libcouchbase2-bin")
                 remote_client.execute_command("apt-get -y install pip")
-                remote_client.execute_command("pip uninstall couchbase")
-                remote_client.execute_command("pip install {0}".format(sdk_url))
+                remote_client.execute_command("pip -y uninstall couchbase")
+                remote_client.execute_command("pip -y install {0}".format(sdk_url))
         if os == "mac":
-            remote_client.execute_command("brew install libcouchbase; brew link libcouchbase")
+            remote_client.execute_command("brew install libcouchbase;\
+                    brew link libcouchbase")
             remote_client.execute_command("brew install pip; brew link pip")
             remote_client.execute_command("pip install {0}".format(sdk_url))
         if os == "windows":
             log.info('Currently not supported')
-
         remote_client.disconnect()
         return True
+
 
 class ESInstaller(object):
     def __init__(self):
