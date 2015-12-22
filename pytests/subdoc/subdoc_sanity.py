@@ -228,10 +228,10 @@ class SubdocSanityTests(unittest.TestCase):
 
         #Should be a negative testcase below.
         #data_set.array_push_last(inserted_keys, replace_string, path='isDict')
-        #data_set.counter_all_paths(inserted_keys, replace_string, path='geometry.coordinates')
+        data_set.counter_all_paths(inserted_keys,path='geometry.coordinates[0]')
         #data_set.array_push_last(inserted_keys, replace_string, path='dict_value.name')
-        data_set.counter_all_paths(inserted_keys, 1, path='height')
-        #data_set.counter_all_paths(inserted_keys, replace_string, path='array')
+        data_set.counter_all_paths(inserted_keys, path='height')
+        #data_set.counter_all_paths(inserted_keys, path='array')
 
 
     def test_simple_dataset_array_add_unqiue(self):
@@ -252,10 +252,26 @@ class SubdocSanityTests(unittest.TestCase):
         #data_set.counter_all_paths(inserted_keys, 1, path='height')
         #data_set.counter_all_paths(inserted_keys, replace_string, path='array')
 
-    def test_simple_dataset_multi_mutation(self):
-        pass
-
     def test_simple_dataset_multi_lookup(self):
+        num_docs = self.helper.input.param("num-docs")
+        self.log.info("description : Issue simple multi lookup sub doc single path "
+                      "dataset with {0} docs".format(num_docs))
+
+        data_set = SimpleDataSet(self.helper, num_docs)
+        inserted_keys = data_set.load()
+
+        ''' Randomly generate 1000 long string to replace existing path strings '''
+        replace_string = self.generate_string(10)
+
+        #Should be a negative testcase below.
+        #data_set.array_push_last(inserted_keys, replace_string, path='isDict')
+        data_set.multi_lookup_all_paths(inserted_keys, path='geometry.coordinates')
+        #data_set.array_push_last(inserted_keys, replace_string, path='dict_value.name')
+        #data_set.counter_all_paths(inserted_keys, 1, path='height')
+        #data_set.counter_all_paths(inserted_keys, replace_string, path='array')
+
+
+    def test_simple_dataset_multi_lookup2(self):
         pass
 
     def generate_string(self, range_val=100):
@@ -366,11 +382,11 @@ class SimpleDataSet(SubdocSanityTests):
                     "Unable to  array push first for key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))
 
-    def counter_all_paths(self, inserted_keys, long_string, path):
+    def counter_all_paths(self, inserted_keys, path):
         for in_key in inserted_keys:
             num_tries = 1
             try:
-                opaque, cas, data = self.helper.client.counter_sd(in_key, path ,long_string)
+                opaque, cas, data = self.helper.client.counter_sd(in_key, path ,10000)
             except Exception as e:
                 print '[ERROR] {}'.format(e)
                 self.helper.testcase.fail(
@@ -388,8 +404,17 @@ class SimpleDataSet(SubdocSanityTests):
                     "Unable to  add array_unique key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))
 
-    def multi_mutation_all_paths(self):
-        pass
+    def multi_lookup_all_paths(self, inserted_keys, path):
+        for in_key in inserted_keys:
+            num_tries = 1
+            try:
+                opaque, cas, data = self.helper.client.multi_lookup_sd(in_key, path)
+                print data
+            except Exception as e:
+                print '[ERROR] {}'.format(e)
+                self.helper.testcase.fail(
+                    "Unable to  add array_unique key {0} for path {1} after {2} tries"
+                    .format(in_key, path, num_tries))
 
 class DeeplyNestedDataSet(SubdocSanityTests):
     def __init__(self, helper, num_docs):
