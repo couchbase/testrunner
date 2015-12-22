@@ -32,8 +32,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
                 self._load_all_buckets(self.master, gen, "delete", 0)
             self.backup_cluster_validate()
         self.targetMaster = True
-        self.backup_reset_clusters(self.cluster_to_backup)
-        self._initialize_nodes(Cluster(), self.servers[:self.nodes_init])
         start = randrange(1, self.backupset.number_of_backups + 1)
         if start == self.backupset.number_of_backups:
             end = start
@@ -41,8 +39,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
             end = randrange(start, self.backupset.number_of_backups + 1)
         restored = {"{0}/{1}".format(start, end): ""}
         for i in range(1, self.backupset.number_of_backups + 1):
-            self.backup_reset_clusters(self.cluster_to_backup)
-            self._initialize_nodes(Cluster(), self.servers[:self.nodes_init])
+            if self.reset_restore_cluster:
+                self.backup_reset_clusters(self.cluster_to_restore)
+                if self.same_cluster:
+                    self._initialize_nodes(Cluster(), self.servers[:self.nodes_init])
+                else:
+                    self._initialize_nodes(Cluster(), self.input.clusters[0][:self.nodes_init])
             self.backupset.start = start
             self.backupset.end = end
             self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
@@ -59,32 +61,57 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
     def test_backup_restore_after_rebalance(self):
         """
         1. Create default bucket on the cluster and loads it with given number of items
-        2. Does a rebalance with specified number of servers in (test param nodes_in) and servers out
-        (test param nodes_out)
+        2. Does a rebalance on cluster to be backed up with specified number of servers in (test param nodes_in) and
+        servers out (test param nodes_out)
         3. Takes a backup
-        4. Resets cluster if it is same cluster (test param same_cluster) and Rebalances again
+        4. Does a rebalance on cluster to be restored to with specified number of servers in (test param nodes_in) and
+        servers out (test param nodes_out)
         5. Performs a restore on the restore cluster
         """
         serv_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
         serv_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
-        gen = BlobGenerator("ent-backup", "ent-backup", self.value_size, end=self.num_items)
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create_validate()
         self.backupset.number_of_backups = 1
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, serv_in, serv_out)
         rebalance.result()
         self.backup_cluster_validate()
-        if self.same_cluster:
-            self.backup_reset_clusters(self.cluster_to_backup)
-            self._initialize_nodes(Cluster(), self.servers[:self.nodes_init])
-            compare_uuid = False
-        else:
+        if not self.same_cluster:
             self._initialize_nodes(Cluster(), self.input.clusters[0][:self.nodes_init])
             serv_in = self.input.clusters[0][self.nodes_init: self.nodes_init + self.nodes_in]
             serv_out = self.input.clusters[0][self.nodes_init - self.nodes_out: self.nodes_init]
             compare_uuid = False
         rebalance = self.cluster.async_rebalance(self.cluster_to_restore, serv_in, serv_out)
         rebalance.result()
+        self.backup_restore_validate(compare_uuid=compare_uuid, seqno_compare_function="<=")
+
+    def test_backup_restore_with_rebalance(self):
+        """
+        1. Create default bucket on the cluster and loads it with given number of items
+        2. Does a rebalance on cluster to be backed up with specified number of servers in (test param nodes_in) and
+        servers out (test param nodes_out)
+        3. Takes a backup while rebalance is going on
+        4. Does a rebalance on cluster to be restored to with specified number of servers in (test param nodes_in) and
+        servers out (test param nodes_out)
+        5. Performs a restore on the restore cluster while rebalance is going on
+        """
+        serv_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
+        serv_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create_validate()
+        self.backupset.number_of_backups = 1
+        self.cluster.async_rebalance(self.cluster_to_backup, serv_in, serv_out)
+        self.sleep(10)
+        self.backup_cluster_validate()
+        if not self.same_cluster:
+            self._initialize_nodes(Cluster(), self.input.clusters[0][:self.nodes_init])
+            serv_in = self.input.clusters[0][self.nodes_init: self.nodes_init + self.nodes_in]
+            serv_out = self.input.clusters[0][self.nodes_init - self.nodes_out: self.nodes_init]
+            compare_uuid = False
+        self.cluster.async_rebalance(self.cluster_to_restore, serv_in, serv_out)
+        self.sleep(10)
         self.backup_restore_validate(compare_uuid=compare_uuid, seqno_compare_function="<=")
 
     def test_backup_restore_with_ops(self):
