@@ -37,6 +37,14 @@ class SubdocHelper:
             "isDict" : True,
             "padding": None
         }
+        self.jsonSchema_longPath = {
+            "id" : "0",
+            "number" : 0,
+            "array12345678901234567890123456789" : [],
+            "child12345678901234567890123456789" : {},
+            "isDict" : True,
+            "padding": None
+        }
 
     def set_bucket(self, bucket):
         self.bucket = bucket
@@ -108,16 +116,41 @@ class SubdocHelper:
             dict['doc']['array'][level] = self.array
         return self._createNestedJson(key, {'doc': dict['doc'], 'levels': dict['levels']-1})
 
-    def insert_nested_docs(self, num_of_docs, prefix='doc', levels=16, size=512, return_docs=False):
+    '''Recursive call to create a deep nested long path Dictionary JSON document '''
+    def _createNestedJson_longPath(self, key, dict):
+        if dict['levels'] == 0:
+            return
+        if dict['doc'] == {}:
+            dict['doc'] = copy.copy(self.jsonSchema_longPath)
+        else:
+            dict['doc']['child12345678901234567890123456789'] = copy.copy(self.jsonSchema)
+            dict['doc']['child12345678901234567890123456789']['array12345678901234567890123456789'] = []
+            dict['doc'] = dict['doc']['child12345678901234567890123456789']
+
+        dict['doc']['id'] = key
+        dict['doc']['number'] = dict['levels']
+
+        for level in xrange(0, dict['levels']):
+            dict['doc']['array12345678901234567890123456789'].append(level)
+        return self._createNestedJson(key, {'doc': dict['doc'], 'levels': dict['levels']-1})
+
+
+    def insert_nested_docs(self, num_of_docs, prefix='doc', levels=16, size=512, return_docs=False, long_path=False):
         rest = RestConnection(self.master)
         smart = VBucketAwareMemcached(rest, self.bucket)
         doc_names = []
 
+        print '*'*100
+        print long_path
+        print '*'*100
         dict = {'doc' : {}, 'levels' : levels }
 
         for i in range(0, num_of_docs):
             key = doc_name = "{0}-{1}".format(prefix, i)
-            self._createNestedJson(key, dict)
+            if long_path:
+                self._createNestedJson_longPath(key, dict)
+            else:
+                self._createNestedJson(key, dict)
             value = dict['doc']
             if not return_docs:
                 doc_names.append(doc_name)
