@@ -690,14 +690,14 @@ class MemcachedClient(object):
     def array_add_unique_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_ADD_UNIQUE, key, path, value, expiry, opaque, cas, create)
 
-    def counter_sd(self, type, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+    def counter_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_COUNTER, key, path, value, expiry, opaque, cas, create)
 
-    def multi_mutation_sd(self, type, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+    def multi_mutation_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_MULTI_MUTATION, key, path, value, expiry, opaque, cas, create)
 
-    def multi_lookup_sd(self, type, key, path, value, expiry=0, opaque=0, cas=0, create=False):
-        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_MULTI_LOOKUP, key, path, value, expiry, opaque, cas, create)
+    def multi_lookup_sd(self, key, path, expiry=0, opaque=0, cas=0, create=False):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_MULTI_LOOKUP, key, path, expiry, opaque, cas, create)
 
 def error_to_str(errno):
     if errno == 0x01:
