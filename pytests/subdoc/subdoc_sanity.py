@@ -321,7 +321,7 @@ class SimpleDataSet(SubdocSanityTests):
             except Exception as e:
                 print '[ERROR] {}'.format(e)
                 self.helper.testcase.fail(
-                    "Unable to upsert key {0} for path {1} after {2} tries"
+                    "Unable to add key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))
 
     def remove_all_docs(self, inserted_keys, path):
