@@ -20,6 +20,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.cluster_host_password = self.servers[0].rest_password
         self.same_cluster = self.input.param("same-cluster", False)
         self.reset_restore_cluster = self.input.param("reset-restore-cluster", True)
+        self.no_progress_bar = self.input.param("no-progress-bar", True)
         if self.same_cluster:
             self.backupset.restore_cluster_host = self.servers[0]
             self.backupset.restore_cluster_host_username = self.servers[0].rest_username
@@ -135,9 +136,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                    self.backupset.cluster_host.port, self.backupset.cluster_host_username,
                    self.backupset.cluster_host_password)
         if self.backupset.resume:
-            args += "--resume"
+            args += " --resume"
         if self.backupset.purge:
-            args += "--purge"
+            args += " --purge"
+        if self.no_progress_bar:
+            args += " --no-progress-bar"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/backup {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
@@ -202,6 +205,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --filter_values {0}".format(self.backupset.filter_values)
         if self.backupset.force_updates:
             args += " --force-updates"
+        if self.no_progress_bar:
+            args += " --no-progress-bar"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/backup {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
@@ -225,11 +230,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_list(self):
         args = "list --dir {0}".format(self.backupset.directory)
         if self.backupset.backup_list_name:
-            args += "--name {0}".format(self.backupset.backup_list_name)
+            args += " --name {0}".format(self.backupset.backup_list_name)
         if self.backupset.backup_incr_backup:
-            args += "--incr-backup {0}".format(self.backupset.backup_incr_backup)
+            args += " --incr-backup {0}".format(self.backupset.backup_incr_backup)
         if self.backupset.bucket_backup:
-            args += "--bucket-backup {0}".format(self.backupset.bucket_backup)
+            args += " --bucket-backup {0}".format(self.backupset.bucket_backup)
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/backup {1}".format(self.cli_command_location, args)
