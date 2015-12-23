@@ -214,8 +214,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         return output, error
 
     def backup_restore_validate(self, compare_uuid=False, seqno_compare_function="==", replicas=False, mode="memory"):
-        output, error = self.backup_restore()
-        if "Transfer plan finished successfully" not in error[-1]:
+        self.backup_restore()
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = "grep 'Transfer plan finished successfully' " + self.backupset.directory + "/logs/backup.log"
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if not output:
             self.fail("Restoring backup failed.")
         self.log.info("Finished restoring backup")
         current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets)
