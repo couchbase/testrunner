@@ -194,6 +194,8 @@ class RestHelper(object):
         vbuckets_servers = {}
         for server in servers:
             buckets = RestConnection(server).get_buckets()
+            if not buckets:
+                return vbuckets_servers
             if bucket_name:
                 bucket_to_check = [bucket for bucket in buckets
                                if bucket.name == bucket_name][0]

@@ -81,10 +81,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
             self._initialize_nodes(Cluster(), self.input.clusters[0][:self.nodes_init])
             serv_in = self.input.clusters[0][self.nodes_init: self.nodes_init + self.nodes_in]
             serv_out = self.input.clusters[0][self.nodes_init - self.nodes_out: self.nodes_init]
-            compare_uuid = False
-        rebalance = self.cluster.async_rebalance(self.cluster_to_restore, serv_in, serv_out)
+            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, serv_in, serv_out)
+        else:
+            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, serv_out, serv_in)
         rebalance.result()
-        self.backup_restore_validate(compare_uuid=compare_uuid, seqno_compare_function="<=")
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function="<=")
 
     def test_backup_restore_with_rebalance(self):
         """
@@ -109,10 +110,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
             self._initialize_nodes(Cluster(), self.input.clusters[0][:self.nodes_init])
             serv_in = self.input.clusters[0][self.nodes_init: self.nodes_init + self.nodes_in]
             serv_out = self.input.clusters[0][self.nodes_init - self.nodes_out: self.nodes_init]
-            compare_uuid = False
-        self.cluster.async_rebalance(self.cluster_to_restore, serv_in, serv_out)
+            self.cluster.async_rebalance(self.cluster_to_restore, serv_in, serv_out)
+        else:
+            self.cluster.async_rebalance(self.cluster_to_restore, serv_out, serv_in)
         self.sleep(10)
-        self.backup_restore_validate(compare_uuid=compare_uuid, seqno_compare_function="<=")
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function="<=")
 
     def test_backup_restore_with_ops(self):
         """
