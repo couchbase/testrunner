@@ -94,7 +94,6 @@ class JoinTests(QueryTests):
             self.query = "SELECT employee.name, employee.tasks_ids " +\
             "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
             "ON KEY new_project_full.tasks_ids FOR employee"
-            import pdb;pdb.set_trace()
             actual_result = self.run_cbq_query()
             self.assertTrue(actual_result['metrics']['resultCount'] == 0, 'Query was not run successfully')
             self.query = "drop index default.idx";
