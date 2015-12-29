@@ -3,6 +3,7 @@ from random import randrange
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.documentgenerator import BlobGenerator
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
+from membase.api.rest_client import RestConnection
 
 
 class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
@@ -22,14 +23,18 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         3. Perform restores for the same number of times with random start and end values
         """
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
-        self._load_all_buckets(self.master, gen, "create", 0)
+        self._load_all_buckets(self.master, gen, "create", self.expires)
         self.ops_type = self.input.param("ops-type", "update")
+        if self.auto_failover:
+            self.log.info("Enabling auto failover on " + str(self.backupset.cluster_host))
+            rest_conn = RestConnection(self.backupset.cluster_host)
+            rest_conn.update_autofailover_settings(self.auto_failover, self.auto_failover_timeout)
         self.backup_create_validate()
         for i in range(1, self.backupset.number_of_backups + 1):
             if self.ops_type == "update":
-                self._load_all_buckets(self.master, gen, "update", 0)
+                self._load_all_buckets(self.master, gen, "update", self.expires)
             elif self.ops_type == "delete":
-                self._load_all_buckets(self.master, gen, "delete", 0)
+                self._load_all_buckets(self.master, gen, "delete", self.expires)
             self.backup_cluster_validate()
         self.targetMaster = True
         start = randrange(1, self.backupset.number_of_backups + 1)
@@ -159,3 +164,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         else:
             self.backup_restore_validate(compare_uuid=compare_uuid, seqno_compare_function=compare_function,
                                          replicas=replicas, mode=mode)
+
+    def test_backup_list(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backup and validates it
+        3. Executes list command on the backupset and validates the output
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster_validate()
+        self.backup_list_validate()

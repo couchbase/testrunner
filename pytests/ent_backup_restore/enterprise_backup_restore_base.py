@@ -53,9 +53,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backups = []
         self.backup_validation_files_location = "/tmp/backuprestore"
         self.validation_helper = BackupRestoreValidations(self.backupset, self.cluster_to_backup, self.cluster_to_restore,
-                                                          self.buckets, self.backup_validation_files_location)
+                                                          self.buckets, self.backup_validation_files_location, self.backups,
+                                                          self.num_items)
         self.number_of_backups_taken = 0
         self.vbucket_seqno = []
+        self.expires = self.input.param("expires", 0)
+        self.auto_failover = self.input.param("enable-autofailover", False)
+        self.auto_failover_timeout = self.input.param("autofailover-timeout", 30)
         if not os.path.exists(self.backup_validation_files_location):
             os.mkdir(self.backup_validation_files_location)
 
@@ -240,7 +244,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.backupset.bucket_backup:
             args += " --bucket-backup {0}".format(self.backupset.bucket_backup)
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/backup {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
@@ -277,6 +280,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         else:
             return True, output, "Removing of backup success"
 
+    def backup_list_validate(self):
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        status, message = self.validation_helper.validate_backup_list(output)
+        if not status:
+            self.fail(message)
+        self.log.info(message)
 
 class Backupset:
     def __init__(self):

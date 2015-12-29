@@ -10,13 +10,15 @@ from remote.remote_util import RemoteMachineShellConnection
 
 
 class BackupRestoreValidations(BackupRestoreValidationBase):
-    def __init__(self, backupset, cluster, restore_cluster, bucket, backup_validation_path):
+    def __init__(self, backupset, cluster, restore_cluster, bucket, backup_validation_path, backups, num_items):
         BackupRestoreValidationBase.__init__(self)
         self.backupset = backupset
         self.cluster = cluster
         self.restore_cluster = restore_cluster
         self.buckets = bucket
         self.backup_validation_path = backup_validation_path
+        self.backups = backups
+        self.num_items = num_items
         self.log = logger.Logger.get_logger()
 
     def validate_backup_create(self):
@@ -97,3 +99,46 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
             success_msg += "{0}\n".format(msg)
         success_msg += "Data validation success"
         return True, success_msg
+
+    def validate_backup_list(self, output):
+        """
+        Validates list command output
+        :param output: list command output
+        :return: status and message
+        """
+        #TODO: this function validates list command output for 1 backup / 1 bucket only - need to be enhanced for multiple backups
+        backup_name = False
+        bucket_name = False
+        backup_folder_timestamp = False
+        items_count = False
+        shard_count = False
+        items = 0
+        for line in output:
+            if self.backupset.name in line:
+                backup_name = True
+            if str(self.buckets[0].name) in line:
+                bucket_name = True
+            if self.backups[0] in line:
+                backup_folder_timestamp = True
+            if "+ data" in line:
+                split = line.split(" ")
+                split = [s for s in split if s]
+                if int(split[1]) == self.num_items:
+                    items_count = True
+            if "shard" in line:
+                split = line.split(" ")
+                split = [s for s in split if s]
+                items += int(split[1])
+        if items == self.num_items:
+            shard_count = True
+        if not backup_name:
+            return False, "Expected Backup name not found in list command output"
+        if not bucket_name:
+            return False, "Expected Bucket name not found in list command output"
+        if not backup_folder_timestamp:
+            return False, "Expected folder timestamp not found in list command output"
+        if not items_count:
+            return False, "Items count mismatch in list command output"
+        if not shard_count:
+            return False, "Shard count mismatch in list command output"
+        return True, "List command validation success"
