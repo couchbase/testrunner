@@ -1001,7 +1001,8 @@ class RemoteMachineShellConnection:
             log.info("create {0} task with content:{1}".format(task, content))
             f.write(content)
             log.info('Successful write to {0}'.format(found))
-            capture_iss_file = '{0}_{1}_{2}.iss'.format(uuid_name, self.ip, task)
+            if "upgrade" not in task:
+                capture_iss_file = '{0}_{1}_{2}.iss'.format(uuid_name, self.ip, task)
         except IOError:
             log.error('Can not write build name file to bat file {0}'.format(found))
         sftp.close()
