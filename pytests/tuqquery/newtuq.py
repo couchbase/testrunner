@@ -689,7 +689,7 @@ class QueryTests(BaseTestCase):
                     self.sleep(3, 'Sleep for some time after index drop')
                 self.log.info("Creating primary index for %s ..." % bucket.name)
                 self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
-                if self.gsi_type:
+                if self.primary_indx_type.lower() == 'gsi':
                     self.query += " WITH {'index_type': 'memdb'}"
                 try:
                     self.run_cbq_query()
