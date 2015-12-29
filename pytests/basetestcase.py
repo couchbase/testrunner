@@ -331,7 +331,7 @@ class BaseTestCase(unittest.TestCase):
         except:
             pass
 
-    def sleep(self, timeout=1, message=""):
+    def sleep(self, timeout=15, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
 
