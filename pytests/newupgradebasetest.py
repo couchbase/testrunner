@@ -26,6 +26,7 @@ from testconstants import COUCHBASE_VERSIONS
 from testconstants import SHERLOCK_VERSION
 from testconstants import CB_VERSION_NAME
 from testconstants import COUCHBASE_MP_VERSION
+from testconstants import CE_EE_ON_SAME_FOLDER
 
 
 class NewUpgradeBaseTest(BaseTestCase):
@@ -35,7 +36,8 @@ class NewUpgradeBaseTest(BaseTestCase):
                                   "2.5.2", "3.0.0", "3.0.1",
                                   "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
                                   "3.1.0", "3.1.0-1776", "3.1.1", "3.1.1-1807",
-                                  "3.1.2", "3.1.2-1815", "4.0.0", "4.0.0-4051"]
+                                  "3.1.2", "3.1.2-1815", "3.1.3", "3.1.3-1823",
+                                  "4.0.0", "4.0.0-4051", "4.1.0", "4.1.0-5005"]
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
