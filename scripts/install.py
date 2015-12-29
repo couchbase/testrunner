@@ -5,6 +5,7 @@
 import getopt
 import copy
 import logging
+import os
 import sys
 from threading import Thread
 from datetime import datetime
@@ -820,6 +821,17 @@ class InstallerJob(object):
         for t in initializer_threads:
             t.join()
             print "thread {0} finished".format(t.name)
+        """ remove any capture files left after install windows """
+        remote_client = RemoteMachineShellConnection(servers[0])
+        type = remote_client.extract_remote_info().distribution_type
+        remote_client.disconnect()
+        if type.lower() == 'windows':
+            for server in servers:
+                shell = RemoteMachineShellConnection(server)
+                shell.execute_command("rm -f /cygdrive/c/automation/*_172.23*")
+                shell.execute_command("rm -f /cygdrive/c/automation/*_10.17*")
+                os.system("rm -f resources/windows/automation/*_172.23*")
+                os.system("rm -f resources/windows/automation/*_10.17*")
         return success
 
 

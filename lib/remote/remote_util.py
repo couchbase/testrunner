@@ -972,6 +972,7 @@ class RemoteMachineShellConnection:
     def modify_bat_file(self, remote_path, file_name, name, version, task):
         found = self.find_file(remote_path, file_name)
         sftp = self._ssh_client.open_sftp()
+        capture_iss_file = ""
 
         product_version = ""
         if version[:5] in MEMBASE_VERSIONS:
@@ -981,7 +982,8 @@ class RemoteMachineShellConnection:
             product_version = version[:5]
             name = "cb"
         else:
-            log.error('Windows automation does not support {0} version yet'.format(version))
+            log.error('Windows automation does not support {0} version yet'\
+                                                               .format(version))
             sys.exit()
 
         if "upgrade" not in task:
@@ -991,17 +993,19 @@ class RemoteMachineShellConnection:
             name = name.strip()
             version = version.strip()
             if task == "upgrade":
-                content = 'c:\\tmp\{3}.exe /s -f1c:\\automation\{0}_{1}_{2}.iss'.format(name,
-                                                                         product_version, task, version)
+                content = 'c:\\tmp\{3}.exe /s -f1c:\\automation\{0}_{1}_{2}.iss' \
+                                .format(name, product_version, task, version)
             else:
                 content = 'c:\\tmp\{0}.exe /s -f1c:\\automation\{3}_{2}_{1}.iss' \
                              .format(version, task, self.ip, uuid_name)
             log.info("create {0} task with content:{1}".format(task, content))
             f.write(content)
             log.info('Successful write to {0}'.format(found))
+            capture_iss_file = '{0}_{1}_{2}.iss'.format(uuid_name, self.ip, task)
         except IOError:
             log.error('Can not write build name file to bat file {0}'.format(found))
         sftp.close()
+        return capture_iss_file
 
     def set_vbuckets_win(self, vbuckets):
         bin_path = WIN_COUCHBASE_BIN_PATH
@@ -1402,11 +1406,12 @@ class RemoteMachineShellConnection:
             task = "install"
             bat_file = "install.bat"
             dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
+            capture_iss_file = ""
             # build = self.build_url(params)
             self.create_multiple_dir(dir_paths)
             self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
             #self.create_windows_capture_file(task, abbr_product, version)
-            self.modify_bat_file('/cygdrive/c/automation', bat_file, abbr_product, version, task)
+            capture_iss_file = self.modify_bat_file('/cygdrive/c/automation', bat_file, abbr_product, version, task)
             self.stop_schedule_tasks()
             self.remove_win_backup_dir()
             self.remove_win_collect_tmp()
@@ -1431,9 +1436,6 @@ class RemoteMachineShellConnection:
             if not ended:
                 sys.exit("*****  Node %s failed to install  *****" % (self.ip))
             self.sleep(10, "wait for server to start up completely")
-            output, error = self.execute_command("rm -f \
-                       /cygdrive/c/automation/*_{0}_install.iss".format(self.ip))
-            self.log_command_output(output, error)
             output, error = self.execute_command("rm -f *-diag.zip")
             self.log_command_output(output, error, track_words)
             if vbuckets:
@@ -1443,6 +1445,16 @@ class RemoteMachineShellConnection:
                 self.execute_command("rm -rf \
                 /cygdrive/c/Jenkins/workspace/sherlock-windows/couchbase/install/etc/security")
                 """ end remove code for bug MB-13046 """
+            if capture_iss_file:
+                    log.info("Delete {0} in windows automation directory" \
+                                                          .format(capture_iss_file))
+                    output, error = self.execute_command("rm -f \
+                               /cygdrive/c/automation/{0}".format(capture_iss_file))
+                    self.log_command_output(output, error)
+                    log.info("Delete {0} in slave resources/windows/automation dir" \
+                             .format(capture_iss_file))
+                    os.system("rm -f resources/windows/automation/{0}" \
+                                                          .format(capture_iss_file))
             return success
 
 
@@ -1577,6 +1589,7 @@ class RemoteMachineShellConnection:
             version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
             deleted = False
             build_repo = MV_LATESTBUILD_REPO
+            capture_iss_file = ""
 
             exist = self.file_exists(version_path, version_file)
             log.info("Is VERSION file existed on {0}? {1}".format(self.ip, exist))
@@ -1621,7 +1634,7 @@ class RemoteMachineShellConnection:
                 self.stop_couchbase()
                 # modify bat file to run uninstall schedule task
                 #self.create_windows_capture_file(task, product, full_version)
-                self.modify_bat_file('/cygdrive/c/automation',
+                capture_iss_file = self.modify_bat_file('/cygdrive/c/automation',
                                         bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
 
@@ -1660,9 +1673,6 @@ class RemoteMachineShellConnection:
                 output, error = self.execute_command("rm -f /cygdrive/c/tmp/{0}"\
                                                               .format(build_name))
                 self.log_command_output(output, error)
-                output, error = self.execute_command("rm -f \
-                       /cygdrive/c/automation/*_{0}_uninstall.iss".format(self.ip))
-                self.log_command_output(output, error)
 
                 """ the code below need to remove when bug MB-11328
                                                            is fixed in 3.0.1 """
@@ -1680,6 +1690,16 @@ class RemoteMachineShellConnection:
                             'HKLM\Software\Wow6432Node\Ericsson\Erlang\ErlSrv' /f ")
                     self.log_command_output(output, error)
                 """ end remove code """
+                if capture_iss_file:
+                    log.info("Delete {0} in windows automation directory" \
+                                                          .format(capture_iss_file))
+                    output, error = self.execute_command("rm -f \
+                               /cygdrive/c/automation/{0}".format(capture_iss_file))
+                    self.log_command_output(output, error)
+                    log.info("Delete {0} in slave resources/windows/automation dir" \
+                             .format(capture_iss_file))
+                    os.system("rm -f resources/windows/automation/{0}" \
+                                                          .format(capture_iss_file))
             else:
                 log.info("No couchbase server on {0} server. Free to install" \
                                                                  .format(self.ip))
