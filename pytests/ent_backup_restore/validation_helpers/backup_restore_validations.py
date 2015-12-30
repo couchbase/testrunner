@@ -142,3 +142,30 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         if not shard_count:
             return False, "Shard count mismatch in list command output"
         return True, "List command validation success"
+
+    def validate_compact_lists(self, output_before_compact, output_after_compact):
+        size_match = True
+        for line1, line2 in zip(output_before_compact, output_after_compact):
+            split1 = line1.split(" ")
+            split1 = [s for s in split1 if s]
+            split2 = line2.split(" ")
+            split2 = [s for s in split2 if s]
+            size1 = self._convert_to_kb(split1[0])
+            size2 = self._convert_to_kb(split2[0])
+            if size1 < size2:
+                size_match = False
+                break
+        if not size_match:
+            return False, "Size comparison failed after compact - before: {0} after: {1}".format(line1, line2)
+        return True, "Compact command validation success"
+
+    def _convert_to_kb(self, input):
+        if "MB" in input:
+            result = input[:-2]
+            return float(result) * 1000
+        if "KB" in input:
+            result = input[:-2]
+            return float(result)
+        if "B" in input:
+            result = input[:-1]
+            return float(result) / 1000
