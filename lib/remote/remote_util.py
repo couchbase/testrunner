@@ -1740,6 +1740,7 @@ class RemoteMachineShellConnection:
                 self.log_command_output(output, error)
             self.terminate_processes(self.info, terminate_process_list)
             self.remove_folders(linux_folders)
+            self.kill_memcached()
         elif self.info.distribution_type.lower() == 'mac':
             self.stop_server(os='mac')
             self.terminate_processes(self.info, terminate_process_list)
