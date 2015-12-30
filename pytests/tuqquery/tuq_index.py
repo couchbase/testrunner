@@ -811,8 +811,12 @@ class QueriesViewsTests(QueryTests):
                 self.assertTrue(set(actual_indexes) == set(indexes),
                                 "Indexes should be %s, but are: %s" % (indexes, actual_indexes))
         finally:
-            if indexes:
-                self._delete_indexes(indexes)
+            for indx in indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, indx, self.index_type)
+                    try:
+                        self.run_cbq_query()
+                    except:
+                        pass
 
     def run_intersect_scan_query(self, query_method):
         indexes = []
