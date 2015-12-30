@@ -1725,6 +1725,8 @@ class RemoteMachineShellConnection:
                     We need to kill them before doing uninstall """
                 output, error = self.execute_command("killall -9 rpm")
                 self.log_command_output(output, error)
+                output, error = self.execute_command("rm -f /var/lib/rpm/.rpm.lock")
+                self.log_command_output(output, error)
                 if sv in COUCHBASE_FROM_VERSION_4:
                     if self.is_enterprise(type):
                         uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
