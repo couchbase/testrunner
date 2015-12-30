@@ -253,18 +253,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             return True, output, "Backup list obtained"
 
     def backup_compact(self):
-        try:
-            backup_to_compact = self.buckets[int(self.backupset.backup_to_compact)]
-        except IndexError:
-            backup_to_compact = "{0}{1}".format(self.buckets[-1], self.backupset.backup_to_compact)
         args = "compact --dir {0} --name {1} --backup {2}".format(self.backupset.directory, self.backupset.name,
-                                                                  backup_to_compact)
+                                                                  self.backups[self.backupset.backup_to_compact])
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/backup {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error:
-            return False, error, "Compacting backup failed."
+        if "Compaction succeeded," not in output[0]:
+            return False, output, "Compacting backup failed."
         else:
             return True, output, "Compaction of backup success"
 
@@ -285,6 +281,23 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if not status:
             self.fail(message)
         status, message = self.validation_helper.validate_backup_list(output)
+        if not status:
+            self.fail(message)
+        self.log.info(message)
+
+    def backup_compact_validate(self):
+        self.log.info("Listing backup details before compact")
+        status, output_before_compact, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        status, output, message = self.backup_compact()
+        if not status:
+            self.fail(message)
+        self.log.info("Listing backup details after compact")
+        status, output_after_compact, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        status, message = self.validation_helper.validate_compact_lists(output_before_compact, output_after_compact)
         if not status:
             self.fail(message)
         self.log.info(message)

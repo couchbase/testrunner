@@ -176,3 +176,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.backup_create()
         self.backup_cluster_validate()
         self.backup_list_validate()
+
+    def test_backup_compact(self):
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster_validate()
+        self.backup_compact_validate()
