@@ -1898,7 +1898,7 @@ class FTSBaseTest(unittest.TestCase):
         self.num_queries = self._input.param("num_queries", 1)
         self.query_types = (self._input.param("query_types", "match")).split(',')
         self.index_per_bucket = self._input.param("index_per_bucket", 1)
-
+        self.dataset = self._input.param("dataset", "emp")
         self.sample_query = {"match": "Safiya Morgan", "field": "name"}
         self.compare_es = self._input.param("compare_es", False)
         if self.compare_es:
@@ -2276,14 +2276,12 @@ class FTSBaseTest(unittest.TestCase):
                       like: query_type=["match", "match_phrase","bool",
                                         "conjunction", "disjunction"]
         """
-        from emp_rand_query_gen import FTSESQueryGenerator
+        from random_query_generator.rand_query_gen import FTSESQueryGenerator
         query_gen = FTSESQueryGenerator(num_queries, query_type=query_type,
-                                      seed=seed)
+                                      seed=seed, dataset=self.dataset)
         for fts_query in query_gen.fts_queries:
             index.fts_queries.append(
-                json.loads(
-                    json.dumps(fts_query, ensure_ascii=False).
-                    replace("manages_", "manages.")))
+                json.loads(json.dumps(fts_query, ensure_ascii=False)))
 
         if self.compare_es:
             for es_query in query_gen.es_queries:
@@ -2291,9 +2289,7 @@ class FTSBaseTest(unittest.TestCase):
                 # so enclose in query dict here
                 es_query = {'query': es_query}
                 self.es.es_queries.append(
-                    json.loads(
-                        json.dumps(es_query, ensure_ascii=False).
-                        replace("manages_", "manages.")))
+                    json.loads(json.dumps(es_query, ensure_ascii=False)))
             return index.fts_queries, self.es.es_queries
 
         return index.fts_queries
@@ -2340,7 +2336,7 @@ class FTSBaseTest(unittest.TestCase):
                 alias_def['targets'][index.name] = {}
                 alias_def['targets'][index.name]['indexUUID'] = index.get_uuid()
 
-        return self._cb_cluster.create_fts_index(name='alias_%s' % time.time(),
+        return self._cb_cluster.create_fts_index(name='alias_%s' % int(time.time()),
                                                  index_type='fulltext-alias',
                                                  index_params=alias_def)
 
@@ -2416,23 +2412,15 @@ class FTSBaseTest(unittest.TestCase):
                                      end=start+num_items)
 
     def populate_create_gen(self):
-        dataset = self._input.param("dataset", "emp")
 
-        if dataset == "emp":
-            self.create_gen = self.get_generator(dataset="emp",
-                                                 num_items=self._num_items)
-        elif dataset == "wiki":
-            self.create_gen += self.get_generator(dataset="wiki",
-                                                  num_items=self._num_items)
-        if dataset == "all":
-            self.create_gen = self.get_generator(dataset="emp",
-                                                 num_items=self._num_items/2)
-            self.create_gen += self.get_generator(dataset="wiki",
-                                                  num_items=self._num_items/2)
-
-        self.create_gen.start = 0
-        self.create_gen.itr = 0
-        self.create_gen.end = self._num_items
+        if self.dataset == "emp":
+            self.create_gen = self.get_generator(self.dataset, num_items=self._num_items)
+        elif self.dataset == "wiki":
+            self.create_gen = self.get_generator(self.dataset, num_items=self._num_items)
+        elif self.dataset == "all":
+            self.create_gen = []
+            self.create_gen.append(self.get_generator("emp", num_items=self._num_items/2))
+            self.create_gen.append(self.get_generator("wiki", num_items=self._num_items/2))
 
     def load_data(self):
         """
@@ -2451,11 +2439,18 @@ class FTSBaseTest(unittest.TestCase):
         self.populate_create_gen()
         if self.compare_es:
             gen = copy.copy(self.create_gen)
-            load_tasks.append(self.es.async_load_ES(index_name='default_es_index',
-                                                    gen=gen,
-                                                    op_type='create'))
+            if isinstance(gen, list):
+                for generator in gen:
+                    load_tasks.append(self.es.async_load_ES(index_name='default_es_index',
+                                                        gen=generator,
+                                                        op_type='create'))
+            else:
+                load_tasks.append(self.es.async_load_ES(index_name='default_es_index',
+                                                        gen=gen,
+                                                        op_type='create'))
+
         load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(
-            self.create_gen)
+                self.create_gen)
         return load_tasks
 
     def run_query_and_compare(self, index):

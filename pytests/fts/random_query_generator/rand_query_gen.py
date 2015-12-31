@@ -1,17 +1,22 @@
 import random
 import json
-#import sys
-#sys.path.append("/Users/apiravi/testrunner")
-from lib.couchbase_helper.data import FIRST_NAMES, LAST_NAMES, LANGUAGES, DEPT
+import sys
+sys.path.append("/Users/apiravi/testrunner")
+from emp_querables import EmployeeQuerables
+from wiki_queryables import WikiQuerables
 
 class DATASET:
-    EMP_FIELDS = {'str': ["name", "dept", "manages_reports",
-                               "languages_known", "email"],
-                  'float': ["salary"],
-                  'int': ["empid", "mutated", "manages_team_size"],
-                  'bool': ["is_manager"],
-                  'date': ["join_date"],
-                  'text': ["name", "manages_reports"]}
+    FIELDS = {'emp': {'str': ["name", "dept", "manages_reports",
+                               "languages_known", "email", "_type"],
+                      'num': ["empid", "mutated", "manages_team_size", "salary"],
+                      'bool': ["is_manager"],
+                      'date': ["join_date"],
+                      'text': ["name", "manages_reports"]},
+              'wiki': {'str': ["title", "revision_text_text", "_type"],
+                       'text': ["title", "revision_text_text"],
+                       'num': ["id", "mutated", "revision_contributor_id", "revision_contributor_id"],
+                       'bool': [],
+                       'date': ["revision_timestamp"]}}
 
 class QUERY_TYPE:
     VALUES = ["match", "phrase", "bool", "match_phrase",
@@ -20,9 +25,9 @@ class QUERY_TYPE:
               "numeric_range", "date_range", "match_all", "match_none"]
 
 
-class FTSESQueryGenerator:
+class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 
-    def __init__(self, num_queries=1, query_type=None, seed=0):
+    def __init__(self, num_queries=1, query_type=None, seed=0, dataset="emp"):
         """
         FTS(Bleve) and equivalent ES(Lucene) query generator for employee dataset
         (JsonDocGenerator in couchbase_helper/documentgenerator.py)
@@ -34,12 +39,47 @@ class FTSESQueryGenerator:
         self.fts_queries = []
         self.es_queries = []
         self.query_types = query_type
+        self.dataset = dataset
+        self.fields = DATASET.FIELDS['emp']
+        self.construct_fields()
         self.construct_queries()
+
+    def construct_fields(self):
+        if self.dataset == "emp":
+            self.fields = DATASET.FIELDS['emp']
+        elif self.dataset == "wiki":
+            self.fields = DATASET.FIELDS['wiki']
+        elif self.dataset == "all":
+            for _, fields in DATASET.FIELDS.iteritems():
+                self.fields['str'] += fields['str']
+                self.fields['date'] += fields['date']
+                self.fields['num'] += fields['num']
+                self.fields['text'] += fields['text']
+                self.fields['bool'] += fields['bool']
+
+    def replace_underscores(self, query):
+        replace_dict = {
+            "manages_": "manages.",
+            "revision_text_text":  "revision.text.#text",
+            "revision_contributor_username": "revision.contributor.username",
+            "revision_contributor_id": "revision.contributor.id",
+            "revision_date": "revision.date"
+        }
+        query_str = json.dumps(query, ensure_ascii=False)
+        for key, val in replace_dict.iteritems():
+            query_str = query_str.replace(key, val)
+        return json.loads(query_str, encoding='utf-8')
 
     def construct_queries(self):
         while self.iterator < self.queries_to_generate:
             fieldname = self.get_random_value(self.query_types)
             fts_query, es_query = eval("self.construct_%s_query" % fieldname + "()")
+            if not fts_query:
+                # if there are no queryable fields in a dataset for a
+                # particular data type
+                continue
+            fts_query = self.replace_underscores(fts_query)
+            es_query = self.replace_underscores(es_query)
             self.fts_queries.append(fts_query)
             self.es_queries.append(es_query)
             self.iterator += 1
@@ -56,7 +96,7 @@ class FTSESQueryGenerator:
             fts_match_query = {}
             es_match_query = {'match': {}}
 
-            fieldname = self.get_random_value(DATASET.EMP_FIELDS['str'])
+            fieldname = self.get_random_value(self.fields['str'])
             match_str = eval("self.get_queryable_%s" % fieldname + "()")
 
             fts_match_query["field"] = fieldname
@@ -136,7 +176,7 @@ class FTSESQueryGenerator:
         """
         fts_match_phrase_query = {}
         es_match_phrase_query = {'match_phrase': {}}
-        fieldname = self.get_random_value(DATASET.EMP_FIELDS['text'])
+        fieldname = self.get_random_value(self.fields['text'])
         match_str = eval("self.get_queryable_%s" % fieldname + "(full=True)")
         fts_match_phrase_query["field"] = fieldname
         fts_match_phrase_query["match_phrase"] = match_str
@@ -170,7 +210,7 @@ class FTSESQueryGenerator:
         fts_date_query = {}
         es_date_query = self.construct_es_empty_filter_query()
 
-        fieldname = self.get_random_value(DATASET.EMP_FIELDS['date'])
+        fieldname = self.get_random_value(self.fields['date'])
         start = eval("self.get_queryable_%s" % fieldname + "()")
         end = eval("self.get_queryable_%s" % fieldname + "(now=True)")
         fts_date_query['field'] = fieldname
@@ -199,8 +239,7 @@ class FTSESQueryGenerator:
         fts_numeric_query = {}
         es_numeric_query = self.construct_es_empty_filter_query()
 
-        fieldname = self.get_random_value(DATASET.EMP_FIELDS['int'] +
-                                          DATASET.EMP_FIELDS['float'])
+        fieldname = self.get_random_value(self.fields['num'])
         low = eval("self.get_queryable_%s" % fieldname + "()")
         high = low + random.randint(2, 10000)
 
@@ -242,6 +281,10 @@ class FTSESQueryGenerator:
         #TODO
         pass
 
+    def construct_match_all_query(self):
+        query = {'match_all': {}}
+        return query, query
+
     def construct_compound_query(self):
         """
         This is used to consolidate more than one type of query
@@ -271,103 +314,16 @@ class FTSESQueryGenerator:
             es_compound_query.append(es)
         return fts_compound_query, es_compound_query
 
-    def get_random_value(self, list):
-        return list[random.randint(0, len(list)-1)]
-
-    def get_queryable_name(self, full=False):
-        """
-        Returns a first or last name OR
-        a combination of both
-        """
-        if full:
-            return self.return_unicode(self.get_queryable_full_name())
-
-        if bool(random.getrandbits(1)):
-            name_list = FIRST_NAMES + LAST_NAMES
-            return self.return_unicode(self.get_random_value(name_list))
-        else:
-            return self.return_unicode(self.get_queryable_full_name())
-
-    def return_unicode(self, text):
-        try:
-            text = unicode(text, 'utf-8')
-            return text
-        except TypeError:
-            return text
-
-    def get_queryable_full_name(self):
-        return "%s %s" %(self.get_random_value(FIRST_NAMES),
-                         self.get_random_value(LAST_NAMES))
-
-    def get_queryable_dept(self):
-        """
-        Returns a valid dept to be queried
-        """
-        return self.get_random_value(DEPT)
-
-    def get_queryable_join_date(self, now=False):
-        import datetime
-        if now:
-            return datetime.datetime.now().isoformat()
-        year = random.randint(1950, 2016)
-        month = random.randint(1, 12)
-        day = random.randint(1, 28)
-        hour = random.randint(0, 23)
-        min = random.randint(0, 59)
-        return datetime.datetime(year, month, day, hour, min).isoformat()
-
-    def get_queryable_languages_known(self):
-        """
-        Returns one or two languages
-        """
-        if bool(random.getrandbits(1)):
-            return self.get_random_value(LANGUAGES)
-        else:
-            return "%s %s" % (self.get_random_value(LANGUAGES),
-                             self.get_random_value(list(reversed(LANGUAGES))))
-
-    def get_queryable_email(self):
-        return "%s@mcdiabetes.com" % self.get_random_value(FIRST_NAMES).lower()
-
-    def get_queryable_empid(self):
-        return random.randint(10000000, 10001000)
-
-    def get_queryable_salary(self):
-        return round(random.random(), 2) *100000 + 50000
-
-    def get_queryable_manages_team_size(self):
-        return random.randint(5, 10)
-
-    def get_queryable_mutated(self):
-        return random.randint(0, 5)
-
-    def get_queryable_manages_reports(self, full=False):
-        """
-        Returns first names of 1-4 reports
-        """
-        num_reports = random.randint(1, 4)
-        reports = []
-        if not full:
-            while len(reports) < num_reports:
-                if num_reports == 1:
-                    return self.get_random_value(FIRST_NAMES)
-                reports.append(self.get_random_value(FIRST_NAMES))
-            return ' '.join(reports)
-        else:
-            while len(reports) < num_reports:
-                if num_reports == 1:
-                    return self.return_unicode(self.get_queryable_full_name())
-
-                reports.append(self.return_unicode(self.get_queryable_full_name()))
-            return ' '.join(reports)
+    def get_queryable__type(self):
+        doc_types = DATASET.FIELDS.keys()
+        return self.get_random_value(doc_types)
 
 if __name__ == "__main__":
     #query_type=["match", "match_phrase","bool", "conjunction", "disjunction",
     # "prefix"]
-    query_type = ['match_phrase']
-    query_gen = FTSESQueryGenerator(2, query_type=query_type)
+    query_type = ['match_phrase', 'match', 'date_range', 'numeric_range', 'bool', 'conjunction', 'disjunction', 'prefix']
+    query_gen = FTSESQueryGenerator(100, query_type=query_type, dataset='wiki')
     for index, query in enumerate(query_gen.fts_queries):
-        print json.dumps(query, ensure_ascii=False, indent=3).replace("manages_", "manages.",)
-        print json.dumps(query_gen.es_queries[index], ensure_ascii=False, indent=3).\
-            replace("manages_", "manages.")
+        print json.dumps(query, ensure_ascii=False, indent=3)
+        print json.dumps(query_gen.es_queries[index], ensure_ascii=False, indent=3)
         print "------------"
