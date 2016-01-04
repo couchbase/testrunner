@@ -486,7 +486,7 @@ class N1QLHelper():
             query_params.update("scan_consistency", scan_consistency)
         return query_params
 
-    def _is_index_in_list(self, bucket, index_name, server = None, index_state = ["pending","building"]):
+    def _is_index_in_list(self, bucket, index_name, server = None, index_state = ["pending", "building", "deferred"]):
         query = "SELECT * FROM system:indexes where name = \'{0}\'".format(index_name)
         if server == None:
             server = self.master
