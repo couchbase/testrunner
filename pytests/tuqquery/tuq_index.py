@@ -772,7 +772,13 @@ class QueriesViewsTests(QueryTests):
             self.run_intersect_scan_explain_query(indexes, query)
         finally:
             if indexes:
-                self._delete_indexes(indexes)
+                  for bucket in self.buckets:
+                    for indx in indexes:
+                        self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, indx, self.index_type)
+                        try:
+                            self.run_cbq_query()
+                        except:
+                            pass
 
     def test_intersect_scan_meta(self):
         test_to_run = self.input.param("test_to_run", '')
