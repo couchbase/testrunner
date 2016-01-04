@@ -127,7 +127,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def backup_create_validate(self):
         output, error = self.backup_create()
-        if error or "Backup `{0}` created successfully".format(self.backupset.name) not in output:
+        if error or "Backup `{0}` created successfully".format(self.backupset.name) not in output[0]:
             self.fail("Creating backupset failed.")
         status, msg = self.validation_helper.validate_backup_create()
         if not status:
@@ -149,7 +149,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{0}/backup {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if output:
+        if error or "Backup successfully completed" not in output[0]:
             return output, error
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = remote_client.execute_command(command)
@@ -161,7 +161,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def backup_cluster_validate(self):
         output, error = self.backup_cluster()
-        if output:
+        if error or "Backup successfully completed" not in output[0]:
             self.fail("Taking cluster backup failed.")
         status, msg = self.validation_helper.validate_backup()
         if not status:
