@@ -30,11 +30,15 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
 
-    def run_default_index_query(self):
+    def run_default_index_query(self, query=None, zero_results_ok=None,
+                                expected_hits=None):
         self.create_simple_default_index()
-        query = eval(self._input.param("query", str(self.sample_query)))
+        if not query:
+            query = eval(self._input.param("query", str(self.sample_query)))
         for index in self._cb_cluster.get_indexes():
-            index.execute_query(query, zero_results_ok=True)
+            hits, _, _ = index.execute_query(query, zero_results_ok=zero_results_ok,
+                                expected_hits=expected_hits)
+            self.log.info("Hits: %s" % hits)
 
     def test_query_type(self):
         """
@@ -60,6 +64,15 @@ class StableTopFTS(FTSBaseTest):
         alias = self.create_alias([index])
         self.generate_random_queries(alias, self.num_queries, self.query_types)
         self.run_query_and_compare(alias)
+
+    def test_match_all(self):
+        self.run_default_index_query(query={"match_all": {}},
+                                     expected_hits=self._num_items)
+
+    def test_match_none(self):
+        self.run_default_index_query(query={"match_none": {}},
+                                     zero_results_ok=True,
+                                     expected_hits=0)
 
     def index_utf16_dataset(self):
         self.load_utf16_data()
@@ -148,8 +161,8 @@ class StableTopFTS(FTSBaseTest):
 
     def edit_index_new_name(self):
         self.load_employee_dataset()
-        index = self._cb_cluster.create_fts_index('sample_index',
-                                                  source_name='default')
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        index = self.create_default_index(bucket, 'sample_index')
         self.wait_for_indexing_complete()
         index.name = "new_index"
         try:
@@ -159,8 +172,8 @@ class StableTopFTS(FTSBaseTest):
 
     def edit_index(self):
         self.load_employee_dataset()
-        index = self._cb_cluster.create_fts_index('sample_index',
-                                                  source_name='default')
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        index = self.create_default_index(bucket, 'sample_index')
         self.wait_for_indexing_complete()
         hits, _, _ = index.execute_query(self.sample_query)
         new_plan_param = {"maxPartitionsPerPIndex": 30}

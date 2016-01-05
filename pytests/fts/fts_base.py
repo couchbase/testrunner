@@ -938,8 +938,7 @@ class CouchbaseCluster:
     def create_fts_index(self, name, source_type='couchbase',
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
-                         source_params=None, source_uuid=None,
-                         node=None):
+                         source_params=None, source_uuid=None):
         """Create fts index/alias
         @param node: Node on which index is created
         @param name: name of the index/alias
@@ -1762,10 +1761,12 @@ class FTSBaseTest(unittest.TestCase):
             else:
                 raise FTSException("Negative test passed!")
 
+        if self._input.param("get-fts-diags", True) and self.__is_test_failed():
+            self.grab_fts_diag()
+
         # collect logs before tearing down clusters
         if self._input.param("get-cbcollect-info", False) and \
                 self.__is_test_failed():
-            self.grab_fts_diag()
             for server in self._input.servers:
                 self.log.info("Collecting logs @ {0}".format(server.ip))
                 NodeHelper.collect_logs(server)
@@ -2173,9 +2174,9 @@ class FTSBaseTest(unittest.TestCase):
                 index_doc_count = index.get_indexed_doc_count()
                 if not self.compare_es:
                     self.log.info("Docs in bucket = %s, docs in FTS index '%s': %s"
-                                        %(index.get_src_bucket_doc_count()),
+                                        %(index.get_src_bucket_doc_count(),
                                         index.name,
-                                        index.get_indexed_doc_count())
+                                        index.get_indexed_doc_count()))
                 else:
                     self.es.update_index('default_es_index')
                     self.log.info("Docs in bucket = %s, docs in FTS index '%s':"
@@ -2502,6 +2503,8 @@ class FTSBaseTest(unittest.TestCase):
         import base64
         path = TestInputSingleton.input.param("logs_folder", "/tmp")
         for serverInfo in self._cb_cluster.get_fts_nodes():
+            if not self.__is_cluster_run():
+                serverInfo.fts_port = 9110
             self.log.info("Grabbing fts diag from {0}...".format(serverInfo.ip))
             diag_url = "http://{0}:{1}/api/diag".format(serverInfo.ip,
                                                         serverInfo.fts_port)
@@ -2515,7 +2518,7 @@ class FTSBaseTest(unittest.TestCase):
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'Authorization': 'Basic %s' % authorization,
                     'Accept': '*/*'}
-                filename = "{0}-fts-diag.json".format(serverInfo.ip)
+                filename = "{0}_fts_diag.json".format(serverInfo.ip)
                 page = urllib2.urlopen(req)
                 with open(path+'/'+filename, 'wb') as output:
                     os.write(1, "downloading {0} ...".format(serverInfo.ip))
@@ -2530,7 +2533,7 @@ class FTSBaseTest(unittest.TestCase):
                 zipped.writelines(file_input)
                 file_input.close()
                 zipped.close()
-                os.remove(filename)
+                os.remove(path+'/'+filename)
                 print "downloaded and zipped diags @ : {0}/{1}".format(path,
                                                                        filename)
             except urllib2.URLError as error:
