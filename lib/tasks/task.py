@@ -758,8 +758,6 @@ class GenericLoadingTask(Thread, Task):
             self.state = FINISHED
             self.set_exception(error)
 
-
-
     # start of batch methods
     def _create_batch(self, partition_keys_dic, key_val):
         try:
@@ -872,7 +870,6 @@ class LoadDocumentsTask(GenericLoadingTask):
     def has_next(self):
         return self.generator.has_next()
 
-
     def next(self):
         if self.batch_size == 1:
             key, value = self.generator.next()
@@ -979,7 +976,7 @@ class ESLoadGeneratorTask(Task):
             doc = json.loads(doc)
             self.es_instance.load_data(self.index_name,
                                        json.dumps(doc, encoding='utf-8'),
-                                       doc['_type'],
+                                       doc['type'],
                                        key)
             self.iterator += 1
             if math.fmod(self.iterator, 500) == 0.0:
@@ -987,6 +984,58 @@ class ESLoadGeneratorTask(Task):
                               format(self.iterator))
         self.state = FINISHED
         self.set_result(True)
+
+class ESBulkLoadGeneratorTask(Task):
+    """
+        Class to load/update/delete documents into/from Elastic Search
+    """
+
+    def __init__(self, es_instance, index_name, generator, op_type="create",
+                 batch=1000):
+        Task.__init__(self, "ES_loader_task")
+        self.es_instance = es_instance
+        self.index_name = index_name
+        self.generator = generator
+        self.iterator = 0
+        self.batch_size = batch
+        self.log.info("Starting to load data into Elastic Search ...")
+
+    def check(self, task_manager):
+        self.state = FINISHED
+        self.set_result(True)
+
+    def execute(self, task_manager):
+        es_filename = "/tmp/es_bulk.txt"
+        es_bulk_docs = []
+        loaded = 0
+        batched = 0
+        for key, doc in self.generator:
+            doc = json.loads(doc)
+            es_doc = {"index": {
+                                "_index": self.index_name,
+                                "_type": doc['type'],
+                                "_id": key,
+                                }
+                     }
+            es_bulk_docs.append(json.dumps(es_doc))
+            es_bulk_docs.append(json.dumps(doc))
+            batched += 1
+            if batched == self.batch_size or not self.generator.has_next():
+                es_file = open(es_filename, "wb")
+                for line in es_bulk_docs:
+                    es_file.write("%s\n" %line)
+                es_file.close()
+                self.es_instance.load_bulk_data(es_filename)
+                loaded += batched
+                self.log.info("{0} documents bulk loaded into ES".format(loaded))
+                self.es_instance.update_index(self.index_name)
+                batched = 0
+        indexed = self.es_instance.get_index_count(self.index_name)
+        self.log.info("ES index count for '{0}': {1}".
+                              format(self.index_name, indexed))
+        self.state = FINISHED
+        self.set_result(True)
+
 
 class ESRunQueryCompare(Task):
     def __init__(self, fts_index, es_instance, query_index):

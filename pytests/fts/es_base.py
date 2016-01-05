@@ -116,6 +116,36 @@ class ElasticSearchBase(object):
         self.task_manager.schedule(_task)
         return _task
 
+    def async_bulk_load_ES(self, index_name, gen, op_type='create', batch=5000):
+        _task = ESBulkLoadGeneratorTask(es_instance=self,
+                                    index_name=index_name,
+                                    generator=gen,
+                                    op_type=op_type,
+                                    batch=batch)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def load_bulk_data(self, filename):
+        """
+        Bulk load to ES from a file
+        curl -s -XPOST 172.23.105.25:9200/_bulk --data-binary @req
+        cat req:
+        { "index" : { "_index" : "default_es_index", "_type" : "aruna", "_id" : "1" } }
+        { "field1" : "value1" , "field2" : "value2"}
+        { "index" : { "_index" : "default_es_index", "_type" : "aruna", "_id" : "2" } }
+        { "field1" : "value1" , "field2" : "value2"}
+        """
+        try:
+            import os
+            url = self.__connection_url + "/_bulk"
+            data = open(filename, "rb").read()
+            status, content, _ = self._http_request(url,
+                                                    'POST',
+                                                    data)
+            return status
+        except Exception as e:
+            raise e
+
     def load_data(self, index_name, document_json, doc_type, doc_id):
         """
         index_name : name of index into which the doc is loaded

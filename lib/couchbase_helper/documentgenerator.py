@@ -290,7 +290,7 @@ class JsonDocGenerator(KVGenerator):
                             'languages_known': self.generate_lang_known(),
                             'is_manager': bool(random.getrandbits(1)),
                             'mutated': 0,
-                            '_type': 'emp'
+                            'type': 'emp'
                            }
                 if doc_dict["is_manager"]:
                     doc_dict['manages'] = {'team_size': random.randint(5, 10)}
@@ -463,8 +463,8 @@ class WikiJSONGenerator(KVGenerator):
         if self.itr >= self.end:
             raise StopIteration
         doc = eval(self.gen_docs[self.itr])
-        doc["mutated"] = 0
-        doc['_type'] = 'wiki'
+        doc['mutated'] = 0
+        doc['type'] = 'wiki'
         self.itr += 1
         return self.name+str(10000000+self.itr),\
                json.dumps(doc, indent=3).encode(self.encoding, "ignore")
