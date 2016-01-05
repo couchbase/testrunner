@@ -15,9 +15,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.backup_host = self.input.clusters[1][0]
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         self.backupset.name = self.input.param("name", "backup")
-        self.backupset.cluster_host = self.servers[0]
-        self.backupset.cluster_host_username = self.servers[0].rest_username
-        self.backupset.cluster_host_password = self.servers[0].rest_password
+        self.non_master_host = self.input.param("non-master", False)
+        if self.non_master_host:
+            self.backupset.cluster_host = self.servers[1]
+            self.backupset.cluster_host_username = self.servers[1].rest_username
+            self.backupset.cluster_host_password = self.servers[1].rest_password
+        else:
+            self.backupset.cluster_host = self.servers[0]
+            self.backupset.cluster_host_username = self.servers[0].rest_username
+            self.backupset.cluster_host_password = self.servers[0].rest_password
         self.same_cluster = self.input.param("same-cluster", False)
         self.reset_restore_cluster = self.input.param("reset-restore-cluster", True)
         self.no_progress_bar = self.input.param("no-progress-bar", True)
