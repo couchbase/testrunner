@@ -1,18 +1,18 @@
 import random
 import json
-import sys
-sys.path.append("/Users/apiravi/testrunner")
+#import sys
+#sys.path.append("/Users/apiravi/testrunner")
 from emp_querables import EmployeeQuerables
 from wiki_queryables import WikiQuerables
 
 class DATASET:
     FIELDS = {'emp': {'str': ["name", "dept", "manages_reports",
-                               "languages_known", "email", "_type"],
+                               "languages_known", "email", "type"],
                       'num': ["empid", "mutated", "manages_team_size", "salary"],
                       'bool': ["is_manager"],
                       'date': ["join_date"],
                       'text': ["name", "manages_reports"]},
-              'wiki': {'str': ["title", "revision_text_text", "_type"],
+              'wiki': {'str': ["title", "revision_text_text", "type"],
                        'text': ["title", "revision_text_text"],
                        'num': ["id", "mutated", "revision_contributor_id", "revision_contributor_id"],
                        'bool': [],
@@ -314,7 +314,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             es_compound_query.append(es)
         return fts_compound_query, es_compound_query
 
-    def get_queryable__type(self):
+    def get_queryable_type(self):
         doc_types = DATASET.FIELDS.keys()
         return self.get_random_value(doc_types)
 

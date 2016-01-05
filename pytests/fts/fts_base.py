@@ -102,9 +102,9 @@ class INDEX_DEFAULTS:
                       "dynamic": True,
                       "default_analyzer": ""
                     },
-                    "type_field": "_type",
+                    "type_field": "type",
                     "default_type": "_default",
-                    "default_analyzer": "standard",
+                    "default_analyzer": "simple",
                     "default_datetime_parser": "dateTimeOptional",
                     "default_field": "_all",
                     "byte_array_converter": "json",
@@ -2163,6 +2163,7 @@ class FTSBaseTest(unittest.TestCase):
         """
         Wait for index_count for any index to stabilize
         """
+        start_time = time.time()
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "alias":
                 continue
@@ -2170,20 +2171,28 @@ class FTSBaseTest(unittest.TestCase):
             prev_count = 0
             while retry_count > 0:
                 index_doc_count = index.get_indexed_doc_count()
-                self.log.info("Index %s doc count: %s bucket doc count = %s"
-                        % (index.name,
-                        index.get_indexed_doc_count(),
-                        index.get_src_bucket_doc_count()))
+                if not self.compare_es:
+                    self.log.info("Docs in bucket = %s, docs in FTS index '%s': %s"
+                                        %(index.get_src_bucket_doc_count()),
+                                        index.name,
+                                        index.get_indexed_doc_count())
+                else:
+                    self.es.update_index('default_es_index')
+                    self.log.info("Docs in bucket = %s, docs in FTS index '%s':"
+                                  " %s, docs in ES index: %s "
+                                % (index.get_src_bucket_doc_count(),
+                                index.name,
+                                index.get_indexed_doc_count(),
+                                self.es.get_index_count('default_es_index')))
+
                 if prev_count < index_doc_count or prev_count > index_doc_count:
                     prev_count = index_doc_count
                     retry_count = retry
                 else:
                     retry_count -= 1
                 time.sleep(10)
-        if self.compare_es:
-            self.es.update_index('default_es_index')
-            self.log.info("Docs in ES index: %s" %
-                          self.es.get_index_count('default_es_index'))
+        self.log.info("FTS indexed all docs in %s mins"
+                      % (round(float((time.time()-60-start_time)/60), 2)))
 
     def construct_plan_params(self):
         plan_params = {}
@@ -2412,7 +2421,6 @@ class FTSBaseTest(unittest.TestCase):
                                      end=start+num_items)
 
     def populate_create_gen(self):
-
         if self.dataset == "emp":
             self.create_gen = self.get_generator(self.dataset, num_items=self._num_items)
         elif self.dataset == "wiki":
@@ -2441,11 +2449,11 @@ class FTSBaseTest(unittest.TestCase):
             gen = copy.copy(self.create_gen)
             if isinstance(gen, list):
                 for generator in gen:
-                    load_tasks.append(self.es.async_load_ES(index_name='default_es_index',
+                    load_tasks.append(self.es.async_bulk_load_ES(index_name='default_es_index',
                                                         gen=generator,
                                                         op_type='create'))
             else:
-                load_tasks.append(self.es.async_load_ES(index_name='default_es_index',
+                load_tasks.append(self.es.async_bulk_load_ES(index_name='default_es_index',
                                                         gen=gen,
                                                         op_type='create'))
 
