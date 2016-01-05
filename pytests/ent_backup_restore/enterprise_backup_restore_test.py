@@ -178,8 +178,27 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.backup_list_validate()
 
     def test_backup_compact(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backup and validates it
+        3. Executes compact command on the backupset and validates the output
+        """
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster_validate()
         self.backup_compact_validate()
+
+    def test_restore_from_compacted_backup(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backup and validates it
+        3. Executes compact command on the backupset
+        4. Restores from the compacted backup and validates it
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster_validate()
+        self.backup_compact()
+        self.backup_restore_validate()
