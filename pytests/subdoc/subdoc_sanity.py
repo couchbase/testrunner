@@ -20,6 +20,21 @@ class SubdocSanityTests(unittest.TestCase):
     def tearDown(self):
         self.helper.cleanup_cluster()
 
+    def test_simple_dataset_sanity(self):
+        self.test_simple_dataset_get()
+        self.test_deep_nested_dataset_get_dict()
+        self.test_deep_nested_dataset_get_array()
+        self.test_simple_dataset_dict_upsert()
+        self.test_simple_dataset_dict_add()
+        self.test_simple_dataset_remove()
+        self.test_simple_dataset_exists()
+        self.test_simple_dataset_replace()
+        self.test_simple_dataset_array_push_last()
+        self.test_simple_dataset_array_push_first()
+        self.test_simple_dataset_counter()
+        self.test_simple_dataset_array_add_unqiue()
+        self.test_simple_dataset_counter()
+
     def test_simple_dataset_get(self):
         num_docs = self.helper.input.param("num-docs")
         self.log.info("description : Issue simple get sub doc single path "
