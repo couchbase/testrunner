@@ -4,6 +4,7 @@ from couchbase_helper.cluster import Cluster
 from couchbase_helper.documentgenerator import BlobGenerator
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
 from membase.api.rest_client import RestConnection
+from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 
 
 class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
@@ -202,3 +203,66 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.backup_cluster_validate()
         self.backup_compact()
         self.backup_restore_validate()
+
+    def test_backup_restore_with_nodes_reshuffle(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Enlists the default zone of current cluster - backsup the cluster and validates
+        3. Creates a new zone - shuffles cluster host to new zone
+        4. Restores to cluster host and validates
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        rest_conn = RestConnection(self.backupset.cluster_host)
+        zones = rest_conn.get_zone_names().keys()
+        source_zone = zones[0]
+        target_zone = "test_backup_restore"
+        self.log.info("Current nodes in group {0} : {1}".format(source_zone,
+                                                                str(rest_conn.get_nodes_in_zone(source_zone).keys())))
+        self.log.info("Taking backup with current groups setup")
+        self.backup_create()
+        self.backup_cluster_validate()
+        self.log.info("Creating new zone " + target_zone)
+        rest_conn.add_zone(target_zone)
+        self.log.info("Moving {0} to new zone {1}".format(self.backupset.cluster_host.ip, target_zone))
+        rest_conn.shuffle_nodes_in_zones(["{0}".format(self.backupset.cluster_host.ip)],source_zone,target_zone)
+        self.log.info("Restoring to {0} after group change".format(self.backupset.cluster_host.ip))
+        self.backup_restore_validate()
+        self.log.info("Moving {0} back to old zone {1}".format(self.backupset.cluster_host.ip, source_zone))
+        rest_conn.shuffle_nodes_in_zones(["{0}".format(self.backupset.cluster_host.ip)],target_zone,source_zone)
+        self.log.info("Deleting new zone " + target_zone)
+        rest_conn.delete_zone(target_zone)
+
+    def test_backup_restore_with_firewall(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates backupset on backup host
+        3. Enables firewall on cluster host and validates if backup cluster command throws expected error
+        4. Disables firewall on cluster host, takes backup and validates
+        5. Enables firewall on restore host and validates if backup restore command throws expected error
+        6. Disables firewall on restore host, restores and validates
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.log.info("Enabling firewall on cluster host before backup")
+        RemoteUtilHelper.enable_firewall(self.backupset.cluster_host)
+        output, error = self.backup_cluster()
+        self.assertTrue("getsockopt: connection refused" in output[0],
+                        "Expected error not thrown by backup cluster when firewall enabled")
+        self.log.info("Disabling firewall on cluster host to take backup")
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.disable_firewall()
+        self.log.info("Trying backup now")
+        self.backup_cluster_validate()
+        self.log.info("Enabling firewall on restore host before restore")
+        RemoteUtilHelper.enable_firewall(self.backupset.restore_cluster_host)
+        output, error = self.backup_restore()
+        self.assertTrue("getsockopt: connection refused" in output[0],
+                       "Expected error not thrown by backup restore when firewall enabled")
+        self.log.info("Disabling firewall on restore host to restore")
+        conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+        conn.disable_firewall()
+        self.log.info("Trying restore now")
+        self.backup_restore_validate()
+
