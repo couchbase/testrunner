@@ -2160,10 +2160,11 @@ class FTSBaseTest(unittest.TestCase):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
 
-    def wait_for_indexing_complete(self, retry=5):
+    def wait_for_indexing_complete(self):
         """
         Wait for index_count for any index to stabilize
         """
+        retry = self._input.param("index_retry", 5)
         start_time = time.time()
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "alias":
