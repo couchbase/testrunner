@@ -773,7 +773,7 @@ class ESInstaller(object):
        pass
 
     def initialize(self, params):
-        self.remote_client.execute_command("~/elasticsearch/bin/elasticsearch start > /var/log/es.log 2>&1 &")
+        self.remote_client.execute_command("~/elasticsearch/bin/elasticsearch > es.log 2>&1 &")
 
     def install(self, params):
         self.remote_client = RemoteMachineShellConnection(params["server"])
@@ -784,8 +784,9 @@ class ESInstaller(object):
         self.remote_client.execute_command("wget {0}".format(download_url))
         self.remote_client.execute_command("tar xvzf elasticsearch-{0}.tar.gz; mv elasticsearch-{0} elasticsearch".format(params["version"]))
         self.remote_client.execute_command("echo couchbase.password: password >> ~/elasticsearch/config/elasticsearch.yml")
-        self.remote_client.execute_command("~/elasticsearch/bin/plugin -install transport-couchbase -url {0}".format(params["plugin-url"]))
-        self.remote_client.execute_command("~/elasticsearch/bin/plugin -install mobz/elasticsearch-head")
+        self.remote_client.execute_command("echo couchbase.port: 9091 >> ~/elasticsearch/config/elasticsearch.yml")
+        self.remote_client.execute_command("~/elasticsearch/bin/plugin install {0}".format(params["plugin-url"]))
+        self.remote_client.execute_command("~/elasticsearch/bin/plugin install https://github.com/mobz/elasticsearch-head/archive/master.zip")
         return True
 
     def __exit__(self):
