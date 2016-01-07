@@ -689,6 +689,7 @@ class QueryTests(BaseTestCase):
             self.query = "SELECT distinct name FROM %s WHERE META(%s).id IS NOT NULL"  % (
                                                                                    bucket.name, bucket.name)
             actual_result = self.run_cbq_query()
+
             actual_result = sorted(actual_result['results'], key=lambda doc: (doc['name']))
             self._verify_results(actual_result, expected_result)
 
@@ -3243,11 +3244,15 @@ class QueryTests(BaseTestCase):
                                                        min_output_size=20,
                                                        end_msg='cbq>')
             else:
-                output = self.shell.execute_commands_inside("/tmp/tuq/cbq -engine=http://%s:%s/" % (server.ip, str(self.n1ql_port)),
+                os = self.shell.extract_remote_info().type.lower()
+                if os == "linux":
+                    cmd = "cd %s ; " % testconstants.LINUX_COUCHBASE_BIN_PATH +"cbq  -engine=http://%s:8093/" % (server.ip)
+                    output = self.shell.execute_commands_inside(cmd,query,
                                                            subcommands=[query,],
                                                            min_output_size=20,
                                                            end_msg='cbq>')
-            result = self._parse_query_output(output)
+            result = output
+            #result = self._parse_query_output(output)
         if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)
         if 'metrics' in result:
@@ -3361,14 +3366,14 @@ class QueryTests(BaseTestCase):
         return out
 
     def _parse_query_output(self, output):
-        if output.find("cbq>") == 0:
-            output = output[output.find("cbq>") + 4:].strip()
-        if output.find("tuq_client>") == 0:
-            output = output[output.find("tuq_client>") + 11:].strip()
-        if output.find("cbq>") != -1:
-            output = output[:output.find("cbq>")].strip()
-        if output.find("tuq_client>") != -1:
-            output = output[:output.find("tuq_client>")].strip()
+        # if output.find("cbq>") == 0:
+        #     output = output[output.find("cbq>") + 4:].strip()
+        # if output.find("tuq_client>") == 0:
+        #     output = output[output.find("tuq_client>") + 11:].strip()
+        # if output.find("cbq>") != -1:
+        #     output = output[:output.find("cbq>")].strip()
+        # if output.find("tuq_client>") != -1:
+        #     output = output[:output.find("tuq_client>")].strip()
         return json.loads(output)
 
     def generate_docs(self, docs_per_day, start=0):

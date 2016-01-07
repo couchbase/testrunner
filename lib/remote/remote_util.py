@@ -1969,35 +1969,56 @@ class RemoteMachineShellConnection:
                               .format(self.ip, output, error, track_words))
         return success
 
-    def execute_commands_inside(self, main_command, subcommands=[], min_output_size=0,
+    def execute_commands_inside(self, main_command,query, subcommands=[], min_output_size=0,
                                 end_msg='', timeout=250):
         log.info("running command on {0}: {1}".format(self.ip, main_command))
 
         if self.remote:
-            stdin, stdout, stderro = self._ssh_client.exec_command(main_command)
+            # stdin, stdout, stderro = self._ssh_client.exec_command(main_command)
+            # output = stdout.readlines()
+            # print output
+           ssh = paramiko.SSHClient()
+           ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+           ssh.connect(self.ip, username=self.username, password="couchbase")
+           sftp = ssh.open_sftp()
+           filename = 'test'
+           f = sftp.open('/tmp/' + filename, 'w')
+           print query
+           query = query + ";"
+           f.write(query)
+           main_command = main_command + " < " + '/tmp/' + filename
+           stdin,stdout, ssh_stderr = ssh.exec_command(main_command)
+           output = ""
+           for line in iter(lambda: stdout.readline(2048), ""):
+                print(line)
+                output = line
+           f.close()
+           ssh.close()
+           #output = output + end_msg
+
         else:
             p = Popen(main_command , shell=True, stdout=PIPE, stderr=PIPE)
             stdout, stderro = p.communicate()
         time.sleep(1)
-        for cmd in subcommands:
-              log.info("running command {0} inside {1} ({2})".format(
-                                                        main_command, cmd, self.ip))
-              stdin.channel.send("{0}\n".format(cmd))
-              end_time = time.time() + float(timeout)
-              while True:
-                  if time.time() > end_time:
-                      raise Exception("no output in {3} sec running command \
-                                       {0} inside {1} ({2})".format(main_command,
-                                                                    cmd, self.ip,
-                                                                    timeout))
-                  output = stdout.channel.recv(1024)
-                  if output.strip().endswith(end_msg) and len(output) >= min_output_size:
-                          break
-                  time.sleep(2)
-              log.info("{0}:'{1}' -> '{2}' output\n: {3}".format(self.ip, main_command, cmd, output))
-        stdin.close()
-        stdout.close()
-        stderro.close()
+        # for cmd in subcommands:
+        #       log.info("running command {0} inside {1} ({2})".format(
+        #                                                 main_command, cmd, self.ip))
+        #       stdin.channel.send("{0}\n".format(cmd))
+        #       end_time = time.time() + float(timeout)
+        #       while True:
+        #           if time.time() > end_time:
+        #               raise Exception("no output in {3} sec running command \
+        #                                {0} inside {1} ({2})".format(main_command,
+        #                                                             cmd, self.ip,
+        #                                                             timeout))
+        #           output = stdout.channel.recv(1024)
+        #           if output.strip().endswith(end_msg) and len(output) >= min_output_size:
+        #                   break
+        #           time.sleep(2)
+        #       log.info("{0}:'{1}' -> '{2}' output\n: {3}".format(self.ip, main_command, cmd, output))
+        # stdin.close()
+        # stdout.close()
+        # stderro.close()
         return output
 
     def execute_command(self, command, info=None, debug=True, use_channel=False):
