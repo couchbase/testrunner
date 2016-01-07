@@ -1,5 +1,6 @@
 import os
 import shutil
+import testconstants
 
 from basetestcase import BaseTestCase
 from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
@@ -12,8 +13,23 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def setUp(self):
         super(EnterpriseBackupRestoreBase, self).setUp()
         self.backupset = Backupset()
+        shell = RemoteMachineShellConnection(self.servers[0])
+        info = shell.extract_remote_info().type.lower()
+        if info == 'linux':
+            self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
+            self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
+            self.backup_validation_files_location = "/tmp/backuprestore"
+        elif info == 'windows':
+            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH
+            self.backupset.directory = self.input.param("dir", testconstants.WIN_TMP_PATH + "entbackup")
+            self.backup_validation_files_location = testconstants.WIN_TMP_PATH + "backuprestore"
+        elif info == 'mac':
+            self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
+            self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
+            self.backup_validation_files_location = "/tmp/backuprestore"
+        else:
+            raise Exception("OS not supported.")
         self.backupset.backup_host = self.input.clusters[1][0]
-        self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         self.backupset.name = self.input.param("name", "backup")
         self.non_master_host = self.input.param("non-master", False)
         if self.non_master_host:
@@ -55,9 +71,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.backup_incr_backup = self.input.param("incr-backup", None)
         self.backupset.bucket_backup = self.input.param("bucket-backup", None)
         self.backupset.backup_to_compact = self.input.param("backup-to-compact", 0)
-        self.cli_command_location = "/opt/couchbase/bin"
         self.backups = []
-        self.backup_validation_files_location = "/tmp/backuprestore"
         self.validation_helper = BackupRestoreValidations(self.backupset, self.cluster_to_backup, self.cluster_to_restore,
                                                           self.buckets, self.backup_validation_files_location, self.backups,
                                                           self.num_items)
@@ -73,15 +87,24 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         super(EnterpriseBackupRestoreBase, self).tearDown()
         if not self.input.param("skip_cleanup", False):
             remote_client = RemoteMachineShellConnection(self.input.clusters[1][0])
-            command = "rm -rf {0}".format(self.input.param("dir", "/tmp/entbackup"))
+            info = remote_client.extract_remote_info().type.lower()
+            if info == 'linux' or info == 'mac':
+                backup_directory = "/tmp/entbackup"
+                validation_files_location = "/tmp/backuprestore"
+            elif info == 'windows':
+                backup_directory = testconstants.WIN_TMP_PATH + "entbackup"
+                validation_files_location = testconstants.WIN_TMP_PATH + "backuprestore"
+            else:
+                raise Exception("OS not supported.")
+            command = "rm -rf {0}".format(backup_directory)
             output, error = remote_client.execute_command(command)
             remote_client.log_command_output(output, error)
             if self.input.clusters:
                 for key in self.input.clusters.keys():
                     servers = self.input.clusters[key]
                     self.backup_reset_clusters(servers)
-            if os.path.exists("/tmp/backuprestore"):
-                shutil.rmtree("/tmp/backuprestore")
+            if os.path.exists(validation_files_location):
+                shutil.rmtree(validation_files_location)
 
     @property
     def cluster_to_backup(self):
