@@ -8,13 +8,13 @@ from wiki_queryables import WikiQuerables
 class DATASET:
     FIELDS = {'emp': {'str': ["name", "dept", "manages_reports",
                                "languages_known", "email", "type"],
-                      'num': ["empid", "mutated", "manages_team_size", "salary"],
+                      'num': ["mutated", "manages_team_size", "salary"],
                       'bool': ["is_manager"],
                       'date': ["join_date"],
                       'text': ["name", "manages_reports"]},
               'wiki': {'str': ["title", "revision_text_text", "type"],
                        'text': ["title", "revision_text_text"],
-                       'num': ["id", "mutated", "revision_contributor_id", "revision_contributor_id"],
+                       'num': ["mutated"],
                        'bool': [],
                        'date': ["revision_timestamp"]}}
 
