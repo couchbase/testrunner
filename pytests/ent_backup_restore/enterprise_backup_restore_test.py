@@ -5,6 +5,10 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
+from security.auditmain import audit
+
+AUDITBACKUPID = 20480
+AUDITRESTOREID= 20485
 
 
 class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
@@ -266,3 +270,128 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.log.info("Trying restore now")
         self.backup_restore_validate()
 
+    def test_backup_restore_with_audit(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates backupset on backup host
+        3. Creates a backup of the cluster host - verifies if corresponding entry was created in audit log
+        4. Restores data on to restore host - verifies if corresponding entry was created in audit log
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        audit_obj = audit(AUDITBACKUPID, self.backupset.cluster_host)
+        status = audit_obj.getAuditStatus()
+        self.log.info("Audit status on {0} is {1}".format(self.backupset.cluster_host.ip, status))
+        if not status:
+            self.log.info("Enabling audit on {0}".format(self.backupset.cluster_host.ip))
+            audit_obj.setAuditEnable('true')
+        self.backup_create()
+        self.backup_cluster()
+        field_verified, value_verified = audit_obj.validateEvents(self._get_event_expected_results(action='backup'))
+        self.assertTrue(field_verified, "One of the fields is not matching")
+        self.assertTrue(value_verified, "Values for one of the fields is not matching")
+        audit_obj = audit(AUDITBACKUPID, self.backupset.restore_cluster_host)
+        status = audit_obj.getAuditStatus()
+        self.log.info("Audit status on {0} is {1}".format(self.backupset.restore_cluster_host.ip, status))
+        if not status:
+            self.log.info("Enabling audit on {0}".format(self.backupset.restore_cluster_host.ip))
+            audit_obj.setAuditEnable('true')
+        self.backup_restore()
+        audit_obj = audit(AUDITRESTOREID, self.backupset.restore_cluster_host)
+        field_verified, value_verified = audit_obj.validateEvents(self._get_event_expected_results(action='restore'))
+        self.assertTrue(field_verified, "One of the fields is not matching")
+        self.assertTrue(value_verified, "Values for one of the fields is not matching")
+
+    def _get_event_expected_results(self, action):
+        if action == 'backup':
+            expected_results = {
+                "real_userid:source": "memcached",
+                "real_userid:user": "default",
+                "name": "opened DCP connection",
+                "id": AUDITBACKUPID,
+                "description": "opened DCP connection",
+                "timestamp": "{0}".format(self.backups[0]),
+                "bucket": "{0}".format(self.buckets[0].name),
+                "sockname": "{0}:11210".format(self.backupset.cluster_host.ip),
+                "peername": "{0}".format(self.backupset.backup_host.ip)
+                }
+        elif action == 'restore':
+            expected_results = {
+                "real_userid:source": "memcached",
+                "real_userid:user": "unknown",
+                "name": "authentication succeeded",
+                "id": AUDITRESTOREID,
+                "description": "Authentication to the cluster succeeded",
+                "timestamp": "{0}".format(self.backups[0]),
+                "bucket": "{0}".format(self.buckets[0].name),
+                "sockname": "{0}:11210".format(self.backupset.restore_cluster_host.ip),
+                "peername": "{0}".format(self.backupset.backup_host.ip)
+                }
+        return expected_results
+
+    def test_backup_restore_with_lesser_nodes(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Adds another node to restore cluster and rebalances - note the test has to be run with nodes_init >= 3 so
+           that cluster host had more nodes than restore host
+        3. Creates backupset on backup host
+        4. Creates backup of cluster host with 3 or more number of nodes and validates
+        5. Restores to restore host with lesser number of nodes (2) and validates
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        rest_conn = RestConnection(self.backupset.restore_cluster_host)
+        rest_conn.add_node(self.input.clusters[0][1].rest_username, self.input.clusters[0][1].rest_password,
+                           self.input.clusters[0][1].ip)
+        rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
+        rebalance.result()
+        self.backup_create()
+        self.backup_cluster_validate()
+        self.backup_restore_validate()
+
+    def test_backup_with_full_disk(self):
+        """
+        Things to be done before running this testcase:
+            - scripts/install.py has to be run with init_nodes=False
+            - scripts/cbqe3043.py has to be run against the ini file - this script will mount a 20MB partition on the
+              nodes required for the test
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a bucket on the backup host and pumps it with 50000 items so that 20MB disk is almost full
+        3. Sets backup directory to the 20MB partition and creates a backupset
+        4. Keeps taking backup until no space left on device error is hit
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        rest_conn = RestConnection(self.backupset.backup_host)
+        rest_conn.create_bucket(bucket="default",ramQuotaMB=512)
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=50000)
+        self._load_all_buckets(self.backupset.backup_host, gen, "create", 0)
+        self.backupset.directory = "/cbqe3043/entbackup"
+        self.backup_create()
+        output, error = self.backup_cluster()
+        while "Backup successfully completed" in output[0]:
+            output, error = self.backup_cluster()
+        self.assertTrue("no space left on device" in output[0],
+                        "Expected error message not thrown by backup when disk is full")
+        self.log.info("Expected no space left on device error thrown by backup command")
+
+    def test_backup_and_restore_with_memcached_buckets(self):
+        """
+        1. Creates specified buckets on the cluster and loads it with given number of items- memcached bucket has to
+           be created for this test (memcached_buckets=1)
+        2. Creates a backupset, takes backup of the cluster host and validates
+        3. Executes list command on the backup and validates that memcached bucket has been skipped
+        4. Restores the backup and validates
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster()
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail("Getting backup list to validate memcached buckets failed.")
+        for line in output:
+            self.assertTrue("memcached_bucket0" not in line,
+                            "Memcached bucket found in backup list output after backup")
+        self.log.info("Memcached bucket not found in backup list output after backup as expected")
+        self.backup_restore()
