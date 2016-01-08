@@ -1176,7 +1176,7 @@ class CouchbaseCluster:
 
     def async_load_all_buckets_from_generator(self, kv_gen, ops=OPS.CREATE, exp=0,
                                               kv_store=1, flag=0, only_store_hash=True,
-                                              batch_size=1000, pause_secs=1, timeout_secs=30):
+                                              batch_size=5000, pause_secs=1, timeout_secs=30):
         """Load data asynchronously on all buckets. Function wait for
         load data to finish.
         @param gen: BlobGenerator() object
@@ -2411,12 +2411,12 @@ class FTSBaseTest(unittest.TestCase):
            Returns a generator depending on the dataset
         """
         if dataset == "emp":
-            return JsonDocGenerator("emp",
+            return JsonDocGenerator(name="emp",
                                     encoding=encoding,
                                     start=start,
                                     end=start+num_items)
         elif dataset == "wiki":
-            return WikiJSONGenerator("wiki",
+            return WikiJSONGenerator(name="wiki",
                                      lang=lang,
                                      encoding=encoding,
                                      start=start,
@@ -2448,7 +2448,7 @@ class FTSBaseTest(unittest.TestCase):
         load_tasks = []
         self.populate_create_gen()
         if self.compare_es:
-            gen = copy.copy(self.create_gen)
+            gen = copy.deepcopy(self.create_gen)
             if isinstance(gen, list):
                 for generator in gen:
                     load_tasks.append(self.es.async_bulk_load_ES(index_name='default_es_index',
@@ -2458,9 +2458,8 @@ class FTSBaseTest(unittest.TestCase):
                 load_tasks.append(self.es.async_bulk_load_ES(index_name='default_es_index',
                                                         gen=gen,
                                                         op_type='create'))
-
         load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(
-                self.create_gen)
+            self.create_gen)
         return load_tasks
 
     def run_query_and_compare(self, index):
