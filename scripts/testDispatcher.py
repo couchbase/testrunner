@@ -101,27 +101,33 @@ def main():
 
 
     for row in results:
-        data = row['QE-Test-Suites']
-        print 'row', data
+        try:
+            data = row['QE-Test-Suites']
+            print 'row', data
 
-        if 'os' not in data or (data['os'] == options.os) or \
-            (data['os'] == 'linux' and options.os in set(['centos','ubuntu']) ):
-            if 'jenkins' in data:
-                # then this is sort of a special case, launch the old style Jenkins job
-                # not implemented yet
-                print 'Old style Jenkins', data['jenkins']
-            else:
-                if 'initNodes' in data:
-                    initNodes = data['initNodes'].lower() == 'true'
+            if 'os' not in data or (data['os'] == options.os) or \
+                (data['os'] == 'linux' and options.os in set(['centos','ubuntu']) ):
+                if 'jenkins' in data:
+                    # then this is sort of a special case, launch the old style Jenkins job
+                    # not implemented yet
+                    print 'Old style Jenkins', data['jenkins']
                 else:
-                    initNodes = True
+                    if 'initNodes' in data:
+                        initNodes = data['initNodes'].lower() == 'true'
+                    else:
+                        initNodes = True
 
-                testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],'confFile':data['confFile'],
-                                   'iniFile':data['config'],
-                                 'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
-                                 'parameters':data['parameters'], 'initNodes':initNodes})
-        else:
-            print 'OS does not apply to', data['component'], data['subcomponent']
+                    testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],'confFile':data['confFile'],
+                                       'iniFile':data['config'],
+                                     'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
+                                     'parameters':data['parameters'], 'initNodes':initNodes})
+            else:
+                print 'OS does not apply to', data['component'], data['subcomponent']
+
+        except Exception as e:
+            print 'exception in querying tests, possible bad record'
+            print traceback.format_exc()
+            print data
 
     print 'tests to launch:'
     for i in testsToLaunch: print i['component'], i['subcomponent']
