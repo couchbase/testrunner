@@ -99,6 +99,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             command = "rm -rf {0}".format(backup_directory)
             output, error = remote_client.execute_command(command)
             remote_client.log_command_output(output, error)
+            if info == 'linux':
+                command = "rm -rf /cbqe3043/entbackup".format(backup_directory)
+                output, error = remote_client.execute_command(command)
+                remote_client.log_command_output(output, error)
             if self.input.clusters:
                 for key in self.input.clusters.keys():
                     servers = self.input.clusters[key]
