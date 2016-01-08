@@ -11,6 +11,14 @@ class SubdocBaseTest(BaseTestCase):
         super(SubdocBaseTest, self).tearDown()
 
 
+    def generate_simple_data_boolean(self):
+    	json = {
+    		"true":True,
+    		"false":False,
+    		"array":[True, False, True, False]
+    	}
+    	return json
+
     def generate_simple_data_numbers(self):
     	json = {
     		"integer_zero":0,
@@ -21,7 +29,7 @@ class SubdocBaseTest(BaseTestCase):
     		"double":1.1,
     		"double_negative":-1.1,
     		"float":2.99792458e8,
-    		"float_negative":2.99792458e8,
+    		"float_negative":-2.99792458e8,
     	}
     	return json
 
@@ -51,11 +59,26 @@ class SubdocBaseTest(BaseTestCase):
     	}
     	return json
 
+    def generate_simple_data_array_strings(self):
+    	json = {
+    		"simple_string_chars_array":['a','b',''],
+    		"simple_string_string_array":['aa','11','&#^#',''],
+    		"simple_string_string_array_arrays":[['aa','11','&#^#',''],['a','b','']]
+    	}
+    	return json
+
     def generate_simple_data_mix_arrays(self):
     	json = {
     		"array_mix" : ["abcdefghijklmnoprestuvxyz",1,1.1,""],
     		"array_arrays_numbers" : [[1,2,3],[4,5,6]],
     		"array_arrays_string" : [["abcdef","ghijklmo","prririr"],["xcvf","ffjfjf","pointer"]]
+    	}
+    	return json
+
+    def generate_simple_arrays(self):
+    	json = {
+    		"single_dimension_array" : ["abcdefghijklmnoprestuvxyz",1,1.1,""],
+    		"two_dimension_array" : [[1,2,3],["",-1,1,1.1,-1.1]]
     	}
     	return json
 
