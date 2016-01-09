@@ -12,6 +12,44 @@ class SubdocSimpleDataset(SubdocBaseTest):
     def tearDown(self):
         super(SubdocSimpleDataset, self).tearDown()
 
+#SD_COUNTER
+    def test_counter(self):
+        result = True
+        dict = {}
+        self.key = "test_counter"
+        array = {
+                    "add_integer":0,
+                    "sub_integer":1,
+                    "add_double":0.0,
+                    "sub_double":0.0,
+                    "array_add_integer":[0,1],
+                    "array_sub_integer":[0,1],
+                }
+        expected_array = {
+                    "add_integer":1,
+                    "sub_integer":0,
+                    "add_double":1.0,
+                    "sub_double":0.0,
+                    "array_add_integer":[1,1],
+                    "array_sub_integer":[0,0],
+                }
+        jsonDump = json.dumps(array)
+        self.client.set(self.key, 0, 0, jsonDump)
+        self.counter(self.client, key = "test_counter", path = 'add_integer', value = "1")
+        self.counter(self.client, key = "test_counter", path = 'sub_integer', value = "-1")
+        self.counter(self.client, key = "test_counter", path = 'add_double', value = "1.0")
+        self.counter(self.client, key = "test_counter", path = 'sub_double', value = "-1.0")
+        self.counter(self.client, key = "test_counter", path = 'array_add_integer[0]', value = "-1.0")
+        self.counter(self.client, key = "test_counter", path = 'array_add_integer[1]', value = "-1.0")
+        self.json  = expected_array
+        for key in expected_array.keys():
+            value = expected_array[key]
+            logic, data_return  =  self.get_string_and_verify_return( self.client, key = self.key, path = key)
+            if not logic:
+                dict[key] = {"expected": expected_array[key], "actual": data_return}
+            result = result and logic
+        self.assertTrue(result, dict)
+
 # SD_GET
 
     def test_get_numbers(self):
@@ -146,6 +184,7 @@ class SubdocSimpleDataset(SubdocBaseTest):
                 dict[key] = {"expected": expected_array[key], "actual": data_return}
             result = result and logic
         self.assertTrue(result, dict)
+
 # SD_ADD
 
     def test_add_numbers(self):
@@ -463,6 +502,13 @@ class SubdocSimpleDataset(SubdocBaseTest):
     def dict_upsert(self, client, key = '', path = '', value = None):
         try:
             self.client.dict_upsert_sd(key, path, value)
+        except Exception as e:
+            self.log.info(e)
+            self.fail("Unable to add key {0} for path {1} after {2} tries".format(key, path, 1))
+
+    def counter(self, client, key = '', path = '', value = None):
+        try:
+            self.client.counter_sd(key, path, value)
         except Exception as e:
             self.log.info(e)
             self.fail("Unable to add key {0} for path {1} after {2} tries".format(key, path, 1))
