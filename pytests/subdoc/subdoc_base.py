@@ -10,6 +10,12 @@ class SubdocBaseTest(BaseTestCase):
     def tearDown(self):
         super(SubdocBaseTest, self).tearDown()
 
+    def generate_simple_data_null(self):
+    	json = {
+    		"null":None,
+    		"array":[None, None, None, None]
+    	}
+    	return json
 
     def generate_simple_data_boolean(self):
     	json = {
