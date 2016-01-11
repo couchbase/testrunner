@@ -1,4 +1,6 @@
+from ast import literal_eval
 import os
+import re
 import sys
 import urllib
 import uuid
@@ -1971,34 +1973,45 @@ class RemoteMachineShellConnection:
 
     def execute_commands_inside(self, main_command,query, subcommands=[], min_output_size=0,
                                 end_msg='', timeout=250):
+        main_command = main_command + " -s=\"" + query+ '"'
         log.info("running command on {0}: {1}".format(self.ip, main_command))
-
+        output=""
         if self.remote:
-            # stdin, stdout, stderro = self._ssh_client.exec_command(main_command)
-            # output = stdout.readlines()
-            # print output
-           ssh = paramiko.SSHClient()
-           ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-           ssh.connect(self.ip, username=self.username, password="couchbase")
-           sftp = ssh.open_sftp()
-           filename = 'test'
-           f = sftp.open('/tmp/' + filename, 'w')
-           print query
-           query = query + ";"
-           f.write(query)
-           main_command = main_command + " < " + '/tmp/' + filename
-           stdin,stdout, ssh_stderr = ssh.exec_command(main_command)
-           output = ""
-           for line in iter(lambda: stdout.readline(2048), ""):
-                print(line)
-                output = line
-           f.close()
-           ssh.close()
+            stdin, stdout, stderro = self._ssh_client.exec_command(main_command)
+            time.sleep(10)
+            #output = stdout.readlines().split()
+            count = 0
+            for line in stdout.readlines():
+              #if line.find("results") > 0 or line.find("status") > 0 or line.find("metrics") or line.find("elapsedTime")> 0 or  line.find("executionTime")> 0 or line.find("resultCount"):
+                if (count > 0):
+                    output+=line.strip()
+                    output = output.strip()
+                else:
+                    count+=1
+           # ssh = paramiko.SSHClient()
+           # ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+           # ssh.connect(self.ip, username=self.username, password="password")
+           # sftp = ssh.open_sftp()
+           # filename = 'test'
+           # f = sftp.open('/tmp/' + filename, 'w')
+           # print query
+           # query = query + ";"
+           # f.write(query)
+           # main_command = main_command + " < " + '/tmp/' + filename
+           # stdin,stdout, ssh_stderr = ssh.exec_command(main_command)
+           # stdin.close()
+           # output = []
+           # for line in stdout.read().splitlines():
+           #   print(line)
+           #   output = output.append(line)
+           # f.close()
+           # ssh.close()
+
            #output = output + end_msg
 
-        else:
-            p = Popen(main_command , shell=True, stdout=PIPE, stderr=PIPE)
-            stdout, stderro = p.communicate()
+        # else:
+        #     p = Popen(main_command , shell=True, stdout=PIPE, stderr=PIPE)
+        #     stdout, stderro = p.communicate()
         time.sleep(1)
         # for cmd in subcommands:
         #       log.info("running command {0} inside {1} ({2})".format(
@@ -2019,7 +2032,8 @@ class RemoteMachineShellConnection:
         # stdin.close()
         # stdout.close()
         # stderro.close()
-        return output
+        output = re.sub('\s+', '', output)
+        return (output)
 
     def execute_command(self, command, info=None, debug=True, use_channel=False):
         if getattr(self, "info", None) is None and info is not None :

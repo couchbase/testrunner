@@ -3246,13 +3246,13 @@ class QueryTests(BaseTestCase):
             else:
                 os = self.shell.extract_remote_info().type.lower()
                 if os == "linux":
-                    cmd = "cd %s ; " % testconstants.LINUX_COUCHBASE_BIN_PATH +"cbq  -engine=http://%s:8093/" % (server.ip)
+                    cmd = "/opt/couchbase/bin/go_cbq  -engine=http://%s:8093/" % (server.ip)
                     output = self.shell.execute_commands_inside(cmd,query,
                                                            subcommands=[query,],
                                                            min_output_size=20,
-                                                           end_msg='cbq>')
-            result = output
-            #result = self._parse_query_output(output)
+                                                           end_msg='go_cbq>')
+                    print output
+                    result = json.loads(output)
         if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)
         if 'metrics' in result:
@@ -3366,15 +3366,15 @@ class QueryTests(BaseTestCase):
         return out
 
     def _parse_query_output(self, output):
-        # if output.find("cbq>") == 0:
-        #     output = output[output.find("cbq>") + 4:].strip()
-        # if output.find("tuq_client>") == 0:
-        #     output = output[output.find("tuq_client>") + 11:].strip()
-        # if output.find("cbq>") != -1:
-        #     output = output[:output.find("cbq>")].strip()
-        # if output.find("tuq_client>") != -1:
-        #     output = output[:output.find("tuq_client>")].strip()
-        return json.loads(output)
+         if output.find("cbq>") == 0:
+             output = output[output.find("cbq>") + 4:].strip()
+         if output.find("tuq_client>") == 0:
+             output = output[output.find("tuq_client>") + 11:].strip()
+         if output.find("cbq>") != -1:
+             output = output[:output.find("cbq>")].strip()
+         if output.find("tuq_client>") != -1:
+             output = output[:output.find("tuq_client>")].strip()
+         return json.loads(output)
 
     def generate_docs(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
@@ -3488,7 +3488,7 @@ class QueryTests(BaseTestCase):
     def _wait_for_index_online(self, bucket, index_name, timeout=6000):
         end_time = time.time() + timeout
         while time.time() < end_time:
-            query = 'SELECT * FROM system:indexes where name="%s"' % index_name
+            query = "SELECT * FROM system:indexes where name='%s'" % index_name
             res = self.run_cbq_query(query)
             for item in res['results']:
                 if 'keyspace_id' not in item['indexes']:
