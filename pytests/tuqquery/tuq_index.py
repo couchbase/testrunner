@@ -175,7 +175,6 @@ class QueriesViewsTests(QueryTests):
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT ARRAY vm.memory FOR vm IN VMs END AS vm_memories FROM %s' % (bucket.name)
                 res = self.run_cbq_query()
-                self.log.info(res)
                 self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
@@ -846,21 +845,17 @@ class QueriesViewsTests(QueryTests):
             return indexes, query
 
     def run_intersect_scan_explain_query(self, indexes_names, query_temp):
-        actual_index = []
+        actual_indexes = []
         for bucket in self.buckets:
-            query = 'EXPLAIN %s' % (query_temp % (bucket.name))
+            query = 'EXPLAIN %s' % (query_temp)
             res = self.run_cbq_query(query=query)
             self.log.info('-'*100)
-            result = res["results"][0]["~children"][0]["~children"][0] if "~children" in res["results"][0]["~children"][0] \
-                        else res["results"][0]["~children"][0]
+            result = res["results"][0]
 
-            self.assertTrue(result["#operator"] == 'IntersectScan',
+            self.assertTrue(result['#operator'] == 'CreateIndex',
                                     "Index should be intersect scan and is %s" % (res["results"]))
 
-            actual_indexes = [scan['scans'][0]['index'] if 'scans' in scan else scan['index']
-                            for scan in result['scans']]
-
-            actual_indexes = [x.encode('UTF8') for x in actual_indexes]
+            actual_indexes.append(result['index'])
 
             self.log.info('actual indexes {}'.format(actual_indexes))
             self.log.info('compared against {}'.format(indexes_names))
