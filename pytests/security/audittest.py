@@ -45,7 +45,6 @@ class auditTest(BaseTestCase):
         super(auditTest, self).tearDown()
 
     def getLocalIPAddress(self):
-        '''
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
@@ -54,6 +53,7 @@ class auditTest(BaseTestCase):
         if '1' not in ipAddress:
             status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
+        '''
 
     #Wrapper around auditmain
     def checkConfig(self, eventID, host, expectedResults):
