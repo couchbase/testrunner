@@ -160,7 +160,7 @@ class SubdocSimpleDataset(SubdocBaseTest):
         self.key = "test_add_unique_array"
         array = {
                     "empty":[],
-                    "single_dimension_array":["0",2,],
+                    "single_dimension_array":["0",2],
                     "two_dimension_array":[["0",2]],
                     "three_dimension_array":[[["0", 2]]]
                 }
@@ -176,6 +176,46 @@ class SubdocSimpleDataset(SubdocBaseTest):
         self.array_add_unique(self.client, key = "test_add_unique_array", path = 'single_dimension_array', value =  json.dumps("1"))
         self.array_add_unique(self.client, key = "test_add_unique_array", path = 'two_dimension_array[0]', value =  json.dumps("1"))
         self.array_add_unique(self.client, key = "test_add_unique_array", path = 'three_dimension_array[0][0]', value =  json.dumps("1"))
+        self.json  = expected_array
+        for key in expected_array.keys():
+            value = expected_array[key]
+            logic, data_return  =  self.get_string_and_verify_return( self.client, key = self.key, path = key)
+            if not logic:
+                dict[key] = {"expected": expected_array[key], "actual": data_return}
+            result = result and logic
+        self.assertTrue(result, dict)
+
+    def test_add_insert_array(self):
+        result = True
+        dict = {}
+        self.key = "test_add_insert_array"
+        array = {
+                    "single_dimension_array_no_element":[],
+                    "two_dimension_array_no_element":[[]],
+                    "three_dimension_array_no_element":[[[]]]
+                }
+        expected_array = {
+                    "single_dimension_array_no_element":[0, 1 , 2, 3],
+                    "two_dimension_array_no_element":[[0, 1, 2, 3],[0, 1, 2, 3]],
+                    "three_dimension_array_no_element":[[[0, 1, 2, 3],[0, 1, 2, 3]],[0, 1, 2, 3]],
+                }
+        jsonDump = json.dumps(array)
+        self.client.set(self.key, 0, 0, jsonDump)
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "single_dimension_array_no_element[0]", value = json.dumps(1))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "single_dimension_array_no_element[0]", value = json.dumps(0))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "single_dimension_array_no_element[2]", value = json.dumps(3))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "single_dimension_array_no_element[2]", value = json.dumps(2))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "two_dimension_array_no_element[0][0]", value = json.dumps(1))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "two_dimension_array_no_element[0][0]", value = json.dumps(0))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "two_dimension_array_no_element[0][2]", value = json.dumps(3))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "two_dimension_array_no_element[0][2]", value = json.dumps(2))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "two_dimension_array_no_element[1]", value = json.dumps([0, 1, 2, 3]))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "three_dimension_array_no_element[0][0][0]", value = json.dumps(1))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "three_dimension_array_no_element[0][0][0]", value = json.dumps(0))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "three_dimension_array_no_element[0][0][2]", value = json.dumps(3))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "three_dimension_array_no_element[0][0][2]", value = json.dumps(2))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "three_dimension_array_no_element[0][1]", value = json.dumps([0, 1, 2, 3]))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "three_dimension_array_no_element[1]", value = json.dumps([0, 1, 2, 3]))
         self.json  = expected_array
         for key in expected_array.keys():
             value = expected_array[key]
@@ -530,6 +570,13 @@ class SubdocSimpleDataset(SubdocBaseTest):
     def array_add_unique(self, client, key = '', path = '', value = None):
         try:
             self.client.array_add_unique_sd(key, path, value)
+        except Exception as e:
+            self.log.info(e)
+            self.fail("Unable to add key {0} for path {1} after {2} tries".format(key, path, 1))
+
+    def array_add_insert(self, client, key = '', path = '', value = None):
+        try:
+            self.client.array_add_insert_sd(key, path, value)
         except Exception as e:
             self.log.info(e)
             self.fail("Unable to add key {0} for path {1} after {2} tries".format(key, path, 1))

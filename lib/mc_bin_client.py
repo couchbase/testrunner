@@ -690,6 +690,9 @@ class MemcachedClient(object):
     def array_add_unique_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_ADD_UNIQUE, key, path, value, expiry, opaque, cas, create)
 
+    def array_add_insert_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_INSERT, key, path, value, expiry, opaque, cas, create)
+
     def counter_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_COUNTER, key, path, value, expiry, opaque, cas, create)
 
