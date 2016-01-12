@@ -101,6 +101,33 @@ class SubdocNestedDataset(SubdocBaseTest):
             dict["two_dimension_array"] = msg
         self.assertTrue(result, dict)
 
+# SD_EXISTS
+    def test_exists_json_strings(self):
+        self.json =  self.generate_simple_data_array_of_numbers()
+        self.exists(self.json, "generate_simple_data_numbers_boundary")
+
+    def test_exists_element_array(self):
+        result = True
+        dict = {}
+        self.key = "element_arrays"
+        data_set =  self.generate_simple_arrays()
+        base_json = self.generate_json_for_nesting()
+        nested_json = self.generate_nested(base_json, data_set, self.nesting_level)
+        jsonDump = json.dumps(nested_json)
+        self.client.set(self.key, 0, 0, jsonDump)
+        key_single_dimension_path = "single_dimension_array[0]"
+        logic, msg =  self.verify_exists(self.client, key = self.key, path = key_single_dimension_path)
+        if not logic:
+            dict[single_dimension_array] = msg
+        result = result and logic
+        key_two_dimension_path = "two_dimension_array[0][0]"
+        logic, msg = self.verify_exists(self.client, key = self.key, path = key_two_dimension_path)
+        result = result and logic
+        if not logic:
+            dict["two_dimension_array"] = msg
+        self.assertTrue(result, dict)
+
+
 # SD_ARRAY_ADD
 
     def test_add_last_array(self):
@@ -546,6 +573,24 @@ class SubdocNestedDataset(SubdocBaseTest):
                     result = result and logic
             self.assertTrue(result, result_dict)
 
+    def exists(self, dataset, data_key = "default"):
+        dict = {}
+        result_dict = {}
+        result = True
+        self.key = data_key
+        self.json =  dataset
+        base_json = self.generate_json_for_nesting()
+        self.json = self.generate_nested(base_json, dataset, self.nesting_level)
+        jsonDump = json.dumps(self.json)
+        self.client.set(self.key, 0, 0, jsonDump)
+        for key in dataset.keys():
+            logic, data_return  =  self.verify_exists( self.client, key = self.key, path = key)
+            if not logic:
+                self.log.info(data_return)
+                result_dict[key] = {"expected":True, "actual":logic}
+                result = result and logic
+        self.assertTrue(result, result_dict)
+
     def delete(self, client, key = '', path = ''):
         try:
             self.client.delete_sd(key, path)
@@ -649,6 +694,16 @@ class SubdocNestedDataset(SubdocBaseTest):
             msg = "Unable to get key {0} for path {1} after {2} tries".format(key, path, 1)
             return False, msg
         return (data == expected_value), data
+
+    def verify_exists(self, client, key = '', path = ''):
+        new_path = self.generate_path(self.nesting_level, path)
+        check = True
+        try:
+            self.client.exists_sd(key, new_path)
+        except Exception as e:
+            msg = "Unable to get key {0} for path {1} after {2} tries".format(key, path, 1)
+            return False, msg
+        return True, ""
 
     def get_and_verify_return(self, client, key = '', path = '', expected_value = None):
         new_path = self.generate_path(self.nesting_level, path)
