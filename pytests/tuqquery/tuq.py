@@ -3245,8 +3245,10 @@ class QueryTests(BaseTestCase):
                                                        end_msg='cbq>')
             else:
                 os = self.shell.extract_remote_info().type.lower()
+                #if (query.find("VALUES") > 0):
+                query = query.encode('unicode-escape').replace(b'"', b'\\"')
                 if os == "linux":
-                    cmd = "/opt/couchbase/bin/go_cbq  -engine=http://%s:8093/" % (server.ip)
+                    cmd = "%s/go_cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
                     output = self.shell.execute_commands_inside(cmd,query,
                                                            subcommands=[query,],
                                                            min_output_size=20,
