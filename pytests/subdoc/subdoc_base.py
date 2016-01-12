@@ -12,11 +12,7 @@ class SubdocBaseTest(BaseTestCase):
         super(SubdocBaseTest, self).tearDown()
 
     def generate_json_for_nesting(self):
-        return {"integer":1}
-
-
-    def generate_simple_data_null(self):
-    	json = {
+        json = {
             "not_tested_integer_zero":0,
             "not_tested_integer_big":1038383839293939383938393,
             "not_tested_double_zero":0.0,
@@ -35,7 +31,16 @@ class SubdocBaseTest(BaseTestCase):
             "not_tested_simple_string_upper_case":"ABCDEFGHIJKLMNOPQRSTUVWXZYZ",
             "not_tested_simple_string_empty":"",
             "not_tested_simple_string_datetime":"2012-10-03 15:35:46.461491",
-            "not_tested_simple_string_special_chars":"_-+!#@$%&*(){}\][;.,<>?/"
+            "not_tested_simple_string_special_chars":"_-+!#@$%&*(){}\][;.,<>?/",
+            "not_test_json" : { "not_to_bes_tested_string_field1": "not_to_bes_tested_string"}
+        }
+        return json
+
+
+    def generate_simple_data_null(self):
+    	json = {
+            "null":None,
+            "null_array":[None, None]
         }
     	return json
 
@@ -46,6 +51,13 @@ class SubdocBaseTest(BaseTestCase):
     		"array":[True, False, True, False]
     	}
     	return json
+
+    def generate_nested_json(self):
+        json_data = self.generate_json_for_nesting()
+        json = {
+            "json_1": { "json_2": {"json_3":json_data}}
+        }
+        return json
 
     def generate_simple_data_numbers(self):
     	json = {
