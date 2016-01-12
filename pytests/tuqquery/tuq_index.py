@@ -845,22 +845,32 @@ class QueriesViewsTests(QueryTests):
             return indexes, query
 
     def run_intersect_scan_explain_query(self, indexes_names, query_temp):
-        actual_indexes = []
         for bucket in self.buckets:
+            if (query_temp.find('%s') > 0):
+                query_temp = query_temp % bucket.name
+            print query_temp
             query = 'EXPLAIN %s' % (query_temp)
             res = self.run_cbq_query(query=query)
             self.log.info('-'*100)
-            result = res["results"][0]
+            if (query.find("CREATE INDEX") < 0):
+                result = res["results"][0]["~children"][0]["~children"][0] if "~children" in res["results"][0]["~children"][0] \
+                        else res["results"][0]["~children"][0]
 
-            self.assertTrue(result['#operator'] == 'CreateIndex',
+                self.assertTrue(result["#operator"] == 'IntersectScan',
                                     "Index should be intersect scan and is %s" % (res["results"]))
 
-            actual_indexes.append(result['index'])
+                actual_indexes = [scan['scans'][0]['index'] if 'scans' in scan else scan['index']
+                            for scan in result['scans']]
 
-            self.log.info('actual indexes {}'.format(actual_indexes))
-            self.log.info('compared against {}'.format(indexes_names))
-            self.assertTrue(set(actual_indexes) == set(indexes_names),"Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
+                actual_indexes = [x.encode('UTF8') for x in actual_indexes]
 
+                self.log.info('actual indexes {}'.format(actual_indexes))
+                self.log.info('compared against {}'.format(indexes_names))
+                self.assertTrue(set(actual_indexes) == set(indexes_names),"Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
+            else:
+                result = res["results"][0]
+                self.assertTrue(result['#operator'] == 'CreateIndex',
+                                    "Operator is not create index and is %s" % (res["results"]))
             self.log.info('-'*100)
 
     def _delete_indexes(self, indexes):
