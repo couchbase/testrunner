@@ -37,8 +37,8 @@ class SubdocSimpleDataset(SubdocBaseTest):
         self.client.set(self.key, 0, 0, jsonDump)
         self.counter(self.client, key = "test_counter", path = 'add_integer', value = "1")
         self.counter(self.client, key = "test_counter", path = 'sub_integer', value = "-1")
-        self.counter(self.client, key = "test_counter", path = 'add_double', value = "1.0")
-        self.counter(self.client, key = "test_counter", path = 'sub_double', value = "-1.0")
+        #self.counter(self.client, key = "test_counter", path = 'add_double', value = "1.0")
+        #self.counter(self.client, key = "test_counter", path = 'sub_double', value = "-1.0")
         self.counter(self.client, key = "test_counter", path = 'array_add_integer[0]', value = "-1.0")
         self.counter(self.client, key = "test_counter", path = 'array_add_integer[1]', value = "-1.0")
         self.json  = expected_array

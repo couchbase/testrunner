@@ -21,10 +21,10 @@ class SubdocNestedDataset(SubdocBaseTest):
         array = {
                     "add_integer":0,
                     "sub_integer":1,
-                    "add_double":0.0,
-                    "sub_double":0.0,
+                    "add_double":0,
+                    "sub_double":1,
                     "array_add_integer":[0,1],
-                    "array_sub_integer":[0,1],
+                    "array_sub_integer":[0,1]
                 }
         expected_array = {
                     "add_integer":1,
@@ -32,22 +32,22 @@ class SubdocNestedDataset(SubdocBaseTest):
                     "add_double":1.0,
                     "sub_double":0.0,
                     "array_add_integer":[1,1],
-                    "array_sub_integer":[0,0],
+                    "array_sub_integer":[0,0]
                 }
         base_json = self.generate_json_for_nesting()
         nested_json = self.generate_nested(base_json, array, self.nesting_level)
         jsonDump = json.dumps(nested_json)
+        self.log.info(jsonDump)
         self.client.set(self.key, 0, 0, jsonDump)
         self.counter(self.client, key = "test_counter", path = 'add_integer', value = "1")
         self.counter(self.client, key = "test_counter", path = 'sub_integer', value = "-1")
         self.counter(self.client, key = "test_counter", path = 'add_double', value = "1.0")
         self.counter(self.client, key = "test_counter", path = 'sub_double', value = "-1.0")
-        self.counter(self.client, key = "test_counter", path = 'array_add_integer[0]', value = "-1.0")
-        self.counter(self.client, key = "test_counter", path = 'array_add_integer[1]', value = "-1.0")
+        self.counter(self.client, key = "test_counter", path = 'array_add_integer[0]', value = "1")
+        self.counter(self.client, key = "test_counter", path = 'array_sub_integer[1]', value = "-1")
         self.json  = expected_array
         for key in expected_array.keys():
-            new_path = self.generate_path(self.nesting_level, key)
-            logic, data_return  =  self.get_string_and_verify_return( self.client, key = self.key, path = new_path, expected_value = expected_array[key])
+            logic, data_return  =  self.get_string_and_verify_return( self.client, key = self.key, path = key, expected_value = expected_array[key])
             if not logic:
                 dict[key] = {"expected": expected_array[key], "actual": data_return}
             result = result and logic
@@ -80,16 +80,25 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.get_verify(self.json, "generate_simple_data_numbers_boundary")
 
     def test_get_element_arrays(self):
+        result = True
+        dict = {}
         self.key = "element_arrays"
-        self.json =  self.generate_simple_arrays()
+        data_set =  self.generate_simple_arrays()
         base_json = self.generate_json_for_nesting()
-        nested_json = self.generate_nested(base_json, array, self.nesting_level)
+        nested_json = self.generate_nested(base_json, data_set, self.nesting_level)
+        self.log.info(nested_json)
         jsonDump = json.dumps(nested_json)
         self.client.set(self.key, 0, 0, jsonDump)
         key_single_dimension_path = "single_dimension_array[0]"
-        self.get_and_verify_with_value(self.client, self.key, key_single_dimension_path, str(self.json["single_dimension_array"][0]))
+        logic, msg =  self.get_and_verify_with_value(self.client, key = self.key, path = key_single_dimension_path, expected_value = str(data_set["single_dimension_array"][0]))
+        if not logic:
+            dict[single_dimension_array] = msg
+        result = result and logic
         key_two_dimension_path = "two_dimension_array[0][0]"
-        self.get_and_verify_with_value(self.client, self.key, key_two_dimension_path, str(self.json["two_dimension_array"][0][0]))
+        logic, msg = self.get_and_verify_with_value(self.client, key = self.key, path = key_two_dimension_path, expected_value = str(data_set["two_dimension_array"][0][0]))
+        result = result and logic
+        if not logic:
+            dict["two_dimension_array"] = msg
         self.assertTrue(result, dict)
 
 # SD_ARRAY_ADD
@@ -112,7 +121,7 @@ class SubdocNestedDataset(SubdocBaseTest):
                 }
         base_json = self.generate_json_for_nesting()
         nested_json = self.generate_nested(base_json, array, self.nesting_level)
-        jsonDump = json.dumps(array)
+        jsonDump = json.dumps(nested_json)
         self.client.set(self.key, 0, 0, jsonDump)
         self.array_add_last(self.client, key = "test_add_last_array", path = 'empty', value = json.dumps("1"))
         self.array_add_last(self.client, key = "test_add_last_array", path = 'single_dimension_array', value =  json.dumps("1"))
@@ -120,9 +129,8 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.array_add_last(self.client, key = "test_add_last_array", path = 'three_dimension_array[0][0]', value =  json.dumps("1"))
         self.json  = expected_array
         for key in expected_array.keys():
-            new_path = self.generate_path(self.nesting_level, key)
             value = expected_array[key]
-            logic, data_return  =  self.get_string_and_verify_return( self.client, key = self.key, path = new_path, expected_value = value)
+            logic, data_return  =  self.get_string_and_verify_return( self.client, key = self.key, path = key, expected_value = value)
             if not logic:
                 dict[key] = {"expected": expected_array[key], "actual": data_return}
             result = result and logic
@@ -146,7 +154,7 @@ class SubdocNestedDataset(SubdocBaseTest):
                 }
         base_json = self.generate_json_for_nesting()
         nested_json = self.generate_nested(base_json, array, self.nesting_level)
-        jsonDump = json.dumps(array)
+        jsonDump = json.dumps(nested_json)
         self.client.set(self.key, 0, 0, jsonDump)
         self.array_add_first(self.client, key = "test_add_first_array", path = 'empty', value = json.dumps("0"))
         self.array_add_first(self.client, key = "test_add_first_array", path = 'single_dimension_array', value =  json.dumps("0"))
@@ -154,9 +162,8 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.array_add_first(self.client, key = "test_add_first_array", path = 'three_dimension_array[0][0]', value =  json.dumps("0"))
         self.json  = expected_array
         for key in expected_array.keys():
-            new_path = self.generate_path(self.nesting_level, key)
             value = expected_array[key]
-            logic, data_return  =  self.get_string_and_verify_return( self.client, key = self.key, path = new_path, expected_value = value)
+            logic, data_return  =  self.get_string_and_verify_return( self.client, key = self.key, path = key, expected_value = value)
             if not logic:
                 dict[key] = {"expected": expected_array[key], "actual": data_return}
             result = result and logic
@@ -180,7 +187,7 @@ class SubdocNestedDataset(SubdocBaseTest):
                 }
         base_json = self.generate_json_for_nesting()
         nested_json = self.generate_nested(base_json, array, self.nesting_level)
-        jsonDump = json.dumps(array)
+        jsonDump = json.dumps(nested_json)
         self.client.set(self.key, 0, 0, jsonDump)
         self.array_add_unique(self.client, key = "test_add_unique_array", path = 'empty', value = json.dumps("1"))
         self.array_add_unique(self.client, key = "test_add_unique_array", path = 'single_dimension_array', value =  json.dumps("1"))
@@ -188,11 +195,10 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.array_add_unique(self.client, key = "test_add_unique_array", path = 'three_dimension_array[0][0]', value =  json.dumps("1"))
         self.json  = expected_array
         for key in expected_array.keys():
-            value = expected_array[key]
-            new_path = self.generate_path(self.nesting_level, key)
-            logic, data_return  =  self.get_string_and_verify_return( self.client, key = self.key, path = new_path, expected_value = value)
+            expected_value = expected_array[key]
+            logic, data_return  =  self.get_string_and_verify_return( self.client, key = self.key, path = key, expected_value = expected_value)
             if not logic:
-                dict[key] = {"expected": expected_array[key], "actual": data_return}
+                dict[key] = {"expected": expected_value, "actual": data_return}
             result = result and logic
         self.assertTrue(result, dict)
 
@@ -212,7 +218,7 @@ class SubdocNestedDataset(SubdocBaseTest):
                 }
         base_json = self.generate_json_for_nesting()
         nested_json = self.generate_nested(base_json, array, self.nesting_level)
-        jsonDump = json.dumps(array)
+        jsonDump = json.dumps(nested_json)
         self.client.set(self.key, 0, 0, jsonDump)
         self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "single_dimension_array_no_element[0]", value = json.dumps(1))
         self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "single_dimension_array_no_element[0]", value = json.dumps(0))
@@ -231,11 +237,10 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "three_dimension_array_no_element[1]", value = json.dumps([0, 1, 2, 3]))
         self.json  = expected_array
         for key in expected_array.keys():
-            value = expected_array[key]
-            new_path = self.generate_path(self.nesting_level, key)
-            logic, data_return  =  self.get_string_and_verify_return( self.client, key = self.key, path = new_path, expected_value = value)
+            expected_value = expected_array[key]
+            logic, actua_value  =  self.get_string_and_verify_return( self.client, key = self.key, path = key, expected_value = expected_value)
             if not logic:
-                dict[key] = {"expected": expected_array[key], "actual": data_return}
+                dict[key] = {"expected": expected_value, "actual": actua_value}
             result = result and logic
         self.assertTrue(result, dict)
 
@@ -575,10 +580,12 @@ class SubdocNestedDataset(SubdocBaseTest):
     def counter(self, client, key = '', path = '', value = None):
         try:
             new_path = self.generate_path(self.nesting_level, path)
+            self.log.info(new_path)
             self.client.counter_sd(key, new_path, value)
         except Exception as e:
             self.log.info(e)
-            self.fail("Unable to add key {0} for path {1} after {2} tries".format(key, path, 1))
+            msg = "Unable to add key {0} for path {1} after {2} tries".format(key, path, 1)
+            return msg
 
     def array_add_last(self, client, key = '', path = '', value = None):
         try:
@@ -618,7 +625,8 @@ class SubdocNestedDataset(SubdocBaseTest):
             opaque, cas, data = self.client.get_sd(key, new_path)
         except Exception as e:
             msg = "Unable to get key {0} for path {1} after {2} tries".format(key, path, 1)
-            return false, msg
+            return False, msg
+        msg = "expected {0}, actual {1}".format(str(data), expected_value)
         self.assertTrue(str(data) == str(expected_value), msg="data not returned correctly")
 
     def get_and_verify_with_value(self, client, key = '', path = '', value = '', expected_value = None):
@@ -628,8 +636,9 @@ class SubdocNestedDataset(SubdocBaseTest):
             data = json.loads(data)
         except Exception as e:
             msg = "Unable to get key {0} for path {1} after {2} tries".format(key, path, 1)
-            return false, msg
-        self.assertTrue(str(data) == expected_value, msg="data not returned correctly")
+            return False, msg
+        msg = "expected {0}, actual {1}".format(str(data), expected_value)
+        return str(data) == expected_value, msg
 
     def get_string_and_verify_return(self, client, key = '', path = '', expected_value = None):
         new_path = self.generate_path(self.nesting_level, path)
@@ -638,8 +647,8 @@ class SubdocNestedDataset(SubdocBaseTest):
             data = json.loads(data)
         except Exception as e:
             msg = "Unable to get key {0} for path {1} after {2} tries".format(key, path, 1)
-            return false, msg
-        return data == expected_value, data
+            return False, msg
+        return (data == expected_value), data
 
     def get_and_verify_return(self, client, key = '', path = '', expected_value = None):
         new_path = self.generate_path(self.nesting_level, path)
@@ -647,7 +656,7 @@ class SubdocNestedDataset(SubdocBaseTest):
             opaque, cas, data = self.client.get_sd(key, new_path)
         except Exception as e:
             msg = "Unable to get key {0} for path {1} after {2} tries".format(key, path, 1)
-            return false, msg
+            return False, msg
         return str(data) == str(expected_value), data
 
     def shuffle_json(self, json_value):
