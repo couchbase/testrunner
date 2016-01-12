@@ -55,29 +55,33 @@ class SubdocNestedDataset(SubdocBaseTest):
 
 # SD_GET
 
-    def test_get_null(self):
+    def test_get_json(self):
         self.json =  self.generate_simple_data_null()
+        self.get_verify(self.json, "test_get_json")
+
+    def test_get_null(self):
+        self.json =  self.generate_nested_json()
         self.get_verify(self.json, "simple_dataset_null")
 
-    def test_get_boolean(self):
+    def test_get_json(self):
         self.json =  self.generate_simple_data_boolean()
-        self.get_verify(self.json, "simple_dataset_boolean")
+        self.get_verify(self.json, "test_get_json")
 
     def test_get_array_numbers(self):
     	self.json =  self.generate_simple_data_array_of_numbers()
-        self.get_verify(self.json, "simple_dataset_array_numbers")
+        self.get_verify(self.json, "test_get_array_numbers")
 
     def test_get_array_strings(self):
     	self.json =  self.generate_simple_data_strings()
-        self.get_verify(self.json, "generate_simple_data_array_strings")
+        self.get_verify(self.json, "test_get_array_strings")
 
     def test_get_mix_arrays(self):
         self.json =  self.generate_simple_data_mix_arrays()
-        self.get_verify(self.json, "generate_simple_data_mix_arrays")
+        self.get_verify(self.json, "test_get_mix_arrays")
 
     def test_get_numbers_boundary(self):
         self.json =  self.generate_simple_data_array_of_numbers()
-        self.get_verify(self.json, "generate_simple_data_numbers_boundary")
+        self.get_verify(self.json, "test_get_numbers_boundary")
 
     def test_get_element_arrays(self):
         result = True
@@ -98,18 +102,18 @@ class SubdocNestedDataset(SubdocBaseTest):
         logic, msg = self.get_and_verify_with_value(self.client, key = self.key, path = key_two_dimension_path, expected_value = str(data_set["two_dimension_array"][0][0]))
         result = result and logic
         if not logic:
-            dict["two_dimension_array"] = msg
+            dict[key_two_dimension_path] = msg
         self.assertTrue(result, dict)
 
 # SD_EXISTS
-    def test_exists_json_strings(self):
+    def test_exists_json_fields(self):
         self.json =  self.generate_simple_data_array_of_numbers()
-        self.exists(self.json, "generate_simple_data_numbers_boundary")
+        self.exists(self.json, "test_exists_json_fields")
 
     def test_exists_element_array(self):
         result = True
         dict = {}
-        self.key = "element_arrays"
+        self.key = "test_exists_element_array"
         data_set =  self.generate_simple_arrays()
         base_json = self.generate_json_for_nesting()
         nested_json = self.generate_nested(base_json, data_set, self.nesting_level)
@@ -118,13 +122,13 @@ class SubdocNestedDataset(SubdocBaseTest):
         key_single_dimension_path = "single_dimension_array[0]"
         logic, msg =  self.verify_exists(self.client, key = self.key, path = key_single_dimension_path)
         if not logic:
-            dict[single_dimension_array] = msg
+            dict[key_single_dimension_path] = msg
         result = result and logic
         key_two_dimension_path = "two_dimension_array[0][0]"
         logic, msg = self.verify_exists(self.client, key = self.key, path = key_two_dimension_path)
         result = result and logic
         if not logic:
-            dict["two_dimension_array"] = msg
+            dict[key_two_dimension_path] = msg
         self.assertTrue(result, dict)
 
 
