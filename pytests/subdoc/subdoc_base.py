@@ -17,9 +17,26 @@ class SubdocBaseTest(BaseTestCase):
 
     def generate_simple_data_null(self):
     	json = {
-    		"null":None,
-    		"array":[None, None, None, None]
-    	}
+            "not_tested_integer_zero":0,
+            "not_tested_integer_big":1038383839293939383938393,
+            "not_tested_double_zero":0.0,
+            "not_tested_integer":1,
+            "not_tested_integer_negative":-1,
+            "not_tested_double":1.1,
+            "not_tested_double_negative":-1.1,
+            "not_tested_float":2.99792458e8,
+            "not_tested_float_negative":-2.99792458e8,
+            "not_tested_array_numbers_integer" : [1,2,3,4,5],
+            "not_tested_array_numbers_double" : [1.1,2.2,3.3,4.4,5.5],
+            "not_tested_array_numbers_float" : [2.99792458e8,2.99792458e8,2.99792458e8],
+            "not_tested_array_numbers_mix" : [0,2.99792458e8,1.1],
+            "not_tested_array_array_mix" : [[2.99792458e8,2.99792458e8,2.99792458e8],[0,2.99792458e8,1.1],[],[0, 0, 0]],
+            "not_tested_simple_string_lower_case":"abcdefghijklmnoprestuvxyz",
+            "not_tested_simple_string_upper_case":"ABCDEFGHIJKLMNOPQRSTUVWXZYZ",
+            "not_tested_simple_string_empty":"",
+            "not_tested_simple_string_datetime":"2012-10-03 15:35:46.461491",
+            "not_tested_simple_string_special_chars":"_-+!#@$%&*(){}\][;.,<>?/"
+        }
     	return json
 
     def generate_simple_data_boolean(self):
@@ -57,7 +74,7 @@ class SubdocBaseTest(BaseTestCase):
     		"array_numbers_double" : [1.1,2.2,3.3,4.4,5.5],
     		"array_numbers_float" : [2.99792458e8,2.99792458e8,2.99792458e8],
     		"array_numbers_mix" : [0,2.99792458e8,1.1],
-    		"array_array_mix" : [[2.99792458e8,2.99792458e8,2.99792458e8],[0,2.99792458e8,1.1],[],[0, 0, 0]],
+    		"array_array_mix" : [[2.99792458e8,2.99792458e8,2.99792458e8],[0,2.99792458e8,1.1],[],[0, 0, 0]]
     	}
     	return json
 
