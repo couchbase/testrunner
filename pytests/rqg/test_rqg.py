@@ -1,3 +1,4 @@
+import sys
 from basetestcase import BaseTestCase
 import json
 import os
@@ -903,6 +904,10 @@ class RQGTests(BaseTestCase):
         try:
             actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
+            print n1ql_result
+            if(str(n1ql_result).find("CBQError")) > 0:
+                import  pdb;pdb.set_trace()
+                sys.exit()
             #self.log.info(actual_result)
             # Run SQL Query
             sql_result = expected_result
