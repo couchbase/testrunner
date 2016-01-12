@@ -1984,7 +1984,6 @@ class RemoteMachineShellConnection:
             for line in stdout.readlines():
                 if (count == 0) and line.lower().find("error") > 0:
                    output = "status:FAIL"
-                   import pdb;pdb.set_trace()
               #if line.find("results") > 0 or line.find("status") > 0 or line.find("metrics") or line.find("elapsedTime")> 0 or  line.find("executionTime")> 0 or line.find("resultCount"):
                 if (count > 0):
                     output+=line.strip()
