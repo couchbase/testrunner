@@ -848,7 +848,6 @@ class QueriesViewsTests(QueryTests):
         for bucket in self.buckets:
             if (query_temp.find('%s') > 0):
                 query_temp = query_temp % bucket.name
-            print query_temp
             query = 'EXPLAIN %s' % (query_temp)
             res = self.run_cbq_query(query=query)
             self.log.info('-'*100)
