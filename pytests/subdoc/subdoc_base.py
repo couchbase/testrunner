@@ -1,6 +1,7 @@
 from basetestcase import BaseTestCase
 from lib.mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.rest_client import RestConnection, RestHelper
+import copy
 
 class SubdocBaseTest(BaseTestCase):
     def setUp(self):
@@ -9,6 +10,10 @@ class SubdocBaseTest(BaseTestCase):
 
     def tearDown(self):
         super(SubdocBaseTest, self).tearDown()
+
+    def generate_json_for_nesting(self):
+        return {"integer":1}
+
 
     def generate_simple_data_null(self):
     	json = {
@@ -61,6 +66,7 @@ class SubdocBaseTest(BaseTestCase):
     		"simple_string_lower_case":"abcdefghijklmnoprestuvxyz",
     		"simple_string_upper_case":"ABCDEFGHIJKLMNOPQRSTUVWXZYZ",
     		"simple_string_empty":"",
+            "simple_string_datetime":"2012-10-03 15:35:46.461491",
     		"simple_string_special_chars":"_-+!#@$%&*(){}\][;.,<>?/"
     	}
     	return json
@@ -88,15 +94,23 @@ class SubdocBaseTest(BaseTestCase):
     	}
     	return json
 
-	def generate_nested(self, nested_level):
-   		json = self.generate_simple_data()
-    	original_json = json
-    	for i in range(10):
-    		level = "level_"+str(i)
-    		new_json = self.generate_simple_data()
-    		json[level] = new_json
-    		json = new_json
-    	return json
+    def generate_path(self, level, key):
+        path = key
+        list = range(level)
+        list.reverse()
+        for i in list:
+            path = "level_"+str(i)+"."+path
+        return path
+
+    def generate_nested(self, base_nested_level, nested_data, level_counter):
+        json_data = copy.deepcopy(base_nested_level)
+        original_json  = json_data
+        for i in range(level_counter):
+            level = "level_"+str(i)
+            json_data[level] = copy.deepcopy(base_nested_level)
+            json_data = json_data[level]
+        json_data.update(nested_data)
+        return original_json
 
     def direct_client(self, server, bucket, timeout=30):
         rest = RestConnection(server)
