@@ -663,7 +663,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         conn.kill_erlang()
         conn.start_couchbase()
         output = restore_result.result(timeout=200)
-        self.assertTrue("Restore successfully completed" in output[0],
+        self.assertTrue("Restore completed successfully" in output[0],
                         "Restore failed with erlang crash and restart within 180 seconds")
         self.log.info("Restore succeeded with erlang crash and restart within 180 seconds")
 
@@ -691,7 +691,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         conn.stop_couchbase()
         conn.start_couchbase()
         output = restore_result.result(timeout=200)
-        self.assertTrue("Restore successfully completed" in output[0],
+        self.assertTrue("Restore completed successfully" in output[0],
                         "Restore failed with couchbase stop and start within 180 seconds")
         self.log.info("Restore succeeded with couchbase stop and start within 180 seconds")
 
@@ -719,7 +719,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         conn.pause_memcached()
         conn.unpause_memcached()
         output = restore_result.result(timeout=200)
-        self.assertTrue("Restore successfully completed" in output[0],
+        self.assertTrue("Restore completed successfully" in output[0],
                         "Restore failed with memcached crash and restart within 180 seconds")
         self.log.info("Restore succeeded with memcached crash and restart within 180 seconds")
 
