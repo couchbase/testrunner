@@ -4132,3 +4132,125 @@ class CancelBucketCompactionTask(Task):
                 self.log.error("Bucket Compaction Cancellation not started")
                 self.set_result(False)
                 self.state = FINISHED
+
+class EnterpriseBackupTask(Task):
+
+    def __init__(self, cluster_host, backup_host, directory='', name='', resume=False, purge=False,
+                 no_progress_bar=False, cli_command_location=''):
+        Task.__init__(self, "enterprise_backup_task")
+        self.cluster_host = cluster_host
+        self.backup_host = backup_host
+        self.directory = directory
+        self.name = name
+        self.resume = resume
+        self.purge = purge
+        self.no_progress_bar = no_progress_bar
+        self.cli_command_location = cli_command_location
+        self.output = []
+        self.error = []
+        try:
+            self.remote_client = RemoteMachineShellConnection(self.backup_host)
+        except Exception, e:
+            self.log.error(e)
+            self.state = FINISHED
+            self.set_exception(e)
+
+    def execute(self, task_manager):
+        try:
+            args = "cluster --dir {0} --name {1} --host http://{2}:{3} --username {4} --password {5}". \
+            format(self.directory, self.name, self.cluster_host.ip,
+                   self.cluster_host.port, self.cluster_host.rest_username,
+                   self.cluster_host.rest_password)
+            if self.resume:
+                args += " --resume"
+            if self.purge:
+                args += " --purge"
+            if self.no_progress_bar:
+                args += " --no-progress-bar"
+            command = "{0}/backup {1}".format(self.cli_command_location, args)
+            self.output, self.error = self.remote_client.execute_command(command)
+            self.state = CHECKING
+        except Exception, e:
+            self.log.error("Backup cluster failed for unknown reason")
+            self.set_exception(e)
+            self.state = FINISHED
+            self.set_result(False)
+        task_manager.schedule(self)
+
+    def check(self, task_manager):
+        if self.output:
+            self.state = FINISHED
+            self.set_result(self.output)
+            self.remote_client.log_command_output(self.output, self.error)
+        elif self.error:
+            self.state = FINISHED
+            self.set_result(self.error)
+            self.remote_client.log_command_output(self.output, self.error)
+        else:
+            task_manager.schedule(self, 10)
+
+class EnterpriseRestoreTask(Task):
+
+    def __init__(self, restore_host, backup_host, backups=[], start=0, end=0, directory='', name='',
+                 force_updates=False, no_progress_bar=False, cli_command_location=''):
+        Task.__init__(self, "enterprise_backup_task")
+        self.restore_host = restore_host
+        self.backup_host = backup_host
+        self.directory = directory
+        self.name = name
+        self.force_updates = force_updates
+        self.no_progress_bar = no_progress_bar
+        self.cli_command_location = cli_command_location
+        self.output = []
+        self.error = []
+        self.backups = backups
+        self.start = start
+        self.end = end
+        try:
+            self.remote_client = RemoteMachineShellConnection(self.backup_host)
+        except Exception, e:
+            self.log.error(e)
+            self.state = FINISHED
+            self.set_exception(e)
+
+    def execute(self, task_manager):
+        try:
+            try:
+                backup_start = self.backups[int(self.start) - 1]
+            except IndexError:
+                backup_start = "{0}{1}".format(self.backups[-1], self.start)
+            try:
+                backup_end = self.backups[int(self.end) - 1]
+            except IndexError:
+                backup_end = "{0}{1}".format(self.backups[-1], self.end)
+            args = "restore --dir {0} --name {1} --host http://{2}:{3} --username {4} --password {5} --start {6} " \
+                   "--end {7}".format(self.directory, self.name, self.restore_host.ip,
+                                                  self.restore_host.port,
+                                                  self.restore_host.rest_username,
+                                                  self.restore_host.rest_password, backup_start,
+                                                  backup_end)
+            if self.no_progress_bar:
+                args += " --no-progress-bar"
+            if self.force_updates:
+                args += " --force-updates"
+            command = "{0}/backup {1}".format(self.cli_command_location, args)
+            self.output, self.error = self.remote_client.execute_command(command)
+            self.state = CHECKING
+        except Exception, e:
+            self.log.error("Restore failed for unknown reason")
+            self.set_exception(e)
+            self.state = FINISHED
+            self.set_result(False)
+        task_manager.schedule(self)
+
+    def check(self, task_manager):
+        if self.output:
+            self.state = FINISHED
+            self.set_result(self.output)
+            self.remote_client.log_command_output(self.output, self.error)
+        elif self.error:
+            self.state = FINISHED
+            self.set_result(self.error)
+            self.remote_client.log_command_output(self.output, self.error)
+        else:
+            task_manager.schedule(self, 10)
