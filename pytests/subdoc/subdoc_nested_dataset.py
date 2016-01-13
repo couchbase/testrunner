@@ -105,6 +105,38 @@ class SubdocNestedDataset(SubdocBaseTest):
             dict[key_two_dimension_path] = msg
         self.assertTrue(result, dict)
 
+    def test_get_json_and_arrays(self):
+        result = True
+        dict = {}
+        self.key = "element_array"
+        expected_value = "value"
+        data_set =  {
+                        "1_array":[ { "field": [expected_value] }],
+                        "2_array":[ [{ "field": [expected_value] }]],
+                        "3_array":[ [[{ "field": [expected_value] }]]],
+                    }
+        base_json = self.generate_json_for_nesting()
+        nested_json = self.generate_nested(base_json, data_set, self.nesting_level)
+        jsonDump = json.dumps(nested_json)
+        self.client.set(self.key, 0, 0, jsonDump)
+        key_single_dimension_path = "1_array[0].field[0]"
+        logic, msg =  self.get_and_verify_with_value(self.client, key = self.key, path = key_single_dimension_path, expected_value = expected_value)
+        if not logic:
+            dict[single_dimension_array] = msg
+        result = result and logic
+        key_two_dimension_path = "2_array[0][0].field[0]"
+        logic, msg = self.get_and_verify_with_value(self.client, key = self.key, path = key_two_dimension_path, expected_value = expected_value)
+        result = result and logic
+        if not logic:
+            dict[key_two_dimension_path] = msg
+        self.assertTrue(result, dict)
+        key_three_dimension_path = "3_array[0][0][0].field[0]"
+        logic, msg = self.get_and_verify_with_value(self.client, key = self.key, path = key_three_dimension_path, expected_value = expected_value)
+        result = result and logic
+        if not logic:
+            dict[key_three_dimension_path] = msg
+        self.assertTrue(result, dict)
+
 # SD_EXISTS
     def test_exists_json_fields(self):
         self.json =  self.generate_simple_data_array_of_numbers()
@@ -131,6 +163,38 @@ class SubdocNestedDataset(SubdocBaseTest):
             dict[key_two_dimension_path] = msg
         self.assertTrue(result, dict)
 
+    def test_exists_json_and_arrays(self):
+        result = True
+        dict = {}
+        self.key = "element_array"
+        expected_value = "value"
+        data_set =  {
+                        "1_array":[ { "field": [expected_value] }],
+                        "2_array":[ [{ "field": [expected_value] }]],
+                        "3_array":[ [[{ "field": [expected_value] }]]],
+                    }
+        base_json = self.generate_json_for_nesting()
+        nested_json = self.generate_nested(base_json, data_set, self.nesting_level)
+        jsonDump = json.dumps(nested_json)
+        self.client.set(self.key, 0, 0, jsonDump)
+        key_single_dimension_path = "1_array[0].field[0]"
+        logic, msg =  self.verify_exists(self.client, key = self.key, path = key_single_dimension_path)
+        if not logic:
+            dict[single_dimension_array] = msg
+        result = result and logic
+        key_two_dimension_path = "2_array[0][0].field[0]"
+        logic, msg = self.verify_exists(self.client, key = self.key, path = key_two_dimension_path)
+        result = result and logic
+        if not logic:
+            dict[key_two_dimension_path] = msg
+        self.assertTrue(result, dict)
+        key_three_dimension_path = "3_array[0][0][0].field[0]"
+        logic, msg = self.verify_exists(self.client, key = self.key, path = key_three_dimension_path)
+        result = result and logic
+        if not logic:
+            dict[key_three_dimension_path] = msg
+        self.assertTrue(result, dict)
+
 
 # SD_ARRAY_ADD
 
@@ -142,13 +206,15 @@ class SubdocNestedDataset(SubdocBaseTest):
                     "empty":[],
                     "single_dimension_array":["0"],
                     "two_dimension_array":[["0"]],
-                    "three_dimension_array":[[["0"]]]
+                    "three_dimension_array":[[["0"]]],
+                    "four_json_dimension_array":[[[{"field":["0"]}]]]
                 }
         expected_array = {
                     "empty":["1"],
                     "single_dimension_array":["0","1"],
                     "two_dimension_array":[["0", "1"]],
-                    "three_dimension_array":[[["0", "1"]]]
+                    "three_dimension_array":[[["0", "1"]]],
+                    "four_json_dimension_array":[[[{"field":["0", "1"]}]]]
                 }
         base_json = self.generate_json_for_nesting()
         nested_json = self.generate_nested(base_json, array, self.nesting_level)
@@ -158,6 +224,7 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.array_add_last(self.client, key = "test_add_last_array", path = 'single_dimension_array', value =  json.dumps("1"))
         self.array_add_last(self.client, key = "test_add_last_array", path = 'two_dimension_array[0]', value =  json.dumps("1"))
         self.array_add_last(self.client, key = "test_add_last_array", path = 'three_dimension_array[0][0]', value =  json.dumps("1"))
+        self.array_add_last(self.client, key = "test_add_last_array", path = 'four_json_dimension_array[0][0][0].field', value =  json.dumps("1"))
         self.json  = expected_array
         for key in expected_array.keys():
             value = expected_array[key]
@@ -175,13 +242,15 @@ class SubdocNestedDataset(SubdocBaseTest):
                     "empty":[],
                     "single_dimension_array":["1"],
                     "two_dimension_array":[["1"]],
-                    "three_dimension_array":[[["1"]]]
+                    "three_dimension_array":[[["1"]]],
+                    "four_dimension_json_array":[[[{"field":["1"]}]]]
                 }
         expected_array = {
                     "empty":["0"],
                     "single_dimension_array":["0","1"],
                     "two_dimension_array":[["0", "1"]],
-                    "three_dimension_array":[[["0", "1"]]]
+                    "three_dimension_array":[[["0", "1"]]],
+                    "four_dimension_json_array":[[[{"field":["0","1"]}]]]
                 }
         base_json = self.generate_json_for_nesting()
         nested_json = self.generate_nested(base_json, array, self.nesting_level)
@@ -191,6 +260,7 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.array_add_first(self.client, key = "test_add_first_array", path = 'single_dimension_array', value =  json.dumps("0"))
         self.array_add_first(self.client, key = "test_add_first_array", path = 'two_dimension_array[0]', value =  json.dumps("0"))
         self.array_add_first(self.client, key = "test_add_first_array", path = 'three_dimension_array[0][0]', value =  json.dumps("0"))
+        self.array_add_first(self.client, key = "test_add_first_array", path = 'four_dimension_json_array[0][0][0].field', value =  json.dumps("0"))
         self.json  = expected_array
         for key in expected_array.keys():
             value = expected_array[key]
@@ -208,13 +278,15 @@ class SubdocNestedDataset(SubdocBaseTest):
                     "empty":[],
                     "single_dimension_array":["0",2],
                     "two_dimension_array":[["0",2]],
-                    "three_dimension_array":[[["0", 2]]]
+                    "three_dimension_array":[[["0", 2]]],
+                    "four_dimension_json_array":[[[{"field":["0", 2]}]]]
                 }
         expected_array = {
                     "empty":["1"],
                     "single_dimension_array":["0",2, "1"],
                     "two_dimension_array":[["0",2, "1"]],
-                    "three_dimension_array":[[["0",2,"1"]]]
+                    "three_dimension_array":[[["0",2,"1"]]],
+                    "four_dimension_json_array":[[[{"field":["0", 2, "1"]}]]]
                 }
         base_json = self.generate_json_for_nesting()
         nested_json = self.generate_nested(base_json, array, self.nesting_level)
@@ -224,6 +296,7 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.array_add_unique(self.client, key = "test_add_unique_array", path = 'single_dimension_array', value =  json.dumps("1"))
         self.array_add_unique(self.client, key = "test_add_unique_array", path = 'two_dimension_array[0]', value =  json.dumps("1"))
         self.array_add_unique(self.client, key = "test_add_unique_array", path = 'three_dimension_array[0][0]', value =  json.dumps("1"))
+        self.array_add_unique(self.client, key = "test_add_unique_array", path = 'four_dimension_json_array[0][0][0].field', value =  json.dumps("1"))
         self.json  = expected_array
         for key in expected_array.keys():
             expected_value = expected_array[key]
@@ -240,12 +313,14 @@ class SubdocNestedDataset(SubdocBaseTest):
         array = {
                     "single_dimension_array_no_element":[],
                     "two_dimension_array_no_element":[[]],
-                    "three_dimension_array_no_element":[[[]]]
+                    "three_dimension_array_no_element":[[[]]],
+                    "three_dimension_json_array_no_element":[[[{"field":[]}]]]
                 }
         expected_array = {
                     "single_dimension_array_no_element":[0, 1 , 2, 3],
                     "two_dimension_array_no_element":[[0, 1, 2, 3],[0, 1, 2, 3]],
                     "three_dimension_array_no_element":[[[0, 1, 2, 3],[0, 1, 2, 3]],[0, 1, 2, 3]],
+                    "three_dimension_json_array_no_element":[[[{"field":[0, 1, 2, 3]}]]]
                 }
         base_json = self.generate_json_for_nesting()
         nested_json = self.generate_nested(base_json, array, self.nesting_level)
@@ -266,6 +341,10 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "three_dimension_array_no_element[0][0][2]", value = json.dumps(2))
         self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "three_dimension_array_no_element[0][1]", value = json.dumps([0, 1, 2, 3]))
         self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "three_dimension_array_no_element[1]", value = json.dumps([0, 1, 2, 3]))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "three_dimension_json_array_no_element[0][0][0].field[0]", value = json.dumps(0))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "three_dimension_json_array_no_element[0][0][0].field[1]", value = json.dumps(1))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "three_dimension_json_array_no_element[0][0][0].field[2]", value = json.dumps(2))
+        self.array_add_insert(self.client, key  = "test_add_insert_array" , path = "three_dimension_json_array_no_element[0][0][0].field[3]", value = json.dumps(3))
         self.json  = expected_array
         for key in expected_array.keys():
             expected_value = expected_array[key]
@@ -441,6 +520,47 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.delete(self.client, key = "test_delete_array", path = 'strings[2]')
         self.delete(self.client, key = "test_delete_array", path = 'two_dimension_array[0][0]')
         self.delete(self.client, key = "test_delete_array", path = 'three_dimension_array[0][0][0]')
+        self.json  = expected_array
+        for key in expected_array.keys():
+            value = expected_array[key]
+            new_path = self.generate_path(self.nesting_level, key)
+            logic, data_return  =  self.get_string_and_verify_return( self.client, key = self.key, path = new_path, expected_value = value)
+            if not logic:
+                dict[key] = {"expected": expected_array[key], "actual": data_return}
+            result = result and logic
+        self.assertTrue(result, dict)
+
+
+    def test_delete_json_array(self):
+        result = True
+        self.key = "test_delete_array"
+        array = {
+                    "2_json_array":[{"field":[0, 1, 2]},[0, 1, 2]],
+                    "3_json_array":[[{"field":[0, 1, 2]},[0, 1, 2]]],
+                    "4_json_array":[[[{"field":[0, 1, 2]},[0, 1, 2]]]]
+                }
+        expected_array = {
+                    "2_json_array":[{"field":[1]},[1]],
+                    "3_json_array":[[{"field":[1]},[1]]],
+                    "4_json_array":[[[{"field":[1]},[1]]]]
+                }
+        base_json = self.generate_json_for_nesting()
+        self.json = self.generate_nested(base_json, array, self.nesting_level)
+        jsonDump = json.dumps(self.json)
+        jsonDump = json.dumps(array)
+        self.client.set(self.key, 0, 0, jsonDump)
+        self.delete(self.client, key = "test_delete_array", path = '2_json_array[0].field[0]')
+        self.delete(self.client, key = "test_delete_array", path = '2_json_array[0].field[1]')
+        self.delete(self.client, key = "test_delete_array", path = '2_json_array[1][0]')
+        self.delete(self.client, key = "test_delete_array", path = '2_json_array[1][1]')
+        self.delete(self.client, key = "test_delete_array", path = '3_json_array[0][0].field[0]')
+        self.delete(self.client, key = "test_delete_array", path = '3_json_array[0][0].field[1]')
+        self.delete(self.client, key = "test_delete_array", path = '3_json_array[0][1][0]')
+        self.delete(self.client, key = "test_delete_array", path = '3_json_array[0][1][1]')
+        self.delete(self.client, key = "test_delete_array", path = '4_json_array[0][0][0].field[0]')
+        self.delete(self.client, key = "test_delete_array", path = '4_json_array[0][0][0].field[1]')
+        self.delete(self.client, key = "test_delete_array", path = '4_json_array[0][0][1][0]')
+        self.delete(self.client, key = "test_delete_array", path = '4_json_array[0][0][1][1]')
         self.json  = expected_array
         for key in expected_array.keys():
             value = expected_array[key]
