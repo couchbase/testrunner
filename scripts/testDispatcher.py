@@ -42,8 +42,9 @@ def main():
     parser.add_option('-n','--noLaunch', action="store_true", dest='noLaunch', default=False)
     parser.add_option('-c','--component', dest='component', default=None)
     parser.add_option('-p','--poolId', dest='poolId', default='12hour')
-    parser.add_option('-t','--test', dest='test', default=False)
+    parser.add_option('-t','--test', dest='test', default=False, action='store_true')
     parser.add_option('-s','--subcomponent', dest='subcomponent', default=None)
+    parser.add_option('-e','--extraParameters', dest='extraParameters', default=None)
 
 
     options, args = parser.parse_args()
@@ -187,11 +188,22 @@ def main():
                         time.sleep(POLL_INTERVAL) # some error checking here at some point
                     else:
                         r2 = json.loads(content)
+
+                        # figure out the parameters, there are test suite specific, and added at dispatch time
+                        if options.extraParameters is None or options.extraParameters == 'None':
+                            parameters = testsToLaunch[i]['parameters']
+                        else:
+                            if testsToLaunch[i]['parameters'] == 'None':
+                                parameters = options.extraParameters
+                            else:
+                                parameters = testsToLaunch[i]['parameters'] + ',' + options.extraParameters
+
+
                         url = launchString.format(options.version, testsToLaunch[i]['confFile'],
                                              descriptor, testsToLaunch[i]['component'],
                                              testsToLaunch[i]['subcomponent'], testsToLaunch[i]['iniFile'],
                                              urllib.quote(json.dumps(r2).replace(' ','')),
-                                             urllib.quote(testsToLaunch[i]['parameters']), options.os,
+                                             urllib.quote( parameters ), options.os,
                                              testsToLaunch[i]['initNodes'])
 
                         #print 'launching', url
