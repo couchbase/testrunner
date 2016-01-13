@@ -3,7 +3,7 @@ from random import randrange
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.documentgenerator import BlobGenerator
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, Bucket
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from security.auditmain import audit
 
@@ -181,6 +181,102 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.backup_create()
         self.backup_cluster_validate()
         self.backup_list_validate()
+
+    def test_backup_list_optional_switches(self):
+        """
+        1. Creates specified buckets on the cluster and loads it with given number of items
+           Note: this test should be run with 2 buckets
+        2. Creates two backupsets
+        3. Creates two backups on each of the backupset
+        4. Executes list command with --name and validates
+        5. Executes list command with --name and --incr-backup and validates
+        6. Executes list command with --name, --incr-backup and --bucket-backup and validates
+        """
+        rest_conn = RestConnection(self.backupset.cluster_host)
+        rest_conn.create_bucket(bucket="default2",ramQuotaMB=512)
+        self.buckets.append(Bucket(name="default2"))
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self._take_n_backups(n=2)
+        self.backupset.name = "backup2"
+        self.backup_create()
+        self._take_n_backups(n=2)
+        incr_names = 0
+        backup_name = False
+        self.backupset.backup_list_name = "backup"
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        for line in output:
+            if self.backupset.backup_list_name in line:
+                backup_name = True
+            if self.backups[0] in line:
+                incr_names += 1
+            if self.backups[1] in line:
+                incr_names += 1
+        self.assertTrue(backup_name, "Expected backup name not found in output")
+        self.log.info("Expected backup name found in output")
+        self.assertEqual(incr_names, 2, "Expected backups were not listed for --name option")
+        self.log.info("Expected backups listed for --name option")
+        incr_names = 0
+        backup_name = False
+        self.backupset.backup_list_name = "backup2"
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        for line in output:
+            if self.backupset.backup_list_name in line:
+                backup_name = True
+            if self.backups[2] in line:
+                incr_names += 1
+            if self.backups[3] in line:
+                incr_names += 1
+        self.assertTrue(backup_name, "Expected backup name not found in output")
+        self.log.info("Expected backup name found in output")
+        self.assertEqual(incr_names, 2, "Expected backups were not listed for --name option")
+        self.log.info("Expected backups listed for --name option")
+        buckets = 0
+        name = False
+        self.backupset.backup_list_name = "backup"
+        self.backupset.backup_incr_backup = self.backups[0]
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        for line in output:
+            if self.backupset.backup_incr_backup in line:
+                name = True
+            if self.buckets[0].name in line:
+                buckets += 1
+            if self.buckets[1].name in line:
+                buckets += 1
+        self.assertTrue(name, "Expected incremental backup name not found in output")
+        self.log.info("Expected incrmental backup name found in output")
+        self.assertEqual(buckets, 2, "Expected buckets were not listed for --incr-backup option")
+        self.log.info("Expected buckets were listed for --incr-backup option")
+        name = False
+        items = 0
+        self.backupset.backup_list_name = "backup2"
+        self.backupset.backup_incr_backup = self.backups[2]
+        self.backupset.bucket_backup = self.buckets[0].name
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        for line in output:
+            if self.buckets[0].name in line:
+                name = True
+            if "shard" in line:
+                split = line.split(" ")
+                split = [s for s in split if s]
+                items += int(split[1])
+        self.assertTrue(name, "Expected bucket not listed for --bucket-backup option")
+        self.log.info("Expected bucket listed for --bucket-backup option")
+        self.assertEqual(items, self.num_items, "Mismatch in items for --bucket-backup option")
+        self.log.info("Expected number of items for --bucket-backup option")
+
+    def _take_n_backups(self, n=1):
+        for i in range(1, n + 1):
+            self.backup_cluster()
 
     def test_backup_compact(self):
         """
@@ -395,3 +491,315 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
                             "Memcached bucket found in backup list output after backup")
         self.log.info("Memcached bucket not found in backup list output after backup as expected")
         self.backup_restore()
+
+    def test_backup_with_erlang_crash_and_restart(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset on the backup host
+        3. Initiates a backup - while backup is going on kills and restarts erlang process
+        4. Validates backup output
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                          backup_host=self.backupset.backup_host,
+                                          directory=self.backupset.directory, name=self.backupset.name,
+                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                          no_progress_bar=self.no_progress_bar,
+                                          cli_command_location=self.cli_command_location)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.kill_erlang()
+        conn.start_couchbase()
+        output = backup_result.result(timeout=200)
+        self.assertTrue("Backup successfully completed" in output[0],
+                        "Backup failed with erlang crash and restart within 180 seconds")
+        self.log.info("Backup succeeded with erlang crash and restart within 180 seconds")
+
+    def test_backup_with_couchbase_stop_and_start(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset on the backup host
+        3. Initiates a backup - while backup is going on kills and restarts couchbase server
+        4. Validates backup output
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                          backup_host=self.backupset.backup_host,
+                                          directory=self.backupset.directory, name=self.backupset.name,
+                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                          no_progress_bar=self.no_progress_bar,
+                                          cli_command_location=self.cli_command_location)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.stop_couchbase()
+        conn.start_couchbase()
+        output = backup_result.result(timeout=200)
+        self.assertTrue("Backup successfully completed" in output[0],
+                        "Backup failed with couchbase stop and start within 180 seconds")
+        self.log.info("Backup succeeded with couchbase stop and start within 180 seconds")
+
+    def test_backup_with_memcached_crash_and_restart(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset on the backup host
+        3. Initiates a backup - while backup is going on kills and restarts memcached process
+        4. Validates backup output
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                          backup_host=self.backupset.backup_host,
+                                          directory=self.backupset.directory, name=self.backupset.name,
+                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                          no_progress_bar=self.no_progress_bar,
+                                          cli_command_location=self.cli_command_location)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.pause_memcached()
+        conn.unpause_memcached()
+        output = backup_result.result(timeout=200)
+        self.assertTrue("Backup successfully completed" in output[0],
+                        "Backup failed with memcached crash and restart within 180 seconds")
+        self.log.info("Backup succeeded with memcached crash and restart within 180 seconds")
+
+    def test_backup_with_erlang_crash(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset on the backup host
+        3. Initiates a backup - while backup is going on kills erlang process
+        4. Waits for 200s and Validates backup error
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                          backup_host=self.backupset.backup_host,
+                                          directory=self.backupset.directory, name=self.backupset.name,
+                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                          no_progress_bar=self.no_progress_bar,
+                                          cli_command_location=self.cli_command_location)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.kill_erlang()
+        output = backup_result.result(timeout=200)
+        self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
+                        "Expected error message not thrown by Backup 180 seconds after erlang crash")
+        self.log.info("Expected error message thrown by Backup 180 seconds after erlang crash")
+
+    def test_backup_with_couchbase_stop(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset on the backup host
+        3. Initiates a backup - while backup is going on kills couchbase server
+        4. Waits for 200s and Validates backup error
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                          backup_host=self.backupset.backup_host,
+                                          directory=self.backupset.directory, name=self.backupset.name,
+                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                          no_progress_bar=self.no_progress_bar,
+                                          cli_command_location=self.cli_command_location)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.stop_couchbase()
+        output = backup_result.result(timeout=200)
+        self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
+                        "Expected error message not thrown by Backup 180 seconds after couchbase-server stop")
+        self.log.info("Expected error message thrown by Backup 180 seconds after couchbase-server stop")
+
+    def test_backup_with_memcached_crash(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset on the backup host
+        3. Initiates a backup - while backup is going on kills memcached process
+        4. Waits for 200s and Validates backup error
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                          backup_host=self.backupset.backup_host,
+                                          directory=self.backupset.directory, name=self.backupset.name,
+                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                          no_progress_bar=self.no_progress_bar,
+                                          cli_command_location=self.cli_command_location)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.pause_memcached()
+        output = backup_result.result(timeout=200)
+        self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
+                        "Expected error message not thrown by Backup 180 seconds after memcached crash")
+        self.log.info("Expected error message thrown by Backup 180 seconds after memcached crash")
+
+    def test_restore_with_erlang_crash_and_restart(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset on the backup host and backsup data
+        3. Initiates a restore - while restore is going on kills and restarts erlang process
+        4. Validates restore output
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster()
+        restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
+                                                           backup_host=self.backupset.backup_host,
+                                                           backups=self.backups, start=self.backupset.start,
+                                                           end=self.backupset.end, directory=self.backupset.directory,
+                                                           name=self.backupset.name,
+                                                           force_updates=self.backupset.force_updates,
+                                                           no_progress_bar=self.no_progress_bar,
+                                                           cli_command_location=self.cli_command_location)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+        conn.kill_erlang()
+        conn.start_couchbase()
+        output = restore_result.result(timeout=200)
+        self.assertTrue("Restore successfully completed" in output[0],
+                        "Restore failed with erlang crash and restart within 180 seconds")
+        self.log.info("Restore succeeded with erlang crash and restart within 180 seconds")
+
+    def test_restore_with_couchbase_stop_and_start(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset on the backup host and backsup data
+        3. Initiates a restore - while restore is going on kills and restarts couchbase process
+        4. Validates restore output
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster()
+        restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
+                                                           backup_host=self.backupset.backup_host,
+                                                           backups=self.backups, start=self.backupset.start,
+                                                           end=self.backupset.end, directory=self.backupset.directory,
+                                                           name=self.backupset.name,
+                                                           force_updates=self.backupset.force_updates,
+                                                           no_progress_bar=self.no_progress_bar,
+                                                           cli_command_location=self.cli_command_location)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+        conn.stop_couchbase()
+        conn.start_couchbase()
+        output = restore_result.result(timeout=200)
+        self.assertTrue("Restore successfully completed" in output[0],
+                        "Restore failed with couchbase stop and start within 180 seconds")
+        self.log.info("Restore succeeded with couchbase stop and start within 180 seconds")
+
+    def test_restore_with_memcached_crash_and_restart(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset on the backup host and backsup data
+        3. Initiates a restore - while restore is going on kills and restarts memcached process
+        4. Validates restore output
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster()
+        restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
+                                                           backup_host=self.backupset.backup_host,
+                                                           backups=self.backups, start=self.backupset.start,
+                                                           end=self.backupset.end, directory=self.backupset.directory,
+                                                           name=self.backupset.name,
+                                                           force_updates=self.backupset.force_updates,
+                                                           no_progress_bar=self.no_progress_bar,
+                                                           cli_command_location=self.cli_command_location)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+        conn.pause_memcached()
+        conn.unpause_memcached()
+        output = restore_result.result(timeout=200)
+        self.assertTrue("Restore successfully completed" in output[0],
+                        "Restore failed with memcached crash and restart within 180 seconds")
+        self.log.info("Restore succeeded with memcached crash and restart within 180 seconds")
+
+    def test_restore_with_erlang_crash(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset on the backup host and backsup data
+        3. Initiates a restore - while restore is going on kills erlang process
+        4. Waits for 200s and Validates restore output
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster()
+        restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
+                                                           backup_host=self.backupset.backup_host,
+                                                           backups=self.backups, start=self.backupset.start,
+                                                           end=self.backupset.end, directory=self.backupset.directory,
+                                                           name=self.backupset.name,
+                                                           force_updates=self.backupset.force_updates,
+                                                           no_progress_bar=self.no_progress_bar,
+                                                           cli_command_location=self.cli_command_location)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+        conn.kill_erlang()
+        output = restore_result.result(timeout=200)
+        self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
+                        "Expected error message not thrown by Restore 180 seconds after erlang crash")
+        self.log.info("Expected error message thrown by Restore 180 seconds after erlang crash")
+
+    def test_restore_with_couchbase_stop(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset on the backup host and backsup data
+        3. Initiates a restore - while restore is going on kills couchbase server
+        4. Waits for 200s and Validates restore output
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster()
+        restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
+                                                           backup_host=self.backupset.backup_host,
+                                                           backups=self.backups, start=self.backupset.start,
+                                                           end=self.backupset.end, directory=self.backupset.directory,
+                                                           name=self.backupset.name,
+                                                           force_updates=self.backupset.force_updates,
+                                                           no_progress_bar=self.no_progress_bar,
+                                                           cli_command_location=self.cli_command_location)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+        conn.stop_couchbase()
+        output = restore_result.result(timeout=200)
+        self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
+                        "Expected error message not thrown by Restore 180 seconds after couchbase-server stop")
+        self.log.info("Expected error message thrown by Restore 180 seconds after couchbase-server stop")
+
+    def test_restore_with_memcached_crash(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset on the backup host and backsup data
+        3. Initiates a restore - while restore is going on kills memcached process
+        4. Waits for 200s and Validates restore output
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster()
+        restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
+                                                           backup_host=self.backupset.backup_host,
+                                                           backups=self.backups, start=self.backupset.start,
+                                                           end=self.backupset.end, directory=self.backupset.directory,
+                                                           name=self.backupset.name,
+                                                           force_updates=self.backupset.force_updates,
+                                                           no_progress_bar=self.no_progress_bar,
+                                                           cli_command_location=self.cli_command_location)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+        conn.pause_memcached()
+        output = restore_result.result(timeout=200)
+        self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
+                        "Expected error message not thrown by Restore 180 seconds after memcached crash")
+        self.log.info("Expected error message thrown by Restore 180 seconds after memcached crash")
