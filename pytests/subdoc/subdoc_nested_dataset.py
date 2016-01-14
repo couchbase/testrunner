@@ -13,6 +13,22 @@ class SubdocNestedDataset(SubdocBaseTest):
     def tearDown(self):
         super(SubdocNestedDataset, self).tearDown()
 
+# SANITY TESTS
+    def test_sanity(self):
+        result = {}
+        self.run_testcase(self.test_counter, "test_counter", result)
+        self.run_testcase(self.test_get_array_strings, "test_get_array_strings", result)
+        self.run_testcase(self.test_add_numbers, "test_add_numbers", result)
+        self.run_testcase(self.test_delete_json_array, "test_delete_json_array", result)
+        self.run_testcase(self.test_upsert_numbers, "test_upsert_numbers", result)
+        self.run_testcase(self.test_replace_boolean, "test_replace_boolean", result)
+        self.run_testcase(self.test_add_insert_array, "test_add_insert_array", result)
+        self.run_testcase(self.test_add_last_array, "test_add_last_array", result)
+        self.run_testcase(self.test_add_first_array, "test_add_first_array", result)
+        self.run_testcase(self.test_add_unique_array, "test_add_unique_array", result)
+        self.run_testcase(self.test_replace_numbers, "test_replace_numbers", result)
+        self.assertTrue(len(result) == 0, result)
+
 #SD_COUNTER
     def test_counter(self):
         result = True
@@ -21,28 +37,21 @@ class SubdocNestedDataset(SubdocBaseTest):
         array = {
                     "add_integer":0,
                     "sub_integer":1,
-                    "add_double":0,
-                    "sub_double":1,
                     "array_add_integer":[0,1],
                     "array_sub_integer":[0,1]
                 }
         expected_array = {
                     "add_integer":1,
                     "sub_integer":0,
-                    "add_double":1.0,
-                    "sub_double":0.0,
                     "array_add_integer":[1,1],
                     "array_sub_integer":[0,0]
                 }
         base_json = self.generate_json_for_nesting()
         nested_json = self.generate_nested(base_json, array, self.nesting_level)
         jsonDump = json.dumps(nested_json)
-        self.log.info(jsonDump)
         self.client.set(self.key, 0, 0, jsonDump)
         self.counter(self.client, key = "test_counter", path = 'add_integer', value = "1")
         self.counter(self.client, key = "test_counter", path = 'sub_integer', value = "-1")
-        self.counter(self.client, key = "test_counter", path = 'add_double', value = "1.0")
-        self.counter(self.client, key = "test_counter", path = 'sub_double', value = "-1.0")
         self.counter(self.client, key = "test_counter", path = 'array_add_integer[0]', value = "1")
         self.counter(self.client, key = "test_counter", path = 'array_sub_integer[1]', value = "-1")
         self.json  = expected_array
