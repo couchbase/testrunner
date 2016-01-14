@@ -615,8 +615,9 @@ class FTSIndex:
             doc_ids = []
             hits, matches, time_taken =\
                 self.__cluster.run_fts_query(self.name, query_dict)
-            for doc in matches:
-                doc_ids.append(doc['id'])
+            if hits:
+                for doc in matches:
+                    doc_ids.append(doc['id'])
             if show_query_results:
                 self.__log.info("Doc matches : %s" % json.dumps(matches, indent=3))
             if int(hits) == 0 and not zero_results_ok:
@@ -627,7 +628,6 @@ class FTSIndex:
             return hits, doc_ids, time_taken
         except Exception as e:
             self.__log.error("Error running query: %s" % e)
-            #raise FTSException("Error running query: %s" % e)
 
 class CouchbaseCluster:
 
