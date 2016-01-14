@@ -77,8 +77,8 @@ class StableTopFTS(FTSBaseTest):
     def index_utf16_dataset(self):
         self.load_utf16_data()
         try:
-            index = self._cb_cluster.create_fts_index('sample_index',
-                                              source_name='default')
+            bucket = self._cb_cluster.get_bucket_by_name('default')
+            index = self.create_default_index(bucket, "default_index")
             # an exception will most likely be thrown from waiting
             self.wait_for_indexing_complete()
             self.validate_index_count(
@@ -106,7 +106,8 @@ class StableTopFTS(FTSBaseTest):
 
     def index_wiki(self):
         self.load_wiki(lang=self.lang)
-        self._cb_cluster.create_fts_index('wiki_index', source_name='default')
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        index = self.create_default_index(bucket, "wiki_index")
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True,
                                   zero_rows_ok=False)
