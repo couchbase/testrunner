@@ -26,10 +26,10 @@ class SubdocErrorHandling(SubdocBaseTest):
                 }
         # Add Simple Data
         jsonDump = json.dumps(simple_data)
-        self.client.set("simple_data", 0, 0, jsonDump)
+        self.client.set("xxx", 0, 0, jsonDump)
         # Add Normal Nested Data
         base_json = self.generate_json_for_nesting()
-        nested_json = self.generate_nested(base_json, nested_simple, 30)
+        nested_json = self.generate_nested(base_json, nested_simple, 40)
         jsonDump = json.dumps(nested_json)
         self.client.set("nested_data", 0, 0, jsonDump)
         # Add Abnormal Nested Data
@@ -39,13 +39,15 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.client.set("normal_nested_data", 0, 0, jsonDump)
         # Tests for Simple Data Set
         self.log.info("simple_data :: empty path does not exist")
-        self.error_gets("simple_data", "", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
+        self.error_gets("xxx", "", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
         self.log.info("simple_data :: path does not exist")
-        self.error_gets("simple_data", "does_not_exist", error = "Memcached error #192 'Path not exists'", field = "simple_data : path does not exist - dictionary", result = result)
+        self.error_gets("xxx", "does_not_exist", error = "Memcached error #192 'Path not exists'", field = "simple_data : path does not exist - dictionary", result = result)
+        self.log.info("simple_data :: malformed path")
+        self.error_gets("xxx", "{][]}", error = "Memcached error #194 'Invalid path'", field = "simple_data : malformed path", result = result)
         self.log.info("simple_data :: path does not exist - array, negavtie index")
-        self.error_gets("simple_data", "array[-1]", error = "Memcached error #192 'Path not exists'", field = "simple_data : path does not exist - array, negavtie index", result = result)
+        self.error_gets("xxx", "array[-1]", error = "Memcached error #192 'Path not exists'", field = "simple_data : path does not exist - array, negavtie index", result = result)
         self.log.info("simple_data :: path does not exist - array, out of bounds index")
-        self.error_gets("simple_data", "array[200]", error = "Memcached error #192 'Path not exists'", field = "simple_data : path does not exist - array, out of bounds index", result = result)
+        self.error_gets("xxx", "array[200]", error = "Memcached error #192 'Path not exists'", field = "simple_data : path does not exist - array, out of bounds index", result = result)
         self.log.info("simple_data :: document does not exist")
         self.error_gets("does_not_exist", "does_not_exist", error = "Memcached error #1 'Not found'", field = "simple_data : document does not exist", result = result)
         # Tests for Simple Data Set
@@ -61,9 +63,12 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.log.info("nested_data ::path does not exist - array, out of bounds index")
         new_path = self.generate_path(20, "array[200]")
         self.error_gets("normal_nested_data", new_path, error = "Memcached error #192 'Path not exists'", field = "nested_data : path does not exist - array, out of bounds index", result = result)
+        self.log.info("nested_data ::malformed path")
+        new_path = self.generate_path(20, "{[]}")
+        self.error_gets("normal_nested_data", new_path, error = "Memcached error #194 'Invalid path'", field = "nested_data : malformed path", result = result)
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
-        new_path = self.generate_path(30, "field")
+        new_path = self.generate_path(40, "field")
         self.error_gets("nested_data", new_path, error = "Memcached error #192 'Path not exists'", field = "nested_data : path does not exist - too big path", result = result)
         self.assertTrue(len(result) == 0, result)
 
@@ -92,25 +97,30 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.client.set("normal_nested_data", 0, 0, jsonDump)
         # Tests for Simple Data Set
         self.log.info("simple_data :: empty path does not exist")
-        self.error_exists("simple_data", "", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
+        self.error_exists("simple_data", "", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist ", result = result)
         self.log.info("simple_data :: path does not exist")
-        self.error_exists("simple_data", "does_not_exist", error = "Memcached error #192 'Path not exists'", field = "simple_data : path does not exist - dictionary", result = result)
-        self.log.info("simple_data :: path does not exist - array, negavtie index")
-        self.error_exists("simple_data", "array[-1]", error = "Memcached error #192 'Path not exists'", field = "simple_data : path does not exist - array, negavtie index", result = result)
+        self.error_exists("simple_data", "does_not_exist", error = "Memcached error #192 'Path not exists'", field = "simple_data : path does not exist ", result = result)
+        self.log.info("simple_data :: path does not exist - array, negative index")
+        self.error_exists("simple_data", "array[-1]", error = "Memcached error #192 'Path not exists'", field = "simple_data : path does not exist - array, negative index", result = result)
         self.log.info("simple_data :: path does not exist - array, out of bounds index")
         self.error_exists("simple_data", "array[200]", error = "Memcached error #192 'Path not exists'", field = "simple_data : path does not exist - array, out of bounds index", result = result)
         self.log.info("simple_data :: document does not exist")
         self.error_exists("does_not_exist", "does_not_exist", error = "Memcached error #1 'Not found'", field = "simple_data : document does not exist", result = result)
-        # Tests for Simple Data Set
+        self.log.info("simple_data :: malformed path")
+        self.error_exists("does_not_exist", "[]{}]", error = "Memcached error #194 'Invalid path'", field = "simple_data : malformed path", result = result)
+        # Tests for Nested Data Set
         self.log.info("nested_data :: empty path does not exist")
         new_path = self.generate_path(20, "")
-        self.error_exists("normal_nested_data", new_path, error = "Memcached error #192 'Path not exists'", field = "nested_data : empty path does not exist - dictionary", result = result)
+        self.error_exists("normal_nested_data", new_path, error = "Memcached error #192 'Path not exists'", field = "nested_data : empty path does not exist", result = result)
+        self.log.info("nested_data :: malformed path")
+        new_path = self.generate_path(20, "{][]}")
+        self.error_exists("normal_nested_data", new_path, error = "Memcached error #194 'Invalid path'", field = "nested_data : malformed path", result = result)
         self.log.info("nested_data :: path does not exist")
         new_path = self.generate_path(20, "does_not_exist")
-        self.error_exists("normal_nested_data", new_path, error = "Memcached error #192 'Path not exists'", field = "nested_data : path does not exist - dictionary", result = result)
-        self.log.info("nested_data :: path does not exist - array, negavtie index")
+        self.error_exists("normal_nested_data", new_path, error = "Memcached error #192 'Path not exists'", field = "nested_data : path does not exist malformed path", result = result)
+        self.log.info("nested_data :: path does not exist - array, negative index")
         new_path = self.generate_path(20, "array[-1]")
-        self.error_exists("normal_nested_data", new_path, error = "Memcached error #192 'Path not exists'", field = "nested_data : path does not exist - array, negavtie index", result = result)
+        self.error_exists("normal_nested_data", new_path, error = "Memcached error #192 'Path not exists'", field = "nested_data : path does not exist - array, negative index", result = result)
         self.log.info("nested_data ::path does not exist - array, out of bounds index")
         new_path = self.generate_path(20, "array[200]")
         self.error_exists("normal_nested_data", new_path, error = "Memcached error #192 'Path not exists'", field = "nested_data : path does not exist - array, out of bounds index", result = result)
@@ -119,6 +129,7 @@ class SubdocErrorHandling(SubdocBaseTest):
         new_path = self.generate_path(40, "field")
         self.error_exists("nested_data", new_path, error = "Memcached error #192 'Path not exists'", field = "nested_data : path does not exist - too big path", result = result)
         self.assertTrue(len(result) == 0, result)
+
     def test_error_add_dict(self):
         result = {}
         simple_data = {
@@ -151,7 +162,12 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.error_add_dict("simple_data", "", value = "value_value", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
         self.log.info("simple_data :: document does not exist")
         self.error_add_dict("does_not_exist", "does_not_exist", value = "value_value", error = "Memcached error #1 'Not found'", field = "simple_data : document does not exist", result = result)
+        self.log.info("simple_data :: malformed path")
+        self.error_add_dict("does_not_exist", "{][]}", value = "value_value", error = "Memcached error #194 'Invalid path'", field = "simple_data : malformed path", result = result)
         # Tests for Simple Data Set
+        self.log.info("nested_data :: malformed json")
+        new_path = self.generate_path(20, "field_1")
+        self.error_add_dict("normal_nested_data", new_path, value = {"data"}, error = "Memcached error #197 'Cant insert'", field = "nested_data : malformed json", result = result)
         self.log.info("nested_data :: path exists")
         new_path = self.generate_path(20, "field")
         self.error_add_dict("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : path exists", result = result)
@@ -161,6 +177,9 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.log.info("nested_data :: empty path does not exist")
         new_path = self.generate_path(20, "")
         self.error_add_dict("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : empty path does not exist - dictionary", result = result)
+        self.log.info("nested_data :: malformed path")
+        new_path = self.generate_path(20, "{}][")
+        self.error_add_dict("normal_nested_data", new_path, value = "value_value", error = "Memcached error #194 'Invalid path'", field = "nested_data : malformed path", result = result)
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
         new_path = self.generate_path(40, "field")
@@ -198,12 +217,18 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.log.info("simple_data :: insertion into array")
         self.error_upsert_dict("does_not_exist", "array[0]", value = "value_value", error = "Memcached error #1 'Not found'", field = "simple_data : insertion into array", result = result)
         # Tests for Nested Data Set
+        self.log.info("nested_data :: malformed json")
+        new_path = self.generate_path(20, "field_1")
+        self.error_upsert_dict("normal_nested_data", new_path, value = {10}, error = "Memcached error #197 'Cant insert'", field = "nested_data : malformed json", result = result)
         self.log.info("nested_data :: empty path does not exist")
         new_path = self.generate_path(20, "")
         self.error_upsert_dict("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : empty path does not exist - dictionary", result = result)
         self.log.info("nested_data :: inserting into array")
         new_path = self.generate_path(20, "array[0]")
         self.error_upsert_dict("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : inserting into array", result = result)
+        self.log.info("nested_data :: malformed path")
+        new_path = self.generate_path(20, "{}}[0]")
+        self.error_upsert_dict("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : malformed path", result = result)
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
         new_path = self.generate_path(40, "field")
@@ -252,6 +277,12 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.log.info("nested_data :: path does not exist - array, out of bounds index")
         new_path = self.generate_path(20, "array[200]")
         self.error_replace("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : path does not exist - array, out of bounds index", result = result)
+        self.log.info("nested_data :: malformed path")
+        new_path = self.generate_path(20, "{][]}")
+        self.error_replace("normal_nested_data", new_path, value = "value_value", error = "Memcached error #194 'Invalid path'", field = "nested_data : malformed path", result = result)
+        self.log.info("nested_data :: malformed json")
+        new_path = self.generate_path(20, "field")
+        self.error_replace("normal_nested_data", new_path, value = {10}, error = "Memcached error #197 'Cant insert'", field = "nested_data : malformed json", result = result)
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
         new_path = self.generate_path(40, "field")
@@ -300,9 +331,12 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.log.info("nested_data :: path does not exist - array, out of bounds index")
         new_path = self.generate_path(20, "array[200]")
         self.error_delete("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : path does not exist - array, out of bounds index", result = result)
+        self.log.info("nested_data :: malformed path")
+        new_path = self.generate_path(20, "{][]}")
+        self.error_delete("normal_nested_data", new_path, value = "value_value", error = "Memcached error #194 'Invalid path'", field = "nested_data : malformed path", result = result)
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
-        new_path = self.generate_path(40, "field")
+        new_path = self.generate_path(40, "array")
         self.error_delete("nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : path does not exist - too big path", result = result)
         self.assertTrue(len(result) == 0, result)
 
@@ -341,9 +375,15 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.log.info("nested_data :: empty path does not exist")
         new_path = self.generate_path(20, "")
         self.error_array_push_last("normal_nested_data", new_path, error = "Memcached error #4 'Invalid'", field = "nested_data : empty path does not exist - dictionary", result = result)
+        self.log.info("nested_data :: malformed path")
+        new_path = self.generate_path(20, "[][\|}{")
+        self.error_array_push_last("normal_nested_data", new_path, error = "Memcached error #4 'Invalid'", field = "nested_data : malformed path", result = result)
+        self.log.info("nested_data :: malformed json")
+        new_path = self.generate_path(20, "array")
+        self.error_array_push_last("normal_nested_data", new_path, value = {10}, error = "Memcached error #197 'Cant insert'", field = "nested_data : malformed json", result = result)
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
-        new_path = self.generate_path(40, "field")
+        new_path = self.generate_path(40, "array")
         self.error_array_push_last("nested_data", new_path, error = "Memcached error #4 'Invalid'", field = "nested_data : path does not exist - too big path", result = result)
         self.assertTrue(len(result) == 0, result)
 
@@ -381,9 +421,15 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.log.info("nested_data :: empty path does not exist")
         new_path = self.generate_path(20, "")
         self.error_array_push_first("normal_nested_data", new_path, error = "Memcached error #4 'Invalid'", field = "nested_data : empty path does not exist - dictionary", result = result)
+        self.log.info("nested_data :: malformed path")
+        new_path = self.generate_path(20, "{{]\{}[")
+        self.error_array_push_first("normal_nested_data", new_path, error = "Memcached error #4 'Invalid'", field = "nested_data : malformed path", result = result)
+        self.log.info("nested_data :: malformed json")
+        new_path = self.generate_path(20, "array")
+        self.error_array_push_first("normal_nested_data", new_path, value = {10}, error = "Memcached error #197 'Cant insert'", field = "nested_data : malformed json", result = result)
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
-        new_path = self.generate_path(40, "field")
+        new_path = self.generate_path(40, "array")
         self.error_array_push_first("nested_data", new_path, error = "Memcached error #4 'Invalid'", field = "nested_data : path does not exist - too big path", result = result)
         self.assertTrue(len(result) == 0, result)
 
@@ -391,7 +437,7 @@ class SubdocErrorHandling(SubdocBaseTest):
         result = {}
         simple_data = {
                     "field":"simple",
-                    "array":[{"field":"exists"}, 1, 2]
+                    "array":[{"field":"exists"}, 1, 2, {}]
                 }
         nested_simple = {
                     "field":"simple",
@@ -426,6 +472,15 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.log.info("nested_data :: empty path does not exist")
         new_path = self.generate_path(20, "")
         self.error_array_add_unique("normal_nested_data", new_path, error = "Memcached error #4 'Invalid'", field = "nested_data : empty path does not exist - dictionary", result = result)
+        self.log.info("nested_data :: malformed path")
+        new_path = self.generate_path(20, "{}][\P")
+        self.error_array_add_unique("normal_nested_data", new_path, error = "Memcached error #4 'Invalid'", field = "nested_data : malformed path", result = result)
+        self.log.info("nested_data :: malformed json")
+        new_path = self.generate_path(20, "array")
+        self.error_array_add_unique("normal_nested_data", new_path, value= {10}, error = "Memcached error #197 'Cant insert'", field = "nested_data : malformed json", result = result)
+        self.log.info("nested_data :: collision - already present json structure")
+        new_path = self.generate_path(20, "array")
+        self.error_array_add_unique("normal_nested_data", new_path, value= {}, error = "Memcached error #197 'Cant insert'", field = "nested_data : collision - already present json structure", result = result)
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
         new_path = self.generate_path(40, "field")
@@ -466,16 +521,22 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.error_array_add_insert("simple_data", "array[200]", value=2, error = "Memcached error #193 'Path mismatch'", field = "simple_data : out of bounds index  value - dictionary", result = result)
         self.log.info("simple_data :: document does not exist")
         self.error_array_add_insert("does_not_exist", "does_not_exist", error = "Memcached error #4 'Invalid'", field = "simple_data : document does not exist", result = result)
-        # Tests for Simple Data Set
+        # Tests for Nested Data Set
         self.log.info("nested_data :: empty path does not exist")
         new_path = self.generate_path(20, "")
         self.error_array_add_insert("normal_nested_data", new_path, error = "Memcached error #4 'Invalid'", field = "nested_data : empty path does not exist - dictionary", result = result)
         self.log.info("simple_data :: negative index value")
         new_path = self.generate_path(20, "array[-1]")
-        self.error_array_add_insert("simple_data", new_path, value=2, error = "Memcached error #193 'Path mismatch'", field = "simple_data : negative value - dictionary", result = result)
+        self.error_array_add_insert("normal_nested_data", new_path, value=2, error = "Memcached error #193 'Path mismatch'", field = "simple_data : negative value - dictionary", result = result)
         self.log.info("simple_data :: out of bounds index value")
         new_path = self.generate_path(20, "array[200]")
-        self.error_array_add_insert("simple_data", new_path, value=2, error = "Memcached error #193 'Path mismatch'", field = "simple_data : out of bounds index  value - dictionary", result = result)
+        self.error_array_add_insert("normal_nested_data", new_path, value=2, error = "Memcached error #193 'Path mismatch'", field = "simple_data : out of bounds index  value - dictionary", result = result)
+        self.log.info("simple_data :: malformed path")
+        new_path = self.generate_path(20, "{][[e]]}")
+        self.error_array_add_insert("normal_nested_data", new_path, value=2, error = "Memcached error #194 'Invalid path'", field = "simple_data : malformed path", result = result)
+        self.log.info("simple_data :: malformed json")
+        new_path = self.generate_path(20, "array[0]")
+        self.error_array_add_insert("normal_nested_data", new_path, value={10}, error = "Memcached error #197 'Cant insert'", field = "simple_data : malformed json", result = result)
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
         new_path = self.generate_path(40, "field")
@@ -524,6 +585,9 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.log.info("nested_data :: empty path does not exist")
         new_path = self.generate_path(20, "")
         self.error_counter("normal_nested_data", new_path, error = "Memcached error #4 'Invalid'", field = "nested_data : empty path does not exist - dictionary", result = result)
+        self.log.info("nested_data :: malformed path")
+        new_path = self.generate_path(20, "[]{}\][")
+        self.error_counter("normal_nested_data", new_path, error = "Memcached error #4 'Invalid'", field = "nested_data : malformed path", result = result)
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
         new_path = self.generate_path(40, "field")
