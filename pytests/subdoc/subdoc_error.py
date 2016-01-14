@@ -130,6 +130,7 @@ class SubdocErrorTests(SubdocSanityTests):
         self.assertTrue(len(result) > 0, result)
 
         ''' Change error behaviour , there is something wrong on the call '''
+
     def error_test_deep_nested_dataset_dict_upsert(self):
         result = {}
         num_docs = self.helper.input.param("num-docs")
@@ -146,7 +147,11 @@ class SubdocErrorTests(SubdocSanityTests):
         '''path does not exist'''
         self.log.info('Testing empty path for dictionary')
         self.error_upsert_dict(inserted_keys, add_str="new_value", path = self._get_path('child', levels-2), error="Memcached error #197 'Cant insert'", field = 'path does not exist', result  = result)
-        self.assertTrue(len(result) > 0, result)
+
+        '''document does not exist'''
+        self.log.info('Document does not exist')
+        self.error_upsert_dict(['key_does_not_exist'], add_str="new_value", path = "does_not_matter", error="Memcached error #197 'Cant insert'", field = 'Document does not exist', result  = result)
+        self.assertTrue(len(result) == 0, result)
 
     def error_test_deep_nested_dataset_delete(self):
         result = {}
@@ -249,12 +254,11 @@ class SubdocErrorTests(SubdocSanityTests):
             num_tries = 1
             try:
                 opaque, cas, data = self.helper.client.dict_upsert_sd(in_key, path, add_str)
-                print data
-            except Exception as ex:
-                if not (str(ex).find(error) != -1):
-                    result[field] = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
-            else:
                 result[field] = "There were no errors. Error expected: %s" % error
+            except Exception as ex:
+                self.log.info(str(ex))
+                if str(ex).find(error) == -1:
+                    result[field] = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
 
     def error_delete(self, inserted_keys, path, error, field  = "field", result = {}):
         for in_key in inserted_keys:
