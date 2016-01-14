@@ -1,7 +1,7 @@
 import random
 import json
-#import sys
-#sys.path.append("/Users/apiravi/testrunner")
+import sys
+sys.path.append("/Users/apiravi/testrunner")
 from emp_querables import EmployeeQuerables
 from wiki_queryables import WikiQuerables
 
@@ -278,10 +278,12 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             fieldname = self.get_random_value(self.fields['str'] +
                                               self.fields['text'])
             match_str = eval("self.get_queryable_%s" % fieldname + "()")
+            if ':' or ' ' in match_str:
+                match_str = '\"' + match_str + '\"'
             if bool(random.getrandbits(1)):
                 return match_str
             else:
-                return fieldname+':'+match_str
+                return fieldname+':'+ match_str
         else:
             # numeric range
             operators = ['>', '>=', '<', '<=']
@@ -445,8 +447,8 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 if __name__ == "__main__":
     #query_type=['match_phrase', 'match', 'date_range', 'numeric_range', 'bool',
     #              'conjunction', 'disjunction', 'prefix']
-    query_type = ['regexp']
-    query_gen = FTSESQueryGenerator(30, query_type=query_type, dataset='all')
+    query_type = ['query_string']
+    query_gen = FTSESQueryGenerator(100, query_type=query_type, dataset='all')
     for index, query in enumerate(query_gen.fts_queries):
         print json.dumps(query, ensure_ascii=False, indent=3)
         print json.dumps(query_gen.es_queries[index], ensure_ascii=False, indent=3)
