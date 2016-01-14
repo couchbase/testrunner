@@ -29,7 +29,7 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.client.set("simple_data", 0, 0, jsonDump)
         # Add Normal Nested Data
         base_json = self.generate_json_for_nesting()
-        nested_json = self.generate_nested(base_json, nested_simple, 40)
+        nested_json = self.generate_nested(base_json, nested_simple, 30)
         jsonDump = json.dumps(nested_json)
         self.client.set("nested_data", 0, 0, jsonDump)
         # Add Abnormal Nested Data
@@ -63,7 +63,7 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.error_gets("normal_nested_data", new_path, error = "Memcached error #192 'Path not exists'", field = "nested_data : path does not exist - array, out of bounds index", result = result)
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
-        new_path = self.generate_path(40, "field")
+        new_path = self.generate_path(30, "field")
         self.error_gets("nested_data", new_path, error = "Memcached error #192 'Path not exists'", field = "nested_data : path does not exist - too big path", result = result)
         self.assertTrue(len(result) == 0, result)
 
@@ -145,6 +145,8 @@ class SubdocErrorHandling(SubdocBaseTest):
         # Tests for Simple Data Set
         self.log.info("simple_data :: path exists")
         self.error_add_dict("simple_data", "field", value = "value_value", error = "Memcached error #197 'Cant insert'", field = "simple_data :: path exists", result = result)
+        self.log.info("simple_data :: inserting into an array")
+        self.error_add_dict("simple_data", "array[0]", value = "value_value", error = "Memcached error #197 'Cant insert'", field = "simple_data :: inserting into an array", result = result)
         self.log.info("simple_data :: empty path does not exist")
         self.error_add_dict("simple_data", "", value = "value_value", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
         self.log.info("simple_data :: document does not exist")
@@ -153,6 +155,9 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.log.info("nested_data :: path exists")
         new_path = self.generate_path(20, "field")
         self.error_add_dict("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : path exists", result = result)
+        self.log.info("nested_data :: inserting into an array")
+        new_path = self.generate_path(20, "array[0]")
+        self.error_add_dict("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : inserting into an array", result = result)
         self.log.info("nested_data :: empty path does not exist")
         new_path = self.generate_path(20, "")
         self.error_add_dict("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : empty path does not exist - dictionary", result = result)
@@ -190,11 +195,15 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.error_upsert_dict("simple_data", "", value = "value_value", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
         self.log.info("simple_data :: document does not exist")
         self.error_upsert_dict("does_not_exist", "does_not_exist", value = "value_value", error = "Memcached error #1 'Not found'", field = "simple_data : document does not exist", result = result)
-        # Tests for Simple Data Set
+        self.log.info("simple_data :: insertion into array")
+        self.error_upsert_dict("does_not_exist", "array[0]", value = "value_value", error = "Memcached error #1 'Not found'", field = "simple_data : insertion into array", result = result)
+        # Tests for Nested Data Set
         self.log.info("nested_data :: empty path does not exist")
         new_path = self.generate_path(20, "")
         self.error_upsert_dict("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : empty path does not exist - dictionary", result = result)
-        self.log.info("nested_data :: path does not exist - array, negative index")
+        self.log.info("nested_data :: inserting into array")
+        new_path = self.generate_path(20, "array[0]")
+        self.error_upsert_dict("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : inserting into array", result = result)
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
         new_path = self.generate_path(40, "field")
