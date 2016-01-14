@@ -64,6 +64,7 @@ class QueriesViewsTests(QueryTests):
             self.query = "DROP PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
             actual_result = self.run_cbq_query()
             self._verify_results(actual_result['results'], [])
+            self.sleep(30,'sleep after dropping indexes..')
             self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
             actual_result = self.run_cbq_query()
             self._verify_results(actual_result['results'], [])
