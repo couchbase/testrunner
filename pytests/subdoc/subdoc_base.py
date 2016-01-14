@@ -174,3 +174,9 @@ class SubdocBaseTest(BaseTestCase):
         client.sasl_auth_plain(bucket_info.name.encode('ascii'),
                                bucket_info.saslPassword.encode('ascii'))
         return client
+
+    def run_testcase(self, test_case, test_case_name = "", result = {}):
+        try:
+            test_case()
+        except Exception as e:
+            result[test_case_name] = str(e)
