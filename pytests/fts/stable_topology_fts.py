@@ -1,3 +1,4 @@
+import json
 from fts_base import FTSBaseTest
 from lib.membase.api.rest_client import RestConnection
 from lib.membase.api.exception import FTSException, ServerUnavailableException
@@ -30,13 +31,19 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
 
-    def run_default_index_query(self, query=None, zero_results_ok=None,
-                                expected_hits=None):
+    def run_default_index_query(self, query=None, expected_hits=None):
         self.create_simple_default_index()
+        zero_results_ok = True
+        if not expected_hits:
+            expected_hits = int(self._input.param("expected_hits", 0))
+            if expected_hits:
+                zero_results_ok = False
         if not query:
-            query = eval(self._input.param("query", str(self.sample_query)))
+            inp_query = self._input.param("query", str(self.sample_query))
+            query = json.loads(eval(inp_query))
+            zero_results_ok = True
         for index in self._cb_cluster.get_indexes():
-            hits, _, _ = index.execute_query(eval(query),
+            hits, _, _ = index.execute_query(query,
                                              zero_results_ok=zero_results_ok,
                                              expected_hits=expected_hits)
             self.log.info("Hits: %s" % hits)
@@ -72,7 +79,6 @@ class StableTopFTS(FTSBaseTest):
 
     def test_match_none(self):
         self.run_default_index_query(query={"match_none": {}},
-                                     zero_results_ok=True,
                                      expected_hits=0)
 
     def index_utf16_dataset(self):
