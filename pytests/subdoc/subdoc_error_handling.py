@@ -39,7 +39,7 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.client.set("normal_nested_data", 0, 0, jsonDump)
         # Tests for Simple Data Set
         self.log.info("simple_data :: empty path does not exist")
-        self.error_gets("simple_data", "", error = "Memcached error #192 'Path not exists'", field = "simple_data : empty path does not exist - dictionary", result = result)
+        self.error_gets("simple_data", "", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
         self.log.info("simple_data :: path does not exist")
         self.error_gets("simple_data", "does_not_exist", error = "Memcached error #192 'Path not exists'", field = "simple_data : path does not exist - dictionary", result = result)
         self.log.info("simple_data :: path does not exist - array, negavtie index")
@@ -92,7 +92,7 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.client.set("normal_nested_data", 0, 0, jsonDump)
         # Tests for Simple Data Set
         self.log.info("simple_data :: empty path does not exist")
-        self.error_exists("simple_data", "", error = "Memcached error #192 'Path not exists'", field = "simple_data : empty path does not exist - dictionary", result = result)
+        self.error_exists("simple_data", "", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
         self.log.info("simple_data :: path does not exist")
         self.error_exists("simple_data", "does_not_exist", error = "Memcached error #192 'Path not exists'", field = "simple_data : path does not exist - dictionary", result = result)
         self.log.info("simple_data :: path does not exist - array, negavtie index")
