@@ -53,6 +53,7 @@ class QueryTests(BaseTestCase):
         self.covering_index = self.input.param("covering_index", False)
         self.named_prepare = self.input.param("named_prepare", None)
         self.encoded_prepare = self.input.param("encoded_prepare", False)
+        self.isprepared = False
         if self.primary_indx_type.lower() == "gsi":
             self.gsi_type = self.input.param("gsi_type", None)
         else:
@@ -3190,6 +3191,7 @@ class QueryTests(BaseTestCase):
                     self.fail("There was no errors. Error expected: %s" % error)
 
     def prepared_common_body(self):
+        self.isprepared = True
         result_no_prepare = self.run_cbq_query()['results']
         if self.named_prepare:
             self.named_prepare=self.named_prepare + "_" +str(uuid.uuid4())[:4]
@@ -3246,7 +3248,9 @@ class QueryTests(BaseTestCase):
             else:
                 os = self.shell.extract_remote_info().type.lower()
                 #if (query.find("VALUES") > 0):
-                query = query.encode('unicode-escape').replace(b'"', b'\\"')
+                if not(self.isprepared):
+                    query = query.encode('unicode-escape').replace(b'"', b'\\"')
+                    query = query.encode('unicode-escape').replace(b'`', b'\\`')
                 if os == "linux":
                     cmd = "%s/go_cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
                     output = self.shell.execute_commands_inside(cmd,query,
@@ -3466,7 +3470,6 @@ class QueryTests(BaseTestCase):
         if self.flat_json:
                     return
         self.sleep(30, 'Sleep for some time prior to index creation')
-        self.log.info("CREATE PRIMARY INDEX")
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
         if versions[0].startswith("4") or versions[0].startswith("3"):
@@ -3475,17 +3478,20 @@ class QueryTests(BaseTestCase):
                     self.log.info("Dropping primary index for %s ..." % bucket.name)
                     self.query = "DROP PRIMARY INDEX ON %s" % (bucket.name)
                     self.sleep(3, 'Sleep for some time after index drop')
-                self.log.info("Creating primary index for %s ..." % bucket.name)
-                self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
-                try:
-                    self.run_cbq_query()
-                    if self.primary_indx_type.lower() == 'gsi':
-                        self._wait_for_index_online(bucket, '#primary')
-                except Exception, ex:
-                    self.log.info(str(ex))
-        self.primary_index_created = True
+                self.query = "select * from system:indexes where name='#primary'"
+                res = self.run_cbq_query(self.query)
+                if (res['metrics']['resultCount'] == 0):
+                    self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
+                    self.log.info("Creating primary index for %s ..." % bucket.name)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
+                    try:
+                        self.run_cbq_query()
+                        self.primary_index_created= True
+                        if self.primary_indx_type.lower() == 'gsi':
+                            self._wait_for_index_online(bucket, '#primary')
+                    except Exception, ex:
+                        self.log.info(str(ex))
 
     def _wait_for_index_online(self, bucket, index_name, timeout=6000):
         end_time = time.time() + timeout
