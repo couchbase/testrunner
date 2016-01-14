@@ -197,7 +197,7 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.error_replace("nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : path does not exist - too big path", result = result)
         self.assertTrue(len(result) == 0, result)
 
-    def test_error_replace(self):
+    def test_error_delete(self):
         result = {}
         simple_data = {
                     "field":"simple",
@@ -222,28 +222,29 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.client.set("normal_nested_data", 0, 0, jsonDump)
         # Tests for Simple Data Set
         self.log.info("simple_data :: empty path does not exist")
-        self.error_replace("simple_data", "", value = "value_value", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
+        self.error_delete("simple_data", "", value = "value_value", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
         self.log.info("simple_data :: document does not exist")
-        self.error_replace("does_not_exist", "does_not_exist", value = "value_value", error = "Memcached error #1 'Not found'", field = "simple_data : document does not exist", result = result)
+        self.error_delete("does_not_exist", "does_not_exist", value = "value_value", error = "Memcached error #1 'Not found'", field = "simple_data : document does not exist", result = result)
         self.log.info("simple_data :: path does not exist - array, negavtie index")
-        self.error_replace("simple_data", "array[-1]", value = "value_value", error = "Memcached error #197 'Cant insert'", field = "simple_data : path does not exist - array, negavtie index", result = result)
+        self.error_delete("simple_data", "array[-1]", value = "value_value", error = "Memcached error #197 'Cant insert'", field = "simple_data : path does not exist - array, negavtie index", result = result)
         self.log.info("simple_data :: path does not exist - array, out of bounds index")
-        self.error_replace("simple_data", "array[200]", value = "value_value", error = "Memcached error #197 'Cant insert'", field = "simple_data : path does not exist - array, out of bounds index", result = result)
+        self.error_delete("simple_data", "array[200]", value = "value_value", error = "Memcached error #197 'Cant insert'", field = "simple_data : path does not exist - array, out of bounds index", result = result)
         # Tests for Simple Data Set
         self.log.info("nested_data :: empty path does not exist")
         new_path = self.generate_path(20, "")
-        self.error_replace("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : empty path does not exist - dictionary", result = result)
+        self.error_delete("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : empty path does not exist - dictionary", result = result)
         self.log.info("nested_data :: path does not exist - array, negavtie index")
         new_path = self.generate_path(20, "array[-1]")
-        self.error_replace("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : path does not exist - array, negavtie index", result = result)
+        self.error_delete("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : path does not exist - array, negavtie index", result = result)
         self.log.info("nested_data :: path does not exist - array, out of bounds index")
         new_path = self.generate_path(20, "array[200]")
-        self.error_replace("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : path does not exist - array, out of bounds index", result = result)
+        self.error_delete("normal_nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : path does not exist - array, out of bounds index", result = result)
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
         new_path = self.generate_path(40, "field")
-        self.error_replace("nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : path does not exist - too big path", result = result)
+        self.error_delete("nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : path does not exist - too big path", result = result)
         self.assertTrue(len(result) == 0, result)
+
 
     def test_error_array_push_last(self):
         result = {}
