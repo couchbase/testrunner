@@ -2199,7 +2199,7 @@ class FTSBaseTest(unittest.TestCase):
     def construct_plan_params(self):
         plan_params = {}
         plan_params['numReplicas'] = self.index_replicas
-        plan_params['maxPartitionsPerPindex'] = self.partitions_per_pindex
+        plan_params['maxPartitionsPerPIndex'] = self.partitions_per_pindex
         return plan_params
 
     def is_index_partitioned_balanced(self, index):
@@ -2222,8 +2222,10 @@ class FTSBaseTest(unittest.TestCase):
             _, defn = index.get_index_defn()
 
         # check 1 - test number of pindexes
-        import math
-        exp_num_pindexes = math.ceil(
+        exp_num_pindexes = self._num_vbuckets/self.partitions_per_pindex
+        if self._num_vbuckets % self.partitions_per_pindex:
+            import math
+            exp_num_pindexes = math.ceil(
             self._num_vbuckets/self.partitions_per_pindex + 0.5)
         if len(defn['planPIndexes']) != exp_num_pindexes:
             self.fail("Number of pindexes for %s is %s while"
