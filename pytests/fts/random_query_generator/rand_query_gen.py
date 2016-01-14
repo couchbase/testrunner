@@ -1,7 +1,7 @@
 import random
 import json
-import sys
-sys.path.append("/Users/apiravi/testrunner")
+#import sys
+#sys.path.append("/Users/apiravi/testrunner")
 from emp_querables import EmployeeQuerables
 from wiki_queryables import WikiQuerables
 
