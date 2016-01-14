@@ -177,12 +177,9 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         hits, _, _ = index.execute_query(self.sample_query)
         new_plan_param = {"maxPartitionsPerPIndex": 30}
-        index.index_definition['params'] = \
+        index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
         index.update()
-        hits2, _, _ = index.execute_query(self.sample_query)
-        if hits != hits2:
-            self.fail("Changing maxPartitionsPerIndex results in wrong hits for"
-                      "same query")
-
+        defn = index.get_index_defn()
+        self.log.info(defn)
 

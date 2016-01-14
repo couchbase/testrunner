@@ -62,7 +62,7 @@ class EmployeeQuerables:
         return "%s@mcdiabetes.com" % self.get_random_value(FIRST_NAMES).lower()
 
     def get_queryable_empid(self):
-        return random.randint(10000000, 10001000)
+        return random.randint(10000000, 10000100)
 
     def get_queryable_salary(self):
         return round(random.random(), 2) *100000 + 50000
@@ -92,3 +92,12 @@ class EmployeeQuerables:
 
                 reports.append(self.return_unicode(self.get_queryable_full_name()))
             return ' '.join(reports)
+
+    def get_queryable_regex_name(self):
+        list = ['Ad*', 'XI+', 'I+', 'Scot+', 'Phil+', 'An.*', 'Tr*', 'Adrian?e*',
+                'Wel*[a-z]*', 'Rus+el+*', 'Ca[m-z]+', 'Kil{1}[a-z]+', '[^a-m][a-z]+',
+                'I{1,2}']
+        return self.get_random_value(list)
+
+    def get_queryable_regex_manages_reports(self):
+        return self.get_queryable_regex_name()
