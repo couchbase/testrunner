@@ -36,8 +36,9 @@ class StableTopFTS(FTSBaseTest):
         if not query:
             query = eval(self._input.param("query", str(self.sample_query)))
         for index in self._cb_cluster.get_indexes():
-            hits, _, _ = index.execute_query(query, zero_results_ok=zero_results_ok,
-                                expected_hits=expected_hits)
+            hits, _, _ = index.execute_query(eval(query),
+                                             zero_results_ok=zero_results_ok,
+                                             expected_hits=expected_hits)
             self.log.info("Hits: %s" % hits)
 
     def test_query_type(self):
