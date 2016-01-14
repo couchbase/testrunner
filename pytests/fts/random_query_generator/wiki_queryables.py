@@ -57,3 +57,12 @@ class WikiQuerables:
             return text
         except TypeError:
             return text
+
+    def get_queryable_regex_title(self):
+        list = ['Au*', '[A-Ca-z ]+', u'[A-Za-z]+\xe9*', 'Embas+y*',
+                'Etc[,./]*', 'Edit*', 'Flesch[-:]Kincaid*',
+                '[:{}()]', '[0-9]+', 'Kil+', '[E-M]ist[ ,]of*', 'm[m-t].']
+        return self.return_unicode(self.get_random_value(list))
+
+    def get_queryable_regex_revision_text_text(self):
+        return self.get_queryable_regex_title()

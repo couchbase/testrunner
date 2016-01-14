@@ -12,6 +12,7 @@ class DATASET:
                       'bool': ["is_manager"],
                       'date': ["join_date"],
                       'text': ["name", "manages_reports"]},
+
               'wiki': {'str': ["title", "revision_text_text", "type"],
                        'text': ["title", "revision_text_text"],
                        'num': ["mutated"],
@@ -73,7 +74,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
     def construct_queries(self):
         while self.iterator < self.queries_to_generate:
             fieldname = self.get_random_value(self.query_types)
-            fts_query, es_query = eval("self.construct_%s_query" % fieldname + "()")
+            fts_query, es_query = eval("self.construct_%s_query()" % fieldname)
             if not fts_query:
                 # if there are no queryable fields in a dataset for a
                 # particular data type
@@ -97,7 +98,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             es_match_query = {'match': {}}
 
             fieldname = self.get_random_value(self.fields['str'])
-            match_str = eval("self.get_queryable_%s" % fieldname + "()")
+            match_str = eval("self.get_queryable_%s()" % fieldname)
 
             fts_match_query["field"] = fieldname
             fts_match_query["match"] = match_str
@@ -268,22 +269,145 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
     def construct_es_empty_filter_query(self):
         return {'filtered': {'filter': {}}}
 
+    def construct_terms_query_string_query(self):
+        """
+        Generates disjunction, boolean query string queries
+        """
+        if bool(random.getrandbits(1)):
+            # text/str terms
+            fieldname = self.get_random_value(self.fields['str'] +
+                                              self.fields['text'])
+            match_str = eval("self.get_queryable_%s" % fieldname + "()")
+            if bool(random.getrandbits(1)):
+                return match_str
+            else:
+                return fieldname+':'+match_str
+        else:
+            # numeric range
+            operators = ['>', '>=', '<', '<=']
+            fieldname = self.get_random_value(self.fields['num'])
+            val = eval("self.get_queryable_%s" % fieldname + "()")
+            if bool(random.getrandbits(1)):
+                # upper or lower bound specified
+                end_point = fieldname + ':'+ \
+                            self.get_random_value(operators) + str(val)
+                return end_point
+            else:
+                # both upper and lower bounds specified
+                # +age:>=10 +age:<20
+                high_val = val + random.randint(2, 10000)
+                range_str = fieldname + ':'+ \
+                             self.get_random_value(operators[:1]) + str(val) +\
+                            ' +' +fieldname + ':'+ \
+                             self.get_random_value(operators[2:]) +\
+                             str(high_val)
+                return range_str
+
     def construct_query_string_query(self):
-        #TODO
-        pass
+        """
+        Returns an fts and es query string query
+        See: http://www.blevesearch.com/docs/Query-String-Query/
+        """
+        fts_query = {'query': ""}
+        es_query = {"query_string": {'query': ""}}
+        connectors = [' ', ' +', ' -']
+        match_str = ""
+
+        # search term
+        term = self.construct_terms_query_string_query()
+        connector = self.get_random_value(connectors)
+        match_str += connector + term
+
+        if bool(random.getrandbits(1)):
+            # another term
+            term = self.construct_terms_query_string_query()
+            connector = self.get_random_value(connectors)
+            match_str += connector + term
+
+            # another term
+            term = self.construct_terms_query_string_query()
+            connector = self.get_random_value(connectors)
+            match_str += connector + term
+
+        fts_query['query'] = match_str.lstrip()
+        es_query['query_string']['query'] = match_str.lstrip()
+
+        return fts_query, es_query
 
     def construct_wildcard_query(self):
-        # TODO
-        wildcard_query = {"wildcard": {}}
-        pass
+        """
+        Wildcards supported:
+         * - any char sequence (even empty)
+         ? - any single char
+        Sample FTS query:
+        {
+            "field":  "user",
+            "wildcard": "ki*y"
+        }
+        """
+        fts_query = {}
+        es_query = {"wildcard": {}}
+        fieldname = self.get_random_value(self.fields['str'] +
+                                              self.fields['text'])
+        match_str = eval("self.get_queryable_%s" % fieldname + "()")
+        if bool(random.getrandbits(1)):
+            # '*' query
+            pos = random.randint(0, len(match_str)-1)
+            match_str = match_str[:pos] + '*'
+        else:
+            # '?' query
+            pos = random.randint(0, len(match_str)-1)
+            match_str = match_str.replace(match_str[pos], '?')
+
+        fts_query['field'] = fieldname
+        fts_query['wildcard'] = match_str
+
+        es_query['wildcard'][fieldname] = match_str
+
+        return fts_query, es_query
 
     def construct_regexp_query(self):
-        #TODO
-        pass
+        """
+        All regexp queries are not generated but defined by the dataset
+        queryables
+        """
+        fts_query = {}
+        es_query = {'regexp': {}}
+        fieldname = self.get_random_value(self.fields['text'])
+        match_str = eval("self.get_queryable_regex_%s" % fieldname + "()")
+        fts_query['field'] = fieldname
+        fts_query['regexp'] = match_str
 
-    def construct_match_all_query(self):
-        query = {'match_all': {}}
-        return query, query
+        es_query['regexp'][fieldname] = match_str
+
+        return fts_query, es_query
+
+    def construct_fuzzy_query(self):
+        """
+        fuzziness: edit distance (0: exact search to 1: fuzziness,
+        2: more fuzziness and so on
+        In FTS, fuzzy queries are performed on match and term queries
+        """
+        fts_query = {}
+        es_query = {'fuzzy': {}}
+        fuzziness = random.randint(0, 2)
+        fieldname = self.get_random_value(self.fields['str'] +
+                                          self.fields['text'])
+        match_str = eval("self.get_queryable_%s" % fieldname + "()")
+        if bool(random.getrandbits(1)):
+            match_str = match_str[1:]
+        else:
+            match_str = match_str[:len(match_str)-2]
+
+        fts_query['field'] = fieldname
+        fts_query['match'] = match_str
+        fts_query['fuzziness'] = fuzziness
+
+        es_query['fuzzy'][fieldname] = {}
+        es_query['fuzzy'][fieldname]['value'] = match_str
+        es_query['fuzzy'][fieldname]['fuzziness'] = fuzziness
+
+        return fts_query, es_query
 
     def construct_compound_query(self):
         """
@@ -319,10 +443,10 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         return self.get_random_value(doc_types)
 
 if __name__ == "__main__":
-    #query_type=["match", "match_phrase","bool", "conjunction", "disjunction",
-    # "prefix"]
-    query_type = ['match_phrase', 'match', 'date_range', 'numeric_range', 'bool', 'conjunction', 'disjunction', 'prefix']
-    query_gen = FTSESQueryGenerator(100, query_type=query_type, dataset='wiki')
+    #query_type=['match_phrase', 'match', 'date_range', 'numeric_range', 'bool',
+    #              'conjunction', 'disjunction', 'prefix']
+    query_type = ['regexp']
+    query_gen = FTSESQueryGenerator(30, query_type=query_type, dataset='all')
     for index, query in enumerate(query_gen.fts_queries):
         print json.dumps(query, ensure_ascii=False, indent=3)
         print json.dumps(query_gen.es_queries[index], ensure_ascii=False, indent=3)

@@ -1049,8 +1049,6 @@ class ESRunQueryCompare(Task):
         self.show_results = False
         self.query_index = query_index
         self.passed = True
-        self.log.info("Query verification in progress for %s..."
-                      % json.dumps(self.fts_query, ensure_ascii=False))
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1085,12 +1083,12 @@ class ESRunQueryCompare(Task):
                 else:
                     if fts_but_not_es:
                         msg = "FAIL: Following %s doc(s) were not returned" \
-                              " by ES,but FTS: %s" \
-                              % (len(fts_but_not_es), fts_but_not_es)
+                              " by ES,but FTS, printing 50: %s" \
+                              % (len(fts_but_not_es), fts_but_not_es[:50])
                     else:
                         msg = "FAIL: Following %s docs were not returned" \
-                              " by FTS, but ES: %s" \
-                              % (len(es_but_not_fts), es_but_not_fts)
+                              " by FTS, but ES, printing 50: %s" \
+                              % (len(es_but_not_fts), es_but_not_fts[:50])
                     self.log.error(msg)
                     self.passed = False
             self.state = CHECKING
