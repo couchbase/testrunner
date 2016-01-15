@@ -9,6 +9,7 @@ import logging
 import json
 import commands
 import mc_bin_client
+import traceback
 
 from memcached.helper.data_helper import VBucketAwareMemcached
 from couchbase_helper.documentgenerator import BlobGenerator
@@ -124,6 +125,12 @@ class BaseTestCase(unittest.TestCase):
             self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
             self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
             self.enable_bloom_filter = self.input.param("enable_bloom_filter", False)
+
+            self.enable_time_sync = self.input.param("enable_time_sync", False)
+            if self.enable_time_sync:
+                # retrieved now for later use
+                self.memcache_admin, self.memcache_admin_password = RestConnection(self.master).get_admin_credentials()
+
             if not self.skip_init_check_cbserver:
                 self.protocol = self.get_protocol_type()
             self.services_map = None
@@ -232,6 +239,7 @@ class BaseTestCase(unittest.TestCase):
                 self._log_start(self)
             self.sleep(10)
         except Exception, e:
+            traceback.print_exc()
             self.cluster.shutdown(force=True)
             self.fail(e)
 
@@ -384,6 +392,9 @@ class BaseTestCase(unittest.TestCase):
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self.num_replicas, bucket_size=self.bucket_size,
                                        eviction_policy=self.eviction_policy))
+            if self.enable_time_sync:
+                self._set_time_sync_on_buckets( ['default'] )
+
 
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
@@ -392,6 +403,30 @@ class BaseTestCase(unittest.TestCase):
     def _get_bucket_size(self, mem_quota, num_buckets):
         # min size is 100MB now
         return max(100, int(float(mem_quota) / float(num_buckets)))
+
+
+
+    def _set_time_sync_on_buckets(self, buckets):
+
+        for b in buckets:
+
+            client1 = VBucketAwareMemcached( RestConnection(self.master), b)
+
+            """ this a possible optimization but we need to re-auth below for reason I do not understand yet
+            for s in [self.master]:
+                client = MemcachedClient(s.ip, 11210)
+                client.sasl_auth_plain(self.memcache_admin, self.memcache_admin_password)
+                client.bucket_select(b)
+            """
+
+
+            for j in range(1): #self.vbuckets):
+                active_vbucket = client1.memcached_for_vbucket ( j )
+                active_vbucket.sasl_auth_plain(self.memcache_admin, self.memcache_admin_password)
+                active_vbucket.bucket_select(b)
+                result = active_vbucket.set_time_sync_state(j, 1)
+
+
 
     def _create_sasl_buckets(self, server, num_buckets, server_id=None, bucket_size=None, password='password'):
         if not num_buckets:
@@ -418,6 +453,9 @@ class BaseTestCase(unittest.TestCase):
                                        master_id=server_id, eviction_policy=self.eviction_policy));
         for task in bucket_tasks:
             task.result(self.wait_timeout * 10)
+
+        if self.enable_time_sync:
+            self._set_time_sync_on_buckets( ['bucket' + str(i) for i in range(num_buckets)] )
 
     def _create_standard_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
         if not num_buckets:
@@ -447,6 +485,10 @@ class BaseTestCase(unittest.TestCase):
         for task in bucket_tasks:
             task.result(self.wait_timeout * 10)
 
+
+        if self.enable_time_sync:
+            self._set_time_sync_on_buckets( ['standard_bucket' + str(i) for i in range(num_buckets)] )
+
     def _create_buckets(self, server, bucket_list, server_id=None, bucket_size=None):
         if server_id is None:
             server_id = RestConnection(server).get_nodes_self().id
@@ -474,6 +516,9 @@ class BaseTestCase(unittest.TestCase):
                                        eviction_policy=self.eviction_policy));
         for task in bucket_tasks:
             task.result(self.wait_timeout * 10)
+
+        if self.enable_time_sync:
+            self._set_time_sync_on_bucket( bucket_list )
 
     def _create_memcached_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
         if not num_buckets:
