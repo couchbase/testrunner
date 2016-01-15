@@ -344,6 +344,15 @@ class MemcachedClient(object):
         return self._doCmd(memcacheConstants.CMD_SET_DRIFT_COUNTER_STATE, '', '', extras)
 
 
+
+    def set_time_sync_state(self, vbucket, state):
+        """Get the value for a given key within the memcached server."""
+        self.vbucketId = vbucket
+        extras = struct.pack(memcacheConstants.SET_DRIFT_COUNTER_STATE_REQ_FMT, 0, state)
+        return self._doCmd(memcacheConstants.CMD_SET_DRIFT_COUNTER_STATE, '', '', extras)
+
+
+
     def cas(self, key, exp, flags, oldVal, val, vbucket= -1):
         """CAS in a new value for the given key and comparison value."""
         self._set_vbucket(key, vbucket)

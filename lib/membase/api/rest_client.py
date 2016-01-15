@@ -1230,6 +1230,16 @@ class RestConnection(object):
         log.info("diag/masterEvents?o=1 status: {0} content: {1}".format(status, content))
         return status, content
 
+
+    def get_admin_credentials(self):
+
+        code = 'ns_config:search_node_prop(node(), ns_config:latest(), memcached, admin_user)'
+        status, id = self.diag_eval(code)
+
+        code = 'ns_config:search_node_prop(node(), ns_config:latest(), memcached, admin_pass)'
+        status, password = self.diag_eval(code)
+        return id.strip('"'), password.strip('"')
+
     def monitorRebalance(self, stop_if_loop=True):
         start = time.time()
         progress = 0
