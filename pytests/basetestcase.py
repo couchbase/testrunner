@@ -420,7 +420,7 @@ class BaseTestCase(unittest.TestCase):
             """
 
 
-            for j in range(1): #self.vbuckets):
+            for j in range(self.vbuckets):
                 active_vbucket = client1.memcached_for_vbucket ( j )
                 active_vbucket.sasl_auth_plain(self.memcache_admin, self.memcache_admin_password)
                 active_vbucket.bucket_select(b)
