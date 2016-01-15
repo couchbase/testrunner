@@ -11,19 +11,20 @@ class SubdocHelper():
     		if path != "":
     			prefix = path+"."
     		if isinstance(json[key], dict):
-    			self.find_json_paths(json[key], prefix+key, pairs)
-    		if isinstance(json[key], list):
-    			self.find_array_paths(json[key], prefix+key, pairs)
+    			self.find_json_paths(json[key], prefix + key, pairs)
+    		elif isinstance(json[key], list):
+    			self.find_array_paths(json[key], prefix + key, pairs)
     		pairs[prefix+key] = json[key]
 
     def find_array_paths(self, array = [], path  = "", pairs = {}):
     	index = 0
     	for element in array:
     		if isinstance(element, dict):
-    			self.find_json_paths(element, copy.deepcopy(path)+"["+str(index)+"]", pairs)
-    		if isinstance(element, list):
-    			self.find_array_paths(element, copy.deepcopy(path)+"["+str(index)+"]", pairs)
-    		pairs[path+"["+str(index)+"]"] =element
+    			self.find_json_paths(element, path + "["+str(index)+"]", pairs)
+    		elif isinstance(element, list):
+    			self.find_array_paths(element, path + "["+str(index)+"]", pairs)
+    		else:
+    			pairs[path+"["+str(index)+"]"] =element
     		index += 1
 
     def show_all_paths(self, pairs):
