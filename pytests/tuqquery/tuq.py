@@ -2426,9 +2426,9 @@ class QueryTests(BaseTestCase):
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
                 if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(name, email, join_mo)  USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(name, email, join_mo)  USING %s" % (index_name, bucket.name,self.index_type)
                 elif ind =="two":
-                    self.query = "CREATE INDEX %s ON %s(email,join_mo) USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(email,join_mo) USING %s" % (index_name, bucket.name,self.index_type)
                 if self.gsi_type:
                     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
@@ -2436,6 +2436,7 @@ class QueryTests(BaseTestCase):
                 created_indexes.append(index_name)
         for bucket in self.buckets:
             self.query = "explain select name from %s where name is not null union select email from %s where email is not null and join_mo >2 " % (bucket.name, bucket.name)
+            import pdb;pdb.set_trace()
             if self.covering_index:
                 self.test_explain_covering_index(index_name[0])
             self.query = "select name from %s where name is not null union select email from %s where email is not null and join_mo >2" % (bucket.name, bucket.name)
@@ -2451,7 +2452,7 @@ class QueryTests(BaseTestCase):
             expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
             for index_name in created_indexes:
-                self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
 
     def test_union_aggr_fns(self):
@@ -3257,6 +3258,7 @@ class QueryTests(BaseTestCase):
                                                            subcommands=[query,],
                                                            min_output_size=20,
                                                            end_msg='go_cbq>')
+                    #output = self.shell.execute_commands_inside(cmd,query)
                     print output
                     result = json.loads(output)
         if isinstance(result, str) or 'errors' in result:
@@ -3478,7 +3480,7 @@ class QueryTests(BaseTestCase):
                     self.log.info("Dropping primary index for %s ..." % bucket.name)
                     self.query = "DROP PRIMARY INDEX ON %s" % (bucket.name)
                     self.sleep(3, 'Sleep for some time after index drop')
-                self.query = "select * from system:indexes where name='#primary'"
+                self.query = "select * from system:indexes where name='#primary' and keyspace_id = %s" % bucket.name
                 res = self.run_cbq_query(self.query)
                 if (res['metrics']['resultCount'] == 0):
                     self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
