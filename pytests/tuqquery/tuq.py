@@ -2436,7 +2436,6 @@ class QueryTests(BaseTestCase):
                 created_indexes.append(index_name)
         for bucket in self.buckets:
             self.query = "explain select name from %s where name is not null union select email from %s where email is not null and join_mo >2 " % (bucket.name, bucket.name)
-            import pdb;pdb.set_trace()
             if self.covering_index:
                 self.test_explain_covering_index(index_name[0])
             self.query = "select name from %s where name is not null union select email from %s where email is not null and join_mo >2" % (bucket.name, bucket.name)
