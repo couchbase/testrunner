@@ -39,8 +39,9 @@ class StableTopFTS(FTSBaseTest):
             if expected_hits:
                 zero_results_ok = False
         if not query:
-            inp_query = self._input.param("query", str(self.sample_query))
-            query = json.loads(eval(inp_query))
+            query = eval(self._input.param("query", str(self.sample_query)))
+            if isinstance(query, str):
+                query = json.loads(query)
             zero_results_ok = True
         for index in self._cb_cluster.get_indexes():
             hits, _, _ = index.execute_query(query,
