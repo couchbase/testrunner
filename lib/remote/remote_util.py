@@ -32,6 +32,8 @@ from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
+from testconstants import CB_RELEASE_APT_GET_REPO
+from testconstants import CB_RELEASE_YUM_REPO
 from membase.api.rest_client import RestConnection, RestHelper
 
 log = logger.Logger.get_logger()
@@ -1460,6 +1462,56 @@ class RemoteMachineShellConnection:
                                                           .format(capture_iss_file))
             return success
 
+    def install_server_via_repo(self, deliverable_type, cb_edition, remote_client):
+        if cb_edition:
+            cb_edition = "-" + cb_edition
+        if deliverable_type == "deb":
+            self.update_couchbase_release(remote_client, deliverable_type)
+            output, error = self.execute_command("yes \
+                   | apt-get install couchbase-server{0}".format(cb_edition))
+            self.log_command_output(output, error)
+
+    def update_couchbase_release(self, remote_client, deliverable_type):
+        if deliverable_type == "deb":
+            """ remove old couchbase-release package """
+            log.info("remove couchbase-release at node {0}".format(self.ip))
+            output, error = self.execute_command("dpkg --get-selections |\
+                                                              grep couchbase")
+            self.log_command_output(output, error)
+            for str in output:
+                if "couchbase-release" in str:
+                    output, error = self.execute_command("apt-get \
+                                                   purge -y couchbase-release")
+            output, error = self.execute_command("dpkg --get-selections |\
+                                                              grep couchbase")
+            self.log_command_output(output, error)
+            package_remove = True
+            for str in output:
+                if "couchbase-release" in str:
+                    package_remove = False
+                    log.info("couchbase-release is not removed at node {0}" \
+                                                                  .format(self.ip))
+                    sys.exit("***  Node %s failed to remove couchbase-release  ***"\
+                                                                        % (self.ip))
+            """ install new couchbase-release package """
+            log.info("install new couchbase-release repo at node {0}" \
+                                                             .format(self.ip))
+            self.execute_command("rm -rf /tmp/couchbase-release*")
+            self.execute_command("cd /tmp; wget {0}".format(CB_RELEASE_APT_GET_REPO))
+            output, error = self.execute_command("dpkg -i /tmp/couchbase-release*")
+            self.log_command_output(output, error)
+            output, error = self.execute_command("dpkg --get-selections |\
+                                                              grep couchbase")
+            package_updated = False
+            for str in output:
+                if "couchbase-release" in str:
+                    package_updated = True
+                    log.info("couchbase-release installed on node {0}" \
+                                               .format(self.ip))
+                    return package_updated
+            if not package_updated:
+                sys.exit("fail to install %s on node %s" % \
+                                  (CB_RELEASE_APT_GET_REPO.rsplit("/",1)[-1], self.ip))
 
     def install_moxi(self, build):
         success = True
