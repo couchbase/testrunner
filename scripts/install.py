@@ -173,6 +173,11 @@ class Installer(object):
             if "url" in params and params["url"] != "":
                 direct_build_url = params["url"]
         if ok:
+            if "linux_repo" in params and params["linux_repo"].lower() == "true":
+                linux_repo = True
+            else:
+                linux_repo = False
+        if ok:
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
             cb_alias = ["couchbase", "couchbase-server", "cb"]
             css_alias = ["couchbase-single", "couchbase-single-server", "css"]
@@ -203,7 +208,7 @@ class Installer(object):
         remote_client = RemoteMachineShellConnection(server)
         info = remote_client.extract_remote_info()
         remote_client.disconnect()
-        if ok:
+        if ok and not linux_repo:
             timeout = 300
             if "timeout" in params:
                 timeout = int(params["timeout"])
@@ -272,8 +277,9 @@ class Installer(object):
                     else:
                         sys.exit("ERROR: URL is not good. Check URL again")
             _errors.append(errors["BUILD-NOT-FOUND"])
-        msg = "unable to find a build for product {0} version {1} for package_type {2}"
-        raise Exception(msg.format(names, version, info.deliverable_type))
+        if not linux_repo:
+            msg = "unable to find a build for product {0} version {1} for package_type {2}"
+            raise Exception(msg.format(names, version, info.deliverable_type))
 
     def is_socket_active(self, host, port, timeout=300):
         """ Check if remote socket is open and active
@@ -517,33 +523,45 @@ class CouchbaseServerInstaller(Installer):
         else:
             xdcr_upr = eval(params["xdcr_upr"].capitalize())
 
-        if type == "windows":
-            remote_client.download_binary_in_win(build.url, params["version"])
-            success = remote_client.install_server_win(build, \
-                        params["version"].replace("-rel", ""), vbuckets=vbuckets)
+        if "linux_repo" in params and params["linux_repo"].lower() == "true":
+            linux_repo = True
         else:
-            downloaded = remote_client.download_build(build)
-            if not downloaded:
-                log.error('server {1} unable to download binaries : {0}' \
+            linux_repo = False
+        if not linux_repo:
+            if type == "windows":
+                remote_client.download_binary_in_win(build.url, params["version"])
+                success = remote_client.install_server_win(build, \
+                        params["version"].replace("-rel", ""), vbuckets=vbuckets)
+            else:
+                downloaded = remote_client.download_build(build)
+                if not downloaded:
+                    log.error('server {1} unable to download binaries : {0}' \
                           .format(build.url, params["server"].ip))
-                return False
-            # TODO: need separate methods in remote_util for couchbase and membase install
-            path = server.data_path or '/tmp'
-            try:
-                success = remote_client.install_server(build, path=path, vbuckets=vbuckets, swappiness=swappiness,
-                                                       openssl=openssl, upr=upr, xdcr_upr=xdcr_upr)
-                log.info('wait 5 seconds for membase server to start')
-                time.sleep(5)
-                if "rest_vbuckets" in params:
-                    rest_vbuckets = int(params["rest_vbuckets"])
-                    ClusterOperationHelper.set_vbuckets(server, rest_vbuckets)
-            except BaseException, e:
-                success = False
-                log.error("installation failed: {0}".format(e))
-        remote_client.disconnect()
-        if queue:
-            queue.put(success)
-        return success
+                    return False
+                # TODO: need separate methods in remote_util for couchbase and membase install
+                path = server.data_path or '/tmp'
+                try:
+                    success = remote_client.install_server(build, path=path, \
+                                         vbuckets=vbuckets, swappiness=swappiness,\
+                                        openssl=openssl, upr=upr, xdcr_upr=xdcr_upr)
+                    log.info('wait 5 seconds for membase server to start')
+                    time.sleep(5)
+                    if "rest_vbuckets" in params:
+                        rest_vbuckets = int(params["rest_vbuckets"])
+                        ClusterOperationHelper.set_vbuckets(server, rest_vbuckets)
+                except BaseException, e:
+                    success = False
+                    log.error("installation failed: {0}".format(e))
+            remote_client.disconnect()
+            if queue:
+                queue.put(success)
+            return success
+        elif linux_repo:
+            cb_edition = ""
+            if "type" in params and params["type"] == "community":
+                cb_edition = "community"
+            remote_client.install_server_via_repo(info.deliverable_type,cb_edition,\
+                                                  remote_client)
 
 
 class MongoInstaller(Installer):
