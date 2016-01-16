@@ -8,13 +8,14 @@ COUCHBASE_DATA_PATH = "/opt/couchbase/var/lib/couchbase/data/"
 COUCHBASE_VERSIONS = ["1.8.0r", "1.8.0", "1.8.1", "2.0.0", "2.0.1", "2.0.2", "2.1.0",
                       "2.1.1", "2.2.0", "2.2.1", "2.5.0", "2.5.1", "2.5.2", "3.0.0",
                       "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2", "3.1.3",
-                      "3.1.4", "3.5.0", "4.0.0", "4.0.1", "4.1.0", "4.5.0", "4.7.0"]
+                      "3.1.4", "3.5.0", "4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.5.0",
+                      "4.7.0"]
 COUCHBASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1",
                             "3.1.2", "3.1.3", "3.1.4", "3.5.0", "4.0.0", "4.0.1",
-                            "4.1.0", "4.5.0", "4.7.0"]
+                            "4.1.0", "4.1.1", "4.5.0", "4.7.0"]
 COUCHBASE_RELEASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0",
                                     "3.1.1", "3.1.2", "3.1.3", "4.0.0", "4.1.0"]
-COUCHBASE_FROM_VERSION_4 = ["4.0.0", "4.0.1", "4.1.0", "4.5.0", "4.7.0"]
+COUCHBASE_FROM_VERSION_4 = ["4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.5.0", "4.7.0"]
 COUCHBASE_RELEASE_VERSIONS_3 = ["3.0.1", "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
                                 "3.0.3-1716", "3.1.0", "3.1.0-1797", "3.1.1", "3.1.1-1807",
                                 "3.1.2", "3.1.2-1815", "3.1.3", "3.1.3-1823"]
@@ -28,7 +29,7 @@ COUCHBASE_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.
                        "3.1.3", "3.1.4", "3.5.0"]
 WIN_CB_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1","3.1.2",
                     "3.1.3", "3.1.4"]
-SHERLOCK_VERSION = ["4.0.0", "4.0.1", "4.0", "4.1.0", "4.1","4.5.0","4.5"]
+SHERLOCK_VERSION = ["4.0.0", "4.0.1", "4.0", "4.1.0", "4.1", "4.1.1", "4.5.0", "4.5"]
 CB_VERSION_NAME = {"4.0":"sherlock", "4.1":"sherlock", "4.5":"watson", "4.7":"spock"}
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
@@ -51,6 +52,7 @@ WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F", "170":"AF3F80E
                    "314":"040F761F-28D9-F0F4-99F1-9D572E6EB826",
                    "350":"24D9F882-481C-2B04-0572-00B273CE17B3", "400":"24D9F882-481C-2B04-0572-00B273CE17B3",
                    "401":"898C4818-1F6D-C554-1163-6DF5C0F1F7D8", "410":"898C4818-1F6D-C554-1163-6DF5C0F1F7D8",
+                   "411":"8A2472CD-C408-66F4-B53F-6797FCBF7F4C",
                    "450":"A4BB2687-E63E-F424-F9F3-18D739053798", "470":"5F8BB367-A796-1104-05DE-00BCD7A787A5"}
 """ This "220":"CC4CF619-03B8-462A-8CCE-7CA1C22B337B" is for build 2.2.0-821 and earlier
     The new build register ID for 2.2.0-837 id is set in create_windows_capture_file in remote_util
@@ -116,3 +118,5 @@ CB_RELEASE_REPO = "http://172.23.120.24/builds/releases/"
 MC_BIN_CLIENT = "mc_bin_client"
 TESTRUNNER_CLIENT = "testrunner_client"
 PYTHON_SDK = "python_sdk"
+CB_RELEASE_APT_GET_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-release/10/couchbase-release-1.0-0.deb"
+CB_RELEASE_YUM_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-release/10/couchbase-release-1.0-0.noarch.rpm"
