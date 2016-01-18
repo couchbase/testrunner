@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 import copy
+import random
+from random_gen import RandomDataGenerator
 
 class SubdocHelper():
     def __init__(self):
-    	print "Initialize SubdocHelper"
+      self.randomDataGenerator = RandomDataGenerator()
 
     def find_json_paths(self, json = {}, path  = "", pairs = {}):
     	for key in json.keys():
@@ -68,6 +70,7 @@ class SubdocHelper():
         trial += 1
         if trial == max_number_operations:
           return
+
     def parse_and_get_data(self, data_set, path):
       print "parse_and_get_data"
       for key in path.split("."):
@@ -81,6 +84,9 @@ class SubdocHelper():
             data_set = data_set[index]
       return data_set
 
+    def gen_data(self):
+        return self.randomDataGenerator.gen_data()
+
     def doNoMutationOperation(self,  operation, data_set, value):
       print "doNoMutationOperation"
 
@@ -90,13 +96,13 @@ class SubdocHelper():
     def isMutationOperation(self, operation):
       return False
 
-    def pick_operations(self, data):
-      array_ops = ["array_op1", "array_op2", "array_op3"]
-      field_ops = ["field_op1", "field_op2", "field_op3"]
-      if isinstance(element, list):
+    def pick_operations(self, path = "", data = None):
+      array_ops = ["array_first", "array_last", "array_unique", "array_insert", "array_read", "get", "exists", "delete", "replace"]
+      dict_ops = ["dict_add", "dict_upsert", "get", "exists", "delete", "replace" ]
+      if "[" in path or isinstance(element, list):
         return "array", random.choice(array_ops)
       else:
-        return "other", random.choice(field_ops)
+        return "field", random.choice(dict_ops)
 
     def isPathPresent(self, path, filter_paths = []):
       for path_parent in filter_paths:
@@ -121,6 +127,15 @@ if __name__=="__main__":
     nest_json = [{"field_1":1}, {"field_2":2}, 3]
     helper.find_pairs(nest_json,"", pairs)
     helper.show_all_paths(pairs, nest_json)
+    print helper.gen_data()
+    print helper.gen_data()
+    print helper.gen_data()
+    print helper.gen_data()
+    print helper.gen_data()
+    print helper.gen_data()
+    print helper.gen_data()
+    print helper.gen_data()
+    print helper.gen_data()
     '''data_set = {"field":{"field":1},"array":[0,1,2,3]}
     print helper.parse_and_get_data(data_set, "field")
     print helper.parse_and_get_data(data_set, "field.field")
