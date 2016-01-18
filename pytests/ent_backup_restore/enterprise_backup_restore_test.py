@@ -1,3 +1,4 @@
+import re
 from random import randrange
 
 from couchbase_helper.cluster import Cluster
@@ -274,9 +275,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.assertEqual(items, self.num_items, "Mismatch in items for --bucket-backup option")
         self.log.info("Expected number of items for --bucket-backup option")
 
-    def _take_n_backups(self, n=1):
+    def _take_n_backups(self, n=1, validate=False):
         for i in range(1, n + 1):
-            self.backup_cluster()
+            if validate:
+                self.backup_cluster_validate()
+            else:
+                self.backup_cluster()
 
     def test_backup_compact(self):
         """
@@ -803,3 +807,97 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
                         "Expected error message not thrown by Restore 180 seconds after memcached crash")
         self.log.info("Expected error message thrown by Restore 180 seconds after memcached crash")
+
+    def test_backup_merge(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Takes specified number of backups (param number_of_backups - should be atleast 2 for this test case)
+        3. Executes list command and validates if all backups are present
+        4. Randomly selects a start and end and merges the backups
+        5. Executes list command again and validates if the new merges set of backups are listed
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self._take_n_backups(n=self.backupset.number_of_backups)
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        backup_count = 0
+        for line in output:
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line):
+                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line).group()
+                if backup_name in self.backups:
+                    backup_count += 1
+                    self.log.info("{0} matched in list command output".format(backup_name))
+        self.assertEqual(backup_count, len(self.backups), "Initial number of backups did not match")
+        self.log.info("Initial number of backups matched")
+        self.backupset.start = randrange(1, self.backupset.number_of_backups)
+        self.backupset.end = randrange(self.backupset.start + 1, self.backupset.number_of_backups + 1)
+        status, output, message = self.backup_merge()
+        if not status:
+            self.fail(message)
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        backup_count = 0
+        for line in output:
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line):
+                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line).group()
+                if backup_name in self.backups:
+                    backup_count += 1
+                    self.log.info("{0} matched in list command output".format(backup_name))
+        self.assertEqual(backup_count, len(self.backups), "Merged number of backups did not match")
+        self.log.info("Merged number of backups matched")
+
+    def test_backup_merge_with_restore(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Takes two backups - restores from the backups and validates
+        3. Merges both the backups - restores from merged backup and validates
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self._take_n_backups(n=2)
+        self.backupset.start = 1
+        self.backupset.end = 2
+        output, error = self.backup_restore()
+        if error:
+            self.fail("Restoring backup failed")
+        self.log.info("Finished restoring backup before merging")
+        status, output, message = self.backup_merge()
+        if not status:
+            self.fail(message)
+        self.backupset.start = 1
+        self.backupset.end = 1
+        output, error = self.backup_restore()
+        if error:
+            self.fail("Restoring backup failed")
+        self.log.info("Finished restoring backup after merging")
+
+    def test_backup_merge_with_unmerged(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Takes two backups - merges them into one
+        3. Takes 2 more backups - merges the new backups with already merged ones and validates
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self._take_n_backups(n=2)
+        self.backupset.start = 1
+        self.backupset.end = 2
+        self.log.info("Merging existing incremental backups")
+        status, output, message = self.backup_merge()
+        if not status:
+            self.fail(message)
+        self.log.info("Taking more backups")
+        self._take_n_backups(n=2)
+        self.backupset.start = 1
+        self.backupset.end = 3
+        self.log.info("Merging new backups into already merged backup")
+        status, output, message = self.backup_merge()
+        if not status:
+            self.fail(message)
+        self.log.info("Successfully merged new backups with already merged backup")

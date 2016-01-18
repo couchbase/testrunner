@@ -335,6 +335,36 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.fail(message)
         self.log.info(message)
 
+    def backup_merge(self):
+        self.log.info("backups before merge: " + str(self.backups))
+        self.log.info("number_of_backups_taken before merge: " + str(self.number_of_backups_taken))
+        try:
+            backup_start = self.backups[int(self.backupset.start) - 1]
+        except IndexError:
+            backup_start = "{0}{1}".format(self.backups[-1], self.backupset.start)
+        try:
+            backup_end = self.backups[int(self.backupset.end) - 1]
+        except IndexError:
+            backup_end = "{0}{1}".format(self.backups[-1], self.backupset.end)
+        args = "merge --dir {0} --name {1} --start {2} --end {3}".format(self.backupset.directory, self.backupset.name,
+                                                                         backup_start, backup_end)
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = "{0}/backup {1}".format(self.cli_command_location, args)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error or "Merge completed successfully" not in output[0]:
+            return False, error, "Merging backup failed"
+        del self.backups[self.backupset.start - 1:self.backupset.end]
+        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        o, e = remote_client.execute_command(command)
+        if o:
+            self.backups.insert(self.backupset.start - 1, o[0])
+        self.number_of_backups_taken -= (self.backupset.end - self.backupset.start + 1)
+        self.number_of_backups_taken += 1
+        self.log.info("backups after merge: " + str(self.backups))
+        self.log.info("number_of_backups_taken after merge: " + str(self.number_of_backups_taken))
+        return True, output, "Merging backup succeeded"
+
 class Backupset:
     def __init__(self):
         self.backup_host = None
