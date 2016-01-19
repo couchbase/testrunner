@@ -148,13 +148,11 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             self.query = 'SELECT ALL tasks_points.task1 FROM %s '  % (bucket.name) +\
                          'ORDER BY tasks_points.task1'
-
             actual_result = self.run_cbq_query()
             expected_result = [{"task1" : doc['tasks_points']['task1']}
                                for doc in self.full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['task1']))
             self._verify_results(actual_result['results'], expected_result)
-
             self.query = 'SELECT ALL skills[0] as skill' +\
                          ' FROM %s ORDER BY skills[0]'  % (bucket.name)
             actual_result = self.run_cbq_query()
@@ -2473,9 +2471,9 @@ class QueryTests(BaseTestCase):
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
                 if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(name, email, join_day)  USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(name, email, join_day)  USING %s" % (index_name, bucket.name,self.index_type)
                 elif ind =="two":
-                    self.query = "CREATE INDEX %s ON %s(email)  USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(email)  USING %s" % (index_name, bucket.name,self.index_type)
                 if self.gsi_type:
                     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
@@ -2492,6 +2490,9 @@ class QueryTests(BaseTestCase):
             expected_result.extend([{"emails" : len(self.full_list)}])
             expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
+            for index_name in created_indexes:
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
+                self.run_cbq_query()
 
         ############## META NEW ###################
     def test_meta_basic(self):
@@ -2699,9 +2700,9 @@ class QueryTests(BaseTestCase):
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
                 if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(job_title, name)  USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(job_title, name)  USING %s" % (index_name, bucket.name,self.index_type)
                 elif ind =="two":
-                    self.query = "CREATE INDEX %s ON %s(join_day, name)  USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(join_day, name)  USING %s" % (index_name, bucket.name,self.index_type)
                 if self.query:
                     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
@@ -2721,10 +2722,7 @@ class QueryTests(BaseTestCase):
 
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
-                if ind =="one":
-                    self.query = "DROP INDEX %s.%s USING GSI" % (bucket.name, index_name)
-                elif ind =="two":
-                    self.query = "DROP INDEX %s.%s USING GSI" % (bucket.name, index_name)
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
 
     def test_intersect_all(self):
@@ -3241,7 +3239,7 @@ class QueryTests(BaseTestCase):
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
-                                                            "shell/cbq/cbq ",
+                                                            "shell/cbq/cbq ","",
                                                        subcommands=[query,],
                                                        min_output_size=20,
                                                        end_msg='cbq>')
@@ -3253,7 +3251,7 @@ class QueryTests(BaseTestCase):
                     query = query.encode('unicode-escape').replace(b'`', b'\\`')
                 if os == "linux":
                     cmd = "%s/go_cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
-                    output = self.shell.execute_commands_inside(cmd,query,
+                    output = self.shell.execute_commands_inside(cmd,query,"",
                                                            subcommands=[query,],
                                                            min_output_size=20,
                                                            end_msg='go_cbq>')

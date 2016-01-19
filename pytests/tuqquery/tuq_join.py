@@ -108,30 +108,33 @@ class JoinTests(QueryTests):
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
                 if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(project, name, tasks_ids)  USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(name, tasks_ids,project)  USING %s" % (index_name, bucket.name,self.index_type)
                     if self.gsi_type:
                         self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
         for bucket in self.buckets:
-            self.query = "EXPLAIN SELECT employee.name, employee.tasks_ids, new_project_full.project new_project " +\
+            self.query = "EXPLAIN SELECT employee.name, employee.tasks_ids, employee.project new_project " +\
                          "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
-                         "ON KEYS employee.tasks_ids WHERE employee.project == 'IT'"
+                         "ON KEYS employee.tasks_ids WHERE employee.name == 'employee-9'"
             if self.covering_index:
                 self.test_explain_covering_index(index_name[0])
-            self.query = "SELECT employee.name, employee.tasks_ids, new_project_full.project new_project " +\
+            self.query = "SELECT employee.name, employee.tasks_ids " +\
                          "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
-                         "ON KEYS employee.tasks_ids WHERE employee.project == 'IT'"
+                         "ON KEYS employee.tasks_ids WHERE employee.name == 'employee-9'"
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = self._generate_full_joined_docs_list(join_type=self.type_join)
-            expected_result = [{"name" : doc['name'], "tasks_ids" : doc['tasks_ids'],
-                                "new_project" : doc['project']}
-            for doc in expected_result if doc and 'project' in doc and\
-                                          doc['project'] == 'IT']
+            expected_result = [{"name" : doc['name'], "tasks_ids" : doc['tasks_ids']
+                                }
+            for doc in expected_result if doc and 'name' in doc and\
+                                          doc['name'] == 'employee-9']
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+            for index_name in created_indexes:
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
+                self.run_cbq_query()
 
     def test_where_join_keys_not_equal(self):
         for bucket in self.buckets:
@@ -216,7 +219,7 @@ class JoinTests(QueryTests):
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
                 if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(join_day, tasks_ids, project)  USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(join_day, tasks_ids, project)  USING %s" % (index_name, bucket.name,self.index_type)
                     if self.gsi_type:
                         self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
@@ -240,6 +243,9 @@ class JoinTests(QueryTests):
                                           doc['join_day'] <= 2]
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
+            for index_name in created_indexes:
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
+                self.run_cbq_query()
 
     def test_join_unnest_alias(self):
         for bucket in self.buckets:
@@ -276,7 +282,7 @@ class JoinTests(QueryTests):
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
                 if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(name, task, tasks_ids)  USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(name, task, tasks_ids)  USING %s" % (index_name, bucket.name,self.index_type)
                     if self.gsi_type:
                         self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
@@ -286,7 +292,6 @@ class JoinTests(QueryTests):
             self.query = "EXPLAIN SELECT emp.name, task FROM %s emp %s UNNEST emp.tasks_ids task where emp.name is not null" % (bucket.name,self.type_join)
             if self.covering_index:
                 self.test_explain_covering_index(index_name[0])
-
             self.query = "SELECT emp.name, task FROM %s emp %s UNNEST emp.tasks_ids task where emp.name is not null" % (bucket.name,self.type_join)
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
@@ -298,7 +303,7 @@ class JoinTests(QueryTests):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
         for index_name in created_indexes:
-            self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+            self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
             self.run_cbq_query()
 
     def test_prepared_unnest(self):
