@@ -901,3 +901,99 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         if not status:
             self.fail(message)
         self.log.info("Successfully merged new backups with already merged backup")
+
+    def test_backup_purge(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset
+        3. Initiates a backup and kills the erlang server while backup is going on
+        4. Waits for the backup command to timeout
+        5. Executes backup command again with purge option
+        6. Validates the old backup is deleted and new backup is created successfully
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        old_backup_name = ""
+        new_backup_name = ""
+        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                          backup_host=self.backupset.backup_host,
+                                          directory=self.backupset.directory, name=self.backupset.name,
+                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                          no_progress_bar=self.no_progress_bar,
+                                          cli_command_location=self.cli_command_location)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.kill_erlang()
+        output = backup_result.result(timeout=200)
+        self.log.info(str(output))
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        for line in output:
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line):
+                old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line).group()
+                self.log.info("Backup name before purge: " + old_backup_name)
+        conn.start_couchbase()
+        self.sleep(30)
+        output, error = self.backup_cluster()
+        if error or "Backup successfully completed" not in output[0]:
+            self.fail("Taking cluster backup failed.")
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        for line in output:
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line):
+                new_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line).group()
+                self.log.info("Backup name after purge: " + new_backup_name)
+        self.assertNotEqual(old_backup_name, new_backup_name,
+                            "Old backup name and new backup name are same when purge is used")
+        self.log.info("Old backup name and new backup name are not same when purge is used")
+
+    def test_backup_resume(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset
+        3. Initiates a backup and kills the erlang server while backup is going on
+        4. Waits for the backup command to timeout
+        5. Executes backup command again with resume option
+        6. Validates the old backup is resumes and backup is completed successfully
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        old_backup_name = ""
+        new_backup_name = ""
+        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                          backup_host=self.backupset.backup_host,
+                                          directory=self.backupset.directory, name=self.backupset.name,
+                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                          no_progress_bar=self.no_progress_bar,
+                                          cli_command_location=self.cli_command_location)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.kill_erlang()
+        output = backup_result.result(timeout=200)
+        self.log.info(str(output))
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        for line in output:
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line):
+                old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line).group()
+                self.log.info("Backup name before resume: " + old_backup_name)
+        conn.start_couchbase()
+        self.sleep(30)
+        output, error = self.backup_cluster()
+        if error or "Backup successfully completed" not in output[0]:
+            self.fail("Taking cluster backup failed.")
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        for line in output:
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line):
+                new_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line).group()
+                self.log.info("Backup name after resume: " + new_backup_name)
+        self.assertEqual(old_backup_name, new_backup_name,
+                            "Old backup name and new backup name are not same when resume is used")
+        self.log.info("Old backup name and new backup name are same when resume is used")
