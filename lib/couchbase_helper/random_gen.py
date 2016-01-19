@@ -75,14 +75,15 @@ class RandomDataGenerator(object):
 
     def gen_data(self):
     	function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_array", "random_char", "random_json"]
-        return getattr(self, random.choice(function_list))()
+    	function_name = random.choice(function_list)
+        return (self.random_alphanumeric() + "_" + function_name), getattr(self, function_name)()
 
     def random_json(self, random_fields = True):
     	json_body = {}
     	function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_array", "random_char", "random_json"]
         for function in function_list:
         	if random_fields and self.isChoice():
-        		json_body[function.replace("random_", "")] = getattr(self, function)()
+        		json_body[(self.random_alphanumeric() + "_" + function.replace("random_", ""))] = getattr(self, function)()
         return json_body
 
     def isChoice(self):
