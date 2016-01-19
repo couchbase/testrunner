@@ -125,11 +125,8 @@ class BaseTestCase(unittest.TestCase):
             self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
             self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
             self.enable_bloom_filter = self.input.param("enable_bloom_filter", False)
-
             self.enable_time_sync = self.input.param("enable_time_sync", False)
-            if self.enable_time_sync:
-                # retrieved now for later use
-                self.memcache_admin, self.memcache_admin_password = RestConnection(self.master).get_admin_credentials()
+
 
             if not self.skip_init_check_cbserver:
                 self.protocol = self.get_protocol_type()
@@ -408,23 +405,31 @@ class BaseTestCase(unittest.TestCase):
 
     def _set_time_sync_on_buckets(self, buckets):
 
-        for b in buckets:
+        # get the credentials beforehand
+        memcache_credentials = {}
+        for s in self.servers:
+            memcache_admin, memcache_admin_password = RestConnection(s).get_admin_credentials()
+            memcache_credentials[s.ip] = {'id':memcache_admin, 'password':memcache_admin_password}
 
+            # this is a failed optimization, in theory sasl could be done here but it didn't work
+            #client = MemcachedClient(s.ip, 11210)
+            #client.sasl_auth_plain(memcache_credentials[s.ip]['id'], memcache_credentials[s.ip]['password'])
+
+
+        for b in buckets:
             client1 = VBucketAwareMemcached( RestConnection(self.master), b)
 
-            """ this a possible optimization but we need to re-auth below for reason I do not understand yet
-            for s in [self.master]:
-                client = MemcachedClient(s.ip, 11210)
-                client.sasl_auth_plain(self.memcache_admin, self.memcache_admin_password)
-                client.bucket_select(b)
-            """
-
-
             for j in range(self.vbuckets):
-                active_vbucket = client1.memcached_for_vbucket ( j )
-                active_vbucket.sasl_auth_plain(self.memcache_admin, self.memcache_admin_password)
-                active_vbucket.bucket_select(b)
-                result = active_vbucket.set_time_sync_state(j, 1)
+                #print 'doing vbucket', j
+                #try:
+                    active_vbucket = client1.memcached_for_vbucket ( j )
+                    #print memcache_credentials[active_vbucket.host]['id'], memcache_credentials[active_vbucket.host]['password']
+                    active_vbucket.sasl_auth_plain(memcache_credentials[active_vbucket.host]['id'],
+                                          memcache_credentials[active_vbucket.host]['password'])
+                    active_vbucket.bucket_select(b)
+                    result = active_vbucket.set_time_sync_state(j, 1)
+                #except:
+                    #print 'got a failure'
 
 
 
