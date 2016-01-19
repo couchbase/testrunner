@@ -96,6 +96,87 @@ class SubdocHelper():
     def isMutationOperation(self, operation):
       return False
 
+    def python_based_dict_add(self, path = "", original_dataset = {}):
+      field_name, data_set = self.gen_data()
+      if path == "":
+        modify_dataset = original_dataset
+        modify_dataset[field_name] = data_set
+      else:
+        modify_dataset  = self.parse_and_get_data(original_dataset, path)
+        modify_dataset[field_name] = data_set
+      if path != "":
+        path = path + "." + field_name
+      else:
+        path = field_name
+      return path, data_set, original_dataset
+
+    def python_based_array_upsert_replace(self, path = "", original_dataset = {}):
+      field_name, data_set = self.gen_data()
+      modify_dataset  = self.parse_and_get_data(original_dataset, path)
+      index = self.randomDataGenerator.random_int(max_int = len(modify_dataset) - 1)
+      modify_dataset[index] = data_set
+      return path+"["+str(index)+"]", data_set, original_dataset
+
+    def python_based_array_insert(self, path = "", original_dataset = {}, type = "insert"):
+      field_name, data_set = self.gen_data()
+      print data_set
+      modify_dataset  = self.parse_and_get_data(original_dataset, path)
+      if type == "first":
+        index = 0
+      elif type == "last" or type == "unique":
+        index = len(original_dataset)
+      else:
+        index = self.randomDataGenerator.random_int(max_int = len(modify_dataset) - 1)
+        path = path+"["+str(index)+"]"
+      modify_dataset.insert(index,data_set)
+      return path, data_set, original_dataset
+
+    def python_based_dict_delete(self, path = "", original_dataset = None):
+      modify_dataset = original_dataset
+      if path != "":
+        modify_dataset  = self.parse_and_get_data(original_dataset, path)
+      key_to_remove = random.choice(modify_dataset.keys())
+      modify_dataset.pop(key_to_remove)
+      if path == "":
+        path  = key_to_remove
+      else:
+        path = path+"."+key_to_remove
+      return path, original_dataset
+
+    def python_based_array_delete(self, path = "", original_dataset = None):
+      modify_dataset  = original_dataset
+      if path != "":
+        modify_dataset  = self.parse_and_get_data(original_dataset, path)
+      index = random.choice(range(len(modify_dataset)))
+      modify_dataset.pop(index)
+      if path == "":
+        path  = "["+str(index)+"]"
+      else:
+        path = path+"["+str(index)+"]"
+      return path, original_dataset
+
+    def python_based_dict_upsert_replace(self, path = "", original_dataset = {}):
+      field_name, data_set = self.gen_data()
+      if path == "":
+        field_name = random.choice(original_dataset.keys())
+        modify_dataset = original_dataset
+        modify_dataset[field_name] = data_set
+      else:
+        modify_dataset  = self.parse_and_get_data(original_dataset, path)
+        field_name = random.choice(original_dataset.keys())
+        modify_dataset[field_name] = data_set
+      if path != "":
+        path = path + "." + field_name
+      else:
+        path = field_name
+      return path, data_set, original_dataset
+
+    def python_based_dict_replace(self, path = "", original_dataset = {}):
+      return self.python_based_dict_upsert_replace(path = path, original_dataset = original_dataset)
+
+    def python_based_dict_upsert_add(self, path = "", original_dataset = {}):
+      return self.python_based_dict_add(path = path, original_dataset = original_dataset)
+
     def pick_operations(self, path = "", data = None):
       array_ops = ["array_first", "array_last", "array_unique", "array_insert", "array_read", "get", "exists", "delete", "replace"]
       dict_ops = ["dict_add", "dict_upsert", "get", "exists", "delete", "replace" ]
@@ -127,15 +208,37 @@ if __name__=="__main__":
     nest_json = [{"field_1":1}, {"field_2":2}, 3]
     helper.find_pairs(nest_json,"", pairs)
     helper.show_all_paths(pairs, nest_json)
-    print helper.gen_data()
-    print helper.gen_data()
-    print helper.gen_data()
-    print helper.gen_data()
-    print helper.gen_data()
-    print helper.gen_data()
-    print helper.gen_data()
-    print helper.gen_data()
-    print helper.gen_data()
+
+
+    print  "++++++++++++++++++++++++++"
+    json_data = {"level_0": [{"array":[1,2,3]}]}
+    path  = "level_0"
+    new_path, new_value, json_data = helper.python_based_array_upsert_replace(path = "level_0[0].array", original_dataset = json_data)
+    print new_path
+    print new_value
+    print json_data
+    new_path, json_data = helper.python_based_dict_delete(path = "level_0[0][0]", original_dataset = {"level_0":[[{"field":"1"}]]})
+    print new_path
+    print json_data
+    new_path, json_data = helper.python_based_array_delete(path = "level_0[0][0]", original_dataset = {"level_0":[[[0]]]})
+    print new_path
+    print json_data
+    new_path, new_value, json_data = helper.python_based_array_insert(path = "field", original_dataset = {"field":[0,1,2]}, type = "insert")
+    print new_path
+    print new_value
+    print json_data
+    new_path, new_value, json_data = helper.python_based_array_insert(path = "field", original_dataset = {"field":[0,1,2]}, type = "first")
+    print new_path
+    print new_value
+    print json_data
+    new_path, new_value, json_data = helper.python_based_array_insert(path = "field", original_dataset = {"field":[0,1,2]}, type = "last")
+    print new_path
+    print new_value
+    print json_data
+    new_path, new_value, json_data = helper.python_based_array_insert(path = "field", original_dataset = {"field":[0,1,2]}, type = "unique")
+    print new_path
+    print new_value
+    print json_data
     '''data_set = {"field":{"field":1},"array":[0,1,2,3]}
     print helper.parse_and_get_data(data_set, "field")
     print helper.parse_and_get_data(data_set, "field.field")
