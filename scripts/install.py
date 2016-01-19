@@ -490,7 +490,8 @@ class CouchbaseServerInstaller(Installer):
 
     def install(self, params, queue=None):
         try:
-            build = self.build_url(params)
+            if "linux_repo" not in params:
+                build = self.build_url(params)
         except Exception, e:
             if queue:
                 queue.put(False)
@@ -560,8 +561,18 @@ class CouchbaseServerInstaller(Installer):
             cb_edition = ""
             if "type" in params and params["type"] == "community":
                 cb_edition = "community"
-            remote_client.install_server_via_repo(info.deliverable_type,cb_edition,\
-                                                  remote_client)
+            try:
+                success = remote_client.install_server_via_repo(info.deliverable_type,\
+                                                             cb_edition, remote_client)
+                log.info('wait 5 seconds for membase server to start')
+                time.sleep(5)
+            except BaseException, e:
+                success = False
+                log.error("installation failed: {0}".format(e))
+            remote_client.disconnect()
+            if queue:
+                queue.put(success)
+            return success
 
 
 class MongoInstaller(Installer):
