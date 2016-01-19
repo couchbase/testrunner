@@ -64,6 +64,10 @@ Examples:
 
  # to run with build with require openssl version 1.0.0
  install.py -i /tmp/ubuntu.ini -p product=cb,version=2.2.0-792,openssl=1
+
+ # to install latest release of couchbase server via repo (apt-get and yum)
+  install.py -i /tmp/ubuntu.ini -p product=cb,linux_repo=true
+
 """
     sys.exit(err)
 
