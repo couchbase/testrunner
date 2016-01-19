@@ -1463,6 +1463,8 @@ class RemoteMachineShellConnection:
             return success
 
     def install_server_via_repo(self, deliverable_type, cb_edition, remote_client):
+        success = True
+        track_words = ("warning", "error", "fail")
         if cb_edition:
             cb_edition = "-" + cb_edition
         if deliverable_type == "deb":
@@ -1470,6 +1472,14 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("yes \
                    | apt-get install couchbase-server{0}".format(cb_edition))
             self.log_command_output(output, error)
+            success &= self.log_command_output(output, error, track_words)
+        elif deliverable_type == "rpm":
+            self.update_couchbase_release(remote_client, deliverable_type)
+            output, error = self.execute_command("yes \
+                  | yum install couchbase-server{0}".format(cb_edition))
+            self.log_command_output(output, error, track_words)
+            success &= self.log_command_output(output, error, track_words)
+        return success
 
     def update_couchbase_release(self, remote_client, deliverable_type):
         if deliverable_type == "deb":
@@ -1498,7 +1508,7 @@ class RemoteMachineShellConnection:
                                                              .format(self.ip))
             self.execute_command("rm -rf /tmp/couchbase-release*")
             self.execute_command("cd /tmp; wget {0}".format(CB_RELEASE_APT_GET_REPO))
-            output, error = self.execute_command("dpkg -i /tmp/couchbase-release*")
+            output, error = self.execute_command("yes | dpkg -i /tmp/couchbase-release*")
             self.log_command_output(output, error)
             output, error = self.execute_command("dpkg --get-selections |\
                                                               grep couchbase")
@@ -1512,6 +1522,42 @@ class RemoteMachineShellConnection:
             if not package_updated:
                 sys.exit("fail to install %s on node %s" % \
                                   (CB_RELEASE_APT_GET_REPO.rsplit("/",1)[-1], self.ip))
+        elif deliverable_type == "rpm":
+            """ remove old couchbase-release package """
+            log.info("remove couchbase-release at node {0}".format(self.ip))
+            output, error = self.execute_command("rpm -qa | grep couchbase")
+            self.log_command_output(output, error)
+            for str in output:
+                if "couchbase-release" in str:
+                    output, error = self.execute_command("rpm -e couchbase-release")
+            output, error = self.execute_command("rpm -qa | grep couchbase")
+            self.log_command_output(output, error)
+            package_remove = True
+            for str in output:
+                if "couchbase-release" in str:
+                    package_remove = False
+                    log.info("couchbase-release is not removed at node {0}" \
+                                                                  .format(self.ip))
+                    sys.exit("***  Node %s failed to remove couchbase-release  ***"\
+                                                                        % (self.ip))
+            """ install new couchbase-release package """
+            log.info("install new couchbase-release repo at node {0}" \
+                                                             .format(self.ip))
+            self.execute_command("rm -rf /tmp/couchbase-release*")
+            self.execute_command("cd /tmp; wget {0}".format(CB_RELEASE_YUM_REPO))
+            output, error = self.execute_command("yes | rpm -i /tmp/couchbase-release*")
+            self.log_command_output(output, error)
+            output, error = self.execute_command("rpm -qa | grep couchbase")
+            package_updated = False
+            for str in output:
+                if "couchbase-release" in str:
+                    package_updated = True
+                    log.info("couchbase-release installed on node {0}" \
+                                               .format(self.ip))
+                    return package_updated
+            if not package_updated:
+                sys.exit("fail to install %s on node %s" % \
+                                  (CB_RELEASE_YUM_REPO.rsplit("/",1)[-1], self.ip))
 
     def install_moxi(self, build):
         success = True
@@ -2001,6 +2047,9 @@ class RemoteMachineShellConnection:
                              " we will run 'systemctl daemon-reload'")
                     output, error = self.execute_command("systemctl daemon-reload")
                     self.log_command_output(output, error)
+                    success = True
+                elif "Warning" in line and "RPMDB altered outside of yum" in line:
+                    log.info("Warming: RPMDB altered outside of yum")
                     success = True
                 elif "dirname" in line:
                     log.warning("Ignore dirname error message during couchbase "
