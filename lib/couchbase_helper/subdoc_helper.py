@@ -198,23 +198,23 @@ class SubdocHelper():
 
     def pick_operations(self, path = "", data = None):
       array_ops ={
-      "array_add_first" : {"python":"python_based_array_add_first", "subdoc_api":"array_add_first"},
-      "array_add_last": {"python":"python_based_array_add_last", "subdoc_api":"array_add_last"},
-      "array_add_unique": {"python":"python_based_array_add_unique", "subdoc_api":"array_add_unqiue"},
-      "array_add_insert": {"python":"python_based_array_add_insert", "subdoc_api":"array_add_insert"},
-      "array_get": {"python":"python_based_get", "subdoc_api":"get"},
-      "array_exists": {"python":"python_based_exists", "subdoc_api":"exists"},
-      "array_delete": {"python":"python_based_array_delete", "subdoc_api":"delete"},
-      "array_replace": {"python":"python_based_array_replace", "subdoc_api":"replace"}
+      "array_add_first" : {"python":"python_based_array_add_first", "subdoc_api":"array_add_first", "mutate":True},
+      "array_add_last": {"python":"python_based_array_add_last", "subdoc_api":"array_add_last", "mutate":True},
+      "array_add_unique": {"python":"python_based_array_add_unique", "subdoc_api":"array_add_unqiue", "mutate":True},
+      "array_add_insert": {"python":"python_based_array_add_insert", "subdoc_api":"array_add_insert", "mutate":True},
+      "array_get": {"python":"python_based_get", "subdoc_api":"get", "mutate":False},
+      "array_exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
+      "array_delete": {"python":"python_based_array_delete", "subdoc_api":"delete", "mutate":True},
+      "array_replace": {"python":"python_based_array_replace", "subdoc_api":"replace", "mutate":True}
       }
       dict_ops = {
-      "dict_add": {"python":"python_based_dict_add", "subdoc_api":"dict_add"},
-      "dict_upsert_add": {"python":"python_based_dict_upsert_add", "subdoc_api":"dict_upsert"},
-      "dict_upsert_replace": {"python":"python_based_dict_upsert_replace", "subdoc_api":"dict_upsert"},
-      "dict_get": {"python":"python_based_python_based_dict_get", "subdoc_api":"get"},
-      "dict_exists": {"python":"python_based_dict_exists", "subdoc_api":"exists"},
-      "dict_delete": {"python":"python_based_dict_delete", "subdoc_api":"delete"},
-      "dict_replace": {"python":"python_based_dict_replace", "subdoc_api":"replace"}
+      "dict_add": {"python":"python_based_dict_add", "subdoc_api":"dict_add", "mutate":False},
+      "dict_upsert_add": {"python":"python_based_dict_upsert_add", "subdoc_api":"dict_upsert", "mutate":False},
+      "dict_upsert_replace": {"python":"python_based_dict_upsert_replace", "subdoc_api":"dict_upsert", "mutate":True},
+      "dict_get": {"python":"python_based_python_based_dict_get", "subdoc_api":"get", "mutate":False},
+      "dict_exists": {"python":"python_based_dict_exists", "subdoc_api":"exists", "mutate":False},
+      "dict_delete": {"python":"python_based_dict_delete", "subdoc_api":"delete", "mutate":True},
+      "dict_replace": {"python":"python_based_dict_replace", "subdoc_api":"replace", "mutate":True}
       }
       if "[" in path or isinstance(data, list):
         key = random.choice(array_ops.keys())
@@ -236,7 +236,7 @@ class SubdocHelper():
         key, ops_info = self.pick_operations(path, parse_path_data)
         print key
         print "Run python operation {0}".format(ops_info["python"])
-        print "Run equiavlent subdoc api operation {0}".format(ops_info["subdoc_api"])
+        print "Run equivalent subdoc api operation {0}".format(ops_info["subdoc_api"])
 
 # SUB DOC COMMANDS
 
