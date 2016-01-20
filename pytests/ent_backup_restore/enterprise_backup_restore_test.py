@@ -594,6 +594,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
                         "Expected error message not thrown by Backup 180 seconds after erlang crash")
         self.log.info("Expected error message thrown by Backup 180 seconds after erlang crash")
+        conn.start_couchbase()
+        self.sleep(30)
 
     def test_backup_with_couchbase_stop(self):
         """
@@ -618,6 +620,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
                         "Expected error message not thrown by Backup 180 seconds after couchbase-server stop")
         self.log.info("Expected error message thrown by Backup 180 seconds after couchbase-server stop")
+        conn.start_couchbase()
+        self.sleep(30)
 
     def test_backup_with_memcached_crash(self):
         """
@@ -642,6 +646,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
                         "Expected error message not thrown by Backup 180 seconds after memcached crash")
         self.log.info("Expected error message thrown by Backup 180 seconds after memcached crash")
+        conn.unpause_memcached()
+        self.sleep(30)
 
     def test_restore_with_erlang_crash_and_restart(self):
         """
@@ -753,6 +759,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
                         "Expected error message not thrown by Restore 180 seconds after erlang crash")
         self.log.info("Expected error message thrown by Restore 180 seconds after erlang crash")
+        conn.start_couchbase()
+        self.sleep(30)
 
     def test_restore_with_couchbase_stop(self):
         """
@@ -780,6 +788,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
                         "Expected error message not thrown by Restore 180 seconds after couchbase-server stop")
         self.log.info("Expected error message thrown by Restore 180 seconds after couchbase-server stop")
+        conn.start_couchbase()
+        self.sleep(30)
 
     def test_restore_with_memcached_crash(self):
         """
@@ -807,6 +817,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
                         "Expected error message not thrown by Restore 180 seconds after memcached crash")
         self.log.info("Expected error message thrown by Restore 180 seconds after memcached crash")
+        conn.unpause_memcached()
+        self.sleep(30)
 
     def test_backup_merge(self):
         """
