@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import copy
 import random
+import json
 from random_gen import RandomDataGenerator
 
 class SubdocHelper():
@@ -84,6 +85,7 @@ class SubdocHelper():
             data_set = data_set[index]
       return data_set
 
+
     def gen_data(self):
         return self.randomDataGenerator.gen_data()
 
@@ -110,16 +112,33 @@ class SubdocHelper():
         path = field_name
       return path, data_set, original_dataset
 
-    def python_based_array_upsert_replace(self, path = "", original_dataset = {}):
+    def python_based_get(self, path = "", original_dataset = {}):
+      return path, self.parse_and_get_data(original_dataset, path), None
+
+    def python_based_exists(self, path = "", original_dataset = {}):
+      return path, None, None
+
+    def python_based_array_replace(self, path = "", original_dataset = {}):
       field_name, data_set = self.gen_data()
       modify_dataset  = self.parse_and_get_data(original_dataset, path)
       index = self.randomDataGenerator.random_int(max_int = len(modify_dataset) - 1)
       modify_dataset[index] = data_set
       return path+"["+str(index)+"]", data_set, original_dataset
 
-    def python_based_array_insert(self, path = "", original_dataset = {}, type = "insert"):
+    def python_based_array_add_insert(self, path = "", original_dataset = None):
+      self.python_based_array_add_insert(path, original_dataset = original_dataset, type = "insert")
+
+    def python_based_array_add_first(self, path = "", original_dataset = None):
+      self.python_based_array_add_insert(path, original_dataset = original_dataset, type = "first")
+
+    def python_based_array_add_last(self, path = "", original_dataset = None):
+      self.python_based_array_add_insert(path, original_dataset = original_dataset, type = "last")
+
+    def python_based_array_add_unique(self, path = "", original_dataset = None):
+      self.python_based_array_add_insert(path, original_dataset = original_dataset, type = "unique")
+
+    def python_based_array_add(self, path = "", original_dataset = {}, type = "insert"):
       field_name, data_set = self.gen_data()
-      print data_set
       modify_dataset  = self.parse_and_get_data(original_dataset, path)
       if type == "first":
         index = 0
@@ -141,7 +160,7 @@ class SubdocHelper():
         path  = key_to_remove
       else:
         path = path+"."+key_to_remove
-      return path, original_dataset
+      return path, None, original_dataset
 
     def python_based_array_delete(self, path = "", original_dataset = None):
       modify_dataset  = original_dataset
@@ -153,9 +172,9 @@ class SubdocHelper():
         path  = "["+str(index)+"]"
       else:
         path = path+"["+str(index)+"]"
-      return path, original_dataset
+      return path, None,  original_dataset
 
-    def python_based_dict_upsert_replace(self, path = "", original_dataset = {}):
+    def python_based_dict_upsert_replace(self, path = "", original_dataset = None):
       field_name, data_set = self.gen_data()
       if path == "":
         field_name = random.choice(original_dataset.keys())
@@ -178,12 +197,31 @@ class SubdocHelper():
       return self.python_based_dict_add(path = path, original_dataset = original_dataset)
 
     def pick_operations(self, path = "", data = None):
-      array_ops = ["array_first", "array_last", "array_unique", "array_insert", "array_read", "get", "exists", "delete", "replace"]
-      dict_ops = ["dict_add", "dict_upsert", "get", "exists", "delete", "replace" ]
-      if "[" in path or isinstance(element, list):
-        return "array", random.choice(array_ops)
+      array_ops ={
+      "array_add_first" : {"python":"python_based_array_add_first", "subdoc_api":"array_add_first"},
+      "array_add_last": {"python":"python_based_array_add_last", "subdoc_api":"array_add_last"},
+      "array_add_unique": {"python":"python_based_array_add_unique", "subdoc_api":"array_add_unqiue"},
+      "array_add_insert": {"python":"python_based_array_add_insert", "subdoc_api":"array_add_insert"},
+      "array_get": {"python":"python_based_get", "subdoc_api":"get"},
+      "array_exists": {"python":"python_based_exists", "subdoc_api":"exists"},
+      "array_delete": {"python":"python_based_array_delete", "subdoc_api":"delete"},
+      "array_replace": {"python":"python_based_array_replace", "subdoc_api":"replace"}
+      }
+      dict_ops = {
+      "dict_add": {"python":"python_based_dict_add", "subdoc_api":"dict_add"},
+      "dict_upsert_add": {"python":"python_based_dict_upsert_add", "subdoc_api":"dict_upsert"},
+      "dict_upsert_replace": {"python":"python_based_dict_upsert_replace", "subdoc_api":"dict_upsert"},
+      "dict_get": {"python":"python_based_python_based_dict_get", "subdoc_api":"get"},
+      "dict_exists": {"python":"python_based_dict_exists", "subdoc_api":"exists"},
+      "dict_delete": {"python":"python_based_dict_delete", "subdoc_api":"delete"},
+      "dict_replace": {"python":"python_based_dict_replace", "subdoc_api":"replace"}
+      }
+      if "[" in path or isinstance(data, list):
+        key = random.choice(array_ops.keys())
+        return key, array_ops[key]
       else:
-        return "field", random.choice(dict_ops)
+        key = random.choice(dict_ops.keys())
+        return key, dict_ops[key]
 
     def isPathPresent(self, path, filter_paths = []):
       for path_parent in filter_paths:
@@ -195,6 +233,85 @@ class SubdocHelper():
       for path in pairs.keys():
         parse_path_data = self.parse_and_get_data(data_set, path)
         print "PATH = {0} || VALUE = {1} || PARSE PATH = {2} ".format(path, pairs[path], parse_path_data)
+        key, ops_info = self.pick_operations(path, parse_path_data)
+        print key
+        print "Run python operation {0}".format(ops_info["python"])
+        print "Run equiavlent subdoc api operation {0}".format(ops_info["subdoc_api"])
+
+# SUB DOC COMMANDS
+
+# GENERIC COMMANDS
+    def delete(self, client, key = '', path = ''):
+        try:
+            self.client.delete_sd(key, path)
+        except Exception as e:
+            raise
+
+    def replace(self, client, key = '', path = '', value = None):
+        try:
+            self.client.replace_sd(key, path, value)
+        except Exception as e:
+            raise
+
+    def get(self, client, key = '', path = '', expected_value = None):
+        new_path = self.generate_path(self.nesting_level, path)
+        try:
+            opaque, cas, data = self.client.get_sd(key, new_path)
+            return json.loads(data)
+        except Exception as e:
+            raise
+
+    def exists(self, client, key = '', path = '', expected_value = None):
+        new_path = self.generate_path(self.nesting_level, path)
+        try:
+            opaque, cas, data = self.client.exists_sd(key, new_path)
+            return json.loads(data)
+        except Exception as e:
+            raise
+    def counter(self, client, key = '', path = '', value = None):
+        try:
+            self.client.counter_sd(key, path, value)
+        except Exception as e:
+            raise
+
+# DICTIONARY SPECIFIC COMMANDS
+    def dict_add(self, client, key = '', path = '', value = None):
+        try:
+            self.client.dict_add_sd(key, path, value)
+        except Exception as e:
+            raise
+
+    def dict_upsert(self, client, key = '', path = '', value = None):
+        try:
+            self.client.dict_upsert_sd(key, path, value)
+        except Exception as e:
+            raise
+
+
+# ARRAY SPECIFIC COMMANDS
+    def array_add_last(self, client, key = '', path = '', value = None):
+        try:
+            self.client.array_push_last_sd(key, path, value)
+        except Exception as e:
+            raise
+
+    def array_add_first(self, client, key = '', path = '', value = None):
+        try:
+            self.client.array_push_first_sd(key, path, value)
+        except Exception as e:
+            raise
+
+    def array_add_unique(self, client, key = '', path = '', value = None):
+        try:
+            self.client.array_add_unique_sd(key, path, value)
+        except Exception as e:
+            raise
+
+    def array_add_insert(self, client, key = '', path = '', value = None):
+        try:
+            self.client.array_add_insert_sd(key, path, value)
+        except Exception as e:
+            raise
 
 if __name__=="__main__":
     helper = SubdocHelper()
@@ -208,48 +325,3 @@ if __name__=="__main__":
     nest_json = [{"field_1":1}, {"field_2":2}, 3]
     helper.find_pairs(nest_json,"", pairs)
     helper.show_all_paths(pairs, nest_json)
-
-
-    print  "++++++++++++++++++++++++++"
-    json_data = {"level_0": [{"array":[1,2,3]}]}
-    path  = "level_0"
-    new_path, new_value, json_data = helper.python_based_array_upsert_replace(path = "level_0[0].array", original_dataset = json_data)
-    print new_path
-    print new_value
-    print json_data
-    new_path, json_data = helper.python_based_dict_delete(path = "level_0[0][0]", original_dataset = {"level_0":[[{"field":"1"}]]})
-    print new_path
-    print json_data
-    new_path, json_data = helper.python_based_array_delete(path = "level_0[0][0]", original_dataset = {"level_0":[[[0]]]})
-    print new_path
-    print json_data
-    new_path, new_value, json_data = helper.python_based_array_insert(path = "field", original_dataset = {"field":[0,1,2]}, type = "insert")
-    print new_path
-    print new_value
-    print json_data
-    new_path, new_value, json_data = helper.python_based_array_insert(path = "field", original_dataset = {"field":[0,1,2]}, type = "first")
-    print new_path
-    print new_value
-    print json_data
-    new_path, new_value, json_data = helper.python_based_array_insert(path = "field", original_dataset = {"field":[0,1,2]}, type = "last")
-    print new_path
-    print new_value
-    print json_data
-    new_path, new_value, json_data = helper.python_based_array_insert(path = "field", original_dataset = {"field":[0,1,2]}, type = "unique")
-    print new_path
-    print new_value
-    print json_data
-    '''data_set = {"field":{"field":1},"array":[0,1,2,3]}
-    print helper.parse_and_get_data(data_set, "field")
-    print helper.parse_and_get_data(data_set, "field.field")
-    print helper.parse_and_get_data(data_set, "array")
-    print helper.parse_and_get_data(data_set, "array[2]")
-    print helper.parse_and_get_data(data_set, "array[1]")
-    print helper.parse_and_get_data(data_set, "array[0]")
-    data_set = {"array":[{"field":1},1,{"field":[{"inside_field":{"another_field":1000}}]}]}
-    print helper.parse_and_get_data(data_set, "array[0].field")
-    print helper.parse_and_get_data(data_set, "array[1]")
-    print helper.parse_and_get_data(data_set, "array[2].field[0].inside_field.another_field")
-    data_set = [{"field":[0,1,{"field":"value"}]},1]
-    print helper.parse_and_get_data(data_set, "[0].field[2]")
-    print helper.parse_and_get_data(data_set, "[0].field[2].field")'''
