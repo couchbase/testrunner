@@ -1007,5 +1007,44 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
                 new_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line).group()
                 self.log.info("Backup name after resume: " + new_backup_name)
         self.assertEqual(old_backup_name, new_backup_name,
-                            "Old backup name and new backup name are not same when resume is used")
+                         "Old backup name and new backup name are not same when resume is used")
         self.log.info("Old backup name and new backup name are same when resume is used")
+
+    def test_backup_restore_with_deletes(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset - backsup data and validates
+        3. Perform deletes
+        4. Restore data and validate
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster_validate()
+        self._load_all_buckets(self.master, gen, "delete", 0)
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+
+    def test_backup_restore_with_failover(self):
+        """
+        1. Test should be run with 2 nodes in cluster host (param: nodes_init = 2)
+        2. Creates specified bucket on the cluster and loads it with given number of items
+        3. Creates a backupset - backsup data and validates
+        4. Fails over the second node with specified type (param: graceful = True | False)
+        5. Sets recovery type to specified value (param: recoveryType = full | delta)
+        6. Adds back the failed over node and rebalances
+        7. Restores data and validates
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster_validate()
+        rest = RestConnection(self.backupset.cluster_host)
+        nodes_all = rest.node_statuses()
+        for node in nodes_all:
+            if node.ip == self.servers[1].ip:
+                rest.fail_over(otpNode=node.id, graceful=self.graceful)
+                rest.set_recovery_type(otpNode=node.id, recoveryType=self.recoveryType)
+                rest.add_back_node(otpNode=node.id)
+        rebalance = self.cluster.async_rebalance(self.servers, [], [])
+        rebalance.result()
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")

@@ -80,6 +80,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.expires = self.input.param("expires", 0)
         self.auto_failover = self.input.param("enable-autofailover", False)
         self.auto_failover_timeout = self.input.param("autofailover-timeout", 30)
+        self.graceful = self.input.param("graceful",False)
+        self.recoveryType = self.input.param("recoveryType", "full")
         if not os.path.exists(self.backup_validation_files_location):
             os.mkdir(self.backup_validation_files_location)
 
