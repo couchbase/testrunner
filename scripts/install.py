@@ -53,6 +53,7 @@ Available keys:
  erlang_threads=         Number of erlang threads (default=16:16 for +S type)
  upr=True                Enable UPR replication
  xdcr_upr=               Enable UPR for XDCR (temporary param until XDCR with UPR is stable), values: None | True | False
+ fts_query_limit=1000000 Set a limit for the max results to be returned by fts for any query
 
 
 Examples:
@@ -493,6 +494,7 @@ class CouchbaseServerInstaller(Installer):
             sys.exit("unable to initialize couchbase node")
 
     def install(self, params, queue=None):
+        start_server = True
         try:
             if "linux_repo" not in params:
                 build = self.build_url(params)
@@ -528,10 +530,17 @@ class CouchbaseServerInstaller(Installer):
         else:
             xdcr_upr = eval(params["xdcr_upr"].capitalize())
 
+        if "fts_query_limit" in params:
+            fts_query_limit = params["fts_query_limit"]
+            start_server = False
+        else:
+            fts_query_limit = None
+
         if "linux_repo" in params and params["linux_repo"].lower() == "true":
             linux_repo = True
         else:
             linux_repo = False
+
         if not linux_repo:
             if type == "windows":
                 remote_client.download_binary_in_win(build.url, params["version"])
@@ -546,9 +555,11 @@ class CouchbaseServerInstaller(Installer):
                 # TODO: need separate methods in remote_util for couchbase and membase install
                 path = server.data_path or '/tmp'
                 try:
-                    success = remote_client.install_server(build, path=path, \
+                    success = remote_client.install_server(build, path=path,
+                                         startserver=start_server,\
                                          vbuckets=vbuckets, swappiness=swappiness,\
-                                        openssl=openssl, upr=upr, xdcr_upr=xdcr_upr)
+                                        openssl=openssl, upr=upr, xdcr_upr=xdcr_upr,
+                                        fts_query_limit=fts_query_limit)
                     log.info('wait 5 seconds for membase server to start')
                     time.sleep(5)
                     if "rest_vbuckets" in params:
