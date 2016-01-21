@@ -591,8 +591,9 @@ class FTSIndex:
     def get_uuid(self):
         return self.rest.get_fts_index_uuid(self.name)
 
-    def construct_cbft_query_json(self, query, fields=None,
-                             max_matches=10000000, timeout=None):
+    def construct_cbft_query_json(self, query, fields=None, timeout=None):
+
+        max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
         query_json = QUERY.JSON
         # query is a unicode dict
         query_json['query'] = query
