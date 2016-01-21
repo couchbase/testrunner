@@ -50,24 +50,35 @@ class SubdocHelper():
     			pairs[path+"["+str(index)+"]"] =element
     			index += 1
 
-    def find_operations(self, data_set, pairs, max_number_operations, filter_paths = []):
-      trials = 0
+    def run_operations(self, data_set = None, max_number_operations = 10):
+      trial = 0
+      filter_paths = []
+      pairs = {}
+      self.find_pairs(data_set,"", pairs)
       for i in range(10000):
+        print data_set
         if len(pairs.keys()) == 0:
-          find_pairs(data_set,"", pairs)
+          filter_paths = []
+          self.find_pairs(data_set,"", pairs)
         key = random.choice(pairs.keys())
+        print "analysis for key {0}".format(key)
         if self.isPathPresent(key, filter_paths):
+          print filter_paths
+          print "removing path = {0}".format(key)
           pairs.pop(key)
           filter_paths.append(key)
         else:
-          operation_type, operation  = self.pick_operations(pair[key])
-          if isMutationOperation(operation):
+          ops_type, operation = self.pick_operations(key, pairs[key])
+          function = getattr(self, operation["python"])
+          print operation["python"]
+          print key
+          path, data = function(key, data_set)
+          if operation["mutate"] and path != None:
             pairs.pop(key)
-            filter_paths.append(key)
-            # Mutation operation
-            data_set  = self.doMutationOperation(operation_type, operation, data_set)
-          else:
-            self.doNoMutationOperation(operation, data_set, pair[key])
+            print "target mutation path {0}".format(path)
+            if "[" in path:
+              path = self.trim_path(path, "[")
+            filter_paths.append(path)
         trial += 1
         if trial == max_number_operations:
           return
@@ -89,15 +100,6 @@ class SubdocHelper():
     def gen_data(self):
         return self.randomDataGenerator.gen_data()
 
-    def doNoMutationOperation(self,  operation, data_set, value):
-      print "doNoMutationOperation"
-
-    def doMutationOperation(self, operation_type, operation, data_set):
-      print "doMutationOperation"
-
-    def isMutationOperation(self, operation):
-      return False
-
     def python_based_dict_add(self, path = "", original_dataset = {}):
       field_name, data_set = self.gen_data()
       if path == "":
@@ -110,32 +112,32 @@ class SubdocHelper():
         path = path + "." + field_name
       else:
         path = field_name
-      return path, data_set, original_dataset
+      return path, data_set
 
     def python_based_get(self, path = "", original_dataset = {}):
-      return path, self.parse_and_get_data(original_dataset, path), None
+      return path, self.parse_and_get_data(original_dataset, path)
 
     def python_based_exists(self, path = "", original_dataset = {}):
-      return path, None, None
+      return path, None
 
     def python_based_array_replace(self, path = "", original_dataset = {}):
       field_name, data_set = self.gen_data()
       modify_dataset  = self.parse_and_get_data(original_dataset, path)
       index = self.randomDataGenerator.random_int(max_int = len(modify_dataset) - 1)
       modify_dataset[index] = data_set
-      return path+"["+str(index)+"]", data_set, original_dataset
+      return path+"["+str(index)+"]", data_set
 
     def python_based_array_add_insert(self, path = "", original_dataset = None):
-      self.python_based_array_add_insert(path, original_dataset = original_dataset, type = "insert")
+      return self.python_based_array_add(path, original_dataset = original_dataset, type = "insert")
 
     def python_based_array_add_first(self, path = "", original_dataset = None):
-      self.python_based_array_add_insert(path, original_dataset = original_dataset, type = "first")
+      return self.python_based_array_add(path, original_dataset = original_dataset, type = "first")
 
     def python_based_array_add_last(self, path = "", original_dataset = None):
-      self.python_based_array_add_insert(path, original_dataset = original_dataset, type = "last")
+      return self.python_based_array_add(path, original_dataset = original_dataset, type = "last")
 
     def python_based_array_add_unique(self, path = "", original_dataset = None):
-      self.python_based_array_add_insert(path, original_dataset = original_dataset, type = "unique")
+      return self.python_based_array_add(path, original_dataset = original_dataset, type = "unique")
 
     def python_based_array_add(self, path = "", original_dataset = {}, type = "insert"):
       field_name, data_set = self.gen_data()
@@ -148,19 +150,21 @@ class SubdocHelper():
         index = self.randomDataGenerator.random_int(max_int = len(modify_dataset) - 1)
         path = path+"["+str(index)+"]"
       modify_dataset.insert(index,data_set)
-      return path, data_set, original_dataset
+      return path, data_set
 
     def python_based_dict_delete(self, path = "", original_dataset = None):
       modify_dataset = original_dataset
       if path != "":
         modify_dataset  = self.parse_and_get_data(original_dataset, path)
+      if(len(modify_dataset.keys())  == 0):
+        return None, None
       key_to_remove = random.choice(modify_dataset.keys())
       modify_dataset.pop(key_to_remove)
       if path == "":
         path  = key_to_remove
       else:
         path = path+"."+key_to_remove
-      return path, None, original_dataset
+      return path, None
 
     def python_based_array_delete(self, path = "", original_dataset = None):
       modify_dataset  = original_dataset
@@ -172,23 +176,27 @@ class SubdocHelper():
         path  = "["+str(index)+"]"
       else:
         path = path+"["+str(index)+"]"
-      return path, None,  original_dataset
+      return path, None
 
     def python_based_dict_upsert_replace(self, path = "", original_dataset = None):
       field_name, data_set = self.gen_data()
       if path == "":
+        if(len(original_dataset.keys()) == 0):
+          return None, None
         field_name = random.choice(original_dataset.keys())
         modify_dataset = original_dataset
         modify_dataset[field_name] = data_set
       else:
         modify_dataset  = self.parse_and_get_data(original_dataset, path)
-        field_name = random.choice(original_dataset.keys())
+        if(len(modify_dataset.keys()) == 0):
+          return None, None
+        field_name = random.choice(modify_dataset.keys())
         modify_dataset[field_name] = data_set
       if path != "":
         path = path + "." + field_name
       else:
         path = field_name
-      return path, data_set, original_dataset
+      return path, data_set
 
     def python_based_dict_replace(self, path = "", original_dataset = {}):
       return self.python_based_dict_upsert_replace(path = path, original_dataset = original_dataset)
@@ -211,23 +219,33 @@ class SubdocHelper():
       "dict_add": {"python":"python_based_dict_add", "subdoc_api":"dict_add", "mutate":False},
       "dict_upsert_add": {"python":"python_based_dict_upsert_add", "subdoc_api":"dict_upsert", "mutate":False},
       "dict_upsert_replace": {"python":"python_based_dict_upsert_replace", "subdoc_api":"dict_upsert", "mutate":True},
-      "dict_get": {"python":"python_based_python_based_dict_get", "subdoc_api":"get", "mutate":False},
-      "dict_exists": {"python":"python_based_dict_exists", "subdoc_api":"exists", "mutate":False},
+      "dict_get": {"python":"python_based_get", "subdoc_api":"get", "mutate":False},
+      "dict_exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
       "dict_delete": {"python":"python_based_dict_delete", "subdoc_api":"delete", "mutate":True},
       "dict_replace": {"python":"python_based_dict_replace", "subdoc_api":"replace", "mutate":True}
       }
-      if "[" in path or isinstance(data, list):
+      field_ops = {
+      "get": {"python":"python_based_get", "subdoc_api":"get", "mutate":False},
+      "exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
+      }
+      if isinstance(data, list):
         key = random.choice(array_ops.keys())
         return key, array_ops[key]
-      else:
+      elif isinstance(data, dict):
         key = random.choice(dict_ops.keys())
         return key, dict_ops[key]
+      else:
+        key = random.choice(field_ops.keys())
+        return key, field_ops[key]
 
     def isPathPresent(self, path, filter_paths = []):
       for path_parent in filter_paths:
-        if path == path_parent[:len(path)]:
+        if path[:len(path_parent)] == path_parent:
           return True
       return False
+
+    def trim_path(self, path, search_string):
+      return path[:path.rfind(search_string)]
 
     def show_all_paths(self, pairs, data_set):
       for path in pairs.keys():
@@ -325,3 +343,7 @@ if __name__=="__main__":
     nest_json = [{"field_1":1}, {"field_2":2}, 3]
     helper.find_pairs(nest_json,"", pairs)
     helper.show_all_paths(pairs, nest_json)
+    print  "+++++ RUN OPERATION ANALYSIS ++++"
+    json_document = {"json":{}}
+    helper.run_operations(json_document, 100)
+    #print json_document
