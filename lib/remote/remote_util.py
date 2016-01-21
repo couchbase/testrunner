@@ -1262,7 +1262,8 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
 
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
-                       swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None):
+                       swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None,
+                       fts_query_limit=None):
         server_type = None
         success = True
         track_words = ("warning", "error", "fail")
@@ -1356,6 +1357,13 @@ class RemoteMachineShellConnection:
                     self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export XDCR_USE_OLD_PATH={1}/'\
                     /opt/{0}/etc/{0}_init.d".format(server_type, "true"))
                 success &= self.log_command_output(output, error, track_words)
+            if fts_query_limit:
+                output, error = \
+                    self.execute_command("sed -i 's/export PATH/export PATH\\n"
+                        "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1}/'\
+                    /opt/{0}/bin/{0}-server".format(server_type, int(fts_query_limit)))
+                success &= self.log_command_output(output, error, track_words)
+                startserver = True
 
             # skip output: [WARNING] couchbase-server is already started
             # dirname error skipping for CentOS-6.6 (MB-12536)
