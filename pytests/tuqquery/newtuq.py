@@ -39,9 +39,12 @@ class QueryTests(BaseTestCase):
         self.dataset = self.input.param("dataset", "default")
         self.primary_indx_type = self.input.param("primary_indx_type", 'VIEW')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
+        self.isprepared = False
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
         if self.primary_indx_type.lower() == "gsi":
             self.gsi_type = self.input.param("gsi_type", None)
+        else:
+            self.gsi_type = None
         if self.input.param("reload_data", False):
             for bucket in self.buckets:
                 self.cluster.bucket_flush(self.master, bucket=bucket,
@@ -471,17 +474,19 @@ class QueryTests(BaseTestCase):
             result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params)
         else:
             if self.version == "git_repo":
-                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/" +\
-                                                            "tuq_client/tuq_client " +\
-                                                            "-engine=http://%s:8093/" % server.ip,
-                                                       subcommands=[query,],
-                                                       min_output_size=20,
-                                                       end_msg='tuq_client>')
+                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
+                                                            "shell/cbq/cbq ","","","","","")
             else:
-                output = self.shell.execute_commands_inside("/tmp/tuq/cbq -engine=http://%s:8093/" % server.ip,
-                                                           subcommands=[query,],
-                                                           min_output_size=20,
-                                                           end_msg='cbq>')
+                os = self.shell.extract_remote_info().type.lower()
+                #if (query.find("VALUES") > 0):
+                if not(self.isprepared):
+                    query = query.replace('"', '\\"')
+                    query = query.replace('`', '\\`')
+                if os == "linux":
+                    cmd = "%s/go_cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
+                    output = self.shell.execute_commands_inside(cmd,query,"","","","")
+                    #output = self.shell.execute_commands_inside(cmd,query)
+                    result = json.loads(output)
             result = self._parse_query_output(output)
         if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)
@@ -687,16 +692,20 @@ class QueryTests(BaseTestCase):
                     self.log.info("Dropping primary index for %s ..." % bucket.name)
                     self.query = "DROP PRIMARY INDEX ON %s" % (bucket.name)
                     self.sleep(3, 'Sleep for some time after index drop')
-                self.log.info("Creating primary index for %s ..." % bucket.name)
-                self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
-                if self.primary_indx_type.lower() == 'gsi':
-                    self.query += " WITH {'index_type': 'memdb'}"
-                try:
-                    self.run_cbq_query()
-                    if self.primary_indx_type.lower() == 'gsi':
-                        self._wait_for_index_online(bucket, '#primary')
-                except Exception, ex:
-                    self.log.info(str(ex))
+                self.query = "select * from system:indexes where name='#primary' and keyspace_id = %s" % bucket.name
+                res = self.run_cbq_query(self.query)
+                if (res['metrics']['resultCount'] == 0):
+                    self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
+                    self.log.info("Creating primary index for %s ..." % bucket.name)
+                    if self.gsi_type:
+                        self.query += " WITH {'index_type': 'memdb'}"
+                    try:
+                        self.run_cbq_query()
+                        self.primary_index_created= True
+                        if self.primary_indx_type.lower() == 'gsi':
+                            self._wait_for_index_online(bucket, '#primary')
+                    except Exception, ex:
+                        self.log.info(str(ex))
 
     def _get_keys(self, key_num):
         keys = []

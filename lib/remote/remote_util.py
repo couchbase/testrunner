@@ -2080,9 +2080,37 @@ class RemoteMachineShellConnection:
                               .format(self.ip, output, error, track_words))
         return success
 
-    def execute_commands_inside(self, main_command,query, subcommands=[], min_output_size=0,
+    def execute_commands_inside(self, main_command,query, queries,username,password,bucketname,subcommands=[], min_output_size=0,
                                 end_msg='', timeout=250):
-        main_command = main_command + " -s=\"" + query+ '"'
+        if not(query==""):
+            main_command = main_command + " -s=\"" + query+ '"'
+            print "main_command is %s" %main_command
+        if not(queries==""):
+            sftp = self._ssh_client.open_sftp()
+            filename = '/tmp/test'
+            filein = sftp.open(filename, 'w')
+            for query in queries:
+                filein.write(query)
+                filein.write('\n')
+            fileout = sftp.open(filename,'r')
+            filedata = fileout.read()
+            print filedata
+            fileout.close()
+            if("bucketname" in filedata):
+                newdata = filedata.replace("bucketname",bucketname)
+                newdata = newdata.replace("user",username)
+                newdata = newdata.replace("pass",password)
+            else:
+                newdata = filedata.replace("bucket1",username)
+                newdata = newdata.replace("user1",username)
+                newdata = newdata.replace("pass1",password)
+                newdata = newdata.replace("bucket2",bucketname)
+                newdata = newdata.replace("user2",bucketname)
+                newdata = newdata.replace("pass2",password)
+            f = sftp.open(filename,'w')
+            f.write(newdata)
+            f.close()
+            main_command = main_command + " -f=" + filename
         log.info("running command on {0}: {1}".format(self.ip, main_command))
         output=""
         if self.remote:
@@ -2093,21 +2121,18 @@ class RemoteMachineShellConnection:
             for line in stdout.readlines():
                 if (count == 0) and line.lower().find("error") > 0:
                    output = "status:FAIL"
+                   break
               #if line.find("results") > 0 or line.find("status") > 0 or line.find("metrics") or line.find("elapsedTime")> 0 or  line.find("executionTime")> 0 or line.find("resultCount"):
                 if (count > 0):
                     output+=line.strip()
                     output = output.strip()
+                    if "Inputwasnotastatement" in output:
+                        output = "status:FAIL"
+                        break
+                    if "timeout" in output:
+                        output = "status:timeout"
                 else:
                     count+=1
-           # ssh = paramiko.SSHClient()
-           # ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-           # ssh.connect(self.ip, username=self.username, password="password")
-           # sftp = ssh.open_sftp()
-           # filename = 'test'
-           # f = sftp.open('/tmp/' + filename, 'w')
-           # print query
-           # query = query + ";"
-           # f.write(query)
            # main_command = main_command + " < " + '/tmp/' + filename
            # stdin,stdout, ssh_stderr = ssh.exec_command(main_command)
            # stdin.close()
@@ -2143,6 +2168,9 @@ class RemoteMachineShellConnection:
         # stdin.close()
         # stdout.close()
         # stderro.close()
+        if not(queries==""):
+            sftp.remove(filename)
+            sftp.close()
         output = re.sub('\s+', '', output)
         return (output)
 

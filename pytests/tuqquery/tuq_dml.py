@@ -262,7 +262,8 @@ class DMLQueryTests(QueryTests):
             self.query = 'insert into %s (key , value) VALUES %s RETURNING ELEMENT name' % (bucket.name, values[:-1])
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.assertEqual(sorted(actual_result['results']), sorted([v['name'] for v in expected_item_values]),
+            if (self.use_rest):
+                self.assertEqual(sorted(actual_result['results']), sorted([v['name'] for v in expected_item_values]),
                              'Results expected:%s, actual: %s' % (expected_item_values, actual_result['results']))
 
     def test_insert_values_returning_elements_long_value(self):
@@ -608,7 +609,8 @@ class DMLQueryTests(QueryTests):
             self.query = 'upsert into %s (key , value) VALUES %s RETURNING ELEMENT name' % (bucket.name, values[:-1])
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.assertEqual(sorted(actual_result['results']), sorted([v['name'] for v in expected_item_values]),
+            if  (self.use_rest):
+                self.assertEqual(sorted(actual_result['results']), sorted([v['name'] for v in expected_item_values]),
                              'Results expected:%s, actual: %s' % (expected_item_values, actual_result['results']))
 
     def items_check(self, prefix, vls, num_docs):
