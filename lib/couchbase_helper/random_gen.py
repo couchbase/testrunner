@@ -1,5 +1,6 @@
 import random
 import string
+import uuid
 from datetime import datetime
 from random import randint
 
@@ -16,6 +17,8 @@ class RandomDataGenerator(object):
         random.shuffle(r)
         return reduce(lambda i, s: i + chr(s), r[:random.randint(0, len(r))], "")
 
+    def random_uuid(self):
+        return str(uuid.uuid4()).replace("-","")
     def random_char(self):
         return random.choice(string.ascii_uppercase)
 
@@ -76,19 +79,19 @@ class RandomDataGenerator(object):
     def gen_data(self):
     	function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_array", "random_char", "random_json"]
     	function_name = random.choice(function_list)
-        return (self.random_alphanumeric(limit = 5) + "_" + function_name), getattr(self, function_name)()
+        return (self.random_uuid() + "_" + function_name), getattr(self, function_name)()
 
     def gen_data_no_json(self):
-        function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_array", "random_char"]
+        function_list = ["random_int", "random_float", "random_alphanumeric", "random_float",]
         function_name = random.choice(function_list)
-        return (self.random_alphanumeric(limit = 5) + "_" + function_name), getattr(self, function_name)()
+        return (self.random_uuid() + "_" + function_name), getattr(self, function_name)()
 
     def random_json(self, random_fields = True):
     	json_body = {}
     	function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_array", "random_char", "random_json"]
         for function in function_list:
         	if random_fields and self.isChoice():
-        		json_body[(self.random_alphanumeric(limit = 5) + "_" + function.replace("random_", ""))] = getattr(self, function)()
+        		json_body[(self.random_uuid() + "_" + function.replace("random_", ""))] = getattr(self, function)()
         return json_body
 
     def isChoice(self):
