@@ -224,7 +224,16 @@ class BaseTestCase(unittest.TestCase):
                               .format(self.total_buckets))
                 self.change_max_buckets(self, self.total_buckets)
             if self.total_buckets > 0 and not self.skip_init_check_cbserver:
-                self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
+                """ from sherlock, we have index service that could take some
+                    RAM quota from total RAM quota for couchbase server.  We need
+                    to get the correct RAM quota available to create bucket(s)
+                    after all services were set """
+                node_info = RestConnection(self.master).get_nodes_self()
+                if node_info.memoryQuota and int(node_info.memoryQuota) > 0 :
+                    ram_available = node_info.memoryQuota
+                else:
+                    ram_available = self.quota
+                self.bucket_size = self._get_bucket_size(ram_available, self.total_buckets)
 
             if str(self.__class__).find('upgrade_tests') == -1 and \
                             str(self.__class__).find('newupgradetests') == -1:
