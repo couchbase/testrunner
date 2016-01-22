@@ -2,6 +2,7 @@
 import copy
 import random
 import json
+import sys
 from random_gen import RandomDataGenerator
 
 class SubdocHelper():
@@ -54,37 +55,76 @@ class SubdocHelper():
       trial = 0
       filter_paths = []
       pairs = {}
+      operation_definition = []
+      operation_index = 1
       self.find_pairs(data_set,"", pairs)
       for i in range(10000):
-        print data_set
         if len(pairs.keys()) == 0:
           filter_paths = []
           self.find_pairs(data_set,"", pairs)
         key = random.choice(pairs.keys())
-        print "analysis for key {0}".format(key)
         if self.isPathPresent(key, filter_paths):
-          print filter_paths
-          print "removing path = {0}".format(key)
+          print "collision {0}".format(key)
           pairs.pop(key)
           filter_paths.append(key)
         else:
-          ops_type, operation = self.pick_operations(key, pairs[key])
+          ops_type, operation = self.pick_operations(pairs[key])
+          copy_of_original_dataset = copy.deepcopy(data_set)
           function = getattr(self, operation["python"])
-          print operation["python"]
-          print key
-          path, data = function(key, data_set)
-          if operation["mutate"] and path != None:
+          new_path, data = function(key, data_set)
+          if operation["mutate"] == True and new_path != None:
             pairs.pop(key)
-            print "target mutation path {0}".format(path)
-            if "[" in path:
-              path = self.trim_path(path, "[")
-            filter_paths.append(path)
-        trial += 1
-        if trial == max_number_operations:
-          return
+            print "target mutation path {0}".format(new_path)
+            filter_path = new_path
+            if "[" in filter_path:
+              filter_path = self.trim_path(filter_path, "[")
+            filter_paths.append(filter_path)
+            operation_definition.append({
+                "data_value":data,
+                "path_impacted_by_mutation_operation":key,
+                "new_path_impacted_after_mutation_operation":new_path,
+                "original_dataset":copy_of_original_dataset,
+                "mutated_data_set": copy.deepcopy(data_set),
+                "python_based_function_applied":operation["python"],
+                "subdoc_api_function_applied":operation["subdoc_api"]
+                })
+            operation_index += 1
+          elif operation["mutate"] and new_path == None:
+            print "mutation failed"
+        if operation_index == max_number_operations:
+          return operation_definition
+      return operation_definition
+
+    def run_operations_slow(self, data_set = None, max_number_operations = 10):
+      trial = 0
+      operation_definition = []
+      operation_index = 0
+      while True:
+        pairs = {}
+        self.find_pairs(data_set,"", pairs)
+        key = random.choice(pairs.keys())
+        ops_type, operation = self.pick_operations(pairs[key])
+        if operation["mutate"] == True:
+          copy_of_original_dataset = copy.deepcopy(data_set)
+          function = getattr(self, operation["python"])
+          new_path, data = function(key, data_set)
+          if new_path != None:
+            pairs.pop(key)
+            operation_definition.append({
+                  "data_value":data,
+                  "path_impacted_by_mutation_operation":key,
+                  "new_path_impacted_after_mutation_operation":new_path,
+                  "original_dataset":copy_of_original_dataset,
+                  "mutated_data_set": copy.deepcopy(data_set),
+                  "python_based_function_applied":operation["python"],
+                  "subdoc_api_function_applied":operation["subdoc_api"]
+                  })
+            operation_index += 1
+          if operation_index == max_number_operations:
+            return operation_definition
+      return operation_definition
 
     def parse_and_get_data(self, data_set, path):
-      print "parse_and_get_data"
       for key in path.split("."):
         if "[" not in key:
           data_set = data_set[key]
@@ -123,7 +163,9 @@ class SubdocHelper():
     def python_based_array_replace(self, path = "", original_dataset = {}):
       field_name, data_set = self.gen_data()
       modify_dataset  = self.parse_and_get_data(original_dataset, path)
-      index = self.randomDataGenerator.random_int(max_int = len(modify_dataset) - 1)
+      if len(modify_dataset) == 0:
+        return None, None
+      index = random.choice(range(len(modify_dataset)))
       modify_dataset[index] = data_set
       return path+"["+str(index)+"]", data_set
 
@@ -140,14 +182,17 @@ class SubdocHelper():
       return self.python_based_array_add(path, original_dataset = original_dataset, type = "unique")
 
     def python_based_array_add(self, path = "", original_dataset = {}, type = "insert"):
-      field_name, data_set = self.gen_data()
+      field_name, data_set = self.randomDataGenerator.gen_data_no_json()
       modify_dataset  = self.parse_and_get_data(original_dataset, path)
       if type == "first":
         index = 0
       elif type == "last" or type == "unique":
-        index = len(original_dataset)
+        modify_dataset.append(data_set)
+        return path, data_set
       else:
-        index = self.randomDataGenerator.random_int(max_int = len(modify_dataset) - 1)
+        if len(modify_dataset) == 0:
+          return None, None
+        index = random.choice(range(len(modify_dataset)))
         path = path+"["+str(index)+"]"
       modify_dataset.insert(index,data_set)
       return path, data_set
@@ -170,6 +215,8 @@ class SubdocHelper():
       modify_dataset  = original_dataset
       if path != "":
         modify_dataset  = self.parse_and_get_data(original_dataset, path)
+      if len(modify_dataset) == 0:
+        return None, None
       index = random.choice(range(len(modify_dataset)))
       modify_dataset.pop(index)
       if path == "":
@@ -204,29 +251,29 @@ class SubdocHelper():
     def python_based_dict_upsert_add(self, path = "", original_dataset = {}):
       return self.python_based_dict_add(path = path, original_dataset = original_dataset)
 
-    def pick_operations(self, path = "", data = None):
+    def pick_operations(self, data = None):
       array_ops ={
       "array_add_first" : {"python":"python_based_array_add_first", "subdoc_api":"array_add_first", "mutate":True},
       "array_add_last": {"python":"python_based_array_add_last", "subdoc_api":"array_add_last", "mutate":True},
-      "array_add_unique": {"python":"python_based_array_add_unique", "subdoc_api":"array_add_unqiue", "mutate":True},
+      "array_add_unique": {"python":"python_based_array_add_unique", "subdoc_api":"array_add_unique", "mutate":True},
       "array_add_insert": {"python":"python_based_array_add_insert", "subdoc_api":"array_add_insert", "mutate":True},
-      "array_get": {"python":"python_based_get", "subdoc_api":"get", "mutate":False},
-      "array_exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
+      #"array_get": {"python":"python_based_get", "subdoc_api":"get", "mutate":False},
+      #"array_exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
       "array_delete": {"python":"python_based_array_delete", "subdoc_api":"delete", "mutate":True},
-      "array_replace": {"python":"python_based_array_replace", "subdoc_api":"replace", "mutate":True}
+      #"array_replace": {"python":"python_based_array_replace", "subdoc_api":"replace", "mutate":True}
       }
       dict_ops = {
-      "dict_add": {"python":"python_based_dict_add", "subdoc_api":"dict_add", "mutate":False},
+      "dict_add": {"python":"python_based_dict_add", "subdoc_api":"dict_add", "mutate":True},
       "dict_upsert_add": {"python":"python_based_dict_upsert_add", "subdoc_api":"dict_upsert", "mutate":False},
       "dict_upsert_replace": {"python":"python_based_dict_upsert_replace", "subdoc_api":"dict_upsert", "mutate":True},
-      "dict_get": {"python":"python_based_get", "subdoc_api":"get", "mutate":False},
-      "dict_exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
+      #"dict_get": {"python":"python_based_get", "subdoc_api":"get", "mutate":False},
+      #"dict_exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
       "dict_delete": {"python":"python_based_dict_delete", "subdoc_api":"delete", "mutate":True},
       "dict_replace": {"python":"python_based_dict_replace", "subdoc_api":"replace", "mutate":True}
       }
       field_ops = {
       "get": {"python":"python_based_get", "subdoc_api":"get", "mutate":False},
-      "exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
+      #"exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
       }
       if isinstance(data, list):
         key = random.choice(array_ops.keys())
@@ -247,89 +294,23 @@ class SubdocHelper():
     def trim_path(self, path, search_string):
       return path[:path.rfind(search_string)]
 
+
+    def show_all_operations(self, ops = []):
+      operation_index = 0
+      for operation in ops:
+        print "++++++++++++++++++ OPERATION {0} ++++++++++++++++++++++".format(operation_index)
+        operation_index += 1
+        for field in operation.keys():
+          print "{0} :: {1}".format(field, operation[field])
+
     def show_all_paths(self, pairs, data_set):
       for path in pairs.keys():
         parse_path_data = self.parse_and_get_data(data_set, path)
         print "PATH = {0} || VALUE = {1} || PARSE PATH = {2} ".format(path, pairs[path], parse_path_data)
-        key, ops_info = self.pick_operations(path, parse_path_data)
+        key, ops_info = self.pick_operations(parse_path_data)
         print key
         print "Run python operation {0}".format(ops_info["python"])
         print "Run equivalent subdoc api operation {0}".format(ops_info["subdoc_api"])
-
-# SUB DOC COMMANDS
-
-# GENERIC COMMANDS
-    def delete(self, client, key = '', path = ''):
-        try:
-            self.client.delete_sd(key, path)
-        except Exception as e:
-            raise
-
-    def replace(self, client, key = '', path = '', value = None):
-        try:
-            self.client.replace_sd(key, path, value)
-        except Exception as e:
-            raise
-
-    def get(self, client, key = '', path = '', expected_value = None):
-        new_path = self.generate_path(self.nesting_level, path)
-        try:
-            opaque, cas, data = self.client.get_sd(key, new_path)
-            return json.loads(data)
-        except Exception as e:
-            raise
-
-    def exists(self, client, key = '', path = '', expected_value = None):
-        new_path = self.generate_path(self.nesting_level, path)
-        try:
-            opaque, cas, data = self.client.exists_sd(key, new_path)
-            return json.loads(data)
-        except Exception as e:
-            raise
-    def counter(self, client, key = '', path = '', value = None):
-        try:
-            self.client.counter_sd(key, path, value)
-        except Exception as e:
-            raise
-
-# DICTIONARY SPECIFIC COMMANDS
-    def dict_add(self, client, key = '', path = '', value = None):
-        try:
-            self.client.dict_add_sd(key, path, value)
-        except Exception as e:
-            raise
-
-    def dict_upsert(self, client, key = '', path = '', value = None):
-        try:
-            self.client.dict_upsert_sd(key, path, value)
-        except Exception as e:
-            raise
-
-
-# ARRAY SPECIFIC COMMANDS
-    def array_add_last(self, client, key = '', path = '', value = None):
-        try:
-            self.client.array_push_last_sd(key, path, value)
-        except Exception as e:
-            raise
-
-    def array_add_first(self, client, key = '', path = '', value = None):
-        try:
-            self.client.array_push_first_sd(key, path, value)
-        except Exception as e:
-            raise
-
-    def array_add_unique(self, client, key = '', path = '', value = None):
-        try:
-            self.client.array_add_unique_sd(key, path, value)
-        except Exception as e:
-            raise
-
-    def array_add_insert(self, client, key = '', path = '', value = None):
-        try:
-            self.client.array_add_insert_sd(key, path, value)
-        except Exception as e:
-            raise
 
 if __name__=="__main__":
     helper = SubdocHelper()
@@ -344,6 +325,5 @@ if __name__=="__main__":
     helper.find_pairs(nest_json,"", pairs)
     helper.show_all_paths(pairs, nest_json)
     print  "+++++ RUN OPERATION ANALYSIS ++++"
-    json_document = {"json":{}}
-    helper.run_operations(json_document, 100)
-    #print json_document
+    ops = helper.run_operations_slow({"json":{"field":1, "json":{"array":[0]}}, "array":[0,1,2]}, max_number_operations = 1000)
+    helper.show_all_operations(ops)
