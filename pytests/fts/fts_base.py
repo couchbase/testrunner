@@ -119,7 +119,7 @@ class INDEX_DEFAULTS:
 
 
     PLAN_PARAMS = {
-                  "maxPartitionsPerPIndex": 20,
+                  "maxPartitionsPerPIndex": 128,
                   "numReplicas": 0,
                   "hierarchyRules": None,
                   "nodePlanParams": None,
@@ -1001,7 +1001,7 @@ class CouchbaseCluster:
         if not node:
             node = self.get_random_fts_node()
         self.__log.info("Running query %s on node: %s"
-                        % (json.dumps(query_dict['query'], ensure_ascii=False),
+                        % (json.dumps(query_dict, ensure_ascii=False),
                            node.ip))
         total_hits, hit_list, time_taken = \
             RestConnection(node).run_fts_query(index_name, query_dict)
@@ -1302,7 +1302,7 @@ class CouchbaseCluster:
                           kv_store=1, flag=0, only_store_hash=True,
                           batch_size=1000, pause_secs=1, timeout_secs=30):
         """Update data asynchronously on given bucket. Function don't wait for
-        load data to finish, return immidiately.
+        load data to finish, return immediately.
         @param bucket: bucket where to load data.
         @param fields_to_update: list of fields to update in loaded JSON
         @param value_size: size of the one item.
@@ -1895,7 +1895,7 @@ class FTSBaseTest(unittest.TestCase):
         self.index_replicas = self._input.param("index_replicas", None)
         self.index_kv_store = self._input.param("kvstore", None)
         self.partitions_per_pindex = \
-            self._input.param("max_partitions_pindex", 20)
+            self._input.param("max_partitions_pindex", 128)
         self.upd_del_fields = self._input.param("upd_del_fields", None)
         self.num_queries = self._input.param("num_queries", 1)
         self.query_types = (self._input.param("query_types", "match")).split(',')
