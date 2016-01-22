@@ -7,12 +7,14 @@ from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRe
 from membase.api.rest_client import RestConnection, Bucket
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from security.auditmain import audit
+from newupgradebasetest import NewUpgradeBaseTest
+from couchbase.bucket import Bucket
 
 AUDITBACKUPID = 20480
 AUDITRESTOREID= 20485
 
 
-class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
+class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTest):
     def setUp(self):
         super(EnterpriseBackupRestoreTest, self).setUp()
 
@@ -1048,3 +1050,81 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         rebalance = self.cluster.async_rebalance(self.servers, [], [])
         rebalance.result()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+
+    def test_backup_restore_after_upgrade(self):
+        """
+        1. Test has to be supplied initial_version to be installed and upgrade_version to be upgraded to
+        2. Installs initial_version on the servers - initializes them and creates bucket default
+        3. Upgrades cluster to upgrade_version
+        4. Creates a backupset - backsup data and validates
+        5. Restores data and validates
+        """
+        self._install(self.servers)
+        for server in self.servers:
+            rest_conn = RestConnection(server)
+            rest_conn.init_cluster(username='Administrator', password='asdasd')
+            rest_conn.create_bucket(bucket='default', ramQuotaMB=512)
+        upgrade_version = self.input.param("upgrade_version", "4.5.0-1069")
+        upgrade_threads = self._async_update(upgrade_version=upgrade_version, servers=self.servers)
+        for th in upgrade_threads:
+            th.join()
+        self.log.info("Upgraded to: {ver}".format(ver="4.5.0-1069"))
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster_validate()
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+
+    def test_backup_restore_with_python_sdk(self):
+        """
+        1. Note that python sdk has to be installed on all nodes before running this test
+        2. Connects to default bucket on cluster host using Python SDK - loads specifed number of items
+        3. Creates a backupset, backsup data and validates
+        4. Restores data and validates
+        5. Connects to default bucket on restore host using Python SDK
+        6. Retrieves cas and flgas of each doc on both cluster and restore host - validates if they are equal
+        """
+        try:
+            cb = Bucket('couchbase://' + self.backupset.cluster_host.ip + '/default')
+            if cb is not None:
+                self.log.info("Established connection to bucket on cluster host using python SDK")
+            else:
+                self.fail("Failed to establish connection to bucket on cluster host using python SDK")
+        except Exception, ex:
+            self.fail(str(ex))
+        self.log.info("Loading bucket with data using python SDK")
+        for i in range(1, self.num_items + 1):
+            cb.upsert("doc" + str(i), "value" + str(i))
+        cluster_host_data = {}
+        for i in range(1, self.num_items + 1):
+            key = "doc" + str(i)
+            value_obj = cb.get(key=key)
+            cluster_host_data[key] = {}
+            cluster_host_data[key]["cas"] = str(value_obj.cas)
+            cluster_host_data[key]["flags"] = str(value_obj.flags)
+        self.backup_create()
+        self.backup_cluster_validate()
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+        try:
+            cb = Bucket('couchbase://' + self.backupset.restore_cluster_host.ip + '/default')
+            if cb is not None:
+                self.log.info("Established connection to bucket on restore host using python SDK")
+            else:
+                self.fail("Failed to establish connection to bucket on restore host using python SDK")
+        except Exception, ex:
+            self.fail(str(ex))
+        restore_host_data = {}
+        for i in range(1, self.num_items + 1):
+            key = "doc" + str(i)
+            value_obj = cb.get(key=key)
+            restore_host_data[key] = {}
+            restore_host_data[key]["cas"] = str(value_obj.cas)
+            restore_host_data[key]["flags"] = str(value_obj.flags)
+        self.log.info("Comparing cluster host data cas and flags against restore host data")
+        for i in range(1, self.num_items + 1):
+            key = "doc" + str(i)
+            if cluster_host_data[key]["cas"] != restore_host_data[key]["cas"]:
+                self.fail("CAS mismatch for key: {0}".format(key))
+            if cluster_host_data[key]["flags"] != restore_host_data[key]["flags"]:
+                self.fail("Flags mismatch for key: {0}".format(key))
+        self.log.info("Successfully validated cluster host data cas and flags against restore host data")
