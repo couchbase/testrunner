@@ -323,7 +323,7 @@ class QueryTests(BaseTestCase):
     def test_slicing(self):
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_agg(name)[0:5] as names" +\
-            " FROM %s job_title" % (bucket.name)
+            " FROM %s GROUP BY job_title" % (bucket.name)
 
             actual_result = self.run_cbq_query()
             for item in actual_result['results']:
@@ -3220,8 +3220,7 @@ class QueryTests(BaseTestCase):
         cred_params = {'creds': []}
         for bucket in self.buckets:
             if bucket.saslPassword:
-                print bucket.saslPassword
-                cred_params['creds'].append({'user': 'local:%s', 'pass': bucket.saslPassword})
+                cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
         query_params.update(cred_params)
         if self.use_rest:
             query_params.update({'scan_consistency': self.scan_consistency})
