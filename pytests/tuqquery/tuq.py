@@ -323,7 +323,7 @@ class QueryTests(BaseTestCase):
     def test_slicing(self):
         for bucket in self.buckets:
             self.query = "SELECT job_title, array_agg(name)[0:5] as names" +\
-            " FROM %s GROUP BY job_title" % (bucket.name)
+            " FROM %s job_title" % (bucket.name)
 
             actual_result = self.run_cbq_query()
             for item in actual_result['results']:
@@ -3220,7 +3220,8 @@ class QueryTests(BaseTestCase):
         cred_params = {'creds': []}
         for bucket in self.buckets:
             if bucket.saslPassword:
-                cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
+                print bucket.saslPassword
+                cred_params['creds'].append({'user': 'local:%s', 'pass': bucket.saslPassword})
         query_params.update(cred_params)
         if self.use_rest:
             query_params.update({'scan_consistency': self.scan_consistency})
@@ -3240,24 +3241,20 @@ class QueryTests(BaseTestCase):
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
-                                                            "shell/cbq/cbq ","",
-                                                       subcommands=[query,],
-                                                       min_output_size=20,
-                                                       end_msg='cbq>')
+                                                            "shell/cbq/cbq ","","","","","")
             else:
                 os = self.shell.extract_remote_info().type.lower()
                 #if (query.find("VALUES") > 0):
                 if not(self.isprepared):
-                    query = query.encode('unicode-escape').replace(b'"', b'\\"')
-                    query = query.encode('unicode-escape').replace(b'`', b'\\`')
+                    query = query.replace('"', '\\"')
+                    query = query.replace('`', '\\`')
+                    #query = query.encode('unicode-escape').replace(b'`', b'\`')
+                    #query = query.replace('"','\"')
+                    #query = query.replace('`','\`')
                 if os == "linux":
                     cmd = "%s/go_cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
-                    output = self.shell.execute_commands_inside(cmd,query,"",
-                                                           subcommands=[query,],
-                                                           min_output_size=20,
-                                                           end_msg='go_cbq>')
+                    output = self.shell.execute_commands_inside(cmd,query,"","","","")
                     #output = self.shell.execute_commands_inside(cmd,query)
-                    print output
                     result = json.loads(output)
         if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)
