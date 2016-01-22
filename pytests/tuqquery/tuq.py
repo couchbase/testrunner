@@ -3192,7 +3192,8 @@ class QueryTests(BaseTestCase):
         self.isprepared = True
         result_no_prepare = self.run_cbq_query()['results']
         if self.named_prepare:
-            self.named_prepare=self.named_prepare + "_" +str(uuid.uuid4())[:4]
+            if 'concurrent' not in self.named_prepare:
+                self.named_prepare=self.named_prepare + "_" +str(uuid.uuid4())[:4]
             query = "PREPARE %s from %s" % (self.named_prepare,self.query)
         else:
             query = "PREPARE %s" % self.query
