@@ -2,7 +2,9 @@ from lib.mc_bin_client import MemcachedClient, MemcachedError
 from lib.memcacheConstants import *
 from lib.couchbase_helper.subdoc_helper import SubdocHelper
 from subdoc_base import SubdocBaseTest
+import Queue
 import copy, json
+import threading
 import random
 
 class SubdocAutoTestGenerator(SubdocBaseTest):
@@ -143,6 +145,77 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                 error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
         self.assertTrue(len(error_result) == 0, error_result)
 
+    def test_concurrent_mutations(self):
+        data_set =  self.generate_json_for_nesting()
+        base_json = self.generate_json_for_nesting()
+        json_document = self.generate_nested(base_json, data_set, self.nesting_level)
+        data_key = "test_concurrent_mutations"
+        jsonDump = json.dumps(json_document)
+        self.client.set(data_key, 0, 0, jsonDump)
+        self.run_mutation_concurrent_operations(self.client, data_key, json_document)
+
+    def run_mutation_concurrent_operations(self, client  = None, document_key = "", json_document = {}):
+        self.number_of_operations =  self.input.param("number_of_operations",10)
+        # INSERT INTO  COUCHBASE
+        jsonDump = json.dumps(json_document)
+        client.set(document_key, 0, 0, jsonDump)
+        # RUN PARALLEL OPERATIONS
+        operations = self.subdoc_gen_helper.run_operations(json_document, self.number_of_operations)
+        # RUN CONCURRENT THREADS
+        thread_list = []
+        result_queue = Queue.Queue()
+        for operation in operations:
+            t = threading.Thread(target=self.run_mutation_operation, args = (self.client, document_key, operation, result_queue))
+            t.daemon = True
+            t.start()
+            thread_list.append(t)
+        for t in thread_list:
+            t.join()
+        queue_data = []
+        while not result_queue.empty():
+            queue_data.append(result_queue.get())
+        self.assertTrue(len(queue_data) == 0, queue_data)
+        # CHECK RESULT IN THE END
+        json_document  = copy.deepcopy(operations[len(operations)-1]["mutated_data_set"])
+        pairs = {}
+        error_result = {}
+        self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
+        for path in pairs.keys():
+            opaque, cas, data = self.client.get_sd(document_key, path)
+            data = json.loads(data)
+            if data != pairs[path]:
+                error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
+        self.assertTrue(len(error_result) == 0, error_result)
+
+    def run_mutation_operation(self, client, document_key, operation, result_queue):
+        function = getattr(self, operation["subdoc_api_function_applied"])
+        try:
+            function(self.client, document_key, operation["new_path_impacted_after_mutation_operation"], json.dumps(operation["data_value"]))
+        except Exception, ex:
+            self.log.info(str(ex))
+            result_queue.put({"error":str(ex), "operation":operation})
+
+
+    def run_mutation_operations(self, document_key = "document_key", json_document = {}, client  = None, number_of_operations = 10):
+        jsonDump = json.dumps(json_document)
+        operations = self.subdoc_gen_helper.run_operations_slow(json_document, number_of_operations)
+        for operation in operations:
+            function = getattr(self, operation["subdoc_api_function_applied"])
+            try:
+                function(self.client, document_key, operation["new_path_impacted_after_mutation_operation"], json.dumps(operation["data_value"]))
+            except Exception, ex:
+                return False, operation
+        pairs = {}
+        error_result = {}
+        self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
+        for path in pairs.keys():
+            self.log.info(" Analyzing path {0}".format(path))
+            opaque, cas, data = client.get_sd(document_key, path)
+            data = json.loads(data)
+            if data != pairs[path]:
+                error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
+        if len(error_result) != 0:
+            return False, error_result
 
 # SUB DOC COMMANDS
 

@@ -60,8 +60,7 @@ class SubdocHelper():
       self.find_pairs(data_set,"", pairs)
       for i in range(10000):
         if len(pairs.keys()) == 0:
-          filter_paths = []
-          self.find_pairs(data_set,"", pairs)
+          return operation_definition
         key = random.choice(pairs.keys())
         if self.isPathPresent(key, filter_paths):
           print "collision {0}".format(key)
@@ -459,16 +458,6 @@ class SubdocHelper():
 
 if __name__=="__main__":
     helper = SubdocHelper()
-    pairs= {}
-    nest_json = {"string":"data", "integer":3, "simple_json":{"string":"data", "integer":3, "array":[0,1,2, {"field":"value", "array":[0,1,2,3]}]}, "array":[0,1,2]}
-    json_document = {"string":"data", "integer":3,"array":[1,2,3, [0, 1, 2, [3]]], "json":nest_json}
-    helper.find_pairs(json_document,"", pairs)
-    helper.show_all_paths(pairs, json_document)
-    pairs= {}
-    print  "++++++++++++++++++++++++++"
-    nest_json = [{"field_1":1}, {"field_2":2}, 3]
-    helper.find_pairs(nest_json,"", pairs)
-    helper.show_all_paths(pairs, nest_json)
-    print  "+++++ RUN OPERATION ANALYSIS ++++"
-    ops = helper.run_operations_slow({"json":{"field":1, "json":{"array":[0]}}, "array":[0,1,2]}, max_number_operations = 1000)
+    json_document = {"json":{"field":{"json":{"json":{"field_name":1}}}, "json":{"array":[0]}}, "array":[0,1,2]}
+    ops = helper.run_operations(json_document, max_number_operations = 1)
     helper.show_all_operations(ops)
