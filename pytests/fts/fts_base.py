@@ -119,7 +119,7 @@ class INDEX_DEFAULTS:
 
 
     PLAN_PARAMS = {
-                  "maxPartitionsPerPIndex": 128,
+                  "maxPartitionsPerPIndex": 20,
                   "numReplicas": 0,
                   "hierarchyRules": None,
                   "nodePlanParams": None,
@@ -1895,7 +1895,7 @@ class FTSBaseTest(unittest.TestCase):
         self.index_replicas = self._input.param("index_replicas", None)
         self.index_kv_store = self._input.param("kvstore", None)
         self.partitions_per_pindex = \
-            self._input.param("max_partitions_pindex", 128)
+            self._input.param("max_partitions_pindex", 20)
         self.upd_del_fields = self._input.param("upd_del_fields", None)
         self.num_queries = self._input.param("num_queries", 1)
         self.query_types = (self._input.param("query_types", "match")).split(',')
@@ -2318,6 +2318,8 @@ class FTSBaseTest(unittest.TestCase):
             bucket_password = bucket.saslPassword
         if self.index_kv_store:
             index_params = {"store": {"kvStoreName": self.index_kv_store}}
+        if not plan_params:
+            plan_params = self.construct_plan_params()
         index = self._cb_cluster.create_fts_index(
             name=index_name,
             source_name=bucket.name,
