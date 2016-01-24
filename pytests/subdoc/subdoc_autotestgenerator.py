@@ -152,9 +152,10 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         data_key = "test_concurrent_mutations"
         jsonDump = json.dumps(json_document)
         self.client.set(data_key, 0, 0, jsonDump)
-        self.run_mutation_concurrent_operations(self.client, data_key, json_document)
+        self.run_mutation_concurrent_operations(self.buckets[0], data_key, json_document)
 
-    def run_mutation_concurrent_operations(self, client  = None, document_key = "", json_document = {}):
+    def run_mutation_concurrent_operations(self, bucket = None, document_key = "", json_document = {}):
+        client = self.direct_client(self.master, bucket)
         self.number_of_operations =  self.input.param("number_of_operations",10)
         # INSERT INTO  COUCHBASE
         jsonDump = json.dumps(json_document)
