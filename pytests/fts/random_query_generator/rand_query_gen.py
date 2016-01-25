@@ -8,14 +8,14 @@ from wiki_queryables import WikiQuerables
 class DATASET:
     FIELDS = {'emp': {'str': ["name", "dept", "manages_reports",
                                "languages_known", "email", "type"],
-                      'num': ["mutated", "manages_team_size", "salary"],
+                      'num': ["emp_id", "mutated", "manages_team_size", "salary"],
                       'bool': ["is_manager"],
                       'date': ["join_date"],
                       'text': ["name", "manages_reports"]},
 
               'wiki': {'str': ["title", "revision_text_text", "type"],
                        'text': ["title", "revision_text_text"],
-                       'num': ["mutated"],
+                       'num': ["id", "mutated", "revision_contributor_id"],
                        'bool': [],
                        'date': ["revision_timestamp"]}}
 
@@ -447,9 +447,9 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 if __name__ == "__main__":
     #query_type=['match_phrase', 'match', 'date_range', 'numeric_range', 'bool',
     #              'conjunction', 'disjunction', 'prefix']
-    query_type = ['query_string']
-    query_gen = FTSESQueryGenerator(100, query_type=query_type, dataset='all')
+    query_type = ['disjunction']
+    query_gen = FTSESQueryGenerator(10, query_type=query_type, dataset='all')
     for index, query in enumerate(query_gen.fts_queries):
         print json.dumps(query, ensure_ascii=False, indent=3)
         print json.dumps(query_gen.es_queries[index], ensure_ascii=False, indent=3)
-        print "------------"
+        print "------------ %s -------------" % str(index+2)
