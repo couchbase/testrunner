@@ -2078,7 +2078,12 @@ class RestConnection(object):
         """ get fts index/alias definition"""
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}".format(name)
-        status, content, header = self._http_request(api, timeout=timeout)
+        status, content, header = self._http_request(
+            api,
+            headers=self._create_capi_headers_with_auth(
+                        self.username,
+                        self.password),
+            timeout=timeout)
         if status:
             json_parsed = json.loads(content)
         return status, json_parsed
@@ -2087,7 +2092,12 @@ class RestConnection(object):
         """ get number of docs indexed"""
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}/count".format(name)
-        status, content, header = self._http_request(api, timeout=timeout)
+        status, content, header = self._http_request(
+            api,
+            headers=self._create_capi_headers_with_auth(
+                        self.username,
+                        self.password),
+            timeout=timeout)
         if status:
             json_parsed = json.loads(content)
         return json_parsed['count']
@@ -2096,7 +2106,12 @@ class RestConnection(object):
         """ Returns uuid of index/alias """
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}/".format(name)
-        status, content, header = self._http_request(api, timeout=timeout)
+        status, content, header = self._http_request(
+            api,
+            headers=self._create_capi_headers_with_auth(
+                                                self.username,
+                                                self.password),
+            timeout=timeout)
         if status:
             json_parsed = json.loads(content)
         return json_parsed['indexDef']['uuid']
@@ -2104,31 +2119,60 @@ class RestConnection(object):
     def delete_fts_index(self, name):
         """ delete fts index/alias """
         api = self.fts_baseUrl + "api/index/{0}".format(name)
-        status, content, header = self._http_request(api, 'DELETE')
+        status, content, header = self._http_request(
+            api,
+            'DELETE',
+            headers=self._create_capi_headers_with_auth(
+                                                self.username,
+                                                self.password))
         return status
 
     def stop_fts_index_update(self, name):
         """ method to stop fts index from updating"""
         api = self.fts_baseUrl + "api/index/{0}/ingestControl/pause".format(name)
-        status, content, header = self._http_request(api, 'POST', '')
+        status, content, header = self._http_request(
+            api,
+            'POST',
+            '',
+            headers=self._create_capi_headers_with_auth(
+                                                self.username,
+                                                self.password))
         return status
 
     def freeze_fts_index_partitions(self, name):
         """ method to freeze index partitions asignment"""
         api = self.fts_baseUrl+ "api/index/{0}/planFreezeControl".format(name)
-        status, content, header = self._http_request(api, 'POST', '')
+        status, content, header = self._http_request(
+            api,
+            'POST',
+            '',
+            headers=self._create_capi_headers_with_auth(
+                                                self.username,
+                                                self.password))
         return status
 
     def disable_querying_on_fts_index(self, name):
         """ method to disable querying on index"""
         api = self.fts_baseUrl + "api/index/{0}/queryControl/disallow".format(name)
-        status, content, header = self._http_request(api, 'POST', '')
+        status, content, header = self._http_request(
+            api,
+            'POST',
+            '',
+            headers=self._create_capi_headers_with_auth(
+                                                self.username,
+                                                self.password))
         return status
 
     def enable_querying_on_fts_index(self, name):
         """ method to enable querying on index"""
         api = self.fts_baseUrl + "api/index/{0}/queryControl/allow".format(name)
-        status, content, header = self._http_request(api, 'POST', '')
+        status, content, header = self._http_request(
+            api,
+            'POST',
+            '',
+            headers=self._create_capi_headers_with_auth(
+                                                self.username,
+                                                self.password))
         return status
 
     def run_fts_query(self, index_name, query_json):
