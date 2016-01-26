@@ -11,6 +11,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
     def setUp(self):
         super(SubdocAutoTestGenerator, self).setUp()
         self.nesting_level =  self.input.param("nesting_level",0)
+        self.mutation_operation_type =  self.input.param("mutation_operation_type","any")
+        self.seed =  self.input.param("seed",0)
         self.client = self.direct_client(self.master, self.buckets[0])
         self.subdoc_gen_helper = SubdocHelper()
 
@@ -55,67 +57,15 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             	error_result[path] = str(ex)
         self.assertTrue(len(error_result) == 0, error_result)
 
-    def test_mutation_dict_operations(self):
-        error_result = {}
-        self.number_of_operations =  self.input.param("number_of_operations",10)
-        data_set =  self.generate_json_for_nesting()
-        base_json = self.generate_json_for_nesting()
-        json_document = self.generate_nested(base_json, data_set, self.nesting_level)
-        data_key = "test_mutation_dict_operations"
-        jsonDump = json.dumps(json_document)
-        self.client.set(data_key, 0, 0, jsonDump)
-        operations = self.subdoc_gen_helper.run_operations_dict_slow(json_document, self.number_of_operations)
-        for operation in operations:
-            function = getattr(self, operation["subdoc_api_function_applied"])
-            try:
-                function(self.client, data_key, operation["new_path_impacted_after_mutation_operation"], json.dumps(operation["data_value"]))
-            except Exception, ex:
-                self.log.info(ex)
-                for key in operation:
-                    self.log.info(" {0} : {1}".format(key, operation[key]))
-                raise
-        json_document  = copy.deepcopy(operations[len(operations)-1]["mutated_data_set"])
-        pairs = {}
-        self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
-        for path in pairs.keys():
-            self.log.info(" Analyzing path {0}".format(path))
-            opaque, cas, data = self.client.get_sd(data_key, path)
-            data = json.loads(data)
-            if data != pairs[path]:
-                error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
-        self.assertTrue(len(error_result) == 0, error_result)
+    def test_seq_mutations_dict(self):
+        self.mutation_operation_type = "dict"
+        self.test_seq_mutations()
 
-    def test_mutation_array_operations(self):
-        error_result = {}
-        self.number_of_operations =  self.input.param("number_of_operations",10)
-        data_set =  self.generate_json_for_nesting()
-        base_json = self.generate_json_for_nesting()
-        json_document = self.generate_nested(base_json, data_set, self.nesting_level)
-        data_key = "test_mutation_dict_operations"
-        jsonDump = json.dumps(json_document)
-        self.client.set(data_key, 0, 0, jsonDump)
-        operations = self.subdoc_gen_helper.run_operations_array_slow(json_document, self.number_of_operations)
-        for operation in operations:
-            function = getattr(self, operation["subdoc_api_function_applied"])
-            try:
-                function(self.client, data_key, operation["new_path_impacted_after_mutation_operation"], json.dumps(operation["data_value"]))
-            except Exception, ex:
-                self.log.info(ex)
-                for key in operation:
-                    self.log.info(" {0} : {1}".format(key, operation[key]))
-                raise
-        json_document  = copy.deepcopy(operations[len(operations)-1]["mutated_data_set"])
-        pairs = {}
-        self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
-        for path in pairs.keys():
-            self.log.info(" Analyzing path {0}".format(path))
-            opaque, cas, data = self.client.get_sd(data_key, path)
-            data = json.loads(data)
-            if data != pairs[path]:
-                error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
-        self.assertTrue(len(error_result) == 0, error_result)
+    def test_seq_mutations_array(self):
+        self.mutation_operation_type = "array"
+        self.test_seq_mutations()
 
-    def test_mutation_operations(self):
+    def test_seq_mutations(self):
         error_result = {}
         self.number_of_operations =  self.input.param("number_of_operations",10)
         data_set =  self.generate_json_for_nesting()
@@ -124,7 +74,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         data_key = "test_mutation_operations"
         jsonDump = json.dumps(json_document)
         self.client.set(data_key, 0, 0, jsonDump)
-        operations = self.subdoc_gen_helper.run_operations_slow(json_document, self.number_of_operations)
+        operations = self.subdoc_gen_helper.build_sequence_operations(json_document, self.number_of_operations, seed = self.seed, mutation_operation_type = self.mutation_operation_type)
         for operation in operations:
             function = getattr(self, operation["subdoc_api_function_applied"])
             try:
@@ -145,6 +95,14 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                 error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
         self.assertTrue(len(error_result) == 0, error_result)
 
+    def test_concurrent_mutations_dict(self):
+        self.mutation_operation_type = "dict"
+        self.test_concurrent_mutations()
+
+    def test_concurrent_mutations_array(self):
+        self.mutation_operation_type = "array"
+        self.test_concurrent_mutations()
+
     def test_concurrent_mutations(self):
         data_set =  self.generate_json_for_nesting()
         base_json = self.generate_json_for_nesting()
@@ -161,7 +119,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         jsonDump = json.dumps(json_document)
         client.set(document_key, 0, 0, jsonDump)
         # RUN PARALLEL OPERATIONS
-        operations = self.subdoc_gen_helper.run_operations(json_document, self.number_of_operations)
+        operations = self.subdoc_gen_helper.build_concurrent_operations(json_document, self.number_of_operations, seed = self.seed, mutation_operation_type = self.mutation_operation_type)
         # RUN CONCURRENT THREADS
         thread_list = []
         result_queue = Queue.Queue()
