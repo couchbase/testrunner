@@ -9,27 +9,6 @@ class SubdocHelper():
     def __init__(self):
       self.randomDataGenerator = RandomDataGenerator()
 
-    def find_json_paths(self, json = {}, path  = "", pairs = {}):
-    	for key in json.keys():
-    		prefix = ""
-    		if path != "":
-    			prefix = path+"."
-    		if isinstance(json[key], dict):
-    			self.find_json_paths(json[key], prefix + key, pairs)
-    		elif isinstance(json[key], list):
-    			self.find_array_paths(json[key], prefix + key, pairs)
-    		pairs[prefix+key] = json[key]
-
-    def find_array_paths(self, array = [], path  = "", pairs = {}):
-    	index = 0
-    	for element in array:
-    		if isinstance(element, dict):
-    			self.find_json_paths(element, path + "["+str(index)+"]", pairs)
-    		elif isinstance(element, list):
-    			self.find_array_paths(element, path + "["+str(index)+"]", pairs)
-    		pairs[path+"["+str(index)+"]"] =element
-    		index += 1
-
     def find_pairs(self, data_set, path  = "", pairs = {}):
     	if isinstance(data_set, dict):
     		for key in data_set.keys():
@@ -51,7 +30,11 @@ class SubdocHelper():
     			pairs[path+"["+str(index)+"]"] =element
     			index += 1
 
-    def run_operations(self, data_set = None, max_number_operations = 10):
+    def build_concurrent_operations(self, data_set = None, max_number_operations = 10, seed = None, mutation_operation_type = "any", force_operation_type = None):
+      # FIX THE SEED
+      if seed != None:
+        random.seed(seed)
+        self.randomDataGenerator.set_seed(seed)
       trial = 0
       filter_paths = []
       pairs = {}
@@ -67,78 +50,45 @@ class SubdocHelper():
           pairs.pop(key)
           filter_paths.append(key)
         else:
-          ops_type, operation = self.pick_operations(pairs[key])
+          if mutation_operation_type == "any":
+            operation = self.pick_operations(pairs[key], operation = force_operation_type)
+          elif mutation_operation_type == "dict":
+            operation = self.pick_dict_operations(pairs[key], operation = force_operation_type)
+          else:
+            operation = self.pick_array_operations(pairs[key], operation = force_operation_type)
+          new_path  = None
           copy_of_original_dataset = copy.deepcopy(data_set)
-          function = getattr(self, operation["python"])
-          new_path, data = function(key, data_set)
-          if operation["mutate"] == True and new_path != None:
-            pairs.pop(key)
-            print "target mutation path {0}".format(new_path)
-            filter_path = new_path
-            if "[" in filter_path:
-              filter_path = self.trim_path(filter_path, "[")
-            filter_paths.append(filter_path)
-            operation_definition.append({
-                "data_value":data,
-                "path_impacted_by_mutation_operation":key,
-                "new_path_impacted_after_mutation_operation":new_path,
-                "original_dataset":copy_of_original_dataset,
-                "mutated_data_set": copy.deepcopy(data_set),
-                "python_based_function_applied":operation["python"],
-                "subdoc_api_function_applied":operation["subdoc_api"]
-                })
-            operation_index += 1
-          elif operation["mutate"] and new_path == None:
-            print "mutation failed"
+          if operation["mutate"] == True:
+            function = getattr(self, operation["python"])
+            new_path, data = function(key, data_set)
+            if new_path != None:
+              pairs.pop(key)
+              print "target mutation path {0}".format(new_path)
+              filter_path = new_path
+              if "[" in filter_path:
+                filter_path = self.trim_path(filter_path, "[")
+              filter_paths.append(filter_path)
+              operation_definition.append({
+                  "data_value":data,
+                  "path_impacted_by_mutation_operation":key,
+                  "new_path_impacted_after_mutation_operation":new_path,
+                  "original_dataset":copy_of_original_dataset,
+                  "mutated_data_set": copy.deepcopy(data_set),
+                  "python_based_function_applied":operation["python"],
+                  "subdoc_api_function_applied":operation["subdoc_api"]
+                  })
+              operation_index += 1
+            elif operation["mutate"] and new_path == None:
+              print "mutation failed"
         if operation_index == max_number_operations:
           return operation_definition
       return operation_definition
 
-    def run_dict_operations(self, data_set = None, max_number_operations = 10):
-      trial = 0
-      filter_paths = []
-      pairs = {}
-      operation_definition = []
-      operation_index = 1
-      self.find_pairs(data_set,"", pairs)
-      for i in range(10000):
-        if len(pairs.keys()) == 0:
-          filter_paths = []
-          self.find_pairs(data_set,"", pairs)
-        key = random.choice(pairs.keys())
-        if self.isPathPresent(key, filter_paths):
-          print "collision {0}".format(key)
-          pairs.pop(key)
-          filter_paths.append(key)
-        else:
-          ops_type, operation = self.pick_dict_operations(pairs[key])
-          copy_of_original_dataset = copy.deepcopy(data_set)
-          function = getattr(self, operation["python"])
-          new_path, data = function(key, data_set)
-          if operation["mutate"] == True and new_path != None:
-            pairs.pop(key)
-            print "target mutation path {0}".format(new_path)
-            filter_path = new_path
-            if "[" in filter_path:
-              filter_path = self.trim_path(filter_path, "[")
-            filter_paths.append(filter_path)
-            operation_definition.append({
-                "data_value":data,
-                "path_impacted_by_mutation_operation":key,
-                "new_path_impacted_after_mutation_operation":new_path,
-                "original_dataset":copy_of_original_dataset,
-                "mutated_data_set": copy.deepcopy(data_set),
-                "python_based_function_applied":operation["python"],
-                "subdoc_api_function_applied":operation["subdoc_api"]
-                })
-            operation_index += 1
-          elif operation["mutate"] and new_path == None:
-            print "mutation failed"
-        if operation_index == max_number_operations:
-          return operation_definition
-      return operation_definition
-
-    def run_operations_array_slow(self, data_set = None, max_number_operations = 10):
+    def build_sequence_operations(self, data_set = None, max_number_operations = 10, seed = None, mutation_operation_type = "any", force_operation_type = None):
+      # FIX THE SEED
+      if seed != None:
+        random.seed(seed)
+        self.randomDataGenerator.set_seed(seed)
       trial = 0
       operation_definition = []
       operation_index = 0
@@ -146,7 +96,12 @@ class SubdocHelper():
         pairs = {}
         self.find_pairs(data_set,"", pairs)
         key = random.choice(pairs.keys())
-        ops_type, operation = self.pick_array_operations(pairs[key])
+        if mutation_operation_type  == "any":
+          operation = self.pick_operations(pairs[key], operation = force_operation_type)
+        elif mutation_operation_type  == "dict":
+          operation = self.pick_dict_operations(pairs[key], operation = force_operation_type)
+        else:
+          operation = self.pick_array_operations(pairs[key], operation = force_operation_type)
         if operation["mutate"] == True:
           copy_of_original_dataset = copy.deepcopy(data_set)
           function = getattr(self, operation["python"])
@@ -167,34 +122,17 @@ class SubdocHelper():
             return operation_definition
       return operation_definition
 
-    def run_operations_dict_slow(self, data_set = None, max_number_operations = 10):
-      trial = 0
-      operation_definition = []
-      operation_index = 0
-      while True:
-        pairs = {}
-        self.find_pairs(data_set,"", pairs)
-        key = random.choice(pairs.keys())
-        ops_type, operation = self.pick_dict_operations(pairs[key])
-        if operation["mutate"] == True:
-          copy_of_original_dataset = copy.deepcopy(data_set)
-          function = getattr(self, operation["python"])
-          new_path, data = function(key, data_set)
-          if new_path != None:
-            pairs.pop(key)
-            operation_definition.append({
-                  "data_value":data,
-                  "path_impacted_by_mutation_operation":key,
-                  "new_path_impacted_after_mutation_operation":new_path,
-                  "original_dataset":copy_of_original_dataset,
-                  "mutated_data_set": copy.deepcopy(data_set),
-                  "python_based_function_applied":operation["python"],
-                  "subdoc_api_function_applied":operation["subdoc_api"]
-                  })
-            operation_index += 1
-          if operation_index == max_number_operations:
-            return operation_definition
-      return operation_definition
+    def parse_and_get_data(self, data_set, path):
+      for key in path.split("."):
+        if "[" not in key:
+          data_set = data_set[key]
+        else:
+          if key.split("[")[0] != '':
+            data_set = data_set[key.split("[")[0]]
+          for k in key.split("[")[1:]:
+            index = int(k.replace("]",""))
+            data_set = data_set[index]
+      return data_set
 
     def run_operations_slow(self, data_set = None, max_number_operations = 10):
       trial = 0
@@ -204,7 +142,7 @@ class SubdocHelper():
         pairs = {}
         self.find_pairs(data_set,"", pairs)
         key = random.choice(pairs.keys())
-        ops_type, operation = self.pick_operations(pairs[key])
+        operation = self.pick_operations(pairs[key])
         if operation["mutate"] == True:
           copy_of_original_dataset = copy.deepcopy(data_set)
           function = getattr(self, operation["python"])
@@ -358,76 +296,44 @@ class SubdocHelper():
     def python_based_dict_upsert_add(self, path = "", original_dataset = {}):
       return self.python_based_dict_add(path = path, original_dataset = original_dataset)
 
-    def pick_operations(self, data = None):
-      array_ops ={
-      "array_add_first" : {"python":"python_based_array_add_first", "subdoc_api":"array_add_first", "mutate":True},
-      "array_add_last": {"python":"python_based_array_add_last", "subdoc_api":"array_add_last", "mutate":True},
-      "array_add_unique": {"python":"python_based_array_add_unique", "subdoc_api":"array_add_unique", "mutate":True},
-      "array_add_insert": {"python":"python_based_array_add_insert", "subdoc_api":"array_add_insert", "mutate":True},
-      #"array_get": {"python":"python_based_get", "subdoc_api":"get", "mutate":False},
-      #"array_exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
-      "array_delete": {"python":"python_based_array_delete", "subdoc_api":"delete", "mutate":True},
-      #"array_replace": {"python":"python_based_array_replace", "subdoc_api":"replace", "mutate":True}
-      }
-      dict_ops = {
-      "dict_add": {"python":"python_based_dict_add", "subdoc_api":"dict_add", "mutate":True},
-      "dict_upsert_add": {"python":"python_based_dict_upsert_add", "subdoc_api":"dict_upsert", "mutate":True},
-      "dict_upsert_replace": {"python":"python_based_dict_upsert_replace", "subdoc_api":"dict_upsert", "mutate":True},
-      #"dict_get": {"python":"python_based_get", "subdoc_api":"get", "mutate":False},
-      #"dict_exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
-      "dict_delete": {"python":"python_based_dict_delete", "subdoc_api":"delete", "mutate":True},
-      "dict_replace": {"python":"python_based_dict_replace", "subdoc_api":"replace", "mutate":True}
-      }
-      field_ops = {
-      "get": {"python":"python_based_get", "subdoc_api":"get", "mutate":False},
-      #"exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
-      }
+    def pick_operations(self, data = None, operation = None):
       if isinstance(data, list):
-        key = random.choice(array_ops.keys())
-        return key, array_ops[key]
+        return self.pick_array_operations(data = data, operation = operation)
       elif isinstance(data, dict):
-        key = random.choice(dict_ops.keys())
-        return key, dict_ops[key]
+        return self.pick_dict_operations(data = data, operation = operation)
       else:
-        key = random.choice(field_ops.keys())
-        return key, field_ops[key]
+        return {"mutate":False}
 
-    def pick_array_operations(self, data = None):
+    def pick_array_operations(self, data = None, operation = None):
       array_ops ={
       "array_add_first" : {"python":"python_based_array_add_first", "subdoc_api":"array_add_first", "mutate":True},
       "array_add_last": {"python":"python_based_array_add_last", "subdoc_api":"array_add_last", "mutate":True},
       "array_add_unique": {"python":"python_based_array_add_unique", "subdoc_api":"array_add_unique", "mutate":True},
       "array_add_insert": {"python":"python_based_array_add_insert", "subdoc_api":"array_add_insert", "mutate":True},
-      #"array_get": {"python":"python_based_get", "subdoc_api":"get", "mutate":False},
-      #"array_exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
       "array_delete": {"python":"python_based_array_delete", "subdoc_api":"delete", "mutate":True},
       "array_replace": {"python":"python_based_array_replace", "subdoc_api":"replace", "mutate":True}
       }
-      field_ops = {
-      "get": {"python":"python_based_get", "subdoc_api":"get", "mutate":False},
-      #"exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
-      }
       if isinstance(data, list):
-        key = random.choice(array_ops.keys())
-        return key, array_ops[key]
+        if operation == None:
+          operation = random.choice(array_ops.keys())
+        return array_ops[operation]
       else:
-        return "dummy", {"mutate":False}
+        return {"mutate":False}
 
-    def pick_dict_operations(self, data = None):
+    def pick_dict_operations(self, data = None, operation = None):
       dict_ops = {
       "dict_add": {"python":"python_based_dict_add", "subdoc_api":"dict_add", "mutate":True},
       "dict_upsert_add": {"python":"python_based_dict_upsert_add", "subdoc_api":"dict_upsert", "mutate":True},
       "dict_upsert_replace": {"python":"python_based_dict_upsert_replace", "subdoc_api":"dict_upsert", "mutate":True},
-      #"dict_get": {"python":"python_based_get", "subdoc_api":"get", "mutate":False},
-      #"dict_exists": {"python":"python_based_exists", "subdoc_api":"exists", "mutate":False},
       "dict_delete": {"python":"python_based_dict_delete", "subdoc_api":"delete", "mutate":True},
       "dict_replace": {"python":"python_based_dict_replace", "subdoc_api":"replace", "mutate":True}
       }
       if isinstance(data, dict):
-        key = random.choice(dict_ops.keys())
-        return key, dict_ops[key]
+        if operation == None:
+          operation = random.choice(dict_ops.keys())
+        return dict_ops[operation]
       else:
-        return "dummy", {"mutate":False}
+        return {"mutate":False}
 
     def isPathPresent(self, path, filter_paths = []):
       for path_parent in filter_paths:
@@ -459,5 +365,20 @@ class SubdocHelper():
 if __name__=="__main__":
     helper = SubdocHelper()
     json_document = {"json":{"field":{"json":{"json":{"field_name":1}}}, "json":{"array":[0]}}, "array":[0,1,2]}
-    ops = helper.run_operations(json_document, max_number_operations = 1)
+    ops = helper.build_concurrent_operations(json_document, max_number_operations = 10, seed=10, mutation_operation_type = "dict", force_operation_type = "dict_add")
+    helper.show_all_operations(ops)
+    json_document = {"json":{"field":{"json":{"json":{"field_name":1}}}, "json":{"array":[0]}}, "array":[0,1,2]}
+    ops = helper.build_concurrent_operations(json_document, max_number_operations = 10, seed=10, mutation_operation_type = "array", force_operation_type = "array_add_insert")
+    helper.show_all_operations(ops)
+    json_document = {"json":{"field":{"json":{"json":{"field_name":1}}}, "json":{"array":[0]}}, "array":[0,1,2]}
+    ops = helper.build_concurrent_operations(json_document, max_number_operations = 10, seed=10, mutation_operation_type = "all")
+    helper.show_all_operations(ops)
+    json_document = {"json":{"field":{"json":{"json":{"field_name":1}}}, "json":{"array":[0]}}, "array":[0,1,2]}
+    ops = helper.build_sequence_operations(json_document, max_number_operations = 10, seed=10, mutation_operation_type = "dict", force_operation_type = "dict_add")
+    helper.show_all_operations(ops)
+    json_document = {"json":{"field":{"json":{"json":{"field_name":1}}}, "json":{"array":[0]}}, "array":[0,1,2]}
+    ops = helper.build_sequence_operations(json_document, max_number_operations = 10, seed=10, mutation_operation_type = "array", force_operation_type = "array_add_insert")
+    helper.show_all_operations(ops)
+    json_document = {"json":{"field":{"json":{"json":{"field_name":1}}}, "json":{"array":[0]}}, "array":[0,1,2]}
+    ops = helper.build_sequence_operations(json_document, max_number_operations = 10, seed=10, mutation_operation_type = "all")
     helper.show_all_operations(ops)

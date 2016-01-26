@@ -5,6 +5,10 @@ from datetime import datetime
 from random import randint
 
 class RandomDataGenerator(object):
+
+    def set_seed(self, seed = 0):
+        random.seed(seed)
+
     def generate_random_range(self, list):
         val = randrange(0,len(list))
         if val == 0:
