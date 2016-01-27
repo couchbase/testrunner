@@ -307,7 +307,8 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("taskkill /F /T /IM erl.exe*")
             self.log_command_output(o, r)
         else:
-            o, r = self.execute_command("killall -9 beam.smp")
+            o, r = self.execute_command("kill "
+                                " $(ps aux | grep 'beam.smp' | awk '{print $2}')")
             self.log_command_output(o, r)
         return o, r
 
@@ -2239,10 +2240,12 @@ class RemoteMachineShellConnection:
     def terminate_process(self, info=None, process_name=''):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            o, r = self.execute_command("taskkill /F /T /IM {0}*".format(process_name))
+            o, r = self.execute_command("taskkill /F /T /IM {0}*" \
+                                                  .format(process_name))
             self.log_command_output(o, r)
         else:
-            o, r = self.execute_command("killall -9 {0}".format(process_name))
+            o, r = self.execute_command("kill " \
+                "$(ps aux | grep '{0}' | awk '{print $2}') ".format(process_name))
             self.log_command_output(o, r)
 
     def disconnect(self):
