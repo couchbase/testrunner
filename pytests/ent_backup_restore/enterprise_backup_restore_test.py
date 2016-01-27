@@ -583,21 +583,26 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                          backup_host=self.backupset.backup_host,
-                                          directory=self.backupset.directory, name=self.backupset.name,
-                                          resume=self.backupset.resume, purge=self.backupset.purge,
-                                          no_progress_bar=self.no_progress_bar,
-                                          cli_command_location=self.cli_command_location)
-        self.sleep(10)
-        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
-        conn.kill_erlang()
-        output = backup_result.result(timeout=200)
-        self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
-                        "Expected error message not thrown by Backup 180 seconds after erlang crash")
-        self.log.info("Expected error message thrown by Backup 180 seconds after erlang crash")
-        conn.start_couchbase()
-        self.sleep(30)
+        try:
+            backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                                              backup_host=self.backupset.backup_host,
+                                                              directory=self.backupset.directory,
+                                                              name=self.backupset.name,
+                                                              resume=self.backupset.resume, purge=self.backupset.purge,
+                                                              no_progress_bar=self.no_progress_bar,
+                                                              cli_command_location=self.cli_command_location)
+            self.sleep(10)
+            conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+            conn.kill_erlang()
+            output = backup_result.result(timeout=200)
+            self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
+                            "Expected error message not thrown by Backup 180 seconds after erlang crash")
+            self.log.info("Expected error message thrown by Backup 180 seconds after erlang crash")
+        except Exception as ex:
+            self.log.info(str(ex))
+        finally:
+            conn.start_couchbase()
+            self.sleep(30)
 
     def test_backup_with_couchbase_stop(self):
         """
@@ -609,21 +614,26 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                          backup_host=self.backupset.backup_host,
-                                          directory=self.backupset.directory, name=self.backupset.name,
-                                          resume=self.backupset.resume, purge=self.backupset.purge,
-                                          no_progress_bar=self.no_progress_bar,
-                                          cli_command_location=self.cli_command_location)
-        self.sleep(10)
-        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
-        conn.stop_couchbase()
-        output = backup_result.result(timeout=200)
-        self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
-                        "Expected error message not thrown by Backup 180 seconds after couchbase-server stop")
-        self.log.info("Expected error message thrown by Backup 180 seconds after couchbase-server stop")
-        conn.start_couchbase()
-        self.sleep(30)
+        try:
+            backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                                              backup_host=self.backupset.backup_host,
+                                                              directory=self.backupset.directory,
+                                                              name=self.backupset.name,
+                                                              resume=self.backupset.resume, purge=self.backupset.purge,
+                                                              no_progress_bar=self.no_progress_bar,
+                                                              cli_command_location=self.cli_command_location)
+            self.sleep(10)
+            conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+            conn.stop_couchbase()
+            output = backup_result.result(timeout=200)
+            self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
+                            "Expected error message not thrown by Backup 180 seconds after couchbase-server stop")
+            self.log.info("Expected error message thrown by Backup 180 seconds after couchbase-server stop")
+        except Exception as ex:
+            self.log.info(str(ex))
+        finally:
+            conn.start_couchbase()
+            self.sleep(30)
 
     def test_backup_with_memcached_crash(self):
         """
@@ -635,21 +645,26 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                          backup_host=self.backupset.backup_host,
-                                          directory=self.backupset.directory, name=self.backupset.name,
-                                          resume=self.backupset.resume, purge=self.backupset.purge,
-                                          no_progress_bar=self.no_progress_bar,
-                                          cli_command_location=self.cli_command_location)
-        self.sleep(10)
-        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
-        conn.pause_memcached()
-        output = backup_result.result(timeout=200)
-        self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
-                        "Expected error message not thrown by Backup 180 seconds after memcached crash")
-        self.log.info("Expected error message thrown by Backup 180 seconds after memcached crash")
-        conn.unpause_memcached()
-        self.sleep(30)
+        try:
+            backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                                              backup_host=self.backupset.backup_host,
+                                                              directory=self.backupset.directory,
+                                                              name=self.backupset.name,
+                                                              resume=self.backupset.resume, purge=self.backupset.purge,
+                                                              no_progress_bar=self.no_progress_bar,
+                                                              cli_command_location=self.cli_command_location)
+            self.sleep(10)
+            conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+            conn.pause_memcached()
+            output = backup_result.result(timeout=200)
+            self.assertTrue("Error backing up cluster: Not all data was backed up due to connectivity issues." in output[0],
+                            "Expected error message not thrown by Backup 180 seconds after memcached crash")
+            self.log.info("Expected error message thrown by Backup 180 seconds after memcached crash")
+        except Exception as ex:
+            self.log.info(str(ex))
+        finally:
+            conn.unpause_memcached()
+            self.sleep(30)
 
     def test_restore_with_erlang_crash_and_restart(self):
         """
@@ -746,23 +761,28 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster()
-        restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
-                                                           backup_host=self.backupset.backup_host,
-                                                           backups=self.backups, start=self.backupset.start,
-                                                           end=self.backupset.end, directory=self.backupset.directory,
-                                                           name=self.backupset.name,
-                                                           force_updates=self.backupset.force_updates,
-                                                           no_progress_bar=self.no_progress_bar,
-                                                           cli_command_location=self.cli_command_location)
-        self.sleep(10)
-        conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
-        conn.kill_erlang()
-        output = restore_result.result(timeout=200)
-        self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
-                        "Expected error message not thrown by Restore 180 seconds after erlang crash")
-        self.log.info("Expected error message thrown by Restore 180 seconds after erlang crash")
-        conn.start_couchbase()
-        self.sleep(30)
+        try:
+            restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
+                                                                backup_host=self.backupset.backup_host,
+                                                                backups=self.backups, start=self.backupset.start,
+                                                                end=self.backupset.end,
+                                                                directory=self.backupset.directory,
+                                                                name=self.backupset.name,
+                                                                force_updates=self.backupset.force_updates,
+                                                                no_progress_bar=self.no_progress_bar,
+                                                                cli_command_location=self.cli_command_location)
+            self.sleep(10)
+            conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+            conn.kill_erlang()
+            output = restore_result.result(timeout=200)
+            self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
+                            "Expected error message not thrown by Restore 180 seconds after erlang crash")
+            self.log.info("Expected error message thrown by Restore 180 seconds after erlang crash")
+        except Exception as ex:
+            self.log.info(str(ex))
+        finally:
+            conn.start_couchbase()
+            self.sleep(30)
 
     def test_restore_with_couchbase_stop(self):
         """
@@ -775,23 +795,28 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster()
-        restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
-                                                           backup_host=self.backupset.backup_host,
-                                                           backups=self.backups, start=self.backupset.start,
-                                                           end=self.backupset.end, directory=self.backupset.directory,
-                                                           name=self.backupset.name,
-                                                           force_updates=self.backupset.force_updates,
-                                                           no_progress_bar=self.no_progress_bar,
-                                                           cli_command_location=self.cli_command_location)
-        self.sleep(10)
-        conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
-        conn.stop_couchbase()
-        output = restore_result.result(timeout=200)
-        self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
-                        "Expected error message not thrown by Restore 180 seconds after couchbase-server stop")
-        self.log.info("Expected error message thrown by Restore 180 seconds after couchbase-server stop")
-        conn.start_couchbase()
-        self.sleep(30)
+        try:
+            restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
+                                                                backup_host=self.backupset.backup_host,
+                                                                backups=self.backups, start=self.backupset.start,
+                                                                end=self.backupset.end,
+                                                                directory=self.backupset.directory,
+                                                                name=self.backupset.name,
+                                                                force_updates=self.backupset.force_updates,
+                                                                no_progress_bar=self.no_progress_bar,
+                                                                cli_command_location=self.cli_command_location)
+            self.sleep(10)
+            conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+            conn.stop_couchbase()
+            output = restore_result.result(timeout=200)
+            self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
+                            "Expected error message not thrown by Restore 180 seconds after couchbase-server stop")
+            self.log.info("Expected error message thrown by Restore 180 seconds after couchbase-server stop")
+        except Exception as ex:
+            self.log.info(str(ex))
+        finally:
+            conn.start_couchbase()
+            self.sleep(30)
 
     def test_restore_with_memcached_crash(self):
         """
@@ -804,23 +829,28 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster()
-        restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
-                                                           backup_host=self.backupset.backup_host,
-                                                           backups=self.backups, start=self.backupset.start,
-                                                           end=self.backupset.end, directory=self.backupset.directory,
-                                                           name=self.backupset.name,
-                                                           force_updates=self.backupset.force_updates,
-                                                           no_progress_bar=self.no_progress_bar,
-                                                           cli_command_location=self.cli_command_location)
-        self.sleep(10)
-        conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
-        conn.pause_memcached()
-        output = restore_result.result(timeout=200)
-        self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
-                        "Expected error message not thrown by Restore 180 seconds after memcached crash")
-        self.log.info("Expected error message thrown by Restore 180 seconds after memcached crash")
-        conn.unpause_memcached()
-        self.sleep(30)
+        try:
+            restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
+                                                                backup_host=self.backupset.backup_host,
+                                                                backups=self.backups, start=self.backupset.start,
+                                                                end=self.backupset.end,
+                                                                directory=self.backupset.directory,
+                                                                name=self.backupset.name,
+                                                                force_updates=self.backupset.force_updates,
+                                                                no_progress_bar=self.no_progress_bar,
+                                                                cli_command_location=self.cli_command_location)
+            self.sleep(10)
+            conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+            conn.pause_memcached()
+            output = restore_result.result(timeout=200)
+            self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
+                            "Expected error message not thrown by Restore 180 seconds after memcached crash")
+            self.log.info("Expected error message thrown by Restore 180 seconds after memcached crash")
+        except Exception as ex:
+            self.log.info(str(ex))
+        finally:
+            conn.unpause_memcached()
+            self.sleep(30)
 
     def test_backup_merge(self):
         """
