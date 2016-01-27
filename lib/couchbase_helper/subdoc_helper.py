@@ -30,12 +30,12 @@ class SubdocHelper():
     			pairs[path+"["+str(index)+"]"] =element
     			index += 1
 
+    '''  Find out combination of operations to be executed for a given JSON document '''
     def build_concurrent_operations(self, data_set = None, max_number_operations = 10, seed = None, mutation_operation_type = "any", force_operation_type = None):
       # FIX THE SEED
       if seed != None:
         random.seed(seed)
         self.randomDataGenerator.set_seed(seed)
-      trial = 0
       filter_paths = []
       pairs = {}
       operation_definition = []
@@ -84,17 +84,19 @@ class SubdocHelper():
           return operation_definition
       return operation_definition
 
+    '''  Find out combination of operations to be executed for a given JSON document '''
     def build_sequence_operations(self, data_set = None, max_number_operations = 10, seed = None, mutation_operation_type = "any", force_operation_type = None):
       # FIX THE SEED
       if seed != None:
         random.seed(seed)
         self.randomDataGenerator.set_seed(seed)
-      trial = 0
       operation_definition = []
       operation_index = 0
       while True:
         pairs = {}
         self.find_pairs(data_set,"", pairs)
+        if len(pairs) == 0:
+          return operation_definition
         key = random.choice(pairs.keys())
         if mutation_operation_type  == "any":
           operation = self.pick_operations(pairs[key], operation = force_operation_type)
@@ -133,48 +135,6 @@ class SubdocHelper():
             index = int(k.replace("]",""))
             data_set = data_set[index]
       return data_set
-
-    def run_operations_slow(self, data_set = None, max_number_operations = 10):
-      trial = 0
-      operation_definition = []
-      operation_index = 0
-      while True:
-        pairs = {}
-        self.find_pairs(data_set,"", pairs)
-        key = random.choice(pairs.keys())
-        operation = self.pick_operations(pairs[key])
-        if operation["mutate"] == True:
-          copy_of_original_dataset = copy.deepcopy(data_set)
-          function = getattr(self, operation["python"])
-          new_path, data = function(key, data_set)
-          if new_path != None:
-            pairs.pop(key)
-            operation_definition.append({
-                  "data_value":data,
-                  "path_impacted_by_mutation_operation":key,
-                  "new_path_impacted_after_mutation_operation":new_path,
-                  "original_dataset":copy_of_original_dataset,
-                  "mutated_data_set": copy.deepcopy(data_set),
-                  "python_based_function_applied":operation["python"],
-                  "subdoc_api_function_applied":operation["subdoc_api"]
-                  })
-            operation_index += 1
-          if operation_index == max_number_operations:
-            return operation_definition
-      return operation_definition
-
-    def parse_and_get_data(self, data_set, path):
-      for key in path.split("."):
-        if "[" not in key:
-          data_set = data_set[key]
-        else:
-          if key.split("[")[0] != '':
-            data_set = data_set[key.split("[")[0]]
-          for k in key.split("[")[1:]:
-            index = int(k.replace("]",""))
-            data_set = data_set[index]
-      return data_set
-
 
     def gen_data(self):
         return self.randomDataGenerator.gen_data()
@@ -362,6 +322,16 @@ class SubdocHelper():
         print "Run python operation {0}".format(ops_info["python"])
         print "Run equivalent subdoc api operation {0}".format(ops_info["subdoc_api"])
 
+    def gen_input_file(self, file_name = "sample_json.txt", number_of_test_cases = 100):
+      dump_file = open(file_name, 'wb')
+      for x in range(number_of_test_cases):
+        json_document = {}
+        json_document["seed"] = x
+        json_document["json_document"] = self.randomDataGenerator.random_json()
+        dump_file.write(json.dumps(json_document))
+        dump_file.write('\n')
+      dump_file.close()
+
 if __name__=="__main__":
     helper = SubdocHelper()
     json_document = {"json":{"field":{"json":{"json":{"field_name":1}}}, "json":{"array":[0]}}, "array":[0,1,2]}
@@ -382,3 +352,4 @@ if __name__=="__main__":
     json_document = {"json":{"field":{"json":{"json":{"field_name":1}}}, "json":{"array":[0]}}, "array":[0,1,2]}
     ops = helper.build_sequence_operations(json_document, max_number_operations = 10, seed=10, mutation_operation_type = "all")
     helper.show_all_operations(ops)
+    helper.gen_input_file()
