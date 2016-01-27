@@ -14,8 +14,11 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.nesting_level =  self.input.param("nesting_level",0)
         self.mutation_operation_type =  self.input.param("mutation_operation_type","any")
         self.force_operation_type =  self.input.param("force_operation_type",None)
+        self.run_data_verification =  self.input.param("run_data_verification",True)
         self.seed =  self.input.param("seed",0)
         self.client = self.direct_client(self.master, self.buckets[0])
+        self.build_kv_store = self.input.param("build_kv_store", False)
+        self.kv_store = {}
         self.randomDataGenerator = RandomDataGenerator()
         self.subdoc_gen_helper = SubdocHelper()
 
@@ -260,18 +263,37 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                 raise
                 return False, operation
         self.log.info(" END WORKING ON {0}".format(document_key))
-        pairs = {}
+        if self.build_kv_store:
+            self.kv_store[document_key] = operations[len(operations)-1]["mutated_data_set"]
         error_result = {}
-        self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
-        for path in pairs.keys():
-            #self.log.info(" Analyzing path {0}".format(path))
-            opaque, cas, data = client.get_sd(document_key, path)
-            data = json.loads(data)
-            if data != pairs[path]:
-                error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
-        if len(error_result) != 0:
-            return False, error_result
+        if self.run_data_verification:
+            pairs = {}
+            self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
+            for path in pairs.keys():
+                #self.log.info(" Analyzing path {0}".format(path))
+                opaque, cas, data = client.get_sd(document_key, path)
+                data = json.loads(data)
+                if data != pairs[path]:
+                    error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
+            if len(error_result) != 0:
+                return False, error_result
         return True, error_result
+
+    ''' Method to verify kv store data set '''
+    def run_verification(self, bucket, kv_store = {}):
+        client = self.direct_client(self.master, bucket)
+        error_result = {}
+        for document_key in kv_store.keys():
+            pairs = {}
+            json_document = kv_store[document_key]
+            self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
+            for path in pairs.keys():
+                opaque, cas, data = client.get_sd(document_key, path)
+                data = json.loads(data)
+                if data != pairs[path]:
+                    error_result[path] = "key = {0}, expected {1}, actual = {2}".format(document_key, pairs[path], data)
+        self.assertTrue(len(error_result) != 0, error_result)
+
 
 # SUB DOC COMMANDS
 
