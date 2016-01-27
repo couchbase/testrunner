@@ -88,7 +88,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_child"
             try:
-                self.query = "CREATE INDEX %s ON %s(VMs, name)  USING GSI" % (index_name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(VMs, name)  USING %s" % (index_name, bucket.name,self.index_type)
                 if self.gsi_type:
                     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
@@ -98,7 +98,7 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(res["results"][0]['~children'][0]["children"][0]['~children'][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
-                self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 try:
                     self.run_cbq_query()
                 except:
@@ -108,17 +108,17 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_child"
             try:
-                self.query = "CREATE INDEX %s ON %s(VMs, join_yr)  USING GSI" % (index_name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(VMs, join_yr)  USING %s" % (index_name, bucket.name,self.index_type)
                 if self.gsi_type:
                     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
-                self.query = 'EXPLAIN SELECT count(*) FROM %s GROUP BY VMs, join_yr' % (bucket.name)
+                self.query = 'EXPLAIN SELECT count(*) FROM %s where VMs is not null GROUP BY VMs, join_yr' % (bucket.name)
                 res = self.run_cbq_query()
                 self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
-                self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 try:
                     self.run_cbq_query()
                 except:
@@ -128,7 +128,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_meta"
             try:
-                self.query = "CREATE INDEX %s ON %s(meta(%s).type, name)  USING GSI" % (index_name, bucket.name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(meta(%s).type, name)  USING %s" % (index_name, bucket.name, bucket.name,self.index_type)
                 if self.gsi_type:
                     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
@@ -138,7 +138,7 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
-                self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
 
     def test_covering_index(self):
@@ -1467,19 +1467,19 @@ class QueriesIndexTests(QueryTests):
             try:
                 for ind in xrange(self.num_indexes):
                     index_name = "join_index%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(name, project)  USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(name, project)  USING %s" % (index_name, bucket.name,self.index_type)
                     if self.gsi_type:
                         self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
-                    self.query = "EXPLAIN SELECT employee.name, new_task.project FROM %s as employee JOIN %s as new_task USE KEYS ['key1']" % (bucket.name, bucket.name)
+                    self.query = "EXPLAIN SELECT employee.name, new_task.project FROM %s as employee JOIN %s as new_task ON KEYS ['key1']" % (bucket.name, bucket.name)
                     res = self.run_cbq_query()
-                    self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
+                    self.assertTrue(res["results"][0]["~children"][0]["index"] == "#primary",
                                     "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 for index_name in created_indexes:
-                    self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
 
     def test_explain_index_subquery(self):
@@ -1488,37 +1488,37 @@ class QueriesIndexTests(QueryTests):
             try:
                 for ind in xrange(self.num_indexes):
                     index_name = "join_index%s" % ind
-                    self.query = "CREATE INDEX %s ON %s(join_day, name)  USING GSI" % (index_name, bucket.name)
+                    self.query = "CREATE INDEX %s ON %s(join_day, name)  USING %s" % (index_name, bucket.name,self.index_type)
                     if self.gsi_type:
                         self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
-                    self.query = "EXPLAIN select task_name, (select sum(test_rate) cn from %s use keys ['query-1'] where join_day>2 and name =='abc') as names from %s" % (bucket.name, bucket.name)
+                    self.query = "EXPLAIN select task_name, (select sum(test_rate) cn from %s as d use keys ['query-1'] where join_day>2 and name =='abc') as names from %s" % (bucket.name, bucket.name)
                     res = self.run_cbq_query()
-                    self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
+                    self.assertTrue(res["results"][0]["~children"][0]["index"] == "#primary",
                                     "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
                 for index_name in created_indexes:
-                    self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
 
     def test_explain_childs_list_objects(self):
         for bucket in self.buckets:
             index_name = "my_index_child2"
             try:
-                self.query = "CREATE INDEX %s ON %s(VMs[0].RAM, VMS[1].RAM)  USING GSI" % (index_name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(VMs,VMs[0], VMS[1],VMs[0].RAM,VMs[1].RAM)  USING %s" % (index_name, bucket.name,self.index_type)
                 if self.gsi_type:
                     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
-                self.query = 'EXPLAIN SELECT VMs FROM %s ' % (bucket.name) + \
-                        'WHERE ANY vm IN VMs SATISFIES vm.RAM > 5 AND vm.os = "ubuntu" end'
+                self.query = 'EXPLAIN SELECT VMs[0].RAM FROM %s ' % (bucket.name) + \
+                        'WHERE ANY vm IN VMs SATISFIES vm.RAM > 5 end'
                 res = self.run_cbq_query()
                 self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
-                self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 try:
                     self.run_cbq_query()
                 except:
@@ -1528,18 +1528,18 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_obj"
             try:
-                self.query = "CREATE INDEX %s ON %s(tasks_points, join_mo)  USING GSI" % (index_name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(tasks_points, join_mo)  USING %s" % (index_name, bucket.name,self.index_type)
                 if self.gsi_type:
                     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
-                             'WHERE join_mo>7 and task_points > 0'
+                             'WHERE task_points > 0 and join_mo>7 '
                 res = self.run_cbq_query()
                 self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
-                self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 try:
                     self.run_cbq_query()
                 except:
@@ -1549,18 +1549,18 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             index_name = "my_index_obj_el"
             try:
-                self.query = "CREATE INDEX %s ON %s(tasks_points.task1, join_mo)  USING GSI" % (index_name, bucket.name)
+                self.query = "CREATE INDEX %s ON %s(tasks_points.task1, join_mo)  USING %s" % (index_name, bucket.name,self.index_type)
                 if self.gsi_type:
                     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
-                             'WHERE join_mo>7 and  task_points.task1 > 0'
+                             'WHERE task_points.task1 > 0 and join_mo>7'
                 res = self.run_cbq_query()
                 self.assertTrue(res["results"][0]["~children"][0]["index"] == index_name,
                                 "Index should be %s, but is: %s" % (index_name, res["results"]))
             finally:
-                self.query = "DROP INDEX %s.%s" % (bucket.name, index_name)
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 try:
                     self.run_cbq_query()
                 except:
