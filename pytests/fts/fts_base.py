@@ -27,9 +27,6 @@ from couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.exception import FTSException
 from es_base import ElasticSearchBase
 
-
-
-
 class RenameNodeException(FTSException):
 
     """Exception thrown when converting ip to hostname failed
@@ -53,7 +50,6 @@ def raise_if(cond, ex):
     """
     if cond:
         raise ex
-
 
 class OPS:
     CREATE = "create"
@@ -627,6 +623,9 @@ class FTSIndex:
                 raise FTSException("Expected hits: %s, fts returned: %s"
                                    % (expected_hits, hits))
             return hits, doc_ids, time_taken
+        except ServerUnavailableException:
+            # query time outs
+            raise ServerUnavailableException
         except Exception as e:
             self.__log.error("Error running query: %s" % e)
 

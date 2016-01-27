@@ -1060,37 +1060,42 @@ class ESRunQueryCompare(Task):
                           "--------------- Query # %s -----------------------"
                           "------------------------------------------"
                           % str(self.query_index+1))
-            fts_hits, fts_doc_ids, fts_time = self.run_fts_query(self.fts_query)
-            self.log.info("FTS hits for query: %s is %s (took %sms)" % \
+            try:
+                fts_hits, fts_doc_ids, fts_time = self.run_fts_query(self.fts_query)
+                self.log.info("FTS hits for query: %s is %s (took %sms)" % \
                           (json.dumps(self.fts_query, ensure_ascii=False),
                            fts_hits,
                            float(fts_time)/1000000))
+            except ServerUnavailableException:
+                self.log.error("ERROR: FTS Query timed out (timeout=30s)!")
+                self.passed = False
             if self.es and self.es_query['query']:
                 es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query)
                 self.log.info("ES hits for query: %s is %s (took %sms)" % \
                               (json.dumps(self.es_query['query'],  ensure_ascii=False),
                               es_hits,
                               es_time))
-                if int(es_hits) != int(fts_hits):
-                    msg = "FAIL: FTS hits: %s, while ES hits: %s"\
-                          % (fts_hits, es_hits)
-                    self.log.error(msg)
-                es_but_not_fts = list(set(es_doc_ids) - set(fts_doc_ids))
-                fts_but_not_es = list(set(fts_doc_ids) - set(es_doc_ids))
-                if not (es_but_not_fts or fts_but_not_es):
-                    self.log.info("SUCCESS: Docs returned by FTS = docs"
-                                  " returned by ES, doc_ids verified")
-                else:
-                    if fts_but_not_es:
-                        msg = "FAIL: Following %s doc(s) were not returned" \
-                              " by ES,but FTS, printing 50: %s" \
-                              % (len(fts_but_not_es), fts_but_not_es[:50])
+                if self.passed:
+                    if int(es_hits) != int(fts_hits):
+                        msg = "FAIL: FTS hits: %s, while ES hits: %s"\
+                              % (fts_hits, es_hits)
+                        self.log.error(msg)
+                    es_but_not_fts = list(set(es_doc_ids) - set(fts_doc_ids))
+                    fts_but_not_es = list(set(fts_doc_ids) - set(es_doc_ids))
+                    if not (es_but_not_fts or fts_but_not_es):
+                        self.log.info("SUCCESS: Docs returned by FTS = docs"
+                                      " returned by ES, doc_ids verified")
                     else:
-                        msg = "FAIL: Following %s docs were not returned" \
-                              " by FTS, but ES, printing 50: %s" \
-                              % (len(es_but_not_fts), es_but_not_fts[:50])
-                    self.log.error(msg)
-                    self.passed = False
+                        if fts_but_not_es:
+                            msg = "FAIL: Following %s doc(s) were not returned" \
+                                  " by ES,but FTS, printing 50: %s" \
+                                  % (len(fts_but_not_es), fts_but_not_es[:50])
+                        else:
+                            msg = "FAIL: Following %s docs were not returned" \
+                                  " by FTS, but ES, printing 50: %s" \
+                                  % (len(es_but_not_fts), es_but_not_fts[:50])
+                        self.log.error(msg)
+                        self.passed = False
             self.state = CHECKING
             task_manager.schedule(self)
         except Exception as e:
