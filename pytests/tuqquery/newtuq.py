@@ -475,7 +475,7 @@ class QueryTests(BaseTestCase):
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
-                                                            "shell/cbq/cbq ","","","","","")
+                                                            "shell/cbq/cbq ","","","","","","")
             else:
                 os = self.shell.extract_remote_info().type.lower()
                 #if (query.find("VALUES") > 0):
@@ -484,7 +484,7 @@ class QueryTests(BaseTestCase):
                     query = query.replace('`', '\\`')
                 if os == "linux":
                     cmd = "%s/go_cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
-                    output = self.shell.execute_commands_inside(cmd,query,"","","","")
+                    output = self.shell.execute_commands_inside(cmd,query,"","","","","")
                     #output = self.shell.execute_commands_inside(cmd,query)
                     result = json.loads(output)
             result = self._parse_query_output(output)
