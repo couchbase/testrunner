@@ -1442,8 +1442,8 @@ class RemoteMachineShellConnection:
             """ End remove this workaround when bug MB-14504 is fixed """
             """ the code below need to remove when bug MB-11985
                                                            is fixed in 3.0.1 """
-            if version[:5] in COUCHBASE_VERSION_2 or \
-                   version[:5] in COUCHBASE_FROM_VERSION_3:
+            if task == "install" and (version[:5] in COUCHBASE_VERSION_2 or \
+                   version[:5] in COUCHBASE_FROM_VERSION_3):
                 log.info("due to bug MB-11985, we need to delete below registry "
                          "before install version 2.x.x and 3.x.x")
                 output, error = self.execute_command("reg delete \
