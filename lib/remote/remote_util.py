@@ -2248,7 +2248,7 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         else:
             o, r = self.execute_command("kill " \
-                "$(ps aux | grep '{0}' | awk '{print $2}') ".format(process_name))
+                "$(ps aux | grep '{0}' | awk '{{print $2}}') ".format(process_name))
             self.log_command_output(o, r)
 
     def disconnect(self):
