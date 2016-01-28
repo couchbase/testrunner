@@ -19,9 +19,9 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.run_mutation_mode =  self.input.param("run_mutation_mode","seq")
         self.client = self.direct_client(self.master, self.buckets[0])
         self.build_kv_store = self.input.param("build_kv_store", False)
-        self.kv_store = {}
         self.randomDataGenerator = RandomDataGenerator()
         self.subdoc_gen_helper = SubdocHelper()
+        self.kv_store = {}
 
     def tearDown(self):
         super(SubdocAutoTestGenerator, self).tearDown()
