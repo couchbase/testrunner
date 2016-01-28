@@ -440,7 +440,6 @@ class QueryTests(BaseTestCase):
             self.query = "select name AS NAME from %s " % (bucket.name) +\
             "AS EMPLOYEE where EMPLOYEE.name LIKE '_mpl%' ORDER BY name"
             actual_result = self.run_cbq_query()
-
             expected_result = [{"NAME" : doc['name']} for doc in self.full_list
                                if doc["name"].find('mpl') == 1]
             expected_result = sorted(expected_result, key=lambda doc: (doc['NAME']))
@@ -3240,7 +3239,7 @@ class QueryTests(BaseTestCase):
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
-                                                            "shell/cbq/cbq ","","","","","")
+                                                            "shell/cbq/cbq ","","","","","","")
             else:
                 os = self.shell.extract_remote_info().type.lower()
                 #if (query.find("VALUES") > 0):
@@ -3252,7 +3251,7 @@ class QueryTests(BaseTestCase):
                     #query = query.replace('`','\`')
                 if os == "linux":
                     cmd = "%s/go_cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
-                    output = self.shell.execute_commands_inside(cmd,query,"","","","")
+                    output = self.shell.execute_commands_inside(cmd,query,"","","","","")
                     #output = self.shell.execute_commands_inside(cmd,query)
                     result = json.loads(output)
         if isinstance(result, str) or 'errors' in result:

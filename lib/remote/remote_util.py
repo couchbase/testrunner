@@ -2081,7 +2081,7 @@ class RemoteMachineShellConnection:
                               .format(self.ip, output, error, track_words))
         return success
 
-    def execute_commands_inside(self, main_command,query, queries,username,password,bucketname,subcommands=[], min_output_size=0,
+    def execute_commands_inside(self, main_command,query, queries,username,password,bucketname,source,subcommands=[], min_output_size=0,
                                 end_msg='', timeout=250):
         if not(query==""):
             main_command = main_command + " -s=\"" + query+ '"'
@@ -2095,7 +2095,7 @@ class RemoteMachineShellConnection:
                 filein.write('\n')
             fileout = sftp.open(filename,'r')
             filedata = fileout.read()
-            print filedata
+            #print filedata
             fileout.close()
             if("bucketname" in filedata):
                 newdata = filedata.replace("bucketname",bucketname)
@@ -2111,7 +2111,10 @@ class RemoteMachineShellConnection:
             f = sftp.open(filename,'w')
             f.write(newdata)
             f.close()
-            main_command = main_command + " -f=" + filename
+            if (source):
+                main_command = main_command + "  -s=\"\SOURCE " + filename+ '"'
+            else:
+                main_command = main_command + " -f=" + filename
         log.info("running command on {0}: {1}".format(self.ip, main_command))
         output=""
         if self.remote:
