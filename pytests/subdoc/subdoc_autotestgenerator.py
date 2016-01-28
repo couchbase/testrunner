@@ -16,6 +16,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.force_operation_type =  self.input.param("force_operation_type",None)
         self.run_data_verification =  self.input.param("run_data_verification",True)
         self.seed =  self.input.param("seed",0)
+        self.run_mutation_mode =  self.input.param("run_mutation_mode","seq")
         self.client = self.direct_client(self.master, self.buckets[0])
         self.build_kv_store = self.input.param("build_kv_store", False)
         self.kv_store = {}
@@ -191,7 +192,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                 error_data = error_queue.get()
                 self.log.info(" document_info {0}".format(error_data["document_info"]))
                 self.log.info(" error_result {0}".format(error_data["error_result"]))
-                dump_file.write(error_data["document_info"])
+                dump_file.write(json.dumps(error_data["document_info"]))
             dump_file.close()
             # Fail the test with result count
             self.assertTrue(not error_queue.empty(), "error count {0}".format(error_count))
@@ -225,7 +226,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             json_document = document_info["json_document"]
             seed = document_info["seed"]
             document_key =  "document_key_"+str(self.randomDataGenerator.random_int())
-            logic, error_result = self.run_seq_mutation_operations(client,
+            logic, error_result = self.run_mutation_operations(client, bucket,
                 document_key= document_key, json_document = json_document, seed =  seed,
                 number_of_operations = self.test_mutation_operations,
                 mutation_operation_type = mutation_operation_type,
@@ -234,8 +235,9 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                 error_queue.put({"error_result":error_result, "document_info":document_info})
 
     ''' Method to run sequence operations for a given JSON document '''
-    def run_seq_mutation_operations(self,
+    def run_mutation_operations(self,
         client,
+        bucket,
         document_key = "document_key",
         json_document = {},
         seed = 0,
@@ -245,23 +247,28 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         jsonDump = json.dumps(json_document)
         client.set(document_key, 0, 0, jsonDump)
         self.log.info(" START WORKING ON {0}".format(document_key))
-        operations = self.subdoc_gen_helper.build_sequence_operations(
-            json_document,
-            max_number_operations = number_of_operations,
-            seed = seed,
-            mutation_operation_type = mutation_operation_type,
-            force_operation_type = force_operation_type)
-        self.log.info("TOTAL OPERATIONS CALCULATED {0} ".format(len(operations)))
-        operation_index=1
-        for operation in operations:
-            function = getattr(self, operation["subdoc_api_function_applied"])
-            try:
-                function(client, document_key, operation["new_path_impacted_after_mutation_operation"], json.dumps(operation["data_value"]))
-                operation_index+=1
-            except Exception, ex:
-                self.log.info(str(ex))
-                raise
-                return False, operation
+        if self.run_mutation_mode == "seq":
+            operations = self.subdoc_gen_helper.build_sequence_operations(
+                json_document,
+                max_number_operations = number_of_operations,
+                seed = seed,
+                mutation_operation_type = mutation_operation_type,
+                force_operation_type = force_operation_type)
+            self.log.info("TOTAL OPERATIONS CALCULATED {0} ".format(len(operations)))
+            operation_index=1
+            for operation in operations:
+                function = getattr(self, operation["subdoc_api_function_applied"])
+                try:
+                    function(client, document_key, operation["new_path_impacted_after_mutation_operation"], json.dumps(operation["data_value"]))
+                    operation_index+=1
+                except Exception, ex:
+                    self.log.info(str(ex))
+                    raise
+                    return False, operation
+        else:
+            logic, result = self.run_concurrent_mutation_operations(document_key, bucket, seed, json_document, number_of_operations, mutation_operation_type, force_operation_type)
+            if not logic:
+                return False, logic
         self.log.info(" END WORKING ON {0}".format(document_key))
         if self.build_kv_store:
             self.kv_store[document_key] = operations[len(operations)-1]["mutated_data_set"]
@@ -278,6 +285,29 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if len(error_result) != 0:
                 return False, error_result
         return True, error_result
+
+    def run_concurrent_mutation_operations(self, document_key, bucket, seed, json_document, number_of_operations, mutation_operation_type, force_operation_type):
+        result_queue = Queue.Queue()
+        operations = self.subdoc_gen_helper.build_concurrent_operations(
+                json_document,
+                max_number_operations = number_of_operations,
+                seed = seed,
+                mutation_operation_type = mutation_operation_type,
+                force_operation_type = force_operation_type)
+        self.log.info("TOTAL OPERATIONS CALCULATED {0} ".format(len(operations)))
+        thread_list = []
+        for operation in operations:
+            client = self.direct_client(self.master, bucket)
+            t = threading.Thread(target=self.run_mutation_operation, args = (client, document_key, operation, result_queue))
+            t.daemon = True
+            t.start()
+            thread_list.append(t)
+        for t in thread_list:
+            t.join()
+        if result_queue.empty():
+            return True, None
+        return False, result_queue
+
 
     ''' Method to verify kv store data set '''
     def run_verification(self, bucket, kv_store = {}):
