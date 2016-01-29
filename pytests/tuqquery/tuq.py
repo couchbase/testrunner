@@ -2752,7 +2752,7 @@ class QueryTests(BaseTestCase):
 
     def test_except_secondsetempty(self):
         for bucket in self.buckets:
-            self.query = "drop primary index on %s" % bucket.name;
+            self.query = "drop primary index on %s USING %s" % (bucket.name,self.primary_indx_type);
             self.run_cbq_query()
         self.query = "(select id keyspace_id from system:keyspaces) except (select indexes.keyspace_id from system:indexes)"
         actual_list = self.run_cbq_query()
@@ -3476,7 +3476,7 @@ class QueryTests(BaseTestCase):
             for bucket in self.buckets:
                 if self.primary_indx_drop:
                     self.log.info("Dropping primary index for %s ..." % bucket.name)
-                    self.query = "DROP PRIMARY INDEX ON %s" % (bucket.name)
+                    self.query = "DROP PRIMARY INDEX ON %s using %s" % (bucket.name,self.primary_indx_type)
                     self.sleep(3, 'Sleep for some time after index drop')
                 self.query = "select * from system:indexes where name='#primary' and keyspace_id = %s" % bucket.name
                 res = self.run_cbq_query(self.query)
