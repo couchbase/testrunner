@@ -25,7 +25,7 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
             self.sleep(1)
-            self.test_seq_operations()
+            self.test_mutation_operations()
             rebalance.result()
             rself.run_verification(self.buckets[0], self.kv_store)
         except Exception, ex:
@@ -53,7 +53,7 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                     self.nodes_in_list,
                                    self.nodes_out_list, services = self.services_in)
-            self.test_seq_operations()
+            self.test_mutation_operations()
             rebalance.result()
             self.run_verification(self.buckets[0], self.kv_store)
         except Exception, ex:
@@ -71,7 +71,7 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
                 self.assertTrue(RestConnection(self.master).monitorRebalance(stop_if_loop=True), msg=msg)
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                    [], servr_out)
-            self.test_seq_operations()
+            self.test_mutation_operations()
             rebalance.result()
             self.run_verification(self.buckets[0], self.kv_store)
         except Exception, ex:
@@ -100,7 +100,7 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
                 self.log.info(node)
                 rest.add_back_node(node.id)
                 rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
-            self.test_seq_operations()
+            self.test_mutation_operations()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
             rebalance.result()
             self.run_verification(self.buckets[0], self.kv_store)
@@ -118,7 +118,7 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
             self.sleep(autofailover_timeout + 10, "Wait for autofailover")
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                    [], [servr_out[0]])
-            self.test_seq_operations()
+            self.test_mutation_operations()
             rebalance.result()
             self.run_verification(self.buckets[0], self.kv_store)
         except Exception, ex:
@@ -133,7 +133,7 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
         try:
             for node in self.nodes_out_list:
                 self.start_firewall_on_node(node)
-            self.test_seq_operations()
+            self.test_mutation_operations()
         except Exception, ex:
             raise
         finally:
@@ -149,7 +149,7 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
         for bucket in self.buckets:
             compact_tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
         in_between_index_ops = self._run_in_between_tasks()
-        self.test_seq_operations()
+        self.test_mutation_operations()
         for task in compact_tasks:
             task.result()
         self.run_verification(self.buckets[0], self.kv_store)
@@ -161,7 +161,7 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
             remote.stop_server()
             remote.start_server()
             remote.disconnect()
-        self.test_seq_operations()
+        self.test_mutation_operations()
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
         self.run_verification(self.buckets[0], self.kv_store)
 
@@ -169,5 +169,5 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
         #Flush the bucket
         for bucket in self.buckets:
             RestConnection(self.master).flush_bucket(bucket.name)
-            self.test_seq_operations()
+            self.test_mutation_operations()
         self.run_verification(self.buckets[0], self.kv_store)

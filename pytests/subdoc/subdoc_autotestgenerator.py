@@ -161,9 +161,9 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             result_queue.put({"error":str(ex), "operation":operation})
 
     ''' Generic Test case for running sequence operations based tests '''
-    def test_seq_operations(self):
+    def test_mutation_operations(self):
         self.number_of_documents =  self.input.param("number_of_documents",100)
-        self.test_mutation_operations =  self.input.param("test_mutation_operations",10)
+        self.number_of_operations =  self.input.param("number_of_operations",10)
         self.concurrent_threads =  self.input.param("num",10)
         error_queue = Queue.Queue()
         document_info_queue = Queue.Queue()
@@ -228,7 +228,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             document_key =  "document_key_"+str(self.randomDataGenerator.random_int())
             logic, error_result = self.run_mutation_operations(client, bucket,
                 document_key= document_key, json_document = json_document, seed =  seed,
-                number_of_operations = self.test_mutation_operations,
+                number_of_operations = self.number_of_operations,
                 mutation_operation_type = mutation_operation_type,
                 force_operation_type = force_operation_type)
             if not logic:
