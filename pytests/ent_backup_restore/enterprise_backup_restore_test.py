@@ -195,9 +195,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         5. Executes list command with --name and --incr-backup and validates
         6. Executes list command with --name, --incr-backup and --bucket-backup and validates
         """
-        rest_conn = RestConnection(self.backupset.cluster_host)
-        rest_conn.create_bucket(bucket="default2",ramQuotaMB=512)
-        self.buckets.append(Bucket(name="default2"))
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
@@ -1158,3 +1155,228 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if cluster_host_data[key]["flags"] != restore_host_data[key]["flags"]:
                 self.fail("Flags mismatch for key: {0}".format(key))
         self.log.info("Successfully validated cluster host data cas and flags against restore host data")
+
+    def test_backup_restore_with_flush(self):
+        """
+        1. Test should be run with same-cluster=True
+        2. Creates specified bucket on the cluster and loads it with given number of items
+        3. Creates a backupset - backsup data and validates
+        4. Flushes the bucket
+        5. Restores data and validates
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster_validate()
+        rest = RestConnection(self.backupset.cluster_host)
+        rest.flush_bucket()
+        self.log.info("Flushed default bucket - restoring data now..")
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+
+    def test_backup_restore_with_recreate(self):
+        """
+        1. Test should be run with same-cluster=True
+        2. Creates specified bucket on the cluster and loads it with given number of items
+        3. Creates a backupset - backsup data and validates
+        4. Deletes the bucket and recreates it
+        5. Restores data and validates
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster_validate()
+        rest = RestConnection(self.backupset.cluster_host)
+        rest.delete_bucket()
+        rest.create_bucket(bucket="default",ramQuotaMB=512)
+        self.log.info("Deleted default bucket and recreated it - restoring it now..")
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+
+    def test_backup_create_negative_args(self):
+        """
+        Validates error messages for negative inputs of create command
+        """
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        cmd = "create"
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --dir not specified", "Expected error message not thrown")
+        cmd = "create --dir"
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[0], "flag needs an argument: -dir", "Expected error message not thrown")
+        cmd = "create --dir {0}".format(self.backupset.directory)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --name not specified", "Expected error message not thrown")
+        cmd = "create --dir {0} --name".format(self.backupset.directory)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[0], "flag needs an argument: -name", "Expected error message not thrown")
+        self.backup_create()
+        cmd = "create --dir {0} --name {1}".format(self.backupset.directory, self.backupset.name)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Backup creation failed: Backup Set `backup` exists",
+                                    "Expected error message not thrown")
+
+    def test_backup_cluster_restore_negative_args(self):
+        """
+        Validates error messages for negative inputs of cluster or restore command - command parameter
+        decides which command to test
+        """
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        self.backup_create()
+        cmd_to_test = self.input.param("command", "cluster")
+        if cmd_to_test == "restore":
+            cmd = cmd_to_test + " --dir {0} --name {1} --host http://{2}:{3} --username {4} \
+                                  --password {5}".format(self.backupset.directory,
+                                                         self.backupset.name,
+                                                         self.backupset.cluster_host.ip,
+                                                         self.backupset.cluster_host.port,
+                                                         self.backupset.cluster_host_username,
+                                                         self.backupset.cluster_host_password)
+            command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+            output, error = remote_client.execute_command(command)
+            remote_client.log_command_output(output, error)
+            self.assertTrue("Error restoring cluster: Backup backup doesn't contain any backups" in output[-1],
+                            "Expected error message not thrown")
+            self.backup_cluster()
+        cmd = cmd_to_test
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --dir not specified", "Expected error message not thrown")
+        cmd = cmd_to_test + " --dir"
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[-1], "flag needs an argument: -dir", "Expected error message not thrown")
+        cmd = cmd_to_test + " --dir abc"
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Archive directory `abc` doesn't exist", "Expected error message not thrown")
+        cmd = cmd_to_test + " --dir {0}".format(self.backupset.directory)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --name not specified", "Expected error message not thrown")
+        cmd = cmd_to_test + " --dir {0} --name".format(self.backupset.directory)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[-1], "flag needs an argument: -name", "Expected error message not thrown")
+        cmd = cmd_to_test + " --dir {0} --name {1}".format(self.backupset.directory, self.backupset.name)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --host not specified", "Expected error message not thrown")
+        cmd = cmd_to_test + " --dir {0} --name {1} --host".format(self.backupset.directory, self.backupset.name)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[-1], "flag needs an argument: -host", "Expected error message not thrown")
+        cmd = cmd_to_test + " --dir {0} --name {1} --host http://{2}:{3}".format(self.backupset.directory,
+                                                                                 self.backupset.name,
+                                                                                 self.backupset.cluster_host.ip,
+                                                                                 self.backupset.cluster_host.port)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --username not specified", "Expected error message not thrown")
+        cmd = cmd_to_test + " --dir {0} --name {1} --host http://{2}:{3} \
+                              --username".format(self.backupset.directory,
+                                                 self.backupset.name,
+                                                 self.backupset.cluster_host.ip,
+                                                 self.backupset.cluster_host.port)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[-1], "flag needs an argument: -username", "Expected error message not thrown")
+        cmd = cmd_to_test + " --dir {0} --name {1} --host http://{2}:{3} \
+                              --username {4}".format(self.backupset.directory,
+                                                     self.backupset.name,
+                                                     self.backupset.cluster_host.ip,
+                                                     self.backupset.cluster_host.port,
+                                                     self.backupset.cluster_host_username)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --password not specified", "Expected error message not thrown")
+        cmd = cmd_to_test + " --dir {0} --name {1} --host http://{2}:{3} --username {4} \
+                              --password".format(self.backupset.directory,
+                                                 self.backupset.name,
+                                                 self.backupset.cluster_host.ip,
+                                                 self.backupset.cluster_host.port,
+                                                 self.backupset.cluster_host_username)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[-1], "flag needs an argument: -password", "Expected error message not thrown")
+        cmd = cmd_to_test + " --dir {0} --name abc --host http://{1}:{2} --username {3} \
+                              --password {4}".format(self.backupset.directory,
+                                                     self.backupset.cluster_host.ip,
+                                                     self.backupset.cluster_host.port,
+                                                     self.backupset.cluster_host_username,
+                                                     self.backupset.cluster_host_password)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("Backup Set `abc` not found" in output[-1], "Expected error message not thrown")
+        cmd = cmd_to_test + " --dir {0} --name {1} --host abc --username {2} \
+                              --password {3}".format(self.backupset.directory,
+                                                     self.backupset.name,
+                                                     self.backupset.cluster_host_username,
+                                                     self.backupset.cluster_host_password)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("no such host" in output[-1], "Expected error message not thrown")
+        cmd = cmd_to_test + " --dir {0} --name {1} --host http://{2}:{3} --username abc \
+                              --password {4}".format(self.backupset.directory,
+                                                     self.backupset.name,
+                                                     self.backupset.cluster_host.ip,
+                                                     self.backupset.cluster_host.port,
+                                                     self.backupset.cluster_host_password)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("check username and password" in output[-1], "Expected error message not thrown")
+        cmd = cmd_to_test + " --dir {0} --name {1} --host http://{2}:{3} --username {4} \
+                              --password abc".format(self.backupset.directory,
+                                                     self.backupset.name,
+                                                     self.backupset.cluster_host.ip,
+                                                     self.backupset.cluster_host.port,
+                                                     self.backupset.cluster_host_username)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("check username and password" in output[-1], "Expected error message not thrown")
+
+    def test_backup_list_negative_args(self):
+        """
+        Validates error messages for negative inputs of list command
+        """
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        self.backup_create()
+        cmd = "list"
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --dir not specified", "Expected error message not thrown")
+        cmd = "list --dir"
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[0], "flag needs an argument: -dir", "Expected error message not thrown")
+        cmd = "list --dir abc".format(self.backupset.directory)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("Error: Archive directory `abc` doesn't exist" in output[-1],
+                        "Expected error message not thrown")
