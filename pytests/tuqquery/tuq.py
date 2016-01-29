@@ -2713,7 +2713,7 @@ class QueryTests(BaseTestCase):
                     self.query = "CREATE INDEX %s ON %s(job_title, name)  USING %s" % (index_name, bucket.name,self.index_type)
                 elif ind =="two":
                     self.query = "CREATE INDEX %s ON %s(join_day, name)  USING %s" % (index_name, bucket.name,self.index_type)
-                if self.query:
+                if self.gsi_type:
                     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)

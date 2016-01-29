@@ -2093,12 +2093,13 @@ class RemoteMachineShellConnection:
 
     def execute_commands_inside(self, main_command,query, queries,username,password,bucketname,source,subcommands=[], min_output_size=0,
                                 end_msg='', timeout=250):
+        filename = '/tmp/test'
+        filedata = ""
         if not(query==""):
             main_command = main_command + " -s=\"" + query+ '"'
             print "main_command is %s" %main_command
-        if not(queries==""):
+        elif (self.remote and not(queries=="")):
             sftp = self._ssh_client.open_sftp()
-            filename = '/tmp/test'
             filein = sftp.open(filename, 'w')
             for query in queries:
                 filein.write(query)
@@ -2107,23 +2108,40 @@ class RemoteMachineShellConnection:
             filedata = fileout.read()
             #print filedata
             fileout.close()
-            if("bucketname" in filedata):
-                newdata = filedata.replace("bucketname",bucketname)
-                newdata = newdata.replace("user",username)
-                newdata = newdata.replace("pass",password)
-            else:
-                newdata = filedata.replace("bucket1",username)
-                newdata = newdata.replace("user1",username)
-                newdata = newdata.replace("pass1",password)
-                newdata = newdata.replace("bucket2",bucketname)
-                newdata = newdata.replace("user2",bucketname)
-                newdata = newdata.replace("pass2",password)
+        elif not(queries==""):
+            f = open(filename, 'w')
+            for query in queries:
+                f.write(query)
+                f.write('\n')
+            f.close()
+            fileout = open(filename,'r')
+            filedata = fileout.read()
+            print filedata
+            fileout.close()
+
+        newdata = filedata.replace("bucketname",bucketname)
+        newdata = newdata.replace("user",username)
+        newdata = newdata.replace("pass",password)
+        newdata = newdata.replace("bucket1",username)
+        newdata = newdata.replace("user1",username)
+        newdata = newdata.replace("pass1",password)
+        newdata = newdata.replace("bucket2",bucketname)
+        newdata = newdata.replace("user2",bucketname)
+        newdata = newdata.replace("pass2",password)
+        print newdata
+
+        if (self.remote and not(queries=="")) :
             f = sftp.open(filename,'w')
             f.write(newdata)
             f.close()
-            if (source):
+        elif not(queries==""):
+            f = open(filename,'w')
+            f.write(newdata)
+            f.close()
+
+        if (source):
                 main_command = main_command + "  -s=\"\SOURCE " + filename+ '"'
-            else:
+        else:
                 main_command = main_command + " -f=" + filename
         log.info("running command on {0}: {1}".format(self.ip, main_command))
         output=""
@@ -2159,10 +2177,12 @@ class RemoteMachineShellConnection:
 
            #output = output + end_msg
 
-        # else:
-        #     p = Popen(main_command , shell=True, stdout=PIPE, stderr=PIPE)
-        #     stdout, stderro = p.communicate()
-        time.sleep(1)
+        else:
+            p = Popen(main_command , shell=True, stdout=PIPE, stderr=PIPE)
+            stdout, stderro = p.communicate()
+            output = stdout
+            print output
+            time.sleep(1)
         # for cmd in subcommands:
         #       log.info("running command {0} inside {1} ({2})".format(
         #                                                 main_command, cmd, self.ip))
@@ -2182,9 +2202,12 @@ class RemoteMachineShellConnection:
         # stdin.close()
         # stdout.close()
         # stderro.close()
-        if not(queries==""):
+        if (self.remote and not(queries=="")) :
             sftp.remove(filename)
             sftp.close()
+        elif not(queries==""):
+            os.remove(filename)
+
         output = re.sub('\s+', '', output)
         return (output)
 
