@@ -54,6 +54,16 @@ class QueryTests(BaseTestCase):
         self.named_prepare = self.input.param("named_prepare", None)
         self.encoded_prepare = self.input.param("encoded_prepare", False)
         self.isprepared = False
+        self.server = self.master
+        self.rest = RestConnection(self.server)
+        shell = RemoteMachineShellConnection(self.master)
+        type = shell.extract_remote_info().distribution_type
+        shell.disconnect()
+        self.path = testconstants.LINUX_COUCHBASE_BIN_PATH
+        if type.lower() == 'windows':
+            self.path = testconstants.WIN_COUCHBASE_BIN_PATH
+        elif type.lower() == "mac":
+            self.path = testconstants.MAC_COUCHBASE_BIN_PATH
         if self.primary_indx_type.lower() == "gsi":
             self.gsi_type = self.input.param("gsi_type", None)
         else:
@@ -693,9 +703,10 @@ class QueryTests(BaseTestCase):
 
     def test_meta_like(self):
         for bucket in self.buckets:
-            self.query = 'SELECT name FROM %s WHERE META(%s).id LIKE "employee%"'  % (
-                                                                            bucket.name, bucket.name)
+            self.query = 'SELECT name FROM %s WHERE META(%s).id LIKE "%s"'  % (
+                                                                            bucket.name, bucket.name,"query%")
             actual_result = self.run_cbq_query()
+
             actual_result = sorted(actual_result['results'],
                                    key=lambda doc: (doc['name']))
 
@@ -3242,17 +3253,11 @@ class QueryTests(BaseTestCase):
                                                             "shell/cbq/cbq ","","","","","","")
             else:
                 os = self.shell.extract_remote_info().type.lower()
-                #if (query.find("VALUES") > 0):
                 if not(self.isprepared):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
-                    #query = query.encode('unicode-escape').replace(b'`', b'\`')
-                    #query = query.replace('"','\"')
-                    #query = query.replace('`','\`')
-                if os == "linux":
-                    cmd = "%s/go_cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
+                    cmd = "%s/go_cbq  -engine=http://%s:8093/" % (self.path,server.ip)
                     output = self.shell.execute_commands_inside(cmd,query,"","","","","")
-                    #output = self.shell.execute_commands_inside(cmd,query)
                     result = json.loads(output)
         if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)
