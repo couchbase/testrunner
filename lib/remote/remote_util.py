@@ -525,6 +525,10 @@ class RemoteMachineShellConnection:
             self.execute_command('taskkill /F /T /IM WerFault.*')
             self.execute_command('taskkill /F /T /IM memcached.exe')
             self.execute_command('taskkill /F /T /IM bash.exe')
+            log.info("Kill any cbq-engine.exe in sherlock")
+            self.execute_command('taskkill /F /T /IM cbq-engine.exe')
+            self.terminate_processes(self.info, \
+                                 [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
             self.disable_firewall()
             remove_words = ["-rel", ".exe"]
             for word in remove_words:
@@ -750,6 +754,11 @@ class RemoteMachineShellConnection:
         self.execute_command('taskkill /F /T /IM WerFault.*')
         self.execute_command('taskkill /F /T /IM Firefox.*')
         self.execute_command('taskkill /F /T /IM bash.exe')
+        log.info("Kill any cbq-engine.exe in sherlock")
+        self.execute_command('taskkill /F /T /IM cbq-engine.exe')
+        self.terminate_processes(self.info, \
+                              [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
+        self.sleep(200, "check process")
         self.disable_firewall()
         version = version.replace("-rel", "")
         exist = self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
@@ -1282,6 +1291,9 @@ class RemoteMachineShellConnection:
             win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
                              "firefox.*", "WerFault.*", "iexplore.*"]
             self.terminate_processes(self.info, win_processes)
+            self.terminate_processes(self.info, \
+                                 [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
+            self.sleep(200, "check process")
             # to prevent getting full disk let's delete some large files
             self.remove_win_backup_dir()
             self.remove_win_collect_tmp()
@@ -1430,13 +1442,6 @@ class RemoteMachineShellConnection:
             self.remove_win_backup_dir()
             self.remove_win_collect_tmp()
 
-            """ Remove this workaround when bug MB-14504 is fixed """
-            log.info("Kill any un/install process leftover in sherlock")
-            self.execute_command('taskkill /F /T /IM 4.0.0-*')
-            log.info("Kill any un/install process leftover in watson")
-            self.execute_command('taskkill /F /T /IM 4.1.0-*')
-            log.info("Kill any cbq-engine.exe in sherlock")
-            self.execute_command('taskkill /F /T /IM cbq-engine.exe')
             log.info('sleep for 5 seconds before running task '
                                 'schedule uninstall on {0}'.format(self.ip))
             """ End remove this workaround when bug MB-14504 is fixed """
