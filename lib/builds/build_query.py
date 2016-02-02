@@ -535,6 +535,7 @@ class BuildQuery(object):
             """ sherlock build name
                 centos 6: couchbase-server-enterprise-3.5.0-71-centos6.x86_64
                 debian7:  couchbase-server-enterprise_3.5.0-10-debian7_amd64.deb
+                debian8:  couchbase-server-enterprise_4.5.0-1194-debian8_amd64.deb
                 ubuntu 12.04:
                     couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
                 mac:
@@ -544,7 +545,7 @@ class BuildQuery(object):
                     couchbase-server-enterprise_3.5.0-952-windows_amd64.exe"""
 
             if any( x + "-" in build_info for x in COUCHBASE_FROM_VERSION_3):
-                deb_words = ["debian7", "ubuntu12.04", "ubuntu14.04",
+                deb_words = ["debian7", "debian8", "ubuntu12.04", "ubuntu14.04",
                              "windows", "macos"]
                 if "centos" not in build_info:
                     tmp_str = build_info.split("_")
@@ -575,8 +576,8 @@ class BuildQuery(object):
                 elif "-amd64" in build_info:
                     build.architecture_type = "x86_64"
                     build_info = build_info.replace("-amd64", "")
-                del_words = ["centos6", "debian7", "ubuntu12.04", "ubuntu14.04", \
-                             "windows", "macos", "centos7"]
+                del_words = ["centos6", "debian7", "debian8", "ubuntu12.04", \
+                             "ubuntu14.04", "windows", "macos", "centos7"]
                 if build_info.startswith("couchbase-server"):
                     build.product = build_info.split("-")
                     build.product = "-".join([i for i in build.product \
@@ -622,6 +623,7 @@ class BuildQuery(object):
                /1796/couchbase-server-enterprise-4.0.0-1796-oel6.x86_64.rpm
                /723/couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
                /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb
+               /1194/couchbase-server-enterprise_4.5.0-1194-debian8_amd64.deb
                /1120/couchbase-server-enterprise_3.5.0-1120-macos_x86_64.zip
         toy=Ce
         build.name = couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
@@ -686,7 +688,6 @@ class BuildQuery(object):
             edition_type = edition_type.replace("centos6", "ubuntu_1204")
         if "debian" in distribution_version:
             os_name = "debian7_"
-
         joint_char = "_"
         version_join_char = "_"
         if toy is not "":
@@ -741,6 +742,9 @@ class BuildQuery(object):
                 elif "debian gnu/linux 7" in distribution_version:
                     build.distribution_version = "debian7"
                     os_name = "debian7"
+                elif "debian gnu/linux 8" in distribution_version:
+                    build.distribution_version = "debian8"
+                    os_name = "debian8"
                 elif "windows" in distribution_version:
                     os_name = "windows"
                     if "x86_64" not in architecture_type:
@@ -775,6 +779,9 @@ class BuildQuery(object):
             elif "debian gnu/linux 7" in distribution_version:
                 build.distribution_version = "debian7"
                 os_name = "debian7_"
+            elif "debian gnu/linux 8" in distribution_version:
+                build.distribution_version = "debian8"
+                os_name = "debian8_"
             elif "windows" in distribution_version:
                 os_name = "windows-"
                 if "x86_64" not in architecture_type:
