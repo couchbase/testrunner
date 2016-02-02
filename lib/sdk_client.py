@@ -55,6 +55,85 @@ class SDKClient(object):
     def close(self):
         self.cb._close()
 
+    def counter_in(self, key, path, delta, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0):
+        try:
+            return self.cb.counter_in(key, path, delta, create_parents= create_parents, cas= cas, ttl= ttl, persist_to= persist_to, replicate_to= replicate_to)
+        except CouchbaseError as e:
+            raise
+
+    def arrayappend_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0):
+        try:
+            return self.cb.arrayappend_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+        except CouchbaseError as e:
+            raise
+
+    def arrayprepend_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0):
+        try:
+            return self.cb.arrayprepend_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+        except CouchbaseError as e:
+            raise
+
+    def arrayaddunique_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0):
+        try:
+            return self.cb.addunique_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+        except CouchbaseError as e:
+            raise
+
+    def arrayinsert_in(self, key, path, value, cas=0, ttl=0, persist_to=0, replicate_to=0):
+        try:
+            return self.cb.arrayinsert_in(key, path, value, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+        except CouchbaseError as e:
+            raise
+
+    def remove_in(self, key, path,  cas=0, ttl=0):
+        try:
+            self.cb.remove_in(key, path, cas = cas, ttl = ttl)
+        except CouchbaseError as e:
+            raise
+
+    def mutate_in(self, key, *specs, **kwargs):
+        try:
+            self.cb.mutate_in(key, *specs, **kwargs)
+        except CouchbaseError as e:
+            raise
+
+    def lookup_in(self, key, *specs, **kwargs):
+        try:
+            self.cb.lookup_in(key, *specs, **kwargs)
+        except CouchbaseError as e:
+            raise
+
+    def get_in(self, key, path):
+        try:
+            result = self.cb.get_in(key, path)
+            return self.__translate_get(result)
+        except CouchbaseError as e:
+            raise
+
+    def exists_in(self, key, path):
+        try:
+            self.cb.exists_in(key, path)
+        except CouchbaseError as e:
+            raise
+
+    def replace_in(self, key, path, value, cas=0, ttl=0, persist_to=0, replicate_to=0):
+        try:
+            return self.cb.replace_in(key, path, value, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+        except CouchbaseError as e:
+            raise
+
+    def insert_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0):
+        try:
+            return self.cb.insert_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+        except CouchbaseError as e:
+            raise
+
+    def upsert_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0):
+        try:
+            return self.cb.upsert_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+        except CouchbaseError as e:
+            raise
+
     def append(self, key, value, cas=0, format=None, persist_to=0, replicate_to=0):
         try:
             self.cb.append(key, value, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
