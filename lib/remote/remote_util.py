@@ -32,6 +32,7 @@ from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
+from testconstants import WIN_PROCESSES_KILLED
 from testconstants import CB_RELEASE_APT_GET_REPO
 from testconstants import CB_RELEASE_YUM_REPO
 from membase.api.rest_client import RestConnection, RestHelper
@@ -516,17 +517,7 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         self.disable_firewall()
         if self.info.type.lower() == 'windows':
-            self.execute_command('taskkill /F /T /IM msiexec32.exe')
-            self.execute_command('taskkill /F /T /IM msiexec.exe')
-            self.execute_command('taskkill /F /T IM setup.exe')
-            self.execute_command('taskkill /F /T /IM ISBEW64.*')
-            self.execute_command('taskkill /F /T /IM firefox.*')
-            self.execute_command('taskkill /F /T /IM iexplore.*')
-            self.execute_command('taskkill /F /T /IM WerFault.*')
-            self.execute_command('taskkill /F /T /IM memcached.exe')
-            self.execute_command('taskkill /F /T /IM bash.exe')
-            log.info("Kill any cbq-engine.exe in sherlock")
-            self.execute_command('taskkill /F /T /IM cbq-engine.exe')
+            self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
             self.terminate_processes(self.info, \
                                  [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
             self.disable_firewall()
@@ -746,16 +737,7 @@ class RemoteMachineShellConnection:
             return False
 
     def download_binary_in_win(self, url, version):
-        self.execute_command('taskkill /F /T /IM msiexec32.exe')
-        self.execute_command('taskkill /F /T /IM msiexec.exe')
-        self.execute_command('taskkill /F /T IM setup.exe')
-        self.execute_command('taskkill /F /T /IM ISBEW64.*')
-        self.execute_command('taskkill /F /T /IM iexplore.*')
-        self.execute_command('taskkill /F /T /IM WerFault.*')
-        self.execute_command('taskkill /F /T /IM Firefox.*')
-        self.execute_command('taskkill /F /T /IM bash.exe')
-        log.info("Kill any cbq-engine.exe in sherlock")
-        self.execute_command('taskkill /F /T /IM cbq-engine.exe')
+        self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
         self.terminate_processes(self.info, \
                               [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
         self.disable_firewall()
@@ -1287,9 +1269,7 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
         if self.info.type.lower() == 'windows':
-            win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
-                             "firefox.*", "WerFault.*", "iexplore.*"]
-            self.terminate_processes(self.info, win_processes)
+            self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
             self.terminate_processes(self.info, \
                                  [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
             # to prevent getting full disk let's delete some large files
