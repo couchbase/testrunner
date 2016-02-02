@@ -758,7 +758,6 @@ class RemoteMachineShellConnection:
         self.execute_command('taskkill /F /T /IM cbq-engine.exe')
         self.terminate_processes(self.info, \
                               [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
-        self.sleep(200, "check process")
         self.disable_firewall()
         version = version.replace("-rel", "")
         exist = self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
@@ -1293,7 +1292,6 @@ class RemoteMachineShellConnection:
             self.terminate_processes(self.info, win_processes)
             self.terminate_processes(self.info, \
                                  [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
-            self.sleep(200, "check process")
             # to prevent getting full disk let's delete some large files
             self.remove_win_backup_dir()
             self.remove_win_collect_tmp()
