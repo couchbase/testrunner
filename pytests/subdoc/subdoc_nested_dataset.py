@@ -65,17 +65,9 @@ class SubdocNestedDataset(SubdocBaseTest):
 
 # SD_GET
 
-    def test_get_json(self):
-        self.json =  self.generate_simple_data_null()
-        self.get_verify(self.json, "test_get_json")
-
     def test_get_null(self):
-        self.json =  self.generate_nested_json()
+        self.json =  self.generate_simple_data_null()
         self.get_verify(self.json, "simple_dataset_null")
-
-    def test_get_json(self):
-        self.json =  self.generate_simple_data_boolean()
-        self.get_verify(self.json, "test_get_json")
 
     def test_get_array_numbers(self):
     	self.json =  self.generate_simple_data_array_of_numbers()
