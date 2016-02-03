@@ -117,11 +117,17 @@ def main():
                         initNodes = data['initNodes'].lower() == 'true'
                     else:
                         initNodes = True
+                    if 'installParameters' in data:
+                        installParameters = data['installParameters']
+                    else:
+                        installParameters = 'None'
 
-                    testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],'confFile':data['confFile'],
-                                       'iniFile':data['config'],
-                                     'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
-                                     'parameters':data['parameters'], 'initNodes':initNodes})
+
+                    testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],
+                                'confFile':data['confFile'], 'iniFile':data['config'],
+                                'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
+                                'parameters':data['parameters'], 'initNodes':initNodes,
+                                'installParameters':installParameters})
             else:
                 print 'OS does not apply to', data['component'], data['subcomponent']
 
@@ -141,7 +147,7 @@ def main():
 
     launchString = launchStringBase + '/buildWithParameters?token=test_dispatcher&' + \
                         'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
-                         'iniFile={5}&servers={6}&parameters={7}&os={8}&initNodes={9}'
+                         'iniFile={5}&servers={6}&parameters={7}&os={8}&initNodes={9}&installParameters={10}'
 
     summary = []
 
@@ -200,11 +206,10 @@ def main():
 
 
                         url = launchString.format(options.version, testsToLaunch[i]['confFile'],
-                                             descriptor, testsToLaunch[i]['component'],
-                                             testsToLaunch[i]['subcomponent'], testsToLaunch[i]['iniFile'],
-                                             urllib.quote(json.dumps(r2).replace(' ','')),
-                                             urllib.quote( parameters ), options.os,
-                                             testsToLaunch[i]['initNodes'])
+                                    descriptor, testsToLaunch[i]['component'], testsToLaunch[i]['subcomponent'],
+                                    testsToLaunch[i]['iniFile'], urllib.quote(json.dumps(r2).replace(' ','')),
+                                    urllib.quote( parameters ), options.os, testsToLaunch[i]['initNodes'],
+                                    testsToLaunch[i]['installParameters'])
 
                         #print 'launching', url
                         print time.asctime( time.localtime(time.time()) ), 'launching ', descriptor
