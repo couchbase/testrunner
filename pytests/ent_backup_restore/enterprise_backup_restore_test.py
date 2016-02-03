@@ -1380,3 +1380,194 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         remote_client.log_command_output(output, error)
         self.assertTrue("Error: Archive directory `abc` doesn't exist" in output[-1],
                         "Expected error message not thrown")
+
+    def test_backup_compact_negative_args(self):
+        """
+        Validates error messages for negative inputs of compact command
+        """
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        self.backup_create()
+        self.backup_cluster()
+        cmd = "compact"
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --dir not specified", "Expected error message not thrown")
+        cmd = "compact --dir"
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[0], "flag needs an argument: -dir", "Expected error message not thrown")
+        cmd = "compact --dir {0}".format(self.backupset.directory)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --name not specified", "Expected error message not thrown")
+        cmd = "compact --dir {0} --name".format(self.backupset.directory)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[0], "flag needs an argument: -name", "Expected error message not thrown")
+        cmd = "compact --dir {0} --name {1}".format(self.backupset.directory, self.backupset.name)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --backup not specified", "Expected error message not thrown")
+        cmd = "compact --dir {0} --name {1} --backup".format(self.backupset.directory, self.backupset.name)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[0], "flag needs an argument: -backup", "Expected error message not thrown")
+        cmd = "compact --dir abc --name {0} --backup {1}".format(self.backupset.name, self.backups[0])
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("Error: Archive directory `abc` doesn't exist" in output[-1],
+                        "Expected error message not thrown")
+        cmd = "compact --dir {0} --name abc --backup {1}".format(self.backupset.directory, self.backups[0])
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("Backup Set `abc` not found" in output[-1],
+                        "Expected error message not thrown")
+        cmd = "compact --dir {0} --name {1} --backup abc".format(self.backupset.directory, self.backupset.name)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("Cluster Backup `abc` not found" in output[-1],
+                        "Expected error message not thrown")
+
+    def test_backup_merge_negative_args(self):
+        """
+        Validates error messages for negative inputs of merge command
+        """
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        self.backup_create()
+        cmd = "merge"
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --dir not specified", "Expected error message not thrown")
+        cmd = "merge --dir"
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[0], "flag needs an argument: -dir", "Expected error message not thrown")
+        cmd = "merge --dir {0}".format(self.backupset.directory)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --name not specified", "Expected error message not thrown")
+        cmd = "merge --dir {0} --name".format(self.backupset.directory)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[0], "flag needs an argument: -name", "Expected error message not thrown")
+        cmd = "merge --dir {0} --name {1}".format(self.backupset.directory, self.backupset.name)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error merging data: Backup backup doesn't contain any backups",
+                                    "Expected error message not thrown")
+        self._take_n_backups(n=2)
+        cmd = "merge --dir {0} --name {1}".format(self.backupset.directory, self.backupset.name)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error merging data: Error restoring data, `` is invalid start point",
+                                    "Expected error message not thrown")
+        cmd = "merge --dir {0} --name {1} --start".format(self.backupset.directory, self.backupset.name)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[0], "flag needs an argument: -start", "Expected error message not thrown")
+        cmd = "merge --dir {0} --name {1} --start {2}".format(self.backupset.directory,
+                                                              self.backupset.name, self.backups[0])
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error merging data: Error restoring data, `` is invalid end point",
+                                    "Expected error message not thrown")
+        cmd = "merge --dir {0} --name {1} --start {2} --end".format(self.backupset.directory,
+                                                              self.backupset.name, self.backups[0])
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[0], "flag needs an argument: -end", "Expected error message not thrown")
+        cmd = "merge --dir abc --name {0} --start {1} --end {2}".format(self.backupset.name,
+                                                                        self.backups[0], self.backups[1])
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("Error: Archive directory `abc` doesn't exist" in output[-1],
+                        "Expected error message not thrown")
+        cmd = "merge --dir {0} --name abc --start {1} --end {2}".format(self.backupset.directory,
+                                                                        self.backups[0], self.backups[1])
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("Error merging data: Backup Set `abc` not found" in output[-1],
+                        "Expected error message not thrown")
+        cmd = "merge --dir {0} --name {1} --start abc --end {2}".format(self.backupset.directory,
+                                                                        self.backupset.name, self.backups[1])
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("Error merging data: Error restoring data, `abc` is invalid start point" in output[-1],
+                        "Expected error message not thrown")
+        cmd = "merge --dir {0} --name {1} --start {2} --end abc".format(self.backupset.directory,
+                                                                        self.backupset.name, self.backups[0])
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("Error merging data: Error restoring data, `abc` is invalid end point" in output[-1],
+                        "Expected error message not thrown")
+        cmd = "merge --dir {0} --name {1} --start {2} --end {3}".format(self.backupset.directory,
+                                                                        self.backupset.name,
+                                                                        self.backups[1],self.backups[0])
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("Error merging data: start point `{0}` is after end point `{1}`".format
+                                                    (self.backups[1], self.backups[0]) in output[-1],
+                        "Expected error message not thrown")
+
+    def test_backup_remove_negative_args(self):
+        """
+        Validates error messages for negative inputs of remove command
+        """
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        self.backup_create()
+        self.backup_cluster()
+        cmd = "remove"
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --dir not specified", "Expected error message not thrown")
+        cmd = "remove --dir"
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[0], "flag needs an argument: -dir", "Expected error message not thrown")
+        cmd = "remove --dir {0}".format(self.backupset.directory)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(output[0], "Error: Required flag --name not specified", "Expected error message not thrown")
+        cmd = "remove --dir {0} --name".format(self.backupset.directory)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertEqual(error[0], "flag needs an argument: -name", "Expected error message not thrown")
+        cmd = "remove --dir abc --name {0}".format(self.backupset.name)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("Error: Archive directory `abc` doesn't exist" in output[-1],
+                        "Expected error message not thrown")
+        cmd = "remove --dir {0} --name abc".format(self.backupset.directory)
+        command = "{0}/backup {1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("Backup Set `abc` not found" in output[-1],
+                        "Expected error message not thrown")
