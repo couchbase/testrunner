@@ -2,6 +2,7 @@ from lib.mc_bin_client import MemcachedClient, MemcachedError
 from lib.memcacheConstants import *
 from subdoc_base import SubdocBaseTest
 import copy, json
+import yaml
 import random
 
 class SubdocNestedDataset(SubdocBaseTest):
@@ -671,7 +672,7 @@ class SubdocNestedDataset(SubdocBaseTest):
         jsonDump = json.dumps(self.json)
         base_json = self.generate_json_for_nesting()
         self.json = self.generate_nested(base_json, dataset, self.nesting_level)
-        new_json = self.shuffle_json(dataset)
+        new_json = self.shuffle_json(copy.deepcopy(dataset))
         jsonDump = json.dumps(self.json)
         self.client.set(self.key, 0, 0, jsonDump)
         for key in new_json.keys():
@@ -698,11 +699,11 @@ class SubdocNestedDataset(SubdocBaseTest):
         for key in dataset.keys():
             self.delete(self.client, self.key, key)
             dataset.pop(key)
-            for key in self.json.keys():
-                value = self.json[key]
-                logic, data_return  =  self.get_string_and_verify_return( self.client, key = self.key, path = key)
+            for key_1 in dataset.keys():
+                value = dataset[key_1]
+                logic, data_return  =  self.get_string_and_verify_return( self.client, key = self.key, path = key_1, expected_value = dataset[key_1])
                 if not logic:
-                    result_dict[key] = {"expected":self.new_json[key], "actual":data_return}
+                    result_dict[key_1] = {"expected":dataset[key_1], "actual":data_return}
                     result = result and logic
             self.assertTrue(result, result_dict)
 
@@ -822,11 +823,11 @@ class SubdocNestedDataset(SubdocBaseTest):
         new_path = self.generate_path(self.nesting_level, path)
         try:
             opaque, cas, data = self.client.get_sd(key, new_path)
-            data = json.loads(data)
+            data = yaml.safe_load(data)
         except Exception as e:
             msg = "Unable to get key {0} for path {1} after {2} tries".format(key, path, 1)
             return False, msg
-        return (data == expected_value), data
+        return (str(data).encode('utf-8') == str(expected_value)), str(data).encode('utf-8')
 
     def verify_exists(self, client, key = '', path = ''):
         new_path = self.generate_path(self.nesting_level, path)
