@@ -112,6 +112,76 @@ class StableTopFTS(FTSBaseTest):
                       "yields only {1} hits".format(hits, hits2))
         return index, alias
 
+    def create_query_alias_on_multiple_indexes(self):
+
+        #delete default bucket
+        self._cb_cluster.delete_bucket("default")
+
+        # create "emp" bucket
+        self._cb_cluster.create_standard_buckets(bucket_size=1000,
+                                                 name="emp",
+                                                 port=11234,
+                                                 num_replicas=0)
+        emp = self._cb_cluster.get_bucket_by_name('emp')
+
+        # create "wiki" bucket
+        self._cb_cluster.create_standard_buckets(bucket_size=1000,
+                                                 name="wiki",
+                                                 port=11235,
+                                                 num_replicas=0)
+        wiki = self._cb_cluster.get_bucket_by_name('wiki')
+
+        #load emp dataset into emp bucket
+        emp_gen = self.get_generator(dataset="emp", num_items=self._num_items)
+        wiki_gen = self.get_generator(dataset="wiki", num_items=self._num_items)
+        if self.es:
+            # make deep copies of the generators
+            import copy
+            emp_gen_copy = copy.deepcopy(emp_gen)
+            wiki_gen_copy = copy.deepcopy(wiki_gen)
+
+        load_tasks = self._cb_cluster.async_load_bucket_from_generator(
+            bucket=emp,
+            kv_gen=emp_gen)
+        load_tasks += self._cb_cluster.async_load_bucket_from_generator(
+            bucket=wiki,
+            kv_gen=wiki_gen)
+
+        if self.es:
+            # create empty ES indexes
+            self.es.create_empty_index("emp_es_index")
+            self.es.create_empty_index("wiki_es_index")
+            load_tasks.append(self.es.async_bulk_load_ES(index_name='emp_es_index',
+                                                        gen=emp_gen_copy,
+                                                        op_type='create'))
+
+            load_tasks.append(self.es.async_bulk_load_ES(index_name='wiki_es_index',
+                                                        gen=wiki_gen_copy,
+                                                        op_type='create'))
+
+        for task in load_tasks:
+            task.result()
+
+        # create indexes on both buckets
+        emp_index = self.create_default_index(emp, "emp_index")
+        wiki_index = self.create_default_index(
+            wiki,
+            "wiki_index",
+            index_params={"default_analyzer": "simple"})
+
+        self.wait_for_indexing_complete()
+
+        # create compound alias
+        alias = self.create_alias(target_indexes=[emp_index, wiki_index],
+                                  name="emp_wiki_alias")
+        if self.es:
+            self.es.create_alias(name="emp_wiki_es_alias",
+                                 indexes= ["emp_es_index", "wiki_es_index"])
+
+        # run rqg on the alias
+        self.generate_random_queries(alias, self.num_queries, self.query_types)
+        self.run_query_and_compare(alias, es_index_name="emp_wiki_es_alias")
+
     def index_wiki(self):
         self.load_wiki(lang=self.lang)
         bucket = self._cb_cluster.get_bucket_by_name('default')
@@ -184,10 +254,27 @@ class StableTopFTS(FTSBaseTest):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         index = self.create_default_index(bucket, 'sample_index')
         self.wait_for_indexing_complete()
-        hits, _, _ = index.execute_query(self.sample_query)
+        #hits, _, _ = index.execute_query(self.sample_query)
         new_plan_param = {"maxPartitionsPerPIndex": 30}
+        self.partitions_per_pindex = 30
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        defn = index.get_index_defn()
+        self.log.info(defn)
+
+    def edit_index_negative(self):
+        self.load_employee_dataset()
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        index = self.create_default_index(bucket, 'sample_index')
+        self.wait_for_indexing_complete()
+        hits, _, _ = index.execute_query(self.sample_query)
+        new_plan_param = {"maxPartitionsPerPIndex": 30}
+        self.partitions_per_pindex = 30
+        index.index_definition['params'] = \
+            index.build_custom_index_params(new_plan_param)
+        index.index_definition['uuid'] = index.get_uuid()
         index.update()
         defn = index.get_index_defn()
         self.log.info(defn)

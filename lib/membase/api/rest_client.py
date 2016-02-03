@@ -2062,7 +2062,7 @@ class RestConnection(object):
         params = urllib.urlencode({'indexDef': json.dumps(index_def,
                                                           ensure_ascii=False)})
         status, content, header = self._http_request(api,
-                                    'POST',
+                                    'PUT',
                                     params,
                                     headers=self._create_capi_headers_with_auth(
                                                 self.username,
@@ -2186,7 +2186,7 @@ class RestConnection(object):
             "POST",
             json.dumps(query_json, ensure_ascii=False).encode('utf8'),
             headers,
-            timeout=30)
+            timeout=60)
 
         if status:
             content = json.loads(content)

@@ -1,4 +1,5 @@
 import httplib2
+import json
 from tasks.taskmanager import TaskManager
 from tasks.task import *
 
@@ -102,6 +103,28 @@ class ElasticSearchBase(object):
                 self.__indices.append(index_name)
         except Exception as e:
             raise Exception("Could not create ES index : %s" % e)
+
+    def create_alias(self, name, indexes):
+        """
+        @name: alias name
+        @indexes: list of target indexes
+        """
+        try:
+            self.__log.info("Checking if ES alias '{0}' exists...".format(name))
+            self.delete_index(name)
+            alias_info = {"actions": [{"add": {"indices": indexes, "alias": name}}]}
+            self.__log.info("Creating ES alias '{0}' on {1}...".format(
+                name,
+                indexes))
+            status, content, _ = self._http_request(
+                self.__connection_url + name,
+                'POST',
+                json.dumps(alias_info))
+            if status:
+                self.__log.info("ES alias '{0}' created".format(name))
+                self.__indices.append(name)
+        except Exception as e:
+            raise Exception("Could not create ES alias : %s" % e)
 
     def async_load_ES(self, index_name, gen, op_type='create'):
         """

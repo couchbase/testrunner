@@ -1038,7 +1038,7 @@ class ESBulkLoadGeneratorTask(Task):
 
 
 class ESRunQueryCompare(Task):
-    def __init__(self, fts_index, es_instance, query_index):
+    def __init__(self, fts_index, es_instance, query_index, es_index_name=None):
         Task.__init__(self, "Query_runner_task")
         self.fts_index = fts_index
         self.fts_query = fts_index.fts_queries[query_index]
@@ -1049,6 +1049,7 @@ class ESRunQueryCompare(Task):
         self.show_results = False
         self.query_index = query_index
         self.passed = True
+        self.es_index_name = es_index_name or "default_es_index"
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1071,10 +1072,11 @@ class ESRunQueryCompare(Task):
                 self.passed = False
             if self.es and self.es_query['query']:
                 es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query)
-                self.log.info("ES hits for query: %s is %s (took %sms)" % \
+                self.log.info("ES hits for query: %s on %s is %s (took %sms)" % \
                               (json.dumps(self.es_query['query'],  ensure_ascii=False),
-                              es_hits,
-                              es_time))
+                               self.es_index_name,
+                               es_hits,
+                               es_time))
                 if self.passed:
                     if int(es_hits) != int(fts_hits):
                         msg = "FAIL: FTS hits: %s, while ES hits: %s"\
@@ -1107,7 +1109,7 @@ class ESRunQueryCompare(Task):
         return self.fts_index.execute_query(query)
 
     def run_es_query(self, query):
-        return self.es.search(index_name='default_es_index', query=query)
+        return self.es.search(index_name=self.es_index_name, query=query)
 
 
 # This will be obsolete with the implementation of batch operations in LoadDocumentsTaks
