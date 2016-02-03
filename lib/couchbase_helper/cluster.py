@@ -190,10 +190,12 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_run_fts_query_compare(self, fts_index, es_instance, query_index):
+    def async_run_fts_query_compare(self, fts_index, es_instance, query_index,
+                                    es_index_name=None):
         _task = ESRunQueryCompare(fts_index,
                                   es_instance,
-                                  query_index=query_index)
+                                  query_index=query_index,
+                                  es_index_name=es_index_name)
         self.task_manager.schedule(_task)
         return _task
 

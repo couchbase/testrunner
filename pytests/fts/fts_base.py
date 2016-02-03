@@ -100,7 +100,7 @@ class INDEX_DEFAULTS:
                     },
                     "type_field": "type",
                     "default_type": "_default",
-                    "default_analyzer": "simple",
+                    "default_analyzer": "standard",
                     "default_datetime_parser": "dateTimeOptional",
                     "default_field": "_all",
                     "byte_array_converter": "json",
@@ -115,7 +115,7 @@ class INDEX_DEFAULTS:
 
 
     PLAN_PARAMS = {
-                  "maxPartitionsPerPIndex": 20,
+                  "maxPartitionsPerPIndex": 32,
                   "numReplicas": 0,
                   "hierarchyRules": None,
                   "nodePlanParams": None,
@@ -153,12 +153,12 @@ class INDEX_DEFAULTS:
                           "type": "fulltext-index",
                           "name": "",
                           "uuid": "",
-                          "params": BLEVE_MAPPING,
+                          "params": {},
                           "sourceType": "couchbase",
                           "sourceName": "default",
                           "sourceUUID": "",
                           "sourceParams": SOURCE_CB_PARAMS,
-                          "planParams": PLAN_PARAMS
+                          "planParams": {}
                         }
 
 class QUERY:
@@ -507,6 +507,15 @@ class FTSIndex:
             self.source_bucket = self.__cluster.get_bucket_by_name(source_name)
             self.index_definition['sourceType'] = self._source_type
             self.index_definition['sourceName'] = self._source_name
+
+        self.dataset = TestInputSingleton.input.param("dataset", "emp")
+
+        # for wiki docs, specify default analyzer as "simple"
+        if self.index_type == "fulltext-index" and \
+                (self.dataset == "wiki" or self.dataset == "all"):
+            self.index_definition['params'] = self.build_custom_index_params(
+                {"default_analyzer": "simple"})
+
         self.fts_queries = []
 
         if index_params:
@@ -527,9 +536,10 @@ class FTSIndex:
     def build_custom_index_params(self, index_params):
         if self.index_type == "fulltext-index":
             mapping = INDEX_DEFAULTS.BLEVE_MAPPING
+            mapping['mapping'].update(index_params)
         else:
             mapping = INDEX_DEFAULTS.ALIAS_DEFINITION
-        mapping.update(index_params)
+            mapping.update(index_params)
         return mapping
 
     def build_custom_plan_params(self, plan_params):
@@ -575,6 +585,10 @@ class FTSIndex:
     def get_index_defn(self):
         return self.rest.get_fts_index_definition(self.name)
 
+    def get_max_partitions_pindex(self):
+        _, defn = self.get_index_defn()
+        return int(defn['indexDef']['planParams']['maxPartitionsPerPIndex'])
+
     def clone(self, clone_name):
         pass
 
@@ -602,8 +616,7 @@ class FTSIndex:
             query_json['fields'] = fields
         return query_json
 
-    def execute_query(self, query, zero_results_ok=True,
-                      show_query_results=False, expected_hits=None):
+    def execute_query(self, query, zero_results_ok=True, expected_hits=None):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
@@ -615,8 +628,6 @@ class FTSIndex:
             if hits:
                 for doc in matches:
                     doc_ids.append(doc['id'])
-            if show_query_results:
-                self.__log.info("Doc matches : %s" % json.dumps(matches, indent=3))
             if int(hits) == 0 and not zero_results_ok:
                 raise FTSException("No docs returned for query : %s" %query_dict)
             if expected_hits and expected_hits != hits:
@@ -871,7 +882,8 @@ class CouchbaseCluster:
             task.result()
 
     def create_standard_buckets(
-            self, bucket_size, num_buckets=1, num_replicas=1,
+            self, bucket_size, name=None, num_buckets=1,
+            port=None, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
             bucket_priority=BUCKET_PRIORITY.HIGH):
         """Create standard buckets.
@@ -882,12 +894,17 @@ class CouchbaseCluster:
         @param bucket_priority: high/low etc.
         """
         bucket_tasks = []
+        start_port = STANDARD_BUCKET_PORT
+        if port:
+            start_port = port
+
         for i in range(num_buckets):
-            name = "standard_bucket_" + str(i + 1)
+            if not (num_buckets == 1 and name):
+                name = "standard_bucket_" + str(i + 1)
             bucket_tasks.append(self.__clusterop.async_create_standard_bucket(
                 self.__master_node,
                 name,
-                STANDARD_BUCKET_PORT + i,
+                start_port + i,
                 bucket_size,
                 num_replicas,
                 eviction_policy=eviction_policy,
@@ -899,7 +916,7 @@ class CouchbaseCluster:
                     saslPassword=None,
                     num_replicas=num_replicas,
                     bucket_size=bucket_size,
-                    port=STANDARD_BUCKET_PORT + i,
+                    port=start_port + i,
                     eviction_policy=eviction_policy,
                     bucket_priority=bucket_priority
                 ))
@@ -1203,6 +1220,33 @@ class CouchbaseCluster:
             )
         return tasks
 
+    def async_load_bucket_from_generator(self, bucket, kv_gen, ops=OPS.CREATE, exp=0,
+                                              kv_store=1, flag=0, only_store_hash=True,
+                                              batch_size=5000, pause_secs=1, timeout_secs=30):
+        """Load data asynchronously on all buckets. Function wait for
+        load data to finish.
+        @param bucket: pass object of bucket to load into
+        @param gen: BlobGenerator() object
+        @param ops: OPS.CREATE/UPDATE/DELETE/APPEND.
+        @param exp: expiration value.
+        @param kv_store: kv store index.
+        @param flag:
+        @param only_store_hash: True to store hash of item else False.
+        @param batch_size: batch size for load data at a time.
+        @param pause_secs: pause for next batch load.
+        @param timeout_secs: timeout
+        """
+
+        task = []
+        task.append(
+            self.__clusterop.async_load_gen_docs(
+                self.__master_node, bucket.name, kv_gen,
+                bucket.kvs[kv_store], ops, exp, flag,
+                only_store_hash, batch_size, pause_secs, timeout_secs)
+        )
+        return task
+
+
     def load_all_buckets_till_dgm(self, active_resident_threshold, items=0,
                                   exp=0, kv_store=1, flag=0,
                                   only_store_hash=True, batch_size=1000,
@@ -1398,14 +1442,15 @@ class CouchbaseCluster:
             )
         return tasks
 
-    def async_run_fts_query_compare(self, fts_index, es, query_index):
+    def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None):
         """
         Asynchronously run query against FTS and ES and compare result
         note: every task runs a single query
         """
         task = self.__clusterop.async_run_fts_query_compare(fts_index=fts_index,
                                                             es_instance=es,
-                                                            query_index=query_index)
+                                                            query_index=query_index,
+                                                            es_index_name= es_index_name)
         return task
 
     def run_expiry_pager(self, val=10):
@@ -1894,7 +1939,7 @@ class FTSBaseTest(unittest.TestCase):
         self.index_replicas = self._input.param("index_replicas", None)
         self.index_kv_store = self._input.param("kvstore", None)
         self.partitions_per_pindex = \
-            self._input.param("max_partitions_pindex", 20)
+            self._input.param("max_partitions_pindex", 32)
         self.upd_del_fields = self._input.param("upd_del_fields", None)
         self.num_queries = self._input.param("num_queries", 1)
         self.query_types = (self._input.param("query_types", "match")).split(',')
@@ -2198,8 +2243,10 @@ class FTSBaseTest(unittest.TestCase):
 
     def construct_plan_params(self):
         plan_params = {}
-        plan_params['numReplicas'] = self.index_replicas
-        plan_params['maxPartitionsPerPIndex'] = self.partitions_per_pindex
+        if self.index_replicas:
+            plan_params['numReplicas'] = self.index_replicas
+        if self.partitions_per_pindex:
+            plan_params['maxPartitionsPerPIndex'] = self.partitions_per_pindex
         return plan_params
 
     def is_index_partitioned_balanced(self, index):
@@ -2222,11 +2269,12 @@ class FTSBaseTest(unittest.TestCase):
             _, defn = index.get_index_defn()
 
         # check 1 - test number of pindexes
-        exp_num_pindexes = self._num_vbuckets/self.partitions_per_pindex
-        if self._num_vbuckets % self.partitions_per_pindex:
+        partitions_per_pindex = index.get_max_partitions_pindex()
+        exp_num_pindexes = self._num_vbuckets/partitions_per_pindex
+        if self._num_vbuckets % partitions_per_pindex:
             import math
             exp_num_pindexes = math.ceil(
-            self._num_vbuckets/self.partitions_per_pindex + 0.5)
+            self._num_vbuckets/partitions_per_pindex + 0.5)
         if len(defn['planPIndexes']) != exp_num_pindexes:
             self.fail("Number of pindexes for %s is %s while"
                       " expected value is %s" %(index.name,
@@ -2234,7 +2282,7 @@ class FTSBaseTest(unittest.TestCase):
                                                 exp_num_pindexes))
         self.log.info("Validated: Number of PIndexes = %s" % len(defn['planPIndexes']))
 
-        # check 2 - each pindex servicing "self.partitions_per_pindex" vbs
+        # check 2 - each pindex servicing "partitions_per_pindex" vbs
         num_fts_nodes = len(self._cb_cluster.get_fts_nodes())
         nodes_partitions = {}
         for pindex in defn['planPIndexes']:
@@ -2245,12 +2293,12 @@ class FTSBaseTest(unittest.TestCase):
             for partition in pindex['sourcePartitions'].split(','):
                 nodes_partitions[node]['partitions'].append(partition)
             if len(pindex['sourcePartitions'].split(',')) > \
-                    self.partitions_per_pindex:
+                    partitions_per_pindex:
                 self.fail("sourcePartitions for pindex %s more than "
                           "max_partitions_per_pindex %s" %
-                          (pindex['name'], self.partitions_per_pindex))
+                          (pindex['name'], partitions_per_pindex))
         self.log.info("Validated: Every pIndex serves %s partitions or lesser" %
-                          self.partitions_per_pindex)
+                          partitions_per_pindex)
 
         # check 3 - distributed - pindex present on all fts nodes?
         if len(nodes_partitions.keys()) != num_fts_nodes:
@@ -2264,12 +2312,12 @@ class FTSBaseTest(unittest.TestCase):
         # check 4 - balance check(almost equal no of pindexes on all fts nodes)
         exp_partitions_per_node = self._num_vbuckets/num_fts_nodes
         self.log.info("Expecting num of partitions in each node in range %s-%s"
-                      % (exp_partitions_per_node - self.partitions_per_pindex,
-                         exp_partitions_per_node + self.partitions_per_pindex))
+                      % (exp_partitions_per_node - partitions_per_pindex,
+                         exp_partitions_per_node + partitions_per_pindex))
 
         for node, pindex_partitions in nodes_partitions.iteritems():
             if abs(len(pindex_partitions['partitions']) - \
-                    exp_partitions_per_node) > self.partitions_per_pindex:
+                    exp_partitions_per_node) > partitions_per_pindex:
                 self.fail("The source partitions are not evenly distributed "
                           "among nodes, seeing %s on %s"
                           % (len(pindex_partitions['partitions']), node.ip))
@@ -2307,11 +2355,11 @@ class FTSBaseTest(unittest.TestCase):
 
         return index.fts_queries
 
-    def create_default_index(self, bucket, index_name, plan_params=None):
+    def create_default_index(self, bucket, index_name, index_params=None,
+                             plan_params=None):
         """
         Creates a default index given bucket, index_name and plan_params
         """
-        index_params = None
         bucket_password = ""
         if bucket.authType == "sasl":
             bucket_password = bucket.saslPassword
@@ -2341,17 +2389,20 @@ class FTSBaseTest(unittest.TestCase):
                     "%s_index_%s" % (bucket.name, count+1),
                     plan_params)
 
-    def create_alias(self, target_indexes, alias_def=None):
+    def create_alias(self, target_indexes, name=None, alias_def=None):
         """
         Creates an alias spanning one or many target indexes
         """
+        if not name:
+            name = 'alias_%s' % int(time.time())
+
         if not alias_def:
             alias_def = INDEX_DEFAULTS.ALIAS_DEFINITION
             for index in target_indexes:
                 alias_def['targets'][index.name] = {}
                 alias_def['targets'][index.name]['indexUUID'] = index.get_uuid()
 
-        return self._cb_cluster.create_fts_index(name='alias_%s' % int(time.time()),
+        return self._cb_cluster.create_fts_index(name=name,
                                                  index_type='fulltext-alias',
                                                  index_params=alias_def)
 
@@ -2466,7 +2517,7 @@ class FTSBaseTest(unittest.TestCase):
             self.create_gen)
         return load_tasks
 
-    def run_query_and_compare(self, index):
+    def run_query_and_compare(self, index, es_index_name=None):
         """
         Runs every fts query and es_query and compares them as a single task
         Runs as many tasks as there are queries
@@ -2478,6 +2529,7 @@ class FTSBaseTest(unittest.TestCase):
             tasks.append(self._cb_cluster.async_run_fts_query_compare(
                 fts_index=index,
                 es=self.es,
+                es_index_name=es_index_name,
                 query_index=count))
 
         num_queries = len(tasks)
