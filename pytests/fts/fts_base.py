@@ -2387,7 +2387,7 @@ class FTSBaseTest(unittest.TestCase):
                 self.create_default_index(
                     bucket,
                     "%s_index_%s" % (bucket.name, count+1),
-                    plan_params)
+                    plan_params=plan_params)
 
     def create_alias(self, target_indexes, name=None, alias_def=None):
         """
