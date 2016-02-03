@@ -141,7 +141,8 @@ class SubdocBaseTest(BaseTestCase):
         json_data.update(nested_data)
         return original_json
 
-    def direct_client(self, server, bucket, timeout=30):
+    def direct_mc_bin_client(self, server, bucket, timeout=30):
+        # USE MC BIN CLIENT WHEN NOT USING SDK CLIENT
         rest = RestConnection(server)
         node = None
         try:
@@ -170,13 +171,20 @@ class SubdocBaseTest(BaseTestCase):
         else:
             client.vbucket_count = 0
         bucket_info = rest.get_bucket(bucket)
-        # todo raise exception for not bucket_info
-        client.sasl_auth_plain(bucket_info.name.encode('ascii'),
-                               bucket_info.saslPassword.encode('ascii'))
         return client
 
-    def run_testcase(self, test_case, test_case_name = "", result = {}):
-        try:
-            test_case()
-        except Exception as e:
-            result[test_case_name] = str(e)
+    def direct_client(self, server, bucket, timeout=30):
+        # CREATE SDK CLIENT
+        if self.use_sdk_client:
+            try:
+                from sdk_client import SDKClient
+                scheme = "couchbase"
+                host=self.master.ip
+                if self.master.ip == "127.0.0.1":
+                    scheme = "http"
+                    host="{0}:{1}".format(self.master.ip,self.master.port)
+                return SDKClient(scheme=scheme,hosts = [host], bucket = bucket.name)
+            except Exception, ex:
+                self.log.info("cannot load sdk client due to error {0}".format(str(ex)))
+        # USE MC BIN CLIENT WHEN NOT USING SDK CLIENT
+        return self.direct_mc_bin_client(server, bucket, timeout= timeout)
