@@ -11,6 +11,7 @@ import random
 class SubdocAutoTestGenerator(SubdocBaseTest):
     def setUp(self):
         super(SubdocAutoTestGenerator, self).setUp()
+        self.verbose_func_usage =  self.input.param("verbose_func_usage",False)
         self.nesting_level =  self.input.param("nesting_level",0)
         self.mutation_operation_type =  self.input.param("mutation_operation_type","any")
         self.force_operation_type =  self.input.param("force_operation_type",None)
@@ -112,8 +113,10 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.test_concurrent_mutations()
 
     def test_concurrent_mutations(self):
-        data_set =  self.generate_json_for_nesting()
-        base_json = self.generate_json_for_nesting()
+        randomDataGenerator = RandomDataGenerator()
+        randomDataGenerator.set_seed(self.seed)
+        base_json = randomDataGenerator.random_json()
+        data_set = randomDataGenerator.random_json()
         json_document = self.generate_nested(base_json, data_set, self.nesting_level)
         data_key = "test_concurrent_mutations"
         jsonDump = json.dumps(json_document)
@@ -128,10 +131,13 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.set(client, document_key, jsonDump)
         # RUN PARALLEL OPERATIONS
         operations = self.subdoc_gen_helper.build_concurrent_operations(
-            json_document, self.number_of_operations, seed = self.seed, mutation_operation_type = self.mutation_operation_type)
+            json_document, self.number_of_operations, seed = self.seed,
+            mutation_operation_type = self.mutation_operation_type,
+             force_operation_type = self.force_operation_type)
         # RUN CONCURRENT THREADS
         thread_list = []
         result_queue = Queue.Queue()
+        self.log.info(" number of operations {0}".format(len(operations)))
         for operation in operations:
             client = self.direct_client(self.master, self.buckets[0])
             t = threading.Thread(target=self.run_mutation_operation, args = (client, document_key, operation, result_queue))
@@ -162,7 +168,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             function(client, document_key, operation["new_path_impacted_after_mutation_operation"], json.dumps(operation["data_value"]))
         except Exception, ex:
             self.log.info(str(ex))
-            result_queue.put({"error":str(ex), "operation":operation})
+            result_queue.put({"error":str(ex),"operation_type":operation["subdoc_api_function_applied"]})
 
     ''' Generic Test case for running sequence operations based tests '''
     def test_mutation_operations(self):
@@ -331,7 +337,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
 # DOC COMMANDS
     def set(self, client, key, value):
         try:
-            #self.log.info(" delete ----> {0} ".format(path))
+            if self.verbose_func_usage:
+                self.log.info(" delete ----> {0} ".format(key))
             if self.use_sdk_client:
                 client.set(key, value)
             else:
@@ -343,7 +350,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
 # GENERIC COMMANDS
     def delete(self, client, key = '', path = '', value = None):
         try:
-            #self.log.info(" delete ----> {0} ".format(path))
+            if self.verbose_func_usage:
+                self.log.info(" delete ----> {0} ".format(path))
             if self.use_sdk_client:
                 client.remove_in(key, path)
             else:
@@ -353,7 +361,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
 
     def replace(self, client, key = '', path = '', value = None):
         try:
-            #self.log.info(" replace ----> {0} :: {1}".format(path, value))
+            if self.verbose_func_usage:
+                self.log.info(" replace ----> {0} :: {1}".format(path, value))
             if self.use_sdk_client:
                 client.replace_in(key, path, value)
             else:
@@ -363,6 +372,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
 
     def get(self, client, key = '', path = '', value = None):
         try:
+            if self.verbose_func_usage:
+                self.log.info(" get ----> {0} :: {1}".format(key, path))
             if self.use_sdk_client:
                 return client.get_in(key, path)
             else:
@@ -381,6 +392,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
 
     def counter(self, client, key = '', path = '', value = None):
         try:
+            if self.verbose_func_usage:
+                self.log.info(" counter ----> {0} :: {1} + {2}".format(key, path, value))
             if self.use_sdk_client:
                 return client.counter_in(key, path, value)
             else:
@@ -391,7 +404,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
 # DICTIONARY SPECIFIC COMMANDS
     def dict_add(self, client, key = '', path = '', value = None):
         try:
-            #self.log.info(" dict_add ----> {0} :: {1}".format(path, value))
+            if self.verbose_func_usage:
+                self.log.info(" dict_add ----> {0} :: {1}".format(path, value))
             if self.use_sdk_client:
                 client.insert_in(key, path, value)
             else:
@@ -401,7 +415,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
 
     def dict_upsert(self, client, key = '', path = '', value = None):
         try:
-            #self.log.info(" dict_upsert ----> {0} :: {1}".format(path, value))
+            if self.verbose_func_usage:
+                self.log.info(" dict_upsert ----> {0} :: {1}".format(path, value))
             if self.use_sdk_client:
                 client.upsert_in(key, path, value)
             else:
@@ -413,7 +428,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
 # ARRAY SPECIFIC COMMANDS
     def array_add_last(self, client, key = '', path = '', value = None):
         try:
-            #self.log.info(" array_add_last ----> {0} :: {1}".format(path, value))
+            if self.verbose_func_usage:
+                self.log.info(" array_add_last ----> {0} :: {1}".format(path, value))
             if self.use_sdk_client:
                 client.arrayappend_in(key, path, value)
             else:
@@ -423,7 +439,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
 
     def array_add_first(self, client, key = '', path = '', value = None):
         try:
-            #self.log.info(" array_add_first ----> {0} :: {1}".format(path, value))
+            if self.verbose_func_usage:
+                self.log.info(" array_add_first ----> {0} :: {1}".format(path, value))
             if self.use_sdk_client:
                 client.arrayprepend_in(key, path, value)
             else:
@@ -433,7 +450,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
 
     def array_add_unique(self, client, key = '', path = '', value = None):
         try:
-            #self.log.info(" array_add_unique ----> {0} :: {1}".format(path, value))
+            if self.verbose_func_usage:
+                self.log.info(" array_add_unique ----> {0} :: {1}".format(path, value))
             if self.use_sdk_client:
                 client.arrayaddunique_in(key, path, value)
             else:
@@ -443,7 +461,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
 
     def array_add_insert(self, client, key = '', path = '', value = None):
         try:
-            #self.log.info(" array_add_insert ----> {0} :: {1}".format(path, value))
+            if self.verbose_func_usage:
+                self.log.info(" array_add_insert ----> {0} :: {1}".format(path, value))
             if self.use_sdk_client:
                 client.arrayinsert_in(key, path, value)
             else:
