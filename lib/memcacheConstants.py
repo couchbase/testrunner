@@ -253,6 +253,10 @@ RES_MAGIC_BYTE = 0x81
 # magic, opcode, keylen, extralen, datatype, vbucket, bodylen, opaque, cas
 REQ_PKT_FMT = ">BBHBBHIIQ"
 
+
+# subdoc extras format - path len
+REQ_PKT_SD_EXTRAS= ">HB"
+
 # magic, opcode, keylen, extralen, datatype, status, bodylen, opaque, cas
 RES_PKT_FMT = ">BBHBBHIIQ"
 
