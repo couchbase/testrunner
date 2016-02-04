@@ -2059,11 +2059,9 @@ class RestConnection(object):
     def update_fts_index(self, index_name, index_def):
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)
         log.info(json.dumps(index_def, indent=3))
-        params = urllib.urlencode({'indexDef': json.dumps(index_def,
-                                                          ensure_ascii=False)})
         status, content, header = self._http_request(api,
                                     'PUT',
-                                    params,
+                                    json.dumps(index_def, ensure_ascii=False),
                                     headers=self._create_capi_headers_with_auth(
                                                 self.username,
                                                 self.password),
@@ -2075,7 +2073,7 @@ class RestConnection(object):
         return status
 
     def get_fts_index_definition(self, name, timeout=30):
-        """ get fts index/alias definition"""
+        """ get fts index/alias definition """
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}".format(name)
         status, content, header = self._http_request(
