@@ -78,6 +78,7 @@ class MemcachedClient(object):
         else:
             raise exceptions.EOFError("Timeout waiting for socket send. from {0}".format(self.host))
 
+
     def _recvMsg(self):
         response = ""
         while len(response) < MIN_RECV_PACKET:
@@ -138,6 +139,45 @@ class MemcachedClient(object):
         if val != None:
             body += str(val)
         self._sendCmd(cmd, key, body, opaque, extraHeader, cas)
+        return self._handleSingleResponse(opaque)
+
+    def _doMultiSdCmd(self, cmd, key, cmdDict, opaque=0):
+        if opaque == 0:
+            opaque = self.r.randint(0, 2**32)
+        body = ''
+        extraHeader = ''
+        mcmd = None
+        for k, v  in cmdDict.iteritems():
+            if k == "store":
+                mcmd = memcacheConstants.CMD_SUBDOC_DICT_ADD
+            elif k == "counter":
+                mcmd = memcacheConstants.CMD_SUBDOC_COUNTER
+            elif k == "add_unique":
+                mcmd = memcacheConstants.CMD_SUBDOC_ARRAY_ADD_UNIQUE
+            elif k == "push_first":
+                mcmd = memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_FIRST
+            elif k == "push_last":
+                mcmd = memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_LAST
+            elif k == "array_insert":
+                mcmd = memcacheConstants.CMD_SUBDOC_ARRAY_INSERT
+            elif k == "insert":
+                mcmd = memcacheConstants.CMD_SUBDOC_DICT_ADD
+            if v['create_parents'] == True:
+                flags = 1
+            else:
+                flags = 0
+            path = v['path']
+            valuelen = 0
+            if isinstance(v["value"], str):
+                value = '"' + v['value'] + '"'
+                valuelen = len(value)
+            elif isinstance(v["value"], int):
+                value = str(v['value'])
+                valuelen = len(str(value))
+            op_spec = struct.pack(memcacheConstants.REQ_PKT_SD_MULTI_MUTATE, mcmd, flags, len(path), valuelen)
+            op_spec += path + value
+            body += op_spec
+        self._sendMsg(cmd, key, body, opaque, extraHeader, cas=0)
         return self._handleSingleResponse(opaque)
 
     def _mutate(self, cmd, key, exp, flags, cas, val):
@@ -705,8 +745,13 @@ class MemcachedClient(object):
     def counter_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_COUNTER, key, path, value, expiry, opaque, cas, create)
 
-    def multi_mutation_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
-        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_MULTI_MUTATION, key, path, value, expiry, opaque, cas, create)
+    '''
+    usage:
+    cmdDict["add_unique"] = {"create_parents" : False, "path": array, "value": 0}
+    res  = mc.multi_mutation_sd(key, cmdDict)
+    '''
+    def multi_mutation_sd(self, key, cmdDict, expiry=0, opaque=0, cas=0, create=False):
+        return self._doMultiSdCmd(memcacheConstants.CMD_SUBDOC_MULTI_MUTATION, key, cmdDict, opaque)
 
     def multi_lookup_sd(self, key, path, expiry=0, opaque=0, cas=0, create=False):
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_MULTI_LOOKUP, key, path, expiry, opaque, cas, create)
@@ -780,7 +825,6 @@ def error_to_str(errno):
         return "Invalid combinations of commands"
     elif errno == memcacheConstants.ERR_SUBDOC_MULTI_PATH_FAILURE:
         return "Specified key was successfully found, but one or more path operations failed"
-
 
 
 
