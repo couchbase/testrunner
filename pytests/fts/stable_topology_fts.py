@@ -261,8 +261,8 @@ class StableTopFTS(FTSBaseTest):
             index.build_custom_plan_params(new_plan_param)
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
-        defn = index.get_index_defn()
-        self.log.info(defn)
+        _, defn = index.get_index_defn()
+        self.log.info(defn['indexDef'])
 
     def edit_index_negative(self):
         self.load_employee_dataset()
@@ -272,10 +272,12 @@ class StableTopFTS(FTSBaseTest):
         hits, _, _ = index.execute_query(self.sample_query)
         new_plan_param = {"maxPartitionsPerPIndex": 30}
         self.partitions_per_pindex = 30
+        # update params with plan params values to check for validation
         index.index_definition['params'] = \
             index.build_custom_index_params(new_plan_param)
         index.index_definition['uuid'] = index.get_uuid()
-        index.update()
-        defn = index.get_index_defn()
-        self.log.info(defn)
+        try:
+            index.update()
+        except Exception as e:
+            self.log.info("Expected exception: %s" % e)
 
