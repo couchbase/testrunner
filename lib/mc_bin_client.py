@@ -762,9 +762,11 @@ class MemcachedClient(object):
     res  = mc.multi_mutation_sd(key, cmdDict)
     '''
     def multi_mutation_sd(self, key, cmdDict, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
+        self._set_vbucket(key, vbucket)
         return self._doMultiSdCmd(memcacheConstants.CMD_SUBDOC_MULTI_MUTATION, key, cmdDict, opaque)
 
     def multi_lookup_sd(self, key, path, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
+        self._set_vbucket(key, vbucket)
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_MULTI_LOOKUP, key, path, expiry, opaque, cas, create)
 
 def error_to_str(errno):
