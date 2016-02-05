@@ -87,16 +87,21 @@ class JoinTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
     def test_bidirectional_join(self):
-        for bucket in self.buckets:
-            self.query = "create index idx on default(tasks_ids)";
+            self.query = "create index idxbidirec on %s(tasks_ids)" %self.buckets[1].name ;
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+            self.query = "explain SELECT employee.name, employee.tasks_ids " +\
+            "FROM %s as employee %s JOIN %s as new_project " % (self.buckets[0].name, self.type_join,self.buckets[1].name) +\
+            "ON KEY new_project.tasks_ids FOR employee where new_project.tasks_ids is not null"
+            actual_result = self.run_cbq_query()
+            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+            self.test_explain_particular_index("idxbidirec")
             self.query = "SELECT employee.name, employee.tasks_ids " +\
-            "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
-            "ON KEY new_project_full.tasks_ids FOR employee"
+            "FROM %s as employee %s JOIN %s as new_project " % (self.buckets[0].name, self.type_join,self.buckets[1].name)  +\
+            "ON KEY new_project.tasks_ids FOR employee where new_project.tasks_ids is not null"
             actual_result = self.run_cbq_query()
             self.assertTrue(actual_result['metrics']['resultCount'] == 0, 'Query was not run successfully')
-            self.query = "drop index default.idx";
+            self.query = "drop index default.idxbidirec";
             actual_result = self.run_cbq_query()
 
 
