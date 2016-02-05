@@ -1949,6 +1949,18 @@ class QueryTests(BaseTestCase):
             self.assertTrue(res["results"][0]["~children"][0]["index"] == "#primary",
                             "Type should be #primary, but is: %s" % res["results"][0]["~children"][0]["index"])
 
+##############################################################################################
+#
+#   EXPLAIN WITH A PARTICULAR INDEX
+##############################################################################################
+
+    def test_explain_particular_index(self,index):
+        for bucket in self.buckets:
+            res = self.run_cbq_query()
+            self.log.info(res)
+            self.assertTrue(res['results'][0]['~children'][1]['~child']['~children'][1]['scan']['index'] == index,
+                            "Type should be %s, but is: %s" %(index,res["results"][0]["~children"][1]['~child']))
+
 
 ###############################################################################################
 #
