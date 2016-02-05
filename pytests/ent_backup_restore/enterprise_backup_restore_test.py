@@ -2,16 +2,43 @@ import re
 from random import randrange
 
 from couchbase_helper.cluster import Cluster
-from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase
 from membase.api.rest_client import RestConnection, Bucket
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from security.auditmain import audit
 from newupgradebasetest import NewUpgradeBaseTest
 from couchbase.bucket import Bucket
+from couchbase_helper.document import View
+from tasks.future import TimeoutError
 
 AUDITBACKUPID = 20480
 AUDITRESTOREID= 20485
+SOURCE_CB_PARAMS = {
+                      "authUser": "default",
+                      "authPassword": "",
+                      "authSaslUser": "",
+                      "authSaslPassword": "",
+                      "clusterManagerBackoffFactor": 0,
+                      "clusterManagerSleepInitMS": 0,
+                      "clusterManagerSleepMaxMS": 20000,
+                      "dataManagerBackoffFactor": 0,
+                      "dataManagerSleepInitMS": 0,
+                      "dataManagerSleepMaxMS": 20000,
+                      "feedBufferSizeBytes": 0,
+                      "feedBufferAckThreshold": 0
+                    }
+INDEX_DEFINITION = {
+                          "type": "fulltext-index",
+                          "name": "",
+                          "uuid": "",
+                          "params": {},
+                          "sourceType": "couchbase",
+                          "sourceName": "default",
+                          "sourceUUID": "",
+                          "sourceParams": SOURCE_CB_PARAMS,
+                          "planParams": {}
+                        }
 
 
 class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTest):
@@ -1571,3 +1598,94 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         remote_client.log_command_output(output, error)
         self.assertTrue("Backup Set `abc` not found" in output[-1],
                         "Expected error message not thrown")
+
+    def test_backup_restore_with_views(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset
+        3. Creates a simple view on source cluster
+        4. Backsup data and validates
+        5. Restores data ans validates
+        6. Ensures that same view is created in restore cluster
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        default_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
+        default_view_name = "test"
+        default_ddoc_name = "ddoc_test"
+        prefix = "dev_"
+        query = {"full_set": "true", "stale": "false", "connection_timeout": 60000}
+        view = View(default_view_name, default_map_func)
+        task = self.cluster.async_create_view(self.backupset.cluster_host, default_ddoc_name, view, "default")
+        task.result()
+        self.backup_cluster_validate()
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+        try:
+            result = self.cluster.query_view(self.backupset.restore_cluster_host, prefix + default_ddoc_name,
+                                             default_view_name, query, timeout=30)
+            self.assertEqual(len(result['rows']), self.num_items,
+                             "Querying view on restore cluster did not return expected number of items")
+            self.log.info("Querying view on restore cluster returned expected number of items")
+        except TimeoutError:
+            self.fail("View could not be queried in restore cluster within timeout")
+
+    def test_backup_restore_with_gsi(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset
+        3. Creates a GSI index on source cluster
+        4. Backsup data and validates
+        5. Restores data ans validates
+        6. Ensures that same gsi index is created in restore cluster
+        """
+        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(100), start=0, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        cmd = "cbindex -type create -bucket default -using forestdb -index age -fields=age"
+        remote_client = RemoteMachineShellConnection(self.backupset.cluster_host)
+        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        if error or "Index created" not in output[-1]:
+            self.fail("GSI index cannot be created")
+        self.backup_cluster_validate()
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+        cmd = "cbindex -type list"
+        remote_client = RemoteMachineShellConnection(self.backupset.cluster_host)
+        command = "{0}/{1}".format(self.cli_command_location, cmd)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        self.assertTrue("Index:default/age" in output[-1], "GSI index not created in restore cluster as expected")
+        self.log.info("GSI index created in restore cluster as expected")
+
+    def test_backup_restore_with_fts(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backupset
+        3. Creates a simple FTS index on source cluster
+        4. Backsup data and validates
+        5. Restores data ans validates
+        6. Ensures that same FTS index is created in restore cluster
+        """
+        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(100), start=0, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        index_definition = INDEX_DEFINITION
+        index_name = index_definition['name'] = "age"
+        rest_src = RestConnection(self.backupset.cluster_host)
+        try:
+            rest_src.create_fts_index(index_name, index_definition)
+        except Exception, ex:
+            self.fail(ex)
+        self.backup_cluster_validate()
+        self.backup_restore_validate()
+        rest_target = RestConnection(self.backupset.restore_cluster_host)
+        try:
+            status, content = rest_target.get_fts_index_definition(index_name)
+            self.assertTrue(status and content['status'] == 'ok', "FTS index not found in restore cluster as expected")
+            self.log.info("FTS index found in restore cluster as expected")
+        finally:
+            rest_src.delete_fts_index(index_name)
+            if status:
+                rest_target.delete_fts_index(index_name)
