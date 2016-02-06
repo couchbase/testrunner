@@ -848,3 +848,11 @@ class SubdocNestedDataset(SubdocBaseTest):
             dict[key] =json_value[keys[index]]
         return dict
 
+    def run_testcase(self , test_case, test_case_name, result = {}):
+        try:
+            self.log.info("run test case {0}".format(test_case_name))
+            test_case()
+        except Exception, ex:
+            result[test_case_name] = str(ex)
+
+
