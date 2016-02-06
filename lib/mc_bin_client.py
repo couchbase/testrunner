@@ -718,7 +718,7 @@ class MemcachedClient(object):
 
     def exists_sd(self, key, path, opaque=0, cas=0, vbucket= -1):
         self._set_vbucket(key, vbucket)
-        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_EXISTS, key, path, opaque=opaque, cas=cas, vbucket= -1)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_EXISTS, key, path, opaque=opaque, cas=cas)
 
     def dict_add_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
         self._set_vbucket(key, vbucket)
