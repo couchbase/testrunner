@@ -2,12 +2,16 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.helper.cluster_helper import ClusterOperationHelper
+from subdoc_autotestgenerator import SubdocAutoTestGenerator
 import copy
 
 class SubducScenarioTests(SubdocAutoTestGenerator):
 
     def setUp(self):
         super(SubducScenarioTests, self).setUp()
+        self.find_nodes_in_list()
+        self.generate_map_nodes_out_dist()
+
 
     def tearDown(self):
         super(SubducScenarioTests, self).tearDown()
