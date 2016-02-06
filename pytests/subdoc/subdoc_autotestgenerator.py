@@ -34,16 +34,11 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         base_json = self.generate_json_for_nesting()
         json_document = self.generate_nested(base_json, data_set, self.nesting_level)
         data_key = "test_readonly"
-        jsonDump = json.dumps(json_document)
-        self.set(self.client, data_key, jsonDump)
+        self.set(self.client, data_key, json_document)
         pairs = {}
         self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
         for path in pairs.keys():
-            self.log.info(" Analyzing path {0}".format(path))
-            opaque, cas, data = self.get(self.client, key = data_key, path = path)
-            data = json.loads(data)
-            self.log.info(data)
-            self.log.info(pairs[path])
+            data = self.get(self.client, key = data_key, path = path)
             if data != pairs[path]:
             	error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
         self.assertTrue(len(error_result) == 0, error_result)
@@ -55,12 +50,10 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         base_json = self.generate_json_for_nesting()
         json_document = self.generate_nested(base_json, data_set, self.nesting_level)
         data_key = "test_readonly"
-        jsonDump = json.dumps(json_document)
-        self.set(self.client, data_key, jsonDump)
+        self.set(self.client, data_key, json_document)
         pairs = {}
         self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
         for path in pairs.keys():
-            self.log.info(" Analyzing path {0}".format(path))
             try:
             	self.exists(self.client, data_key, path)
             except Exception, ex:
@@ -83,13 +76,17 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         base_json = self.generate_json_for_nesting()
         json_document = self.generate_nested(base_json, data_set, self.nesting_level)
         data_key = "test_mutation_operations"
-        jsonDump = json.dumps(json_document)
-        self.set(self.client, data_key, jsonDump)
-        operations = self.subdoc_gen_helper.build_sequence_operations(json_document, self.number_of_operations, seed = self.seed, mutation_operation_type = self.mutation_operation_type)
+        self.set(self.client, data_key, json_document)
+        operations = self.subdoc_gen_helper.build_sequence_operations(json_document, self.number_of_operations, seed = self.seed,
+         mutation_operation_type = self.mutation_operation_type,
+         force_operation_type = self.force_operation_type)
         for operation in operations:
             function = getattr(self, operation["subdoc_api_function_applied"])
             try:
-                function(self.client, data_key, operation["new_path_impacted_after_mutation_operation"], json.dumps(operation["data_value"]))
+                data_value = operation["data_value"]
+                if not self.use_sdk_client:
+                    data_value = json.dumps(data_value)
+                function(self.client, data_key, operation["new_path_impacted_after_mutation_operation"], data_value)
             except Exception, ex:
                 for key in operation:
                     self.log.info(" {0} : {1}".format(key, operation[key]))
@@ -97,9 +94,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         pairs = {}
         self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
         for path in pairs.keys():
-            self.log.info(" Analyzing path {0}".format(path))
-            opaque, cas, data = self.get(self.client, key = data_key, path = path)
-            data = json.loads(data)
+            data = self.get(self.client, key = data_key, path = path)
             if data != pairs[path]:
                 error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
         self.assertTrue(len(error_result) == 0, error_result)
@@ -119,16 +114,13 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         data_set = randomDataGenerator.random_json()
         json_document = self.generate_nested(base_json, data_set, self.nesting_level)
         data_key = "test_concurrent_mutations"
-        jsonDump = json.dumps(json_document)
-        self.set(self.client, data_key, jsonDump)
         self.run_mutation_concurrent_operations(self.buckets[0], data_key, json_document)
 
     def run_mutation_concurrent_operations(self, bucket = None, document_key = "", json_document = {}):
         client = self.direct_client(self.master, self.buckets[0])
         self.number_of_operations =  self.input.param("number_of_operations",10)
         # INSERT INTO  COUCHBASE
-        jsonDump = json.dumps(json_document)
-        self.set(client, document_key, jsonDump)
+        self.set(client, document_key, json_document)
         # RUN PARALLEL OPERATIONS
         operations = self.subdoc_gen_helper.build_concurrent_operations(
             json_document, self.number_of_operations, seed = self.seed,
@@ -156,8 +148,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         error_result = {}
         self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
         for path in pairs.keys():
-            opaque, cas, data = self.client.get_sd(document_key, path)
-            data = json.loads(data)
+            data = self.get(client, document_key, path)
             if data != pairs[path]:
                 error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
         self.assertTrue(len(error_result) == 0, error_result)
@@ -165,14 +156,17 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
     def run_mutation_operation(self, client, document_key, operation, result_queue):
         function = getattr(self, operation["subdoc_api_function_applied"])
         try:
-            function(client, document_key, operation["new_path_impacted_after_mutation_operation"], json.dumps(operation["data_value"]))
+            data_value  = operation["data_value"]
+            if not self.use_sdk_client:
+                data_value = json.dumps(data_value)
+            function(client, document_key, operation["new_path_impacted_after_mutation_operation"], data_value)
         except Exception, ex:
             self.log.info(str(ex))
             result_queue.put({"error":str(ex),"operation_type":operation["subdoc_api_function_applied"]})
 
     ''' Generic Test case for running sequence operations based tests '''
     def test_mutation_operations(self):
-        self.number_of_documents =  self.input.param("number_of_documents",100)
+        self.number_of_documents =  self.input.param("number_of_documents",10)
         self.number_of_operations =  self.input.param("number_of_operations",10)
         self.concurrent_threads =  self.input.param("num",10)
         error_queue = Queue.Queue()
@@ -230,9 +224,6 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         client = self.direct_client(self.master, self.buckets[0])
         while (not queue.empty()):
             document_info = queue.get()
-            data_set =  self.generate_json_for_nesting()
-            base_json = self.generate_json_for_nesting()
-            json_document = self.generate_nested(base_json, data_set, self.nesting_level)
             json_document = document_info["json_document"]
             seed = document_info["seed"]
             document_key =  "document_key_"+str(self.randomDataGenerator.random_int())
@@ -254,8 +245,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         number_of_operations = 10,
         mutation_operation_type = "any",
         force_operation_type = None):
-        jsonDump = json.dumps(json_document)
-        client.set(document_key, 0, 0, jsonDump)
+        self.set(client, document_key, json_document)
         self.log.info(" START WORKING ON {0}".format(document_key))
         if self.run_mutation_mode == "seq":
             operations = self.subdoc_gen_helper.build_sequence_operations(
@@ -269,7 +259,10 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             for operation in operations:
                 function = getattr(self, operation["subdoc_api_function_applied"])
                 try:
-                    function(client, document_key, operation["new_path_impacted_after_mutation_operation"], json.dumps(operation["data_value"]))
+                    data_value = operation["data_value"]
+                    if not self.use_sdk_client:
+                        data_value = json.dumps(operation["data_value"])
+                    function(client, document_key, operation["new_path_impacted_after_mutation_operation"], data_value)
                     operation_index+=1
                 except Exception, ex:
                     self.log.info(str(ex))
@@ -288,8 +281,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
             for path in pairs.keys():
                 #self.log.info(" Analyzing path {0}".format(path))
-                opaque, cas, data = client.get_sd(document_key, path)
-                data = json.loads(data)
+                data = self.get(client, document_key, path)
                 if data != pairs[path]:
                     error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
             if len(error_result) != 0:
@@ -338,11 +330,12 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
     def set(self, client, key, value):
         try:
             if self.verbose_func_usage:
-                self.log.info(" delete ----> {0} ".format(key))
+                self.log.info(" set ----> {0} ".format(key))
             if self.use_sdk_client:
                 client.set(key, value)
             else:
-                client.set(key, 0, 0, value)
+                jsonDump = json.dumps(value)
+                client.set(key, 0, 0, jsonDump)
         except Exception as e:
             raise
 # SUB DOC COMMANDS
@@ -375,9 +368,11 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" get ----> {0} :: {1}".format(key, path))
             if self.use_sdk_client:
-                return client.get_in(key, path)
+                r, v, d = client.get_in(key, path)
+                return d
             else:
-                return client.get_sd(key, path)
+                r, v, d = client.get_sd(key, path)
+                return json.loads(d)
         except Exception as e:
             raise
 

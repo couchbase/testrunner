@@ -63,7 +63,6 @@ class SubdocHelper():
             new_path, data = function(key, data_set)
             if new_path != None:
               pairs.pop(key)
-              print "target mutation path {0}".format(new_path)
               filter_path = new_path
               if "[" in filter_path:
                 filter_path = self.trim_path(filter_path, "[")
