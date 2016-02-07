@@ -4259,3 +4259,104 @@ class EnterpriseRestoreTask(Task):
             self.remote_client.log_command_output(self.output, self.error)
         else:
             task_manager.schedule(self, 10)
+
+class EnterpriseMergeTask(Task):
+
+    def __init__(self, backup_host, backups=[], start=0, end=0, directory='', name='',
+                 cli_command_location=''):
+        Task.__init__(self, "enterprise_backup_task")
+        self.backup_host = backup_host
+        self.directory = directory
+        self.name = name
+        self.cli_command_location = cli_command_location
+        self.output = []
+        self.error = []
+        self.backups = backups
+        self.start = start
+        self.end = end
+        try:
+            self.remote_client = RemoteMachineShellConnection(self.backup_host)
+        except Exception, e:
+            self.log.error(e)
+            self.state = FINISHED
+            self.set_exception(e)
+
+    def execute(self, task_manager):
+        try:
+            try:
+                backup_start = self.backups[int(self.start) - 1]
+            except IndexError:
+                backup_start = "{0}{1}".format(self.backups[-1], self.start)
+            try:
+                backup_end = self.backups[int(self.end) - 1]
+            except IndexError:
+                backup_end = "{0}{1}".format(self.backups[-1], self.end)
+            args = "merge --dir {0} --name {1} --start {2} --end {3}".format(self.directory, self.name,
+                                                                             backup_start, backup_end)
+            command = "{0}/backup {1}".format(self.cli_command_location, args)
+            self.output, self.error = self.remote_client.execute_command(command)
+            self.state = CHECKING
+        except Exception, e:
+            self.log.error("Merge failed for unknown reason")
+            self.set_exception(e)
+            self.state = FINISHED
+            self.set_result(False)
+        task_manager.schedule(self)
+
+    def check(self, task_manager):
+        if self.output:
+            self.state = FINISHED
+            self.set_result(self.output)
+            self.remote_client.log_command_output(self.output, self.error)
+        elif self.error:
+            self.state = FINISHED
+            self.set_result(self.error)
+            self.remote_client.log_command_output(self.output, self.error)
+        else:
+            task_manager.schedule(self, 10)
+
+class EnterpriseCompactTask(Task):
+
+    def __init__(self, backup_host, backup_to_compact, backups=[], directory='', name='',
+                 cli_command_location=''):
+        Task.__init__(self, "enterprise_backup_task")
+        self.backup_host = backup_host
+        self.backup_to_compact = backup_to_compact
+        self.directory = directory
+        self.name = name
+        self.cli_command_location = cli_command_location
+        self.output = []
+        self.error = []
+        self.backups = backups
+        try:
+            self.remote_client = RemoteMachineShellConnection(self.backup_host)
+        except Exception, e:
+            self.log.error(e)
+            self.state = FINISHED
+            self.set_exception(e)
+
+    def execute(self, task_manager):
+        try:
+            args = "compact --dir {0} --name {1} --backup {2}".format(self.directory, self.name,
+                                                                      self.backups[self.backup_to_compact])
+            command = "{0}/backup {1}".format(self.cli_command_location, args)
+            self.output, self.error = self.remote_client.execute_command(command)
+            self.state = CHECKING
+        except Exception, e:
+            self.log.error("Compact failed for unknown reason")
+            self.set_exception(e)
+            self.state = FINISHED
+            self.set_result(False)
+        task_manager.schedule(self)
+
+    def check(self, task_manager):
+        if self.output:
+            self.state = FINISHED
+            self.set_result(self.output)
+            self.remote_client.log_command_output(self.output, self.error)
+        elif self.error:
+            self.state = FINISHED
+            self.set_result(self.error)
+            self.remote_client.log_command_output(self.output, self.error)
+        else:
+            task_manager.schedule(self, 10)

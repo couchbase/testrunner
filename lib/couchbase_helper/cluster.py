@@ -1210,3 +1210,39 @@ class Cluster(object):
                                       force_updates, no_progress_bar, cli_command_location)
         self.task_manager.schedule(_task)
         return _task
+
+    def async_merge_cluster(self, backup_host, backups=[], start=0, end=0, directory='', name='',
+                            cli_command_location=''):
+        """
+        Asynchronously start backup merge
+        :param backup_host: cluster where backup happens
+        :param backups: list of backups available
+        :param start: backup start index
+        :param end: backup end index
+        :param directory: backup directory
+        :param name: backup name
+        :param no_progress_bar: bool to decide progress bar
+        :param cli_command_location: cli_command_location: command location with respect to os
+        :return: task with the output or error message
+        """
+        _task = EnterpriseMergeTask(backup_host, backups, start, end, directory, name,
+                                    cli_command_location)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_compact_cluster(self, backup_host, backup_to_compact, backups=[], directory='', name='',
+                            cli_command_location=''):
+        """
+        Asynchronously start backup merge
+        :param backup_host: cluster where backup happens
+        :param backups: list of backups available
+        :param backup_to_compact: backup to be compacted
+        :param directory: backup directory
+        :param name: backup name
+        :param cli_command_location: cli_command_location: command location with respect to os
+        :return: task with the output or error message
+        """
+        _task = EnterpriseCompactTask(backup_host, backup_to_compact, backups, directory, name,
+                                    cli_command_location)
+        self.task_manager.schedule(_task)
+        return _task

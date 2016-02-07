@@ -11,6 +11,8 @@ from newupgradebasetest import NewUpgradeBaseTest
 from couchbase.bucket import Bucket
 from couchbase_helper.document import View
 from tasks.future import TimeoutError
+from xdcr.xdcrnewbasetests import NodeHelper
+from couchbase_helper.stats_tools import StatsCommon
 
 AUDITBACKUPID = 20480
 AUDITRESTOREID= 20485
@@ -300,6 +302,29 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.log.info("Expected bucket listed for --bucket-backup option")
         self.assertEqual(items, self.num_items, "Mismatch in items for --bucket-backup option")
         self.log.info("Expected number of items for --bucket-backup option")
+
+    def test_list_with_large_number_of_backups(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a large number of backups
+        3. Executes list command on the backupset and validates the output
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self._take_n_backups(n=25)
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        backup_count = 0
+        for line in output:
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z", line):
+                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z", line).group()
+                if backup_name in self.backups:
+                    backup_count += 1
+                    self.log.info("{0} matched in list command output".format(backup_name))
+        self.assertEqual(backup_count, len(self.backups), "Number of backups did not match")
+        self.log.info("Number of backups matched")
 
     def _take_n_backups(self, n=1, validate=False):
         for i in range(1, n + 1):
@@ -1679,7 +1704,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         except Exception, ex:
             self.fail(ex)
         self.backup_cluster_validate()
-        self.backup_restore_validate()
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
         rest_target = RestConnection(self.backupset.restore_cluster_host)
         try:
             status, content = rest_target.get_fts_index_definition(index_name)
@@ -1689,3 +1714,226 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             rest_src.delete_fts_index(index_name)
             if status:
                 rest_target.delete_fts_index(index_name)
+
+    def test_backup_restore_with_xdcr(self):
+        """
+        1. Creates a XDCR replication between first two servers
+        2. Creates specified bucket on the cluster and loads it with given number of items
+        3. Backsup data and validates while replication is going on
+        4. Restores data and validates while replication is going on
+        """
+        rest_src = RestConnection(self.backupset.cluster_host)
+        rest_dest = RestConnection(self.servers[1])
+
+        try:
+            rest_src.remove_all_replications()
+            rest_src.remove_all_remote_clusters()
+            rest_src.add_remote_cluster(self.servers[1].ip, self.servers[1].port, self.backupset.cluster_host_username,
+                                        self.backupset.cluster_host_password, "C2")
+            rest_dest.create_bucket(bucket='default', ramQuotaMB=512)
+            repl_id = rest_src.start_replication('continuous', 'default', "C2")
+            if repl_id is not None:
+                self.log.info("Replication created successfully")
+            gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+            tasks = self._async_load_all_buckets(self.master, gen, "create", 0)
+            self.sleep(10)
+            self.backup_create()
+            self.backup_cluster_validate()
+            self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+            for task in tasks:
+                task.result()
+        finally:
+            rest_dest.delete_bucket()
+
+    def test_backup_restore_with_warmup(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Warmsup the cluster host
+        2. Backsup data and validates while warmup is on
+        3. Restores data and validates while warmup is on
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        NodeHelper.do_a_warm_up(self.backupset.cluster_host)
+        self.sleep(30)
+        self.backup_cluster_validate()
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+        NodeHelper.wait_warmup_completed([self.backupset.cluster_host])
+
+    def stat(self, key):
+        stats =  StatsCommon.get_stats([self.master], 'default', "", key)
+        val = stats.values()[0]
+        if val.isdigit():
+            val = int(val)
+        return val
+
+    def load_to_dgm(self, active = 75, ttl = 0):
+        """
+        decides how many items to load to enter active% dgm state
+        where active is an integer value between 0 and 100
+        """
+        doc_size = 1024
+        curr_active = self.stat('vb_active_perc_mem_resident')
+
+        # go into heavy dgm
+        while curr_active > active:
+            curr_items = self.stat('curr_items')
+            gen_create = BlobGenerator('dgmkv', 'dgmkv-', doc_size , start=curr_items + 1, end=curr_items+50000)
+            try:
+                self._load_all_buckets(self.master, gen_create, "create", ttl)
+            except:
+                pass
+            curr_active = self.stat('vb_active_perc_mem_resident')
+
+    def test_backup_restore_with_dgm(self):
+        """
+        1. Creates specified bucket on the cluster and loads it until dgm
+        2. Creates a backup set
+        3. Backsup data and validates
+        4. Restores data and validates
+        """
+        self.load_to_dgm()
+        self.backup_create()
+        self.backup_cluster_validate()
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+
+    def test_backup_restore_with_auto_compaction(self):
+        """
+        1. Creates specified bucket on the cluster and loads it
+        2. Updates auto compaction settings
+        3. Validates backup and restore
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        rest = RestConnection(self.backupset.cluster_host)
+        rest.set_auto_compaction(dbFragmentThresholdPercentage=80,
+                                 dbFragmentThreshold=100,
+                                 viewFragmntThresholdPercentage=80,
+                                 viewFragmntThreshold=100,
+                                 bucket="default")
+        self.backup_create()
+        self.backup_cluster_validate()
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+
+    def test_backup_restore_with_update_notifications(self):
+        """
+        1. Creates specified bucket on the cluster and loads it
+        2. Updates notification settings
+        3. Validates backup and restore
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        rest = RestConnection(self.backupset.cluster_host)
+        rest.update_notifications("true")
+        self.backup_create()
+        self.backup_cluster_validate()
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+
+    def test_backup_restore_with_alerts(self):
+        """
+        1. Creates specified bucket on the cluster and loads it
+        2. Updates alerts settings
+        3. Validates backup and restore
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        rest = RestConnection(self.backupset.cluster_host)
+        rest.set_alerts_settings('couchbase@localhost', 'root@localhost', 'user', 'pwd')
+        self.backup_create()
+        self.backup_cluster_validate()
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+
+    def test_merge_with_crash(self):
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self._take_n_backups(n=5)
+        try:
+            merge_result = self.cluster.async_merge_cluster(backup_host=self.backupset.backup_host,
+                                                            backups=self.backups,
+                                                            start=1, end=5,
+                                                            directory=self.backupset.directory,
+                                                            name=self.backupset.name,
+                                                            cli_command_location=self.cli_command_location)
+            self.sleep(10)
+            conn = RemoteMachineShellConnection(self.backupset.backup_host)
+            o, e = conn.execute_command("ps aux | grep '/opt/couchbase/bin//backup merge'")
+            split = o[0].split(" ")
+            split = [s for s in split if s]
+            merge_pid = split[1]
+            conn.execute_command("kill -9 " + str(merge_pid))
+            merge_result.result(timeout=200)
+        except TimeoutError:
+            status, output, message = self.backup_list()
+            if not status:
+                self.fail(message)
+            backup_count = 0
+            for line in output:
+                if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z", line):
+                    backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z", line).group()
+                    if backup_name in self.backups:
+                        backup_count += 1
+                        self.log.info("{0} matched in list command output".format(backup_name))
+            self.assertEqual(backup_count, len(self.backups), "Number of backups after merge crash did not match")
+            self.log.info("Number of backups after merge crash matched")
+
+    def test_compact_with_crash(self):
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster()
+        status, output_before_compact, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        try:
+            compact_result = self.cluster.async_compact_cluster(backup_host=self.backupset.backup_host,
+                                                                backups=self.backups,
+                                                                backup_to_compact=self.backupset.backup_to_compact,
+                                                                directory=self.backupset.directory,
+                                                                name=self.backupset.name,
+                                                                cli_command_location=self.cli_command_location)
+            self.sleep(10)
+            conn = RemoteMachineShellConnection(self.backupset.backup_host)
+            o, e = conn.execute_command("ps aux | grep '/opt/couchbase/bin//backup compact'")
+            split = o[0].split(" ")
+            split = [s for s in split if s]
+            compact_pid = split[1]
+            conn.execute_command("kill -9 " + str(compact_pid))
+            compact_result.result(timeout=200)
+        except TimeoutError:
+            status, output_after_compact, message = self.backup_list()
+            if not status:
+                self.fail(message)
+            status, message = self.validation_helper.validate_compact_lists(output_before_compact,
+                                                                            output_after_compact,
+                                                                            is_equal=True)
+            if not status:
+                self.fail(message)
+            self.log.info(message)
+
+    def test_backup_restore_misc(self):
+        """
+        Misc scenarios for backup and restore
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backupset.name = "!@#$%^&"
+        output, error = self.backup_create()
+        self.assertTrue("Backup `!@#$%^` created successfully" in output[0],
+                        "Backup could not be created with special characters")
+        self.log.info("Backup created with special characters")
+        self.backupset.name = "backup"
+        self.backup_create()
+        self.backup_cluster()
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        conn.execute_command("dd if=/dev/zero of=/tmp/entbackup/backup/" +
+                             str(self.backups[0]) +
+                             "/default*/data/shard_0.fdb" +
+                             " bs=1 count=1 seek=10 conv=notrunc")
+        output, error = self.backup_restore()
+        self.assertTrue(error, "Expected error not thrown when file is corrupt")
+        conn.execute_command("mv /tmp/entbackup/backup /tmp/entbackup/backup2")
+        output, error = self.backup_restore()
+        self.assertTrue("Backup Set `backup` not found" in output[-1], "Expected error message not thrown")
+        self.log.info("Expected error message thrown")
