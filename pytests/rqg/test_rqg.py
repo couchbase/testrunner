@@ -65,7 +65,7 @@ class RQGTests(BaseTestCase):
         self.set_limit = self.input.param("set_limit",0)
         self.build_index_batch_size= self.input.param("build_index_batch_size",1000)
         self.query_count= 0
-        #self.use_rest = self.input.param("use_rest",True)
+        self.use_rest = self.input.param("use_rest",True)
         if self.input_rqg_path != None:
             self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
             self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
@@ -75,14 +75,14 @@ class RQGTests(BaseTestCase):
         self._initialize_n1ql_helper()
         if self.initial_loading_to_cb:
             self._initialize_cluster_setup()
-        # if not(self.use_rest):
-        #     self._ssh_client = paramiko.SSHClient()
-        #     self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        # try:
-        #     self.os = self.shell.extract_remote_info().type.lower()
-        # except Exception, ex:
-        #     self.log.error('SETUP FAILED')
-        #     self.tearDown()
+        if not(self.use_rest):
+            self._ssh_client = paramiko.SSHClient()
+            self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            self.os = self.shell.extract_remote_info().type.lower()
+        except Exception, ex:
+            self.log.error('SETUP FAILED')
+            self.tearDown()
 
 
 
@@ -920,9 +920,6 @@ class RQGTests(BaseTestCase):
         try:
             actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
-            print n1ql_result
-            if(n1ql_result.find("CBQError")) > 0:
-                sys.exit()
             #self.log.info(actual_result)
             # Run SQL Query
             sql_result = expected_result
