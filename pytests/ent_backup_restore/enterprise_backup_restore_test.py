@@ -1927,12 +1927,17 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_create()
         self.backup_cluster()
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = "ls -tr {0}/{1}/{2} | tail".format(self.backupset.directory, self.backupset.name, self.backups[0])
+        o, e = conn.execute_command(command)
+        data_dir = o[0]
         conn.execute_command("dd if=/dev/zero of=/tmp/entbackup/backup/" +
                              str(self.backups[0]) +
-                             "/default*/data/shard_0.fdb" +
-                             " bs=1 count=1 seek=10 conv=notrunc")
+                             "/" + data_dir + "/data/shard_0.fdb" +
+                             " bs=1024 count=100 seek=10 conv=notrunc")
         output, error = self.backup_restore()
-        self.assertTrue(error, "Expected error not thrown when file is corrupt")
+        self.assertTrue("Restore failed due to an internal issue, see logs for details" in output[-1],
+                        "Expected error not thrown when file is corrupt")
+        self.log.info("Expected error thrown when file is corrupted")
         conn.execute_command("mv /tmp/entbackup/backup /tmp/entbackup/backup2")
         output, error = self.backup_restore()
         self.assertTrue("Backup Set `backup` not found" in output[-1], "Expected error message not thrown")
