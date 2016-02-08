@@ -85,6 +85,20 @@ class OpsChangeCasTests(CasBaseTest):
                         replica_cas = int( mc_replica.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(key)) + ':max_cas'] )
                         self.assertTrue(active_cas == cas_new,
                                         'cbstats cas mismatch. Expected {0}, actual {1}'.format( cas_new, active_cas))
+
+
+                        replica_cas = int( mc_replica.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(key)) + ':max_cas'] )
+
+                        poll_count = 0
+                        while replica_cas != active_cas and poll_count < 5:
+                            time.sleep(1)
+                            replica_cas = int( mc_replica.stats('vbucket-details')['vb_' + str(client._get_vBucket_id(key)) + ':max_cas'] )
+                            poll_count = poll_count + 1
+
+                        if poll_count > 0:
+                            self.log.info('Getting the desired CAS was delayed {0} seconds'.format( poll_count) )
+
+
                         self.assertTrue(active_cas == replica_cas,
                                         'replica cas mismatch. Expected {0}, actual {1}'.format( cas_new, replica_cas))
 
