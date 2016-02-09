@@ -2127,8 +2127,7 @@ class RemoteMachineShellConnection:
             f = open(filename,'w')
             f.write(newdata)
             f.close()
-
-        if(not(queries=="")):
+        if not(queries==""):
             if (source):
                 main_command = main_command + "  -s=\"\SOURCE " + filename+ '"'
             else:
@@ -2155,6 +2154,9 @@ class RemoteMachineShellConnection:
                         output = "status:timeout"
                 else:
                     count+=1
+            stdin.close()
+            stdout.close()
+            stderro.close()
            # main_command = main_command + " < " + '/tmp/' + filename
            # stdin,stdout, ssh_stderr = ssh.exec_command(main_command)
            # stdin.close()
