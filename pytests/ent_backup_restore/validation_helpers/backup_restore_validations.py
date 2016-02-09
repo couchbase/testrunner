@@ -66,7 +66,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         self.log.info("backup start: " + str(self.backupset.start))
         self.log.info("backup end: " + str(self.backupset.end))
         success_msg = ""
-        if not self.backupset.force_update:
+        if not self.backupset.force_updates:
             status, msg = self.compare_vbucket_stats(backup_vbucket_seqno[backup_number - 1], restored_vbucket_seqno,
                                                  compare_uuid=compare_uuid, seqno_compare=compare)
             if not status:

@@ -1681,8 +1681,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Index:default/age" in output[1], "GSI index not created in restore cluster as expected")
-        self.log.info("GSI index created in restore cluster as expected")
+        if len(output) > 1:
+            self.assertTrue("Index:default/age" in output[1], "GSI index not created in restore cluster as expected")
+            self.log.info("GSI index created in restore cluster as expected")
+        else:
+            self.fail("GSI index not created in restore cluster as expected")
 
     def test_backup_restore_with_fts(self):
         """
