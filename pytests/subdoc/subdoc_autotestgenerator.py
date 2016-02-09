@@ -5,7 +5,6 @@ from lib.couchbase_helper.random_gen import RandomDataGenerator
 from subdoc_base import SubdocBaseTest
 import Queue
 import copy, json
-import yaml
 import threading
 import random
 
