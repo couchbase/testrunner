@@ -65,11 +65,13 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         """
         self.log.info("backup start: " + str(self.backupset.start))
         self.log.info("backup end: " + str(self.backupset.end))
-        status, msg = self.compare_vbucket_stats(backup_vbucket_seqno[backup_number - 1], restored_vbucket_seqno,
+        success_msg = ""
+        if not self.backupset.force_update:
+            status, msg = self.compare_vbucket_stats(backup_vbucket_seqno[backup_number - 1], restored_vbucket_seqno,
                                                  compare_uuid=compare_uuid, seqno_compare=compare)
-        if not status:
-            return status, msg
-        success_msg = "{0}\n".format(msg)
+            if not status:
+                return status, msg
+            success_msg = "{0}\n".format(msg)
         for bucket in self.buckets:
             kv_file_name = "{0}-{1}-{2}-{3}.json".format(bucket.name, "key_value", "backup", backup_number)
             kv_file_path = os.path.join(self.backup_validation_path, kv_file_name)
