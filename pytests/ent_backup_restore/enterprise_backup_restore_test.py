@@ -1677,11 +1677,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster_validate()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
         cmd = "cbindex -type list"
-        remote_client = RemoteMachineShellConnection(self.backupset.cluster_host)
+        remote_client = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Index:default/age" in output[-1], "GSI index not created in restore cluster as expected")
+        self.assertTrue("Index:default/age" in output[1], "GSI index not created in restore cluster as expected")
         self.log.info("GSI index created in restore cluster as expected")
 
     def test_backup_restore_with_fts(self):
