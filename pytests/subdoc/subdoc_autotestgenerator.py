@@ -5,6 +5,7 @@ from lib.couchbase_helper.random_gen import RandomDataGenerator
 from subdoc_base import SubdocBaseTest
 import Queue
 import copy, json
+import yaml
 import threading
 import random
 
@@ -168,7 +169,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
     def test_mutation_operations(self):
         self.number_of_documents =  self.input.param("number_of_documents",10)
         self.number_of_operations =  self.input.param("number_of_operations",10)
-        self.concurrent_threads =  self.input.param("num",10)
+        self.concurrent_threads =  self.input.param("concurrent_threads",10)
         error_queue = Queue.Queue()
         document_info_queue = Queue.Queue()
         thread_list = []
@@ -194,9 +195,11 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             while not error_queue.empty():
                 error_count+=1
                 error_data = error_queue.get()
-                self.log.info(" document_info {0}".format(error_data["document_info"]))
-                self.log.info(" error_result {0}".format(error_data["error_result"]))
-                dump_file.write(json.dumps(error_data["document_info"]))
+                #self.log.info(error_data)
+                #self.log.info(" document_info {0}".format(error_data["document_info"]))
+                #self.log.info(" error_result {0}".format(error_data["error_result"]))
+                dump_file.write(json.dumps(error_data["error_result"]))
+                #dump_file.write(json.dumps(error_data["document_info"]))
             dump_file.close()
             # Fail the test with result count
             self.assertTrue(not error_queue.empty(), "error count {0}".format(error_count))
@@ -207,6 +210,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             document_info = {}
             randomDataGenerator = RandomDataGenerator()
             randomDataGenerator.set_seed(self.seed)
+            document_info["document_key"] = "key_"+str(x)
             document_info["seed"] = randomDataGenerator.random_int()
             base_json = randomDataGenerator.random_json()
             data_set = randomDataGenerator.random_json()
@@ -224,16 +228,17 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         client = self.direct_client(self.master, self.buckets[0])
         while (not queue.empty()):
             document_info = queue.get()
+            document_key = document_info["document_key"]
             json_document = document_info["json_document"]
             seed = document_info["seed"]
-            document_key =  "document_key_"+str(self.randomDataGenerator.random_int())
             logic, error_result = self.run_mutation_operations(client, bucket,
                 document_key= document_key, json_document = json_document, seed =  seed,
                 number_of_operations = self.number_of_operations,
                 mutation_operation_type = mutation_operation_type,
                 force_operation_type = force_operation_type)
             if not logic:
-                error_queue.put({"error_result":error_result, "document_info":document_info})
+                error_queue.put({"error_result":error_result, "seed":seed})
+                #error_queue.put({"error_result":error_result, "document_info":document_info})
 
     ''' Method to run sequence operations for a given JSON document '''
     def run_mutation_operations(self,
@@ -245,8 +250,9 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         number_of_operations = 10,
         mutation_operation_type = "any",
         force_operation_type = None):
+        original_json_copy = copy.deepcopy(json_document)
         self.set(client, document_key, json_document)
-        self.log.info(" START WORKING ON {0}".format(document_key))
+        self.log.info(" Test ON KEY :: {0}".format(document_key))
         if self.run_mutation_mode == "seq":
             operations = self.subdoc_gen_helper.build_sequence_operations(
                 json_document,
@@ -254,7 +260,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                 seed = seed,
                 mutation_operation_type = mutation_operation_type,
                 force_operation_type = force_operation_type)
-            self.log.info("TOTAL OPERATIONS CALCULATED {0} ".format(len(operations)))
+            #self.log.info("TOTAL OPERATIONS CALCULATED {0} ".format(len(operations)))
             operation_index=1
             for operation in operations:
                 function = getattr(self, operation["subdoc_api_function_applied"])
@@ -272,7 +278,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             logic, result = self.run_concurrent_mutation_operations(document_key, bucket, seed, json_document, number_of_operations, mutation_operation_type, force_operation_type)
             if not logic:
                 return False, logic
-        self.log.info(" END WORKING ON {0}".format(document_key))
+        #self.log.info(" END WORKING ON {0}".format(document_key))
+        #json_document = operations[len(operations)-1]["mutated_data_set"]
         if self.build_kv_store:
             self.kv_store[document_key] = operations[len(operations)-1]["mutated_data_set"]
         error_result = {}
@@ -281,12 +288,33 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
             for path in pairs.keys():
                 #self.log.info(" Analyzing path {0}".format(path))
-                data = self.get(client, document_key, path)
-                if data != pairs[path]:
+                check_data = True
+                try:
+                    data = self.get(client, document_key, path)
+                except Exception, ex:
+                    check_data = False
+                    error_result[path] = "expected {0}, actual = {1}".format(pairs[path], str(ex))
+                    self.print_operations(operations)
+                    self.log.info("_______________________________________________")
+                    self.log.info(" path in question {0} ".format(path))
+                    self.log.info("ORIGINAL {0} ".format(original_json_copy))
+                    self.log.info("EXPECTED {0} ".format(json_document))
+                    self.log.info("ACTUAL {0} ".format(self.get_all(client, document_key)))
+                    self.log.info("_______________________________________________")
+                    return False, error_result
+                if check_data and data != pairs[path]:
                     error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
             if len(error_result) != 0:
                 return False, error_result
         return True, error_result
+
+    def print_operations(self, operations):
+        index =0
+        for operation in operations:
+            index += 1
+            self.log.info(" +++++++++++++++++++++++++ mutation # {0} +++++++++++++++++++++++++ ".format(index))
+            for k, v in operation.iteritems():
+                self.log.info("{0} :: {1}".format(k, v))
 
     def run_concurrent_mutation_operations(self, document_key, bucket, seed, json_document, number_of_operations, mutation_operation_type, force_operation_type):
         result_queue = Queue.Queue()
@@ -309,6 +337,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         if result_queue.empty():
             return True, None
         return False, result_queue
+
+
 
 
     ''' Method to verify kv store data set '''
@@ -360,6 +390,19 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                 client.replace_in(key, path, value)
             else:
                 client.replace_sd(key, path, value)
+        except Exception as e:
+            raise
+
+    def get_all(self, client, key = ''):
+        try:
+            if self.verbose_func_usage:
+                self.log.info(" get ----> {0} :: {1}".format(key, path))
+            if self.use_sdk_client:
+                r, v, d = client.get(key)
+                return d
+            else:
+                r, v, d = client.get(key)
+                return json.loads(d)
         except Exception as e:
             raise
 
