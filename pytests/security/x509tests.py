@@ -36,7 +36,8 @@ class x509tests(BaseTestCase):
     def setUp(self):
         super(x509tests, self).setUp()
         self._reset_original()
-        x509main(self.master)._generate_cert(self.servers)
+        SSLtype = self.input.param("SSLtype","go")
+        x509main(self.master)._generate_cert(self.servers,type=SSLtype)
         self.ip_address = self.getLocalIPAddress()
         enable_audit=self.input.param('audit',None)
         if enable_audit:

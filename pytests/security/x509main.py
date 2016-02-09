@@ -81,20 +81,43 @@ class x509main:
         for server in servers:
             x509main(server)._setup_node_certificates(reload_cert=reload_cert)
 
-    def _generate_cert(self,servers,root_cn='Root\ Authority'):
-        files = []
-        cert_file = "./pytests/security/" + x509main.GOCERTGENFILE
-        shell = RemoteMachineShellConnection(self.slave_host)
-        shell.execute_command("rm -rf /tmp/newcerts")
-        shell.execute_command("mkdir /tmp/newcerts")
+    def _generate_cert(self,servers,root_cn='Root\ Authority',type='go'):
+        if type == 'go':
+            files = []
+            cert_file = "./pytests/security/" + x509main.GOCERTGENFILE
+            shell = RemoteMachineShellConnection(self.slave_host)
+            shell.execute_command("rm -rf /tmp/newcerts")
+            shell.execute_command("mkdir /tmp/newcerts")
 
-        shell.execute_command("go run " + cert_file + " -store-to=/tmp/newcerts/root -common-name="+root_cn)
-        shell.execute_command("go run " + cert_file + " -store-to=/tmp/newcerts/interm -sign-with=/tmp/newcerts/root -common-name=Intemediate\ Authority")
-        for server in servers:
-            shell.execute_command("go run " + cert_file + " -store-to=/tmp/newcerts/" + server.ip + " -sign-with=/tmp/newcerts/interm -common-name=" + server.ip + " -final=true")
-            shell.execute_command("cat /tmp/newcerts/" + server.ip + ".crt /tmp/newcerts/interm.crt  > " + " /tmp/newcerts/long_chain"+server.ip+".pem")
+            shell.execute_command("go run " + cert_file + " -store-to=/tmp/newcerts/root -common-name="+root_cn)
+            shell.execute_command("go run " + cert_file + " -store-to=/tmp/newcerts/interm -sign-with=/tmp/newcerts/root -common-name=Intemediate\ Authority")
+            for server in servers:
+                shell.execute_command("go run " + cert_file + " -store-to=/tmp/newcerts/" + server.ip + " -sign-with=/tmp/newcerts/interm -common-name=" + server.ip + " -final=true")
+                shell.execute_command("cat /tmp/newcerts/" + server.ip + ".crt /tmp/newcerts/interm.crt  > " + " /tmp/newcerts/long_chain"+server.ip+".pem")
 
-        shell.execute_command("go run " + cert_file + " -store-to=/tmp/newcerts/incorrect_root_cert -common-name=Incorrect\ Authority")
+            shell.execute_command("go run " + cert_file + " -store-to=/tmp/newcerts/incorrect_root_cert -common-name=Incorrect\ Authority")
+        elif type == 'openssl':
+            files = []
+            v3_ca = "./pytests/security/v3_ca.crt"
+            shell = RemoteMachineShellConnection(self.slave_host)
+            shell.execute_command("rm -rf /tmp/newcerts")
+            shell.execute_command("mkdir /tmp/newcerts")
+            shell.execute_command("openssl genrsa -out /tmp/newcerts/root.key 2048")
+            shell.execute_command("openssl req -new -x509  -days 3650 -sha256 -key /tmp/newcerts/root.key -out /tmp/newcerts/root.crt -subj '/C=UA/O=My Company/CN=My Company Root CA'")
+
+            shell.execute_command("openssl genrsa -out /tmp/newcerts/int.key 2048")
+            shell.execute_command("openssl req -new -key /tmp/newcerts/int.key -out /tmp/newcerts/int.csr -subj '/C=UA/O=My Company/CN=My Company Intermediate CA'")
+            shell.execute_command("openssl x509 -req -in /tmp/newcerts/int.csr -CA /tmp/newcerts/root.crt -CAkey /tmp/newcerts/root.key -CAcreateserial -CAserial /tmp/newcerts/rootCA.srl -extfile ./pytests/security/v3_ca.ext -out /tmp/newcerts/int.pem -days 365 -sha256")
+
+
+            for server in servers:
+                shell.execute_command("openssl genrsa -out /tmp/newcerts/"+server.ip + ".key 2048")
+                shell.execute_command("openssl req -new -key /tmp/newcerts/" + server.ip + ".key -out /tmp/newcerts/" + server.ip + ".csr -subj '/C=UA/O=My Company/CN=" + server.ip)
+                shell.execute_command("openssl x509 -req -in /tmp/newcerts/" + server.ip + ".csr -CA /tmp/newcerts/int.pem -CAkey /tmp/newcerts/int.key -CAcreateserial -CAserial /tmp/newcerts/intermediateCA.srl -out /tmp/newcerts" + server.ip + ".pem -days 365 -sha256")
+                shell.execute_command("openssl x509 -req -days 300 -in /tmp/newcerts/" + server.ip + ".csr -CA /tmp/newcerts/int.pem -CAkey /tmp/newcerts/int.key -set_serial 01 -out /tmp/newcerts/" + server.ip + ".pem")
+                shell.execute_command("cat /tmp/newcerts/" + server.ip + ".pem /tmp/newcerts/int.pem > /tmp/newcerts/long_chain"+server.ip+".pem")
+
+
 
     def _reload_node_certificate(self,host):
         rest = RestConnection(host)
