@@ -101,7 +101,7 @@ class JoinTests(QueryTests):
             "ON KEY new_project.tasks_ids FOR employee where new_project.tasks_ids is not null"
             actual_result = self.run_cbq_query()
             self.assertTrue(actual_result['metrics']['resultCount'] == 0, 'Query was not run successfully')
-            self.query = "drop index default.idxbidirec";
+            self.query = "drop index %s.idxbidirec" %self.buckets[1].name;
             actual_result = self.run_cbq_query()
 
 
