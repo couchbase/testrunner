@@ -1,30 +1,11 @@
-import json
-import time
-from threading import Thread, Event
-from basetestcase import BaseTestCase
-from couchbase_helper.document import DesignDocument, View
-from couchbase_helper.documentgenerator import DocumentGenerator
-from membase.api.rest_client import RestConnection
-from membase.helper.rebalance_helper import RebalanceHelper
-from membase.api.exception import ReadDocumentException
-from membase.api.exception import DesignDocCreationException
-from membase.helper.cluster_helper import ClusterOperationHelper
-from remote.remote_util import RemoteMachineShellConnection
-from random import randint
-from datetime import datetime
-import time
-import commands
 import logger
-import ssl
-import httplib2
-import httplib
-import urllib
-import socket
-import base64
-import paramiko
-import requests
-
 log = logger.Logger.get_logger()
+from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
+import httplib2
+import base64
+import requests
+import urllib
 
 class ServerInfo():
     def __init__(self,
