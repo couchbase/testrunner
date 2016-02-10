@@ -62,9 +62,14 @@ class RandomDataGenerator(object):
         array_size = randint(1, max_array_size)
         return self.random_multi_dimension_array(level = dimension_size, max_array_size = array_size)
 
-    def random_multi_dimension_array(self, level = 1, max_array_size = 10):
+    def random_multi_dimension_array(self, level = 2, max_array_size = 10):
         if level == 1:
-            return self.random_single_dimension_array(max_array_size = max_array_size)
+            array_size = randint(0, max_array_size)
+            array = []
+            for x in range(0,array_size):
+                k, d = self.gen_data_no_json()
+                array.append(d )
+            return array
         else:
         	array_size = randint(1, max_array_size)
         	array = []
@@ -81,7 +86,7 @@ class RandomDataGenerator(object):
         return array
 
     def gen_data(self):
-    	function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_array", "random_char", "random_json"]
+    	function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_multi_dimension_array", "random_char", "random_json"]
     	function_name = random.choice(function_list)
         return (self.random_uuid() + "_" + function_name), getattr(self, function_name)()
 
@@ -90,12 +95,14 @@ class RandomDataGenerator(object):
         function_name = random.choice(function_list)
         return (self.random_uuid() + "_" + function_name), getattr(self, function_name)()
 
-    def random_json(self, random_fields = True):
+    def random_json(self, random_fields = False):
     	json_body = {}
-    	function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_array", "random_char", "random_json"]
+    	function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_multi_dimension_array", "random_char"]
         for function in function_list:
-        	if random_fields and self.isChoice():
-        		json_body[(self.random_uuid() + "_" + function.replace("random_", ""))] = getattr(self, function)()
+            if random_fields and self.isChoice():
+                json_body[(self.random_uuid() + "_" + function.replace("random_", ""))] = getattr(self, function)()
+            else:
+                json_body[(self.random_uuid() + "_" + function.replace("random_", ""))] = getattr(self, function)()
         return json_body
 
     def isChoice(self):
@@ -105,6 +112,6 @@ if __name__=="__main__":
     helper = RandomDataGenerator()
     print helper.isChoice()
     print helper.isChoice()
-    print helper.random_single_dimension_array(max_array_size = 2)
-    print helper.random_multi_dimension_array(level = 2, max_array_size = 3)
-    print helper.random_json()
+    #print helper.random_single_dimension_array(max_array_size = 100)
+    print helper.random_array()
+    #print helper.random_json()
