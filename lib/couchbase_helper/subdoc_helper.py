@@ -46,7 +46,6 @@ class SubdocHelper():
           return operation_definition
         key = random.choice(pairs.keys())
         if self.isPathPresent(key, filter_paths):
-          print "collision {0}".format(key)
           pairs.pop(key)
           filter_paths.append(key)
         else:
