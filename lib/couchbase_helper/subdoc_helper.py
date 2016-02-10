@@ -101,7 +101,7 @@ class SubdocHelper():
           operation = self.pick_operations(pairs[key], operation = force_operation_type)
         elif mutation_operation_type  == "dict":
           operation = self.pick_dict_operations(pairs[key], operation = force_operation_type)
-        else:
+        elif mutation_operation_type  == "array":
           operation = self.pick_array_operations(pairs[key], operation = force_operation_type)
         if operation["mutate"] == True:
           copy_of_original_dataset = copy.deepcopy(data_set)
@@ -121,6 +121,8 @@ class SubdocHelper():
             operation_index += 1
           if operation_index == max_number_operations:
             return operation_definition
+        else:
+          pairs.pop(key)
       return operation_definition
 
     def parse_and_get_data(self, data_set, path):
@@ -275,6 +277,7 @@ class SubdocHelper():
       if isinstance(data, list):
         if operation == None:
           operation = random.choice(array_ops.keys())
+        print array_ops[operation]
         return array_ops[operation]
       else:
         return {"mutate":False}
