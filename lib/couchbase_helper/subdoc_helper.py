@@ -277,7 +277,6 @@ class SubdocHelper():
       if isinstance(data, list):
         if operation == None:
           operation = random.choice(array_ops.keys())
-        print array_ops[operation]
         return array_ops[operation]
       else:
         return {"mutate":False}
