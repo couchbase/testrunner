@@ -81,22 +81,37 @@ class x509main:
             files = []
             v3_ca = "./pytests/security/v3_ca.crt"
             shell = RemoteMachineShellConnection(self.slave_host)
-            shell.execute_command("rm -rf /tmp/newcerts")
+            output,error = shell.execute_command("rm -rf /tmp/newcerts")
+            log.info ('Output message is {0} and error message is {1}'.format(output,error))
             shell.execute_command("mkdir /tmp/newcerts")
-            shell.execute_command("openssl genrsa -out /tmp/newcerts/root.key 2048")
-            shell.execute_command("openssl req -new -x509  -days 3650 -sha256 -key /tmp/newcerts/root.key -out /tmp/newcerts/root.crt -subj '/C=UA/O=My Company/CN=My Company Root CA'")
+            log.info ('Output message is {0} and error message is {1}'.format(output,error))
+            shell.execute_command("openssl genrsa -out /tmp/newcerts/ca.key 2048")
+            log.info ('Output message is {0} and error message is {1}'.format(output,error))
+            output,error = shell.execute_command("openssl req -new -x509  -days 3650 -sha256 -key /tmp/newcerts/ca.key -out /tmp/newcerts/ca.pem -subj '/C=UA/O=My Company/CN=My Company Root CA'")
+            log.info ('Output message is {0} and error message is {1}'.format(output,error))
 
-            shell.execute_command("openssl genrsa -out /tmp/newcerts/int.key 2048")
-            shell.execute_command("openssl req -new -key /tmp/newcerts/int.key -out /tmp/newcerts/int.csr -subj '/C=UA/O=My Company/CN=My Company Intermediate CA'")
-            shell.execute_command("openssl x509 -req -in /tmp/newcerts/int.csr -CA /tmp/newcerts/root.crt -CAkey /tmp/newcerts/root.key -CAcreateserial -CAserial /tmp/newcerts/rootCA.srl -extfile ./pytests/security/v3_ca.ext -out /tmp/newcerts/int.pem -days 365 -sha256")
+            output, error = shell.execute_command("openssl genrsa -out /tmp/newcerts/int.key 2048")
+            log.info ('Output message is {0} and error message is {1}'.format(output,error))
+            output, error = shell.execute_command("openssl req -new -key /tmp/newcerts/int.key -out /tmp/newcerts/int.csr -subj '/C=UA/O=My Company/CN=My Company Intermediate CA'")
+            log.info ('Output message is {0} and error message is {1}'.format(output,error))
+            output, error = shell.execute_command("openssl x509 -req -in /tmp/newcerts/int.csr -CA /tmp/newcerts/ca.pem -CAkey /tmp/newcerts/ca.key -CAcreateserial -CAserial /tmp/newcerts/rootCA.srl -extfile ./pytests/security/v3_ca.ext -out /tmp/newcerts/int.pem -days 365 -sha256")
+            log.info ('Output message is {0} and error message is {1}'.format(output,error))
 
 
             for server in servers:
-                shell.execute_command("openssl genrsa -out /tmp/newcerts/"+server.ip + ".key 2048")
-                shell.execute_command("openssl req -new -key /tmp/newcerts/" + server.ip + ".key -out /tmp/newcerts/" + server.ip + ".csr -subj '/C=UA/O=My Company/CN=" + server.ip)
-                shell.execute_command("openssl x509 -req -in /tmp/newcerts/" + server.ip + ".csr -CA /tmp/newcerts/int.pem -CAkey /tmp/newcerts/int.key -CAcreateserial -CAserial /tmp/newcerts/intermediateCA.srl -out /tmp/newcerts" + server.ip + ".pem -days 365 -sha256")
-                shell.execute_command("openssl x509 -req -days 300 -in /tmp/newcerts/" + server.ip + ".csr -CA /tmp/newcerts/int.pem -CAkey /tmp/newcerts/int.key -set_serial 01 -out /tmp/newcerts/" + server.ip + ".pem")
-                shell.execute_command("cat /tmp/newcerts/" + server.ip + ".pem /tmp/newcerts/int.pem > /tmp/newcerts/long_chain"+server.ip+".pem")
+                output, error = shell.execute_command("openssl genrsa -out /tmp/newcerts/"+server.ip + ".key 2048")
+                log.info ('Output message is {0} and error message is {1}'.format(output,error))
+                output, error= shell.execute_command("openssl req -new -key /tmp/newcerts/" + server.ip + ".key -out /tmp/newcerts/" + server.ip + ".csr -subj '/C=UA/O=My Company/CN=" + server.ip + "'")
+                log.info ('Output message is {0} and error message is {1}'.format(output,error))
+                output, error = shell.execute_command("openssl x509 -req -in /tmp/newcerts/" + server.ip + ".csr -CA /tmp/newcerts/int.pem -CAkey /tmp/newcerts/int.key -CAcreateserial -CAserial /tmp/newcerts/intermediateCA.srl -out /tmp/newcerts" + server.ip + ".pem -days 365 -sha256")
+                log.info ('Output message is {0} and error message is {1}'.format(output,error))
+                output, error = shell.execute_command("openssl x509 -req -days 300 -in /tmp/newcerts/" + server.ip + ".csr -CA /tmp/newcerts/int.pem -CAkey /tmp/newcerts/int.key -set_serial 01 -out /tmp/newcerts/" + server.ip + ".pem")
+                log.info ('Output message is {0} and error message is {1}'.format(output,error))
+                output, error = shell.execute_command("cat /tmp/newcerts/" + server.ip + ".pem /tmp/newcerts/int.pem > /tmp/newcerts/long_chain"+server.ip+".pem")
+                log.info ('Output message is {0} and error message is {1}'.format(output,error))
+
+            output, error = shell.execute_command("cp /tmp/newcerts/ca.pem /tmp/newcerts/root.crt")
+            log.info ('Output message is {0} and error message is {1}'.format(output,error))
 
 
 
