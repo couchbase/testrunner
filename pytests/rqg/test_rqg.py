@@ -78,11 +78,11 @@ class RQGTests(BaseTestCase):
         if not(self.use_rest):
             self._ssh_client = paramiko.SSHClient()
             self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        try:
-            self.os = self.shell.extract_remote_info().type.lower()
-        except Exception, ex:
-            self.log.error('SETUP FAILED')
-            self.tearDown()
+            try:
+                self.os = self.shell.extract_remote_info().type.lower()
+            except Exception, ex:
+                self.log.error('SETUP FAILED')
+                self.tearDown()
 
 
 
