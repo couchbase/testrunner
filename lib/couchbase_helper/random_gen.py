@@ -95,7 +95,7 @@ class RandomDataGenerator(object):
         function_name = random.choice(function_list)
         return (self.random_uuid() + "_" + function_name), getattr(self, function_name)()
 
-    def random_json(self, random_fields = False):
+    def random_json(self, random_fields = False, random_array_count = 4):
     	json_body = {}
     	function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_multi_dimension_array", "random_char"]
         for function in function_list:
@@ -103,7 +103,7 @@ class RandomDataGenerator(object):
                 json_body[(self.random_uuid() + "_" + function.replace("random_", ""))] = getattr(self, function)()
             else:
                 if function == "random_multi_dimension_array":
-                    for x in range(10):
+                    for x in range(random_array_count):
                         json_body[(self.random_uuid() + "_" + function.replace("random_", ""))] = getattr(self, function)()
                 else:
                     json_body[(self.random_uuid() + "_" + function.replace("random_", ""))] = getattr(self, function)()
