@@ -102,7 +102,11 @@ class RandomDataGenerator(object):
             if random_fields and self.isChoice():
                 json_body[(self.random_uuid() + "_" + function.replace("random_", ""))] = getattr(self, function)()
             else:
-                json_body[(self.random_uuid() + "_" + function.replace("random_", ""))] = getattr(self, function)()
+                if function == "random_multi_dimension_array":
+                    for x in range(10):
+                        json_body[(self.random_uuid() + "_" + function.replace("random_", ""))] = getattr(self, function)()
+                else:
+                    json_body[(self.random_uuid() + "_" + function.replace("random_", ""))] = getattr(self, function)()
         return json_body
 
     def isChoice(self):
