@@ -137,13 +137,12 @@ class x509main:
     def _create_inbox_folder(self,host):
         shell = RemoteMachineShellConnection(self.host)
         final_path = self.install_path + x509main.CHAINFILEPATH
-        shell.execute_command('mkdir ' + final_path)
-
+        shell.create_directory(final_path)
 
     def _delete_inbox_folder(self):
         shell = RemoteMachineShellConnection(self.host)
         final_path = self.install_path + x509main.CHAINFILEPATH
-        shell.execute_command('rm -rf ' + final_path)
+        shell.remove_directory(final_path)
 
     def _copy_node_key_chain_cert(self,host,src_path,dest_path):
         shell = RemoteMachineShellConnection(host)
