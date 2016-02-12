@@ -46,6 +46,9 @@ class BucketFlushTests(BaseTestCase):
         Works with multiple nodes/buckets."""
     def bucketflush(self):
 
+
+        # MB-18068 known issue with bucket flush
+        time.sleep(5)
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket)
 
