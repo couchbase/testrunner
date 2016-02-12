@@ -95,7 +95,7 @@ class SubdocErrorHandling(SubdocBaseTest):
         # Tests for Nested Data Set
         self.log.info("nested_data :: malformed path")
         new_path = self.generate_path(20, "{][]}")
-        self.error_exists("normal_nested_data", new_path, error = "Memcached error #194 'Invalid path'", field = "nested_data : malformed path", result = result)
+        self.error_exists("normal_nested_data", new_path, error = "Memcached error #1 'Not found'", field = "nested_data : malformed path", result = result)
         self.log.info("nested_data :: path does not exist")
         new_path = self.generate_path(20, "does_not_exist")
         self.error_exists("normal_nested_data", new_path, error = "Memcached error #192 'Path not exists'", field = "nested_data : path does not exist malformed path", result = result)
@@ -105,7 +105,7 @@ class SubdocErrorHandling(SubdocBaseTest):
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
         new_path = self.generate_path(40, "field")
-        self.error_exists("nested_data", new_path, error = "Memcached error #192 'Path not exists'", field = "nested_data : path does not exist - too big path", result = result)
+        self.error_exists("nested_data", new_path, error = "Memcached error #195 'Path too big'test_error_exists_simple_data", field = "nested_data : path does not exist - too big path", result = result)
         self.assertTrue(len(result) == 0, result)
 
     def test_error_exists_simple_data(self):
@@ -249,7 +249,7 @@ class SubdocErrorHandling(SubdocBaseTest):
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
         new_path = self.generate_path(40, "field")
-        self.error_upsert_dict("nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : path does not exist - too big path", result = result)
+        self.error_upsert_dict("nested_data", new_path, value = "value_value", error = "Memcached error #195 'Path too big'", field = "nested_data : path does not exist - too big path", result = result)
         self.assertTrue(len(result) == 0, result)
 
     def test_error_replace_simple_data(self):
@@ -679,6 +679,7 @@ class SubdocErrorHandling(SubdocBaseTest):
             if (str(ex).find(error) == -1):
                 self.log.info(str(ex))
                 result[field]  = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
+                self.client = self.direct_client(self.master, self.buckets[0])
 
     def error_gets(self, in_key, path, error = "error", field  = "field", result = {}):
         try:
@@ -688,6 +689,7 @@ class SubdocErrorHandling(SubdocBaseTest):
             if (str(ex).find(error) == -1):
                 self.log.info(str(ex))
                 result[field]  = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
+                self.client = self.direct_client(self.master, self.buckets[0])
 
     def error_add_dict(self, in_key, path, value = None, error = "error", field  = "field", result = {}):
         try:
@@ -697,6 +699,7 @@ class SubdocErrorHandling(SubdocBaseTest):
             if (str(ex).find(error) == -1):
                 self.log.info(str(ex))
                 result[field]  = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
+                self.client = self.direct_client(self.master, self.buckets[0])
 
     def error_upsert_dict(self, in_key, path, value = None, error = "error", field  = "field", result = {}):
         try:
@@ -706,6 +709,7 @@ class SubdocErrorHandling(SubdocBaseTest):
             if (str(ex).find(error) == -1):
                 self.log.info(str(ex))
                 result[field]  = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
+                self.client = self.direct_client(self.master, self.buckets[0])
 
 
     def error_array_push_last(self, in_key, path, value = None, error = "error", field  = "field", result = {}):
@@ -716,6 +720,7 @@ class SubdocErrorHandling(SubdocBaseTest):
             if (str(ex).find(error) == -1):
                 self.log.info(str(ex))
                 result[field]  = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
+                self.client = self.direct_client(self.master, self.buckets[0])
 
     def error_array_push_first(self, in_key, path, value = None, error = "error", field  = "field", result = {}):
         try:
@@ -725,6 +730,7 @@ class SubdocErrorHandling(SubdocBaseTest):
             if (str(ex).find(error) == -1):
                 self.log.info(str(ex))
                 result[field]  = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
+                self.client = self.direct_client(self.master, self.buckets[0])
 
     def error_array_add_unique(self, in_key, path, value = None, error = "error", field  = "field", result = {}):
         try:
@@ -734,6 +740,7 @@ class SubdocErrorHandling(SubdocBaseTest):
             if (str(ex).find(error) == -1):
                 self.log.info(str(ex))
                 result[field]  = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
+                self.client = self.direct_client(self.master, self.buckets[0])
 
 
     def error_array_add_insert(self, in_key, path, value = None, error = "error", field  = "field", result = {}):
@@ -744,6 +751,7 @@ class SubdocErrorHandling(SubdocBaseTest):
             if (str(ex).find(error) == -1):
                 self.log.info(str(ex))
                 result[field]  = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
+                self.client = self.direct_client(self.master, self.buckets[0])
 
     def error_replace(self, in_key, path, value = None, error = "error", field  = "field", result = {}):
         try:
@@ -753,6 +761,7 @@ class SubdocErrorHandling(SubdocBaseTest):
             if (str(ex).find(error) == -1):
                 self.log.info(str(ex))
                 result[field]  = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
+                self.client = self.direct_client(self.master, self.buckets[0])
 
 
     def error_delete(self, in_key, path, error = "error", field  = "field", result = {}):
@@ -763,6 +772,7 @@ class SubdocErrorHandling(SubdocBaseTest):
             if (str(ex).find(error) == -1):
                 self.log.info(str(ex))
                 result[field]  = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
+                self.client = self.direct_client(self.master, self.buckets[0])
 
     def error_counter(self, in_key, path, value = None, error = "error", field  = "field", result = {}):
         try:
@@ -772,3 +782,4 @@ class SubdocErrorHandling(SubdocBaseTest):
             if (str(ex).find(error) == -1):
                 self.log.info(str(ex))
                 result[field]  = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
+                self.client = self.direct_client(self.master, self.buckets[0])
