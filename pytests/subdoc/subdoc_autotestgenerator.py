@@ -11,6 +11,8 @@ import random
 class SubdocAutoTestGenerator(SubdocBaseTest):
     def setUp(self):
         super(SubdocAutoTestGenerator, self).setUp()
+        self.verify_data_without_paths =  self.input.param("verify_data_without_paths",True)
+        self.number_of_arrays =  self.input.param("number_of_arrays",1)
         self.verbose_func_usage =  self.input.param("verbose_func_usage",False)
         self.nesting_level =  self.input.param("nesting_level",0)
         self.mutation_operation_type =  self.input.param("mutation_operation_type","any")
@@ -211,8 +213,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             randomDataGenerator.set_seed(self.seed)
             document_info["document_key"] = "key_"+str(x)
             document_info["seed"] = randomDataGenerator.random_int()
-            base_json = randomDataGenerator.random_json()
-            data_set = randomDataGenerator.random_json()
+            base_json = randomDataGenerator.random_json(random_array_count = self.number_of_arrays)
+            data_set = randomDataGenerator.random_json(random_array_count = self.number_of_arrays)
             json_document = self.generate_nested(base_json, data_set, self.nesting_level)
             document_info["json_document"] = json_document
             document_info_queue.put(document_info)
@@ -283,28 +285,35 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             self.kv_store[document_key] = operations[len(operations)-1]["mutated_data_set"]
         error_result = {}
         if self.run_data_verification:
-            pairs = {}
-            self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
-            for path in pairs.keys():
-                #self.log.info(" Analyzing path {0}".format(path))
-                check_data = True
-                try:
-                    data = self.get(client, document_key, path)
-                except Exception, ex:
-                    check_data = False
-                    error_result[path] = "expected {0}, actual = {1}".format(pairs[path], str(ex))
-                    self.print_operations(operations)
-                    self.log.info("_______________________________________________")
-                    self.log.info(" path in question {0} ".format(path))
-                    self.log.info("ORIGINAL {0} ".format(original_json_copy))
-                    self.log.info("EXPECTED {0} ".format(json_document))
-                    self.log.info("ACTUAL {0} ".format(self.get_all(client, document_key)))
-                    self.log.info("_______________________________________________")
+            if self.verify_data_without_paths:
+                data = self.get_all(client, document_key)
+                if data != json_document:
+                        error_result = "expected {0}, actual = {1}".format(json_document, data)
+                        print error_result
+                        return False,error_result
+            else:
+                pairs = {}
+                self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
+                for path in pairs.keys():
+                    #self.log.info(" Analyzing path {0}".format(path))
+                    check_data = True
+                    try:
+                        data = self.get(client, document_key, path)
+                    except Exception, ex:
+                        check_data = False
+                        error_result[path] = "expected {0}, actual = {1}".format(pairs[path], str(ex))
+                        self.print_operations(operations)
+                        self.log.info("_______________________________________________")
+                        self.log.info(" path in question {0} ".format(path))
+                        self.log.info("ORIGINAL {0} ".format(original_json_copy))
+                        self.log.info("EXPECTED {0} ".format(json_document))
+                        self.log.info("ACTUAL {0} ".format(self.get_all(client, document_key)))
+                        self.log.info("_______________________________________________")
+                        return False, error_result
+                    if check_data and data != pairs[path]:
+                        error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
+                if len(error_result) != 0:
                     return False, error_result
-                if check_data and data != pairs[path]:
-                    error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
-            if len(error_result) != 0:
-                return False, error_result
         return True, error_result
 
     def print_operations(self, operations):
@@ -395,7 +404,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
     def get_all(self, client, key = ''):
         try:
             if self.verbose_func_usage:
-                self.log.info(" get ----> {0} :: {1}".format(key, path))
+                self.log.info(" get ----> {0} ".format(key))
             if self.use_sdk_client:
                 r, v, d = client.get(key)
                 return d
