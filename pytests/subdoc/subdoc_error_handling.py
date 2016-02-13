@@ -140,12 +140,10 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.log.info("simple_data :: inserting into an array")
         self.error_add_dict("simple_data", "array[0]", value = "value_value", error = "Memcached error #197 'Cant insert'", field = "simple_data :: inserting into an array", result = result)
         self.log.info("simple_data :: empty path does not exist")
-        self.error_add_dict("simple_data", "", value = "value_value", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
-        self.log.info("simple_data :: document does not exist")
-        self.error_add_dict("does_not_exist", "does_not_exist", value = "value_value", error = "Memcached error #1 'Not found'", field = "simple_data : document does not exist", result = result)
-        self.log.info("simple_data :: malformed path")
         self.error_add_dict("simple_data", "{][]}", value = "value_value", error = "Memcached error #194 'Invalid path'", field = "simple_data : malformed path", result = result)
         self.assertTrue(len(result) == 0, result)
+        self.error_add_dict("simple_data", "", value = "value_value", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
+        self.log.info("simple_data :: malformed path")
 
     def test_error_add_dict_nested_data(self):
         result = {}
@@ -206,12 +204,10 @@ class SubdocErrorHandling(SubdocBaseTest):
         jsonDump = json.dumps(simple_data)
         self.client.set("simple_data", 0, 0, jsonDump)
         # Tests for Simple Data Set
+        self.log.info("simple_data :: insertion into array")
+        self.error_upsert_dict("simple_data", "array[0]", value = "value_value", error = "Memcached error #197 'Cant insert'", field = "simple_data : insertion into array", result = result)
         self.log.info("simple_data :: empty path does not exist")
         self.error_upsert_dict("simple_data", "", value = "value_value", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
-        self.log.info("simple_data :: document does not exist")
-        self.error_upsert_dict("does_not_exist", "does_not_exist", value = "value_value", error = "Memcached error #1 'Not found'", field = "simple_data : document does not exist", result = result)
-        self.log.info("simple_data :: insertion into array")
-        self.error_upsert_dict("does_not_exist", "array[0]", value = "value_value", error = "Memcached error #1 'Not found'", field = "simple_data : insertion into array", result = result)
         self.assertTrue(len(result) == 0, result)
 
     def test_error_upsert_dict_nested_data(self):
@@ -263,14 +259,14 @@ class SubdocErrorHandling(SubdocBaseTest):
         jsonDump = json.dumps(simple_data)
         self.client.set("simple_data", 0, 0, jsonDump)
         # Tests for Simple Data Set
-        self.log.info("simple_data :: empty path does not exist")
-        self.error_replace("simple_data", "", value = "value_value", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
         self.log.info("simple_data :: document does not exist")
         self.error_replace("does_not_exist", "does_not_exist", value = "value_value", error = "Memcached error #1 'Not found'", field = "simple_data : document does not exist", result = result)
         self.log.info("simple_data :: path does not exist - array, negavtie index")
         self.error_replace("simple_data", "array[-1]", value = "value_value", error = "Memcached error #197 'Cant insert'", field = "simple_data : path does not exist - array, negavtie index", result = result)
         self.log.info("simple_data :: path does not exist - array, out of bounds index")
         self.error_replace("simple_data", "array[200]", value = "value_value", error = "Memcached error #197 'Cant insert'", field = "simple_data : path does not exist - array, out of bounds index", result = result)
+        self.log.info("simple_data :: empty path does not exist")
+        self.error_replace("simple_data", "", value = "value_value", error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
         self.assertTrue(len(result) == 0, result)
 
     def test_error_replace_nested_data(self):
@@ -561,8 +557,6 @@ class SubdocErrorHandling(SubdocBaseTest):
         jsonDump = json.dumps(simple_data)
         self.client.set("simple_data", 0, 0, jsonDump)
         # Tests for Simple Data Set
-        self.log.info("simple_data :: empty path does not exist")
-        self.error_array_add_insert("simple_data", "", value=2,error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
         self.log.info("simple_data :: not an array path does not exist")
         self.error_array_add_insert("simple_data", "field", value=2,error = "Memcached error #194 'Invalid path'", field = "simple_data : not an array path does not exist - dictionary", result = result)
         self.log.info("simple_data :: negative index value")
@@ -571,6 +565,8 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.error_array_add_insert("simple_data", "array[200]", value=2, error = "Memcached error #192 'Path not exists'", field = "simple_data : out of bounds index  value - dictionary", result = result)
         self.log.info("simple_data :: document does not exist")
         self.error_array_add_insert("does_not_exist", "does_not_exist", error = "Memcached error #1 'Not found'", field = "simple_data : document does not exist", result = result)
+        self.log.info("simple_data :: empty path does not exist")
+        self.error_array_add_insert("simple_data", "", value=2,error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
         self.assertTrue(len(result) == 0, result)
 
     def test_error_array_add_insert_nested_data(self):
@@ -619,12 +615,11 @@ class SubdocErrorHandling(SubdocBaseTest):
         jsonDump = json.dumps(simple_data)
         self.client.set("simple_data", 0, 0, jsonDump)
         # Tests for Simple Data Set
-        self.log.info("simple_data :: empty path does not exist")
-        self.error_counter("simple_data", "", value = 1, error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
-        self.log.info("simple_data :: counter to a double")
-        self.error_counter("simple_data", "integer", value  = 1.0, error = "Memcached error #4 'Invalid'", field = "simple_data : counter to a double - dictionary", result = result)
         self.log.info("simple_data :: document does not exist")
         self.error_counter("does_not_exist", "does_not_exist", value = 1,error = "Memcached error #1 'Not found'", field = "simple_data : document does not exist", result = result)
+        self.log.info("simple_data :: empty path does not exist")
+        self.error_counter("simple_data", "", value = 1, error = "Memcached error #4 'Invalid'", field = "simple_data : empty path does not exist - dictionary", result = result)
+
         self.assertTrue(len(result) == 0, result)
 
     def test_error_counter_nested_data(self):
