@@ -147,7 +147,7 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.error_add_dict("simple_data", "{][]}", value = "value_value", error = "Memcached error #194 'Invalid path'", field = "simple_data : malformed path", result = result)
         self.assertTrue(len(result) == 0, result)
 
-    def test_error_add_dict_nestedt_data(self):
+    def test_error_add_dict_nested_data(self):
         result = {}
         simple_data = {
                     "field":"simple",
@@ -189,7 +189,7 @@ class SubdocErrorHandling(SubdocBaseTest):
         # Tests for Nested Data with long path
         self.log.info("long_nested_data ::nested_data : path does not exist - too big path")
         new_path = self.generate_path(40, "field")
-        self.error_add_dict("nested_data", new_path, value = "value_value", error = "Memcached error #197 'Cant insert'", field = "nested_data : path does not exist - too big path", result = result)
+        self.error_add_dict("nested_data", new_path, value = "value_value", error = "Memcached error #195 'Path too big'", field = "nested_data : path does not exist - too big path", result = result)
         self.assertTrue(len(result) == 0, result)
 
     def test_error_upsert_dict_simple_data(self):
