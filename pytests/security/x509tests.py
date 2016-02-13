@@ -153,23 +153,23 @@ class x509tests(BaseTestCase):
 
     def test_error_without_node_chain_certificates(self):
         x509main(self.master)._upload_cluster_ca_certificate("Administrator",'password')
-        status, content, header = x509main(self.master)._reload_node_certificate(self.master)
-        self.assertFalse(status,"Issue with status when node and chain certificates are missing")
-        self.assertEqual(content,'"Unable to read certificate chain file. Reason: enoent"')
+        status, content = x509main(self.master)._reload_node_certificate(self.master)
+        self.assertEqual(status['status'],'400',"Issue with status with node certificate are missing")
+        self.assertTrue('Unable to read certificate chain file. Reason: enoent' in content, "Incorrect message from the system")
 
     def test_error_without_chain_cert(self):
         x509main(self.master)._upload_cluster_ca_certificate("Administrator",'password')
         x509main(self.master)._setup_node_certificates(chain_cert=False)
-        status, content, header = x509main(self.master)._reload_node_certificate(self.master)
-        self.assertFalse(status,"Issue with status when node and chain certificates are missing")
-        self.assertEqual(content,'"Unable to read certificate chain file. Reason: enoent"')
+        status, content = x509main(self.master)._reload_node_certificate(self.master)
+        self.assertEqual(status['status'],'400',"Issue with status with node certificate are missing")
+        self.assertTrue('Unable to read certificate chain file. Reason: enoent' in content, "Incorrect message from the system")
 
     def test_error_without_node_key(self):
         x509main(self.master)._upload_cluster_ca_certificate("Administrator",'password')
         x509main(self.master)._setup_node_certificates(node_key=False)
-        status,content,header = x509main(self.master)._reload_node_certificate(self.master)
-        self.assertFalse(status,"Issue with status when node and chain certificates are missing")
-        self.assertEqual(content,'"Unable to read private key file. Reason: enoent"')
+        status, content = x509main(self.master)._reload_node_certificate(self.master)
+        self.assertEqual(status['status'],'400',"Issue with status with node key is missing")
+        self.assertTrue('Unable to read private key file. Reason: enoent' in content, "Incorrect message from the system")
 
     def test_add_node_without_cert(self):
         rest = RestConnection(self.master)
