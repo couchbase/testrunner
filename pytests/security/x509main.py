@@ -118,8 +118,12 @@ class x509main:
     def _reload_node_certificate(self,host):
         rest = RestConnection(host)
         api = rest.baseUrl + "node/controller/reloadCertificate"
-        status, content, header = rest._http_request(api, 'POST')
-        return status, content, header
+        http = httplib2.Http()
+        status, content = http.request(api, 'POST', headers=self._create_rest_headers('Administrator','password'))
+        #status, content, header = rest._http_request(api, 'POST')
+        print status
+        print content
+        return status, content
 
     def _get_install_path(self,host):
         shell = RemoteMachineShellConnection(host)
@@ -142,7 +146,17 @@ class x509main:
     def _delete_inbox_folder(self):
         shell = RemoteMachineShellConnection(self.host)
         final_path = self.install_path + x509main.CHAINFILEPATH
-        shell.remove_directory(final_path)
+        shell = RemoteMachineShellConnection(self.host)
+        os_type = shell.extract_remote_info().distribution_type
+        log.info ("OS type is {0}".format(os_type))
+        shell.delete_file(final_path , "root.crt")
+        shell.delete_file(final_path , "chain.pem")
+        shell.delete_file(final_path , "pkey.pem")
+        if os_type == 'windows':
+            final_path = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/inbox'
+            shell.remove_directory(final_path)
+        else:
+            shell.execute_command('rm -rf ' + final_path)
 
     def _copy_node_key_chain_cert(self,host,src_path,dest_path):
         shell = RemoteMachineShellConnection(host)
@@ -159,11 +173,8 @@ class x509main:
         if node_key:
             self._copy_node_key_chain_cert(self.host, src_node_key, dest_node_key)
         if reload_cert:
-            status, content, header = self._reload_node_certificate(self.host)
-            print status
-            print content
-            print header
-            return status, content, header
+            status, content = self._reload_node_certificate(self.host)
+            return status, content
 
 
     def _create_rest_headers(self,username="Administrator",password="password"):
