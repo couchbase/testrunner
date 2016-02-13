@@ -154,7 +154,7 @@ class x509main:
         shell.delete_file(final_path , "pkey.pem")
         if os_type == 'windows':
             final_path = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/inbox'
-            shell.remove_directory(final_path)
+            shell.execute_command('rm -rf ' + final_path)
         else:
             shell.execute_command('rm -rf ' + final_path)
 
