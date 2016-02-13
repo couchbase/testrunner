@@ -9,6 +9,38 @@ class SubdocHelper():
     def __init__(self):
       self.randomDataGenerator = RandomDataGenerator()
 
+    def _find_data_type(self, data, data_type = "any"):
+      if data_type != "any" and data_type == "dict" and isinstance(data, dict):
+        return True
+      elif data_type != "any" and data_type == "array" and isinstance(data, list):
+        return True
+      elif data_type == "any" and (isinstance(data, dict) or isinstance(data, list)):
+        return True
+      return False
+
+    def find_pairs_data_type(self, data_set, path  = "", pairs = {}, data_type = "any"):
+      if isinstance(data_set, dict):
+        for key in data_set.keys():
+          prefix = ""
+          if path != "":
+            prefix = path+"."
+          if isinstance(data_set[key], dict):
+            self.find_pairs_data_type(data_set[key], prefix + key, pairs)
+          elif isinstance(data_set[key], list):
+            self.find_pairs_data_type(data_set[key], prefix + key, pairs)
+          if self._find_data_type(data_set[key], data_type = data_type):
+            pairs[prefix+key] = data_set[key]
+      elif  isinstance(data_set, list):
+        index = 0
+        for element in data_set:
+          if isinstance(element, dict):
+            self.find_pairs_data_type(element, path + "["+str(index)+"]", pairs)
+          elif isinstance(element, list):
+            self.find_pairs_data_type(element, path + "["+str(index)+"]", pairs)
+          if self._find_data_type(element, data_type = data_type):
+            pairs[path+"["+str(index)+"]"] =element
+          index += 1
+
     def find_pairs(self, data_set, path  = "", pairs = {}):
     	if isinstance(data_set, dict):
     		for key in data_set.keys():
@@ -40,7 +72,7 @@ class SubdocHelper():
       pairs = {}
       operation_definition = []
       operation_index = 1
-      self.find_pairs(data_set,"", pairs)
+      self.find_pairs_data_type(data_set,"", pairs = pairs, data_type = mutation_operation_type)
       for i in range(10000):
         if len(pairs.keys()) == 0:
           return operation_definition
@@ -92,7 +124,7 @@ class SubdocHelper():
       operation_index = 0
       while True:
         pairs = {}
-        self.find_pairs(data_set,"", pairs)
+        self.find_pairs_data_type(data_set,"", pairs = pairs, data_type = mutation_operation_type)
         if len(pairs) == 0:
           return operation_definition
         key = random.choice(pairs.keys())
