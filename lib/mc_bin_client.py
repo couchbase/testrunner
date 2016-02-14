@@ -712,92 +712,68 @@ class MemcachedClient(object):
         """Set the config within the memcached server."""
         return self._doCmd(memcacheConstants.CMD_SET_CLUSTER_CONFIG, blob_conf, '')
 
-    def sd_function(*args, **kwargs):
-        def true_decorator(f):
-            @wraps(f)
-            def wrapped(*args, **kwargs):
-                try:
-                    r = f(*args, **kwargs)
-                except Exception, ex:
-                    raise
-                return r
-            return wrapped
-        return true_decorator
+    def sd_function(fn):
+        def new_func(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except Exception, ex:
+                raise
+        return new_func
 
-
+    @sd_function
     def get_sd(self, key, path, cas=0, vbucket= -1):
-        try:
-            self._set_vbucket(key, vbucket)
-            return self._doSdCmd(memcacheConstants.CMD_SUBDOC_GET, key, path, cas=cas)
-        except Exception,ex:
-            raise
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_GET, key, path, cas=cas)
 
+    @sd_function
     def exists_sd(self, key, path, opaque=0, cas=0, vbucket= -1):
-        try:
-            self._set_vbucket(key, vbucket)
-            return self._doSdCmd(memcacheConstants.CMD_SUBDOC_EXISTS, key, path, opaque=opaque, cas=cas)
-        except Exception, ex:
-            raise
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_EXISTS, key, path, opaque=opaque, cas=cas)
 
+    @sd_function
     def dict_add_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
-        try:
-            self._set_vbucket(key, vbucket)
-            return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DICT_ADD, key, path, value, expiry, opaque, cas, create)
-        except Exception, ex:
-            raise
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DICT_ADD, key, path, value, expiry, opaque, cas, create)
 
+    @sd_function
     def dict_upsert_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
-        try:
-            self._set_vbucket(key, vbucket)
-            return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DICT_UPSERT, key, path, value, expiry, opaque, cas, create)
-        except Exception, ex:
-            raise
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DICT_UPSERT, key, path, value, expiry, opaque, cas, create)
 
+    @sd_function
     def delete_sd(self, key, path, opaque=0, cas=0, vbucket= -1):
-        try:
-            self._set_vbucket(key, vbucket)
-            return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DELETE, key, path, opaque=opaque, cas=cas)
-        except Exception, ex:
-            raise
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_DELETE, key, path, opaque=opaque, cas=cas)
 
+    @sd_function
     def replace_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
-        try:
-            self._set_vbucket(key, vbucket)
-            return self._doSdCmd(memcacheConstants.CMD_SUBDOC_REPLACE, key, path, value, expiry, opaque, cas, create)
-        except Exception, ex:
-            raise
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_REPLACE, key, path, value, expiry, opaque, cas, create)
 
+    @sd_function
     def array_push_last_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
-        try:
-            self._set_vbucket(key, vbucket)
-            return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_LAST, key, path, value, expiry, opaque, cas, create)
-        except Exception, ex:
-            raise
-    def array_push_first_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
-        try:
-            self._set_vbucket(key, vbucket)
-            return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_FIRST, key, path, value, expiry, opaque, cas, create)
-        except Exception, ex:
-            raise
-    def array_add_unique_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
-        try:
-            self._set_vbucket(key, vbucket)
-            return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_ADD_UNIQUE, key, path, value, expiry, opaque, cas, create)
-        except Exception, ex:
-            raise
-    def array_add_insert_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
-        try:
-            self._set_vbucket(key, vbucket)
-            return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_INSERT, key, path, value, expiry, opaque, cas, create)
-        except Exception, ex:
-            raise
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_LAST, key, path, value, expiry, opaque, cas, create)
 
+    @sd_function
+    def array_push_first_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_PUSH_FIRST, key, path, value, expiry, opaque, cas, create)
+
+    @sd_function
+    def array_add_unique_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_ADD_UNIQUE, key, path, value, expiry, opaque, cas, create)
+
+    @sd_function
+    def array_add_insert_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_ARRAY_INSERT, key, path, value, expiry, opaque, cas, create)
+
+    @sd_function
     def counter_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
-        try:
-            self._set_vbucket(key, vbucket)
-            return self._doSdCmd(memcacheConstants.CMD_SUBDOC_COUNTER, key, path, value, expiry, opaque, cas, create)
-        except Exception, ex:
-            raise
+        self._set_vbucket(key, vbucket)
+        return self._doSdCmd(memcacheConstants.CMD_SUBDOC_COUNTER, key, path, value, expiry, opaque, cas, create)
 
 
     '''
@@ -805,10 +781,11 @@ class MemcachedClient(object):
     cmdDict["add_unique"] = {"create_parents" : False, "path": array, "value": 0}
     res  = mc.multi_mutation_sd(key, cmdDict)
     '''
+    @sd_function
     def multi_mutation_sd(self, key, cmdDict, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
         self._set_vbucket(key, vbucket)
         return self._doMultiSdCmd(memcacheConstants.CMD_SUBDOC_MULTI_MUTATION, key, cmdDict, opaque)
-
+    @sd_function
     def multi_lookup_sd(self, key, path, expiry=0, opaque=0, cas=0, create=False, vbucket= -1):
         self._set_vbucket(key, vbucket)
         return self._doSdCmd(memcacheConstants.CMD_SUBDOC_MULTI_LOOKUP, key, path, expiry, opaque, cas, create)
