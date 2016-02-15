@@ -180,7 +180,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         for i in range(1, self.backupset.number_of_backups + 1):
             self.backupset.start = start
             self.backupset.end = end
-            self._backup_restore_with_ops(backup=False)
+            self._backup_restore_with_ops(backup=False, compare_function=">=")
             if self.backupset.number_of_backups == 1:
                 continue
             while "{0}/{1}".format(start, end) in restored:
@@ -318,8 +318,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
         backup_count = 0
         for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z", line):
-                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z", line).group()
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line):
+                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line).group()
                 if backup_name in self.backups:
                     backup_count += 1
                     self.log.info("{0} matched in list command output".format(backup_name))
@@ -469,7 +469,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         elif action == 'restore':
             expected_results = {
                 "real_userid:source": "memcached",
-                "real_userid:user": "unknown",
+                "real_userid:user": "default",
                 "name": "authentication succeeded",
                 "id": AUDITRESTOREID,
                 "description": "Authentication to the cluster succeeded",
@@ -648,7 +648,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             "Expected error message not thrown by Backup 180 seconds after erlang crash")
             self.log.info("Expected error message thrown by Backup 180 seconds after erlang crash")
         except Exception as ex:
-            self.log.info(str(ex))
+            self.fail(str(ex))
         finally:
             conn.start_couchbase()
             self.sleep(30)
@@ -679,7 +679,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             "Expected error message not thrown by Backup 180 seconds after couchbase-server stop")
             self.log.info("Expected error message thrown by Backup 180 seconds after couchbase-server stop")
         except Exception as ex:
-            self.log.info(str(ex))
+            self.fail(str(ex))
         finally:
             conn.start_couchbase()
             self.sleep(30)
@@ -710,7 +710,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             "Expected error message not thrown by Backup 180 seconds after memcached crash")
             self.log.info("Expected error message thrown by Backup 180 seconds after memcached crash")
         except Exception as ex:
-            self.log.info(str(ex))
+            self.fail(str(ex))
         finally:
             conn.unpause_memcached()
             self.sleep(30)
@@ -828,7 +828,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             "Expected error message not thrown by Restore 180 seconds after erlang crash")
             self.log.info("Expected error message thrown by Restore 180 seconds after erlang crash")
         except Exception as ex:
-            self.log.info(str(ex))
+            self.fail(str(ex))
         finally:
             conn.start_couchbase()
             self.sleep(30)
@@ -862,7 +862,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             "Expected error message not thrown by Restore 180 seconds after couchbase-server stop")
             self.log.info("Expected error message thrown by Restore 180 seconds after couchbase-server stop")
         except Exception as ex:
-            self.log.info(str(ex))
+            self.fail(str(ex))
         finally:
             conn.start_couchbase()
             self.sleep(30)
@@ -896,7 +896,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             "Expected error message not thrown by Restore 180 seconds after memcached crash")
             self.log.info("Expected error message thrown by Restore 180 seconds after memcached crash")
         except Exception as ex:
-            self.log.info(str(ex))
+            self.fail(str(ex))
         finally:
             conn.unpause_memcached()
             self.sleep(30)
@@ -918,8 +918,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
         backup_count = 0
         for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line):
-                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line).group()
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line):
+                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line).group()
                 if backup_name in self.backups:
                     backup_count += 1
                     self.log.info("{0} matched in list command output".format(backup_name))
@@ -935,8 +935,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
         backup_count = 0
         for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line):
-                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line).group()
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line):
+                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line).group()
                 if backup_name in self.backups:
                     backup_count += 1
                     self.log.info("{0} matched in list command output".format(backup_name))
@@ -1024,8 +1024,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if not status:
             self.fail(message)
         for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line):
-                old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line).group()
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line):
+                old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line).group()
                 self.log.info("Backup name before purge: " + old_backup_name)
         conn.start_couchbase()
         self.sleep(30)
@@ -1036,8 +1036,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if not status:
             self.fail(message)
         for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line):
-                new_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line).group()
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line):
+                new_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line).group()
                 self.log.info("Backup name after purge: " + new_backup_name)
         self.assertNotEqual(old_backup_name, new_backup_name,
                             "Old backup name and new backup name are same when purge is used")
@@ -1072,8 +1072,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if not status:
             self.fail(message)
         for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line):
-                old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line).group()
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line):
+                old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line).group()
                 self.log.info("Backup name before resume: " + old_backup_name)
         conn.start_couchbase()
         self.sleep(30)
@@ -1084,8 +1084,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if not status:
             self.fail(message)
         for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line):
-                new_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{9}Z", line).group()
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line):
+                new_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line).group()
                 self.log.info("Backup name after resume: " + new_backup_name)
         self.assertEqual(old_backup_name, new_backup_name,
                          "Old backup name and new backup name are not same when resume is used")
@@ -1388,7 +1388,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/backup {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("no such host" in output[-1], "Expected error message not thrown")
+        self.assertTrue("Error: Host specified with no scheme requires a port" in output[0],
+                        "Expected error message not thrown")
         cmd = cmd_to_test + " --dir {0} --name {1} --host http://{2}:{3} --username abc \
                               --password {4}".format(self.backupset.directory,
                                                      self.backupset.name,
@@ -1873,8 +1874,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.fail(message)
             backup_count = 0
             for line in output:
-                if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z", line):
-                    backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z", line).group()
+                if re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line):
+                    backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+", line).group()
                     if backup_name in self.backups:
                         backup_count += 1
                         self.log.info("{0} matched in list command output".format(backup_name))
