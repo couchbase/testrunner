@@ -6,7 +6,8 @@ import commands
 import json
 from couchbase.bucket import Bucket
 from threading import Thread, Event
-
+from remote.remote_util import RemoteMachineShellConnection
+from security.auditmain import audit
 
 class x509tests(BaseTestCase):
 
@@ -14,7 +15,9 @@ class x509tests(BaseTestCase):
         super(x509tests, self).setUp()
         self._reset_original()
         SSLtype = self.input.param("SSLtype","go")
-        x509main(self.master)._generate_cert(self.servers,type=SSLtype)
+        encryption_type = self.input.param('encryption_type',"")
+        key_length=self.input.param("key_length",1024)
+        x509main(self.master)._generate_cert(self.servers,type=SSLtype,encryption=encryption_type,key_length=key_length)
         self.ip_address = self.getLocalIPAddress()
         enable_audit=self.input.param('audit',None)
         if enable_audit:
@@ -122,9 +125,7 @@ class x509tests(BaseTestCase):
         content = json.loads(content)
         self.assertEqual(content['cert']['type'],"uploaded","Type of certificate is mismatch")
         #self.assertEqual(content['cert']['pem'],"uploaded","Type of certificate is mismatch")
-        print content['cert']['expires']
         self.assertEqual(content['cert']['subject'],"CN=Root Authority","Common Name is incorrect")
-        self.assertEqual(content['cert']['expires'],"2049-12-31T23:59:59.000Z","Common Name is incorrect")
 
     def test_get_cluster_ca_cluster(self):
         servs_inout = self.servers[1]
@@ -138,9 +139,7 @@ class x509tests(BaseTestCase):
             content = json.loads(content)
             self.assertTrue(status,"Issue while Cluster CA Cert")
             self.assertEqual(content['cert']['type'],"uploaded","Type of certificate is mismatch")
-            #self.assertEqual(content['cert']['pem'],"uploaded","Type of certificate is mismatch")
             self.assertEqual(content['cert']['subject'],"CN=Root Authority","Common Name is incorrect")
-            self.assertEqual(content['cert']['expires'],"2049-12-31T23:59:59.000Z","Common Name is incorrect")
 
     def test_get_cluster_ca_self_signed(self):
         rest = RestConnection(self.master)
