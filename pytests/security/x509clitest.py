@@ -49,9 +49,8 @@ class X509clitest(x509tests):
         x509main(self.master)._copy_node_key_chain_cert(self.master, src_chain_file, dest_chain_file)
 
     def setup_master(self):
-        dest_chain_file = self.install_path + x509main.CHAINFILEPATH + "/root.crt"
         self._copy_root_crt()
-        output, error = self._upload_cert_cli(dest_chain_file)
+        output, error = self._upload_cert_cli()
 
     def _upload_cert_cli(self):
         path_to_root_cert = self.install_path + x509main.CHAINFILEPATH + "/root.crt"

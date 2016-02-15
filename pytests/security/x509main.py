@@ -62,7 +62,7 @@ class x509main:
         for server in servers:
             x509main(server)._setup_node_certificates(reload_cert=reload_cert)
 
-    def _generate_cert(self,servers,root_cn='Root\ Authority',type='go'):
+    def _generate_cert(self,servers,root_cn='Root\ Authority',type='go',encryption="",key_length=1024):
         if type == 'go':
             files = []
             cert_file = "./pytests/security/" + x509main.GOCERTGENFILE
@@ -85,12 +85,12 @@ class x509main:
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
             shell.execute_command("mkdir /tmp/newcerts")
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
-            shell.execute_command("openssl genrsa -out /tmp/newcerts/ca.key 2048")
+            shell.execute_command("openssl genrsa " + encryption + " -out /tmp/newcerts/ca.key " + str(key_length))
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
             output,error = shell.execute_command("openssl req -new -x509  -days 3650 -sha256 -key /tmp/newcerts/ca.key -out /tmp/newcerts/ca.pem -subj '/C=UA/O=My Company/CN=My Company Root CA'")
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
 
-            output, error = shell.execute_command("openssl genrsa -out /tmp/newcerts/int.key 2048")
+            output, error = shell.execute_command("openssl genrsa " + encryption + " -out /tmp/newcerts/int.key " + str(key_length))
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
             output, error = shell.execute_command("openssl req -new -key /tmp/newcerts/int.key -out /tmp/newcerts/int.csr -subj '/C=UA/O=My Company/CN=My Company Intermediate CA'")
             log.info ('Output message is {0} and error message is {1}'.format(output,error))
@@ -99,7 +99,7 @@ class x509main:
 
 
             for server in servers:
-                output, error = shell.execute_command("openssl genrsa -out /tmp/newcerts/"+server.ip + ".key 2048")
+                output, error = shell.execute_command("openssl genrsa " + encryption + " -out /tmp/newcerts/"+server.ip + ".key " + str(key_length))
                 log.info ('Output message is {0} and error message is {1}'.format(output,error))
                 output, error= shell.execute_command("openssl req -new -key /tmp/newcerts/" + server.ip + ".key -out /tmp/newcerts/" + server.ip + ".csr -subj '/C=UA/O=My Company/CN=" + server.ip + "'")
                 log.info ('Output message is {0} and error message is {1}'.format(output,error))
