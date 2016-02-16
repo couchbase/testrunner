@@ -118,7 +118,7 @@ class CommunityTests(CommunityBaseTest):
             else:
                 self.log.info("services enforced in CE")
         elif self.services == "index,kv,n1ql":
-            if self.version in SHERLOCK_VERSION:
+            if self.version not in WATSON_VERSION:
                 if status:
                     self.log.info("CE could set all services {0} on same nodes."
                                                            .format(self.services))
