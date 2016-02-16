@@ -15,6 +15,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from scripts.install import InstallerJob
 from testconstants import SHERLOCK_VERSION
+from testconstants import WATSON_VERSION
 
 
 
@@ -117,13 +118,43 @@ class CommunityTests(CommunityBaseTest):
             else:
                 self.log.info("services enforced in CE")
         elif self.services == "index,kv,n1ql":
-            if status:
-                self.log.info("CE could set all services on same nodes."
-                                  .format(self.services))
-            else:
-                self.fail("Failed to set kv, index and query services on CE")
+            if self.version in SHERLOCK_VERSION:
+                if status:
+                    self.log.info("CE could set all services {0} on same nodes."
+                                                           .format(self.services))
+                else:
+                    self.fail("Failed to set kv, index and query services on CE")
+            elif self.version in WATSON_VERSION:
+                if status:
+                    self.fail("CE does not support only"
+                              " kv, index and n1ql on same node")
+                else:
+                    self.log.info("services enforced in CE")
+        elif self.version in WATSON_VERSION:
+            if self.services == "index,kv,fts":
+                if status:
+                    self.fail("CE does not support kv, index and fts on same node")
+                else:
+                    self.log.info("services enforced in CE")
+            elif self.services == "index,n1ql,fts":
+                if status:
+                    self.fail("CE does not support index, n1ql and fts on same node")
+                else:
+                    self.log.info("services enforced in CE")
+            elif self.services == "kv,n1ql,fts":
+                if status:
+                    self.fail("CE does not support kv, n1ql and fts on same node")
+                else:
+                    self.log.info("services enforced in CE")
+            elif self.services == "kv,index,n1ql,fts":
+                if status:
+                    self.log.info("CE could set all services {0} on same nodes."
+                                                           .format(self.services))
+                else:
+                    self.fail("Failed to set "
+                              "kv, index, query and fts services on CE")
         else:
-            self.fail("services don't support")
+            self.fail("some services don't support")
 
     def check_set_services_when_add_node(self):
         self.rest = RestConnection(self.master)
