@@ -125,9 +125,9 @@ class JoinTests(QueryTests):
                          "ON KEYS employee.tasks_ids WHERE employee.name == 'employee-9'"
             if self.covering_index:
                 self.test_explain_covering_index(index_name[0])
-            self.query = "SELECT employee.name, employee.tasks_ids " +\
+            self.query = "SELECT employee.name , employee.tasks_ids " +\
                          "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
-                         "ON KEYS employee.tasks_ids WHERE employee.name == 'employee-9'"
+                         "ON KEYS employee.tasks_ids WHERE employee.name == 'employee-9' limit 10"
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'])
             expected_result = self._generate_full_joined_docs_list(join_type=self.type_join)
@@ -135,8 +135,8 @@ class JoinTests(QueryTests):
                                 }
             for doc in expected_result if doc and 'name' in doc and\
                                           doc['name'] == 'employee-9']
-            expected_result = sorted(expected_result)
-            self._verify_results(actual_result, expected_result)
+            expected_result = sorted(expected_result)[0:10]
+            self.assertTrue(expected_result == actual_result)
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
@@ -214,6 +214,7 @@ class JoinTests(QueryTests):
                                for doc in expected_result if doc and 'join_day' in doc and\
                                doc['join_day'] <= 2]
             expected_result = sorted(expected_result)
+            self.assertTrue(actual_result,expected_result)
             #self._verify_results(actual_result, expected_result)
 
     def test_where_join_keys_equal_more_covering(self):
@@ -247,7 +248,7 @@ class JoinTests(QueryTests):
             for doc in expected_result if doc and 'join_day' in doc and\
                                           doc['join_day'] <= 2]
             expected_result = sorted(expected_result, key=lambda doc: (doc['join_day']))[0:10]
-            self._verify_results(actual_result['results'], expected_result)
+            self.assertTrue(actual_result, expected_result)
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
