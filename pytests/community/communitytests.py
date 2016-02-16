@@ -159,7 +159,8 @@ class CommunityTests(CommunityBaseTest):
     def check_set_services_when_add_node(self):
         self.rest = RestConnection(self.master)
         self.rest.force_eject_node()
-        services_in_ce = ["kv", "index,kv,n1ql"]
+        sherlock_services_in_ce = ["kv", "index,kv,n1ql"]
+        watson_services_in_ce = ["kv", "index,kv,n1ql,fts"]
         self.sleep(5, "wait for node reset done")
         try:
             self.log.info("Initialize node with services {0}"
@@ -171,8 +172,13 @@ class CommunityTests(CommunityBaseTest):
         except Exception, e:
             if e:
                 print e
-        if not status and self.start_node_services not in services_in_ce:
-             self.log.info("services setting enforced in CE")
+        if not status:
+            if self.version in SHERLOCK_VERSION and \
+                         self.start_node_services not in sherlock_services_in_ce:
+                self.log.info("services setting enforced in Sherlock CE")
+            elif self.version in WATSON_VERSION and \
+                         self.start_node_services not in watson_services_in_ce:
+                self.log.info("services setting enforced in Watson CE")
 
         if status and init_node.result() != 0:
             add_node = False
@@ -193,13 +199,23 @@ class CommunityTests(CommunityBaseTest):
                     self.log.info("services set correctly when node added & rebalance")
                 else:
                     self.fail("services set incorrectly when node added & rebalance")
-            elif self.start_node_services in ["kv", "index,kv,n1ql"] and \
-                 self.add_node_services not in ["kv", "index,kv,n1ql"]:
-                self.log.info("services are enforced in CE")
             else:
-                self.fail("maybe bug in add node")
-        elif self.start_node_services not in ["kv", "index,kv,n1ql"]:
-            self.log.info("services are enforced in CE")
+                if self.verison in SHERLOCK_VERWION:
+                    if self.start_node_services in ["kv", "index,kv,n1ql"] and \
+                          self.add_node_services not in ["kv", "index,kv,n1ql"]:
+                        self.log.info("services are enforced in CE")
+                    elif self.start_node_services not in ["kv", "index,kv,n1ql"]:
+                        self.log.info("services are enforced in CE")
+                    else:
+                        self.fail("maybe bug in add node")
+                elif self.version in WATSON_VERSION:
+                    if self.start_node_services in ["kv", "index,kv,n1ql,fts"] and \
+                          self.add_node_services not in ["kv", "index,kv,n1ql,fts"]:
+                        self.log.info("services are enforced in CE")
+                    elif self.start_node_services not in ["kv", "index,kv,n1ql,fts"]:
+                        self.log.info("services are enforced in CE")
+                    else:
+                        self.fail("maybe bug in add node")
         else:
             self.fail("maybe bug in node initialization")
 
