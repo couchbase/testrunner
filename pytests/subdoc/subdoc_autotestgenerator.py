@@ -1,5 +1,6 @@
 from lib.mc_bin_client import MemcachedClient, MemcachedError
 from lib.memcacheConstants import *
+from couchbase_helper.documentgenerator import BlobGenerator
 from lib.couchbase_helper.subdoc_helper import SubdocHelper
 from lib.couchbase_helper.random_gen import RandomDataGenerator
 from subdoc_base import SubdocBaseTest
@@ -11,6 +12,7 @@ import random
 class SubdocAutoTestGenerator(SubdocBaseTest):
     def setUp(self):
         super(SubdocAutoTestGenerator, self).setUp()
+        self.prepopulate_data =  self.input.param("prepopulate_data",False)
         self.verify_data_without_paths =  self.input.param("verify_data_without_paths",True)
         self.number_of_arrays =  self.input.param("number_of_arrays",1)
         self.verbose_func_usage =  self.input.param("verbose_func_usage",False)
@@ -25,6 +27,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.randomDataGenerator = RandomDataGenerator()
         self.subdoc_gen_helper = SubdocHelper()
         self.kv_store = {}
+        if self.prepopulate_data:
+            self.run_prepopulate_data()
 
     def tearDown(self):
         super(SubdocAutoTestGenerator, self).tearDown()
@@ -251,6 +255,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         number_of_operations = 10,
         mutation_operation_type = "any",
         force_operation_type = None):
+        tasks = self.run_update_data_tasks()
         original_json_copy = copy.deepcopy(json_document)
         self.set(client, document_key, json_document)
         self.log.info(" Test ON KEY :: {0}".format(document_key))
@@ -314,6 +319,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                         error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
                 if len(error_result) != 0:
                     return False, error_result
+        for task in tasks:
+            task.result()
         return True, error_result
 
     def print_operations(self, operations):
@@ -346,8 +353,23 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             return True, None
         return False, result_queue
 
+    def run_prepopulate_data(self):
+        if self.prepopulate_data:
+            self.prepopulate_item_count =  self.input.param("prepopulate_item_count",10000)
+            self.data_size =  self.input.param("data_size",100)
+            # gen_load data is used for upload before each test(1000 items by default)
+            self.gen_load = BlobGenerator('subdoc_prepop', 'subdoc_prepop-', self.data_size, end=self.prepopulate_item_count)
+            # upload data before each test
+            self._load_all_buckets(self.servers[0], self.gen_load, "create", 0, flag=2, batch_size=10000)
 
-
+    def run_update_data_tasks(self):
+        self.update_data =  self.input.param("update_data",True)
+        if self.prepopulate_data and self.update_data:
+             # gen_load data is used for upload before each test(1000 items by default)
+            self.gen_load = BlobGenerator('subdoc_prepop', 'subdoc_prepop-', self.data_size, end=self.prepopulate_item_count)
+            # upload data before each test
+            return self._async_load_all_buckets(self.servers[0], self.gen_load, "update", 0, flag=2, batch_size=10000)
+        return []
 
     ''' Method to verify kv store data set '''
     def run_verification(self, bucket, kv_store = {}):
