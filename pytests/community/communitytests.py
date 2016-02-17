@@ -200,7 +200,7 @@ class CommunityTests(CommunityBaseTest):
                 else:
                     self.fail("services set incorrectly when node added & rebalance")
             else:
-                if self.verison not in WATSON_VERSION:
+                if self.version not in WATSON_VERSION:
                     if self.start_node_services in ["kv", "index,kv,n1ql"] and \
                           self.add_node_services not in ["kv", "index,kv,n1ql"]:
                         self.log.info("services are enforced in CE")
