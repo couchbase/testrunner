@@ -28,7 +28,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.subdoc_gen_helper = SubdocHelper()
         self.kv_store = {}
         if self.prepopulate_data:
-            self.run_prepopulate_data()
+            self.run_sync_data()
 
     def tearDown(self):
         super(SubdocAutoTestGenerator, self).tearDown()
@@ -182,6 +182,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         document_push = threading.Thread(target=self.push_document_info, args = (self.number_of_documents, document_info_queue))
         document_push.start()
         document_push.join()
+        self.run_async_data()
         self.sleep(2)
         # RUN WORKER THREADS
         for x in range(self.concurrent_threads):
@@ -255,7 +256,6 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         number_of_operations = 10,
         mutation_operation_type = "any",
         force_operation_type = None):
-        tasks = self.run_update_data_tasks()
         original_json_copy = copy.deepcopy(json_document)
         self.set(client, document_key, json_document)
         self.log.info(" Test ON KEY :: {0}".format(document_key))
@@ -319,8 +319,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                         error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
                 if len(error_result) != 0:
                     return False, error_result
-        for task in tasks:
-            task.result()
+        for t in self.load_thread_list:
+            t.join()
         return True, error_result
 
     def print_operations(self, operations):
@@ -353,23 +353,45 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             return True, None
         return False, result_queue
 
-    def run_prepopulate_data(self):
+    def run_sync_data(self):
+        self.load_thread_list = []
+        randomDataGenerator = RandomDataGenerator()
+        randomDataGenerator.set_seed(self.seed)
+        base_json = randomDataGenerator.random_json(random_array_count = self.number_of_arrays)
+        data_set = randomDataGenerator.random_json(random_array_count = self.number_of_arrays)
+        json_document = self.generate_nested(base_json, data_set, self.nesting_level)
         if self.prepopulate_data:
-            self.prepopulate_item_count =  self.input.param("prepopulate_item_count",10000)
-            self.data_size =  self.input.param("data_size",100)
-            # gen_load data is used for upload before each test(1000 items by default)
-            self.gen_load = BlobGenerator('subdoc_prepop', 'subdoc_prepop-', self.data_size, end=self.prepopulate_item_count)
-            # upload data before each test
-            self._load_all_buckets(self.servers[0], self.gen_load, "create", 0, flag=2, batch_size=10000)
+            self.load_thread_list = []
+            for bucket in self.buckets:
+                client = self.direct_client(self.master, bucket)
+                t = threading.Thread(target=self.run_populate_data_per_bucket, args = (client, bucket, json_document))
+                t.daemon = True
+            t.start()
+            self.load_thread_list.append(t)
+            for t in self.load_thread_list:
+                t.join()
 
-    def run_update_data_tasks(self):
-        self.update_data =  self.input.param("update_data",True)
-        if self.prepopulate_data and self.update_data:
-             # gen_load data is used for upload before each test(1000 items by default)
-            self.gen_load = BlobGenerator('subdoc_prepop', 'subdoc_prepop-', self.data_size, end=self.prepopulate_item_count)
-            # upload data before each test
-            return self._async_load_all_buckets(self.servers[0], self.gen_load, "update", 0, flag=2, batch_size=10000)
-        return []
+    def run_async_data(self):
+        self.load_thread_list = []
+        randomDataGenerator = RandomDataGenerator()
+        randomDataGenerator.set_seed(self.seed)
+        base_json = randomDataGenerator.random_json(random_array_count = self.number_of_arrays)
+        data_set = randomDataGenerator.random_json(random_array_count = self.number_of_arrays)
+        json_document = self.generate_nested(base_json, data_set, self.nesting_level)
+        if self.prepopulate_data:
+            self.load_thread_list = []
+            for bucket in self.buckets:
+                client = self.direct_client(self.master, bucket)
+                t = threading.Thread(target=self.run_populate_data_per_bucket, args = (client, bucket, json_document))
+                t.daemon = True
+            t.start()
+            self.load_thread_list.append(t)
+
+    def run_populate_data_per_bucket(self, client, bucket, json_document):
+        self.prepopulate_item_count =  self.input.param("prepopulate_item_count",10000)
+        for x in range(self.prepopulate_item_count):
+            key="subdoc_"+str(x)
+            self.set(client, key, json.dumps(json_document))
 
     ''' Method to verify kv store data set '''
     def run_verification(self, bucket, kv_store = {}):
