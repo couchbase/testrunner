@@ -30,8 +30,9 @@ class x509tests(BaseTestCase):
                 self.sleep(30)
 
     def tearDown(self):
+        self._reset_original()
         super(x509tests, self).tearDown()
-        #self._reset_original()
+
 
     def _reset_original(self):
         self.log.info ("Reverting to original state - regenerating certificate and removing inbox folder")
