@@ -391,7 +391,11 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.prepopulate_item_count =  self.input.param("prepopulate_item_count",10000)
         for x in range(self.prepopulate_item_count):
             key="subdoc_"+str(x)
-            self.set(client, key, json.dumps(json_document))
+            try:
+                self.set(client, key, json.dumps(json_document))
+            except Exception, ex:
+                self.log.info(ex)
+                client = self.direct_client(self.master, bucket)
 
     ''' Method to verify kv store data set '''
     def run_verification(self, bucket, kv_store = {}):
