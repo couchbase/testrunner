@@ -3,6 +3,8 @@ from lib.memcacheConstants import *
 from couchbase_helper.documentgenerator import BlobGenerator
 from lib.couchbase_helper.subdoc_helper import SubdocHelper
 from lib.couchbase_helper.random_gen import RandomDataGenerator
+from membase.api.rest_client import RestConnection
+from memcached.helper.data_helper import VBucketAwareMemcached
 from subdoc_base import SubdocBaseTest
 import Queue
 import copy, json
@@ -381,7 +383,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         if self.prepopulate_data:
             self.load_thread_list = []
             for bucket in self.buckets:
-                client = self.direct_client(self.master, bucket)
+                client = VBucketAwareMemcached( RestConnection(self.master), bucket)
                 t = threading.Thread(target=self.run_populate_data_per_bucket, args = (client, bucket, json_document))
                 t.daemon = True
             t.start()
@@ -392,10 +394,10 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         for x in range(self.prepopulate_item_count):
             key="subdoc_"+str(x)
             try:
-                self.set(client, key, json.dumps(json_document))
+                client.set(key, 0,0,json.dumps(json_document))
             except Exception, ex:
                 self.log.info(ex)
-                client = self.direct_client(self.master, bucket)
+                client = VBucketAwareMemcached( RestConnection(self.master), bucket)
 
     ''' Method to verify kv store data set '''
     def run_verification(self, bucket, kv_store = {}):
