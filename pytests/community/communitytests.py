@@ -131,28 +131,28 @@ class CommunityTests(CommunityBaseTest):
                 else:
                     self.log.info("services enforced in CE")
         elif self.version in WATSON_VERSION:
-            if self.services == "index,kv,fts":
+            if self.services == "fts,index,kv":
                 if status:
-                    self.fail("CE does not support kv, index and fts on same node")
+                    self.fail("CE does not support fts, index and kv on same node")
                 else:
                     self.log.info("services enforced in CE")
-            elif self.services == "index,n1ql,fts":
+            elif self.services == "fts,index,n1ql":
                 if status:
-                    self.fail("CE does not support index, n1ql and fts on same node")
+                    self.fail("CE does not support fts, index and n1ql on same node")
                 else:
                     self.log.info("services enforced in CE")
-            elif self.services == "kv,n1ql,fts":
+            elif self.services == "fts,kv,n1ql":
                 if status:
-                    self.fail("CE does not support kv, n1ql and fts on same node")
+                    self.fail("CE does not support fts, kv and n1ql on same node")
                 else:
                     self.log.info("services enforced in CE")
-            elif self.services == "kv,index,n1ql,fts":
+            elif self.services == "fts,index,kv,n1ql":
                 if status:
                     self.log.info("CE could set all services {0} on same nodes."
                                                            .format(self.services))
                 else:
                     self.fail("Failed to set "
-                              "kv, index, query and fts services on CE")
+                              "fts, index, kv, and query services on CE")
         else:
             self.fail("some services don't support")
 
@@ -160,7 +160,7 @@ class CommunityTests(CommunityBaseTest):
         self.rest = RestConnection(self.master)
         self.rest.force_eject_node()
         sherlock_services_in_ce = ["kv", "index,kv,n1ql"]
-        watson_services_in_ce = ["kv", "index,kv,n1ql,fts"]
+        watson_services_in_ce = ["kv", "fts,index,kv,n1ql"]
         self.sleep(5, "wait for node reset done")
         try:
             self.log.info("Initialize node with services {0}"
@@ -198,7 +198,11 @@ class CommunityTests(CommunityBaseTest):
                     map[self.servers[1].ip] == self.add_node_services:
                     self.log.info("services set correctly when node added & rebalance")
                 else:
-                    self.fail("services set incorrectly when node added & rebalance")
+                    self.fail("services set incorrectly when node added & rebalance. "
+                        "cluster expected services: {0}; set cluster services {1} ."
+                        "add node expected srv: {2}; set add node srv {3}"\
+                        .format(map[self.master.ip], self.start_node_services, \
+                         map[self.servers[1].ip], self.add_node_services))
             else:
                 if self.version not in WATSON_VERSION:
                     if self.start_node_services in ["kv", "index,kv,n1ql"] and \
@@ -210,9 +214,9 @@ class CommunityTests(CommunityBaseTest):
                         self.fail("maybe bug in add node")
                 elif self.version in WATSON_VERSION:
                     if self.start_node_services in ["kv", "index,kv,n1ql,fts"] and \
-                          self.add_node_services not in ["kv", "index,kv,n1ql,fts"]:
+                          self.add_node_services not in ["kv", "fts,index,kv,n1ql"]:
                         self.log.info("services are enforced in CE")
-                    elif self.start_node_services not in ["kv", "index,kv,n1ql,fts"]:
+                    elif self.start_node_services not in ["kv", "fts,index,kv,n1ql"]:
                         self.log.info("services are enforced in CE")
                     else:
                         self.fail("maybe bug in add node")
