@@ -22,10 +22,12 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.mutation_operation_type =  self.input.param("mutation_operation_type","any")
         self.force_operation_type =  self.input.param("force_operation_type",None)
         self.run_data_verification =  self.input.param("run_data_verification",True)
+        self.prepopulate_item_count =  self.input.param("prepopulate_item_count",10000)
         self.seed =  self.input.param("seed",0)
         self.run_mutation_mode =  self.input.param("run_mutation_mode","seq")
         self.client = self.direct_client(self.master, self.buckets[0])
         self.build_kv_store = self.input.param("build_kv_store", False)
+        self.total_writer_threads = self.input.param("total_writer_threads", 10)
         self.randomDataGenerator = RandomDataGenerator()
         self.subdoc_gen_helper = SubdocHelper()
         self.kv_store = {}
@@ -355,6 +357,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             return True, None
         return False, result_queue
 
+
     def run_sync_data(self):
         self.load_thread_list = []
         randomDataGenerator = RandomDataGenerator()
@@ -365,12 +368,13 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         if self.prepopulate_data:
             self.load_thread_list = []
             for bucket in self.buckets:
-                client = self.direct_client(self.master, bucket)
-                t = threading.Thread(target=self.run_populate_data_per_bucket, args = (client, bucket, json_document))
-                t.daemon = True
-            t.start()
-            self.load_thread_list.append(t)
-            for t in self.load_thread_list:
+                for x in range(self.total_writer_threads):
+                    client = VBucketAwareMemcached( RestConnection(self.master), bucket)
+                    t = threading.Thread(target=self.run_populate_data_per_bucket, args = (client, bucket, json_document, (self.prepopulate_item_count/self.total_writer_threads), x))
+                    t.daemon = True
+                    t.start()
+                    self.load_thread_list.append(t)
+        for t in self.load_thread_list:
                 t.join()
 
     def run_async_data(self):
@@ -383,21 +387,21 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         if self.prepopulate_data:
             self.load_thread_list = []
             for bucket in self.buckets:
-                client = VBucketAwareMemcached( RestConnection(self.master), bucket)
-                t = threading.Thread(target=self.run_populate_data_per_bucket, args = (client, bucket, json_document))
-                t.daemon = True
-            t.start()
-            self.load_thread_list.append(t)
+                for x in range(self.total_writer_threads):
+                    client = VBucketAwareMemcached( RestConnection(self.master), bucket)
+                    t = threading.Thread(target=self.run_populate_data_per_bucket, args = (client, bucket, json_document, (self.prepopulate_item_count/self.total_writer_threads), x))
+                    t.daemon = True
+                    t.start()
+                    self.load_thread_list.append(t)
 
-    def run_populate_data_per_bucket(self, client, bucket, json_document):
-        self.prepopulate_item_count =  self.input.param("prepopulate_item_count",10000)
-        for x in range(self.prepopulate_item_count):
-            key="subdoc_"+str(x)
+    def run_populate_data_per_bucket(self, client, bucket, json_document, prepopulate_item_count, prefix):
+        for x in range(prepopulate_item_count):
+            key=str(prefix)+"_subdoc_"+str(x)
             try:
                 client.set(key, 0,0,json.dumps(json_document))
             except Exception, ex:
                 self.log.info(ex)
-                client = VBucketAwareMemcached( RestConnection(self.master), bucket)
+
 
     ''' Method to verify kv store data set '''
     def run_verification(self, bucket, kv_store = {}):
