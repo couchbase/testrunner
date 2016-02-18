@@ -42,6 +42,7 @@ class QueryTests(BaseTestCase):
         self.buckets = RestConnection(self.master).get_buckets()
         self.docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
+        self.array_indexing = self.input.param("array_indexing", False)
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.skip_load = self.input.param("skip_load", False)
         self.skip_index = self.input.param("skip_index", False)
@@ -3396,7 +3397,10 @@ class QueryTests(BaseTestCase):
 
     def generate_docs(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_employee( docs_per_day, start)
+        if self.array_indexing:
+            return json_generator.generate_docs_employee_array( docs_per_day, start)
+        else:
+            return json_generator.generate_docs_employee( docs_per_day, start)
 
     def _verify_results(self, actual_result, expected_result):
         if self.max_verify is not None:

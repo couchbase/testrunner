@@ -579,7 +579,8 @@ class JsonGenerator:
                         vms = [{"RAM": month, "os": "ubuntu",
                                 "name": "vm_%s" % month, "memory": month},
                                {"RAM": month, "os": "windows",
-                                "name": "vm_%s"% (month + 1), "memory": month}]
+                                "name": "vm_%s"% (month + 1), "memory": month}
+                             ]
                         generators.append(DocumentGenerator("query-test" + prefix,
                                                template,
                                                name, [year], [month], [day],
@@ -588,6 +589,70 @@ class JsonGenerator:
                                                [["skill%s" % y for y in join_yr]],
                                                [vms],
                                                start=start, end=docs_per_day))
+        return generators
+
+
+    def generate_docs_employee_array(self, docs_per_day = 1, start=0, isShuffle = False):
+        generators = []
+        #simple array
+        department = self._shuffle(['Developer', 'Support','HR','Tester','Manager'],isShuffle)
+        sport = ['Badminton','Cricket','Football','Basketball','American Football','ski']
+        dance = ['classical','bollywood','salsa','hip hop','contemporary','bhangra']
+        join_yr = self._shuffle([2010, 2011,2012,2013,2014,2015,2016],isShuffle)
+        join_mo = self._shuffle(xrange(1, 12 + 1),isShuffle)
+        join_day = self._shuffle(xrange(1, 28 + 1),isShuffle)
+        engineer = ["Query","Search","Indexing","Storage","Android","IOS"]
+        marketing = ["East","West","North","South","International"]
+        cities = ['Mumbai','Delhi','New York','San Francisco']
+        streets = ['21st street','12th street','18th street']
+        countries = ['USA','INDIA','EUROPE']
+        template = '{{ "name":{0}  , "department": "{1}" , "join_yr":{2},'
+        template += ' "email":"{3}", "hobbies": {{ "hobby" : {4} }},'
+        template += ' "tasks":  {5},  '
+        template += '"VMs": {6} , '
+        template += '"address" : {7} }}'
+        count = 1
+
+        for dept in department:
+            for month in join_mo:
+                for day in join_day:
+                    random.seed(count)
+                    count += 1
+                    prefix = "employee" + str(random.random() * 100000)
+                    # array of  single objects
+                    name = [{"FirstName": "employeefirstname-%s" % (str(day))},
+                            {"MiddleName": "employeemiddlename-%s" % (str(day))},
+                            {"LastName": "employeelastname-%s" % (str(day))}]
+
+                    # array inside array inside object
+                    sportValue = random.sample(sport, 3)
+                    danceValue = random.sample(dance, 3)
+                    hobbies = [{"sports": sportValue}, {"dance": danceValue},"art"]
+                    email = ["%s-mail@couchbase.com" % (str(day))]
+                    joining = random.sample(join_yr,3)
+                    # array inside array
+                    enggValue = random.sample(engineer, 2)
+                    marketingValue = [{"region1" :random.choice(marketing),"region2" :random.choice(marketing)},{"region2" :random.choice(marketing)}]
+                    taskValue = [{"Developer": enggValue,"Marketing": marketingValue},"Sales","QA"]
+                    # array of multiple objects
+                    vms = [{"RAM": month, "os": "ubuntu",
+                            "name": "vm_%s" % month, "memory": month},
+                           {"RAM": month, "os": "windows",
+                            "name": "vm_%s" % (month + 1), "memory": month},
+                           {"RAM": month, "os": "centos", "name": "vm_%s" % (month + 2), "memory": month},
+                           {"RAM": month, "os": "macos", "name": "vm_%s" % (month + 3), "memory": month}
+                           ]
+
+                    addressvalue = [[ {"city": random.choice(cities)},{"street":random.choice(streets)}],[{"apartment":123,"country":random.choice(countries)}]]
+
+                    generators.append(DocumentGenerator("query-test" + prefix,
+                                                        template,
+                                                        [name], [dept], [[ y for y in joining]],
+                                                        email, [hobbies],
+                                                        [taskValue],
+                                                        [vms],[addressvalue],
+                                                        start=start, end=docs_per_day))
+
         return generators
 
     def generate_docs_sabre(self, docs_per_day=1, start=0, isShuffle=False, years=2, indexes=[1,4,8]):
