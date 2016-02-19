@@ -861,126 +861,98 @@ class VBucketAwareMemcached(object):
             if server != which_mc:
                 return self.memcacheds[server]
 
+# DECORATOR
+    def aware_call(func):
+      def new_func(self, key, *args, **keyargs):
+        vb_error = 0
+        while True:
+            try:
+                return func(self, key, *args, **keyargs)
+            except MemcachedError as error:
+                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
+                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]),
+                                        forward_map=self._parse_not_my_vbucket_error(error))
+                    vb_error += 1
+                else:
+                    raise error
+            except (EOFError, socket.error), error:
+                if "Got empty data (remote died?)" in error.message or \
+                   "Timeout waiting for socket" in error.message or \
+                   "Broken pipe" in error.message or "Connection reset by peer" in error.message \
+                    and vb_error < 5:
+                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
+                    vb_error += 1
+                else:
+                    raise error
+            except BaseException as error:
+                if vb_error < 5:
+                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
+                    vb_error += 1
+                else:
+                    raise error
+      return new_func
+
+# SUBDOCS
+
+    @aware_call
+    def counter_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._send_op(self.memcached(key).counter_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+
+    @aware_call
+    def array_add_insert_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._send_op(self.memcached(key).array_add_insert_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+
+    @aware_call
+    def array_add_unique_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._send_op(self.memcached(key).array_add_unique_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+
+    @aware_call
+    def array_push_first_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._send_op(self.memcached(key).array_push_first_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+
+    @aware_call
+    def array_push_last_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._send_op(self.memcached(key).array_push_last_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+
+    @aware_call
+    def replace_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._send_op(self.memcached(key).replace_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+
+    @aware_call
+    def delete_sd(self, key, path, opaque=0, cas=0):
+        return self._send_op(self.memcached(key).delete_sd, key, path, opaque=opaque, cas=cas)
+
+    @aware_call
+    def dict_upsert_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._send_op(self.memcached(key).dict_upsert_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+
+    @aware_call
+    def dict_add_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
+        return self._send_op(self.memcached(key).dict_add_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+
+    @aware_call
+    def exists_sd(self, key, path, cas=0):
+        return self._send_op(self.memcached(key).exists_sd, key, path, cas=cas)
+
+    @aware_call
+    def get_sd(self, key, path, cas=0):
+        return self._send_op(self.memcached(key).get_sd, key, path, cas=cas)
+
+    @aware_call
     def set(self, key, exp, flags, value):
-        vb_error = 0
-        while True:
-            try:
-                return self._send_op(self.memcached(key).set, key, exp, flags, value)
-            except MemcachedError as error:
-                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]),
-                                        forward_map=self._parse_not_my_vbucket_error(error))
-                    vb_error += 1
-                else:
-                    raise error
-            except (EOFError, socket.error), error:
-                if "Got empty data (remote died?)" in error.message or \
-                   "Timeout waiting for socket" in error.message or \
-                   "Broken pipe" in error.message or "Connection reset by peer" in error.message \
-                    and vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
-                    vb_error += 1
-                else:
-                    raise error
-            except BaseException as error:
-                if vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
-                    vb_error += 1
-                else:
-                    raise error
+        return self._send_op(self.memcached(key).set, key, exp, flags, value)
 
+    @aware_call
     def append(self, key, value):
-        vb_error = 0
-        while True:
-            try:
-                return self._send_op(self.memcached(key).append, key, value)
-            except MemcachedError as error:
-                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]),
-                                        forward_map=self._parse_not_my_vbucket_error(error))
-                    vb_error += 1
-                else:
-                    raise error
-            except (EOFError, socket.error), error:
-                if "Got empty data (remote died?)" in error.message or \
-                   "Timeout waiting for socket" in error.message or \
-                   "Broken pipe" in error.message or "Connection reset by peer" in error.message \
-                    and vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
-                    vb_error += 1
-                else:
-                    raise error
-            except BaseException as error:
-                if vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
-                    vb_error += 1
-                else:
-                    raise error
+        return self._send_op(self.memcached(key).append, key, value)
 
+    @aware_call
     def observe(self, key):
-        vb_error = 0
-        while True:
-            try:
-                return self._send_op(self.memcached(key).observe, key)
-            except MemcachedError as error:
-                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]),
-                                        forward_map=self._parse_not_my_vbucket_error(error))
-                    vb_error += 1
-                else:
-                    raise error
-            except (EOFError, socket.error), error:
-                if "Got empty data (remote died?)" in error.message or \
-                   "Timeout waiting for socket" in error.message or \
-                   "Broken pipe" in error.message or "Connection reset by peer" in error.message \
-                    and vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
-                    vb_error += 1
-                else:
-                    raise error
-            except BaseException as error:
-                if vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
-                    self.log.info("***************resetting vbucket id***********")
-                    vb_error += 1
-                else:
-                    raise error
+        return self._send_op(self.memcached(key).observe, key)
 
-
-
-
-
+    @aware_call
     def observe_seqno(self, key, vbucket_uuid):
-        vb_error = 0
-        while True:
-            try:
-                return self._send_op(self.memcached(key).observe_seqno, key, vbucket_uuid)
-            except MemcachedError as error:
-                if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]),
-                                        forward_map=self._parse_not_my_vbucket_error(error))
-                    vb_error += 1
-                else:
-                    raise error
-            except (EOFError, socket.error), error:
-                if "Got empty data (remote died?)" in error.message or \
-                   "Timeout waiting for socket" in error.message or \
-                   "Broken pipe" in error.message or "Connection reset by peer" in error.message \
-                    and vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
-                    vb_error += 1
-                    if vb_error >= 5:
-                        raise error
-                else:
-                    raise error
-            except BaseException as error:
-                if vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
-                    self.log.info("***************resetting vbucket id***********")
-                    vb_error += 1
-                else:
-                    raise error
-
+        return self._send_op(self.memcached(key).observe_seqno, key, vbucket_uuid)
 
     # This saves a lot of repeated code - the func is the mc bin client function
 
@@ -1278,11 +1250,11 @@ class VBucketAwareMemcached(object):
                 else:
                     raise error
 
-    def _send_op(self, func, *args):
+    def _send_op(self, func, *args, **kargs):
         backoff = .001
         while True:
             try:
-                return func(*args)
+                return func(*args, **kargs)
             except MemcachedError as error:
                 if error.status == ERR_ETMPFAIL and backoff < .5:
                     time.sleep(backoff)
