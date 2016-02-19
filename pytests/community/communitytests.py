@@ -175,12 +175,12 @@ class CommunityTests(CommunityBaseTest):
         if not status:
             if self.version not in WATSON_VERSION and \
                          self.start_node_services not in sherlock_services_in_ce:
-                self.log.info("services setting enforced in Sherlock CE")
+                self.log.info("initial services setting enforced in Sherlock CE")
             elif self.version in WATSON_VERSION and \
                          self.start_node_services not in watson_services_in_ce:
-                self.log.info("services setting enforced in Watson CE")
+                self.log.info("initial services setting enforced in Watson CE")
 
-        if status and init_node.result() != 0:
+        elif status and init_node.result() != 0:
             add_node = False
             try:
                 self.log.info("node with services {0} try to add"
@@ -216,7 +216,7 @@ class CommunityTests(CommunityBaseTest):
                     if self.start_node_services in ["kv", "index,kv,n1ql,fts"] and \
                           self.add_node_services not in ["kv", "fts,index,kv,n1ql"]:
                         self.log.info("services are enforced in CE")
-                    elif self.start_node_services not in ["kv", "fts,index,kv,n1ql"]:
+                    elif self.start_node_services not in ["kv", "index,kv,n1ql"]:
                         self.log.info("services are enforced in CE")
                     else:
                         self.fail("maybe bug in add node")
