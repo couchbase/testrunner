@@ -176,6 +176,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
 
     ''' Generic Test case for running sequence operations based tests '''
     def test_mutation_operations(self):
+        self.run_load_during_mutations =  self.input.param("run_load_during_mutations",False)
         self.number_of_documents =  self.input.param("number_of_documents",10)
         self.number_of_operations =  self.input.param("number_of_operations",10)
         self.concurrent_threads =  self.input.param("concurrent_threads",10)
@@ -186,7 +187,6 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         document_push = threading.Thread(target=self.push_document_info, args = (self.number_of_documents, document_info_queue))
         document_push.start()
         document_push.join()
-        self.run_async_data()
         self.sleep(2)
         # RUN WORKER THREADS
         for x in range(self.concurrent_threads):
@@ -194,8 +194,14 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             t.daemon = True
             t.start()
             thread_list.append(t)
+        if self.run_load_during_mutations:
+            self.run_async_data()
         for t in thread_list:
             t.join()
+        for t in self.load_thread_list:
+            if t.isAlive():
+                if t != None:
+                    t.signal = False
         # ERROR ANALYSIS
         error_msg =""
         error_count = 0
@@ -323,8 +329,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                         error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
                 if len(error_result) != 0:
                     return False, error_result
-        for t in self.load_thread_list:
-            t.join()
+        
         return True, error_result
 
     def print_operations(self, operations):
