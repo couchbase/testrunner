@@ -1,6 +1,7 @@
 from basetestcase import BaseTestCase
 from lib.mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.rest_client import RestConnection, RestHelper
+from memcached.helper.data_helper import VBucketAwareMemcached
 import copy
 
 class SubdocBaseTest(BaseTestCase):
@@ -143,7 +144,8 @@ class SubdocBaseTest(BaseTestCase):
 
     def direct_mc_bin_client(self, server, bucket, timeout=30):
         # USE MC BIN CLIENT WHEN NOT USING SDK CLIENT
-        rest = RestConnection(server)
+        return VBucketAwareMemcached( RestConnection(server), bucket)
+        '''rest = RestConnection(server)
         node = None
         try:
             node = rest.get_nodes_self()
@@ -171,7 +173,7 @@ class SubdocBaseTest(BaseTestCase):
         else:
             client.vbucket_count = 0
         bucket_info = rest.get_bucket(bucket)
-        return client
+        return client'''
 
     def direct_client(self, server, bucket, timeout=30):
         # CREATE SDK CLIENT
