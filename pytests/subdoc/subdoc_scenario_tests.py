@@ -11,38 +11,47 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
         super(SubducScenarioTests, self).setUp()
         self.find_nodes_in_list()
         self.generate_map_nodes_out_dist()
-
+        self.run_sync_data()
 
     def tearDown(self):
         super(SubducScenarioTests, self).tearDown()
 
     def test_rebalance_in(self):
         try:
+            self.run_async_data()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],self.nodes_in_list, [], services = self.services_in)
-            self.sleep(1)
+            self.run_mutation_operations_for_situational_tests()
+            for t in self.load_thread_list:
+                if t.isAlive():
+                    if t != None:
+                        t.signal = False
             rebalance.result()
-            self.run_verification(self.buckets[0], self.kv_store)
         except Exception, ex:
             raise
 
     def test_rebalance_out(self):
         try:
+            self.run_async_data()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
-            self.sleep(1)
-            self.test_mutation_operations()
-            rebalance.result()
-            rself.run_verification(self.buckets[0], self.kv_store)
+            self.run_mutation_operations_for_situational_tests()
+            for t in self.load_thread_list:
+                if t.isAlive():
+                    if t != None:
+                        t.signal = False
         except Exception, ex:
             raise
 
     def test_rebalance_in_out(self):
         try:
+            self.run_async_data()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                     self.nodes_in_list,
                                    self.nodes_out_list, services = self.services_in)
-            self.sleep(1)
-            rebalance.result()
-            self.run_verification(self.buckets[0], self.kv_store)
+            self.run_mutation_operations_for_situational_tests()
+            for t in self.load_thread_list:
+                if t.isAlive():
+                    if t != None:
+                        t.signal = False
         except Exception, ex:
             raise
 
@@ -59,12 +68,12 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
                                    self.nodes_out_list, services = self.services_in)
             self.test_mutation_operations()
             rebalance.result()
-            self.run_verification(self.buckets[0], self.kv_store)
         except Exception, ex:
             raise
 
     def test_failover(self):
         try:
+            self.run_async_data()
             servr_out = self.nodes_out_list
             failover_task = self.cluster.async_failover([self.master],
                     failover_nodes = servr_out, graceful=self.graceful)
@@ -75,14 +84,17 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
                 self.assertTrue(RestConnection(self.master).monitorRebalance(stop_if_loop=True), msg=msg)
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                    [], servr_out)
-            self.test_mutation_operations()
-            rebalance.result()
-            self.run_verification(self.buckets[0], self.kv_store)
+            self.run_mutation_operations_for_situational_tests()
+            for t in self.load_thread_list:
+                if t.isAlive():
+                    if t != None:
+                        t.signal = False
         except Exception, ex:
             raise
 
     def test_failover_add_back(self):
         try:
+            self.run_async_data()
             rest = RestConnection(self.master)
             recoveryType = self.input.param("recoveryType", "full")
             servr_out = self.nodes_out_list
@@ -104,14 +116,17 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
                 self.log.info(node)
                 rest.add_back_node(node.id)
                 rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
-            self.test_mutation_operations()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
-            rebalance.result()
-            self.run_verification(self.buckets[0], self.kv_store)
+            self.run_mutation_operations_for_situational_tests()
+            for t in self.load_thread_list:
+                if t.isAlive():
+                    if t != None:
+                        t.signal = False
         except Exception, ex:
             raise
 
     def test_autofailover(self):
+        self.run_async_data()
         autofailover_timeout = 30
         status = RestConnection(self.master).update_autofailover_settings(True, autofailover_timeout)
         self.assertTrue(status, 'failed to change autofailover_settings!')
@@ -122,9 +137,11 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
             self.sleep(autofailover_timeout + 10, "Wait for autofailover")
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                    [], [servr_out[0]])
-            self.test_mutation_operations()
-            rebalance.result()
-            self.run_verification(self.buckets[0], self.kv_store)
+            self.run_mutation_operations_for_situational_tests()
+            for t in self.load_thread_list:
+                if t.isAlive():
+                    if t != None:
+                        t.signal = False
         except Exception, ex:
             raise
         finally:
@@ -135,43 +152,57 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
 
     def test_network_partitioning(self):
         try:
+            self.run_async_data()
             for node in self.nodes_out_list:
                 self.start_firewall_on_node(node)
-            self.test_mutation_operations()
+            self.run_mutation_operations_for_situational_tests()
+            for t in self.load_thread_list:
+                if t.isAlive():
+                    if t != None:
+                        t.signal = False
         except Exception, ex:
             raise
         finally:
             for node in self.nodes_out_list:
                 self.stop_firewall_on_node(node)
-            self.run_verification(self.buckets[0], self.kv_store)
-            self.sleep(1)
 
     def test_couchbase_bucket_compaction(self):
         # Run Compaction Here
         # Run auto-compaction to remove the tomb stones
         compact_tasks = []
+        self.run_async_data()
         for bucket in self.buckets:
             compact_tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
-        in_between_index_ops = self._run_in_between_tasks()
-        self.test_mutation_operations()
+        self.run_mutation_operations_for_situational_tests()
         for task in compact_tasks:
             task.result()
-        self.run_verification(self.buckets[0], self.kv_store)
+        for t in self.load_thread_list:
+            if t.isAlive():
+                if t != None:
+                    t.signal = False
 
 
     def test_warmup(self):
+        self.run_async_data()
         for server in self.nodes_out_list:
             remote = RemoteMachineShellConnection(server)
             remote.stop_server()
             remote.start_server()
             remote.disconnect()
-        self.test_mutation_operations()
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
-        self.run_verification(self.buckets[0], self.kv_store)
+        self.run_mutation_operations_for_situational_tests()
+        for t in self.load_thread_list:
+            if t.isAlive():
+                if t != None:
+                    t.signal = False
 
     def test_couchbase_bucket_flush(self):
         #Flush the bucket
+        self.run_async_data()
         for bucket in self.buckets:
             RestConnection(self.master).flush_bucket(bucket.name)
-            self.test_mutation_operations()
-        self.run_verification(self.buckets[0], self.kv_store)
+        self.run_mutation_operations_for_situational_tests()
+        for t in self.load_thread_list:
+            if t.isAlive():
+                if t != None:
+                    t.signal = False
