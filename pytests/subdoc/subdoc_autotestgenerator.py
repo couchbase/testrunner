@@ -175,6 +175,44 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             result_queue.put({"error":str(ex),"operation_type":operation["subdoc_api_function_applied"]})
 
     ''' Generic Test case for running sequence operations based tests '''
+    def run_mutation_operations_for_situational_tests(self):
+        self.run_load_during_mutations =  self.input.param("run_load_during_mutations",False)
+        self.number_of_documents =  self.input.param("number_of_documents",10)
+        self.number_of_operations =  self.input.param("number_of_operations",10)
+        self.concurrent_threads =  self.input.param("concurrent_threads",10)
+        error_queue = Queue.Queue()
+        document_info_queue = Queue.Queue()
+        thread_list = []
+        # RUN INPUT FILE READ THREAD
+        document_push = threading.Thread(target=self.push_document_info, args = (self.number_of_documents, document_info_queue))
+        document_push.start()
+        # RUN WORKER THREADS
+        for x in range(self.concurrent_threads):
+            t = threading.Thread(target=self.worker_operation_run, args = (document_info_queue, error_queue, self.buckets[0], self.mutation_operation_type, self.force_operation_type))
+            t.daemon = True
+            t.start()
+            thread_list.append(t)
+        for t in thread_list:
+            t.join()
+        # ERROR ANALYSIS
+        error_msg =""
+        error_count = 0
+        if not error_queue.empty():
+            # Dump Re-run file
+            dump_file = open('/tmp/dump_failure.txt', 'wb')
+            while not error_queue.empty():
+                error_count+=1
+                error_data = error_queue.get()
+                #self.log.info(error_data)
+                #self.log.info(" document_info {0}".format(error_data["document_info"]))
+                #self.log.info(" error_result {0}".format(error_data["error_result"]))
+                dump_file.write(json.dumps(error_data["error_result"]))
+                #dump_file.write(json.dumps(error_data["document_info"]))
+            dump_file.close()
+            # Fail the test with result count
+            self.assertTrue(not error_queue.empty(), "error count {0}".format(error_count))
+
+    ''' Generic Test case for running sequence operations based tests '''
     def test_mutation_operations(self):
         self.run_load_during_mutations =  self.input.param("run_load_during_mutations",False)
         self.number_of_documents =  self.input.param("number_of_documents",10)
@@ -329,7 +367,6 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                         error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
                 if len(error_result) != 0:
                     return False, error_result
-        
         return True, error_result
 
     def print_operations(self, operations):
