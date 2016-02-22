@@ -1364,6 +1364,20 @@ class RestConnection(object):
             index_map = RestParser().parse_index_stats_response(json_parsed, index_map=index_map)
         return index_map
 
+    def get_indexer_stats(self, timeout=120, index_map=None):
+        api = self.index_baseUrl + 'stats'
+        index_map = {}
+        status, content, header = self._http_request(api, timeout=timeout)
+        if status:
+            json_parsed = json.loads(content)
+            for key in json_parsed.keys():
+                tokens = key.split(":")
+                val = json_parsed[key]
+                if len(tokens) == 1:
+                    field = tokens[0]
+                    index_map[field] = val
+        return index_map
+
     def get_index_status(self, timeout=120, index_map=None):
         api = self.baseUrl + 'indexStatus'
         index_map = {}
@@ -1481,15 +1495,16 @@ class RestConnection(object):
 
     def get_buckets_itemCount(self):
         # get all the buckets
-        map = {}
+        bucket_map = {}
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets?basic_stats=true')
         status, content, header = self._http_request(api)
         json_parsed = json.loads(content)
         if status:
             for item in json_parsed:
                 bucketInfo = RestParser().parse_get_bucket_json(item)
-                map[bucketInfo.name] = bucketInfo.stats.itemCount
-        return map
+                bucket_map[bucketInfo.name] = bucketInfo.stats.itemCount
+        log.info(bucket_map)
+        return bucket_map
 
     def get_bucket_stats_for_node(self, bucket='default', node=None):
         if not node:
@@ -2992,6 +3007,65 @@ class RestConnection(object):
         else:
             return status, json.loads(content)
 
+    def create_index_with_rest(self, create_info):
+        api = self.index_baseUrl + 'api/indexes?create=true'
+        headers = {'Content-type': 'application/json'}
+        params = json.loads("{0}".format(create_info).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                             params=json.dumps(params).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    def build_index_with_rest(self, id):
+        api = self.index_baseUrl + 'api/indexes?build=true'
+        build_info = {'ids': [id]}
+        headers = {'Content-type': 'application/json'}
+        status, content, header = self._http_request(api, 'PUT', headers=headers,
+                                               params=json.dumps(build_info))
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    def drop_index_with_rest(self, id):
+        url = 'api/index/{0}'.format(id)
+        api = self.index_baseUrl + url
+        headers = {'Content-type': 'application/json'}
+        status, content, header = self._http_request(api, 'DELETE', headers=headers)
+        if not status:
+            raise Exception(content)
+
+    def get_all_indexes_with_rest(self):
+        url = 'api/indexes'
+        api = self.index_baseUrl + url
+        headers = {'Content-type': 'application/json'}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    def lookup_gsi_index_with_rest(self, id, body):
+        url = 'api/index/{0}?lookup=true'.format(id)
+        api = self.index_baseUrl + url
+        headers = {"Accept": "application/json"}
+        params = json.loads("{0}".format(body).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
+        status, content, header = self._http_request(api, 'GET', headers=headers,
+                                             params=json.dumps(params).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    def full_table_scan_gsi_index_with_rest(self, id, body):
+        url = 'api/index/{0}?scanall=true'.format(id)
+        api = self.index_baseUrl + url
+        headers = {"Accept": "application/json"}
+        params = json.loads("{0}".format(body).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
+        status, content, header = self._http_request(api, 'GET', headers=headers,
+                                                     params=json.dumps(params).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return json.loads(json.dumps(content))
+
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
@@ -3134,7 +3208,7 @@ class vBucket(object):
 class RestParser(object):
     def parse_index_status_response(self, parsed):
         index_map = {}
-        for map in parsed:
+        for map in parsed["indexes"]:
             bucket_name = map['bucket'].encode('ascii', 'ignore')
             if bucket_name not in index_map.keys():
                 index_map[bucket_name] = {}
@@ -3324,3 +3398,4 @@ class RestParser(object):
                 node.id = nodeDictionary["otpNode"]
             bucket.nodes.append(node)
         return bucket
+
