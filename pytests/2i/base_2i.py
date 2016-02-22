@@ -32,16 +32,18 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.run_query= self.input.param("run_query",True)
         self.graceful = self.input.param("graceful",False)
         self.groups = self.input.param("groups", "all").split(":")
-        query_definition_generator = SQLDefinitionGenerator()
-        if self.dataset == "default" or self.dataset == "employee":
-            self.query_definitions = query_definition_generator.generate_employee_data_query_definitions()
-        if self.dataset == "simple":
-            self.query_definitions = query_definition_generator.generate_simple_data_query_definitions()
-        if self.dataset == "sabre":
-            self.query_definitions = query_definition_generator.generate_sabre_data_query_definitions()
-        if self.dataset == "bigdata":
-            self.query_definitions = query_definition_generator.generate_big_data_query_definitions()
-        self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
+        self.use_rest = self.input.param("use_rest", False)
+        if not self.use_rest:
+            query_definition_generator = SQLDefinitionGenerator()
+            if self.dataset == "default" or self.dataset == "employee":
+                self.query_definitions = query_definition_generator.generate_employee_data_query_definitions()
+            if self.dataset == "simple":
+                self.query_definitions = query_definition_generator.generate_simple_data_query_definitions()
+            if self.dataset == "sabre":
+                self.query_definitions = query_definition_generator.generate_sabre_data_query_definitions()
+            if self.dataset == "bigdata":
+                self.query_definitions = query_definition_generator.generate_big_data_query_definitions()
+            self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
         self.ops_map = self._create_operation_map()
         self.log.info(self.ops_map)
         self.find_nodes_in_list()
@@ -53,7 +55,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.index_loglevel = self.input.param("index_loglevel", None)
         if self.index_loglevel:
             self.set_indexer_logLevel(self.index_loglevel)
-
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
@@ -104,16 +105,6 @@ class BaseSecondaryIndexingTests(QueryTests):
                  query = self.query , n1ql_helper = self.n1ql_helper)
         return build_index_task
 
-    def sync_create_index(self, bucket, query_definition, deploy_node_info = None):
-        self.query = query_definition.generate_index_create_query(bucket = bucket,
-            use_gsi_for_secondary = self.use_gsi_for_secondary, deploy_node_info = deploy_node_info,
-            defer_build = self.defer_build, gsi_type = self.gsi_type)
-        create_index_task = self.cluster.create_index(self,
-                 server = self.n1ql_node, bucket = bucket,
-                 query = self.query , n1ql_helper = self.n1ql_helper,
-                 index_name = query_definition.index_name,  defer_build = self.defer_build)
-        return create_index_task
-
     def multi_create_index(self, buckets = [], query_definitions =[]):
         self.index_lost_during_move_out =[]
         index_node_count = 0
@@ -129,13 +120,13 @@ class BaseSecondaryIndexingTests(QueryTests):
                         index_node_count += 1
                     self.create_index(bucket.name, query_definition, deploy_node_info = self.deploy_node_info)
 
-    def initialize_multi_create_index(self, buckets = [], query_definitions =[]):
+    def initialize_multi_create_index(self, buckets = [], query_definitions =[], deploy_node_info = None):
         for bucket in buckets:
             for query_definition in query_definitions:
                 index_info = "{0}:{1}".format(bucket.name, query_definition.index_name)
                 if index_info not in self.memory_create_list:
                     self.memory_create_list.append(index_info)
-                    self.create_index(bucket.name, query_definition)
+                    self.create_index(bucket.name, query_definition, deploy_node_info)
 
     def async_multi_create_index(self, buckets = [], query_definitions =[]):
         create_index_tasks = []
@@ -328,7 +319,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info("Query : {0}".format(self.gen_results.query))
         self.query = self.gen_results.query
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
-        self.verify_result_set_isempty(actual_result["results"])
+        self.assertTrue(len(result) == 0, "Result is not empty {0}".format(actual_result["results"]))
 
     def multi_query_using_index_with_emptyresult(self, buckets =[], query_definitions = []):
         for bucket in buckets:
@@ -572,9 +563,6 @@ class BaseSecondaryIndexingTests(QueryTests):
                 check = self.n1ql_helper._is_index_in_list(bucket.name, query_definition.index_name, server = server)
                 self.assertFalse(check, " {0} was not absent as expected".format(query_definition.index_name))
 
-    def verify_result_set_isempty(self,result):
-        self.assertTrue(len(result) == 0, "Result is not empty {0}".format(result))
-
     def _gen_dict(self, result):
         result_set = []
         if result != None and len(result) > 0:
@@ -582,13 +570,6 @@ class BaseSecondaryIndexingTests(QueryTests):
                 for key in val.keys():
                     result_set.append(val[key])
         return result_set
-
-    def _get_stats_snap_shot_after_create_index(self):
-        self.initial_stats = self.get_index_stats(perNode=True)
-
-    def _get_final_stats_snap_shot(self):
-        if self.initial_stats != None:
-            self.final_stats = self.get_index_stats(perNode=True)
 
     def _verify_index_map(self):
         if not self.verify_using_index_status:
@@ -637,15 +618,24 @@ class BaseSecondaryIndexingTests(QueryTests):
                     "Bucket {0}, mismatch in item count for index :{1} : expected {2} != actual {3} ".format
                     (bucket_name, index_name, expected_item_count, actual_item_count))
 
-    def _verify_stats_before_after(self):
-        if self.check_stats and self.initial_stats and self.final_stats:
-            for node in self.final_stats.keys():
-                for bucket_name in self.final_stats[node]:
-                    for index_name in self.final_stats[node][bucket_name].keys():
-                        final_stats = self.final_stats[node][bucket_name][index_name]
-                        initial_stats = self.final_stats[node][bucket_name][index_name]
-                        self.assertTrue(final_stats["items_count"] ==  initial_stats["items_count"], \
-                            " expect items_count mismatch, expected {0} != actual {1}".format(final_stats["items_count"] ,initial_stats["items_count"]))
+    def _verify_bucket_count_with_index_count(self, query_definitions, buckets=[]):
+        """
+
+        :param bucket:
+        :param index:
+        :return:
+        """
+        if not buckets:
+            buckets = self.buckets
+        bucket_map = self.get_buckets_itemCount()
+        for bucket in buckets:
+            bucket_count = bucket_map[bucket.name]
+            for query in query_definitions:
+                index_count = self.n1ql_helper.get_index_count_using_index(
+                                                        bucket, query.index_name)
+                self.assertTrue(int(index_count) == int(bucket_count),
+                        "Bucket {0}, mismatch in item count for index :{1} : expected {2} != actual {3} ".format
+                        (bucket.name, query.index_name, bucket_count, index_count))
 
     def _create_operation_map(self):
         map_initial = {"create_index":False, "query_ops": False, "query_explain_ops": False, "drop_index": False}
@@ -747,17 +737,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
         if not self.defer_build:
             self.defer_build = None
-
-    def _pick_query_definitions_employee(self):
-        query_definition_generator = SQLDefinitionGenerator()
-        if self.create_index_usage == "where":
-            self.query_definitions = query_definition_generator.generate_employee_data_query_definitions_for_where_clause()
-            self.use_where_clause_in_index = True
-        elif self.create_index_usage == "expressions":
-            self.query_definitions = query_definition_generator.generate_employee_data_query_definitions_for_index_expressions()
-            self.use_where_clause_in_index = True
-        else:
-            self.query_definitions =  query_definition_generator.generate_employee_data_query_definitions()
 
     def set_indexer_logLevel(self, loglevel="info"):
         """
