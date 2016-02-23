@@ -65,7 +65,6 @@ class QueryTests(BaseTestCase):
         self.expiry_ops_per = self.input.param("expiry_ops_per", 0)
         self.delete_ops_per = self.input.param("delete_ops_per", 0)
         self.update_ops_per = self.input.param("update_ops_per", 0)
-        self.gsi_type = self.input.param("gsi_type", None)
         self.gens_load = self.generate_docs(self.docs_per_day)
         if self.input.param("gomaxprocs", None):
             self.n1ql_helper.configure_gomaxprocs()
@@ -96,7 +95,7 @@ class QueryTests(BaseTestCase):
         if self.create_primary_index:
             try:
                 self.n1ql_helper.create_primary_index(using_gsi=self.use_gsi_for_primary,
-                 server=n1ql_server,gsi_type=self.gsi_type)
+                 server=n1ql_server)
             except Exception, ex:
                 self.log.info(ex)
                 raise ex
@@ -111,6 +110,7 @@ class QueryTests(BaseTestCase):
                 self.n1ql_helper._restart_indexer()
                 self.n1ql_helper.killall_tuq_process()
         super(QueryTests, self).tearDown()
+
 
     def generate_docs(self, num_items, start=0):
         try:

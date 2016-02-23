@@ -117,7 +117,7 @@ class Cluster(object):
     def async_init_node(self, server, disabled_consistent_view=None,
                         rebalanceIndexWaitingDisabled=None, rebalanceIndexPausingDisabled=None,
                         maxParallelIndexers=None, maxParallelReplicaIndexers=None, port=None,
-                        quota_percent=None, services = None, index_quota_percent = None):
+                        quota_percent=None, services = None, index_quota_percent = None, gsi_type='forestdb'):
         """Asynchronously initializes a node
 
         The task scheduled will initialize a nodes username and password and will establish
@@ -134,12 +134,14 @@ class Cluster(object):
             port - port to initialize cluster
             quota_percent - percent of memory to initialize
             services - can be kv, n1ql, index
+            gsi_type - Indexer Storage Mode
         Returns:
             NodeInitTask - A task future that is a handle to the scheduled task."""
 
         _task = NodeInitializeTask(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
                           rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers,
-                          port, quota_percent, services = services, index_quota_percent = index_quota_percent)
+                          port, quota_percent, services = services, index_quota_percent = index_quota_percent,
+                          gsi_type=gsi_type)
         self.task_manager.schedule(_task)
         return _task
 

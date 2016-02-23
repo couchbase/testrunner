@@ -88,7 +88,7 @@ class NodeInitializeTask(Task):
                  maxParallelReplicaIndexers=None,
                  port=None, quota_percent=None,
                  index_quota_percent=None,
-                 services = None):
+                 services = None, gsi_type='forestdb'):
         Task.__init__(self, "node_init_task")
         self.server = server
         self.port = port or server.port
@@ -102,6 +102,7 @@ class NodeInitializeTask(Task):
         self.maxParallelIndexers = maxParallelIndexers
         self.maxParallelReplicaIndexers = maxParallelReplicaIndexers
         self.services = services
+        self.gsi_type = gsi_type
 
 
     def execute(self, task_manager):
@@ -158,6 +159,7 @@ class NodeInitializeTask(Task):
             self.index_quota = int((info.mcdMemoryReserved * 2/3) *self.index_quota_percent / 100)
             rest.set_indexer_memoryQuota(username, password, self.index_quota)
         rest.init_cluster_memoryQuota(username, password, self.quota)
+        rest.set_indexer_storage_mode(username, password, self.gsi_type)
         self.state = CHECKING
         task_manager.schedule(self)
 

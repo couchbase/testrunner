@@ -821,6 +821,20 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
+    def set_indexer_storage_mode(self, username='Administrator',
+                                 password='password',
+                                 storageMode='forestdb'):
+        api = self.baseUrl + 'settings/indexes'
+        params = urllib.urlencode({'storageMode': storageMode})
+        error_message = "storageMode must be one of forestdb, memory_optimized"
+        log.info('settings/indexes params : {0}'.format(params))
+        status, content, header = self._http_request(api, 'POST', params)
+        if not status and error_message in content:
+            #TODO: Currently it just acknowledges if there is an error.
+            #And proceeds with further initialization.
+            log.info(content)
+        return status
+
     def get_cluster_ceritificate(self):
         api = self.baseUrl + 'pools/default/certificate'
         status, content, _ = self._http_request(api, 'GET')
@@ -3398,4 +3412,3 @@ class RestParser(object):
                 node.id = nodeDictionary["otpNode"]
             bucket.nodes.append(node)
         return bucket
-
