@@ -319,7 +319,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info("Query : {0}".format(self.gen_results.query))
         self.query = self.gen_results.query
         actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
-        self.assertTrue(len(result) == 0, "Result is not empty {0}".format(actual_result["results"]))
+        self.assertTrue(len(actual_result["results"]) == 0, "Result is not empty {0}".format(actual_result["results"]))
 
     def multi_query_using_index_with_emptyresult(self, buckets =[], query_definitions = []):
         for bucket in buckets:
