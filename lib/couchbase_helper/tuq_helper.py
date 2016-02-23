@@ -70,7 +70,7 @@ class N1QLHelper():
             if scan_consistency:
                 query_params['scan_consistency']=  scan_consistency
             if scan_vector:
-                query_params['scan_vector']=  scan_vector
+                query_params['scan_vector']=  str(scan_vector).replace("'", '"')
             if verbose:
                 self.log.info('RUN QUERY %s' % query)
             result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared = is_prepared, verbose = verbose)
