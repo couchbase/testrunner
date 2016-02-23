@@ -88,9 +88,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         log.info("Deleting bucket {0}...".format(self.buckets[0]))
         BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.restServer, bucket=self.buckets[0].name)
         self.sleep(10)
-        log.info("Performing Full Table Scan after deleting bucket {0}...".format(self.buckets[0].name))
-        content = self.rest.full_table_scan_gsi_index_with_rest(id, body)
-        self.assertIsNotNone(content, "Table Scan failed after deleting bucket {0}".format(self.buckets[0]))
+        self.assertIsNone(self._check_index_status(id, "index_name_1"), "Index still exists after dropping the bucket.")
 
     def test_remove_array_field(self):
         secExpr = ["ALL DISTINCT {0}".format(self.index_field)]
@@ -189,7 +187,6 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
     def _update_document(self, bucket_name, key, document):
         bucket = Bucket('couchbase://{ip}/{name}'.format(ip=self.master.ip, name=bucket_name))
         bucket.upsert(key, document)
-        self.sleep(30)
 
     def _get_documets(self, bucket_name, field):
         bucket = Bucket('couchbase://{ip}/{name}'.format(ip=self.master.ip, name=bucket_name))
@@ -199,5 +196,5 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         for i in range(self.docs_per_day):
             for j in range(self.docs_per_day):
                 key = "array_dataset-" + str(i) + "-" + str(j)
-                document = json.loads(bucket.get(key=key).value)
+                document = bucket.get(key=key).value
                 yield key, document

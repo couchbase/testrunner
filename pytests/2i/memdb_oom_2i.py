@@ -17,8 +17,10 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         query_template = QUERY_TEMPLATE
         self.query_template = query_template.format("job_title")
         self.doc_ops = self.input.param("doc_ops", True)
-        self.initial_index_number = self.input.param("initial_index_number", 5)
+        self.initial_index_number = self.input.param("initial_index_number", 2)
         self.oomServer = self.get_nodes_from_services_map(service_type="index")
+        self.whereCondition= self.input.param("whereCondition"," job_title != \"Sales\" ")
+        self.query_template += " WHERE {0}".format(self.whereCondition)
         rest = RestConnection(self.oomServer)
         if self.indexMemQuota > 256:
             log.info("Setting indexer memory quota to {0} MB...".format(self.indexMemQuota))
@@ -28,7 +30,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         self.load_query_definitions = []
         for x in range(self.initial_index_number):
             index_name = "index_name_"+str(x)
-            query_definition = QueryDefinition(index_name=index_name, index_fields = ["job_title"], \
+            query_definition = QueryDefinition(index_name=index_name, index_fields = ["job_title"],
                         query_template = self.query_template, groups = ["simple"])
             self.load_query_definitions.append(query_definition)
         self._initialize_multi_create_index(buckets = self.buckets,
@@ -75,8 +77,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         self.assertFalse(self._validate_indexer_status_oom(), "Indexer still in OOM")
         self.sleep(60)
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
-        #self.multi_query_using_index_with_explain(buckets=self.buckets,
-        #            query_definitions=self.load_query_definitions)
+        self.multi_query_using_index(buckets=self.buckets,
+                    query_definitions=self.load_query_definitions)
 
     def test_oom_drop_indexes(self):
         """
@@ -99,8 +101,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         self.sleep(30)
         self.assertFalse(self._validate_indexer_status_oom(), "Indexer still in OOM")
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
-        #self.multi_query_using_index_with_explain(buckets=self.buckets,
-        #            query_definitions=self.load_query_definitions)
+        self.multi_query_using_index(buckets=self.buckets,
+                    query_definitions=self.load_query_definitions)
 
     def test_oom_flush_bucket(self):
         """
@@ -121,8 +123,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         self.sleep(10)
         self.assertFalse(self._validate_indexer_status_oom(), "Indexer still in OOM")
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
-        #self.multi_query_using_index_with_explain(buckets=self.buckets,
-        #            query_definitions=self.load_query_definitions)
+        self.multi_query_using_index(buckets=self.buckets,
+                    query_definitions=self.load_query_definitions)
 
     def test_oom_delete_bucket(self):
         """
@@ -145,8 +147,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         self.sleep(10)
         self.assertFalse(self._validate_indexer_status_oom(), "Indexer still in OOM")
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
-        #self.multi_query_using_index_with_explain(buckets=self.buckets,
-        #            query_definitions=self.load_query_definitions)
+        self.multi_query_using_index(buckets=self.buckets,
+                    query_definitions=self.load_query_definitions)
 
     def test_oom_kv_rebalance_in(self):
         """
@@ -164,8 +166,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         self._bring_indexer_back_to_life()
         self.sleep(5)
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
-        #self.multi_query_using_index_with_explain(buckets=self.buckets,
-        #            query_definitions=self.load_query_definitions)
+        self.multi_query_using_index(buckets=self.buckets,
+                    query_definitions=self.load_query_definitions)
 
     def test_oom_kv_rebalance_out(self):
         """
@@ -184,8 +186,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         self._bring_indexer_back_to_life()
         self.sleep(5)
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
-        #self.multi_query_using_index_with_explain(buckets=self.buckets,
-        #            query_definitions=self.load_query_definitions)
+        self.multi_query_using_index(buckets=self.buckets,
+                    query_definitions=self.load_query_definitions)
 
     def test_oom_kv_restart(self):
         """
@@ -215,8 +217,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         self.sleep(5)
         try:
             self._verify_bucket_count_with_index_count(self.load_query_definitions)
-            #self.multi_query_using_index_with_explain(buckets=self.buckets,
-            #                                          query_definitions=self.load_query_definitions)
+            self.multi_query_using_index(buckets=self.buckets,
+                                                      query_definitions=self.load_query_definitions)
         except ex:
             log.info(str(ex))
         finally:
@@ -224,8 +226,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
             remote.start_server()
             self.sleep(10)
             self._verify_bucket_count_with_index_count(self.load_query_definitions)
-            #self.multi_query_using_index_with_explain(buckets=self.buckets,
-            #            query_definitions=self.load_query_definitions)
+            self.multi_query_using_index(buckets=self.buckets,
+                        query_definitions=self.load_query_definitions)
 
 
     def test_oom_indexer_reboot(self):
@@ -244,8 +246,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
             self._bring_indexer_back_to_life()
         self.sleep(10)
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
-        #self.multi_query_using_index_with_explain(buckets=self.buckets,
-        #            query_definitions=self.load_query_definitions)
+        self.multi_query_using_index(buckets=self.buckets,
+                    query_definitions=self.load_query_definitions)
 
     def test_oom_reduce_mem_quota(self):
         """
@@ -262,6 +264,41 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         self.sleep(10)
         self.assertTrue(self._validate_indexer_status_oom(), "Indexer is still Online")
 
+    def test_change_mem_quota_when_index_building(self):
+        rest = RestConnection(self.oomServer)
+        log.info("Setting indexer memory quota to 700 MB...")
+        rest.set_indexer_memoryQuota(indexMemoryQuota=700)
+        self.sleep(30)
+        query_definitions = []
+        for x in range(3):
+            index_name = "index_"+str(x)
+            query_definition = QueryDefinition(index_name=index_name, index_fields = ["job_title"],
+                        query_template = self.query_template, groups = ["simple"])
+            query_definitions.append(query_definition)
+        create_tasks = []
+        build_tasks = []
+        index_info = {}
+        for bucket in self.buckets:
+            if not bucket in index_info.keys():
+                index_info[bucket] = []
+            for query_definition in query_definitions:
+                index_info[bucket].append(query_definition.index_name)
+                task = self.async_create_index(bucket.name, query_definition)
+                create_tasks.append(task)
+        for task in create_tasks:
+            task.result()
+        if self.defer_build:
+            log.info("Building Indexes...")
+            for key, val in index_info.iteritems():
+                task = self.async_build_index(bucket=key, index_list=val)
+                build_tasks.append(task)
+        self.sleep(10)
+        log.info("Setting indexer memory quota to 500 MB...")
+        rest.set_indexer_memoryQuota(indexMemoryQuota=500)
+        self.sleep(30)
+        for task in build_tasks:
+            task.result()
+
     def test_oom_query_replica_index(self):
         """
         Configuration: kv:n1ql, kv, index, index
@@ -273,13 +310,13 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         """
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[1]
         deploy_node_info = ["{0}:{1}".format(index_node.ip, index_node.port)]
-        index_name = "replica_index_{0}".format(index_node.ip)
-        replica_definition = QueryDefinition(index_name=index_name, index_fields=["join_mo"],
-                    query_template = self.query_template, groups=["simple"])
+        index_name = "replica_index"
+        replica_definition = QueryDefinition(index_name=index_name, index_fields=["job_title"],
+                        query_template=self.query_template, groups=["simple"])
         self.create_index(self.buckets[0].name, replica_definition, deploy_node_info)
         self.assertTrue(self._push_indexer_off_the_cliff(), "OOM Can't be achieved")
-        self.multi_query_using_index_with_explain(buckets=self.buckets,
-                    query_definitions=replica_definition)
+        self.multi_query_using_index(buckets=self.buckets,
+                    query_definitions=[replica_definition])
 
     def test_oom_create_build_index(self):
         """
@@ -291,9 +328,9 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_mo"], \
                         query_template = "", groups = ["simple"])
         try:
-            self.create_index(self.buckets[0].name, query_definitions, self.deploy_node_info)
+            self.create_index(self.buckets[0].name, query_definition, self.deploy_node_info)
         except Exception, ex:
-            log.info({0}.format(str(ex)))
+            log.info("{0}".format(str(ex)))
 
     def test_oom_create_index(self):
         """
@@ -306,10 +343,10 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_mo"], \
                         query_template = "", groups = ["simple"])
         try:
-            task = self.async_create_index(bucket[0].name, query_definition, self.deploy_node_info)
+            task = self.async_create_index(bucket[0].name, query_definition)
             task.result()
         except Exception, ex:
-            log.info({0}.format(str(ex)))
+            log.info("{0}".format(str(ex)))
 
     def _push_indexer_off_the_cliff(self):
         """
