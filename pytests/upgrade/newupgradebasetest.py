@@ -84,6 +84,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         if type.lower() == "ubuntu":
             self.is_ubuntu = True
         self.queue = Queue.Queue()
+        self.upgrade_servers = []
 
     def tearDown(self):
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
