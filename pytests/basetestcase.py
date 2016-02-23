@@ -77,7 +77,7 @@ class BaseTestCase(unittest.TestCase):
             self.wait_timeout = self.input.param("wait_timeout", 60)
             # number of case that is performed from testrunner( increment each time)
             self.case_number = self.input.param("case_number", 0)
-            self.default_bucket = self.input.param("default_bucket", True)
+            self.default_bucket = self.input.param("default_bucket", 1)
             if self.default_bucket:
                 self.default_bucket_name = "default"
             self.standard_buckets = self.input.param("standard_buckets", 0)
@@ -127,6 +127,7 @@ class BaseTestCase(unittest.TestCase):
             self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
             self.enable_bloom_filter = self.input.param("enable_bloom_filter", False)
             self.enable_time_sync = self.input.param("enable_time_sync", False)
+            self.gsi_type = self.input.param("gsi_type", 'forestdb')
 
 
             if not self.skip_init_check_cbserver:
@@ -377,7 +378,8 @@ class BaseTestCase(unittest.TestCase):
                                                       rebalanceIndexPausingDisabled, maxParallelIndexers,
                                                       maxParallelReplicaIndexers, init_port,
                                                       quota_percent, services=assigned_services,
-                                                      index_quota_percent=self.index_quota_percent))
+                                                      index_quota_percent=self.index_quota_percent,
+                                                      gsi_type=self.gsi_type))
         for task in init_tasks:
             node_quota = task.result()
             if node_quota < quota or quota == 0:
@@ -2061,7 +2063,6 @@ class BaseTestCase(unittest.TestCase):
         items = 0
         for gen_load in gens_load[self.buckets[0]]:
             items += (gen_load.end - gen_load.start)
-
         for bucket in self.buckets:
             self.log.info("%s %s to %s documents..." % (op_type, items, bucket.name))
             tasks.append(self.cluster.async_load_gen_docs(self.master, bucket.name,
