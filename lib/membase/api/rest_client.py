@@ -247,7 +247,7 @@ class RestConnection(object):
             self.port = serverInfo["port"]
             self.index_port = 9102
             self.fts_port = 9110
-            self.query_port=8094
+            self.query_port=8093
             if "index_port" in serverInfo.keys():
                 self.index_port = serverInfo["index_port"]
             if "fts_port" in serverInfo.keys():
@@ -264,7 +264,7 @@ class RestConnection(object):
             self.hostname = ''
             self.index_port = 9102
             self.fts_port = 9110
-            self.query_port = 8094
+            self.query_port = 8093
             if hasattr(serverInfo, 'index_port'):
                 self.index_port = serverInfo.index_port
             if hasattr(serverInfo, 'query_port'):
@@ -283,7 +283,7 @@ class RestConnection(object):
         if self.hostname:
             self.baseUrl = "http://{0}:{1}/".format(self.hostname, self.port)
             self.capiBaseUrl = "http://{0}:{1}/".format(self.hostname, 8092)
-            self.query_baseUrl = "http://{0}:{1}/".format(self.hostname, 8094)
+            self.query_baseUrl = "http://{0}:{1}/".format(self.hostname, 8093)
         # for Node is unknown to this cluster error
         for iteration in xrange(5):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
