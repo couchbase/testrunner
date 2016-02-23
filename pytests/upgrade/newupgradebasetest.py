@@ -86,16 +86,20 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.queue = Queue.Queue()
 
     def tearDown(self):
-        test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
-                    or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
-        if test_failed:
+        test_failed = (hasattr(self, '_resultForDoCleanups') and \
+                       len(self._resultForDoCleanups.failures or \
+                           self._resultForDoCleanups.errors)) or \
+                                 (hasattr(self, '_exc_info') and \
+                                  self._exc_info()[1] is not None)
+        if test_failed and self.skip_cleanup:
                 self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
                 self.cluster.shutdown(force=True)
                 self.log.info("Test Input params were:")
                 pprint(self.input.test_params)
 
                 if self.input.param('BUGS', False):
-                    self.log.warn("Test failed. Possible reason is: {0}".format(self.input.param('BUGS', False)))
+                    self.log.warn("Test failed. Possible reason is: {0}"
+                                           .format(self.input.param('BUGS', False)))
         else:
             if not hasattr(self, 'rest'):
                 return
@@ -111,9 +115,12 @@ class NewUpgradeBaseTest(BaseTestCase):
                         temp.append(server)
                 self.servers = temp
             except Exception, e:
+                self.log.info("Exception " + e)
                 self.cluster.shutdown(force=True)
                 self.fail(e)
             super(NewUpgradeBaseTest, self).tearDown()
+            if self.upgrade_servers:
+                self._install(self.upgrade_servers,version=self.initial_version)
         self.sleep(20, "sleep 20 seconds before run next test")
 
     def _install(self, servers):
