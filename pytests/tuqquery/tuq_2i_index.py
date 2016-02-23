@@ -781,6 +781,80 @@ class QueriesIndexTests(QueryTests):
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
+    def test_array_index_update(self):
+        for bucket in self.buckets:
+             created_indexes = []
+             try:
+                idx = "arrayidx_update"
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j.city for j in i end) FOR i in %s END) USING %s" % (
+                    idx, bucket.name, "address", self.index_type)
+                if self.gsi_type:
+                    self.query += " WITH {'index_type': 'memdb'}"
+                actual_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(actual_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+                updated_value = 'new_dept' * 30
+                self.query = "explain update %s set name=%s where ANY i IN address SATISFIES  (ANY j IN i SATISFIES j.city='Mumbai' end) END  returning element department"  % (bucket.name, updated_value)
+                actual_result = self.run_cbq_query()
+                actual_result = (actual_result['results'])
+                print actual_result
+                self.assertTrue(
+                    actual_result[0]['~children'][0]['#operator'] == 'UnionScan',
+                    "Union Scan is not being used")
+                result1 = actual_result[0]['~children'][0]['scans'][0]['index']
+                self.assertTrue(result1 == idx)
+                self.query = "update %s set department=%s where ANY i IN address SATISFIES  (ANY j IN i SATISFIES j.city='Mumbai' end) END  returning element department"  % (bucket.name, updated_value)
+                self.run_cbq_query()
+                self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+             finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_array_index_delete(self):
+        for bucket in self.buckets:
+             created_indexes = []
+             try:
+                idx = "arrayidx_delete"
+                self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY v FOR v in %s END) USING %s" % (
+                    idx, bucket.name, "join_yr", self.index_type)
+                if self.gsi_type:
+                    self.query += " WITH {'index_type': 'memdb'}"
+                create_result = self.run_cbq_query()
+                self._wait_for_index_online(bucket, idx)
+                self._verify_results(create_result['results'], [])
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+                self.query = 'select count(*) as actual from %s where join_yr=2012'  % (bucket.name)
+                self.run_cbq_query()
+                self.sleep(5, 'wait for index')
+                actual_result = self.run_cbq_query()
+                current_docs = actual_result['results'][0]['actual']
+                self.query = 'explain delete from %s where any v in join_yr SATISFIES v=2012 end LIMIT 1'  % (bucket.name)
+                actual_result = self.run_cbq_query()
+                result = actual_result['results'][0]['~children'][0]['scans'][0]['index']
+                self.assertTrue(
+                    actual_result['results'][0]['~children'][0]['#operator'] == 'UnionScan',
+                    "UnionScan is not being used in and query for 2 array indexes")
+                self.assertTrue(result == idx )
+                self.query = 'delete from %s where any v in join_yr satisfies v=2012 end LIMIT 1'  % (bucket.name)
+                actual_result = self.run_cbq_query()
+                self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
+
+             finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
+                    actual_result = self.run_cbq_query()
+                    self._verify_results(actual_result['results'], [])
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+
+
     def test_simple_create_delete_index(self):
         for bucket in self.buckets:
             created_indexes = []
