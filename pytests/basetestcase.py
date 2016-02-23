@@ -128,6 +128,7 @@ class BaseTestCase(unittest.TestCase):
             self.enable_bloom_filter = self.input.param("enable_bloom_filter", False)
             self.enable_time_sync = self.input.param("enable_time_sync", False)
             self.gsi_type = self.input.param("gsi_type", 'forestdb')
+            self.bucket_size = self.input.param("bucket_size", None)
 
 
             if not self.skip_init_check_cbserver:
@@ -235,7 +236,8 @@ class BaseTestCase(unittest.TestCase):
                     ram_available = node_info.memoryQuota
                 else:
                     ram_available = self.quota
-                self.bucket_size = self._get_bucket_size(ram_available, self.total_buckets)
+                if self.bucket_size is None:
+                    self.bucket_size = self._get_bucket_size(ram_available, self.total_buckets)
 
             if str(self.__class__).find('upgrade_tests') == -1 and \
                             str(self.__class__).find('newupgradetests') == -1:
