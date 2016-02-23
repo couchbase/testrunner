@@ -507,7 +507,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.log.info("analyzing for bucket {0}".format(bucket.name))
                 map = sequence_bucket_map[bucket.name]
                 for key in map.keys():
-                    value = {"seqno":map[key]["abs_high_seqno"],"guard":map[key]["uuid"]}
+                    value = [ int(map[key]["abs_high_seqno"]), map[key]["uuid"] ]
                     scan_vector.append(value)
                 scan_vectors[bucket.name] = scan_vector
         else:
@@ -522,7 +522,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 for key in map.keys():
                     vb = int(key.split("vb_")[1])
                     if vb in vbuckets_number_list:
-                        value = {"seqno":map[key]["abs_high_seqno"],"guard":map[key]["uuid"]}
+                        value = [ int(map[key]["abs_high_seqno"]), map[key]["uuid"] ]
                         scan_vector[str(vb)] = value
                 scan_vectors[bucket.name] = scan_vector
         return scan_vectors
@@ -756,3 +756,4 @@ class BaseSecondaryIndexingTests(QueryTests):
         server = self.get_nodes_from_services_map(service_type="index")
         rest = RestConnection(server)
         status = rest.set_indexer_params("logLevel", loglevel)
+
