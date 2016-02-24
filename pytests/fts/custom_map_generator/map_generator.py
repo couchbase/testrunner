@@ -52,7 +52,7 @@ WIKI_NESTED_FIELDS = {
 
 FULL_FIELD_NAMES = {
     'reports': 'manages_reports',
-    'team_size': 'manages_teamsize',
+    'team_size': 'manages_team_size',
     'timestamp': 'revision_timestamp',
     '#text': 'revision_text_text',
     'username': 'revision_contributor_username'
