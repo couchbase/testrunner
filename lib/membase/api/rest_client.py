@@ -246,7 +246,7 @@ class RestConnection(object):
             self.password = serverInfo["password"]
             self.port = serverInfo["port"]
             self.index_port = 9102
-            self.fts_port = 9110
+            self.fts_port = 8094
             self.query_port=8093
             if "index_port" in serverInfo.keys():
                 self.index_port = serverInfo["index_port"]
@@ -263,7 +263,7 @@ class RestConnection(object):
             self.port = serverInfo.port
             self.hostname = ''
             self.index_port = 9102
-            self.fts_port = 9110
+            self.fts_port = 8094
             self.query_port = 8093
             if hasattr(serverInfo, 'index_port'):
                 self.index_port = serverInfo.index_port
