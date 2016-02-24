@@ -104,6 +104,26 @@ class ElasticSearchBase(object):
         except Exception as e:
             raise Exception("Could not create ES index : %s" % e)
 
+    def create_index_mapping(self, index_name, mapping):
+        """
+        Updates a default index, with the given mapping
+        """
+        self.delete_index(index_name)
+        map = {"mappings": mapping}
+        try:
+            self.__log.info("Creating %s with mapping %s"
+                            % (index_name, json.dumps(mapping, indent=3)))
+            status, content, _ = self._http_request(
+                self.__connection_url + index_name,
+                'PUT',
+                json.dumps(map))
+            if status:
+                self.__log.info("SUCCESS: ES index created with above mapping")
+            else:
+                raise Exception("Could not create ES index")
+        except Exception as e:
+            raise Exception("Could not create ES index : %s" % e)
+
     def create_alias(self, name, indexes):
         """
         @name: alias name

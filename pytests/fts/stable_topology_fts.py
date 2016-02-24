@@ -22,7 +22,7 @@ class StableTopFTS(FTSBaseTest):
     def create_simple_default_index(self):
         plan_params = self.construct_plan_params()
         self.load_data()
-        self.create_default_indexes_all_buckets(plan_params=plan_params)
+        self.create_fts_indexes_all_buckets(plan_params=plan_params)
         if self._update or self._delete:
             self.wait_for_indexing_complete()
             self.validate_index_count(equal_bucket_doc_count=True,
@@ -54,7 +54,7 @@ class StableTopFTS(FTSBaseTest):
         uses RQG
         """
         self.load_data()
-        index = self.create_default_index(
+        index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
         self.wait_for_indexing_complete()
@@ -66,7 +66,7 @@ class StableTopFTS(FTSBaseTest):
         uses RQG
         """
         self.load_data()
-        index = self.create_default_index(
+        index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
         self.wait_for_indexing_complete()
@@ -86,7 +86,7 @@ class StableTopFTS(FTSBaseTest):
         self.load_utf16_data()
         try:
             bucket = self._cb_cluster.get_bucket_by_name('default')
-            index = self.create_default_index(bucket, "default_index")
+            index = self.create_index(bucket, "default_index")
             # an exception will most likely be thrown from waiting
             self.wait_for_indexing_complete()
             self.validate_index_count(
@@ -99,7 +99,7 @@ class StableTopFTS(FTSBaseTest):
     def create_simple_alias(self):
         self.load_data()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_default_index(bucket, "default_index")
+        index = self.create_index(bucket, "default_index")
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
         hits, _, _ = index.execute_query(self.sample_query,
@@ -163,8 +163,8 @@ class StableTopFTS(FTSBaseTest):
             task.result()
 
         # create indexes on both buckets
-        emp_index = self.create_default_index(emp, "emp_index")
-        wiki_index = self.create_default_index(
+        emp_index = self.create_index(emp, "emp_index")
+        wiki_index = self.create_index(
             wiki,
             "wiki_index",
             index_params={"default_analyzer": "simple"})
@@ -176,7 +176,7 @@ class StableTopFTS(FTSBaseTest):
                                   name="emp_wiki_alias")
         if self.es:
             self.es.create_alias(name="emp_wiki_es_alias",
-                                 indexes= ["emp_es_index", "wiki_es_index"])
+                                 indexes=["emp_es_index", "wiki_es_index"])
 
         # run rqg on the alias
         self.generate_random_queries(alias, self.num_queries, self.query_types)
@@ -185,7 +185,7 @@ class StableTopFTS(FTSBaseTest):
     def index_wiki(self):
         self.load_wiki(lang=self.lang)
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_default_index(bucket, "wiki_index")
+        index = self.create_index(bucket, "wiki_index")
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True,
                                   zero_rows_ok=False)
@@ -193,7 +193,7 @@ class StableTopFTS(FTSBaseTest):
     def delete_index_then_query(self):
         self.load_data()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_default_index(bucket, "default_index")
+        index = self.create_index(bucket, "default_index")
         self._cb_cluster.delete_fts_index(index.name)
         try:
             hits2, _, _ = index.execute_query(self.sample_query)
@@ -204,7 +204,7 @@ class StableTopFTS(FTSBaseTest):
     def drop_bucket_check_index(self):
         self.load_data()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_default_index(bucket, "default_index")
+        index = self.create_index(bucket, "default_index")
         self._cb_cluster.delete_bucket("default")
         self.sleep(60, "waiting for bucket deletion to be known by fts")
         status, _ = index.get_index_defn()
@@ -225,7 +225,7 @@ class StableTopFTS(FTSBaseTest):
     def create_alias_on_deleted_index(self):
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_default_index(bucket, "default_index")
+        index = self.create_index(bucket, "default_index")
         self.wait_for_indexing_complete()
         from fts_base import INDEX_DEFAULTS
         alias_def = INDEX_DEFAULTS.ALIAS_DEFINITION
@@ -241,7 +241,7 @@ class StableTopFTS(FTSBaseTest):
     def edit_index_new_name(self):
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_default_index(bucket, 'sample_index')
+        index = self.create_index(bucket, 'sample_index')
         self.wait_for_indexing_complete()
         index.name = "new_index"
         try:
@@ -252,7 +252,7 @@ class StableTopFTS(FTSBaseTest):
     def edit_index(self):
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_default_index(bucket, 'sample_index')
+        index = self.create_index(bucket, 'sample_index')
         self.wait_for_indexing_complete()
         #hits, _, _ = index.execute_query(self.sample_query)
         new_plan_param = {"maxPartitionsPerPIndex": 30}
@@ -267,7 +267,7 @@ class StableTopFTS(FTSBaseTest):
     def edit_index_negative(self):
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_default_index(bucket, 'sample_index')
+        index = self.create_index(bucket, 'sample_index')
         self.wait_for_indexing_complete()
         hits, _, _ = index.execute_query(self.sample_query)
         new_plan_param = {"maxPartitionsPerPIndex": 30}
@@ -281,3 +281,40 @@ class StableTopFTS(FTSBaseTest):
         except Exception as e:
             self.log.info("Expected exception: %s" % e)
 
+    def index_query_beer_sample(self):
+        #delete default bucket
+        self._cb_cluster.delete_bucket("default")
+        master = self._cb_cluster.get_master_node()
+        from lib.remote.remote_util import RemoteMachineShellConnection
+        shell = RemoteMachineShellConnection(master)
+        shell.execute_command("""curl -v -u Administrator:password \
+                         -X POST http://{0}:8091/sampleBuckets/install \
+                      -d '["beer-sample"]'""".format(master.ip))
+        shell.disconnect()
+        self.sleep(20)
+        bucket = self._cb_cluster.get_bucket_by_name("beer-sample")
+        index = self.create_index(bucket, "beer-index")
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True,
+                                  zero_rows_ok=False)
+
+        query = {"match": "cafe", "field": "name"}
+        hits, _, _ = index.execute_query(query,
+                                         zero_results_ok=False,
+                                         expected_hits=10)
+        self.log.info("Hits: %s" % hits)
+
+
+    def index_query_custom_mapping(self):
+        """
+         uses RQG for custom mapping
+        """
+        # create a custom map, disable default map
+        index = self.create_index(
+            bucket=self._cb_cluster.get_bucket_by_name('default'),
+            index_name="custom_index")
+        self.create_es_index_mapping(index.es_custom_map)
+        self.load_data()
+        self.wait_for_indexing_complete()
+        self.generate_random_queries(index, self.num_queries, self.query_types)
+        self.run_query_and_compare(index)

@@ -1051,7 +1051,7 @@ class ESRunQueryCompare(Task):
         self.show_results = False
         self.query_index = query_index
         self.passed = True
-        self.es_index_name = es_index_name or "default_es_index"
+        self.es_index_name = es_index_name or "es_index"
 
     def check(self, task_manager):
         self.state = FINISHED
