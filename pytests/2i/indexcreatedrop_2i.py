@@ -1,7 +1,9 @@
+import logging
 from base_2i import BaseSecondaryIndexingTests
-from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.query_definitions import QueryDefinition
+from remote.remote_util import RemoteMachineShellConnection
 
+log = logging.getLogger(__name__)
 class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
 
     def setUp(self):
@@ -322,18 +324,18 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
 
     def test_fail_create_kv_node_down(self):
         servr_out =[]
+        servr_out = self.get_nodes_from_services_map(service_type = "kv", get_all_nodes = True)
+        remote = RemoteMachineShellConnection(servr_out[1])
+        remote.stop_server()
+        self.sleep(10)
+        index_name = self.query_definitions[0].index_name
+        self.query = self.query_definitions[0].generate_index_create_query(bucket = self.buckets[0].name,
+                                                                           gsi_type=self.gsi_type)
         try:
-            servr_out = self.get_nodes_from_services_map(service_type = "kv", get_all_nodes = True)
-            remote = RemoteMachineShellConnection(servr_out[1])
-            remote.stop_server()
-            self.sleep(10)
-            index_name = self.query_definitions[0].index_name
-            self.query = self.query_definitions[0].generate_index_create_query(bucket = self.buckets[0].name,
-                                                                               gsi_type=self.gsi_type)
             res = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             self.log.info(res)
         except Exception, ex:
-            msg = "Error Connecting KV 127.0.0.1:8091 Err dcp.invalidBucket"
+            msg = "Error Connecting KV 127.0.0.1:8091 Err dial tcp {0}:11210: getsockopt: connection refused".format(servr_out[1].ip)
             self.log.info(ex)
             self.assertTrue(msg in str(ex), ex)
         finally:
