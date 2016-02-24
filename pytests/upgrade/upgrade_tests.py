@@ -45,6 +45,9 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.online_upgrade_type = self.input.param("online_upgrade_type","swap")
         self.final_events = []
         self.in_servers_pool = self._convert_server_map(self.servers[:self.nodes_init])
+        """ Init nodes to not upgrade yet """
+        for key in self.in_servers_pool.keys():
+            self.in_servers_pool[key].upgraded = False
         self.out_servers_pool = self._convert_server_map(self.servers[self.nodes_init:])
         self.gen_initial_create = BlobGenerator('upgrade', 'upgrade',\
                                             self.value_size, end=self.num_items)
@@ -504,10 +507,15 @@ class UpgradeTests(NewUpgradeBaseTest):
             self._install(servers_in.values())
             old_vbucket_map = self._record_vbuckets(self.master, servers.values())
             if self.upgrade_services_in != None and len(self.upgrade_services_in) > 0:
-                self.cluster.rebalance(servers.values(), servers_in.values(), servers_out.values(), services = self.upgrade_services_in[start_services_num:start_services_num+len(servers_in.values())])
+                self.cluster.rebalance(servers.values(),
+                                    servers_in.values(),
+                      servers_out.values(), services = \
+                   self.upgrade_services_in[start_services_num:start_services_num+\
+                                                         len(servers_in.values())])
                 start_services_num += len(servers_in.values())
             else:
-                self.cluster.rebalance(servers.values(), servers_in.values(), servers_out.values())
+                self.cluster.rebalance(servers.values(), servers_in.values(),\
+                                                         servers_out.values())
             self.out_servers_pool = servers_out
             self.in_servers_pool = new_servers
             servers = new_servers
