@@ -499,6 +499,8 @@ class FTSIndex:
         self.rest = RestConnection(self.__cluster.get_random_fts_node())
         self.index_definition = INDEX_DEFAULTS.INDEX_DEFINITION
         self.name = self.index_definition['name'] = name
+        self.es_custom_map = None
+        self.smart_query_fields = None
         self.index_definition['type'] = self.index_type
         if self.index_type == "fulltext-alias":
             self.index_definition['sourceType'] = "nil"
@@ -509,12 +511,25 @@ class FTSIndex:
             self.index_definition['sourceName'] = self._source_name
 
         self.dataset = TestInputSingleton.input.param("dataset", "emp")
-
         # for wiki docs, specify default analyzer as "simple"
         if self.index_type == "fulltext-index" and \
                 (self.dataset == "wiki" or self.dataset == "all"):
             self.index_definition['params'] = self.build_custom_index_params(
                 {"default_analyzer": "simple"})
+
+        # Support for custom map
+        self.custom_map = TestInputSingleton.input.param("custom_map", False)
+        self.cm_id = TestInputSingleton.input.param("cm_id", 0)
+        if self.custom_map:
+            from custom_map_generator.map_generator import CustomMapGenerator
+            cm_gen = CustomMapGenerator(seed=self.cm_id, dataset=self.dataset)
+            fts_map, self.es_custom_map = cm_gen.get_map()
+            self.smart_query_fields = cm_gen.get_smart_query_fields()
+            print self.smart_query_fields
+            self.index_definition['params'] = self.build_custom_index_params(
+                fts_map)
+            self.__log.info(json.dumps(self.index_definition["params"],
+                                       indent=3))
 
         self.fts_queries = []
 
@@ -536,6 +551,8 @@ class FTSIndex:
     def build_custom_index_params(self, index_params):
         if self.index_type == "fulltext-index":
             mapping = INDEX_DEFAULTS.BLEVE_MAPPING
+            if not TestInputSingleton.input.param("default_map", False):
+                mapping['mapping']['default_mapping']['enabled'] = False
             mapping['mapping'].update(index_params)
         else:
             mapping = INDEX_DEFAULTS.ALIAS_DEFINITION
@@ -1031,7 +1048,7 @@ class CouchbaseCluster:
         @param bucket_name: bucket name.
         @return: bucket object
         """
-        for bucket in self.__buckets:
+        for bucket in RestConnection(self.__master_node).get_buckets():
             if bucket.name == bucket_name:
                 return bucket
 
@@ -2209,6 +2226,7 @@ class FTSBaseTest(unittest.TestCase):
         """
         Wait for index_count for any index to stabilize
         """
+        index_doc_count = 0
         retry = self._input.param("index_retry", 5)
         start_time = time.time()
         for index in self._cb_cluster.get_indexes():
@@ -2224,13 +2242,13 @@ class FTSBaseTest(unittest.TestCase):
                                         index.name,
                                         index.get_indexed_doc_count()))
                 else:
-                    self.es.update_index('default_es_index')
+                    self.es.update_index('es_index')
                     self.log.info("Docs in bucket = %s, docs in FTS index '%s':"
                                   " %s, docs in ES index: %s "
                                 % (index.get_src_bucket_doc_count(),
                                 index.name,
                                 index.get_indexed_doc_count(),
-                                self.es.get_index_count('default_es_index')))
+                                self.es.get_index_count('es_index')))
 
                 if prev_count < index_doc_count or prev_count > index_doc_count:
                     prev_count = index_doc_count
@@ -2238,8 +2256,8 @@ class FTSBaseTest(unittest.TestCase):
                 else:
                     retry_count -= 1
                 time.sleep(10)
-        self.log.info("FTS indexed all docs in %s mins"
-                      % (round(float((time.time()-60-start_time)/60), 2)))
+        self.log.info("FTS indexed %s docs in %s mins, now breaking loop after 60s of inactivity"
+                      % (index_doc_count, round(float((time.time()-60-start_time)/60), 2)))
 
     def construct_plan_params(self):
         plan_params = {}
@@ -2339,7 +2357,8 @@ class FTSBaseTest(unittest.TestCase):
         """
         from random_query_generator.rand_query_gen import FTSESQueryGenerator
         query_gen = FTSESQueryGenerator(num_queries, query_type=query_type,
-                                      seed=seed, dataset=self.dataset)
+                                            seed=seed, dataset=self.dataset,
+                                            fields=index.smart_query_fields)
         for fts_query in query_gen.fts_queries:
             index.fts_queries.append(
                 json.loads(json.dumps(fts_query, ensure_ascii=False)))
@@ -2355,7 +2374,7 @@ class FTSBaseTest(unittest.TestCase):
 
         return index.fts_queries
 
-    def create_default_index(self, bucket, index_name, index_params=None,
+    def create_index(self, bucket, index_name, index_params=None,
                              plan_params=None):
         """
         Creates a default index given bucket, index_name and plan_params
@@ -2377,14 +2396,14 @@ class FTSBaseTest(unittest.TestCase):
         self.is_index_partitioned_balanced(index)
         return index
 
-    def create_default_indexes_all_buckets(self, plan_params=None):
+    def create_fts_indexes_all_buckets(self, plan_params=None):
         """
         Creates 'n' default indexes for all buckets.
         'n' is defined by 'index_per_bucket' test param.
         """
         for bucket in self._cb_cluster.get_buckets():
             for count in range(self.index_per_bucket):
-                self.create_default_index(
+                self.create_index(
                     bucket,
                     "%s_index_%s" % (bucket.name, count+1),
                     plan_params=plan_params)
@@ -2441,8 +2460,12 @@ class FTSBaseTest(unittest.TestCase):
     def teardown_es(self):
         self.es.delete_indices()
 
+    def create_es_index_mapping(self, mapping):
+        self.es.create_index_mapping(index_name="es_index",
+                                     mapping=mapping)
+
     def load_data_es_from_generator(self, generator,
-                                    index_name="default_es_index"):
+                                    index_name="es_index"):
         """
             Loads json docs into ES from a generator, does a blocking load
         """
@@ -2455,7 +2478,7 @@ class FTSBaseTest(unittest.TestCase):
                               key)
 
 
-    def create_index_es(self, index_name="default_es_index"):
+    def create_index_es(self, index_name="es_index"):
         self.es.create_empty_index(index_name)
         self.log.info("Created empty index %s on Elastic Search node"
                       % index_name)
@@ -2506,11 +2529,11 @@ class FTSBaseTest(unittest.TestCase):
             gen = copy.deepcopy(self.create_gen)
             if isinstance(gen, list):
                 for generator in gen:
-                    load_tasks.append(self.es.async_bulk_load_ES(index_name='default_es_index',
+                    load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
                                                         gen=generator,
                                                         op_type='create'))
             else:
-                load_tasks.append(self.es.async_bulk_load_ES(index_name='default_es_index',
+                load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
                                                         gen=gen,
                                                         op_type='create'))
         load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(

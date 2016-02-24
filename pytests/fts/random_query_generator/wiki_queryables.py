@@ -6,35 +6,35 @@ class WikiQuerables:
     def get_random_value(self, list):
         return list[random.randint(0, len(list)-1)]
 
-    def get_queryable_title(self, full=False):
+    def get_queryable_title(self):
         """
         Returns a valid wiki doc title
         """
         return self.return_unicode(self.get_random_value(TITLES))
 
-    def get_queryable_revision_text_text(self, full=False):
+    def get_queryable_revision_text_text(self):
         """
         Returns a valid wiki search term
         """
         return self.return_unicode(self.get_random_value(TITLES))
 
-    def get_queryable_revision_contributor_id(self, full=False):
+    def get_queryable_revision_contributor_id(self):
         """
         Returns a valid wiki contributor id(number)
         """
-        return int(self.get_random_value(USER_IDS))
+        return self.get_random_value(USER_IDS)
 
-    def get_queryable_revision_contributor_username(self, full=False):
+    def get_queryable_revision_contributor_username(self):
         """
         Returns a valid wiki contributor username(str)
         """
         return self.return_unicode(self.get_random_value(USERNAMES))
 
-    def get_queryable_id(self, full=False):
+    def get_queryable_id(self):
         """
         Returns a valid wiki id(number)
         """
-        return int(self.get_random_value(USER_IDS))
+        return self.get_random_value(USER_IDS)
 
     def get_queryable_revision_timestamp(self, now=False):
         """

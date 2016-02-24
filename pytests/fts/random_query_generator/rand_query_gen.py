@@ -8,12 +8,13 @@ from wiki_queryables import WikiQuerables
 class DATASET:
     FIELDS = {'emp': {'str': ["name", "dept", "manages_reports",
                                "languages_known", "email", "type"],
+                      'text': ["name", "manages_reports"],
                       'num': ["mutated", "manages_team_size", "salary"],
                       'bool': ["is_manager"],
-                      'date': ["join_date"],
-                      'text': ["name", "manages_reports"]},
+                      'date': ["join_date"]
+                      },
 
-              'wiki': {'str': ["title", "revision_text_text", "type"],
+              'wiki': {'str': ["title", "revision_text_text", "type", "revision_contributor_username", "revision_contributor_id"],
                        'text': ["title", "revision_text_text"],
                        'num': ["mutated"],
                        'bool': [],
@@ -25,10 +26,23 @@ class QUERY_TYPE:
               "wildcard", "regexp",  "query_string",
               "numeric_range", "date_range", "match_all", "match_none"]
 
+    # to know what type of queries to generate for fields
+    # returned by custom map_generator (only for custom map indexes)
+    CUSTOM_QUERY_TYPES = {
+        'text': ["match", "bool", "match_phrase",
+                 "prefix", "wildcard", "query_string",
+                 "conjunction", "disjunction"],
+        'str': ["match", "bool", "match_phrase",
+                 "prefix", "wildcard", "query_string",
+                 "conjunction", "disjunction"],
+        'num': ["numeric_range"],
+        'date': ["date_range"]
+    }
 
 class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 
-    def __init__(self, num_queries=1, query_type=None, seed=0, dataset="emp"):
+    def __init__(self, num_queries=1, query_type=None, seed=0, dataset="emp",
+                 fields=None):
         """
         FTS(Bleve) and equivalent ES(Lucene) query generator for employee dataset
         (JsonDocGenerator in couchbase_helper/documentgenerator.py)
@@ -41,22 +55,56 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         self.es_queries = []
         self.query_types = query_type
         self.dataset = dataset
-        self.fields = DATASET.FIELDS['emp']
-        self.construct_fields()
-        self.construct_queries()
+        if fields:
+            # Smart query generation
+            self.fields = {}
+            self.make_fields_compatible(fields)
+            self.query_types = self.get_custom_query_types()
+        else:
+            self.fields = self.construct_fields()
+            self.query_types = query_type
+        if self.query_types:
+            self.construct_queries()
+        else:
+            print "No string/number/date fields indexed for smart" \
+                  " query generation "
+
 
     def construct_fields(self):
+        all_fields = {}
         if self.dataset == "emp":
-            self.fields = DATASET.FIELDS['emp']
+            all_fields = DATASET.FIELDS['emp']
         elif self.dataset == "wiki":
-            self.fields = DATASET.FIELDS['wiki']
+            all_fields = DATASET.FIELDS['wiki']
         elif self.dataset == "all":
             for _, fields in DATASET.FIELDS.iteritems():
-                self.fields['str'] += fields['str']
-                self.fields['date'] += fields['date']
-                self.fields['num'] += fields['num']
-                self.fields['text'] += fields['text']
-                self.fields['bool'] += fields['bool']
+                all_fields['str'] += fields['str']
+                all_fields['date'] += fields['date']
+                all_fields['num'] += fields['num']
+                all_fields['text'] += fields['text']
+                all_fields['bool'] += fields['bool']
+        return all_fields
+
+    def make_fields_compatible(self, fields):
+        """
+        Passed field types could be specified as  "num"/"number"/"integer".
+        Standardize it to work with RQG
+        """
+        for field_type, field_list in fields.iteritems():
+            if field_type == "str" or field_type == "text":
+                self.fields["str"] = field_list
+                self.fields["text"] = field_list
+            if field_type == "number" or field_type == "integer":
+                self.fields["num"] = field_list
+            if field_type == "datetime":
+                self.fields["date"] = field_list
+        print "Smart queries will be generated on fields: %s" % self.fields
+
+    def get_custom_query_types(self):
+        query_types = []
+        for field_type in self.fields.keys():
+            query_types += QUERY_TYPE.CUSTOM_QUERY_TYPES[field_type]
+        return list(set(query_types))
 
     def replace_underscores(self, query):
         replace_dict = {
@@ -178,7 +226,10 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fts_match_phrase_query = {}
         es_match_phrase_query = {'match_phrase': {}}
         fieldname = self.get_random_value(self.fields['text'])
-        match_str = eval("self.get_queryable_%s" % fieldname + "(full=True)")
+        if fieldname == "name":
+            match_str = eval("self.get_queryable_%s" % fieldname + "(full=True)")
+        else:
+            match_str = eval("self.get_queryable_%s()" % fieldname)
         fts_match_phrase_query["field"] = fieldname
         fts_match_phrase_query["match_phrase"] = match_str
         es_match_phrase_query['match_phrase'][fieldname] = match_str
@@ -430,11 +481,11 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             fts, es = self.construct_match_phrase_query()
             fts_compound_query.append(fts)
             es_compound_query.append(es)
-        if bool(random.getrandbits(1)):
+        if bool(random.getrandbits(1))and 'date_range' in self.query_types:
             fts, es = self.construct_date_range_query()
             fts_compound_query.append(fts)
             es_compound_query.append(es)
-        if bool(random.getrandbits(1)):
+        if bool(random.getrandbits(1)) and 'numeric_range' in self.query_types:
             fts, es = self.construct_numeric_range_query()
             fts_compound_query.append(fts)
             es_compound_query.append(es)
