@@ -37,6 +37,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.upgrade_versions = self.input.param('upgrade_version', '2.0.1-170-rel')
         self.upgrade_versions = self.upgrade_versions.split(";")
+        self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.init_nodes = self.input.param('init_nodes', True)
 
         self.is_downgrade = self.input.param('downgrade', False)
