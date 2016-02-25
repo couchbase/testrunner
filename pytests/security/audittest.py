@@ -45,7 +45,6 @@ class auditTest(BaseTestCase):
         super(auditTest, self).tearDown()
 
     def getLocalIPAddress(self):
-        '''
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
@@ -54,6 +53,11 @@ class auditTest(BaseTestCase):
         if '1' not in ipAddress:
             status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
+        '''
+
+    def set_user_role(self,rest,username,user_role='admin'):
+        payload = "name=" + username + "&roles=" + user_role
+        status, content, header =  rest._set_user_roles(rest,user_name=username,payload=payload)
 
     #Wrapper around auditmain
     def checkConfig(self, eventID, host, expectedResults):
@@ -413,7 +417,7 @@ class auditTest(BaseTestCase):
         #User must be pre-created in LDAP in advance
         elif (ops in ['ldapLogin']):
             rest = RestConnection(self.master)
-            rest.ldapUserRestOperation(True, [[username]], exclude=None)
+            self.set_user_role(rest,username)
             status, content = rest.validateLogin(username, password, True, getContent=True)
             sessionID = (((status['set-cookie']).split("="))[1]).split(";")[0]
             expectedResults = {'source':'saslauthd', 'user':username, 'password':password, 'roles':roles, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
