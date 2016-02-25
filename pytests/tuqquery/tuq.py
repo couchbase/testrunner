@@ -19,6 +19,20 @@ from memcached.helper.data_helper import MemcachedClientHelper
 from couchbase_helper.tuq_helper import N1QLHelper
 
 
+def ExplainPlanHelper(res):
+    try:
+	rv = res["results"][0]["plan"]
+    except:
+	rv = res["results"][0]
+    return rv
+
+def PreparePlanHelper(res):
+    try:
+	rv = res["results"][0]["plan"]
+    except:
+	rv = res["results"][0]["operator"]
+    return rv
+
 class QueryTests(BaseTestCase):
     def setUp(self):
         if not self._testMethodName == 'suite_setUp':
@@ -121,7 +135,6 @@ class QueryTests(BaseTestCase):
                            if len(output) > 1:
                                 pid = [item for item in output if item][1]
                                 self.shell.execute_command("kill -9 %s" % pid)
-
 
 ##############################################################################################
 #
@@ -1947,8 +1960,9 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             res = self.run_cbq_query()
             self.log.info(res)
-            self.assertTrue(res["results"][0]["~children"][0]["index"] == "#primary",
-                            "Type should be #primary, but is: %s" % res["results"][0]["~children"][0]["index"])
+	    plan = ExplainPlanHelper(res)
+            self.assertTrue(plan["~children"][0]["index"] == "#primary",
+                            "Type should be #primary, but is: %s" % plan["~children"][0]["index"])
 
 ##############################################################################################
 #
@@ -1959,8 +1973,9 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             res = self.run_cbq_query()
             self.log.info(res)
-            self.assertTrue(res['results'][0]['~children'][1]['~child']['~children'][1]['scan']['index'] == index,
-                            "Type should be %s, but is: %s" %(index,res["results"][0]["~children"][1]['~child']))
+	    plan = ExplainPlanHelper(res)
+            self.assertTrue(plan['~children'][1]['~child']['~children'][1]['scan']['index'] == index,
+                            "Type should be %s, but is: %s" %(index,plan["~children"][1]['~child']))
 
 
 ###############################################################################################
@@ -1971,14 +1986,15 @@ class QueryTests(BaseTestCase):
     def test_explain_union(self,index):
         for bucket in self.buckets:
             res = self.run_cbq_query()
-            self.assertTrue(res["results"][0]["~children"][0]["~children"][0]["#operator"] == "UnionScan",
+	    plan = ExplainPlanHelper(res)
+            self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "UnionScan",
                         "UnionScan Operator is not used by this query")
-            if res["results"][0]["~children"][0]["~children"][0]["scans"][0]["#operator"] == "IndexScan":
+            if plan["~children"][0]["~children"][0]["scans"][0]["#operator"] == "IndexScan":
                 self.log.info("IndexScan Operator is also used by this query in scans")
             else:
                 self.log.error("IndexScan Operator is not used by this query, Covering Indexes not used properly")
                 self.fail("IndexScan Operator is not used by this query, Covering Indexes not used properly")
-            if res["results"][0]["~children"][0]["~children"][0]["scans"][0]["index"] == index:
+            if plan["~children"][0]["~children"][0]["scans"][0]["index"] == index:
                 self.log.info("Query is using specified index")
             else:
                 self.log.info("Query is not using specified index")
@@ -3523,4 +3539,3 @@ class QueryTests(BaseTestCase):
                         return
             self.sleep(5, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in res['results']])
         raise Exception('index %s is not online. last response is %s' % (index_name, res))
-
