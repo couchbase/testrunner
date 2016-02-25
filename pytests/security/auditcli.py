@@ -54,7 +54,8 @@ class auditcli(BaseTestCase):
         else:
             if self.source == 'saslauthd':
                 rest = RestConnection(self.master)
-                rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
+                #rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
+                self.set_user_role(rest,self.ldapUser)
 
 
 
@@ -65,7 +66,8 @@ class auditcli(BaseTestCase):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
-        '''status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
+        '''
+        status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
         return ipAddress
         '''
 
@@ -73,6 +75,11 @@ class auditcli(BaseTestCase):
         if "runCmd" in output[0]:
             output = output[1:]
         return output
+
+    def set_user_role(self,rest,username,user_role='admin'):
+        payload = "name=" + username + "&roles=" + user_role
+        status, content, header =  rest._set_user_roles(rest,user_name=username,payload=payload)
+
 
     #Wrapper around auditmain
     def checkConfig(self, eventID, host, expectedResults):

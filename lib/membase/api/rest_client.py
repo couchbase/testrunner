@@ -2982,6 +2982,19 @@ class RestConnection(object):
         log.info ("Status of executeValidateCredentials command - {0}".format(status))
         return status, json.loads(content)
 
+    def _set_user_roles(self,rest,user_name,payload):
+        url = "settings/rbac/users/" + user_name
+        param = payload
+        api = rest.baseUrl + url
+        status, content, header = rest._http_request(api, 'PUT', param)
+        return status, content, header
+
+    def _delete_user(self,rest,user_name):
+        url = "/settings/rbac/users/" + user_name
+        api = rest.baseUrl + url
+        status, content, header = rest._http_request(api, 'DELETE')
+        return status, content, header
+
     '''
     Audit Commands
     '''
