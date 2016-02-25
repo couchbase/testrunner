@@ -71,7 +71,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
              query_definitions=self.query_definitions, query_with_explain=True, query=True)
 
         self.stop_firewall_on_node(index_servers[0])
-        self.sleep(30)
+        self.sleep(60)
         # Add removed index from query
         self.query_definitions.append(unavailable_query)
         # Drop indexes
