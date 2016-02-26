@@ -7,6 +7,7 @@ from ent_backup_restore.validation_helpers.backup_restore_validations import Bac
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -246,6 +247,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --force-updates"
         if self.no_progress_bar:
             args += " --no-progress-bar"
+        rest_conn = RestConnection(self.backupset.restore_cluster_host)
+        for bucket in self.buckets:
+            self.log.info("Creating bucket {0} in restore host {1}".format(bucket.name,
+                                                                           self.backupset.restore_cluster_host.ip))
+            rest_conn.create_bucket(bucket=bucket.name, ramQuotaMB=512)
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/backup {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
