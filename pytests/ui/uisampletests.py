@@ -54,10 +54,10 @@ class BucketTests(BaseUITestCase):
         bucket.num_replica = '0'
         NavigationHelper(self).navigate('Data Buckets')
         try:
-            bucket_helper.create(bucket)
+            BucketHelper(self).create(bucket)
         except Exception, ex:
             if error and str(ex).find('create new bucket pop up is not closed') != -1:
-                actual_err = bucket_helper.get_error()
+                actual_err = BucketHelper(self).get_error()
                 self.assertTrue(actual_err.find(error) != -1, 'Expected error %s. Actual %s' % (error, actual_err))
                 self.log.info('Error verified')
             else:
@@ -882,8 +882,10 @@ class BucketTestsControls():
     def edit_btn(self):
         return self.helper.find_control('bucket','edit_btn')
 
-    def bucket_stats(self, stat):
-        return self.helper.find_control('bucket_stats', 'value_stat', text=stat)
+    def bucket_stats(self, stat=None, tab=None):
+        self.arrow = self.helper.find_control('bucket_stats', 'value_stat_arrow', text=tab)
+        self.stats = self.helper.find_control('bucket_stats', 'value_stat', text=stat)
+        return self
 
     def bucket_stat_view_block(self):
         return self.helper.find_control('bucket_stats','view_stats_block')
@@ -1456,14 +1458,15 @@ class BucketHelper():
         self.fill_bucket_info(bucket)
         self.controls.bucket_pop_up().create_btn.click()
         self.tc.log.info("created bucket '%s'" % bucket.name)
-        self.wait.until_not(lambda fn:
+        if self.controls.bucket_pop_up().create_bucket_pop_up.is_present():
+            self.wait.until_not(lambda fn:
                             self.controls.bucket_pop_up().create_bucket_pop_up.is_displayed(),
                             "create new bucket pop up is not closed in %d sec" % self.wait._timeout)
         self.wait.until(lambda fn: self.is_bucket_present(bucket),
                          "Bucket '%s' is not displayed" % bucket)
         self.tc.log.info("bucket '%s' is displayed" % bucket)
-        self.wait.until(lambda fn: self.is_bucket_helthy(bucket),
-                        "Bucket '%s' is not  in healthy state" % bucket)
+        #self.wait.until(lambda fn: self.is_bucket_helthy(bucket),
+        #                "Bucket '%s' is not  in healthy state" % bucket)
 
     def fill_bucket_info(self, bucket, parent='create_bucket_pop_up'):
         if not parent == 'initialize_step':
@@ -1579,6 +1582,8 @@ class BucketHelper():
     def open_stats(self, bucket):
         self.controls.bucket_info(bucket.name).name.click()
         self.tc.log.info("Stats page is opened")
+        time.sleep(30)
+        self.controls.bucket_stats(tab="Server Resources").arrow.click()
 
     def open_view_block_stats(self):
         self.wait.until(lambda fn:
@@ -1591,10 +1596,10 @@ class BucketHelper():
     def get_stat(self, stat, block=None):
         if block is None:
             self.wait.until(lambda fn:
-                            self.controls.bucket_stats(stat).is_displayed(),
+                            self.controls.bucket_stats(stat).stats.is_displayed(),
                             "stat %s is not displayed in %d sec" % (
                                                   stat, self.wait._timeout))
-            return self.controls.bucket_stats(stat).get_text()
+            return self.controls.bucket_stats(stat).stats.get_text()
         elif block == 'view':
             self.open_view_block_stats()
             self.wait.until(lambda fn:
