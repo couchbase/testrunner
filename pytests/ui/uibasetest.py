@@ -26,13 +26,8 @@ class BaseUITestCase(unittest.TestCase):
     # selenium thread
 
     def _start_selenium(self):
-        host = self.machine.ip
-        if host in ['localhost', '127.0.0.1']:
-
-            os.system("java -jar selenium-server-standalone-2.48.2.jar -Dwebdriver.chromedriver='~/Applications/chromedriver' > selenium.log 2>&1"
-                      )
-        else:
-            self.shell.execute_command('{0}start-selenium.bat > {0}selenium.log 2>&1 &'.format(self.input.ui_conf['selenium_path']))
+        self.shell.execute_command("java -jar ~/selenium-server-standalone-2.52.0.jar "
+                                   "-Dwebdriver.chromedriver='~/Applications/chromedriver' > selenium.log 2>&1")
 
     def _kill_old_drivers(self):
         if self.shell.extract_remote_info().type.lower() == 'windows':
@@ -123,7 +118,7 @@ class BaseUITestCase(unittest.TestCase):
         })
             self.log.info('start selenium started')
 
-            self.driver.get("http://127.0.0.1:8091")
+            self.driver.get("http://" + self.servers[0].ip + ":8091")
             self.username = "Administrator"
             self.password = "password"
             self.driver.maximize_window()
@@ -273,7 +268,7 @@ class Control():
 class ControlsHelper():
     def __init__(self, driver):
         self.driver = driver
-        file = "pytests/ui/uilocators.conf"
+        file = "pytests/ui/uilocators-watson.conf"
         config = ConfigParser.ConfigParser()
         config.read(file)
         self.locators = config
