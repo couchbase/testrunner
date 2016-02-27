@@ -2583,7 +2583,7 @@ class FTSBaseTest(unittest.TestCase):
         path = TestInputSingleton.input.param("logs_folder", "/tmp")
         for serverInfo in self._cb_cluster.get_fts_nodes():
             if not self.__is_cluster_run():
-                serverInfo.fts_port = 9110
+                serverInfo.fts_port = 8094
             self.log.info("Grabbing fts diag from {0}...".format(serverInfo.ip))
             diag_url = "http://{0}:{1}/api/diag".format(serverInfo.ip,
                                                         serverInfo.fts_port)
