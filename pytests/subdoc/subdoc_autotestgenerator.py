@@ -31,6 +31,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.randomDataGenerator = RandomDataGenerator()
         self.subdoc_gen_helper = SubdocHelper()
         self.kv_store = {}
+        self.load_thread_list = []
         if self.prepopulate_data:
             self.run_sync_data()
 
