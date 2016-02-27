@@ -2279,7 +2279,7 @@ class FTSBaseTest(unittest.TestCase):
         """
         _, defn = index.get_index_defn()
         start_time = time.time()
-        while not defn['planPIndexes']:
+        while 'planPIndexes' not in  defn:
             if time.time() - start_time > 180:
                 self.fail("planPIndexes=null for index {0} even after 3 mins"
                           .format(index.name))
