@@ -135,6 +135,9 @@ class EvictionKV(EvictionBase):
 
         self.load_set_to_be_evicted(20, 100)
         self.run_expiry_pager()
+        print "sleep 40 seconds and verify all items expired"
+        time.sleep(40)
+        self._verify_all_buckets(self.master)
         self.cluster.wait_for_stats([self.master],
                                     "default", "",
                                     "curr_items", "==", 0, timeout=60)
