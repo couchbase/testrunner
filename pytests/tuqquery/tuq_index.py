@@ -102,8 +102,8 @@ class QueriesViewsTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 self._verify_results(actual_result['results'], [])
                 self.query = "CREATE INDEX %s ON %s(%s) USING GSI" % (view_name, bucket.name, 'VMs')
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, view_name)
                 self._verify_results(actual_result['results'], [])
@@ -135,8 +135,8 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_index_child"
             try:
                 self.query = "CREATE INDEX %s ON %s(VMs) USING %s" % (index_name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT count(VMs) FROM %s ' % (bucket.name)
@@ -154,8 +154,8 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_index_child"
             try:
                 self.query = "CREATE INDEX %s ON %s(VMs) USING %s" % (index_name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT count(VMs) FROM %s GROUP BY VMs' % (bucket.name)
@@ -173,8 +173,8 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_index_arr"
             try:
                 self.query = "CREATE INDEX %s ON %s(VMs) USING %s" % (index_name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT ARRAY vm.memory FOR vm IN VMs END AS vm_memories FROM %s' % (bucket.name)
@@ -191,8 +191,8 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_index_meta"
             try:
                 self.query = "CREATE INDEX %s ON %s(meta(%s).type) USING %s" % (index_name, bucket.name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT name FROM %s WHERE meta(%s).type = "json"' % (bucket.name, bucket.name)
@@ -209,8 +209,8 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_index_fn"
             try:
                 self.query = "CREATE INDEX %s ON %s(round(test_rate)) USING %s" % (index_name, bucket.name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN select name, round(test_rate) as rate from %s WHERE round(test_rate) = 2' % (bucket.name, bucket.name)
@@ -230,8 +230,8 @@ class QueriesViewsTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "my_attr_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, self.FIELDS_TO_INDEX[ind - 1], self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     self.query = "EXPLAIN SELECT * FROM %s WHERE %s = 'abc'" % (bucket.name, self.FIELDS_TO_INDEX[ind - 1])
@@ -250,8 +250,8 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_non_index"
             try:
                 self.query = "CREATE INDEX %s ON %s(name) USING %s" % (index_name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = "EXPLAIN SELECT * FROM %s WHERE email = 'abc'" % (bucket.name)
@@ -270,8 +270,8 @@ class QueriesViewsTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "my_aggr_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, self.FIELDS_TO_INDEX[ind - 1], self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -292,8 +292,8 @@ class QueriesViewsTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "my_aggr_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, self.FIELDS_TO_INDEX[ind - 1], self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -314,8 +314,8 @@ class QueriesViewsTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "join_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(name) USING %s" % (index_name, bucket.name, self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -336,8 +336,8 @@ class QueriesViewsTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "join_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(tasks_ids) USING %s" % (index_name, bucket.name, self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -358,8 +358,8 @@ class QueriesViewsTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "join_index%s" % ind
                     self.query = "CREATE INDEX %s ON %s(join_day) USING %s" % (index_name, bucket.name, self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -378,8 +378,8 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_index_child"
             try:
                 self.query = "CREATE INDEX %s ON %s(VMs) USING %s" % (index_name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT VMs FROM %s ' % (bucket.name) + \
@@ -397,8 +397,8 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_index_obj"
             try:
                 self.query = "CREATE INDEX %s ON %s(tasks_points) USING %s" % (index_name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
@@ -416,8 +416,8 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_index_obj_el"
             try:
                 self.query = "CREATE INDEX %s ON %s(tasks_points.task1) USING %s" % (index_name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT tasks_points.task1 AS task from %s ' % (bucket.name) + \
@@ -435,8 +435,8 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_index_list_el"
             try:
                 self.query = "CREATE INDEX %s ON %s(skills[0]) USING %s" % (index_name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT DISTINCT skills[0] as skill' + \
@@ -454,8 +454,8 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_index_list"
             try:
                 self.query = "CREATE INDEX %s ON %s(skills[0]) USING %s" % (index_name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 self.query = 'EXPLAIN SELECT DISTINCT skills[0] as skill' + \
@@ -475,8 +475,8 @@ class QueriesViewsTests(QueryTests):
                 for ind in xrange(self.num_indexes):
                     index_name = "my_index_complex%s" % ind
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, self.FIELDS_TO_INDEX[ind - 1], self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -498,8 +498,8 @@ class QueriesViewsTests(QueryTests):
             try:
                self.query = "CREATE INDEX %s ON %s(" % (index_name, bucket.name) + \
                "meta(%s"%(bucket.name) + ").id) USING %s" % self.index_type
-               if self.gsi_type:
-                   self.query += " WITH {'index_type': 'memdb'}"
+               # if self.gsi_type:
+               #     self.query += " WITH {'index_type': 'memdb'}"
                self.run_cbq_query()
             except Exception, ex:
                self.assertTrue(str(ex).find("Error creating index") != -1,
@@ -529,8 +529,8 @@ class QueriesViewsTests(QueryTests):
                     ind_name = '%s_%s' % (index_name_prefix, attr.split('.')[0].split('[')[0].replace(',', '_'))
                     self.query = "CREATE INDEX %s ON %s(%s)  USING %s" % (ind_name,
                                                                     bucket.name, attr, self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, ind_name)
                     created_indexes.append('%s' % (ind_name))
@@ -557,8 +557,8 @@ class QueriesViewsTests(QueryTests):
                     ind_name = '%s_%s' % (index_name_prefix, attr.split('.')[0].split('[')[0].replace(',', '_'))
                     self.query = "CREATE INDEX %s ON %s(%s)  USING %s" % (ind_name,
                                                                     bucket.name, attr, self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, ind_name)
                     created_indexes.append('%s' % (ind_name))
@@ -587,8 +587,8 @@ class QueriesViewsTests(QueryTests):
                     ind_name = '%s_%s' % (index_name_prefix, attr.split('.')[0].split('[')[0].replace(',', '_'))
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (ind_name,
                                                                        bucket.name, attr, self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, ind_name)
                     created_indexes.append('%s' % (ind_name))
@@ -618,8 +618,8 @@ class QueriesViewsTests(QueryTests):
                     ind_name = '%s_%s' % (index_name_prefix, attr.split('.')[0].split('[')[0].replace(',', '_'))
                     self.query = "CREATE INDEX %s ON %s(%s) " % (ind_name,
                                                                     bucket.name, attr)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, ind_name)
                     created_indexes.append(ind_name)
@@ -651,8 +651,8 @@ class QueriesViewsTests(QueryTests):
                     index_name = '%s_%s%s' % (index_name_prefix, attr, str(uuid.uuid4())[:4])
                     self.query = "CREATE INDEX %s ON %s(%s) " % (index_name,
                                                                 bucket.name, attr)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
@@ -688,8 +688,8 @@ class QueriesViewsTests(QueryTests):
                     index_name = '%s_%s' % (index_name_prefix, attr)
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name,
                                                                     bucket.name, attr, self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append('%s_%s' % (index_name_prefix, attr))
@@ -713,8 +713,8 @@ class QueriesViewsTests(QueryTests):
                 for field in index_fields:
                     index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, ','.join(field.split(';')), self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     indexes.append(index_name)
@@ -759,8 +759,8 @@ class QueriesViewsTests(QueryTests):
                 for field in index_fields:
                     index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, ','.join(field.split(';')), self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     indexes.append(index_name)
@@ -815,16 +815,16 @@ class QueriesViewsTests(QueryTests):
                     index_name = '%sid_meta' % (index_name_prefix)
                     query = "CREATE INDEX %s ON %s(meta(%s).id) USING %s" % (
                         index_name, bucket.name, bucket.name, self.index_type)
-                    if self.gsi_type:
-                        query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query(query=query)
                     self._wait_for_index_online(bucket, index_name)
                     indexes.append(index_name)
                     index_name = '%stype_meta' % (index_name_prefix)
                     query = "CREATE INDEX %s ON %s(meta(%s).type) USING %s" % (
                         index_name, bucket.name, bucket.name, self.index_type)
-                    if self.gsi_type:
-                        query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query(query=query)
                     self._wait_for_index_online(bucket, index_name)
                     indexes.append(index_name)
@@ -859,8 +859,8 @@ class QueriesViewsTests(QueryTests):
                     index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
                     query = "CREATE INDEX %s ON %s(%s) USING %s" % (
                     index_name, bucket.name, ','.join(field.split(';')), self.index_type)
-                    if self.gsi_type:
-                        query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query(query=query)
                     self._wait_for_index_online(bucket, index_name)
                     indexes.append(index_name)
@@ -952,8 +952,8 @@ class QueriesJoinViewsTests(JoinTests):
                 for field in index_fields:
                     index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
                     self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name, ','.join(field.split(';')), self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     indexes.append(index_name)

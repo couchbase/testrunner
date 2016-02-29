@@ -697,8 +697,8 @@ class QueryTests(BaseTestCase):
                 if (res['metrics']['resultCount'] == 0):
                     self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
                     self.log.info("Creating primary index for %s ..." % bucket.name)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     try:
                         self.run_cbq_query()
                         self.primary_index_created= True
