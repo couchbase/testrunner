@@ -304,8 +304,8 @@ class QueriesOpsTests(QueryTests):
         self.assertTrue(index_field, "Index field should be provided")
         for bucket in self.bucket:
             query = "CREATE INDEX %s ON %s(%s) USING GSI" % (index_name, bucket.name, ','.join(index_field.split(';')))
-            if self.gsi_type:
-                query += "  WITH {'index_type': 'memdb'}"
+            # if self.gsi_type:
+            #     query += "  WITH {'index_type': 'memdb'}"
             self.run_cbq_query(query=query)
         try:
             shell = RemoteMachineShellConnection(self.master)
@@ -535,8 +535,8 @@ class QueriesOpsTests(QueryTests):
             index_name = 'idx_%s_%s_%s' % (bucket.name, index_field, str(uuid.uuid4())[:4])
             query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name,
                                                                       ','.join(index_field.split(';')), self.indx_type)
-            if self.gsi_type:
-                query += " WITH {'index_type': 'memdb'}"
+            # if self.gsi_type:
+            #     query += " WITH {'index_type': 'memdb'}"
             self.run_cbq_query(query=query)
             if self.indx_type.lower() == 'gsi':
                 self._wait_for_index_online(bucket, index_name)

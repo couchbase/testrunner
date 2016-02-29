@@ -2466,8 +2466,8 @@ class QueryTests(BaseTestCase):
                     self.query = "CREATE INDEX %s ON %s(name, email, join_mo)  USING %s" % (index_name, bucket.name,self.index_type)
                 elif ind =="two":
                     self.query = "CREATE INDEX %s ON %s(email,join_mo) USING %s" % (index_name, bucket.name,self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -2513,8 +2513,8 @@ class QueryTests(BaseTestCase):
                     self.query = "CREATE INDEX %s ON %s(name, email, join_day)  USING %s" % (index_name, bucket.name,self.index_type)
                 elif ind =="two":
                     self.query = "CREATE INDEX %s ON %s(email)  USING %s" % (index_name, bucket.name,self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -2544,8 +2544,8 @@ class QueryTests(BaseTestCase):
                 index_name = "metaindex%s" % ind
                 if ind =="one":
                     self.query = "CREATE INDEX %s ON %s(meta().id)  USING %s" % (index_name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -2580,8 +2580,8 @@ class QueryTests(BaseTestCase):
                 index_name = "meta_where%s" % ind
                 if ind =="one":
                     self.query = "CREATE INDEX {0} ON {1}(meta().id)  where meta().id like 'query-testemployee6%' USING {2}".format(index_name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -2617,8 +2617,8 @@ class QueryTests(BaseTestCase):
                 index_name = "meta_where%s" % ind
                 if ind =="one":
                     self.query = "CREATE INDEX {0} ON {1}(meta().id)  where meta().id >10 USING {2}".format(index_name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -2654,8 +2654,8 @@ class QueryTests(BaseTestCase):
                 index_name = "meta_where%s" % ind
                 if ind =="one":
                     self.query = "CREATE INDEX {0} ON {1}(meta().id, name)  where meta().id >10 USING {2}".format(index_name, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += "WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += "WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -2696,9 +2696,9 @@ class QueryTests(BaseTestCase):
                                       'CREATE INDEX ONE ON default(meta().flags) using GSI' : ('syntax error', 3000),
                                       'CREATE INDEX ONE ON default(meta().expiry) using GSI' : ('syntax error', 3000),
                                       'CREATE INDEX ONE ON default(meta().cas) using VIEW' : ('syntax error', 3000)}
-                    if self.gsi_type:
-                        for query in queries_errors.iterkeys():
-                            query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     for query in queries_errors.iterkeys():
+                    #         query += " WITH {'index_type': 'memdb'}"
                     self.negative_common_body(queries_errors)
 
     def test_meta_negative_namespace(self):
@@ -2714,9 +2714,9 @@ class QueryTests(BaseTestCase):
                                       'CREATE INDEX ONE ON default(meta(invalid).id) using VIEW' : ('syntax error', 3000),
                                       'CREATE INDEX ONE ON default(meta()) using GSI' : ('syntax error', 3000),
                                       'CREATE INDEX ONE ON default(meta()) using VIEW' : ('syntax error', 3000)}
-                    if self.gsi_type:
-                        for query in queries_errors.iterkeys():
-                            query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     for query in queries_errors.iterkeys():
+                    #         query += " WITH {'index_type': 'memdb'}"
                     self.negative_common_body(queries_errors)
 
 ######################## META NEW END ######################################
@@ -2742,8 +2742,8 @@ class QueryTests(BaseTestCase):
                     self.query = "CREATE INDEX %s ON %s(job_title, name)  USING %s" % (index_name, bucket.name,self.index_type)
                 elif ind =="two":
                     self.query = "CREATE INDEX %s ON %s(join_day, name)  USING %s" % (index_name, bucket.name,self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -3515,8 +3515,8 @@ class QueryTests(BaseTestCase):
                 if (res['metrics']['resultCount'] == 0):
                     self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
                     self.log.info("Creating primary index for %s ..." % bucket.name)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     try:
                         self.run_cbq_query()
                         self.primary_index_created= True
