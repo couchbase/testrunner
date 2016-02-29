@@ -865,7 +865,6 @@ class QueriesIndexTests(QueryTests):
                     # if self.gsi_type:
                     #     self.query += " WITH {'index_type': 'memdb'}"
                     actual_result = self.run_cbq_query()
-                    import pdb;pdb.set_trace()
                     self._wait_for_index_online(bucket, view_name)
                     self._verify_results(actual_result['results'], [])
                     created_indexes.append(view_name)
@@ -893,7 +892,6 @@ class QueriesIndexTests(QueryTests):
                     self.query = "select %s from %s where %s is not null and %s is not null" % (','.join(self.FIELDS_TO_INDEX[ind - 1]), bucket.name,
                                                                                                 self.FIELDS_TO_INDEX[ind - 1][0], self.FIELDS_TO_INDEX[ind - 1][1])
                     actual_result = self.run_cbq_query()
-                    import pdb;pdb.set_trace()
                     self.assertTrue(len(actual_result['results']), self.num_items)
             except Exception, ex:
                 content = self.cluster.query_view(self.master, "ddl_%s" % view_name, view_name, {"stale" : "ok"},
