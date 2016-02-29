@@ -45,6 +45,7 @@ class auditTest(BaseTestCase):
         super(auditTest, self).tearDown()
 
     def getLocalIPAddress(self):
+        '''
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
@@ -53,7 +54,6 @@ class auditTest(BaseTestCase):
         if '1' not in ipAddress:
             status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
-        '''
 
     #Wrapper around auditmain
     def checkConfig(self, eventID, host, expectedResults):
@@ -199,7 +199,7 @@ class auditTest(BaseTestCase):
         rest = RestConnection(self.master)
 
         if (ops == 'memoryQuota'):
-            expectedResults = {'memory_quota':512, 'source':source, 'user':user, 'ip':self.ipAddress, 'port':12345, 'cluster_name':'', 'index_memory_quota':256}
+            expectedResults = {'memory_quota':512, 'source':source, 'user':user, 'ip':self.ipAddress, 'port':12345, 'cluster_name':'', 'index_memory_quota':256,'fts_memory_quota': 327}
             rest.init_cluster_memoryQuota(expectedResults['user'], password, expectedResults['memory_quota'])
 
         elif (ops == 'loadSample'):
@@ -383,6 +383,8 @@ class auditTest(BaseTestCase):
         source = 'ns_server'
         rest = RestConnection(self.master)
         user = self.master.rest_username
+        roles = []
+        roles.append(role)
 
         if (ops in ['loginRoAdmin', 'deleteuser', 'passwordChange']):
                 rest.create_ro_user(username, password)
@@ -390,23 +392,23 @@ class auditTest(BaseTestCase):
         if (ops in ['loginAdmin', 'loginRoAdmin']):
             status, content = rest.validateLogin(username, password, True, getContent=True)
             sessionID = (((status['set-cookie']).split("="))[1]).split(";")[0]
-            expectedResults = {'source':source, 'user':username, 'password':password, 'role':role, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
+            expectedResults = {'source':source, 'user':username, 'password':password, 'roles':roles, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
 
         elif (ops in ['deleteuser']):
-            expectedResults = {"role":role, "real_userid:source":source, 'real_userid:user':user,
+            expectedResults = {"roles":roles, "real_userid:source":source, 'real_userid:user':user,
                                'ip':self.ipAddress, "port":123456, 'userid':username}
             rest.delete_ro_user()
 
         elif (ops in ['passwordChange']):
             expectedResults = {'real_userid:source':source, 'real_userid:user':user,
-                               'password':password, 'role':role, 'ip':self.ipAddress, "port":123456,
+                               'password':password, 'roles':roles, 'ip':self.ipAddress, "port":123456,
                                'userid':username}
             rest.changePass_ro_user(username, password)
 
         elif (ops in ['invalidlogin']):
             status, content = rest.validateLogin(username, password, True, getContent=True)
-            expectedResults = {'real_userid':username, 'password':password, 'role':role,
-                               'ip':self.ipAddress, "port":123456}
+            expectedResults = {'real_userid':username, 'password':password, 'roles':roles,
+                               'ip':self.ipAddress, "port":123456,'source': 'rejected'}
 
         #User must be pre-created in LDAP in advance
         elif (ops in ['ldapLogin']):
@@ -414,7 +416,7 @@ class auditTest(BaseTestCase):
             rest.ldapUserRestOperation(True, [[username]], exclude=None)
             status, content = rest.validateLogin(username, password, True, getContent=True)
             sessionID = (((status['set-cookie']).split("="))[1]).split(";")[0]
-            expectedResults = {'source':'saslauthd', 'user':username, 'password':password, 'role':role, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
+            expectedResults = {'source':'saslauthd', 'user':username, 'password':password, 'roles':roles, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
 
         self.checkConfig(self.eventID, self.master, expectedResults)
 
