@@ -139,8 +139,19 @@ class ViewMergingTests(BaseTestCase):
         results = self.merged_query(self.map_view_name, {'stale': 'update_after'})
         self.assertEquals(results.get(u'total_rows', None), self.num_docs)
         self.assertEquals(len(results.get(u'rows', None)), self.num_docs)
-        time.sleep(1)
-        results = self.merged_query(self.map_view_name, {'stale': 'ok'})
+
+        retries = 50
+        for i in range(retries):
+            results = self.merged_query(self.map_view_name, {'stale': 'ok'})
+            if results['total_rows'] == self.num_docs + 2:
+                break
+            else:
+                # Poll interval to not overwhelm the server
+                time.sleep(0.2)
+        else:
+            self.fail("Updater didn't finish after {0} retries".format(
+                    retries))
+
         self.assertEquals(results.get(u'total_rows', None), self.num_docs + 2)
         self.assertEquals(len(results.get(u'rows', None)), self.num_docs + 2)
         self.verify_keys_are_sorted(results)
