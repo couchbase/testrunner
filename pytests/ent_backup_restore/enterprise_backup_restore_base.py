@@ -7,7 +7,7 @@ from ent_backup_restore.validation_helpers.backup_restore_validations import Bac
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 
 
 class EnterpriseBackupRestoreBase(BaseTestCase):
@@ -140,7 +140,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.vbucket_seqno.append(vseqno)
 
     def backup_create(self):
-        args = "create --dir {0} --name {1}".format(self.backupset.directory, self.backupset.name)
+        args = "config --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
         if self.backupset.exclude_buckets:
             args += " --exclude-buckets \"{0}\"".format(",".join(self.backupset.exclude_buckets))
         if self.backupset.include_buckets:
@@ -156,7 +156,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.backupset.disable_data:
             args += " --disable-data"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{0}/backup {1}".format(self.cli_command_location, args)
+        command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         return output, error
@@ -171,7 +171,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info(msg)
 
     def backup_cluster(self):
-        args = "cluster --dir {0} --name {1} --host http://{2}:{3} --username {4} --password {5}". \
+        args = "backup --archive {0} --repo {1} --host http://{2}:{3} --username {4} --password {5}". \
             format(self.backupset.directory, self.backupset.name, self.backupset.cluster_host.ip,
                    self.backupset.cluster_host.port, self.backupset.cluster_host_username,
                    self.backupset.cluster_host_password)
@@ -182,7 +182,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.no_progress_bar:
             args += " --no-progress-bar"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{0}/backup {1}".format(self.cli_command_location, args)
+        command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if error or "Backup successfully completed" not in output[0]:
@@ -218,7 +218,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             backup_end = self.backups[int(self.backupset.end) - 1]
         except IndexError:
             backup_end = "{0}{1}".format(self.backups[-1], self.backupset.end)
-        args = "restore --dir {0} --name {1} --host http://{2}:{3} --username {4} --password {5} --start {6} " \
+        args = "restore --archive {0} --repo {1} --host http://{2}:{3} --username {4} --password {5} --start {6} " \
                "--end {7}".format(self.backupset.directory, self.backupset.name,
                                                   self.backupset.restore_cluster_host.ip,
                                                   self.backupset.restore_cluster_host.port,
@@ -247,14 +247,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --force-updates"
         if self.no_progress_bar:
             args += " --no-progress-bar"
-        rest_conn = RestConnection(self.backupset.restore_cluster_host)
+        rest_helper = RestHelper(self.backupset.restore_cluster_host)
         for bucket in self.buckets:
-            if not rest_conn.bucket_exists(bucket):
+            if not rest_helper.bucket_exists(bucket):
+                rest_conn = RestConnection(self.backupset.restore_cluster_host)
                 self.log.info("Creating bucket {0} in restore host {1}".format(bucket.name,
                                                                            self.backupset.restore_cluster_host.ip))
                 rest_conn.create_bucket(bucket=bucket.name, ramQuotaMB=512)
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{0}/backup {1}".format(self.cli_command_location, args)
+        command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         return output, error
@@ -278,15 +279,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info(msg)
 
     def backup_list(self):
-        args = "list --dir {0}".format(self.backupset.directory)
+        args = "list --archive {0}".format(self.backupset.directory)
         if self.backupset.backup_list_name:
-            args += " --name {0}".format(self.backupset.backup_list_name)
+            args += " --repo {0}".format(self.backupset.backup_list_name)
         if self.backupset.backup_incr_backup:
-            args += " --incr-backup {0}".format(self.backupset.backup_incr_backup)
+            args += " --backup {0}".format(self.backupset.backup_incr_backup)
         if self.backupset.bucket_backup:
-            args += " --bucket-backup {0}".format(self.backupset.bucket_backup)
+            args += " --bucket {0}".format(self.backupset.bucket_backup)
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{0}/backup {1}".format(self.cli_command_location, args)
+        command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if error:
@@ -295,10 +296,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             return True, output, "Backup list obtained"
 
     def backup_compact(self):
-        args = "compact --dir {0} --name {1} --backup {2}".format(self.backupset.directory, self.backupset.name,
+        args = "compact --archive {0} --repo {1} --backup {2}".format(self.backupset.directory, self.backupset.name,
                                                                   self.backups[self.backupset.backup_to_compact])
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{0}/backup {1}".format(self.cli_command_location, args)
+        command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if "Compaction succeeded," not in output[0]:
@@ -307,9 +308,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             return True, output, "Compaction of backup success"
 
     def backup_remove(self):
-        args = "remove --dir {0} --name {1}".format(self.backupset.directory, self.backupset.name)
+        args = "remove --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{0}/backup {1}".format(self.cli_command_location, args)
+        command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         self.verify_cluster_stats()
@@ -355,10 +356,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             backup_end = self.backups[int(self.backupset.end) - 1]
         except IndexError:
             backup_end = "{0}{1}".format(self.backups[-1], self.backupset.end)
-        args = "merge --dir {0} --name {1} --start {2} --end {3}".format(self.backupset.directory, self.backupset.name,
+        args = "merge --archive {0} --repo {1} --start {2} --end {3}".format(self.backupset.directory, self.backupset.name,
                                                                          backup_start, backup_end)
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "{0}/backup {1}".format(self.cli_command_location, args)
+        command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if error or "Merge completed successfully" not in output[0]:
