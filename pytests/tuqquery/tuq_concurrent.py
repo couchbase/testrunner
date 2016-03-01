@@ -95,8 +95,8 @@ class ConcurrentTests(QueryTests):
                                                                                ind_name,
                                                                                fields.index(attr),
                                                                                bucket.name, attr, self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, '%s_%s_%s' % (index_name_prefix, ind_name,
                                                         fields.index(attr)))
