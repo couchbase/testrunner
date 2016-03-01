@@ -128,7 +128,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.run_mutation_concurrent_operations(self.buckets[0], data_key, json_document)
 
     def run_mutation_concurrent_operations(self, bucket = None, document_key = "", json_document = {}):
-        client = self.direct_client(self.master, self.buckets[0])
+        client = self.direct_client(self.master, bucket)
         self.number_of_operations =  self.input.param("number_of_operations",10)
         # INSERT INTO  COUCHBASE
         self.set(client, document_key, json_document)
@@ -142,7 +142,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         result_queue = Queue.Queue()
         self.log.info(" number of operations {0}".format(len(operations)))
         for operation in operations:
-            client = self.direct_client(self.master, self.buckets[0])
+            client = self.direct_client(self.master, bucket)
             t = threading.Thread(target=self.run_mutation_operation, args = (client, document_key, operation, result_queue))
             t.daemon = True
             t.start()
@@ -228,11 +228,12 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         document_push.join()
         self.sleep(2)
         # RUN WORKER THREADS
-        for x in range(self.concurrent_threads):
-            t = threading.Thread(target=self.worker_operation_run, args = (document_info_queue, error_queue, self.buckets[0], self.mutation_operation_type, self.force_operation_type))
-            t.daemon = True
-            t.start()
-            thread_list.append(t)
+        for bucket in self.buckets:
+            for x in range(self.concurrent_threads*len(self.buckets)):
+                t = threading.Thread(target=self.worker_operation_run, args = (document_info_queue, error_queue, bucket, self.mutation_operation_type, self.force_operation_type))
+                t.daemon = True
+                t.start()
+                thread_list.append(t)
         if self.run_load_during_mutations:
             self.run_async_data()
         for t in thread_list:
@@ -280,7 +281,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         bucket,
         mutation_operation_type = "any",
         force_operation_type = None):
-        client = self.direct_client(self.master, self.buckets[0])
+        client = self.direct_client(self.master, bucket)
         while (not queue.empty()):
             document_info = queue.get()
             document_key = document_info["document_key"]
@@ -389,7 +390,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.log.info("TOTAL OPERATIONS CALCULATED {0} ".format(len(operations)))
         thread_list = []
         for operation in operations:
-            client = self.direct_client(self.master, self.buckets[0])
+            client = self.direct_client(self.master, bucket)
             t = threading.Thread(target=self.run_mutation_operation, args = (client, document_key, operation, result_queue))
             t.daemon = True
             t.start()
@@ -448,7 +449,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
 
     ''' Method to verify kv store data set '''
     def run_verification(self, bucket, kv_store = {}):
-        client = self.direct_client(self.master, self.buckets[0])
+        client = self.direct_client(self.master, bucket)
         error_result = {}
         for document_key in kv_store.keys():
             pairs = {}

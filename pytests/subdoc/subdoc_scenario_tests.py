@@ -66,7 +66,7 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                     self.nodes_in_list,
                                    self.nodes_out_list, services = self.services_in)
-            self.test_mutation_operations()
+            self.run_mutation_operations_for_situational_tests()
             rebalance.result()
         except Exception, ex:
             raise
