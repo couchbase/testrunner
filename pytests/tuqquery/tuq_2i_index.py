@@ -1226,7 +1226,7 @@ class QueriesIndexTests(QueryTests):
                             self.query = 'EXPLAIN SELECT name,join_day, join_mo FROM %s  USE INDEX(%s using %s) WHERE join_day>2 AND join_mo>3' % (bucket.name, ind, self.index_type)
                             res = self.run_cbq_query()
 			    plan = ExplainPlanHelper(res)
-                            self.assertTrue([plan["~children"][0]["index"] == ind,
+                            self.assertTrue(plan["~children"][0]["index"] == ind,
                                     "Index should be %s, but is: %s" % (ind, plan["~children"][0]["index"]))
 
                 finally:
