@@ -77,7 +77,7 @@ class BaseTestCase(unittest.TestCase):
             self.wait_timeout = self.input.param("wait_timeout", 60)
             # number of case that is performed from testrunner( increment each time)
             self.case_number = self.input.param("case_number", 0)
-            self.default_bucket = self.input.param("default_bucket", 1)
+            self.default_bucket = self.input.param("default_bucket", True)
             if self.default_bucket:
                 self.default_bucket_name = "default"
             self.standard_buckets = self.input.param("standard_buckets", 0)
