@@ -220,6 +220,7 @@ class BaseTestCase(unittest.TestCase):
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
                 self.fail(e)
+
             if self.dgm_run:
                 self.quota = 256
             if self.total_buckets > 10:
@@ -237,7 +238,13 @@ class BaseTestCase(unittest.TestCase):
                 else:
                     ram_available = self.quota
                 if self.bucket_size is None:
-                    self.bucket_size = self._get_bucket_size(ram_available, self.total_buckets)
+                    if self.dgm_run:
+                        """ if dgm is set,
+                            we need to set bucket size to dgm setting """
+                        self.bucket_size = self.quota
+                    else:
+                        self.bucket_size = self._get_bucket_size(ram_available,\
+                                                            self.total_buckets)
 
             if str(self.__class__).find('upgrade_tests') == -1 and \
                             str(self.__class__).find('newupgradetests') == -1:
