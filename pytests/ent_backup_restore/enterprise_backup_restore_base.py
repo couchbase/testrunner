@@ -247,12 +247,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --force-updates"
         if self.no_progress_bar:
             args += " --no-progress-bar"
-        rest_helper = RestHelper(self.backupset.restore_cluster_host)
+        rest_conn = RestConnection(self.backupset.restore_cluster_host)
+        rest_helper = RestHelper(rest_conn)
         for bucket in self.buckets:
-            if not rest_helper.bucket_exists(bucket):
-                rest_conn = RestConnection(self.backupset.restore_cluster_host)
+            if not rest_helper.bucket_exists(bucket.name):
                 self.log.info("Creating bucket {0} in restore host {1}".format(bucket.name,
-                                                                           self.backupset.restore_cluster_host.ip))
+                                                                               self.backupset.restore_cluster_host.ip))
                 rest_conn.create_bucket(bucket=bucket.name, ramQuotaMB=512)
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
