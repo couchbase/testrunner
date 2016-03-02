@@ -1067,7 +1067,9 @@ class CouchbaseCluster:
         self.__clusterop.bucket_delete(
             self.__master_node,
             bucket_to_remove.name)
-        self.__buckets.remove(bucket_to_remove)
+        for bucket_in in self.__buckets:
+            if bucket_in.name == bucket_to_remove:
+                self.__buckets.remove(bucket_in)
 
     def delete_all_buckets(self):
         for bucket_to_remove in self.__buckets:
@@ -2278,9 +2280,10 @@ class FTSBaseTest(unittest.TestCase):
         4. if index balanced - every fts node services almost equal num of vbs?
         """
         _, defn = index.get_index_defn()
+        while 'planPIndexes' not in defn:
+            self.sleep(10,'trying to get PIndex')
+            _, defn = index.get_index_defn()
         start_time = time.time()
-        if 'planPIndexes' not in defn:
-            self.fail("planPIndexes is not returned Index Definition")
         while not defn['planPIndexes']:
             if time.time() - start_time > 180:
                 self.fail("planPIndexes=null for index {0} even after 3 mins"

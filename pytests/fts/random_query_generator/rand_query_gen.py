@@ -18,15 +18,7 @@ class DATASET:
                        'text': ["title", "revision_text_text"],
                        'num': ["mutated"],
                        'bool': [],
-                       'date': ["revision_timestamp"]},
-
-              'all': {'str': ["name", "dept", "manages_reports",
-                                   "languages_known", "email", "type"],
-                          'text': ["name", "manages_reports"],
-                          'num': ["mutated", "manages_team_size", "salary"],
-                          'bool': ["is_manager"],
-                          'date': ["join_date"]
-                          }
+                       'date': ["revision_timestamp"]}
               }
 
 class QUERY_TYPE:
@@ -86,7 +78,12 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         elif self.dataset == "wiki":
             all_fields = DATASET.FIELDS['wiki']
         elif self.dataset == "all":
-            for _, fields in DATASET.FIELDS['all'].iteritems():
+            fields_set=set()
+            for _, fields in DATASET.FIELDS.iteritems():
+                fields_set |= set(fields.keys())
+            for v in fields_set:
+                all_fields[v] = []
+            for _, fields in DATASET.FIELDS.iteritems():
                 all_fields['str'] += fields['str']
                 all_fields['date'] += fields['date']
                 all_fields['num'] += fields['num']
