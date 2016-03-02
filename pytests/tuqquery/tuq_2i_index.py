@@ -537,8 +537,8 @@ class QueriesIndexTests(QueryTests):
                 idx = "nestidx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY j for j in department end) USING %s" % (
                     idx, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -593,8 +593,8 @@ class QueriesIndexTests(QueryTests):
                 idx = "nestidx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY j for j in department end) USING %s" % (
                     idx, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -638,8 +638,8 @@ class QueriesIndexTests(QueryTests):
                 idx = "nestidx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY j for j in join_yr end) USING %s" % (
                     idx, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -683,8 +683,8 @@ class QueriesIndexTests(QueryTests):
                 idx = "nestidx"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY j for j in join_yr end) USING %s" % (
                     idx, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -729,8 +729,8 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "indexwitharraysum%s" % ind
                     self.query = "CREATE INDEX %s ON %s(department, DISTINCT ARRAY round(v.memory + v.RAM) FOR v in VMs END ) where join_yr=2012 USING %s" % (index_name, bucket.name,self.index_type)
-                    if self.gsi_type:
-                        self.query += " WITH {'index_type': 'memdb'}"
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
 
@@ -759,8 +759,8 @@ class QueriesIndexTests(QueryTests):
                 idx = "idxsubstr"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY SUBSTR(j.FirstName,8) for j in name end) USING %s" % (
                     idx, bucket.name, self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -789,8 +789,8 @@ class QueriesIndexTests(QueryTests):
                 idx = "arrayidx_update"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY ( DISTINCT array j.city for j in i end) FOR i in %s END) USING %s" % (
                     idx, bucket.name, "address", self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -823,8 +823,8 @@ class QueriesIndexTests(QueryTests):
                 idx = "arrayidx_delete"
                 self.query = "CREATE INDEX %s ON %s( DISTINCT ARRAY v FOR v in %s END) USING %s" % (
                     idx, bucket.name, "join_yr", self.index_type)
-                if self.gsi_type:
-                    self.query += " WITH {'index_type': 'memdb'}"
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(create_result['results'], [])
