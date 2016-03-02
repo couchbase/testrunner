@@ -26,13 +26,15 @@ class UpgradeTests(NewUpgradeBaseTest):
 
     def setUp(self):
         super(UpgradeTests, self).setUp()
+        self.queue = Queue.Queue()
         self.graceful =  self.input.param("graceful",False)
         self.after_upgrade_nodes_in =  self.input.param("after_upgrade_nodes_in",1)
         self.after_upgrade_nodes_out =  self.input.param("after_upgrade_nodes_out",1)
         self.verify_vbucket_info =  self.input.param("verify_vbucket_info",True)
         self.initialize_events = self.input.param("initialize_events","").split(":")
         self.upgrade_services_in = self.input.param("upgrade_services_in", None)
-        self.after_upgrade_services_in = self.input.param("after_upgrade_services_in",None)
+        self.after_upgrade_services_in = \
+                              self.input.param("after_upgrade_services_in",None)
         self.after_upgrade_services_out_dist = \
                             self.input.param("after_upgrade_services_out_dist",None)
         self.in_between_events = self.input.param("in_between_events","").split(":")
@@ -80,6 +82,8 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
         self.create_buckets()
         self.n1ql_server = None
+        self.success_run = True
+        self.failed_thread = None
         self.generate_map_nodes_out_dist_upgrade(self.after_upgrade_services_out_dist)
         self.upgrade_services_in = self.get_services(self.in_servers_pool.values(),
                                           self.upgrade_services_in, start_node = 0)
@@ -96,6 +100,8 @@ class UpgradeTests(NewUpgradeBaseTest):
             if self.initialize_events:
                 initialize_events = self.run_event(self.initialize_events)
             self.finish_events(initialize_events)
+            if not self.success_run and self.failed_thread is not None:
+                raise Exception("*** Failed to {0} ***".format(self.failed_thread))
             self.cluster_stats(self.servers[:self.nodes_init])
             if self.before_events:
                 self.event_threads += self.run_event(self.before_events)
@@ -136,13 +142,25 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.data_analysis =  self.input.param("data_analysis",False)
         self.total_vbuckets =  self.input.param("total_vbuckets",1024)
         if self.data_analysis:
-            disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(self.in_servers_pool.values(), self.buckets, path=None)
-            self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, self.in_servers_pool.values(), self.buckets, path=None)
-            self.vb_distribution_analysis(servers = self.in_servers_pool.values(), buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets)
+            disk_replica_dataset, disk_active_dataset = \
+                        self.get_and_compare_active_replica_data_set_all(\
+                                           self.in_servers_pool.values(),\
+                                                            self.buckets,\
+                                                                path=None)
+            self.data_analysis_active_replica_all(disk_active_dataset,\
+                                                 disk_replica_dataset,\
+                                        self.in_servers_pool.values(),\
+                                               self.buckets, path=None)
+            self.vb_distribution_analysis(servers = \
+                      self.in_servers_pool.values(),\
+                             buckets = self.buckets,\
+                                         std = 1.0 ,\
+                total_vbuckets = self.total_vbuckets)
 
     def _verify_vbuckets(self, old_vbucket_map, new_vbucket_map):
         for bucket in self.buckets:
-            self._verify_vbucket_nums_for_swap(old_vbucket_map[bucket.name], new_vbucket_map[bucket.name])
+            self._verify_vbucket_nums_for_swap(old_vbucket_map[bucket.name],\
+                                                new_vbucket_map[bucket.name])
 
     def stop_all_events(self, thread_list):
         for t in thread_list:
@@ -163,12 +181,18 @@ class UpgradeTests(NewUpgradeBaseTest):
             t.join()
 
     def run_event_in_sequence(self, events):
+        q = self.queue
         self.log.info("run_event_in_sequence")
         for event in events.split("-"):
-            t = threading.Thread(target=self.find_function(event), args = ())
+            t = threading.Thread(target=self.find_function(event), args = (q,))
             t.daemon = True
             t.start()
             t.join()
+            self.success_run = True
+            while not self.queue.empty():
+                self.success_run &= self.queue.get()
+            if not self.success_run:
+                self.failed_thread = event
 
     def run_event(self, events):
         thread_list = []
@@ -345,26 +369,36 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.rest = RestConnection(self.master)
             #Change Bucket Properties
             for bucket in self.buckets:
-                self.rest.change_bucket_props(bucket, ramQuotaMB=None, authType=None, saslPassword=None, replicaNumber=0,
+                self.rest.change_bucket_props(bucket, ramQuotaMB=None,\
+                       authType=None, saslPassword=None, replicaNumber=0,\
                     proxyPort=None, replicaIndex=None, flushEnabled=False)
         except Exception, ex:
             self.log.info(ex)
             raise
 
-    def rebalance_in(self):
+    def rebalance_in(self, queue=None):
         try:
-            self.log.info("rebalance_in")
             self.nodes_in_list =  self.out_servers_pool.values()[:self.nodes_in]
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], self.nodes_in_list, [], services = self.after_upgrade_services_in)
+            self.log.info("<<<<<<<<=== rebalance_in node {0}"\
+                          .format(self.nodes_in_list))
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],\
+                                                                 self.nodes_in_list,\
+                                       [], services = self.after_upgrade_services_in)
             rebalance.result()
         except Exception, ex:
             self.log.info(ex)
+            if queue is not None:
+                queue.put(False)
             raise
+        if queue is not None:
+            queue.put(True)
 
-    def rebalance_out(self):
+    def rebalance_out(self, queue=None):
         try:
-            self.log.info("rebalance_out")
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[], self.nodes_out_list)
+            self.log.info("******** rebalance_out node {0}"\
+                              .format(self.nodes_out_list))
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],\
+                                                             [], self.nodes_out_list)
             rebalance.result()
         except Exception, ex:
             self.log.info(ex)
@@ -374,7 +408,9 @@ class UpgradeTests(NewUpgradeBaseTest):
         try:
             self.log.info("rebalance_out")
             self.nodes_in_list =  self.out_servers_pool.values()[:self.nodes_in]
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], self.nodes_in_list, self.nodes_out_list, services = self.after_upgrade_services_in)
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],\
+                                            self.nodes_in_list, self.nodes_out_list,\
+                                           services = self.after_upgrade_services_in)
             rebalance.result()
         except Exception, ex:
             self.log.info(ex)
@@ -396,28 +432,38 @@ class UpgradeTests(NewUpgradeBaseTest):
         finally:
             self.log.info(ex)
 
-    def create_index(self):
+    def create_index(self, queue=None):
         self.log.info("create_index")
         self.index_list = {}
-        self.n1ql_helper.create_primary_index(using_gsi = True,
+        create_index = False
+        try:
+            self.n1ql_helper.create_primary_index(using_gsi = True,
                                                server = self.n1ql_server)
-        self.n1ql_helper.create_primary_index(using_gsi = False,
+            self.n1ql_helper.create_primary_index(using_gsi = False,
                                                server = self.n1ql_server)
-        for bucket in self.buckets:
-            index_name = "idx_{0}_gsi".format(bucket.name)
-            self.index_list[bucket.name] = index_name
-            query = "create index {0} on {1}(field_1) using gsi"\
+            for bucket in self.buckets:
+                index_name = "idx_{0}_gsi".format(bucket.name)
+                self.index_list[bucket.name] = index_name
+                query = "create index {0} on {1}(field_1) using gsi"\
                                          .format(index_name, bucket.name)
-            self.n1ql_helper.run_cbq_query(query, self.n1ql_server)
+                self.n1ql_helper.run_cbq_query(query, self.n1ql_server)
+            self.log.info("done create_index")
+            create_index = True
+        except Exception, e:
+            self.log.info(e)
+            if queue is not None:
+                queue.put(False)
+        if create_index and queue is not None:
+            queue.put(True)
 
-    def create_views(self):
+    def create_views(self, queue=None):
         self.log.info("create_views")
         """ default is 1 ddoc. Change number of ddoc by param ddocs_num=new_number
             default is 2 views. Change number of views by param
             view_per_ddoc=new_view_per_doc """
         self.create_ddocs_and_views()
 
-    def query_views(self):
+    def query_views(self, queue=None):
         self.log.info("query_views")
         self.verify_all_queries()
 
@@ -427,7 +473,8 @@ class UpgradeTests(NewUpgradeBaseTest):
     def drop_index(self):
         self.log.info("drop_index")
         for bucket_name in self.index_list.keys():
-            query = "drop index {0} on {1} using gsi".format(self.index_list[bucket_name], bucket_name)
+            query = "drop index {0} on {1} using gsi"\
+                 .format(self.index_list[bucket_name], bucket_name)
             self.n1ql_helper.run_cbq_query(query, self.n1ql_server)
 
     def query_explain(self):
@@ -599,13 +646,18 @@ class UpgradeTests(NewUpgradeBaseTest):
         except Exception, ex:
             raise
 
-    def kv_ops_initialize(self):
+    def kv_ops_initialize(self, queue=None):
         try:
             self.log.info("kv_ops_initialize")
             self._load_all_buckets(self.master, self.gen_initial_create, "create", self.expire_time, flag=self.item_flag)
+            self.log.info("done kv_ops_initialize")
         except Exception, ex:
             self.log.info(ex)
+            if queue is not None:
+                queue.put(False)
             raise
+        if queue is not None:
+            queue.put(True)
 
     def kv_after_ops_create(self):
         try:
