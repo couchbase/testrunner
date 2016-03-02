@@ -394,7 +394,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         rest = RestConnection(self.master)
         rest.add_back_node(self.failover_node.id)
 
-    def create_ddocs_and_views(self):
+    def create_ddocs_and_views(self, queue=None):
         self.default_view = View(self.default_view_name, None, None)
         for bucket in self.buckets:
             if int(self.ddocs_num) > 0:
@@ -404,8 +404,16 @@ class NewUpgradeBaseTest(BaseTestCase):
                     ddoc = DesignDocument(self.default_view_name + str(i), views)
                     self.ddocs.append(ddoc)
                     for view in views:
-                        self.cluster.create_view(self.master, ddoc.name, view,
+                        try:
+                            self.cluster.create_view(self.master, ddoc.name, view,
                                                                    bucket=bucket)
+                        except Exception, e:
+                            print e
+                            if queue is not None:
+                                queue.put(False)
+                            raise e
+                        if queue is not None:
+                            queue.put(True)
             else:
                 self.fail("Check param ddocs_num value")
 
