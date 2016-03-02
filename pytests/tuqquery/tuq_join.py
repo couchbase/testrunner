@@ -137,7 +137,6 @@ class JoinTests(QueryTests):
                                           doc['name'] == 'employee-9']
             expected_result = sorted(expected_result)[0:10]
             #self.assertTrue(expected_result == actual_result)
-            self.assertTrue(expected_result == actual_result)
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
@@ -250,7 +249,6 @@ class JoinTests(QueryTests):
                                           doc['join_day'] <= 2]
             expected_result = sorted(expected_result, key=lambda doc: (doc['join_day']))[0:10]
             #self.assertTrue(actual_result, expected_result)
-            self.assertTrue(actual_result, expected_result)
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
