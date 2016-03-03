@@ -147,8 +147,9 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.master = self.in_servers_pool.values()[0]
 
     def _verify_data_active_replica(self):
-        self.data_analysis =  self.input.param("data_analysis",False)
-        self.total_vbuckets =  self.input.param("total_vbuckets",1024)
+        """ set data_analysis True by default """
+        self.data_analysis =  self.input.param("data_analysis",True)
+        self.total_vbuckets =  self.initial_vbuckets
         if self.data_analysis:
             disk_replica_dataset, disk_active_dataset = \
                         self.get_and_compare_active_replica_data_set_all(\
@@ -159,6 +160,7 @@ class UpgradeTests(NewUpgradeBaseTest):
                                                  disk_replica_dataset,\
                                         self.in_servers_pool.values(),\
                                                self.buckets, path=None)
+            """ check vbucket distribution analysis after rebalance """
             self.vb_distribution_analysis(servers = \
                       self.in_servers_pool.values(),\
                              buckets = self.buckets,\
