@@ -395,15 +395,20 @@ class UpgradeTests(NewUpgradeBaseTest):
             queue.put(True)
 
     def rebalance_out(self, queue=None):
+        rebalance_out = False
         try:
-            self.log.info("******** rebalance_out node {0}"\
+            self.log.info("=====>>>> rebalance_out node {0}"\
                               .format(self.nodes_out_list))
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],\
                                                              [], self.nodes_out_list)
             rebalance.result()
+            rebalance_out = True
         except Exception, ex:
             self.log.info(ex)
-            raise
+            if queue is not None:
+                queue.put(False)
+        if rebalance_out and queue is not None:
+            queue.put(True)
 
     def rebalance_in_out(self):
         try:
