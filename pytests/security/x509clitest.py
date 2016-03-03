@@ -118,7 +118,7 @@ class X509clitest(x509tests):
 
     def test_upload_cluster_ca(self):
         output, error = self._upload_cert_cli()
-        self.assertTrue("SUCCESS: uploaded certificate" in output[0],"Error message is incorrect")
+        self.assertTrue("SUCCESS: uploaded cluster certificate" in output[0],"Error message is incorrect")
 
     def test_setup_nodes(self):
         self.setup_master()
@@ -126,7 +126,7 @@ class X509clitest(x509tests):
         if ("ERROR" in output[0]):
             self.assertTrue(False, "There are issues with command execution")
         else:
-            self.assertTrue("SUCCESS: cluster certificate uploaded" in output[0], "Output message are incorrect")
+            self.assertTrue("SUCCESS: node certificate set" in output[0], "Output message are incorrect")
 
     def test_end_to_end_single_node(self):
         output, error = self._upload_cert_cli()
