@@ -477,7 +477,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             queue.put(True)
 
     def create_views(self, queue=None):
-        self.log.info("create_views")
+        self.log.info("*** create_views ***")
         """ default is 1 ddoc. Change number of ddoc by param ddocs_num=new_number
             default is 2 views. Change number of views by param
             view_per_ddoc=new_view_per_doc """
@@ -487,8 +487,11 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(e)
 
     def query_views(self, queue=None):
-        self.log.info("query_views")
-        self.verify_all_queries()
+        self.log.info("*** query_views ***")
+        try:
+           self.verify_all_queries(queue)
+        except Exception, e:
+            self.log.info(e)
 
     def drop_views(self):
         self.log.info("drop_views")
