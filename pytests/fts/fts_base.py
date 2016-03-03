@@ -237,7 +237,10 @@ class NodeHelper:
             o, r = shell.execute_command(COMMAND.REBOOT)
         shell.log_command_output(o, r)
         # wait for restart and warmup on all server
-        time.sleep(wait_timeout * 5)
+        if shell.extract_remote_info().type.lower() == OS.WINDOWS:
+            time.sleep(wait_timeout * 5)
+        else:
+            time.sleep(wait_timeout)
         # disable firewall on these nodes
         NodeHelper.disable_firewall(server)
         # wait till server is ready after warmup
@@ -349,14 +352,24 @@ class NodeHelper:
         shell = RemoteMachineShellConnection(server)
         os_info = shell.extract_remote_info()
         shell.kill_erlang(os_info)
+        shell.start_couchbase()
         shell.disconnect()
+        NodeHelper.wait_warmup_completed([server])
 
     @staticmethod
     def kill_memcached(server):
         """Kill memcached process running on server.
         """
         shell = RemoteMachineShellConnection(server)
-        shell.kill_erlang()
+        shell.kill_memcached()
+        shell.disconnect()
+
+    @staticmethod
+    def kill_cbft_process(server):
+        NodeHelper._log.info("Killing cbft on server: {0}".format(server))
+        shell = RemoteMachineShellConnection(server)
+        os_info = shell.extract_remote_info()
+        shell.kill_cbft_process(os_info)
         shell.disconnect()
 
     @staticmethod
@@ -496,7 +509,6 @@ class FTSIndex:
         self._source_name = source_name
         self._one_time = False
         self.index_type = index_type
-        self.rest = RestConnection(self.__cluster.get_random_fts_node())
         self.index_definition = INDEX_DEFAULTS.INDEX_DEFINITION
         self.name = self.index_definition['name'] = name
         self.es_custom_map = None
@@ -521,15 +533,7 @@ class FTSIndex:
         self.custom_map = TestInputSingleton.input.param("custom_map", False)
         self.cm_id = TestInputSingleton.input.param("cm_id", 0)
         if self.custom_map:
-            from custom_map_generator.map_generator import CustomMapGenerator
-            cm_gen = CustomMapGenerator(seed=self.cm_id, dataset=self.dataset)
-            fts_map, self.es_custom_map = cm_gen.get_map()
-            self.smart_query_fields = cm_gen.get_smart_query_fields()
-            print self.smart_query_fields
-            self.index_definition['params'] = self.build_custom_index_params(
-                fts_map)
-            self.__log.info(json.dumps(self.index_definition["params"],
-                                       indent=3))
+            self.generate_new_custom_map(seed=self.cm_id)
 
         self.fts_queries = []
 
@@ -547,6 +551,17 @@ class FTSIndex:
 
         if source_uuid:
             self.index_definition['sourceUUID'] = source_uuid
+
+    def generate_new_custom_map(self, seed):
+        from custom_map_generator.map_generator import CustomMapGenerator
+        cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset)
+        fts_map, self.es_custom_map = cm_gen.get_map()
+        self.smart_query_fields = cm_gen.get_smart_query_fields()
+        print self.smart_query_fields
+        self.index_definition['params'] = self.build_custom_index_params(
+                fts_map)
+        self.__log.info(json.dumps(self.index_definition["params"],
+                                       indent=3))
 
     def build_custom_index_params(self, index_params):
         if self.index_type == "fulltext-index":
@@ -574,33 +589,37 @@ class FTSIndex:
 
     def create(self):
         self.__log.info("Checking if index already exists ...")
-        status, _ = self.rest.get_fts_index_definition(self.name)
+        rest = RestConnection(self.__cluster.get_random_fts_node())
+        status, _ = rest.get_fts_index_definition(self.name)
         if status != 400:
-            self.rest.delete_fts_index(self.name)
+            rest.delete_fts_index(self.name)
         self.__log.info("Creating {0} {1} on {2}".format(
             self.index_type,
             self.name,
-            self.rest.ip))
-        self.rest.create_fts_index(self.name, self.index_definition)
+            rest.ip))
+        rest.create_fts_index(self.name, self.index_definition)
 
     def update(self):
+        rest = RestConnection(self.__cluster.get_random_fts_node())
         self.__log.info("Updating {0} {1} on {2}".format(
             self.index_type,
             self.name,
-            self.rest.ip))
-        self.rest.update_fts_index(self.name, self.index_definition)
+            rest.ip))
+        rest.update_fts_index(self.name, self.index_definition)
 
     def delete(self):
+        rest = RestConnection(self.__cluster.get_random_fts_node())
         self.__log.info("Deleting {0} {1} on {2}".format(
             self.index_type,
             self.name,
-            self.rest.ip))
-        status = self.rest.delete_fts_index(self.name)
+            rest.ip))
+        status = rest.delete_fts_index(self.name)
         if status:
             self.__log.info("{0} deleted".format(self.name))
 
     def get_index_defn(self):
-        return self.rest.get_fts_index_definition(self.name)
+        rest = RestConnection(self.__cluster.get_random_fts_node())
+        return rest.get_fts_index_definition(self.name)
 
     def get_max_partitions_pindex(self):
         _, defn = self.get_index_defn()
@@ -610,13 +629,15 @@ class FTSIndex:
         pass
 
     def get_indexed_doc_count(self):
-        return self.rest.get_fts_index_doc_count(self.name)
+        rest = RestConnection(self.__cluster.get_random_fts_node())
+        return rest.get_fts_index_doc_count(self.name)
 
     def get_src_bucket_doc_count(self):
         return self.__cluster.get_doc_count_in_bucket(self.source_bucket)
 
     def get_uuid(self):
-        return self.rest.get_fts_index_uuid(self.name)
+        rest = RestConnection(self.__cluster.get_random_fts_node())
+        return rest.get_fts_index_uuid(self.name)
 
     def construct_cbft_query_json(self, query, fields=None, timeout=None):
 
@@ -710,9 +731,14 @@ class CouchbaseCluster:
                 self.__non_fts_nodes.append(node)
 
     def get_fts_nodes(self):
+        self.__separate_nodes_on_services()
         return self.__fts_nodes
 
+    def get_num_fts_nodes(self):
+        return len(self.get_fts_nodes())
+
     def get_non_fts_nodes(self):
+        self.__separate_nodes_on_services()
         return self.__non_fts_nodes
 
     def __stop_rebalance(self):
@@ -754,8 +780,10 @@ class CouchbaseCluster:
         return self.__nodes[random.randint(0, len(self.__nodes)-1)]
 
     def get_random_fts_node(self):
+        self.__separate_nodes_on_services()
         if not self.__fts_nodes:
-            self.__separate_nodes_on_services()
+            return FTSException("No node in the cluster has 'fts' service"
+                                " enabled")
         if len(self.__fts_nodes) == 1:
             return self.__fts_nodes[0]
         return self.__fts_nodes[random.randint(0, len(self.__fts_nodes)-1)]
@@ -1814,6 +1842,11 @@ class FTSBaseTest(unittest.TestCase):
 
     def tearDown(self):
         """Clusters cleanup"""
+        if len(self.__report_error_list) > 0:
+            error_logger = self.check_errors_in_fts_logs()
+            if error_logger:
+                self.fail("Errors found in logs : {0}".format(error_logger))
+
         if self._input.param("negative_test", False):
             if hasattr(self, '_resultForDoCleanups') \
                 and len(self._resultForDoCleanups.failures
@@ -1825,7 +1858,7 @@ class FTSBaseTest(unittest.TestCase):
             else:
                 raise FTSException("Negative test passed!")
 
-        if self._input.param("get-fts-diags", True) and self.__is_test_failed():
+        if self._input.param("get-fts-diags", False) and self.__is_test_failed():
             self.grab_fts_diag()
 
         # collect logs before tearing down clusters
@@ -1885,6 +1918,16 @@ class FTSBaseTest(unittest.TestCase):
             self.__create_buckets()
         self._master = self._cb_cluster.get_master_node()
 
+        # simply append to this list, any error from log we want to fail test on
+        self.__report_error_list = []
+        if self.__fail_on_errors:
+            self.__report_error_list = ["panic:"]
+
+        # for format {ip1: {"panic": 2}}
+        self.__error_count_dict = {}
+        if len(self.__report_error_list) > 0:
+            self.__initialize_error_count_dict()
+
 
     def construct_serv_list(self,serv_str):
         """
@@ -1909,22 +1952,10 @@ class FTSBaseTest(unittest.TestCase):
         self.__eviction_policy = self._input.param("eviction_policy",'valueOnly')
         self.__mixed_priority = self._input.param("mixed_priority", None)
 
-        self.__fail_on_errors = self._input.param("fail_on_errors", False)
-        # simply append to this list, any error from log we want to fail test on
-        self.__report_error_list = []
-        if self.__fail_on_errors:
-            self.__report_error_list = [""]
-
-        # for format {ip1: {"panic": 2}}
-        self.__error_count_dict = {}
-        if len(self.__report_error_list) > 0:
-            self.__initialize_error_count_dict()
-
         # Public init parameters - Used in other tests too.
         # Move above private to this section if needed in future, but
         # Ensure to change other tests too.
 
-        # TODO: when FTS build is available, change the following to "D,D+F,F"
         self._cluster_services = \
             self.construct_serv_list(self._input.param("cluster", "D,D+F,F"))
         self._num_replicas = self._input.param("replicas", 1)
@@ -1979,10 +2010,12 @@ class FTSBaseTest(unittest.TestCase):
             self.es = None
         self.create_gen = None
 
+        self.__fail_on_errors = self._input.param("fail_on_errors", True)
+
     def __initialize_error_count_dict(self):
         """
             initializes self.__error_count_dict with ip, error and err count
-            like {ip1: {"panic": 2, "KEY_ENOENT":3}}
+            like {ip1: {"panic": 2}}
         """
         for node in self._input.servers:
             self.__error_count_dict[node.ip] = {}
@@ -2185,8 +2218,6 @@ class FTSBaseTest(unittest.TestCase):
                 "Waiting for expiration of updated items")
             self._cb_cluster.run_expiry_pager()
 
-
-
     def print_panic_stacktrace(self, node):
         """ Prints panic stacktrace from goxdcr.log*
         """
@@ -2206,16 +2237,17 @@ class FTSBaseTest(unittest.TestCase):
         for node in self._input.servers:
             for error in self.__report_error_list:
                 new_error_count = NodeHelper.check_fts_log(node, error)
-                self.log.info("Initial {0} count on {1} :{2}, now :{3}".
+                self.log.info("Initial '{0}' count on {1} :{2}, now :{3}".
                             format(error,
                                 node.ip,
                                 self.__error_count_dict[node.ip][error],
                                 new_error_count))
-                if (new_error_count  > self.__error_count_dict[node.ip][error]):
-                    error_found_logger.append("{0} found on {1}".format(error,
-                                                                    node.ip))
-                    if "panic" in error:
-                        self.print_panic_stacktrace(node)
+                if node.ip in self.__error_count_dict.keys():
+                    if (new_error_count  > self.__error_count_dict[node.ip][error]):
+                        error_found_logger.append("{0} found on {1}".format(error,
+                                                                        node.ip))
+                        if "panic" in error:
+                            self.print_panic_stacktrace(node)
         if error_found_logger:
             self.log.error(error_found_logger)
         return error_found_logger
@@ -2252,14 +2284,17 @@ class FTSBaseTest(unittest.TestCase):
                                 index.get_indexed_doc_count(),
                                 self.es.get_index_count('es_index')))
 
+                if index.get_src_bucket_doc_count() == index.get_indexed_doc_count():
+                    break
+
                 if prev_count < index_doc_count or prev_count > index_doc_count:
                     prev_count = index_doc_count
                     retry_count = retry
                 else:
                     retry_count -= 1
                 time.sleep(10)
-        self.log.info("FTS indexed %s docs in %s mins, now breaking loop after 60s of inactivity"
-                      % (index_doc_count, round(float((time.time()-60-start_time)/60), 2)))
+        self.log.info("FTS indexed %s docs in %s mins"
+                      % (index_doc_count, round(float((time.time()-start_time)/60), 2)))
 
     def construct_plan_params(self):
         plan_params = {}
@@ -2268,6 +2303,24 @@ class FTSBaseTest(unittest.TestCase):
         if self.partitions_per_pindex:
             plan_params['maxPartitionsPerPIndex'] = self.partitions_per_pindex
         return plan_params
+
+    def populate_node_partition_map(self, index):
+        """
+         populates the node-pindex-partition map
+        """
+        nodes_partitions = {}
+        _, defn = index.get_index_defn()
+        for pindex in defn['planPIndexes']:
+            for node, attr in pindex['nodes'].iteritems():
+                if attr['priority'] == 0:
+                    break
+            if node not in nodes_partitions.keys():
+                nodes_partitions[node] = {'pindex_count': 0, 'pindexes':{}}
+            nodes_partitions[node]['pindex_count'] += 1
+            nodes_partitions[node]['pindexes'][pindex['uuid']] = []
+            for partition in pindex['sourcePartitions'].split(','):
+                nodes_partitions[node]['pindexes'][pindex['uuid']].append(partition)
+        return nodes_partitions
 
     def is_index_partitioned_balanced(self, index):
         """
@@ -2284,9 +2337,9 @@ class FTSBaseTest(unittest.TestCase):
             self.sleep(10,'trying to get PIndex')
             _, defn = index.get_index_defn()
         start_time = time.time()
-        while not defn['planPIndexes']:
-            if time.time() - start_time > 180:
-                self.fail("planPIndexes=null for index {0} even after 3 mins"
+        while 'planPIndexes' not in defn or not defn['planPIndexes']:
+            if time.time() - start_time > 60:
+                self.fail("planPIndexes unavailable for index {0} even after 60s"
                           .format(index.name))
             self.sleep(5, "No pindexes found, waiting for index to get created")
             _, defn = index.get_index_defn()
@@ -2307,48 +2360,52 @@ class FTSBaseTest(unittest.TestCase):
 
         # check 2 - each pindex servicing "partitions_per_pindex" vbs
         num_fts_nodes = len(self._cb_cluster.get_fts_nodes())
-        nodes_partitions = {}
-        for pindex in defn['planPIndexes']:
-            node = pindex['nodes'].keys()[0]
-            if node not in nodes_partitions.keys():
-                nodes_partitions[node] = {'pindex_count': 0, 'partitions':[]}
-            nodes_partitions[node]['pindex_count'] += 1
-            for partition in pindex['sourcePartitions'].split(','):
-                nodes_partitions[node]['partitions'].append(partition)
-            if len(pindex['sourcePartitions'].split(',')) > \
-                    partitions_per_pindex:
-                self.fail("sourcePartitions for pindex %s more than "
-                          "max_partitions_per_pindex %s" %
-                          (pindex['name'], partitions_per_pindex))
+        nodes_partitions = self.populate_node_partition_map(index)
+        for node in nodes_partitions.keys():
+            for uuid, partitions in nodes_partitions[node]['pindexes'].iteritems():
+                if len(partitions) > partitions_per_pindex:
+                    self.fail("sourcePartitions for pindex %s more than "
+                              "max_partitions_per_pindex %s" %
+                              (uuid, partitions_per_pindex))
         self.log.info("Validated: Every pIndex serves %s partitions or lesser" %
                           partitions_per_pindex)
 
         # check 3 - distributed - pindex present on all fts nodes?
-        if len(nodes_partitions.keys()) != num_fts_nodes:
-            self.fail("Index is not properly distributed, pindexes spread across"
-                      " %s while fts nodes are %s"
-                      % (nodes_partitions.keys(),
-                        self._cb_cluster.get_fts_nodes()))
-        self.log.info("Validated: pIndexes are distributed across %s " %
+        count = 0
+        while len(nodes_partitions.keys()) != num_fts_nodes:
+            count += 10
+            if count == 60:
+                self.fail("Even after 60s of waiting, index is not properly"
+                          " distributed,pindexes spread across %s while "
+                          "fts nodes are %s" % (nodes_partitions.keys(),
+                                                self._cb_cluster.get_fts_nodes()))
+            self.sleep(10, "pIndexes not distributed across % nodes yet"
+                           % num_fts_nodes)
+            nodes_partitions = self.populate_node_partition_map(index)
+        else:
+            self.log.info("Validated: pIndexes are distributed across %s " %
                       nodes_partitions.keys())
 
         # check 4 - balance check(almost equal no of pindexes on all fts nodes)
         exp_partitions_per_node = self._num_vbuckets/num_fts_nodes
         self.log.info("Expecting num of partitions in each node in range %s-%s"
                       % (exp_partitions_per_node - partitions_per_pindex,
-                         exp_partitions_per_node + partitions_per_pindex))
+                      min(1024, exp_partitions_per_node + partitions_per_pindex)))
 
-        for node, pindex_partitions in nodes_partitions.iteritems():
-            if abs(len(pindex_partitions['partitions']) - \
-                    exp_partitions_per_node) > partitions_per_pindex:
+        num_node_partitions = 0
+        for node in nodes_partitions.keys():
+            for uuid, partitions in nodes_partitions[node]['pindexes'].iteritems():
+                num_node_partitions += len(partitions)
+            if abs(num_node_partitions - exp_partitions_per_node) > \
+                    partitions_per_pindex:
                 self.fail("The source partitions are not evenly distributed "
                           "among nodes, seeing %s on %s"
-                          % (len(pindex_partitions['partitions']), node.ip))
+                          % (num_node_partitions, node.ip))
             self.log.info("Validated: Node %s houses %s pindexes which serve"
                           " %s partitions" %
                           (node,
-                           pindex_partitions['pindex_count'],
-                           len(pindex_partitions['partitions'])))
+                           nodes_partitions[node]['pindex_count'],
+                           num_node_partitions))
         return True
 
     def generate_random_queries(self, index, num_queries=1, query_type=["match"],
