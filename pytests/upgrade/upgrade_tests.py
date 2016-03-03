@@ -377,6 +377,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             raise
 
     def rebalance_in(self, queue=None):
+        rebalance_in = False
         try:
             self.nodes_in_list =  self.out_servers_pool.values()[:self.nodes_in]
             self.log.info("<<<<<<<<=== rebalance_in node {0}"\
@@ -385,12 +386,12 @@ class UpgradeTests(NewUpgradeBaseTest):
                                                                  self.nodes_in_list,\
                                        [], services = self.after_upgrade_services_in)
             rebalance.result()
+            rebalance_in = True
         except Exception, ex:
             self.log.info(ex)
             if queue is not None:
                 queue.put(False)
-            raise
-        if queue is not None:
+        if rebalance_in and queue is not None:
             queue.put(True)
 
     def rebalance_out(self, queue=None):
@@ -649,7 +650,8 @@ class UpgradeTests(NewUpgradeBaseTest):
     def kv_ops_initialize(self, queue=None):
         try:
             self.log.info("kv_ops_initialize")
-            self._load_all_buckets(self.master, self.gen_initial_create, "create", self.expire_time, flag=self.item_flag)
+            self._load_all_buckets(self.master, self.gen_initial_create, "create",\
+                                             self.expire_time, flag=self.item_flag)
             self.log.info("done kv_ops_initialize")
         except Exception, ex:
             self.log.info(ex)
