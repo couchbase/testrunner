@@ -199,7 +199,7 @@ class auditTest(BaseTestCase):
         rest = RestConnection(self.master)
 
         if (ops == 'memoryQuota'):
-            expectedResults = {'memory_quota':512, 'source':source, 'user':user, 'ip':self.ipAddress, 'port':12345, 'cluster_name':'', 'index_memory_quota':256,'fts_memory_quota': 327}
+            expectedResults = {'memory_quota':512, 'source':source, 'user':user, 'ip':self.ipAddress, 'port':12345, 'cluster_name':'', 'index_memory_quota':256,'fts_memory_quota': 310}
             rest.init_cluster_memoryQuota(expectedResults['user'], password, expectedResults['memory_quota'])
 
         elif (ops == 'loadSample'):
@@ -395,20 +395,20 @@ class auditTest(BaseTestCase):
             expectedResults = {'source':source, 'user':username, 'password':password, 'roles':roles, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
 
         elif (ops in ['deleteuser']):
-            expectedResults = {"roles":roles, "real_userid:source":source, 'real_userid:user':user,
+            expectedResults = {"role":role, "real_userid:source":source, 'real_userid:user':user,
                                'ip':self.ipAddress, "port":123456, 'userid':username}
             rest.delete_ro_user()
 
         elif (ops in ['passwordChange']):
             expectedResults = {'real_userid:source':source, 'real_userid:user':user,
-                               'password':password, 'roles':roles, 'ip':self.ipAddress, "port":123456,
+                               'password':password, 'role':role, 'ip':self.ipAddress, "port":123456,
                                'userid':username}
             rest.changePass_ro_user(username, password)
 
         elif (ops in ['invalidlogin']):
             status, content = rest.validateLogin(username, password, True, getContent=True)
-            expectedResults = {'real_userid':username, 'password':password, 'roles':roles,
-                               'ip':self.ipAddress, "port":123456,'source': 'rejected'}
+            expectedResults = {'real_userid':username, 'password':password,
+                               'ip':self.ipAddress, "port":123456,'source': 'rejected','user':username}
 
         #User must be pre-created in LDAP in advance
         elif (ops in ['ldapLogin']):
