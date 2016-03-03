@@ -411,7 +411,6 @@ class NewUpgradeBaseTest(BaseTestCase):
                             print e
                             if queue is not None:
                                 queue.put(False)
-                            raise e
                         if queue is not None:
                             queue.put(True)
             else:
