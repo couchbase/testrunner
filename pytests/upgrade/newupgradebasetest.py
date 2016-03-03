@@ -327,7 +327,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                     self.log.info("Cluster status: {0}".format(cluster_status))
                     self.fail("autocompaction settings weren't saved")
 
-    def verify_all_queries(self):
+    def verify_all_queries(self, queue=None):
         query = {"connectionTimeout" : 60000}
         expected_rows = self.num_items
         if self.max_verify:
@@ -339,11 +339,18 @@ class NewUpgradeBaseTest(BaseTestCase):
         for bucket in self.buckets:
             for ddoc in self.ddocs:
                 prefix = ("", "dev_")[ddoc.views[0].dev_view]
-                self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name,
-                                                          query, bucket=bucket,
-                                               wait_time=self.wait_timeout * 5,
-                                                   expected_rows=expected_rows,
-                                                                 retry_time=10)
+                try:
+                    self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name,
+                                                              query, bucket=bucket,
+                                                   wait_time=self.wait_timeout * 5,
+                                                       expected_rows=expected_rows,
+                                                                     retry_time=10)
+                except Exception, e:
+                    print e
+                    if queue is not None:
+                        queue.put(False)
+                if queue is not None:
+                    queue.put(True)
 
     def change_settings(self):
         status = True
