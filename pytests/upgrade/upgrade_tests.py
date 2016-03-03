@@ -97,6 +97,7 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.event_threads = []
         self.after_event_threads = []
         try:
+            self.log.info("*** Start init operations before upgrade begins ***")
             if self.initialize_events:
                 initialize_events = self.run_event(self.initialize_events)
             self.finish_events(initialize_events)
@@ -105,6 +106,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.cluster_stats(self.servers[:self.nodes_init])
             if self.before_events:
                 self.event_threads += self.run_event(self.before_events)
+            self.log.info("*** Start upgrade cluster ***")
             self.event_threads += self.upgrade_event()
             if self.in_between_events:
                 self.event_threads += self.run_event(self.in_between_events)
@@ -112,9 +114,12 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.monitor_dcp_rebalance()
             self._install(self.out_servers_pool.values())
             self.generate_map_nodes_out_dist_upgrade(self.after_upgrade_services_out_dist)
+            self.log.info("*** Start operations after upgrade is done ***")
             if self.after_events:
                 self.after_event_threads = self.run_event(self.after_events)
             self.finish_events(self.after_event_threads)
+            if not self.success_run and self.failed_thread is not None:
+                raise Exception("*** Failed to {0} ***".format(self.failed_thread))
             if self.verify_after_events:
                 self.cluster_stats(self.in_servers_pool.values())
                 self._verify_data_active_replica()
@@ -193,6 +198,7 @@ class UpgradeTests(NewUpgradeBaseTest):
                 self.success_run &= self.queue.get()
             if not self.success_run:
                 self.failed_thread = event
+                break
 
     def run_event(self, events):
         thread_list = []
@@ -410,17 +416,25 @@ class UpgradeTests(NewUpgradeBaseTest):
         if rebalance_out and queue is not None:
             queue.put(True)
 
-    def rebalance_in_out(self):
+    def rebalance_in_out(self, queue=None):
+        rebalance_in_out = False
         try:
-            self.log.info("rebalance_out")
             self.nodes_in_list =  self.out_servers_pool.values()[:self.nodes_in]
+            self.log.info("<<<<<===== rebalance_in node {0}"\
+                                                    .format(self.nodes_in_list))
+            self.log.info("=====>>>>> rebalance_out node {0}"\
+                                                   .format(self.nodes_out_list))
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],\
                                             self.nodes_in_list, self.nodes_out_list,\
                                            services = self.after_upgrade_services_in)
             rebalance.result()
+            rebalance_in_out = True
         except Exception, ex:
             self.log.info(ex)
-            raise
+            if queue is not None:
+                queue.put(False)
+        if rebalance_in_out and queue is not None:
+            queue.put(True)
 
     def incremental_backup(self):
         self.log.info("incremental_backup")
@@ -467,7 +481,10 @@ class UpgradeTests(NewUpgradeBaseTest):
         """ default is 1 ddoc. Change number of ddoc by param ddocs_num=new_number
             default is 2 views. Change number of views by param
             view_per_ddoc=new_view_per_doc """
-        self.create_ddocs_and_views()
+        try:
+            self.create_ddocs_and_views(queue)
+        except Exception, e:
+            self.log.info(e)
 
     def query_views(self, queue=None):
         self.log.info("query_views")
