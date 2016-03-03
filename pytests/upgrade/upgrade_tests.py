@@ -120,11 +120,14 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.finish_events(self.after_event_threads)
             if not self.success_run and self.failed_thread is not None:
                 raise Exception("*** Failed to {0} ***".format(self.failed_thread))
+            """ Default set to always verify data """
             if self.verify_after_events:
+                self.log.info("*** Start data verification ***")
                 self.cluster_stats(self.in_servers_pool.values())
                 self._verify_data_active_replica()
         except Exception, ex:
             self.log.info(ex)
+            print  "*** Stop all events to stop the test ***"
             self.stop_all_events(self.event_threads)
             self.stop_all_events(self.after_event_threads)
             raise
