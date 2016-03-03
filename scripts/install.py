@@ -830,8 +830,8 @@ class ESInstaller(object):
         self.remote_client.execute_command("echo couchbase.password: password >> ~/elasticsearch/config/elasticsearch.yml")
         self.remote_client.execute_command("echo network.bind_host: _eth0:ipv4_ >> ~/elasticsearch/config/elasticsearch.yml")
         self.remote_client.execute_command("echo couchbase.port: 9091 >> ~/elasticsearch/config/elasticsearch.yml")
-        self.remote_client.execute_command("~/elasticsearch/bin/plugin install {0}".format(params["plugin-url"]))
-        self.remote_client.execute_command("~/elasticsearch/bin/plugin install https://github.com/mobz/elasticsearch-head/archive/master.zip")
+        self.remote_client.execute_command("~/elasticsearch/bin/plugin -u {0} -i transport-couchbase".format(params["plugin-url"]))
+        self.remote_client.execute_command("~/elasticsearch/bin/plugin -u https://github.com/mobz/elasticsearch-head/archive/master.zip -i mobz/elasticsearch-head")
         return True
 
     def __exit__(self):
