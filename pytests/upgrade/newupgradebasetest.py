@@ -53,6 +53,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         self.initial_build_type = self.input.param('initial_build_type', None)
         self.stop_persistence = self.input.param('stop_persistence', False)
+        self.std_vbucket_dist = self.input.param("std_vbucket_dist", None)
         self.rest_settings = self.input.membase_settings
         self.rest = None
         self.rest_helper = None
