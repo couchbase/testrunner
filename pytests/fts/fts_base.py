@@ -2392,15 +2392,15 @@ class FTSBaseTest(unittest.TestCase):
                       % (exp_partitions_per_node - partitions_per_pindex,
                       min(1024, exp_partitions_per_node + partitions_per_pindex)))
 
-        num_node_partitions = 0
         for node in nodes_partitions.keys():
+            num_node_partitions = 0
             for uuid, partitions in nodes_partitions[node]['pindexes'].iteritems():
                 num_node_partitions += len(partitions)
             if abs(num_node_partitions - exp_partitions_per_node) > \
                     partitions_per_pindex:
                 self.fail("The source partitions are not evenly distributed "
                           "among nodes, seeing %s on %s"
-                          % (num_node_partitions, node.ip))
+                          % (num_node_partitions, node))
             self.log.info("Validated: Node %s houses %s pindexes which serve"
                           " %s partitions" %
                           (node,
