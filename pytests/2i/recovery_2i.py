@@ -1,9 +1,13 @@
+import copy
+import logging
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.helper.cluster_helper import ClusterOperationHelper
 from base_2i import BaseSecondaryIndexingTests
-import copy
+
+log = logging.getLogger(__name__)
+QUERY_TEMPLATE = "SELECT {0} FROM %s "
 
 class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
@@ -12,11 +16,13 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.all_index_nodes_lost = False
         super(SecondaryIndexingRecoveryTests, self).setUp()
         self.load_query_definitions = []
+        query_template = QUERY_TEMPLATE
+        self.query_template = query_template.format("job_title")
         self.initial_index_number = self.input.param("initial_index_number", 10)
         for x in range(1,self.initial_index_number):
             index_name = "index_name_"+str(x)
             query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_mo"], \
-                        query_template = "", groups = ["simple"])
+                        query_template = self.query_template, groups = ["simple"])
             self.load_query_definitions.append(query_definition)
         find_index_lost_list = self._find_list_of_indexes_lost()
         self._create_replica_index_when_indexer_is_down(find_index_lost_list)
@@ -328,13 +334,16 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_couchbase_bucket_flush(self):
         self._run_initial_index_tasks()
-        kvOps_tasks = self._run_kvops_tasks()
+        kvOps_tasks = self.kv_mutations()
         before_index_ops = self._run_before_index_tasks()
+        self._run_tasks([before_index_ops])
         #Flush the bucket
         for bucket in self.buckets:
+            log.info("Flushing bucket {0}...".format(bucket.name))
             RestConnection(self.master).flush_bucket(bucket.name)
+        self.sleep(10)
         in_between_index_ops = self._run_in_between_tasks()
-        self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+        self._run_tasks([kvOps_tasks, in_between_index_ops])
         self._run_after_index_tasks()
 
     def _calculate_scan_vector(self):
@@ -453,6 +462,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         if self.doc_ops:
             tasks_ops = self.async_run_doc_ops()
         return tasks_ops
+
+    def kv_mutations(self, docs=0):
+        gens_load = self.generate_docs(self.docs_per_day)
+        tasks = self.async_load(generators_load=gens_load,
+                                batch_size=self.batch_size)
+        return tasks
 
     def _run_after_index_tasks(self):
         tasks = self.async_check_and_run_operations(buckets = self.buckets, after = True,
