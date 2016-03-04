@@ -19,17 +19,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if info == 'linux':
             self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
-            self.backup_validation_files_location = "/tmp/backuprestore"
         elif info == 'windows':
-            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH
-            self.backupset.directory = self.input.param("dir", testconstants.WIN_TMP_PATH + "entbackup")
-            self.backup_validation_files_location = testconstants.WIN_TMP_PATH + "backuprestore"
+            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
+            self.backupset.directory = self.input.param("dir", testconstants.WIN_TMP_PATH_RAW + "entbackup")
         elif info == 'mac':
             self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
-            self.backup_validation_files_location = "/tmp/backuprestore"
         else:
             raise Exception("OS not supported.")
+        self.backup_validation_files_location = "/tmp/backuprestore"
         self.backupset.backup_host = self.input.clusters[1][0]
         self.backupset.name = self.input.param("name", "backup")
         self.non_master_host = self.input.param("non-master", False)
@@ -93,15 +91,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             info = remote_client.extract_remote_info().type.lower()
             if info == 'linux' or info == 'mac':
                 backup_directory = "/tmp/entbackup"
-                validation_files_location = "/tmp/backuprestore"
             elif info == 'windows':
-                backup_directory = testconstants.WIN_TMP_PATH + "entbackup"
-                validation_files_location = testconstants.WIN_TMP_PATH + "backuprestore"
+                backup_directory = testconstants.WIN_TMP_PATH_RAW + "entbackup"
             else:
                 raise Exception("OS not supported.")
-            command = "rm -rf {0}".format(backup_directory)
-            output, error = remote_client.execute_command(command)
-            remote_client.log_command_output(output, error)
+            validation_files_location = "/tmp/backuprestore"
+            if info == 'linux':
+                command = "rm -rf {0}".format(backup_directory)
+                output, error = remote_client.execute_command(command)
+                remote_client.log_command_output(output, error)
+            elif info == 'windows':
+                remote_client.remove_directory_recursive(backup_directory)
             if info == 'linux':
                 command = "rm -rf /cbqe3043/entbackup".format(backup_directory)
                 output, error = remote_client.execute_command(command)
@@ -123,12 +123,18 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def number_of_processors(self):
         remote_client = RemoteMachineShellConnection(self.input.clusters[1][0])
-        command = "nproc"
-        output, error = remote_client.execute_command(command)
-        if output:
-            return output[0]
-        else:
-            return error[0]
+        info = remote_client.extract_remote_info().type.lower()
+        if info == 'linux' or info == 'mac':
+            command = "nproc"
+            output, error = remote_client.execute_command(command)
+            if output:
+                return output[0]
+            else:
+                return error[0]
+        elif info == 'windows':
+            sysinfo = remote_client.get_windows_system_info()
+            numprocs = sysinfo['Processor(s)'].split(' ')
+            return numprocs[0]
 
     def backup_reset_clusters(self, servers):
         BucketOperationHelper.delete_all_buckets_or_assert(servers, self)
@@ -247,14 +253,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --force-updates"
         if self.no_progress_bar:
             args += " --no-progress-bar"
-        rest_conn = RestConnection(self.backupset.restore_cluster_host)
+	rest_conn = RestConnection(self.backupset.restore_cluster_host)
         rest_helper = RestHelper(rest_conn)
         for bucket in self.buckets:
             if not rest_helper.bucket_exists(bucket.name):
                 self.log.info("Creating bucket {0} in restore host {1}".format(bucket.name,
                                                                                self.backupset.restore_cluster_host.ip))
                 rest_conn.create_bucket(bucket=bucket.name, ramQuotaMB=512)
-        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+	remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
