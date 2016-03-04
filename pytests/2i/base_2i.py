@@ -636,6 +636,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.assertTrue(int(index_count) == int(bucket_count),
                         "Bucket {0}, mismatch in item count for index :{1} : expected {2} != actual {3} ".format
                         (bucket.name, query.index_name, bucket_count, index_count))
+            self.log.info("All {0} items of bucket {1} indexed.".format(index_count, bucket.name))
 
     def _create_operation_map(self):
         map_initial = {"create_index":False, "query_ops": False, "query_explain_ops": False, "drop_index": False}
