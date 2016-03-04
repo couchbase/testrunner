@@ -211,6 +211,49 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         except Exception, ex:
             raise
 
+    def test_failover_indexer_add_back(self):
+        """
+        Indexer add back scenarios
+        :return:
+        """
+        self._calculate_scan_vector()
+        rest = RestConnection(self.master)
+        recoveryType = self.input.param("recoveryType", "full")
+        indexer_out = int(self.input.param("nodes_out", 0))
+        nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.assertGreaterEqual(len(nodes), indexer_out,
+                                "Existing Indexer Nodes less than Indexer out nodes")
+        log.info("Running kv Mutations...")
+        kvOps_tasks = self.kv_mutations()
+        servr_out = nodes[:indexer_out]
+        failover_task =self.cluster.async_failover([self.master],
+                    failover_nodes = servr_out, graceful=self.graceful)
+        self._run_tasks([[failover_task], kvOps_tasks])
+        before_index_ops = self._run_before_index_tasks()
+        nodes_all = rest.node_statuses()
+        nodes = []
+        if servr_out[0].ip == "127.0.0.1":
+            for failover_node in servr_out:
+                nodes.extend([node for node in nodes_all
+                    if (str(node.port) == failover_node.port)])
+        else:
+            for failover_node in servr_out:
+                nodes.extend([node for node in nodes_all
+                    if node.ip == failover_node.ip])
+            for node in nodes:
+                log.info("Adding back {0} with recovery type {1}...".format(node.ip, recoveryType))
+                rest.add_back_node(node.id)
+                rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
+        log.info("Rebalancing nodes in...")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
+        log.info("Running KV mutations...")
+        kvOps_tasks = self.kv_mutations()
+        self._run_tasks([[rebalance], kvOps_tasks])
+        self.sleep(10)
+        self._verify_bucket_count_with_index_count(self.load_query_definitions)
+        self.multi_query_using_index(buckets=self.buckets,
+                query_definitions=self.load_query_definitions)
+
     def test_autofailover(self):
         autofailover_timeout = 30
         status = RestConnection(self.master).update_autofailover_settings(True, autofailover_timeout)
