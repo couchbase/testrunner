@@ -6,6 +6,7 @@ import urllib
 import uuid
 import time
 import logging
+import stat
 import unittest
 from datetime import datetime
 import logger
@@ -653,6 +654,36 @@ class RemoteMachineShellConnection:
             try:
                 p = Popen("rm -rf {0}".format(remote_path) , shell=True, stdout=PIPE, stderr=PIPE)
                 stdout, stderro = p.communicate()
+            except IOError:
+                return False
+        return True
+
+    def rmtree(self, sftp, remote_path, level=0):
+        for f in sftp.listdir_attr(remote_path):
+            rpath = remote_path + "/" + f.filename
+            if stat.S_ISDIR(f.st_mode):
+                self.rmtree(sftp, rpath, level=(level + 1))
+            else:
+                rpath = remote_path + "/" + f.filename
+                print('removing %s' % (rpath))
+                sftp.remove(rpath)
+        print('removing %s' % (remote_path))
+        sftp.rmdir(remote_path)
+
+    def remove_directory_recursive(self, remote_path):
+        if self.remote:
+            sftp = self._ssh_client.open_sftp()
+            try:
+                log.info("removing {0} directory...".format(remote_path))
+                self.rmtree(sftp, remote_path)
+            except IOError:
+                return False
+            finally:
+                sftp.close()
+        else:
+            try:
+                p = Popen("rm -rf {0}".format(remote_path) , shell=True, stdout=PIPE, stderr=PIPE)
+                p.communicate()
             except IOError:
                 return False
         return True
@@ -2881,9 +2912,9 @@ class RemoteMachineShellConnection:
         # Iterate per bucket and generate maps
         for bucket in buckets:
             if data_path == None:
-                options = " -b " + bucket.name + " -u " + userId + " -p " + password + " --single-node"
+                options = " -b " + bucket.name + " -u " + userId + " -p "+ password +" --single-node"
             else:
-                options = " -b " + bucket.name + " -u " + userId + " -p " + password + replicaOption
+                options = " -b " + bucket.name + " -u " + userId + " -p" + password + replicaOption
             suffix = "_" + bucket.name + "_N%2FA.csv"
             if mode == "memory" or mode == "backup":
                suffix = "_" + bucket.name + "_" + self.ip + "%3A8091.csv"

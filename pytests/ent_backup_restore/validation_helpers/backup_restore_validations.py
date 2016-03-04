@@ -28,8 +28,12 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         :return: status and message
         """
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "ls -R {0}/{1}".format(self.backupset.directory, self.backupset.name)
-        o, e = remote_client.execute_command(command)
+        info = remote_client.extract_remote_info().type.lower()
+        if info == 'linux' or info == 'mac':
+            command = "ls -R {0}/{1}".format(self.backupset.directory, self.backupset.name)
+            o, e = remote_client.execute_command(command)
+        elif info == 'windows':
+            o = remote_client.list_files("{0}/{1}".format(self.backupset.directory, self.backupset.name))
         if not o and len(o) != 2 and o[1] != "backup-meta.json":
             return False, "Backup create did not create backup-meta file."
         remote_client.disconnect()
