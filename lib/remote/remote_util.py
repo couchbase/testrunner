@@ -312,6 +312,16 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         return o, r
 
+    def kill_cbft_process(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            o, r = self.execute_command("taskkill /F /T /IM cbft.exe*")
+            self.log_command_output(o, r)
+        else:
+            o, r = self.execute_command("killall -9 cbft")
+            self.log_command_output(o, r)
+        return o, r
+
     def kill_memcached(self):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':

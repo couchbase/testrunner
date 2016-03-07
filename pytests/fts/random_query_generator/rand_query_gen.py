@@ -56,11 +56,13 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         self.es_queries = []
         self.query_types = query_type
         self.dataset = dataset
+        self.smart_queries = False
         if fields:
             # Smart query generation
             self.fields = {}
             self.make_fields_compatible(fields)
             self.query_types = self.get_custom_query_types()
+            self.smart_queries = True
         else:
             self.fields = self.construct_fields()
             self.query_types = query_type
@@ -78,7 +80,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         elif self.dataset == "wiki":
             all_fields = DATASET.FIELDS['wiki']
         elif self.dataset == "all":
-            fields_set=set()
+            fields_set = set()
             for _, fields in DATASET.FIELDS.iteritems():
                 fields_set |= set(fields.keys())
             for v in fields_set:
@@ -337,7 +339,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             match_str = eval("self.get_queryable_%s" % fieldname + "()")
             if ':' or ' ' in match_str:
                 match_str = '\"' + match_str + '\"'
-            if bool(random.getrandbits(1)):
+            if bool(random.getrandbits(1)) and not self.smart_queries:
                 return match_str
             else:
                 return fieldname+':'+ match_str
