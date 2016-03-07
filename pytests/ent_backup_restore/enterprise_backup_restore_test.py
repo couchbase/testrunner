@@ -419,6 +419,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         conn.disable_firewall()
         self.log.info("Trying restore now")
+        self.skip_buckets = False
         self.backup_restore_validate()
 
     def test_backup_restore_with_audit(self):
@@ -726,6 +727,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster()
+        rest_conn = RestConnection(self.backupset.restore_cluster_host)
+        rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
         restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
                                                            backup_host=self.backupset.backup_host,
                                                            backups=self.backups, start=self.backupset.start,
@@ -754,6 +757,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster()
+        rest_conn = RestConnection(self.backupset.restore_cluster_host)
+        rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
         restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
                                                            backup_host=self.backupset.backup_host,
                                                            backups=self.backups, start=self.backupset.start,
@@ -782,6 +787,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster()
+        rest_conn = RestConnection(self.backupset.restore_cluster_host)
+        rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
         restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
                                                            backup_host=self.backupset.backup_host,
                                                            backups=self.backups, start=self.backupset.start,
@@ -810,6 +817,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster()
+        rest_conn = RestConnection(self.backupset.restore_cluster_host)
+        rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
         try:
             restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
                                                                 backup_host=self.backupset.backup_host,
@@ -844,6 +853,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster()
+        rest_conn = RestConnection(self.backupset.restore_cluster_host)
+        rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
         try:
             restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
                                                                 backup_host=self.backupset.backup_host,
@@ -878,6 +889,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.backup_cluster()
+        rest_conn = RestConnection(self.backupset.restore_cluster_host)
+        rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
         try:
             restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
                                                                 backup_host=self.backupset.backup_host,
