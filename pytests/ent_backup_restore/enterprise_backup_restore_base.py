@@ -81,6 +81,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.auto_failover_timeout = self.input.param("autofailover-timeout", 30)
         self.graceful = self.input.param("graceful",False)
         self.recoveryType = self.input.param("recoveryType", "full")
+        self.skip_buckets = self.input.param("skip_buckets", False)
         if not os.path.exists(self.backup_validation_files_location):
             os.mkdir(self.backup_validation_files_location)
 
@@ -253,17 +254,18 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --force-updates"
         if self.no_progress_bar:
             args += " --no-progress-bar"
-	    rest_conn = RestConnection(self.backupset.restore_cluster_host)
-        rest_helper = RestHelper(rest_conn)
-        for bucket in self.buckets:
-            if not rest_helper.bucket_exists(bucket.name):
-                self.log.info("Creating bucket {0} in restore host {1}".format(bucket.name,
-                                                                               self.backupset.restore_cluster_host.ip))
-                rest_conn.create_bucket(bucket=bucket.name,
-                                        ramQuotaMB=512,
-                                        authType=bucket.authType if bucket.authType else 'none',
-                                        proxyPort=bucket.port,
-                                        saslPassword=bucket.saslPassword)
+        if not self.skip_buckets:
+	        rest_conn = RestConnection(self.backupset.restore_cluster_host)
+            rest_helper = RestHelper(rest_conn)
+            for bucket in self.buckets:
+                if not rest_helper.bucket_exists(bucket.name):
+                    self.log.info("Creating bucket {0} in restore host {1}".format(bucket.name,
+                                                                                   self.backupset.restore_cluster_host.ip))
+                    rest_conn.create_bucket(bucket=bucket.name,
+                                            ramQuotaMB=512,
+                                            authType=bucket.authType if bucket.authType else 'none',
+                                            proxyPort=bucket.port,
+                                            saslPassword=bucket.saslPassword)
 	    remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
