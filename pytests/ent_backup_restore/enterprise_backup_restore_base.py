@@ -255,7 +255,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.no_progress_bar:
             args += " --no-progress-bar"
         if not self.skip_buckets:
-	        rest_conn = RestConnection(self.backupset.restore_cluster_host)
+            rest_conn = RestConnection(self.backupset.restore_cluster_host)
             rest_helper = RestHelper(rest_conn)
             for bucket in self.buckets:
                 if not rest_helper.bucket_exists(bucket.name):
