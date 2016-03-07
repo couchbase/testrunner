@@ -67,6 +67,7 @@ class BaseTestCase(unittest.TestCase):
         self.result_analyzer = DataAnalysisResultAnalyzer()
         self.set_testrunner_client()
         try:
+            self.skip_setup_cleanup = self.input.param("skip_setup_cleanup", False)
             self.vbuckets = self.input.param("vbuckets", 1024)
             self.upr = self.input.param("upr", None)
             self.index_quota_percent = self.input.param("index_quota_percent", None)
@@ -129,8 +130,9 @@ class BaseTestCase(unittest.TestCase):
             self.enable_time_sync = self.input.param("enable_time_sync", False)
             self.gsi_type = self.input.param("gsi_type", 'forestdb')
             self.bucket_size = self.input.param("bucket_size", None)
-
-
+            if self.skip_setup_cleanup:
+                self.buckets = RestConnection(self.master).get_buckets()
+                return
             if not self.skip_init_check_cbserver:
                 self.protocol = self.get_protocol_type()
             self.services_map = None
@@ -261,6 +263,8 @@ class BaseTestCase(unittest.TestCase):
             self.fail(e)
 
     def tearDown(self):
+        if self.skip_setup_cleanup:
+                return
         try:
             if hasattr(self, 'skip_buckets_handle') and self.skip_buckets_handle:
                 return
