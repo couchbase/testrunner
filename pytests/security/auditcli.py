@@ -54,9 +54,9 @@ class auditcli(BaseTestCase):
         else:
             if self.source == 'saslauthd':
                 rest = RestConnection(self.master)
+                self.setupLDAPSettings(rest)
                 #rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
                 self.set_user_role(rest,self.ldapUser)
-
 
 
     def tearDown(self):
@@ -70,6 +70,12 @@ class auditcli(BaseTestCase):
         status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
         return ipAddress
         '''
+
+    def setupLDAPSettings (self,rest):
+        api = rest.baseUrl + 'settings/saslauthdAuth'
+        params = urllib.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
+        status, content, header = rest._http_request(api, 'POST', params)
+        return status, content, header
 
     def del_runCmd_value(self, output):
         if "runCmd" in output[0]:
