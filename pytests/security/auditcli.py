@@ -17,6 +17,7 @@ import socket
 import random
 import zlib
 import commands
+import urllib
 
 class auditcli(BaseTestCase):
     def setUp(self):
