@@ -25,6 +25,8 @@ EMP_FIELDS = {
     'object': ["manages"]  # denote nested fields
 }
 
+TOTAL_EMP_FIELDS = 9
+
 EMP_NESTED_FIELDS = {
     'manages': {
         'text': ["reports"],
@@ -37,6 +39,8 @@ WIKI_FIELDS = {
     'number': ["mutated"],
     'object': ["revision", "text", "contributor"]
 }
+
+TOTAL_WIKI_FIELDS = 7
 
 WIKI_NESTED_FIELDS = {
     'revision': {
@@ -75,24 +79,28 @@ class CustomMapGenerator:
         if dataset == "emp":
             self.fields = EMP_FIELDS
             self.nested_fields = EMP_NESTED_FIELDS
+            self.max_fields = TOTAL_EMP_FIELDS
             self.fts_map['types'][dataset] = FTS_TYPE_MAP
             self.es_map[dataset] = ES_TYPE_MAP
             self.build_custom_map(dataset)
         elif dataset == "wiki":
             self.fields = WIKI_FIELDS
             self.nested_fields = WIKI_NESTED_FIELDS
+            self.max_fields = TOTAL_WIKI_FIELDS
             self.fts_map['types'][dataset] = FTS_TYPE_MAP
             self.es_map[dataset] = ES_TYPE_MAP
             self.build_custom_map(dataset)
         elif dataset == "all":
             self.fields = EMP_FIELDS
             self.nested_fields = EMP_NESTED_FIELDS
+            self.max_fields = TOTAL_EMP_FIELDS
             self.fts_map['types']['emp'] = copy.deepcopy(FTS_TYPE_MAP)
             self.es_map['emp'] = copy.deepcopy(ES_TYPE_MAP)
             self.build_custom_map('emp')
             if int(TestInputSingleton.input.param("doc_maps", 1)) > 1:
                 self.fields = WIKI_FIELDS
                 self.nested_fields = WIKI_NESTED_FIELDS
+                self.max_fields = TOTAL_WIKI_FIELDS
                 self.fts_map['types']['wiki'] = copy.deepcopy(FTS_TYPE_MAP)
                 self.es_map['wiki'] = copy.deepcopy(ES_TYPE_MAP)
                 self.build_custom_map('wiki')
@@ -115,7 +123,7 @@ class CustomMapGenerator:
         """
         return self.queryable_fields
 
-    def add_to_querable_fields(self, field, field_type):
+    def add_to_queryable_fields(self, field, field_type):
         if field in FULL_FIELD_NAMES:
             # if nested field, then fully qualify the field name
             field = FULL_FIELD_NAMES[field]
@@ -133,6 +141,29 @@ class CustomMapGenerator:
                 fts_child, es_child = self.get_child_map(field)
             self.fts_map['types'][dataset]['properties'][field] = fts_child
             self.es_map[dataset]['properties'][field] = es_child
+        self.add_non_indexed_field_to_query()
+
+    def add_non_indexed_field_to_query(self):
+        """
+        Add 1 or 2 non-indexed fields(negative test for custom mapping)
+        Query on non-indexed fields to see if 0 results are returned
+        """
+        if self.num_field_maps < self.max_fields:
+            while(True):
+                field, field_type = self.get_random_field_name_and_type(
+                    self.fields)
+                if field_type != 'object' and \
+                   field_type not in self.queryable_fields.keys():
+                    print "Adding an extra non-indexed field '%s' to" \
+                          " list of queryable fields" % field
+                    self.queryable_fields[field_type] = [field]
+                    break
+                if field_type != 'object' and \
+                   field not in self.queryable_fields[field_type]:
+                    print "Adding an extra non-indexed field '%s' to" \
+                          " list of queryable fields" % field
+                    self.queryable_fields[field_type].append(field)
+                    break
 
     def get_child_map(self, field):
         """
@@ -208,7 +239,7 @@ class CustomMapGenerator:
                 es_field_map['analyzer'] = "english"
 
         # add to list of queryable fields
-        self.add_to_querable_fields(field, field_type)
+        self.add_to_queryable_fields(field, field_type)
 
         return fts_field_map, es_field_map
 
