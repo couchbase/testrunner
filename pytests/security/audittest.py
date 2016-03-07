@@ -39,7 +39,8 @@ class auditTest(BaseTestCase):
 	    self.log.info ("Enabling Audit ")
             auditTemp.setAuditEnable('true')
             self.sleep(30)
-
+        rest = RestConnection(self.master)
+        self.setupLDAPSettings(rest)
 
     def tearDown(self):
         super(auditTest, self).tearDown()
@@ -54,6 +55,12 @@ class auditTest(BaseTestCase):
             status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
         '''
+
+    def setupLDAPSettings (self,rest):
+        api = rest.baseUrl + 'settings/saslauthdAuth'
+        params = urllib.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
+        status, content, header = rest._http_request(api, 'POST', params)
+        return status, content, header
 
     def set_user_role(self,rest,username,user_role='admin'):
         payload = "name=" + username + "&roles=" + user_role
