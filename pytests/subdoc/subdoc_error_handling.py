@@ -647,7 +647,7 @@ class SubdocErrorHandling(SubdocBaseTest):
         self.error_counter("normal_nested_data", new_path, 1.0, error = "Memcached error #200 'Delta out of range'", field = "nested_data : counter to a double - dictionary", result = result)
         self.log.info("nested_data :: integer overflow")
         new_path = self.generate_path(20, "integer")
-        self.error_counter("normal_nested_data", new_path, sys.maxint, error = "Memcached error #200 'Delta out of range'", field = "nested_data : integer overflow - dictionary", result = result)
+        self.error_counter("normal_nested_data", new_path, sys.maxint, error = "Memcached error #197 'Cant insert'", field = "nested_data : integer overflow - dictionary", result = result)
         self.log.info("nested_data :: empty path does not exist")
         new_path = self.generate_path(20, "")
         self.error_counter("normal_nested_data", new_path, error = "Memcached error #193 'Path mismatch'", field = "nested_data : empty path does not exist - dictionary", result = result)
