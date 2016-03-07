@@ -523,17 +523,18 @@ class FTSIndex:
             self.index_definition['sourceName'] = self._source_name
 
         self.dataset = TestInputSingleton.input.param("dataset", "emp")
-        # for wiki docs, specify default analyzer as "simple"
-        if self.index_type == "fulltext-index" and \
-                (self.dataset == "wiki" or self.dataset == "all"):
-            self.index_definition['params'] = self.build_custom_index_params(
-                {"default_analyzer": "simple"})
 
         # Support for custom map
         self.custom_map = TestInputSingleton.input.param("custom_map", False)
         self.cm_id = TestInputSingleton.input.param("cm_id", 0)
         if self.custom_map:
             self.generate_new_custom_map(seed=self.cm_id)
+
+        # for wiki docs, specify default analyzer as "simple"
+        if self.index_type == "fulltext-index" and \
+                (self.dataset == "wiki" or self.dataset == "all"):
+            self.index_definition['params'] = self.build_custom_index_params(
+                {"default_analyzer": "simple"})
 
         self.fts_queries = []
 
@@ -552,6 +553,12 @@ class FTSIndex:
         if source_uuid:
             self.index_definition['sourceUUID'] = source_uuid
 
+        self.moss_enabled = TestInputSingleton.input.param("moss", True)
+        if not self.moss_enabled:
+            if 'store' not in self.index_definition['params'].keys():
+                self.index_definition['params']['store'] = {}
+            self.index_definition['params']['store']['kvStoreMossAllow'] = False
+
     def generate_new_custom_map(self, seed):
         from custom_map_generator.map_generator import CustomMapGenerator
         cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset)
@@ -566,8 +573,9 @@ class FTSIndex:
     def build_custom_index_params(self, index_params):
         if self.index_type == "fulltext-index":
             mapping = INDEX_DEFAULTS.BLEVE_MAPPING
-            if not TestInputSingleton.input.param("default_map", False):
-                mapping['mapping']['default_mapping']['enabled'] = False
+            if self.custom_map:
+                if not TestInputSingleton.input.param("default_map", False):
+                    mapping['mapping']['default_mapping']['enabled'] = False
             mapping['mapping'].update(index_params)
         else:
             mapping = INDEX_DEFAULTS.ALIAS_DEFINITION
@@ -782,7 +790,7 @@ class CouchbaseCluster:
     def get_random_fts_node(self):
         self.__separate_nodes_on_services()
         if not self.__fts_nodes:
-            return FTSException("No node in the cluster has 'fts' service"
+            raise FTSException("No node in the cluster has 'fts' service"
                                 " enabled")
         if len(self.__fts_nodes) == 1:
             return self.__fts_nodes[0]
@@ -2012,6 +2020,7 @@ class FTSBaseTest(unittest.TestCase):
 
         self.__fail_on_errors = self._input.param("fail_on_errors", True)
 
+
     def __initialize_error_count_dict(self):
         """
             initializes self.__error_count_dict with ip, error and err count
@@ -2367,8 +2376,8 @@ class FTSBaseTest(unittest.TestCase):
                     self.fail("sourcePartitions for pindex %s more than "
                               "max_partitions_per_pindex %s" %
                               (uuid, partitions_per_pindex))
-        self.log.info("Validated: Every pIndex serves %s partitions or lesser" %
-                          partitions_per_pindex)
+        self.log.info("Validated: Every pIndex serves %s partitions or lesser"
+                      % partitions_per_pindex)
 
         # check 3 - distributed - pindex present on all fts nodes?
         count = 0
@@ -2383,8 +2392,8 @@ class FTSBaseTest(unittest.TestCase):
                            % num_fts_nodes)
             nodes_partitions = self.populate_node_partition_map(index)
         else:
-            self.log.info("Validated: pIndexes are distributed across %s " %
-                      nodes_partitions.keys())
+            self.log.info("Validated: pIndexes are distributed across %s "
+                          % nodes_partitions.keys())
 
         # check 4 - balance check(almost equal no of pindexes on all fts nodes)
         exp_partitions_per_node = self._num_vbuckets/num_fts_nodes
