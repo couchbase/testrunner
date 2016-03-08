@@ -67,6 +67,7 @@ class QueryTests(BaseTestCase):
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
         self.covering_index = self.input.param("covering_index", False)
         self.named_prepare = self.input.param("named_prepare", None)
+        self.monitoring = self.input.param("monitoring", False)
         self.encoded_prepare = self.input.param("encoded_prepare", False)
         self.isprepared = False
         self.server = self.master
@@ -264,6 +265,11 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_prepared_any_no_in_clause(self):
+        if self.monitoring:
+            self.query = "select * from system:prepareds"
+            result = self.run_cbq_query()
+            print result
+            self.assertTrue(result['metrics']['resultCount']==0)
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
                          "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' end)" % (
@@ -272,6 +278,12 @@ class QueryTests(BaseTestCase):
                                                             bucket.name) +\
                          "AND  NOT (job_title = 'Sales') ORDER BY name"
             self.prepared_common_body()
+        if self.monitoring:
+            self.query = "select * from system:prepareds"
+            result = self.run_cbq_query()
+            self.assertTrue(result['metrics']['resultCount']==1)
+            print result
+
 
     def test_any_external(self):
         for bucket in self.buckets:
@@ -487,10 +499,21 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_prepared_like_wildcards(self):
+        if self.monitoring:
+            self.query = "select * from system:prepareds"
+            result = self.run_cbq_query()
+            print result
+            self.assertTrue(result['metrics']['resultCount']==0)
         for bucket in self.buckets:
             self.query = "SELECT email FROM %s WHERE email " % (bucket.name) +\
                          "LIKE '%@%.%' ORDER BY email"
             self.prepared_common_body()
+        if self.monitoring:
+            self.query = "select * from system:prepareds"
+            result = self.run_cbq_query()
+            self.assertTrue(result['metrics']['resultCount']==1)
+            print result
+
 
     def test_between(self):
         for bucket in self.buckets:
@@ -571,6 +594,10 @@ class QueryTests(BaseTestCase):
             self._verify_results(actual_result['results'], expected_result)
 
     def test_prepared_group_by_aggr_fn(self):
+        if self.monitoring:
+            self.query = "select * from system:prepareds"
+            result = self.run_cbq_query()
+            self.assertTrue(result['metrics']['resultCount']==0)
         for bucket in self.buckets:
             self.query = "SELECT tasks_points.task1 AS task from %s " % (bucket.name) +\
                          "WHERE join_mo>7 GROUP BY tasks_points.task1 " +\
@@ -578,6 +605,17 @@ class QueryTests(BaseTestCase):
                          "(MIN(join_day)=1 OR MAX(join_yr=2011)) " +\
                          "ORDER BY tasks_points.task1"
             self.prepared_common_body()
+        if self.monitoring:
+            self.query = "select * from system:prepareds"
+            result = self.run_cbq_query()
+            self.assertTrue(result['metrics']['resultCount']==1)
+            print result
+            self.query = "delete from system:prepareds"
+            self.run_cbq_query()
+            self.query = "select * from system:prepareds"
+            result = self.run_cbq_query()
+            self.assertTrue(result['metrics']['resultCount']==0)
+            print result
 
     def test_group_by_satisfy(self):
         for bucket in self.buckets:
@@ -733,6 +771,15 @@ class QueryTests(BaseTestCase):
             self.query = 'SELECT name FROM %s WHERE META(%s).id '  % (bucket.name, bucket.name) +\
                          'LIKE "employee%"'
             self.prepared_common_body()
+            if self.monitoring:
+                self.query = 'select * from system:completed_requests'
+                result = self.run_cbq_query()
+                print result
+                requestId = result['requestID']
+                self.query = 'delete from system:completed_requests where RequestId  =  "%s"' % requestId
+                self.run_cbq_query()
+                result = self.run_cbq_query('select * from system:completed_requests where RequestId  =  "%s"' % requestId)
+                self.assertTrue(result['metrics']['resultCount'] == 0)
 
     def test_meta_flags(self):
         for bucket in self.buckets:
@@ -1716,6 +1763,11 @@ class QueryTests(BaseTestCase):
             self.prepared_common_body()
 
     def test_named_prepared_between(self):
+        if self.monitoring:
+            self.query = "select * from system:prepareds"
+            result = self.run_cbq_query()
+            print result
+            self.assertTrue(result['metrics']['resultCount']==0)
         for bucket in self.buckets:
             self.query = "SELECT name, email FROM %s WHERE "  % (bucket.name) +\
                           "(ANY skill IN %s.skills SATISFIES skill = 'skill2010' END)" % (
@@ -1724,6 +1776,18 @@ class QueryTests(BaseTestCase):
                                                                     bucket.name) +\
                           "AND  NOT (job_title = 'Sales') ORDER BY name"
             self.prepared_common_body()
+        if self.monitoring:
+            self.query = "select * from system:prepareds"
+            result = self.run_cbq_query()
+            self.assertTrue(result['metrics']['resultCount']==1)
+            print result
+            requestId = result['requestID']
+            self.query = 'delete from system:prepareds where requestID = "%s" '  % requestId
+            result = self.run_cbq_query()
+            self.query = 'select * from system:prepareds where requestID = "%s" '  % requestId
+            result = self.run_cbq_query()
+            self.assertTrue(result['metrics']['resultCount']==0)
+
 
     def test_prepared_comparision_not_equal_less_more(self):
         for bucket in self.buckets:
