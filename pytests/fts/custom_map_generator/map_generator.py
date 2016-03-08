@@ -4,19 +4,6 @@ import random
 import copy
 from TestInput import TestInputSingleton
 
-
-FTS_TYPE_MAP = {
-    "dynamic": False,
-    "enabled": True,
-    "fields": [],
-    "properties": {}
-}
-
-ES_TYPE_MAP = {
-    "dynamic": False,
-    "properties": {}
-}
-
 EMP_FIELDS = {
     'text': ["name", "dept", "languages_known", "email"],
     'number': ["mutated", "salary"],
@@ -80,15 +67,31 @@ class CustomMapGenerator:
             self.fields = EMP_FIELDS
             self.nested_fields = EMP_NESTED_FIELDS
             self.max_fields = TOTAL_EMP_FIELDS
-            self.fts_map['types'][dataset] = FTS_TYPE_MAP
-            self.es_map[dataset] = ES_TYPE_MAP
+            self.fts_map['types'][dataset] = {
+                                        "dynamic": False,
+                                        "enabled": True,
+                                        "fields": [],
+                                        "properties": {}
+                                    }
+            self.es_map[dataset] = {
+                        "dynamic": False,
+                        "properties": {}
+                    }
             self.build_custom_map(dataset)
         elif dataset == "wiki":
             self.fields = WIKI_FIELDS
             self.nested_fields = WIKI_NESTED_FIELDS
             self.max_fields = TOTAL_WIKI_FIELDS
-            self.fts_map['types'][dataset] = FTS_TYPE_MAP
-            self.es_map[dataset] = ES_TYPE_MAP
+            self.fts_map['types'][dataset] = {
+                                        "dynamic": False,
+                                        "enabled": True,
+                                        "fields": [],
+                                        "properties": {}
+                                    }
+            self.es_map[dataset] = {
+                        "dynamic": False,
+                        "properties": {}
+                    }
             self.build_custom_map(dataset)
         elif dataset == "all":
             self.fields = EMP_FIELDS
@@ -124,7 +127,10 @@ class CustomMapGenerator:
                 if not TestInputSingleton.input.param("default_map", False):
                     # if doc_maps=1 and default map is disabled, force single
                     # map on ES by disabling wiki map
-                    self.es_map['wiki'] = copy.deepcopy(ES_TYPE_MAP)
+                    self.es_map['wiki'] = {
+                            "dynamic": False,
+                            "properties": {}
+                        }
 
     def get_random_value(self, list):
         return list[random.randint(0, len(list)-1)]
