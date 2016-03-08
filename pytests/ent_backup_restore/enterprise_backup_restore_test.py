@@ -402,22 +402,26 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_create()
         self.log.info("Enabling firewall on cluster host before backup")
         RemoteUtilHelper.enable_firewall(self.backupset.cluster_host)
-        output, error = self.backup_cluster()
-        self.assertTrue("getsockopt: connection refused" in output[0],
-                        "Expected error not thrown by backup cluster when firewall enabled")
-        self.log.info("Disabling firewall on cluster host to take backup")
-        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
-        conn.disable_firewall()
+        try:
+            output, error = self.backup_cluster()
+            self.assertTrue("getsockopt: connection refused" in output[0],
+                            "Expected error not thrown by backup cluster when firewall enabled")
+        finally:
+            self.log.info("Disabling firewall on cluster host to take backup")
+            conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+            conn.disable_firewall()
         self.log.info("Trying backup now")
         self.backup_cluster_validate()
         self.log.info("Enabling firewall on restore host before restore")
         RemoteUtilHelper.enable_firewall(self.backupset.restore_cluster_host)
-        output, error = self.backup_restore()
-        self.assertTrue("getsockopt: connection refused" in output[0],
-                       "Expected error not thrown by backup restore when firewall enabled")
-        self.log.info("Disabling firewall on restore host to restore")
-        conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
-        conn.disable_firewall()
+        try:
+            output, error = self.backup_restore()
+            self.assertTrue("getsockopt: connection refused" in output[0],
+                            "Expected error not thrown by backup restore when firewall enabled")
+        finally:
+            self.log.info("Disabling firewall on restore host to restore")
+            conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+            conn.disable_firewall()
         self.log.info("Trying restore now")
         self.skip_buckets = False
         self.backup_restore_validate()
