@@ -2123,7 +2123,14 @@ class RemoteMachineShellConnection:
 
     def execute_commands_inside(self, main_command,query, queries,username,password,bucketname,source,subcommands=[], min_output_size=0,
                                 end_msg='', timeout=250):
-        filename = '/tmp/test'
+        self.extract_remote_info()
+        filename = "/tmp/test"
+        iswin=False
+
+        if self.info.type.lower() == 'windows':
+            iswin = True
+            filename = "/cygdrive/c/tmp/test"
+
         filedata = ""
         if not(query==""):
             main_command = main_command + " -s=\"" + query+ '"'
@@ -2170,9 +2177,16 @@ class RemoteMachineShellConnection:
             f.close()
         if not(queries==""):
             if (source):
-                main_command = main_command + "  -s=\"\SOURCE " + filename+ '"'
+                if iswin:
+                    main_command = main_command + "  -s=\"\SOURCE " + 'c:\\\\tmp\\\\test'
+                else:
+                    main_command = main_command + "  -s=\"\SOURCE " + filename+ '"'
             else:
-                main_command = main_command + " -f=" + filename
+                if iswin:
+                    main_command = main_command + " -f=" + 'c:\\\\tmp\\\\test'
+                else:
+                    main_command = main_command + " -f=" + filename
+
         log.info("running command on {0}: {1}".format(self.ip, main_command))
         output=""
         if self.remote:
