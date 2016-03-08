@@ -94,15 +94,31 @@ class CustomMapGenerator:
             self.fields = EMP_FIELDS
             self.nested_fields = EMP_NESTED_FIELDS
             self.max_fields = TOTAL_EMP_FIELDS
-            self.fts_map['types']['emp'] = copy.deepcopy(FTS_TYPE_MAP)
-            self.es_map['emp'] = copy.deepcopy(ES_TYPE_MAP)
+            self.fts_map['types']['emp'] = {
+                                        "dynamic": False,
+                                        "enabled": True,
+                                        "fields": [],
+                                        "properties": {}
+                                    }
+            self.es_map['emp'] = {
+                        "dynamic": False,
+                        "properties": {}
+                    }
             self.build_custom_map('emp')
             if int(TestInputSingleton.input.param("doc_maps", 1)) > 1:
                 self.fields = WIKI_FIELDS
                 self.nested_fields = WIKI_NESTED_FIELDS
                 self.max_fields = TOTAL_WIKI_FIELDS
-                self.fts_map['types']['wiki'] = copy.deepcopy(FTS_TYPE_MAP)
-                self.es_map['wiki'] = copy.deepcopy(ES_TYPE_MAP)
+                self.fts_map['types']['wiki'] = {
+                                        "dynamic": False,
+                                        "enabled": True,
+                                        "fields": [],
+                                        "properties": {}
+                                    }
+                self.es_map['wiki'] = {
+                        "dynamic": False,
+                        "properties": {}
+                    }
                 self.build_custom_map('wiki')
             else:
                 if not TestInputSingleton.input.param("default_map", False):
