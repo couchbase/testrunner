@@ -176,7 +176,7 @@ def main():
                         i = i + 1
 
                 if haveTestToLaunch:
-                    descriptor = urllib.quote(testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] + '-' + time.strftime('%b-%d-%X') )
+                    descriptor = urllib.quote(time.strftime('%b-%d-%X') + '-' + options.version + '-' + testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'])
                     # get the VMs, they should be there
 
                     getVMURL = 'http://' + SERVER_MANAGER + \
