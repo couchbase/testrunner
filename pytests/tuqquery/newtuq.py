@@ -40,6 +40,7 @@ class QueryTests(BaseTestCase):
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.dataset = self.input.param("dataset", "default")
         self.primary_indx_type = self.input.param("primary_indx_type", 'GSI')
+        self.index_type = self.input.param("index_type", 'GSI')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         self.monitoring = self.input.param("monitoring",False)
         self.isprepared = False
@@ -777,14 +778,14 @@ class QueryTests(BaseTestCase):
             shell_connection.execute_command(cmd)
 
     def create_primary_index_for_3_0_and_greater(self):
-        self.log.info("CREATE PRIMARY INDEX")
+        self.log.info("CREATE PRIMARY INDEX using %s" % self.primary_indx_type)
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
         if versions[0].startswith("4") or versions[0].startswith("3"):
             for bucket in self.buckets:
                 if self.primary_indx_drop:
-                    self.log.info("Dropping primary index for %s ..." % bucket.name)
-                    self.query = "DROP PRIMARY INDEX ON %s" % (bucket.name)
+                    self.log.info("Dropping primary index for %s using %s ..." % (bucket.name,self.primary_indx_type))
+                    self.query = "DROP PRIMARY INDEX ON %s USING %s" % (bucket.name,self.primary_indx_type)
                     self.run_cbq_query()
                     self.sleep(3, 'Sleep for some time after index drop')
                 self.query = 'select * from system:indexes where name="#primary" and keyspace_id = "%s"' % bucket.name
