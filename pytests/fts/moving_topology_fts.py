@@ -88,6 +88,8 @@ class MovingTopFTS(FTSBaseTest):
             self._cb_cluster.swap_rebalance_master(services=["fts"])
             self.validate_index_count(equal_bucket_doc_count=True)
             raise e
+        self._cb_cluster.swap_rebalance_master(services=["fts"])
+        self.validate_index_count(equal_bucket_doc_count=True)
 
     def failover_non_master_during_index_building(self):
         self.load_data()
