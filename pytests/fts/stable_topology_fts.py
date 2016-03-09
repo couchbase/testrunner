@@ -304,7 +304,6 @@ class StableTopFTS(FTSBaseTest):
                                          expected_hits=10)
         self.log.info("Hits: %s" % hits)
 
-
     def index_query_custom_mapping(self):
         """
          uses RQG for custom mapping
@@ -318,3 +317,34 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self.generate_random_queries(index, self.num_queries, self.query_types)
         self.run_query_and_compare(index)
+
+    def index_edit_and_query_custom_mapping(self):
+        """
+        Index and query index, update map, query again, uses RQG
+        """
+        fail = False
+        index = self.create_index(
+            bucket=self._cb_cluster.get_bucket_by_name('default'),
+            index_name="custom_index")
+        self.create_es_index_mapping(index.es_custom_map)
+        self.load_data()
+        self.wait_for_indexing_complete()
+        self.generate_random_queries(index, self.num_queries, self.query_types)
+        try:
+            self.run_query_and_compare(index)
+        except AssertionError as err:
+            self.log.error(err)
+            fail = True
+        self.log.info("Editing custom index with new map...")
+        index.generate_new_custom_map(seed=index.cm_id+10)
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        # updating mapping on ES is not easy, often leading to merge issues
+        # drop and recreate the index, load again
+        self.create_es_index_mapping(index.es_custom_map)
+        self.load_data()
+        self.wait_for_indexing_complete()
+        self.run_query_and_compare(index)
+        if fail:
+            raise err
+
