@@ -509,7 +509,17 @@ class FTSIndex:
         self._source_name = source_name
         self._one_time = False
         self.index_type = index_type
-        self.index_definition = INDEX_DEFAULTS.INDEX_DEFINITION
+        self.index_definition = {
+                          "type": "fulltext-index",
+                          "name": "",
+                          "uuid": "",
+                          "params": {},
+                          "sourceType": "couchbase",
+                          "sourceName": "default",
+                          "sourceUUID": "",
+                          "sourceParams": INDEX_DEFAULTS.SOURCE_CB_PARAMS,
+                          "planParams": {}
+                        }
         self.name = self.index_definition['name'] = name
         self.es_custom_map = None
         self.smart_query_fields = None
@@ -2019,7 +2029,7 @@ class FTSBaseTest(unittest.TestCase):
             self.es = None
         self.create_gen = None
 
-        self.__fail_on_errors = self._input.param("fail_on_errors", True)
+        self.__fail_on_errors = self._input.param("fail-on-errors", True)
 
 
     def __initialize_error_count_dict(self):
