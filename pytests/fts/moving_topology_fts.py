@@ -77,14 +77,17 @@ class MovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           %(index.name,index.get_indexed_doc_count()))
         self._cb_cluster.swap_rebalance_master(services=["kv"])
-        for index in self._cb_cluster.get_indexes():
-            self.is_index_partitioned_balanced(index)
-        self.wait_for_indexing_complete()
-        self.validate_index_count(equal_bucket_doc_count=True)
-        # to work around fts node becoming master and
-        # unable to rebalance out kv node
-        self._cb_cluster.swap_rebalance_master(services=["fts"])
-        self.validate_index_count(equal_bucket_doc_count=True)
+        try:
+            for index in self._cb_cluster.get_indexes():
+                self.is_index_partitioned_balanced(index)
+            self.wait_for_indexing_complete()
+            self.validate_index_count(equal_bucket_doc_count=True)
+        except Exception as e:
+            # to work around fts node becoming master and
+            # unable to rebalance out kv node
+            self._cb_cluster.swap_rebalance_master(services=["fts"])
+            self.validate_index_count(equal_bucket_doc_count=True)
+            raise e
 
     def failover_non_master_during_index_building(self):
         self.load_data()
