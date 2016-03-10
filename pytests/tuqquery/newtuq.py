@@ -786,7 +786,7 @@ class QueryTests(BaseTestCase):
                 if self.primary_indx_drop:
                     self.log.info("Dropping primary index for %s using %s ..." % (bucket.name,self.primary_indx_type))
                     self.query = "DROP PRIMARY INDEX ON %s USING %s" % (bucket.name,self.primary_indx_type)
-                    self.run_cbq_query()
+                    #self.run_cbq_query()
                     self.sleep(3, 'Sleep for some time after index drop')
                 self.query = 'select * from system:indexes where name="#primary" and keyspace_id = "%s"' % bucket.name
                 res = self.run_cbq_query()
