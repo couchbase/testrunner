@@ -616,7 +616,6 @@ class FTSIndex:
             self.name,
             rest.ip))
         rest.create_fts_index(self.name, self.index_definition)
-        time.sleep(15)
 
     def update(self):
         rest = RestConnection(self.__cluster.get_random_fts_node())
@@ -2284,7 +2283,6 @@ class FTSBaseTest(unittest.TestCase):
         retry = self._input.param("index_retry", 5)
         start_time = time.time()
         for index in self._cb_cluster.get_indexes():
-            time.sleep(15)
             if index.index_type == "alias":
                 continue
             retry_count = retry
@@ -2313,7 +2311,7 @@ class FTSBaseTest(unittest.TestCase):
                     retry_count = retry
                 else:
                     retry_count -= 1
-
+                time.sleep(10)
         self.log.info("FTS indexed %s docs in %s mins"
                       % (index_doc_count, round(float((time.time()-start_time)/60), 2)))
 
@@ -2368,7 +2366,6 @@ class FTSBaseTest(unittest.TestCase):
         # check 1 - test number of pindexes
         partitions_per_pindex = index.get_max_partitions_pindex()
         exp_num_pindexes = self._num_vbuckets/partitions_per_pindex
-        time.sleep(10)
         if self._num_vbuckets % partitions_per_pindex:
             import math
             exp_num_pindexes = math.ceil(
@@ -2491,7 +2488,6 @@ class FTSBaseTest(unittest.TestCase):
                     bucket,
                     "%s_index_%s" % (bucket.name, count+1),
                     plan_params=plan_params)
-                time.sleep(15)
 
     def create_alias(self, target_indexes, name=None, alias_def=None):
         """
