@@ -880,7 +880,6 @@ class QueriesViewsTests(QueryTests):
             if (query.find("CREATE INDEX") < 0):
                 result = plan["~children"][0]["~children"][0] if "~children" in plan["~children"][0] \
                         else plan["~children"][0]
-
                 self.assertTrue(result["#operator"] == 'IntersectScan',
                                     "Index should be intersect scan and is %s" % (plan))
 
@@ -893,9 +892,9 @@ class QueriesViewsTests(QueryTests):
                 self.log.info('compared against {}'.format(indexes_names))
                 self.assertTrue(set(actual_indexes) == set(indexes_names),"Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
             else:
-                result = res["results"][0]
+                result = plan
                 self.assertTrue(result['#operator'] == 'CreateIndex',
-                                    "Operator is not create index and is %s" % (res["results"]))
+                                    "Operator is not create index and is %s" % (result))
             self.log.info('-'*100)
 
     def _delete_indexes(self, indexes):
