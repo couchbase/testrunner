@@ -52,8 +52,8 @@ class QueryTests(BaseTestCase):
             self.gsi_type = None
         if self.input.param("reload_data", False):
             for bucket in self.buckets:
-                if not self.skip_buckets_handle:
-                    self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
+                self.cluster.bucket_flush(self.master, bucket=bucket,
+                                          timeout=self.wait_timeout * 5)
             self.gens_load = self.generate_docs(self.docs_per_day)
             self.load(self.gens_load, flag=self.item_flag)
         self.gens_load = self.generate_docs(self.docs_per_day)
@@ -792,8 +792,9 @@ class QueryTests(BaseTestCase):
                 res = self.run_cbq_query()
                 self.sleep(10)
                 print res
-                self.query = "delete from system:completed_requests"
-                result = self.run_cbq_query()
+                if self.monitoring:
+                    self.query = "delete from system:completed_requests"
+                    self.run_cbq_query()
                 if not self.skip_primary_index:
                     if (res['metrics']['resultCount'] == 0):
                         self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
