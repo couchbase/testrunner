@@ -550,6 +550,13 @@ class N1QLHelper():
             map[bucket.name] = int(res["results"][0]["$1"])
         return map
 
+    def get_index_count_using_index(self, bucket, index_name,server=None):
+        query = 'SELECT COUNT(*) FROM {0} USE INDEX ({1})'.format(bucket.name, index_name)
+        if not server:
+            server = self.master
+        res = self.run_cbq_query(query=query, server=server)
+        return int(res['results'][0]['$1'])
+
     def _gen_dict(self, result):
         result_set = []
         if result != None and len(result) > 0:
