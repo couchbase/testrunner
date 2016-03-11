@@ -5,6 +5,7 @@ from lib.couchbase_helper.subdoc_helper import SubdocHelper
 from lib.couchbase_helper.random_gen import RandomDataGenerator
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import VBucketAwareMemcached
+from multiprocessing import Process
 from subdoc_base import SubdocBaseTest
 import Queue
 import copy, json
@@ -28,6 +29,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.client = self.direct_client(self.master, self.buckets[0])
         self.build_kv_store = self.input.param("build_kv_store", False)
         self.total_writer_threads = self.input.param("total_writer_threads", 10)
+        self.number_of_documents =  self.input.param("number_of_documents",10)
+        self.concurrent_threads = self.input.param("concurrent_threads",10)
         self.randomDataGenerator = RandomDataGenerator()
         self.subdoc_gen_helper = SubdocHelper()
         self.kv_store = {}
@@ -79,36 +82,55 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.mutation_operation_type = "array"
         self.test_seq_mutations()
 
-    def test_seq_mutations(self):
-        self.client = self.direct_client(self.master, self.buckets[0])
-        error_result = {}
-        self.number_of_operations =  self.input.param("number_of_operations",10)
-        data_set =  self.generate_json_for_nesting()
-        base_json = self.generate_json_for_nesting()
-        json_document = self.generate_nested(base_json, data_set, self.nesting_level)
-        data_key = "test_mutation_operations"
-        self.set(self.client, data_key, json_document)
-        operations = self.subdoc_gen_helper.build_sequence_operations(json_document, self.number_of_operations, seed = self.seed,
-         mutation_operation_type = self.mutation_operation_type,
-         force_operation_type = self.force_operation_type)
-        for operation in operations:
-            function = getattr(self, operation["subdoc_api_function_applied"])
-            try:
-                data_value = operation["data_value"]
-                if not self.use_sdk_client:
-                    data_value = json.dumps(data_value)
-                function(self.client, data_key, operation["new_path_impacted_after_mutation_operation"], data_value)
-            except Exception, ex:
-                for key in operation:
-                    self.log.info(" {0} : {1}".format(key, operation[key]))
-                raise
-        pairs = {}
-        self.subdoc_gen_helper.find_pairs(json_document,"", pairs)
-        for path in pairs.keys():
-            data = self.get(self.client, key = data_key, path = path)
-            if data != pairs[path]:
-                error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
-        self.assertTrue(len(error_result) == 0, error_result)
+    def test_multi_seq_mutations(self):
+        self.verify_result =  self.input.param("verify_result",False)
+        queue = Queue.Queue()
+        number_of_times = (self.number_of_documents/self.concurrent_threads)
+        process_list = []
+        number_of_buckets = len(self.buckets)
+        for x in range(self.concurrent_threads):
+            base_json =  self.generate_json_for_nesting()
+            data_set = self.generate_nested(base_json, base_json, 2)
+            json_document = self.generate_nested(base_json, data_set, 10)
+            bucket_number=x%number_of_buckets
+            prefix = self.buckets[bucket_number].name+"_"+str(x)+"_"
+            p = Process(target=self.test_seq_mutations, args =(queue, number_of_times, prefix, json_document, self.buckets[bucket_number]))
+            p.start()
+            process_list.append(p)
+        for x in process_list:
+            p.join()
+        if self.verify_result:
+            filename = "/tmp/"+self.randomDataGenerator.random_uuid()+"_dump_failure.txt"
+            queue_size = queue.qsize()
+            if not queue.empty():
+                self._dump_data(filename, queue)
+            self.assertTrue(queue_size == 0, "number of failures {0}, check file {1}".format(queue.qsize(),filename))
+
+    def test_seq_mutations(self, queue, number_of_times, prefix, json_document, bucket):
+        client = self.direct_client(self.master, bucket)
+        for x in range(number_of_times):
+            error_result = {}
+            self.number_of_operations =  self.input.param("number_of_operations",50)
+            data_key = prefix+self.randomDataGenerator.random_uuid()
+            self.set(client, data_key, json_document)
+            operations = self.subdoc_gen_helper.build_sequence_operations(json_document, self.number_of_operations, seed = self.seed,
+            mutation_operation_type = self.mutation_operation_type,
+             force_operation_type = self.force_operation_type)
+            for operation in operations:
+                function = getattr(self, operation["subdoc_api_function_applied"])
+                try:
+                    data_value = operation["data_value"]
+                    if not self.use_sdk_client:
+                        data_value = json.dumps(data_value)
+                    function(client, data_key, operation["new_path_impacted_after_mutation_operation"], data_value)
+                except Exception, ex:
+                    queue.put("bucket {0}, error {1}".format(bucket.name, str(ex)))
+            data = self.get_all(client, data_key)
+            error_result = None
+            if data != json_document:
+                error_result = "bucket {0}, expected {1}, actual = {2}".format(bucket.name, json_document, data)
+            if error_result != None:
+                queue.put(error_result)
 
     def test_concurrent_mutations_dict(self):
         self.mutation_operation_type = "dict"
@@ -143,8 +165,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.log.info(" number of operations {0}".format(len(operations)))
         for operation in operations:
             client = self.direct_client(self.master, bucket)
-            t = threading.Thread(target=self.run_mutation_operation, args = (client, document_key, operation, result_queue))
-            t.daemon = True
+            t = Process(target=self.run_mutation_operation, args = (client, document_key, operation, result_queue))
             t.start()
             thread_list.append(t)
         for t in thread_list:
@@ -189,8 +210,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         document_push.start()
         # RUN WORKER THREADS
         for x in range(self.concurrent_threads):
-            t = threading.Thread(target=self.worker_operation_run, args = (document_info_queue, error_queue, self.buckets[0], self.mutation_operation_type, self.force_operation_type))
-            t.daemon = True
+            t = Process(target=self.worker_operation_run, args = (document_info_queue, error_queue, self.buckets[0], self.mutation_operation_type, self.force_operation_type))
             t.start()
             thread_list.append(t)
         for t in thread_list:
@@ -204,14 +224,10 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             while not error_queue.empty():
                 error_count+=1
                 error_data = error_queue.get()
-                #self.log.info(error_data)
-                #self.log.info(" document_info {0}".format(error_data["document_info"]))
-                #self.log.info(" error_result {0}".format(error_data["error_result"]))
                 dump_file.write(json.dumps(error_data["error_result"]))
-                #dump_file.write(json.dumps(error_data["document_info"]))
             dump_file.close()
             # Fail the test with result count
-            self.assertTrue(not error_queue.empty(), "error count {0}".format(error_count))
+            self.assertTrue(error_count == 0, "error count {0}".format(error_count))
 
     ''' Generic Test case for running sequence operations based tests '''
     def test_mutation_operations(self):
@@ -230,8 +246,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         # RUN WORKER THREADS
         for bucket in self.buckets:
             for x in range(self.concurrent_threads*len(self.buckets)):
-                t = threading.Thread(target=self.worker_operation_run, args = (document_info_queue, error_queue, bucket, self.mutation_operation_type, self.force_operation_type))
-                t.daemon = True
+                t = Process(target=self.worker_operation_run, args = (document_info_queue, error_queue, bucket, self.mutation_operation_type, self.force_operation_type))
                 t.start()
                 thread_list.append(t)
         if self.run_load_during_mutations:
@@ -239,7 +254,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         for t in thread_list:
             t.join()
         for t in self.load_thread_list:
-            if t.isAlive():
+            if t.is_alive():
                 if t != None:
                     t.signal = False
         # ERROR ANALYSIS
@@ -247,18 +262,9 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         error_count = 0
         if not error_queue.empty():
             # Dump Re-run file
-            dump_file = open('/tmp/dump_failure.txt', 'wb')
-            while not error_queue.empty():
-                error_count+=1
-                error_data = error_queue.get()
-                #self.log.info(error_data)
-                #self.log.info(" document_info {0}".format(error_data["document_info"]))
-                #self.log.info(" error_result {0}".format(error_data["error_result"]))
-                dump_file.write(json.dumps(error_data["error_result"]))
-                #dump_file.write(json.dumps(error_data["document_info"]))
-            dump_file.close()
-            # Fail the test with result count
-            self.assertTrue(not error_queue.empty(), "error count {0}".format(error_count))
+            filename = '/tmp/dump_failure_{0}.txt'.format(self.randomDataGenerator.self.randomDataGenerator.random_uuid())
+            self._dump_data(filename, error_queue)
+            self.assertTrue(queue_size == 0, "error count {0}, see error dump {1}".format(queue_size, filename))
 
     ''' Generate Sample data for testing '''
     def push_document_info(self, number_of_documents, document_info_queue):
@@ -266,7 +272,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             document_info = {}
             randomDataGenerator = RandomDataGenerator()
             randomDataGenerator.set_seed(self.seed)
-            document_info["document_key"] = "key_"+str(x)
+            document_info["document_key"] = self.randomDataGenerator.random_uuid()+"_key_"+str(x)
             document_info["seed"] = randomDataGenerator.random_int()
             base_json = randomDataGenerator.random_json(random_array_count = self.number_of_arrays)
             data_set = randomDataGenerator.random_json(random_array_count = self.number_of_arrays)
@@ -294,7 +300,6 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                 force_operation_type = force_operation_type)
             if not logic:
                 error_queue.put({"error_result":error_result, "seed":seed})
-                #error_queue.put({"error_result":error_result, "document_info":document_info})
 
     ''' Method to run sequence operations for a given JSON document '''
     def run_mutation_operations(self,
@@ -327,8 +332,6 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                     function(client, document_key, operation["new_path_impacted_after_mutation_operation"], data_value)
                     operation_index+=1
                 except Exception, ex:
-                    self.log.info(str(ex))
-                    raise
                     return False, operation
         else:
             logic, result = self.run_concurrent_mutation_operations(document_key, bucket, seed, json_document, number_of_operations, mutation_operation_type, force_operation_type)
@@ -344,7 +347,6 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                 data = self.get_all(client, document_key)
                 if data != json_document:
                         error_result = "expected {0}, actual = {1}".format(json_document, data)
-                        print error_result
                         return False,error_result
             else:
                 pairs = {}
@@ -391,8 +393,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         thread_list = []
         for operation in operations:
             client = self.direct_client(self.master, bucket)
-            t = threading.Thread(target=self.run_mutation_operation, args = (client, document_key, operation, result_queue))
-            t.daemon = True
+            t = Process(target=self.run_mutation_operation, args = (client, document_key, operation, result_queue))
             t.start()
             thread_list.append(t)
         for t in thread_list:
@@ -414,8 +415,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             for bucket in self.buckets:
                 for x in range(self.total_writer_threads):
                     client = VBucketAwareMemcached( RestConnection(self.master), bucket)
-                    t = threading.Thread(target=self.run_populate_data_per_bucket, args = (client, bucket, json_document, (self.prepopulate_item_count/self.total_writer_threads), x))
-                    t.daemon = True
+                    t = Process(target=self.run_populate_data_per_bucket, args = (client, bucket, json_document, (self.prepopulate_item_count/self.total_writer_threads), x))
                     t.start()
                     self.load_thread_list.append(t)
         for t in self.load_thread_list:
@@ -433,8 +433,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             for bucket in self.buckets:
                 for x in range(self.total_writer_threads):
                     client = VBucketAwareMemcached( RestConnection(self.master), bucket)
-                    t = threading.Thread(target=self.run_populate_data_per_bucket, args = (client, bucket, json_document, (self.prepopulate_item_count/self.total_writer_threads), x))
-                    t.daemon = True
+                    t = Process(target=self.run_populate_data_per_bucket, args = (client, bucket, json_document, (self.prepopulate_item_count/self.total_writer_threads), x))
                     t.start()
                     self.load_thread_list.append(t)
 
@@ -446,6 +445,12 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             except Exception, ex:
                 self.log.info(ex)
 
+    def _dump_data(self, filename, queue):
+        target = open(filename, 'w')
+        while queue.empty():
+            data = queue.get()
+            target.write(data)
+        target.close()
 
     ''' Method to verify kv store data set '''
     def run_verification(self, bucket, kv_store = {}):
