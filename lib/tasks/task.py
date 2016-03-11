@@ -4164,7 +4164,7 @@ class EnterpriseBackupTask(Task):
 
     def execute(self, task_manager):
         try:
-            args = "cluster --dir {0} --name {1} --host http://{2}:{3} --username {4} --password {5}". \
+            args = "backup --archive {0} --repo {1} --host http://{2}:{3} --username {4} --password {5}". \
             format(self.directory, self.name, self.cluster_host.ip,
                    self.cluster_host.port, self.cluster_host.rest_username,
                    self.cluster_host.rest_password)
@@ -4174,7 +4174,7 @@ class EnterpriseBackupTask(Task):
                 args += " --purge"
             if self.no_progress_bar:
                 args += " --no-progress-bar"
-            command = "{0}/backup {1}".format(self.cli_command_location, args)
+            command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
             self.output, self.error = self.remote_client.execute_command(command)
             self.state = CHECKING
         except Exception, e:
@@ -4230,7 +4230,7 @@ class EnterpriseRestoreTask(Task):
                 backup_end = self.backups[int(self.end) - 1]
             except IndexError:
                 backup_end = "{0}{1}".format(self.backups[-1], self.end)
-            args = "restore --dir {0} --name {1} --host http://{2}:{3} --username {4} --password {5} --start {6} " \
+            args = "restore --archive {0} --repo {1} --host http://{2}:{3} --username {4} --password {5} --start {6} " \
                    "--end {7}".format(self.directory, self.name, self.restore_host.ip,
                                                   self.restore_host.port,
                                                   self.restore_host.rest_username,
@@ -4240,7 +4240,7 @@ class EnterpriseRestoreTask(Task):
                 args += " --no-progress-bar"
             if self.force_updates:
                 args += " --force-updates"
-            command = "{0}/backup {1}".format(self.cli_command_location, args)
+            command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
             self.output, self.error = self.remote_client.execute_command(command)
             self.state = CHECKING
         except Exception, e:
@@ -4293,9 +4293,9 @@ class EnterpriseMergeTask(Task):
                 backup_end = self.backups[int(self.end) - 1]
             except IndexError:
                 backup_end = "{0}{1}".format(self.backups[-1], self.end)
-            args = "merge --dir {0} --name {1} --start {2} --end {3}".format(self.directory, self.name,
+            args = "merge --archive {0} --repo {1} --start {2} --end {3}".format(self.directory, self.name,
                                                                              backup_start, backup_end)
-            command = "{0}/backup {1}".format(self.cli_command_location, args)
+            command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
             self.output, self.error = self.remote_client.execute_command(command)
             self.state = CHECKING
         except Exception, e:
@@ -4339,9 +4339,9 @@ class EnterpriseCompactTask(Task):
 
     def execute(self, task_manager):
         try:
-            args = "compact --dir {0} --name {1} --backup {2}".format(self.directory, self.name,
+            args = "compact --archive {0} --repo {1} --backup {2}".format(self.directory, self.name,
                                                                       self.backups[self.backup_to_compact])
-            command = "{0}/backup {1}".format(self.cli_command_location, args)
+            command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
             self.output, self.error = self.remote_client.execute_command(command)
             self.state = CHECKING
         except Exception, e:
