@@ -655,7 +655,7 @@ class x509_upgrade(NewUpgradeBaseTest):
         self._install(self.servers)
         for server in self.servers:
             rest_conn = RestConnection(server)
-            rest_conn.init_cluster(username='Administrator', password='asdasd')
+            rest_conn.init_cluster(username='Administrator', password='password')
             rest_conn.create_bucket(bucket='default', ramQuotaMB=512)
             upgrade_threads = self._async_update(upgrade_version=self.upgrade_version, servers=self.servers)
 
@@ -684,7 +684,7 @@ class x509_upgrade(NewUpgradeBaseTest):
         self._install(self.servers)
         for server in self.servers:
             rest_conn = RestConnection(server)
-            rest_conn.init_cluster(username='Administrator', password='asdasd')
+            rest_conn.init_cluster(username='Administrator', password='password')
             rest_conn.create_bucket(bucket='default', ramQuotaMB=512)
             upgrade_threads = self._async_update(upgrade_version='4.5.0-1069', servers=serv_upgrade)
 
