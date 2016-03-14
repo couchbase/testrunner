@@ -626,7 +626,7 @@ class x509_upgrade(NewUpgradeBaseTest):
     def setUp(self):
         super(x509_upgrade, self).setUp()
         self.initial_version = self.input.param("initial_version",'4.5.0-900')
-        self.upgrade_version = self.input.param("version_number", "4.5.0-1069")
+        self.upgrade_version = self.input.param("upgrade_version", "4.5.0-1069")
         self._reset_original()
         x509main(self.master)._generate_cert(self.servers)
         self.ip_address = self.getLocalIPAddress()
