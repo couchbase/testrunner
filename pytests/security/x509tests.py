@@ -651,59 +651,60 @@ class x509_upgrade(NewUpgradeBaseTest):
             rest.regenerate_cluster_certificate()
             x509main(servers)._delete_inbox_folder()
 
+    def _sdk_connection(self,root_ca_path=x509main.CACERTFILEPATH + x509main.CACERTFILE,bucket='default',host_ip=None):
+        self.sleep(30)
+        result = False
+        connection_string = 'couchbases://'+ host_ip + '/' + bucket + '?certpath='+root_ca_path
+        print connection_string
+        try:
+            cb = Bucket(connection_string)
+            if cb is not None:
+                result = True
+                return result, cb
+        except Exception, ex:
+            print ex
+            return result
+
+
     def upgrade_all_nodes(self):
+        servers_in = self.servers[1:]
         self._install(self.servers)
+        rest_conn = RestConnection(self.master)
+        rest_conn.init_cluster(username='Administrator', password='password')
+        rest_conn.create_bucket(bucket='default', ramQuotaMB=512)
+        self.cluster.rebalance(self.servers, servers_in, [])
+
+        upgrade_threads = self._async_update(upgrade_version=self.upgrade_version, servers=self.servers)
+        for threads in upgrade_threads:
+            threads.join()
+
+
+        x509main(self.master).setup_master()
+        x509main().setup_cluster_nodes_ssl(self.servers,reload_cert=True)
+
         for server in self.servers:
-            rest_conn = RestConnection(server)
-            rest_conn.init_cluster(username='Administrator', password='password')
-            rest_conn.create_bucket(bucket='default', ramQuotaMB=512)
-            upgrade_threads = self._async_update(upgrade_version=self.upgrade_version, servers=self.servers)
-
-        x509main(self.master)._upload_cluster_ca_certificate("Administrator",'password')
-        x509main(self.master)._setup_node_certificates()
-
-        for server in self.servers:
-            x509main(self.master)._setup_node_certificates(reload_cert=False)
-
-
-        root_ca_path = x509main.CACERTFILEPATH + x509main.CACERTFILE
-        for server in self.servers:
-            result = False
-            connection_string = 'couchbases://'+ server.ip + '/default?certpath='+root_ca_path
-            try:
-                cb1 = Bucket(connection_string)
-                if cb1 is not None:
-                    result = True
-            except Exception, ex:
-                print ex
+            result = self._sdk_connection(host_ip=server.ip)
             self.assertTrue(result,"Cannot create a security connection with server")
 
 
     def upgrade_half_nodes(self):
-        serv_upgrade = self.server[2:4]
+        serv_upgrade = self.servers[2:4]
+        servers_in = self.servers[1:]
         self._install(self.servers)
+        rest_conn = RestConnection(self.master)
+        rest_conn.init_cluster(username='Administrator', password='password')
+        rest_conn.create_bucket(bucket='default', ramQuotaMB=512)
+        self.cluster.rebalance(self.servers, servers_in, [])
+
+        upgrade_threads = self._async_update(upgrade_version=self.upgrade_version, servers=serv_upgrade)
+        for threads in upgrade_threads:
+            threads.join()
+
+
+        x509main(self.master).setup_master()
+        x509main().setup_cluster_nodes_ssl(self.servers,reload_cert=True)
+
         for server in self.servers:
-            rest_conn = RestConnection(server)
-            rest_conn.init_cluster(username='Administrator', password='password')
-            rest_conn.create_bucket(bucket='default', ramQuotaMB=512)
-            upgrade_threads = self._async_update(upgrade_version='4.5.0-1069', servers=serv_upgrade)
-
-        x509main(self.master)._upload_cluster_ca_certificate("Administrator",'password')
-        x509main(self.master)._setup_node_certificates()
-
-        for server in self.servers:
-            x509main(self.master)._setup_node_certificates(reload_cert=False)
-
-
-        root_ca_path = x509main.CACERTFILEPATH + x509main.CACERTFILE
-        for server in self.servers:
-            result = False
-            connection_string = 'couchbases://'+ server.ip + '/default?certpath='+root_ca_path
-            try:
-                cb1 = Bucket(connection_string)
-                if cb1 is not None:
-                    result = False
-            except Exception, ex:
-                print ex
+            result = self._sdk_connection(host_ip=server.ip)
             self.assertFalse(result,"Can create a security connection with server")
 
