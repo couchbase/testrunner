@@ -46,6 +46,8 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.verify_after_events = self.input.param("verify_after_events", True)
         self.online_upgrade_type = self.input.param("online_upgrade_type","swap")
         self.final_events = []
+        self.n1ql_helper = None
+        #self.free_nodes = []
         self.in_servers_pool = self._convert_server_map(self.servers[:self.nodes_init])
         """ Init nodes to not upgrade yet """
         for key in self.in_servers_pool.keys():
@@ -112,8 +114,12 @@ class UpgradeTests(NewUpgradeBaseTest):
                 self.event_threads += self.run_event(self.in_between_events)
             self.finish_events(self.event_threads)
             self.monitor_dcp_rebalance()
-            self._install(self.out_servers_pool.values())
-            self.generate_map_nodes_out_dist_upgrade(self.after_upgrade_services_out_dist)
+            self.log.info("Will install upgrade version to any free nodes")
+            out_nodes = self._get_free_nodes()
+            self.log.info("Here is free nodes {0}".format(out_nodes))
+            self._install(out_nodes)
+            self.generate_map_nodes_out_dist_upgrade(\
+                                      self.after_upgrade_services_out_dist)
             self.log.info("*** Start operations after upgrade is done ***")
             if self.after_events:
                 self.after_event_threads = self.run_event(self.after_events)
@@ -148,7 +154,7 @@ class UpgradeTests(NewUpgradeBaseTest):
 
     def _verify_data_active_replica(self):
         """ set data_analysis True by default """
-        self.data_analysis =  self.input.param("data_analysis",True)
+        self.data_analysis =  self.input.param("data_analysis",False)
         self.total_vbuckets =  self.initial_vbuckets
         if self.data_analysis:
             disk_replica_dataset, disk_active_dataset = \
@@ -389,15 +395,29 @@ class UpgradeTests(NewUpgradeBaseTest):
 
     def rebalance_in(self, queue=None):
         rebalance_in = False
+        service_in = copy.deepcopy(self.after_upgrade_services_in)
+        #self.nodes_in = self.input.param("nodes_in", 1)
+        free_nodes = self._get_free_nodes()
+        if not free_nodes:
+            raise Exception("No free node available to rebalance in")
         try:
+            if self.after_upgrade_services_in and \
+                    len(self.after_upgrade_services_in) > 1:
+                service_in = [after_upgrade_services_in[0]]
             self.nodes_in_list =  self.out_servers_pool.values()[:self.nodes_in]
-            self.log.info("<<<<<<<<=== rebalance_in node {0}"\
-                          .format(self.nodes_in_list))
+            self.log.info("<<<<<<<<=== rebalance_in node {0} with services {1}"\
+                                             .format(free_nodes[0], service_in))
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],\
-                                                                 self.nodes_in_list,\
-                                       [], services = self.after_upgrade_services_in)
+                                                                    [free_nodes[0]],\
+                                                           [], services = service_in)
             rebalance.result()
             rebalance_in = True
+            if self.after_upgrade_services_in and \
+                len(self.after_upgrade_services_in) > 1:
+                self.log.info("remove service '{0}' from service list after "
+                        "rebalance done ".format(self.after_upgrade_services_in[0]))
+                self.after_upgrade_services_in.pop(0)
+            self.sleep(10, "wait 10 seconds after rebalance")
         except Exception, ex:
             self.log.info(ex)
             if queue is not None:
@@ -461,6 +481,7 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.log.info("create_index")
         self.index_list = {}
         create_index = False
+        self._initialize_n1ql_helper()
         try:
             self.n1ql_helper.create_primary_index(using_gsi = True,
                                                server = self.n1ql_server)
@@ -543,8 +564,9 @@ class UpgradeTests(NewUpgradeBaseTest):
         try:
             self.log.info("online_upgrade")
             self.initial_version = self.upgrade_versions[0]
-            self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version".\
-                           format(self.initial_version))
+            self.sleep(self.sleep_time, "Pre-setup of old version is done. "
+                                    "Wait for online upgrade to {0} version"\
+                                               .format(self.initial_version))
             self.product = 'couchbase-server'
             if self.online_upgrade_type == "swap":
                 self.online_upgrade_swap_rebalance()
@@ -754,9 +776,43 @@ class UpgradeTests(NewUpgradeBaseTest):
 
     def _initialize_n1ql_helper(self):
         if self.n1ql_helper == None:
-            self.n1ql_server = self.get_nodes_from_services_map(service_type = "n1ql")
+            self.n1ql_server = self.get_nodes_from_services_map(service_type = \
+                                              "n1ql",servers=self.input.servers)
             self.n1ql_helper = N1QLHelper(version = "sherlock", shell = None,
                 use_rest = True, max_verify = self.max_verify,
                 buckets = self.buckets, item_flag = None,
                 n1ql_port = self.n1ql_server.n1ql_port, full_docs_list = [],
                 log = self.log, input = self.input, master = self.master)
+
+    def _get_free_nodes(self):
+        self.log.info("Get free nodes in pool not in cluster yet")
+        nodes = self.get_nodes_in_cluster_after_upgrade()
+        free_nodes = copy.deepcopy(self.input.servers)
+        found = False
+        for node in nodes:
+            for server in free_nodes:
+                if str(server.ip).strip() == str(node.ip).strip():
+                    self.log.info("this node {0} is in cluster".format(server))
+                    free_nodes.remove(server)
+                    found = True
+        if not free_nodes:
+            self.log.info("no free node")
+            return free_nodes
+        else:
+            self.log.info("here is the list of free nodes {0}"\
+                                       .format(free_nodes))
+            return free_nodes
+
+    def get_nodes_in_cluster_after_upgrade(self, master_node=None):
+        rest = None
+        if master_node == None:
+            rest = RestConnection(self.master)
+        else:
+            rest = RestConnection(master_node)
+        nodes = rest.node_statuses()
+        server_set = []
+        for node in nodes:
+            for server in self.input.servers:
+                if server.ip == node.ip:
+                    server_set.append(server)
+        return server_set
