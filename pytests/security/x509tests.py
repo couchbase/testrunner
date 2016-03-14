@@ -659,7 +659,7 @@ class x509_upgrade(NewUpgradeBaseTest):
             rest_conn.create_bucket(bucket='default', ramQuotaMB=512)
             upgrade_threads = self._async_update(upgrade_version=self.upgrade_version, servers=self.servers)
 
-        x509main(self.master)._upload_cluster_ca_certificate(self.master,"Administrator",'password')
+        x509main(self.master)._upload_cluster_ca_certificate("Administrator",'password')
         x509main(self.master)._setup_node_certificates()
 
         for server in self.servers:
@@ -688,7 +688,7 @@ class x509_upgrade(NewUpgradeBaseTest):
             rest_conn.create_bucket(bucket='default', ramQuotaMB=512)
             upgrade_threads = self._async_update(upgrade_version='4.5.0-1069', servers=serv_upgrade)
 
-        x509main(self.master)._upload_cluster_ca_certificate(self.master,"Administrator",'password')
+        x509main(self.master)._upload_cluster_ca_certificate("Administrator",'password')
         x509main(self.master)._setup_node_certificates()
 
         for server in self.servers:
