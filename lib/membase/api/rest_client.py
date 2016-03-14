@@ -3035,8 +3035,9 @@ class RestConnection(object):
             return status, json.loads(content)
 
     def create_index_with_rest(self, create_info):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         api = self.index_baseUrl + 'api/indexes?create=true'
-        headers = {'Content-type': 'application/json'}
+        headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         params = json.loads("{0}".format(create_info).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
         status, content, header = self._http_request(api, 'POST', headers=headers,
                                              params=json.dumps(params).encode("ascii", "ignore"))
@@ -3045,9 +3046,10 @@ class RestConnection(object):
         return json.loads(content)
 
     def build_index_with_rest(self, id):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         api = self.index_baseUrl + 'api/indexes?build=true'
         build_info = {'ids': [id]}
-        headers = {'Content-type': 'application/json'}
+        headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'PUT', headers=headers,
                                                params=json.dumps(build_info))
         if not status:
@@ -3055,26 +3057,29 @@ class RestConnection(object):
         return json.loads(content)
 
     def drop_index_with_rest(self, id):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = 'api/index/{0}'.format(id)
         api = self.index_baseUrl + url
-        headers = {'Content-type': 'application/json'}
+        headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'DELETE', headers=headers)
         if not status:
             raise Exception(content)
 
     def get_all_indexes_with_rest(self):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = 'api/indexes'
         api = self.index_baseUrl + url
-        headers = {'Content-type': 'application/json'}
+        headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
         if not status:
             raise Exception(content)
         return json.loads(content)
 
     def lookup_gsi_index_with_rest(self, id, body):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = 'api/index/{0}?lookup=true'.format(id)
         api = self.index_baseUrl + url
-        headers = {"Accept": "application/json"}
+        headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         params = json.loads("{0}".format(body).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
         status, content, header = self._http_request(api, 'GET', headers=headers,
                                              params=json.dumps(params).encode("ascii", "ignore"))
@@ -3083,9 +3088,10 @@ class RestConnection(object):
         return json.loads(content)
 
     def full_table_scan_gsi_index_with_rest(self, id, body):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = 'api/index/{0}?scanall=true'.format(id)
         api = self.index_baseUrl + url
-        headers = {"Accept": "application/json"}
+        headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
         params = json.loads("{0}".format(body).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
         status, content, header = self._http_request(api, 'GET', headers=headers,
                                                      params=json.dumps(params).encode("ascii", "ignore"))
