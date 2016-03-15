@@ -2325,10 +2325,18 @@ class FTSBaseTest(unittest.TestCase):
 
     def populate_node_partition_map(self, index):
         """
-         populates the node-pindex-partition map
+        populates the node-pindex-partition map
         """
         nodes_partitions = {}
+        start_time = time.time()
         _, defn = index.get_index_defn()
+        while 'planPIndexes' not in defn or not defn['planPIndexes']:
+            if time.time() - start_time > 60:
+                self.fail("planPIndexes unavailable for index {0} even after 60s"
+                          .format(index.name))
+            self.sleep(5, "No pindexes found, waiting for index to get created")
+            _, defn = index.get_index_defn()
+
         for pindex in defn['planPIndexes']:
             for node, attr in pindex['nodes'].iteritems():
                 if attr['priority'] == 0:
@@ -2351,17 +2359,8 @@ class FTSBaseTest(unittest.TestCase):
         3. if index is distributed - present on all fts nodes, almost equally?
         4. if index balanced - every fts node services almost equal num of vbs?
         """
-        _, defn = index.get_index_defn()
-        while 'planPIndexes' not in defn:
-            self.sleep(10,'trying to get PIndex')
-            _, defn = index.get_index_defn()
-        start_time = time.time()
-        while 'planPIndexes' not in defn or not defn['planPIndexes']:
-            if time.time() - start_time > 60:
-                self.fail("planPIndexes unavailable for index {0} even after 60s"
-                          .format(index.name))
-            self.sleep(5, "No pindexes found, waiting for index to get created")
-            _, defn = index.get_index_defn()
+
+        nodes_partitions = self.populate_node_partition_map(index)
 
         # check 1 - test number of pindexes
         partitions_per_pindex = index.get_max_partitions_pindex()
@@ -2370,16 +2369,18 @@ class FTSBaseTest(unittest.TestCase):
             import math
             exp_num_pindexes = math.ceil(
             self._num_vbuckets/partitions_per_pindex + 0.5)
-        if len(defn['planPIndexes']) != exp_num_pindexes:
+        total_pindexes = 0
+        for node in nodes_partitions.keys():
+            total_pindexes += nodes_partitions[node]['pindex_count']
+        if total_pindexes != exp_num_pindexes:
             self.fail("Number of pindexes for %s is %s while"
                       " expected value is %s" %(index.name,
-                                                len(defn['planPIndexes']),
+                                                total_pindexes,
                                                 exp_num_pindexes))
-        self.log.info("Validated: Number of PIndexes = %s" % len(defn['planPIndexes']))
+        self.log.info("Validated: Number of PIndexes = %s" % total_pindexes)
 
         # check 2 - each pindex servicing "partitions_per_pindex" vbs
         num_fts_nodes = len(self._cb_cluster.get_fts_nodes())
-        nodes_partitions = self.populate_node_partition_map(index)
         for node in nodes_partitions.keys():
             for uuid, partitions in nodes_partitions[node]['pindexes'].iteritems():
                 if len(partitions) > partitions_per_pindex:
