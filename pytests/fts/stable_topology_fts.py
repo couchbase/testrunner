@@ -348,3 +348,39 @@ class StableTopFTS(FTSBaseTest):
         if fail:
             raise err
 
+    def index_query_in_parallel(self):
+        """
+        Run rqg before querying is complete
+        turn off es validation
+        goal is to make sure there are no fdb or cbft crashes
+        """
+        index = self.create_index(
+            bucket=self._cb_cluster.get_bucket_by_name('default'),
+            index_name="default_index")
+        self.load_data()
+        self.generate_random_queries(index, self.num_queries, self.query_types)
+        self.run_query_and_compare(index)
+
+    def load_index_query_all_in_parallel(self):
+        """
+        Run rqg before querying is complete
+        turn off es validation
+        goal is to make sure there are no fdb or cbft crashes
+        """
+        index = self.create_index(
+            bucket=self._cb_cluster.get_bucket_by_name('default'),
+            index_name="default_index")
+        self.sleep(20)
+        self.generate_random_queries(index, self.num_queries, self.query_types)
+        from threading import Thread
+        threads = []
+        threads.append(Thread(target=self.load_data,
+                              name="loader thread",
+                              args=()))
+        threads.append(Thread(target=self.run_query_and_compare,
+                              name="query thread",
+                              args=(index,)))
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
