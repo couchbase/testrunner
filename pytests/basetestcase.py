@@ -2074,8 +2074,9 @@ class BaseTestCase(unittest.TestCase):
             gens_load[bucket] = copy.deepcopy(tmp_gen)
         tasks = []
         items = 0
-        for gen_load in gens_load[self.buckets[0]]:
-            items += (gen_load.end - gen_load.start)
+        for bucket in self.buckets:
+            for gen_load in gens_load[bucket]:
+                items += (gen_load.end - gen_load.start)
         for bucket in self.buckets:
             self.log.info("%s %s to %s documents..." % (op_type, items, bucket.name))
             tasks.append(self.cluster.async_load_gen_docs(self.master, bucket.name,
