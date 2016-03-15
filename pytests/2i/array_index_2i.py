@@ -145,8 +145,8 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         ind_content = {}
         ind_content["name"] = "{0}".format(ind_name)
         ind_content["bucket"] = "{0}".format(bucket.name)
-        if self.gsi_type == 'memdb':
-            ind_content["using"] = "memdb"
+        if self.gsi_type == 'memory_optimized':
+            ind_content["using"] = "memory_optimized"
         else:
             ind_content["using"] = "forestdb"
         ind_content["exprType"] = "{0}".format(exprType)
