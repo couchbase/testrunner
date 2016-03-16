@@ -107,19 +107,25 @@ CLI_COMMANDS = ["cbbackup", "cbbrowse_logs", "cbcollect_info", "cbcompact", "cbd
                 "ct_run", "curl", "curl-config", "derb", "dialyzer", "dump-guts", "epmd", "erl", "erlc", "escript", "genbrk", \
                 "gencfu", "gencnval", "genctd", "generate_cert", "genrb", "icu-config", "install", "makeconv", "mctimings", \
                 "memcached", "moxi", "reports", "sigar_port", "sqlite3", "to_erl", "tools", "typer", "uconv", "vbmap"]
+
+# Allow for easy switch to a local mirror of the download stuff
+# (for people outside the mountain view office it's nice to be able to
+# be running this locally without being on VPN (which my test machines isn't)
+CB_DOWNLOAD_SERVER = "172.23.120.24"
+#CB_DOWNLOAD_SERVER = "10.0.0.117:8080"
+
 # old url MV_LATESTBUILD_REPO = "http://builds.hq.northscale.net/latestbuilds/"
 MV_LATESTBUILD_REPO = "http://latestbuilds.hq.couchbase.com/"
 #SHERLOCK_BUILD_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/sherlock/"
-SHERLOCK_BUILD_REPO = "http://172.23.120.24/builds/latestbuilds/couchbase-server/sherlock/"
+SHERLOCK_BUILD_REPO = "http://{}/builds/latestbuilds/couchbase-server/sherlock/".format(CB_DOWNLOAD_SERVER)
 #COUCHBASE_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
-COUCHBASE_REPO = "http://172.23.120.24/builds/latestbuilds/couchbase-server/"
-CB_LATESTBUILDS_REPO = "http://172.23.120.24/builds/latestbuilds/"
+COUCHBASE_REPO = "http://{}/builds/latestbuilds/couchbase-server/".format(CB_DOWNLOAD_SERVER)
+CB_LATESTBUILDS_REPO = "http://{}/builds/latestbuilds/"
 #CB_LATESTBUILDS_REPO = "http://latestbuilds.hq.couchbase.com/latestbuilds/"
-CB_REPO = "http://172.23.120.24/builds/latestbuilds/couchbase-server/"
+CB_REPO = "http://{}/builds/latestbuilds/couchbase-server/".format(CB_DOWNLOAD_SERVER)
 #CB_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
-CB_RELEASE_REPO = "http://172.23.120.24/builds/releases/"
+CB_RELEASE_REPO = "http://{}/builds/releases/".format(CB_DOWNLOAD_SERVER)
 #MV_RELEASE_REPO = "http://latestbuilds.hq.couchbase.com/release"
-""" http://172.23.120.24/builds/latestbuilds/couchbase-server/watson/ """
 MC_BIN_CLIENT = "mc_bin_client"
 TESTRUNNER_CLIENT = "testrunner_client"
 PYTHON_SDK = "python_sdk"
