@@ -82,6 +82,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.graceful = self.input.param("graceful",False)
         self.recoveryType = self.input.param("recoveryType", "full")
         self.skip_buckets = self.input.param("skip_buckets", False)
+        self.skip_consistency = self.input.param("skip_consistency", False)
         if not os.path.exists(self.backup_validation_files_location):
             os.mkdir(self.backup_validation_files_location)
 
@@ -143,7 +144,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, self)
 
     def store_vbucket_seqno(self):
-        vseqno = self.get_vbucket_seqnos(self.cluster_to_backup, self.buckets)
+        vseqno = self.get_vbucket_seqnos(self.cluster_to_backup, self.buckets, self.skip_consistency)
         self.vbucket_seqno.append(vseqno)
 
     def backup_create(self):
@@ -204,7 +205,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def backup_cluster_validate(self):
         output, error = self.backup_cluster()
-        if error or "Backup successfully completed" not in output[0]:
+        if error or "Backup successfully completed" not in output[-1]:
             self.fail("Taking cluster backup failed.")
         status, msg = self.validation_helper.validate_backup()
         if not status:
