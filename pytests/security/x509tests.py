@@ -155,21 +155,21 @@ class x509tests(BaseTestCase):
         x509main(self.master)._upload_cluster_ca_certificate("Administrator",'password')
         status, content = x509main(self.master)._reload_node_certificate(self.master)
         self.assertEqual(status['status'],'400',"Issue with status with node certificate are missing")
-        self.assertTrue('Unable to read certificate chain file. Reason: enoent' in content, "Incorrect message from the system")
+        self.assertTrue('Unable to read certificate chain file' in content, "Incorrect message from the system")
 
     def test_error_without_chain_cert(self):
         x509main(self.master)._upload_cluster_ca_certificate("Administrator",'password')
         x509main(self.master)._setup_node_certificates(chain_cert=False)
         status, content = x509main(self.master)._reload_node_certificate(self.master)
         self.assertEqual(status['status'],'400',"Issue with status with node certificate are missing")
-        self.assertTrue('Unable to read certificate chain file. Reason: enoent' in content, "Incorrect message from the system")
+        self.assertTrue('Unable to read certificate chain file' in content, "Incorrect message from the system")
 
     def test_error_without_node_key(self):
         x509main(self.master)._upload_cluster_ca_certificate("Administrator",'password')
         x509main(self.master)._setup_node_certificates(node_key=False)
         status, content = x509main(self.master)._reload_node_certificate(self.master)
         self.assertEqual(status['status'],'400',"Issue with status with node key is missing")
-        self.assertTrue('Unable to read private key file. Reason: enoent' in content, "Incorrect message from the system")
+        self.assertTrue('Unable to read private key file' in content, "Incorrect message from the system")
 
     def test_add_node_without_cert(self):
         rest = RestConnection(self.master)
@@ -179,8 +179,9 @@ class x509tests(BaseTestCase):
             rest.add_node('Administrator','password',servs_inout.ip)
         except Exception, ex:
             ex = str(ex)
-            expected_result  = "Error adding node: " + servs_inout.ip + " to the cluster:" + self.master.ip + " - [\"Prepare join failed. Error applying node certificate. Unable to read certificate chain file. Reason: enoent\"]"
-            self.assertEqual(ex,expected_result)
+            expected_result  = "Error adding node: " + servs_inout.ip + " to the cluster:" + self.master.ip + " - [\"Prepare join failed. Error applying node certificate. Unable to read certificate chain file\"]"
+            #self.assertEqual(ex,expected_result)
+            self.assertTrue(expected_result in ex,"Incorrect Error message in exception")
 
     def test_add_node_with_cert(self):
         servs_inout = self.servers[1:4]
@@ -642,6 +643,7 @@ class x509_upgrade(NewUpgradeBaseTest):
 
 
     def tearDown(self):
+        self._reset_original()
         super(x509_upgrade, self).tearDown()
 
     def _reset_original(self):
