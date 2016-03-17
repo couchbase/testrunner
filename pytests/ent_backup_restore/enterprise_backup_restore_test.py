@@ -525,9 +525,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.directory = "/cbqe3043/entbackup"
         self.backup_create()
         output, error = self.backup_cluster()
-        while "Backup successfully completed" in output[0]:
+        while "Backup successfully completed" in output[-1]:
             output, error = self.backup_cluster()
-        self.assertTrue("no space left on device" in output[0],
+        self.assertTrue("no space left on device" in output[-1],
                         "Expected error message not thrown by backup when disk is full")
         self.log.info("Expected no space left on device error thrown by backup command")
 
@@ -1141,6 +1141,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         for node in nodes_all:
             if node.ip == self.servers[1].ip:
                 rest.fail_over(otpNode=node.id, graceful=self.graceful)
+                self.sleep(30)
                 rest.set_recovery_type(otpNode=node.id, recoveryType=self.recoveryType)
                 rest.add_back_node(otpNode=node.id)
         rebalance = self.cluster.async_rebalance(self.servers, [], [])
@@ -1477,12 +1478,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(error[0], "flag needs an argument: -archive", "Expected error message not thrown")
+        self.assertEqual(error[0], "flag needs an argument: -repo", "Expected error message not thrown")
         cmd = "compact --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Error: Required flag --archive not specified", "Expected error message not thrown")
+        self.assertEqual(output[0], "Error: Required flag --backup not specified", "Expected error message not thrown")
         cmd = "compact --archive {0} --repo {1} --backup".format(self.backupset.directory, self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
@@ -1928,7 +1929,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.fail(message)
             status, message = self.validation_helper.validate_compact_lists(output_before_compact,
                                                                             output_after_compact,
-                                                                            is_equal=True)
+                                                                            is_approx=True)
             if not status:
                 self.fail(message)
             self.log.info(message)
