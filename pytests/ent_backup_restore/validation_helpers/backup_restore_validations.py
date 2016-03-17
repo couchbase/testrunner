@@ -1,6 +1,7 @@
 import json
 import os
 import logger
+import math
 
 from couchbase_helper.data_analysis_helper import DataCollector
 from ent_backup_restore.validation_helpers.directory_structure_validations import DirectoryStructureValidations
@@ -149,16 +150,16 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
             return False, "Shard count mismatch in list command output"
         return True, "List command validation success"
 
-    def validate_compact_lists(self, output_before_compact, output_after_compact, is_equal=False):
+    def validate_compact_lists(self, output_before_compact, output_after_compact, is_approx=False):
         size_match = True
         for line1, line2 in zip(output_before_compact, output_after_compact):
             split1 = line1.split(" ")
             split1 = [s for s in split1 if s]
             split2 = line2.split(" ")
             split2 = [s for s in split2 if s]
-            size1 = self._convert_to_kb(split1[0])
-            size2 = self._convert_to_kb(split2[0])
-            if is_equal:
+            size1 = self._convert_to_kb(split1[0], is_approx)
+            size2 = self._convert_to_kb(split2[0], is_approx)
+            if is_approx:
                 if size1 != size2:
                     size_match = False
                     break
@@ -170,13 +171,22 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
             return False, "Size comparison failed after compact - before: {0} after: {1}".format(line1, line2)
         return True, "Compact command validation success"
 
-    def _convert_to_kb(self, input):
+    def _convert_to_kb(self, input, is_approx=False):
         if "MB" in input:
             result = input[:-2]
-            return float(result) * 1000
+            if is_approx:
+                return math.ceil(float(result)) * 1000
+            else:
+                return float(result) * 1000
         if "KB" in input:
             result = input[:-2]
-            return float(result)
+            if is_approx:
+                return math.ceil(float(result))
+            else:
+                return float(result)
         if "B" in input:
             result = input[:-1]
-            return float(result) / 1000
+            if is_approx:
+                return math.ceil(float(result)) / 1000
+            else:
+                return float(result) / 1000
