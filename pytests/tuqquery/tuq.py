@@ -803,7 +803,7 @@ class QueryTests(BaseTestCase):
                 a, cas, b = client.get(key.encode('utf-8'))
                 expected_result.append({"cas" : cas})
             expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))
-            #self._verify_results(actual_result, expected_result)
+            self._verify_results(actual_result, expected_result)
 
     def test_meta_negative(self):
         queries_errors = {'SELECT distinct name FROM %s WHERE META().type = "json"' : ('syntax error', 3000)}
@@ -2053,12 +2053,12 @@ class QueryTests(BaseTestCase):
 	    plan = ExplainPlanHelper(res)
             self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "UnionScan",
                         "UnionScan Operator is not used by this query")
-            if plan["~children"][0]["~children"][0]["scans"][0]["#operator"] == "IndexScan":
-                self.log.info("IndexScan Operator is also used by this query in scans")
+            if plan["~children"][0]["~children"][0]["scan"][0]["#operator"] == "IndexScan":
+                self.log.info("IndexScan Operator is also used by this query in scan")
             else:
                 self.log.error("IndexScan Operator is not used by this query, Covering Indexes not used properly")
                 self.fail("IndexScan Operator is not used by this query, Covering Indexes not used properly")
-            if plan["~children"][0]["~children"][0]["scans"][0]["index"] == index:
+            if plan["~children"][0]["~children"][0]["scan"][0]["index"] == index:
                 self.log.info("Query is using specified index")
             else:
                 self.log.info("Query is not using specified index")
