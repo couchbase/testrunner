@@ -135,6 +135,12 @@ class UpgradeTests(NewUpgradeBaseTest):
             if not self.success_run and self.failed_thread is not None:
                 raise Exception("*** Failed to {0} ***".format(self.failed_thread))
             """ Default set to always verify data """
+            for event in self.after_events[0].split("-"):
+                if "delete_buckets" in event:
+                    self.log.info("After events has delete buckets event. "
+                                  "No items verification needed")
+                    self.verify_after_events = False
+                    break
             if self.verify_after_events:
                 self.log.info("*** Start data verification ***")
                 self.cluster_stats(self.in_servers_pool.values())
@@ -370,15 +376,21 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
 
-    def delete_buckets(self):
+    def delete_buckets(self, queue=None):
+        bucket_deleted = False
         try:
             self.log.info("delete_buckets")
             self.rest = RestConnection(self.master)
             for bucket in self.buckets:
+                self.log.info("delete bucket {0}".format(bucket.name))
                 self.rest.delete_bucket(bucket.name)
+            bucket_deleted = True
         except Exception, ex:
             self.log.info(ex)
-            raise
+            if queue is not None:
+                queue.put(False)
+        if bucket_deleted and queue is not None:
+            queue.put(True)
 
     def create_buckets(self, queue=None):
         bucket_created = False
@@ -388,7 +400,8 @@ class UpgradeTests(NewUpgradeBaseTest):
                 self.bucket_size = 256
                 self.default_bucket = False
                 self.sasl_buckets = 1
-                self.sasl_bucket_name = "_" + str(self.total_buckets)
+                self.sasl_bucket_name = self.sasl_bucket_name + "_" \
+                                            + str(self.total_buckets)
             self.rest = RestConnection(self.master)
             self._bucket_creation()
             self.total_buckets +=1
