@@ -403,7 +403,7 @@ class UpgradeTests(NewUpgradeBaseTest):
         try:
             if self.after_upgrade_services_in and \
                     len(self.after_upgrade_services_in) > 1:
-                service_in = [after_upgrade_services_in[0]]
+                service_in = [self.after_upgrade_services_in[0]]
             self.nodes_in_list =  self.out_servers_pool.values()[:self.nodes_in]
             self.log.info("<<<<<<<<=== rebalance_in node {0} with services {1}"\
                                              .format(free_nodes[0], service_in))
@@ -412,6 +412,10 @@ class UpgradeTests(NewUpgradeBaseTest):
                                                            [], services = service_in)
             rebalance.result()
             rebalance_in = True
+            if "index" in service_in:
+                self.log.info("Set storageMode to forestdb after add "
+                              "index node {0} to cluster".format(free_nodes[0]))
+                RestConnection(free_nodes[0]).set_indexer_storage_mode()
             if self.after_upgrade_services_in and \
                 len(self.after_upgrade_services_in) > 1:
                 self.log.info("remove service '{0}' from service list after "
@@ -485,14 +489,8 @@ class UpgradeTests(NewUpgradeBaseTest):
         try:
             self.n1ql_helper.create_primary_index(using_gsi = True,
                                                server = self.n1ql_server)
-            self.n1ql_helper.create_primary_index(using_gsi = False,
-                                               server = self.n1ql_server)
-            for bucket in self.buckets:
-                index_name = "idx_{0}_gsi".format(bucket.name)
-                self.index_list[bucket.name] = index_name
-                query = "create index {0} on {1}(field_1) using gsi"\
-                                         .format(index_name, bucket.name)
-                self.n1ql_helper.run_cbq_query(query, self.n1ql_server)
+            #self.n1ql_helper.create_primary_index(using_gsi = False,
+            #                                  server = self.n1ql_server)
             self.log.info("done create_index")
             create_index = True
         except Exception, e:
