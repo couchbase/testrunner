@@ -2051,14 +2051,18 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             res = self.run_cbq_query()
 	    plan = ExplainPlanHelper(res)
-            self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "UnionScan",
+            if("IN" in self.query):
+                self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "DistinctScan",
                         "UnionScan Operator is not used by this query")
-            if plan["~children"][0]["~children"][0]["scan"][0]["#operator"] == "IndexScan":
-                self.log.info("IndexScan Operator is also used by this query in scan")
+            else:
+                self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "UnionScan",
+                        "UnionScan Operator is not used by this query")
+            if plan["~children"][0]["~children"][0]["scan"]["#operator"] == "IndexScan":
+                self.log.info("IndexScan Operator is also used by this query in scans")
             else:
                 self.log.error("IndexScan Operator is not used by this query, Covering Indexes not used properly")
                 self.fail("IndexScan Operator is not used by this query, Covering Indexes not used properly")
-            if plan["~children"][0]["~children"][0]["scan"][0]["index"] == index:
+            if plan["~children"][0]["~children"][0]["scan"]["index"] == index:
                 self.log.info("Query is using specified index")
             else:
                 self.log.info("Query is not using specified index")
