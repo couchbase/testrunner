@@ -269,6 +269,22 @@ class NodeHelper:
         shell.disconnect()
 
     @staticmethod
+    def start_couchbase(server):
+        """Warmp up server
+        """
+        shell = RemoteMachineShellConnection(server)
+        shell.start_couchbase()
+        shell.disconnect()
+
+    @staticmethod
+    def stop_couchbase(server):
+        """Warmp up server
+        """
+        shell = RemoteMachineShellConnection(server)
+        shell.stop_couchbase()
+        shell.disconnect()
+
+    @staticmethod
     def wait_service_started(server, wait_time=120):
         """Function will wait for Couchbase service to be in
         running phase.
@@ -368,8 +384,7 @@ class NodeHelper:
     def kill_cbft_process(server):
         NodeHelper._log.info("Killing cbft on server: {0}".format(server))
         shell = RemoteMachineShellConnection(server)
-        os_info = shell.extract_remote_info()
-        shell.kill_cbft_process(os_info)
+        shell.kill_cbft_process()
         shell.disconnect()
 
     @staticmethod
@@ -677,24 +692,31 @@ class FTSIndex:
         Takes a query dict, constructs a json, runs and returns results
         """
         query_dict = self.construct_cbft_query_json(query)
+        hits = 0
+        matches = []
+        doc_ids = []
+        time_taken = 0
         try:
-            doc_ids = []
             hits, matches, time_taken =\
                 self.__cluster.run_fts_query(self.name, query_dict)
-            if hits:
-                for doc in matches:
-                    doc_ids.append(doc['id'])
-            if int(hits) == 0 and not zero_results_ok:
-                raise FTSException("No docs returned for query : %s" %query_dict)
-            if expected_hits and expected_hits != hits:
-                raise FTSException("Expected hits: %s, fts returned: %s"
-                                   % (expected_hits, hits))
-            return hits, doc_ids, time_taken
         except ServerUnavailableException:
             # query time outs
             raise ServerUnavailableException
         except Exception as e:
             self.__log.error("Error running query: %s" % e)
+        if hits:
+            for doc in matches:
+                doc_ids.append(doc['id'])
+        if int(hits) == 0 and not zero_results_ok:
+            raise FTSException("No docs returned for query : %s" %query_dict)
+        if expected_hits and expected_hits != hits:
+            raise FTSException("Expected hits: %s, fts returned: %s"
+                               % (expected_hits, hits))
+        if expected_hits and expected_hits == hits:
+            self.__log.info("SUCCESS! Expected hits: %s, fts returned: %s"
+                               % (expected_hits, hits))
+        return hits, doc_ids, time_taken
+
 
 class CouchbaseCluster:
 
@@ -1597,7 +1619,7 @@ class CouchbaseCluster:
         raise_if(
             len(FloatingServers._serverlist) < num_nodes,
             FTSException(
-                "Number of free nodes: {0} is not preset to add {1} nodes.".
+                "Number of free nodes: {0}, test tried to add {1} new nodes!".
                 format(len(FloatingServers._serverlist), num_nodes))
         )
         to_add_node = []
@@ -1618,21 +1640,31 @@ class CouchbaseCluster:
         task = self.async_rebalance_in(num_nodes, services=services)
         task.result()
 
-    def __async_swap_rebalance(self, master=False, services=None):
+    def __async_swap_rebalance(self, master=False, num_nodes=1, services=None):
         """Swap-rebalance nodes on Cluster
         @param master: True if swap-rebalance master node else False.
         """
         if master:
             to_remove_node = [self.__master_node]
         else:
-            to_remove_node = [self.__nodes[-1]]
+            to_remove_node = self.__nodes[len(self.__nodes)-num_nodes:]
 
-        to_add_node = [FloatingServers._serverlist.pop()]
+        raise_if(
+            len(FloatingServers._serverlist) < num_nodes,
+            FTSException(
+                "Number of free nodes: {0}, test tried to add {1} new nodes!".
+                format(len(FloatingServers._serverlist), num_nodes))
+        )
+        to_add_node = []
+        for _ in range(num_nodes):
+            node = FloatingServers._serverlist.pop()
+            if node not in self.__nodes:
+                to_add_node.append(node)
 
         self.__log.info(
             "Starting swap-rebalance [remove_node:{0}] -> [add_node:{1}] at"
             " {2} cluster {3}"
-            .format(to_remove_node[0].ip, to_add_node[0].ip, self.__name,
+            .format(to_remove_node, to_add_node, self.__name,
                     self.__master_node.ip))
         task = self.__clusterop.async_rebalance(
             self.__nodes,
@@ -1640,7 +1672,9 @@ class CouchbaseCluster:
             to_remove_node,
             services=services)
 
-        [self.__nodes.remove(node) for node in to_remove_node]
+        for remove_node in to_remove_node:
+            self.__nodes.remove(remove_node)
+
         self.__nodes.extend(to_add_node)
 
         if master:
@@ -1663,10 +1697,11 @@ class CouchbaseCluster:
         task = self.__async_swap_rebalance(master=True, services=services)
         task.result()
 
-    def swap_rebalance(self, services=None):
+    def swap_rebalance(self, services=None, num_nodes=1):
         """Swap rebalance non-master node
         """
-        task = self.__async_swap_rebalance(services=services)
+        task = self.__async_swap_rebalance(services=services,
+                                           num_nodes = num_nodes)
         task.result()
 
     def __async_failover(self, master=False, num_nodes=1, graceful=False):
@@ -2049,8 +2084,14 @@ class FTSBaseTest(unittest.TestCase):
     def __set_free_servers(self):
         total_servers = self._input.servers
         cluster_nodes = self._cb_cluster.get_nodes()
-        FloatingServers._serverlist = [
-            server for server in total_servers if server not in cluster_nodes]
+        for server in total_servers:
+            for cluster_node in cluster_nodes:
+                if server.ip == cluster_node.ip:
+                    break
+                else:
+                    continue
+            else:
+                FloatingServers._serverlist.append(server)
 
     def __calculate_bucket_size(self, cluster_quota, num_buckets):
         dgm_run = self._input.param("dgm_run", 0)
@@ -2289,21 +2330,22 @@ class FTSBaseTest(unittest.TestCase):
             prev_count = 0
             while retry_count > 0:
                 index_doc_count = index.get_indexed_doc_count()
+                bucket_doc_count = index.get_src_bucket_doc_count()
                 if not self.compare_es:
                     self.log.info("Docs in bucket = %s, docs in FTS index '%s': %s"
-                                        %(index.get_src_bucket_doc_count(),
+                                        %(bucket_doc_count,
                                         index.name,
-                                        index.get_indexed_doc_count()))
+                                        index_doc_count))
                 else:
                     self.es.update_index('es_index')
                     self.log.info("Docs in bucket = %s, docs in FTS index '%s':"
                                   " %s, docs in ES index: %s "
-                                % (index.get_src_bucket_doc_count(),
+                                % (bucket_doc_count,
                                 index.name,
-                                index.get_indexed_doc_count(),
+                                index_doc_count,
                                 self.es.get_index_count('es_index')))
 
-                if index.get_src_bucket_doc_count() == index.get_indexed_doc_count():
+                if bucket_doc_count == index_doc_count:
                     break
 
                 if prev_count < index_doc_count or prev_count > index_doc_count:
