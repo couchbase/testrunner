@@ -48,6 +48,7 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.final_events = []
         self.n1ql_helper = None
         #self.free_nodes = []
+        self.total_buckets = 1
         self.in_servers_pool = self._convert_server_map(self.servers[:self.nodes_init])
         """ Init nodes to not upgrade yet """
         for key in self.in_servers_pool.keys():
@@ -117,7 +118,14 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info("Will install upgrade version to any free nodes")
             out_nodes = self._get_free_nodes()
             self.log.info("Here is free nodes {0}".format(out_nodes))
-            self._install(out_nodes)
+            """ only install nodes out when there is cluster operation """
+            cluster_ops = ["rebalance_in", "rebalance_out", "rebalance_in_out"]
+            for event in self.after_events[0].split("-"):
+                if event in cluster_ops:
+                    self.log.info("There are cluster ops after upgrade.  Need to "
+                                  "install free nodes in upgrade version")
+                    self._install(out_nodes)
+                    break
             self.generate_map_nodes_out_dist_upgrade(\
                                       self.after_upgrade_services_out_dist)
             self.log.info("*** Start operations after upgrade is done ***")
@@ -372,14 +380,25 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
 
-    def create_buckets(self):
+    def create_buckets(self, queue=None):
+        bucket_created = False
         try:
             self.log.info("create_buckets")
+            if self.dgm_run:
+                self.bucket_size = 256
+                self.default_bucket = False
+                self.sasl_buckets = 1
+                self.sasl_bucket_name = "_" + str(self.total_buckets)
             self.rest = RestConnection(self.master)
             self._bucket_creation()
+            self.total_buckets +=1
+            bucket_created = True
         except Exception, ex:
             self.log.info(ex)
-            raise
+            if queue is not None:
+                queue.put(False)
+        if bucket_created and queue is not None:
+            queue.put(True)
 
     def change_bucket_properties(self):
         try:
@@ -711,13 +730,16 @@ class UpgradeTests(NewUpgradeBaseTest):
         if queue is not None:
             queue.put(True)
 
-    def kv_after_ops_create(self):
+    def kv_after_ops_create(self, queue=None):
         try:
             self.log.info("kv_after_ops_create")
             self._load_all_buckets(self.master, self.after_gen_create, "create", self.expire_time, flag=self.item_flag)
         except Exception, ex:
             self.log.info(ex)
-            raise
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
 
     def kv_after_ops_update(self):
         try:

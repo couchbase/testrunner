@@ -83,6 +83,7 @@ class BaseTestCase(unittest.TestCase):
                 self.default_bucket_name = "default"
             self.standard_buckets = self.input.param("standard_buckets", 0)
             self.sasl_buckets = self.input.param("sasl_buckets", 0)
+            self.sasl_bucket_name = "bucket"
             self.num_buckets = self.input.param("num_buckets", 0)
             self.verify_unacked_bytes = self.input.param("verify_unacked_bytes", False)
             self.memcached_buckets = self.input.param("memcached_buckets", 0)
@@ -458,7 +459,8 @@ class BaseTestCase(unittest.TestCase):
 
 
 
-    def _create_sasl_buckets(self, server, num_buckets, server_id=None, bucket_size=None, password='password'):
+    def _create_sasl_buckets(self, server, num_buckets, server_id=None,\
+                                 bucket_size=None, password='password'):
         if not num_buckets:
             return
         if server_id is None:
@@ -467,7 +469,7 @@ class BaseTestCase(unittest.TestCase):
             bucket_size = self.bucket_size
         bucket_tasks = []
         for i in range(num_buckets):
-            name = 'bucket' + str(i)
+            name = self.sasl_bucket_name + str(i)
             bucket_priority = None
             if self.sasl_bucket_priority != None:
                 bucket_priority = self.get_bucket_priority(self.sasl_bucket_priority[i])
