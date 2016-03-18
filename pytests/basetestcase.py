@@ -1228,13 +1228,13 @@ class BaseTestCase(unittest.TestCase):
             remote_client.kill_memcached()
             remote_client.disconnect()
 
-    def get_vbucket_seqnos(self, servers, buckets, skip_consistency=False):
+    def get_vbucket_seqnos(self, servers, buckets, skip_consistency=False, per_node=True):
         """
             Method to get vbucket information from a cluster using cbstats
         """
         new_vbucket_stats = self.data_collector.collect_vbucket_stats(buckets, servers, collect_vbucket=False,
                                                                       collect_vbucket_seqno=True,
-                                                                      collect_vbucket_details=False, perNode=True)
+                                                                      collect_vbucket_details=False, perNode=per_node)
         if not skip_consistency:
             new_vbucket_stats = self.compare_per_node_for_vbucket_consistency(new_vbucket_stats)
         return new_vbucket_stats
