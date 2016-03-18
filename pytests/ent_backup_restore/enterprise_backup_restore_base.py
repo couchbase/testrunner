@@ -83,6 +83,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.recoveryType = self.input.param("recoveryType", "full")
         self.skip_buckets = self.input.param("skip_buckets", False)
         self.skip_consistency = self.input.param("skip_consistency", False)
+        self.per_node = self.input.param("per_node", True)
         if not os.path.exists(self.backup_validation_files_location):
             os.mkdir(self.backup_validation_files_location)
 
@@ -144,7 +145,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, self)
 
     def store_vbucket_seqno(self):
-        vseqno = self.get_vbucket_seqnos(self.cluster_to_backup, self.buckets, self.skip_consistency)
+        vseqno = self.get_vbucket_seqnos(self.cluster_to_backup, self.buckets, self.skip_consistency, self.per_node)
         self.vbucket_seqno.append(vseqno)
 
     def backup_create(self):
@@ -267,6 +268,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                             authType=bucket.authType if bucket.authType else 'none',
                                             proxyPort=bucket.port,
                                             saslPassword=bucket.saslPassword)
+                    bucket_ready = rest_helper.vbucket_map_ready(bucket.name)
+                    if not bucket_ready:
+                        self.fail("Bucket %s not created after 120 seconds." % bucket.name)
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
@@ -282,7 +286,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if not output:
             self.fail("Restoring backup failed.")
         self.log.info("Finished restoring backup")
-        current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets, self.skip_consistency)
+        current_vseqno = self.get_vbucket_seqnos(self.cluster_to_restore, self.buckets)
         status, msg = self.validation_helper.validate_restore(self.backupset.end, self.vbucket_seqno, current_vseqno,
                                                               compare_uuid=compare_uuid, compare=seqno_compare_function,
                                                               get_replica=replicas, mode=mode)
