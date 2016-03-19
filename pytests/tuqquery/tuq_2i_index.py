@@ -1911,9 +1911,17 @@ class QueriesIndexTests(QueryTests):
                     self.assertTrue(
                     plan['~children'][0]['#operator'] == 'DistinctScan',
                     "Union Scan is not being used")
-                    result1 = plan['~children'][0]['scan'][0]['index']
+                    result1 = plan['~children'][0]['scan']['index']
                     self.assertTrue(result1 == index_name)
-
+                    self.query = "SELECT count(name),department" + \
+                                 " FROM %s where join_yr=2012 AND ANY v IN VMs SATISFIES round(v.memory+v.RAM)<100 END AND department = 'Engineer'  GROUP BY department" % (bucket.name)
+                    actual_result = self.run_cbq_query()
+                    actual_result = sorted(actual_result['results'])
+                    self.query = "SELECT count(name),department" + \
+                                 " FROM %s use index(`#primary`) where join_yr=2012 AND ANY v IN VMs SATISFIES round(v.memory+v.RAM)<100 END AND department = 'Engineer'  GROUP BY department" % (bucket.name)
+                    expected_result = self.run_cbq_query()
+                    expected_result = sorted(expected_result['results'])
+                    self.assertTrue(actual_result == expected_result)
             finally:
                 for index_name in set(created_indexes):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
@@ -1941,7 +1949,7 @@ class QueriesIndexTests(QueryTests):
                     self.assertTrue(
                     plan['~children'][0]['#operator'] == 'IndexScan',
                     "IndexScan is not being used")
-                    result1 = plan['~children']['index']
+                    result1 = plan['~children'][0]['scan']['index']
                     self.assertTrue(result1 == index_name)
                     self.query = "SELECT count(department)" + \
                                  " FROM %s where join_yr=2012 AND department = 'Engineer'  GROUP BY department" % (bucket.name)
@@ -2094,7 +2102,7 @@ class QueriesIndexTests(QueryTests):
                     self.query = "select %s from %s where %s is not null and %s is not null" % (','.join(self.FIELDS_TO_INDEX[ind - 1]), bucket.name,
                                                                                                 self.FIELDS_TO_INDEX[ind - 1][0], self.FIELDS_TO_INDEX[ind - 1][1])
                     actual_result = self.run_cbq_query()
-                    self.assertTrue(len(actual_result['results']), self.num_items)
+                    self.assertTrue(len(actual_result['results']), 10)
             except Exception, ex:
                 content = self.cluster.query_view(self.master, "ddl_%s" % view_name, view_name, {"stale" : "ok"},
                                                   bucket="default", retry_time=1)
@@ -2108,7 +2116,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = "select %s from %s where %s is not null and %s is not null" % (','.join(self.FIELDS_TO_INDEX[ind - 1]), bucket.name,
                                                                                                 self.FIELDS_TO_INDEX[ind - 1][0], self.FIELDS_TO_INDEX[ind - 1][1])
                 actual_result = self.run_cbq_query(query_params={'scan_consistency' : 'statement_plus'})
-                self.assertTrue(len(actual_result['results']), self.num_items)
+                self.assertTrue(len(actual_result['results']), 10)
 
     def test_explain_query_count(self):
         for bucket in self.buckets:
