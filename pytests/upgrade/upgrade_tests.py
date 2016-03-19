@@ -366,15 +366,20 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
 
-    def bucket_flush(self):
+    def bucket_flush(self, queue=None):
+        bucket_flushed = False
         try:
-            self.log.info("bucket_flush")
+            self.log.info("bucket_flush ops")
             self.rest =RestConnection(self.master)
             for bucket in self.buckets:
                 self.rest.flush_bucket(bucket.name)
+            bucket_flushed = True
         except Exception, ex:
             self.log.info(ex)
-            raise
+            if queue is not None:
+                queue.put(False)
+        if bucket_flushed and queue is not None:
+            queue.put(True)
 
     def delete_buckets(self, queue=None):
         bucket_deleted = False
@@ -746,7 +751,15 @@ class UpgradeTests(NewUpgradeBaseTest):
     def kv_after_ops_create(self, queue=None):
         try:
             self.log.info("kv_after_ops_create")
-            self._load_all_buckets(self.master, self.after_gen_create, "create", self.expire_time, flag=self.item_flag)
+            self._load_all_buckets(self.master, self.after_gen_create, "create",\
+                                           self.expire_time, flag=self.item_flag)
+            for bucket in self.buckets:
+                self.log.info(" record vbucket for the bucket {0}"\
+                                              .format(bucket.name))
+                curr_items = \
+                    RestConnection(self.master).get_active_key_count(bucket.name)
+                self.log.info("{0} curr_items in bucket {1} "\
+                              .format(curr_items, bucket.name))
         except Exception, ex:
             self.log.info(ex)
             if queue is not None:
