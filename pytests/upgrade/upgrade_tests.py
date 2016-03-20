@@ -353,18 +353,24 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
 
-    def warmup(self):
+    def warmup(self, queue=None):
+        node_warmuped = False
         try:
-            self.log.info("warmup")
-            for server in self.out_servers_pool.values():
+            self.log.info("Start warmup operation")
+            nodes = self.get_nodes_in_cluster_after_upgrade()
+            for server in nodes:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
                 remote.start_server()
                 remote.disconnect()
-            ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+            ClusterOperationHelper.wait_for_ns_servers_or_assert(nodes, self)
+            node_warmuped = True
         except Exception, ex:
             self.log.info(ex)
-            raise
+            if queue is not None:
+                queue.put(False)
+        if node_warmuped and queue is not None:
+            queue.put(True)
 
     def bucket_flush(self, queue=None):
         bucket_flushed = False
