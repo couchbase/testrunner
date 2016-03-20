@@ -290,22 +290,38 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
 
-    def failover(self):
+    def failover(self, queue=None):
+        failover_node = False
         try:
-            self.log.info("failover")
+            self.log.info("VVVVVV failover a node ")
+            print "failover node   ", self.nodes_out_list
+            nodes = self.get_nodes_in_cluster_after_upgrade()
             failover_task = self.cluster.async_failover([self.master],
                         failover_nodes = self.nodes_out_list, graceful=self.graceful)
             failover_task.result()
             if self.graceful:
-            # Check if rebalance is still running
+                """ Check if rebalance is still running """
                 msg = "graceful failover failed for nodes"
-                self.assertTrue(RestConnection(self.master).monitorRebalance(stop_if_loop=True), msg=msg)
+                self.assertTrue(RestConnection(self.master).monitorRebalance(\
+                                                     stop_if_loop=True), msg=msg)
                 rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                        [], self.nodes_out_list)
                 rebalance.result()
+                failover_node = True
+            else:
+                msg = "Failed to failover a node"
+                self.assertTrue(RestConnection(self.master).monitorRebalance(\
+                                                     stop_if_loop=True), msg=msg)
+                rebalance = self.cluster.async_rebalance(nodes, [],
+                                                    self.nodes_out_list)
+                rebalance.result()
+                failover_node = True
         except Exception, ex:
             self.log.info(ex)
-            raise
+            if queue is not None:
+                queue.put(False)
+        if failover_node and queue is not None:
+            queue.put(True)
 
     def autofailover(self):
         try:
