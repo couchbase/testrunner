@@ -17,11 +17,16 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from pprint import pprint
+from testconstants import CB_REPO
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
+from testconstants import COUCHBASE_VERSIONS
 from testconstants import SHERLOCK_VERSION
+from testconstants import CB_VERSION_NAME
+from testconstants import COUCHBASE_MP_VERSION
+from testconstants import CE_EE_ON_SAME_FOLDER
 
 
 class NewUpgradeBaseTest(BaseTestCase):
@@ -30,14 +35,16 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.released_versions = ["2.0.0-1976-rel", "2.0.1", "2.5.0", "2.5.1",
                                   "2.5.2", "3.0.0", "3.0.1",
                                   "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
-                                  "3.1.0", "3.1.0-1776", "3.1.1", "3.1.1-1802",
-                                  "4.0.0", "4.0.0-4051"]
+                                  "3.1.0", "3.1.0-1776", "3.1.1", "3.1.1-1807",
+                                  "3.1.2", "3.1.2-1815", "3.1.3", "3.1.3-1823",
+                                  "4.0.0", "4.0.0-4051", "4.1.0", "4.1.0-5005"]
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
-        self.upgrade_versions = self.input.param('upgrade_version', '2.0.1-170-rel')
+        self.upgrade_versions = self.input.param('upgrade_version', '4.1.0-4963')
         self.upgrade_versions = self.upgrade_versions.split(";")
+        self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.init_nodes = self.input.param('init_nodes', True)
 
         self.is_downgrade = self.input.param('downgrade', False)
@@ -85,18 +92,23 @@ class NewUpgradeBaseTest(BaseTestCase):
         if type.lower() == "ubuntu":
             self.is_ubuntu = True
         self.queue = Queue.Queue()
+        self.upgrade_servers = []
 
     def tearDown(self):
-        test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
-                    or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
-        if test_failed:
+        test_failed = (hasattr(self, '_resultForDoCleanups') and \
+                       len(self._resultForDoCleanups.failures or \
+                           self._resultForDoCleanups.errors)) or \
+                                 (hasattr(self, '_exc_info') and \
+                                  self._exc_info()[1] is not None)
+        if test_failed and self.skip_cleanup:
                 self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
                 self.cluster.shutdown(force=True)
                 self.log.info("Test Input params were:")
                 pprint(self.input.test_params)
 
                 if self.input.param('BUGS', False):
-                    self.log.warn("Test failed. Possible reason is: {0}".format(self.input.param('BUGS', False)))
+                    self.log.warn("Test failed. Possible reason is: {0}"
+                                           .format(self.input.param('BUGS', False)))
         else:
             if not hasattr(self, 'rest'):
                 return
@@ -112,18 +124,23 @@ class NewUpgradeBaseTest(BaseTestCase):
                         temp.append(server)
                 self.servers = temp
             except Exception, e:
+                self.log.info("Exception " + e)
                 self.cluster.shutdown(force=True)
                 self.fail(e)
             super(NewUpgradeBaseTest, self).tearDown()
+            if self.upgrade_servers:
+                self._install(self.upgrade_servers,version=self.initial_version)
         self.sleep(20, "sleep 20 seconds before run next test")
 
-    def _install(self, servers):
+    def _install(self, servers, version=None):
         params = {}
         params['num_nodes'] = len(servers)
         params['product'] = self.product
         params['version'] = self.initial_version
         params['vbuckets'] = [self.initial_vbuckets]
         params['init_nodes'] = self.init_nodes
+        if version:
+            params['version'] = version
         if self.initial_build_type is not None:
             params['type'] = self.initial_build_type
         self.log.info("will install {0} on {1}".format(self.initial_version, [s.ip for s in servers]))
@@ -184,9 +201,12 @@ class NewUpgradeBaseTest(BaseTestCase):
     def _get_build(self, server, version, remote, is_amazon=False, info=None):
         if info is None:
             info = remote.extract_remote_info()
-        build_repo = MV_LATESTBUILD_REPO
-        if version[:3] in SHERLOCK_VERSION:
-            build_repo = SHERLOCK_BUILD_REPO
+        build_repo = CB_REPO
+        if version[:5] in COUCHBASE_VERSIONS:
+            if version[:3] in CB_VERSION_NAME:
+                build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
+            elif version[:5] in COUCHBASE_MP_VERSION:
+                build_repo = MV_LATESTBUILD_REPO
         builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5, \
                     deliverable_type=info.deliverable_type, architecture_type=info.architecture_type, \
                     edition_type="couchbase-server-enterprise", repo=build_repo, \
@@ -197,7 +217,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             version = version + "-rel"
         if version[:5] in self.released_versions:
             appropriate_build = BuildQuery().\
-                find_membase_release_build('%s-enterprise' % (self.product),
+                find_couchbase_release_build('%s-enterprise' % (self.product),
                                            info.deliverable_type,
                                            info.architecture_type,
                                            version.strip(),
@@ -225,8 +245,9 @@ class NewUpgradeBaseTest(BaseTestCase):
             if self.is_ubuntu:
                 remote.start_server()
             """ remove end here """
-            remote.disconnect()
-            self.sleep(10)
+            #remote.disconnect()
+            #self.sleep(10)
+            self.rest = RestConnection(server)
             if self.is_linux:
                 self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 4, wait_if_warmup=True)
             else:

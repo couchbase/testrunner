@@ -1,3 +1,5 @@
+import sys
+import paramiko
 from basetestcase import BaseTestCase
 import json
 import os
@@ -60,8 +62,10 @@ class RQGTests(BaseTestCase):
         self.secondary_index_info_path= self.input.param("secondary_index_info_path",None)
         self.db_dump_path= self.input.param("db_dump_path",None)
         self.input_rqg_path= self.input.param("input_rqg_path",None)
+        self.set_limit = self.input.param("set_limit",0)
         self.build_index_batch_size= self.input.param("build_index_batch_size",1000)
         self.query_count= 0
+        self.use_rest = self.input.param("use_rest",True)
         if self.input_rqg_path != None:
             self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
             self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
@@ -71,6 +75,15 @@ class RQGTests(BaseTestCase):
         self._initialize_n1ql_helper()
         if self.initial_loading_to_cb:
             self._initialize_cluster_setup()
+        if not(self.use_rest):
+            self._ssh_client = paramiko.SSHClient()
+            self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            try:
+                self.os = self.shell.extract_remote_info().type.lower()
+            except Exception, ex:
+                self.log.error('SETUP FAILED')
+                self.tearDown()
+
 
 
     def tearDown(self):
@@ -615,6 +628,10 @@ class RQGTests(BaseTestCase):
         result_run["n1ql_query"] = n1ql_query
         result_run["sql_query"] = sql_query
         result_run["test_case_number"] = test_case_number
+        if self.set_limit > 0 and n1ql_query.find("DISTINCT") > 0:
+            result_limit = self.query_helper._add_limit_to_query(n1ql_query,self.set_limit)
+            query_index_run = self._run_queries_and_verify(n1ql_query = result_limit , sql_query = sql_query, expected_result = expected_result)
+            result_run["run_query_with_limit"] = query_index_run
         if  expected_result == None:
             expected_result = self._gen_expected_result(sql_query)
             data["expected_result"] = expected_result

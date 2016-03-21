@@ -1,3 +1,4 @@
+import json
 from basetestcase import BaseTestCase
 from membase.helper.cluster_helper import ClusterOperationHelper
 from sdk_client import SDKClient
@@ -12,6 +13,31 @@ class SDKClientTests(BaseTestCase):
                       .format(self.case_number, self._testMethodName))
     def tearDown(self):
         super(SDKClientTests, self).tearDown()
+
+    def test_sdk_subddoc(self):
+        """
+            Test SDK Client Calls
+        """
+        scheme = "couchbase"
+        host=self.master.ip
+        if self.master.ip == "127.0.0.1":
+            scheme = "http"
+            host="{0}:{1}".format(self.master.ip,self.master.port)
+
+        client = SDKClient(scheme=scheme,hosts = [host], bucket = "default")
+        json_document = {"1":1, "2":2, "array": [1]}
+        document_key = "1"
+        client.insert("1",json_document)
+        client.insert_in(document_key, "3", 3)
+        client.upsert_in(document_key, "4", 4)
+        client.upsert_in(document_key, "4", "change_4")
+        client.replace_in(document_key, "4", "crap_4")
+        client.arrayprepend_in(document_key, "array", "0")
+        client.arrayappend_in(document_key, "array", "2")
+        client.arrayinsert_in(document_key, "array[1]", "INSERT_VALUE_AT_INDEX_1")
+        client.arrayaddunique_in(document_key, "array", "INSERT_UNIQUE_VALUE")
+        print json.dumps(client.get(document_key))
+
 
     def test_sdk_client(self):
         """

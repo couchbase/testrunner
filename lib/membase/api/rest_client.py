@@ -191,6 +191,8 @@ class RestHelper(object):
         vbuckets_servers = {}
         for server in servers:
             buckets = RestConnection(server).get_buckets()
+            if not buckets:
+                return vbuckets_servers
             if bucket_name:
                 bucket_to_check = [bucket for bucket in buckets
                                if bucket.name == bucket_name][0]
@@ -241,10 +243,13 @@ class RestConnection(object):
             self.password = serverInfo["password"]
             self.port = serverInfo["port"]
             self.index_port = 9102
-            self.fts_port = 9110
-            self.query_port=8094
+            self.fts_port = 8094
+            self.query_port=8093
             if "index_port" in serverInfo.keys():
                 self.index_port = serverInfo["index_port"]
+            if "fts_port" in serverInfo.keys():
+                if serverInfo['fts_port']:
+                    self.fts_port = serverInfo["fts_port"]
             self.hostname = ''
             if "hostname" in serverInfo:
                 self.hostname = serverInfo["hostname"]
@@ -255,12 +260,15 @@ class RestConnection(object):
             self.port = serverInfo.port
             self.hostname = ''
             self.index_port = 9102
-            self.fts_port = 9110
-            self.query_port = 8094
+            self.fts_port = 8094
+            self.query_port = 8093
             if hasattr(serverInfo, 'index_port'):
                 self.index_port = serverInfo.index_port
             if hasattr(serverInfo, 'query_port'):
                 self.query_port = serverInfo.query_port
+            if hasattr(serverInfo, 'fts_port'):
+                if serverInfo.fts_port:
+                    self.fts_port = serverInfo.fts_port
             if hasattr(serverInfo, 'hostname') and serverInfo.hostname and\
                serverInfo.hostname.find(self.ip) == -1:
                 self.hostname = serverInfo.hostname
@@ -272,7 +280,7 @@ class RestConnection(object):
         if self.hostname:
             self.baseUrl = "http://{0}:{1}/".format(self.hostname, self.port)
             self.capiBaseUrl = "http://{0}:{1}/".format(self.hostname, 8092)
-            self.query_baseUrl = "http://{0}:{1}/".format(self.hostname, 8094)
+            self.query_baseUrl = "http://{0}:{1}/".format(self.hostname, 8093)
         # for Node is unknown to this cluster error
         for iteration in xrange(5):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
@@ -753,7 +761,7 @@ class RestConnection(object):
                 log.error("ServerNotFoundError error while connecting to {0} error {1} ".format(api, e))
                 if time.time() > end_time:
                     raise ServerUnavailableException(ip=self.ip)
-            time.sleep(1)
+            time.sleep(3)
 
     def init_cluster(self, username='Administrator', password='password', port='8091'):
         api = self.baseUrl + 'settings/web'
@@ -808,6 +816,20 @@ class RestConnection(object):
         params = urllib.urlencode({'indexMemoryQuota': indexMemoryQuota})
         log.info('pools/default params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)
+        return status
+
+    def set_indexer_storage_mode(self, username='Administrator',
+                                 password='password',
+                                 storageMode='forestdb'):
+        api = self.baseUrl + 'settings/indexes'
+        params = urllib.urlencode({'storageMode': storageMode})
+        error_message = "storageMode must be one of forestdb, memory_optimized"
+        log.info('settings/indexes params : {0}'.format(params))
+        status, content, header = self._http_request(api, 'POST', params)
+        if not status and error_message in content:
+            #TODO: Currently it just acknowledges if there is an error.
+            #And proceeds with further initialization.
+            log.info(content)
         return status
 
     def get_cluster_ceritificate(self):
@@ -1219,6 +1241,16 @@ class RestConnection(object):
         log.info("diag/masterEvents?o=1 status: {0} content: {1}".format(status, content))
         return status, content
 
+
+    def get_admin_credentials(self):
+
+        code = 'ns_config:search_node_prop(node(), ns_config:latest(), memcached, admin_user)'
+        status, id = self.diag_eval(code)
+
+        code = 'ns_config:search_node_prop(node(), ns_config:latest(), memcached, admin_pass)'
+        status, password = self.diag_eval(code)
+        return id.strip('"'), password.strip('"')
+
     def monitorRebalance(self, stop_if_loop=True):
         start = time.time()
         progress = 0
@@ -1343,6 +1375,20 @@ class RestConnection(object):
             index_map = RestParser().parse_index_stats_response(json_parsed, index_map=index_map)
         return index_map
 
+    def get_indexer_stats(self, timeout=120, index_map=None):
+        api = self.index_baseUrl + 'stats'
+        index_map = {}
+        status, content, header = self._http_request(api, timeout=timeout)
+        if status:
+            json_parsed = json.loads(content)
+            for key in json_parsed.keys():
+                tokens = key.split(":")
+                val = json_parsed[key]
+                if len(tokens) == 1:
+                    field = tokens[0]
+                    index_map[field] = val
+        return index_map
+
     def get_index_status(self, timeout=120, index_map=None):
         api = self.baseUrl + 'indexStatus'
         index_map = {}
@@ -1460,15 +1506,16 @@ class RestConnection(object):
 
     def get_buckets_itemCount(self):
         # get all the buckets
-        map = {}
+        bucket_map = {}
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets?basic_stats=true')
         status, content, header = self._http_request(api)
         json_parsed = json.loads(content)
         if status:
             for item in json_parsed:
                 bucketInfo = RestParser().parse_get_bucket_json(item)
-                map[bucketInfo.name] = bucketInfo.stats.itemCount
-        return map
+                bucket_map[bucketInfo.name] = bucketInfo.stats.itemCount
+        log.info(bucket_map)
+        return bucket_map
 
     def get_bucket_stats_for_node(self, bucket='default', node=None):
         if not node:
@@ -2021,10 +2068,10 @@ class RestConnection(object):
     def create_fts_index(self, index_name, params):
         """create or edit fts index , returns {"status":"ok"} on success"""
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)
-        log.info(json.dumps(params, ensure_ascii=False, indent=3))
+        log.info(json.dumps(params))
         status, content, header = self._http_request(api,
                                     'PUT',
-                                    json.dumps(params,ensure_ascii=False),
+                                    json.dumps(params, ensure_ascii=False),
                                     headers=self._create_capi_headers_with_auth(
                                                 self.username,
                                                 self.password),
@@ -2038,11 +2085,9 @@ class RestConnection(object):
     def update_fts_index(self, index_name, index_def):
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)
         log.info(json.dumps(index_def, indent=3))
-        params = urllib.urlencode({'indexDef': json.dumps(index_def,
-                                                          ensure_ascii=False)})
         status, content, header = self._http_request(api,
-                                    'POST',
-                                    params,
+                                    'PUT',
+                                    json.dumps(index_def, ensure_ascii=False),
                                     headers=self._create_capi_headers_with_auth(
                                                 self.username,
                                                 self.password),
@@ -2054,10 +2099,15 @@ class RestConnection(object):
         return status
 
     def get_fts_index_definition(self, name, timeout=30):
-        """ get fts index/alias definition"""
+        """ get fts index/alias definition """
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}".format(name)
-        status, content, header = self._http_request(api, timeout=timeout)
+        status, content, header = self._http_request(
+            api,
+            headers=self._create_capi_headers_with_auth(
+                        self.username,
+                        self.password),
+            timeout=timeout)
         if status:
             json_parsed = json.loads(content)
         return status, json_parsed
@@ -2066,7 +2116,12 @@ class RestConnection(object):
         """ get number of docs indexed"""
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}/count".format(name)
-        status, content, header = self._http_request(api, timeout=timeout)
+        status, content, header = self._http_request(
+            api,
+            headers=self._create_capi_headers_with_auth(
+                        self.username,
+                        self.password),
+            timeout=timeout)
         if status:
             json_parsed = json.loads(content)
         return json_parsed['count']
@@ -2075,7 +2130,12 @@ class RestConnection(object):
         """ Returns uuid of index/alias """
         json_parsed = {}
         api = self.fts_baseUrl + "api/index/{0}/".format(name)
-        status, content, header = self._http_request(api, timeout=timeout)
+        status, content, header = self._http_request(
+            api,
+            headers=self._create_capi_headers_with_auth(
+                                                self.username,
+                                                self.password),
+            timeout=timeout)
         if status:
             json_parsed = json.loads(content)
         return json_parsed['indexDef']['uuid']
@@ -2083,47 +2143,78 @@ class RestConnection(object):
     def delete_fts_index(self, name):
         """ delete fts index/alias """
         api = self.fts_baseUrl + "api/index/{0}".format(name)
-        status, content, header = self._http_request(api, 'DELETE')
+        status, content, header = self._http_request(
+            api,
+            'DELETE',
+            headers=self._create_capi_headers_with_auth(
+                                                self.username,
+                                                self.password))
         return status
 
     def stop_fts_index_update(self, name):
         """ method to stop fts index from updating"""
         api = self.fts_baseUrl + "api/index/{0}/ingestControl/pause".format(name)
-        status, content, header = self._http_request(api, 'POST', '')
+        status, content, header = self._http_request(
+            api,
+            'POST',
+            '',
+            headers=self._create_capi_headers_with_auth(
+                                                self.username,
+                                                self.password))
         return status
 
     def freeze_fts_index_partitions(self, name):
         """ method to freeze index partitions asignment"""
         api = self.fts_baseUrl+ "api/index/{0}/planFreezeControl".format(name)
-        status, content, header = self._http_request(api, 'POST', '')
+        status, content, header = self._http_request(
+            api,
+            'POST',
+            '',
+            headers=self._create_capi_headers_with_auth(
+                                                self.username,
+                                                self.password))
         return status
 
     def disable_querying_on_fts_index(self, name):
         """ method to disable querying on index"""
         api = self.fts_baseUrl + "api/index/{0}/queryControl/disallow".format(name)
-        status, content, header = self._http_request(api, 'POST', '')
+        status, content, header = self._http_request(
+            api,
+            'POST',
+            '',
+            headers=self._create_capi_headers_with_auth(
+                                                self.username,
+                                                self.password))
         return status
 
     def enable_querying_on_fts_index(self, name):
         """ method to enable querying on index"""
         api = self.fts_baseUrl + "api/index/{0}/queryControl/allow".format(name)
-        status, content, header = self._http_request(api, 'POST', '')
+        status, content, header = self._http_request(
+            api,
+            'POST',
+            '',
+            headers=self._create_capi_headers_with_auth(
+                                                self.username,
+                                                self.password))
         return status
 
     def run_fts_query(self, index_name, query_json):
         """Method run an FTS query through rest api"""
         api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
+        headers = self._create_capi_headers_with_auth(
+                    self.username,
+                    self.password)
         status, content, header = self._http_request(
             api,
             "POST",
-            json.dumps(query_json, ensure_ascii=False),
-            headers=self._create_capi_headers_with_auth(
-                self.username,
-                self.password),
-            timeout=30)
+            json.dumps(query_json, ensure_ascii=False).encode('utf8'),
+            headers,
+            timeout=60)
+
         if status:
             content = json.loads(content)
-            return content['total_hits'], content['hits']
+            return content['total_hits'], content['hits'], content['took']
 
 
     """ End of FTS rest APIs """
@@ -2268,6 +2359,23 @@ class RestConnection(object):
                         rebalance, cluster, views, stderr]] end, []]).'.format(loglevel)
         return self._http_request(api=api, method='POST', params=request_body,
                                   headers=self._create_headers())
+
+    def set_indexer_params(self, parameter, val):
+        """
+        :Possible  parameters:
+            -- indexerThreads
+            -- memorySnapshotInterval
+            -- stableSnapshotInterval
+            -- maxRollbackPoints
+            -- logLevel
+        """
+        params = {}
+        api = self.baseUrl + 'settings/indexes'
+        params[parameter] = val
+        params = urllib.urlencode(params)
+        status, content, header = self._http_request(api, "POST", params)
+        log.info('Indexer {0} set to {1}'.format(parameter, val))
+        return status
 
     def set_couchdb_option(self, section, option, value):
         """Dynamic settings changes"""
@@ -2871,6 +2979,19 @@ class RestConnection(object):
         log.info ("Status of executeValidateCredentials command - {0}".format(status))
         return status, json.loads(content)
 
+    def _set_user_roles(self,rest,user_name,payload):
+        url = "settings/rbac/users/" + user_name
+        param = payload
+        api = rest.baseUrl + url
+        status, content, header = rest._http_request(api, 'PUT', param)
+        return status, content, header
+
+    def _delete_user(self,rest,user_name):
+        url = "/settings/rbac/users/" + user_name
+        api = rest.baseUrl + url
+        status, content, header = rest._http_request(api, 'DELETE')
+        return status, content, header
+
     '''
     Audit Commands
     '''
@@ -2909,6 +3030,71 @@ class RestConnection(object):
             return status
         else:
             return status, json.loads(content)
+
+    def create_index_with_rest(self, create_info):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        api = self.index_baseUrl + 'api/indexes?create=true'
+        headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
+        params = json.loads("{0}".format(create_info).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                             params=json.dumps(params).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    def build_index_with_rest(self, id):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        api = self.index_baseUrl + 'api/indexes?build=true'
+        build_info = {'ids': [id]}
+        headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'PUT', headers=headers,
+                                               params=json.dumps(build_info))
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    def drop_index_with_rest(self, id):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = 'api/index/{0}'.format(id)
+        api = self.index_baseUrl + url
+        headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'DELETE', headers=headers)
+        if not status:
+            raise Exception(content)
+
+    def get_all_indexes_with_rest(self):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = 'api/indexes'
+        api = self.index_baseUrl + url
+        headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    def lookup_gsi_index_with_rest(self, id, body):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = 'api/index/{0}?lookup=true'.format(id)
+        api = self.index_baseUrl + url
+        headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
+        params = json.loads("{0}".format(body).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
+        status, content, header = self._http_request(api, 'GET', headers=headers,
+                                             params=json.dumps(params).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    def full_table_scan_gsi_index_with_rest(self, id, body):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = 'api/index/{0}?scanall=true'.format(id)
+        api = self.index_baseUrl + url
+        headers = {'Content-type': 'application/json','Authorization': 'Basic %s' % authorization}
+        params = json.loads("{0}".format(body).replace('\'', '"').replace('True', 'true').replace('False', 'false'))
+        status, content, header = self._http_request(api, 'GET', headers=headers,
+                                                     params=json.dumps(params).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return json.loads(json.dumps(content))
 
 
 class MembaseServerVersion:
@@ -3052,7 +3238,7 @@ class vBucket(object):
 class RestParser(object):
     def parse_index_status_response(self, parsed):
         index_map = {}
-        for map in parsed:
+        for map in parsed["indexes"]:
             bucket_name = map['bucket'].encode('ascii', 'ignore')
             if bucket_name not in index_map.keys():
                 index_map[bucket_name] = {}

@@ -15,6 +15,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from scripts.install import InstallerJob
 from testconstants import SHERLOCK_VERSION
+from testconstants import WATSON_VERSION
 
 
 
@@ -117,18 +118,49 @@ class CommunityTests(CommunityBaseTest):
             else:
                 self.log.info("services enforced in CE")
         elif self.services == "index,kv,n1ql":
-            if status:
-                self.log.info("CE could set all services on same nodes."
-                                  .format(self.services))
-            else:
-                self.fail("Failed to set kv, index and query services on CE")
+            if self.version not in WATSON_VERSION:
+                if status:
+                    self.log.info("CE could set all services {0} on same nodes."
+                                                           .format(self.services))
+                else:
+                    self.fail("Failed to set kv, index and query services on CE")
+            elif self.version in WATSON_VERSION:
+                if status:
+                    self.fail("CE does not support only"
+                              " kv, index and n1ql on same node")
+                else:
+                    self.log.info("services enforced in CE")
+        elif self.version in WATSON_VERSION:
+            if self.services == "fts,index,kv":
+                if status:
+                    self.fail("CE does not support fts, index and kv on same node")
+                else:
+                    self.log.info("services enforced in CE")
+            elif self.services == "fts,index,n1ql":
+                if status:
+                    self.fail("CE does not support fts, index and n1ql on same node")
+                else:
+                    self.log.info("services enforced in CE")
+            elif self.services == "fts,kv,n1ql":
+                if status:
+                    self.fail("CE does not support fts, kv and n1ql on same node")
+                else:
+                    self.log.info("services enforced in CE")
+            elif self.services == "fts,index,kv,n1ql":
+                if status:
+                    self.log.info("CE could set all services {0} on same nodes."
+                                                           .format(self.services))
+                else:
+                    self.fail("Failed to set "
+                              "fts, index, kv, and query services on CE")
         else:
-            self.fail("services don't support")
+            self.fail("some services don't support")
 
     def check_set_services_when_add_node(self):
         self.rest = RestConnection(self.master)
         self.rest.force_eject_node()
-        services_in_ce = ["kv", "index,kv,n1ql"]
+        sherlock_services_in_ce = ["kv", "index,kv,n1ql"]
+        watson_services_in_ce = ["kv", "fts,index,kv,n1ql"]
         self.sleep(5, "wait for node reset done")
         try:
             self.log.info("Initialize node with services {0}"
@@ -140,10 +172,15 @@ class CommunityTests(CommunityBaseTest):
         except Exception, e:
             if e:
                 print e
-        if not status and self.start_node_services not in services_in_ce:
-             self.log.info("services setting enforced in CE")
+        if not status:
+            if self.version not in WATSON_VERSION and \
+                         self.start_node_services not in sherlock_services_in_ce:
+                self.log.info("initial services setting enforced in Sherlock CE")
+            elif self.version in WATSON_VERSION and \
+                         self.start_node_services not in watson_services_in_ce:
+                self.log.info("initial services setting enforced in Watson CE")
 
-        if status and init_node.result() != 0:
+        elif status and init_node.result() != 0:
             add_node = False
             try:
                 self.log.info("node with services {0} try to add"
@@ -161,14 +198,28 @@ class CommunityTests(CommunityBaseTest):
                     map[self.servers[1].ip] == self.add_node_services:
                     self.log.info("services set correctly when node added & rebalance")
                 else:
-                    self.fail("services set incorrectly when node added & rebalance")
-            elif self.start_node_services in ["kv", "index,kv,n1ql"] and \
-                 self.add_node_services not in ["kv", "index,kv,n1ql"]:
-                self.log.info("services are enforced in CE")
+                    self.fail("services set incorrectly when node added & rebalance. "
+                        "cluster expected services: {0}; set cluster services {1} ."
+                        "add node expected srv: {2}; set add node srv {3}"\
+                        .format(map[self.master.ip], self.start_node_services, \
+                         map[self.servers[1].ip], self.add_node_services))
             else:
-                self.fail("maybe bug in add node")
-        elif self.start_node_services not in ["kv", "index,kv,n1ql"]:
-            self.log.info("services are enforced in CE")
+                if self.version not in WATSON_VERSION:
+                    if self.start_node_services in ["kv", "index,kv,n1ql"] and \
+                          self.add_node_services not in ["kv", "index,kv,n1ql"]:
+                        self.log.info("services are enforced in CE")
+                    elif self.start_node_services not in ["kv", "index,kv,n1ql"]:
+                        self.log.info("services are enforced in CE")
+                    else:
+                        self.fail("maybe bug in add node")
+                elif self.version in WATSON_VERSION:
+                    if self.start_node_services in ["kv", "index,kv,n1ql,fts"] and \
+                          self.add_node_services not in ["kv", "fts,index,kv,n1ql"]:
+                        self.log.info("services are enforced in CE")
+                    elif self.start_node_services not in ["kv", "index,kv,n1ql"]:
+                        self.log.info("services are enforced in CE")
+                    else:
+                        self.fail("maybe bug in add node")
         else:
             self.fail("maybe bug in node initialization")
 

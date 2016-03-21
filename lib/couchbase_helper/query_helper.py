@@ -58,14 +58,16 @@ class QueryHelper(object):
             if having:
                 having_text = having_text.split(order_by)[0]
             where_condition_text = where_condition_text.split(order_by)[0]
+
         map = {
                 "from_fields": from_field_text,
                 "where_condition":where_condition_text,
                 "select_from":select_from_text,
                 "group_by": group_by_text,
                 "order_by" : order_by_text,
-                "having" : having_text
+                "having" : having_text,
                 }
+
         return map
 
     def _gen_query_with_subquery(self, sql = "", table_map = {}):
@@ -426,6 +428,25 @@ class QueryHelper(object):
             new_sql += " ORDER BY "+ order_by +" "
         if having:
             new_sql += " HAVING "+ having +" "
+        return new_sql
+
+    def _add_limit_to_query(self,sql,limit):
+        sql_map = self._divide_sql(sql)
+        select_from = sql_map["select_from"]
+        from_fields = sql_map["from_fields"]
+        where_condition = sql_map["where_condition"]
+        order_by = sql_map["order_by"]
+        new_sql = "SELECT "
+        if select_from:
+            new_sql += select_from +" FROM "
+        if from_fields:
+            new_sql += from_fields+ " "
+        if where_condition:
+            new_sql += " WHERE "+ where_condition + " "
+        if order_by:
+            new_sql += " ORDER BY "+ order_by +" "
+        import pdb;pdb.set_trace()
+        new_sql += " limit " + str(limit)+ " "
         return new_sql
 
     def _check_function(self, sql):

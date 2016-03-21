@@ -117,7 +117,7 @@ class Cluster(object):
     def async_init_node(self, server, disabled_consistent_view=None,
                         rebalanceIndexWaitingDisabled=None, rebalanceIndexPausingDisabled=None,
                         maxParallelIndexers=None, maxParallelReplicaIndexers=None, port=None,
-                        quota_percent=None, services = None, index_quota_percent = None):
+                        quota_percent=None, services = None, index_quota_percent = None, gsi_type='forestdb'):
         """Asynchronously initializes a node
 
         The task scheduled will initialize a nodes username and password and will establish
@@ -134,12 +134,14 @@ class Cluster(object):
             port - port to initialize cluster
             quota_percent - percent of memory to initialize
             services - can be kv, n1ql, index
+            gsi_type - Indexer Storage Mode
         Returns:
             NodeInitTask - A task future that is a handle to the scheduled task."""
 
         _task = NodeInitializeTask(server, disabled_consistent_view, rebalanceIndexWaitingDisabled,
                           rebalanceIndexPausingDisabled, maxParallelIndexers, maxParallelReplicaIndexers,
-                          port, quota_percent, services = services, index_quota_percent = index_quota_percent)
+                          port, quota_percent, services = services, index_quota_percent = index_quota_percent,
+                          gsi_type=gsi_type)
         self.task_manager.schedule(_task)
         return _task
 
@@ -187,6 +189,15 @@ class Cluster(object):
 
     def async_verify_revid(self, src_server, dest_server, bucket, src_kv_store, dest_kv_store, max_verify=None):
         _task = VerifyRevIdTask(src_server, dest_server, bucket, src_kv_store, dest_kv_store, max_verify=max_verify)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_run_fts_query_compare(self, fts_index, es_instance, query_index,
+                                    es_index_name=None):
+        _task = ESRunQueryCompare(fts_index,
+                                  es_instance,
+                                  query_index=query_index,
+                                  es_index_name=es_index_name)
         self.task_manager.schedule(_task)
         return _task
 
@@ -1160,3 +1171,80 @@ class Cluster(object):
         _task = self.async_cancel_bucket_compaction(server, bucket)
         status = _task.result()
         return status
+
+    def async_backup_cluster(self, cluster_host, backup_host, directory='', name='', resume=False, purge=False,
+                             no_progress_bar=False, cli_command_location=''):
+        """
+        Asynchronously starts backup cluster
+
+        :param cluster_host: host to be backed up
+        :param backup_host: host where backup happens
+        :param directory: backup directory
+        :param name: backup name
+        :param resume: bool to decide if it is a resume
+        :param purge: bool to decide if it is a purge
+        :param no_progress_bar: bool to decide progress bar
+        :param cli_command_location: command location with respect to os
+        :return: task with the output or error message
+        """
+        _task = EnterpriseBackupTask(cluster_host, backup_host, directory, name, resume, purge,
+                                     no_progress_bar, cli_command_location)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_restore_cluster(self, restore_host, backup_host, backups=[], start=0, end=0, directory='', name='',
+                 force_updates=False, no_progress_bar=False, cli_command_location=''):
+        """
+        Asynchronously start backup restore
+        :param restore_host: cluster to be restored to
+        :param backup_host: cluster where backup happens
+        :param backups: list of backups available
+        :param start: backup start index
+        :param end: backup end index
+        :param directory: backup directory
+        :param name: backup name
+        :param force_updates: bool to decide if force_updates
+        :param no_progress_bar: bool to decide progress bar
+        :param cli_command_location: cli_command_location: command location with respect to os
+        :return: task with the output or error message
+        """
+        _task = EnterpriseRestoreTask(restore_host, backup_host, backups, start, end, directory, name,
+                                      force_updates, no_progress_bar, cli_command_location)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_merge_cluster(self, backup_host, backups=[], start=0, end=0, directory='', name='',
+                            cli_command_location=''):
+        """
+        Asynchronously start backup merge
+        :param backup_host: cluster where backup happens
+        :param backups: list of backups available
+        :param start: backup start index
+        :param end: backup end index
+        :param directory: backup directory
+        :param name: backup name
+        :param no_progress_bar: bool to decide progress bar
+        :param cli_command_location: cli_command_location: command location with respect to os
+        :return: task with the output or error message
+        """
+        _task = EnterpriseMergeTask(backup_host, backups, start, end, directory, name,
+                                    cli_command_location)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_compact_cluster(self, backup_host, backup_to_compact, backups=[], directory='', name='',
+                            cli_command_location=''):
+        """
+        Asynchronously start backup merge
+        :param backup_host: cluster where backup happens
+        :param backups: list of backups available
+        :param backup_to_compact: backup to be compacted
+        :param directory: backup directory
+        :param name: backup name
+        :param cli_command_location: cli_command_location: command location with respect to os
+        :return: task with the output or error message
+        """
+        _task = EnterpriseCompactTask(backup_host, backup_to_compact, backups, directory, name,
+                                    cli_command_location)
+        self.task_manager.schedule(_task)
+        return _task

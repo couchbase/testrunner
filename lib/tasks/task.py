@@ -88,7 +88,7 @@ class NodeInitializeTask(Task):
                  maxParallelReplicaIndexers=None,
                  port=None, quota_percent=None,
                  index_quota_percent=None,
-                 services = None):
+                 services = None, gsi_type='forestdb'):
         Task.__init__(self, "node_init_task")
         self.server = server
         self.port = port or server.port
@@ -102,6 +102,7 @@ class NodeInitializeTask(Task):
         self.maxParallelIndexers = maxParallelIndexers
         self.maxParallelReplicaIndexers = maxParallelReplicaIndexers
         self.services = services
+        self.gsi_type = gsi_type
 
 
     def execute(self, task_manager):
@@ -158,6 +159,7 @@ class NodeInitializeTask(Task):
             self.index_quota = int((info.mcdMemoryReserved * 2/3) *self.index_quota_percent / 100)
             rest.set_indexer_memoryQuota(username, password, self.index_quota)
         rest.init_cluster_memoryQuota(username, password, self.quota)
+        rest.set_indexer_storage_mode(username, password, self.gsi_type)
         self.state = CHECKING
         task_manager.schedule(self)
 
@@ -758,8 +760,6 @@ class GenericLoadingTask(Thread, Task):
             self.state = FINISHED
             self.set_exception(error)
 
-
-
     # start of batch methods
     def _create_batch(self, partition_keys_dic, key_val):
         try:
@@ -872,7 +872,6 @@ class LoadDocumentsTask(GenericLoadingTask):
     def has_next(self):
         return self.generator.has_next()
 
-
     def next(self):
         if self.batch_size == 1:
             key, value = self.generator.next()
@@ -955,6 +954,165 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
             iterator += 1
         self.state = FINISHED
         self.set_result(True)
+
+
+class ESLoadGeneratorTask(Task):
+    """
+        Class to load/update/delete documents into/from Elastic Search
+    """
+
+    def __init__(self, es_instance, index_name, generator, op_type="create"):
+        Task.__init__(self, "ES_loader_task")
+        self.es_instance = es_instance
+        self.index_name = index_name
+        self.generator = generator
+        self.iterator = 0
+        self.log.info("Starting to load data into Elastic Search ...")
+
+    def check(self, task_manager):
+        self.state = FINISHED
+        self.set_result(True)
+
+    def execute(self, task_manager):
+        for key, doc in self.generator:
+            doc = json.loads(doc)
+            self.es_instance.load_data(self.index_name,
+                                       json.dumps(doc, encoding='utf-8'),
+                                       doc['type'],
+                                       key)
+            self.iterator += 1
+            if math.fmod(self.iterator, 500) == 0.0:
+                self.log.info("{0} documents loaded into ES".
+                              format(self.iterator))
+        self.state = FINISHED
+        self.set_result(True)
+
+class ESBulkLoadGeneratorTask(Task):
+    """
+        Class to load/update/delete documents into/from Elastic Search
+    """
+
+    def __init__(self, es_instance, index_name, generator, op_type="create",
+                 batch=1000):
+        Task.__init__(self, "ES_loader_task")
+        self.es_instance = es_instance
+        self.index_name = index_name
+        self.generator = generator
+        self.iterator = 0
+        self.batch_size = batch
+        self.log.info("Starting to load data into Elastic Search ...")
+
+    def check(self, task_manager):
+        self.state = FINISHED
+        self.set_result(True)
+
+    def execute(self, task_manager):
+        es_filename = "/tmp/es_bulk.txt"
+        es_bulk_docs = []
+        loaded = 0
+        batched = 0
+        for key, doc in self.generator:
+            doc = json.loads(doc)
+            es_doc = {"index": {
+                                "_index": self.index_name,
+                                "_type": doc['type'],
+                                "_id": key,
+                                }
+                     }
+            es_bulk_docs.append(json.dumps(es_doc))
+            es_bulk_docs.append(json.dumps(doc))
+            batched += 1
+            if batched == self.batch_size or not self.generator.has_next():
+                es_file = open(es_filename, "wb")
+                for line in es_bulk_docs:
+                    es_file.write("%s\n" %line)
+                es_file.close()
+                self.es_instance.load_bulk_data(es_filename)
+                loaded += batched
+                self.log.info("{0} documents bulk loaded into ES".format(loaded))
+                self.es_instance.update_index(self.index_name)
+                batched = 0
+        indexed = self.es_instance.get_index_count(self.index_name)
+        self.log.info("ES index count for '{0}': {1}".
+                              format(self.index_name, indexed))
+        self.state = FINISHED
+        self.set_result(True)
+
+
+class ESRunQueryCompare(Task):
+    def __init__(self, fts_index, es_instance, query_index, es_index_name=None):
+        Task.__init__(self, "Query_runner_task")
+        self.fts_index = fts_index
+        self.fts_query = fts_index.fts_queries[query_index]
+        self.es = es_instance
+        if self.es:
+            self.es_query = es_instance.es_queries[query_index]
+        self.max_verify = None
+        self.show_results = False
+        self.query_index = query_index
+        self.passed = True
+        self.es_index_name = es_index_name or "es_index"
+
+    def check(self, task_manager):
+        self.state = FINISHED
+        self.set_result(self.result)
+
+    def execute(self, task_manager):
+        try:
+            self.log.info("---------------------------------------------------"
+                          "--------------- Query # %s -----------------------"
+                          "------------------------------------------"
+                          % str(self.query_index+1))
+            try:
+                fts_hits, fts_doc_ids, fts_time = self.run_fts_query(self.fts_query)
+                self.log.info("FTS hits for query: %s is %s (took %sms)" % \
+                          (json.dumps(self.fts_query, ensure_ascii=False),
+                           fts_hits,
+                           float(fts_time)/1000000))
+            except ServerUnavailableException:
+                self.log.error("ERROR: FTS Query timed out (timeout=30s)!")
+                self.passed = False
+            if self.es and self.es_query['query']:
+                es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query)
+                self.log.info("ES hits for query: %s on %s is %s (took %sms)" % \
+                              (json.dumps(self.es_query['query'],  ensure_ascii=False),
+                               self.es_index_name,
+                               es_hits,
+                               es_time))
+                if self.passed:
+                    if int(es_hits) != int(fts_hits):
+                        msg = "FAIL: FTS hits: %s, while ES hits: %s"\
+                              % (fts_hits, es_hits)
+                        self.log.error(msg)
+                    es_but_not_fts = list(set(es_doc_ids) - set(fts_doc_ids))
+                    fts_but_not_es = list(set(fts_doc_ids) - set(es_doc_ids))
+                    if not (es_but_not_fts or fts_but_not_es):
+                        self.log.info("SUCCESS: Docs returned by FTS = docs"
+                                      " returned by ES, doc_ids verified")
+                    else:
+                        if fts_but_not_es:
+                            msg = "FAIL: Following %s doc(s) were not returned" \
+                                  " by ES,but FTS, printing 50: %s" \
+                                  % (len(fts_but_not_es), fts_but_not_es[:50])
+                        else:
+                            msg = "FAIL: Following %s docs were not returned" \
+                                  " by FTS, but ES, printing 50: %s" \
+                                  % (len(es_but_not_fts), es_but_not_fts[:50])
+                        self.log.error(msg)
+                        self.passed = False
+            self.state = CHECKING
+            task_manager.schedule(self)
+        except Exception as e:
+            self.log.error(e)
+            self.set_exception(e)
+            self.state = FINISHED
+
+    def run_fts_query(self, query):
+        return self.fts_index.execute_query(query)
+
+    def run_es_query(self, query):
+        return self.es.search(index_name=self.es_index_name, query=query)
+
 
 # This will be obsolete with the implementation of batch operations in LoadDocumentsTaks
 class BatchedLoadDocumentsTask(GenericLoadingTask):
@@ -2105,7 +2263,6 @@ class N1QLQueryTask(Task):
             self.state = FINISHED
             self.log.error("Unexpected Exception Caught")
             self.set_exception(e)
-
 
 class CreateIndexTask(Task):
     def __init__(self,
@@ -3982,3 +4139,226 @@ class CancelBucketCompactionTask(Task):
                 self.log.error("Bucket Compaction Cancellation not started")
                 self.set_result(False)
                 self.state = FINISHED
+
+class EnterpriseBackupTask(Task):
+
+    def __init__(self, cluster_host, backup_host, directory='', name='', resume=False, purge=False,
+                 no_progress_bar=False, cli_command_location=''):
+        Task.__init__(self, "enterprise_backup_task")
+        self.cluster_host = cluster_host
+        self.backup_host = backup_host
+        self.directory = directory
+        self.name = name
+        self.resume = resume
+        self.purge = purge
+        self.no_progress_bar = no_progress_bar
+        self.cli_command_location = cli_command_location
+        self.output = []
+        self.error = []
+        try:
+            self.remote_client = RemoteMachineShellConnection(self.backup_host)
+        except Exception, e:
+            self.log.error(e)
+            self.state = FINISHED
+            self.set_exception(e)
+
+    def execute(self, task_manager):
+        try:
+            args = "backup --archive {0} --repo {1} --host http://{2}:{3} --username {4} --password {5}". \
+            format(self.directory, self.name, self.cluster_host.ip,
+                   self.cluster_host.port, self.cluster_host.rest_username,
+                   self.cluster_host.rest_password)
+            if self.resume:
+                args += " --resume"
+            if self.purge:
+                args += " --purge"
+            if self.no_progress_bar:
+                args += " --no-progress-bar"
+            command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
+            self.output, self.error = self.remote_client.execute_command(command)
+            self.state = CHECKING
+        except Exception, e:
+            self.log.error("Backup cluster failed for unknown reason")
+            self.set_exception(e)
+            self.state = FINISHED
+            self.set_result(False)
+        task_manager.schedule(self)
+
+    def check(self, task_manager):
+        if self.output:
+            self.state = FINISHED
+            self.set_result(self.output)
+            self.remote_client.log_command_output(self.output, self.error)
+        elif self.error:
+            self.state = FINISHED
+            self.set_result(self.error)
+            self.remote_client.log_command_output(self.output, self.error)
+        else:
+            task_manager.schedule(self, 10)
+
+class EnterpriseRestoreTask(Task):
+
+    def __init__(self, restore_host, backup_host, backups=[], start=0, end=0, directory='', name='',
+                 force_updates=False, no_progress_bar=False, cli_command_location=''):
+        Task.__init__(self, "enterprise_backup_task")
+        self.restore_host = restore_host
+        self.backup_host = backup_host
+        self.directory = directory
+        self.name = name
+        self.force_updates = force_updates
+        self.no_progress_bar = no_progress_bar
+        self.cli_command_location = cli_command_location
+        self.output = []
+        self.error = []
+        self.backups = backups
+        self.start = start
+        self.end = end
+        try:
+            self.remote_client = RemoteMachineShellConnection(self.backup_host)
+        except Exception, e:
+            self.log.error(e)
+            self.state = FINISHED
+            self.set_exception(e)
+
+    def execute(self, task_manager):
+        try:
+            try:
+                backup_start = self.backups[int(self.start) - 1]
+            except IndexError:
+                backup_start = "{0}{1}".format(self.backups[-1], self.start)
+            try:
+                backup_end = self.backups[int(self.end) - 1]
+            except IndexError:
+                backup_end = "{0}{1}".format(self.backups[-1], self.end)
+            args = "restore --archive {0} --repo {1} --host http://{2}:{3} --username {4} --password {5} --start {6} " \
+                   "--end {7}".format(self.directory, self.name, self.restore_host.ip,
+                                                  self.restore_host.port,
+                                                  self.restore_host.rest_username,
+                                                  self.restore_host.rest_password, backup_start,
+                                                  backup_end)
+            if self.no_progress_bar:
+                args += " --no-progress-bar"
+            if self.force_updates:
+                args += " --force-updates"
+            command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
+            self.output, self.error = self.remote_client.execute_command(command)
+            self.state = CHECKING
+        except Exception, e:
+            self.log.error("Restore failed for unknown reason")
+            self.set_exception(e)
+            self.state = FINISHED
+            self.set_result(False)
+        task_manager.schedule(self)
+
+    def check(self, task_manager):
+        if self.output:
+            self.state = FINISHED
+            self.set_result(self.output)
+            self.remote_client.log_command_output(self.output, self.error)
+        elif self.error:
+            self.state = FINISHED
+            self.set_result(self.error)
+            self.remote_client.log_command_output(self.output, self.error)
+        else:
+            task_manager.schedule(self, 10)
+
+class EnterpriseMergeTask(Task):
+
+    def __init__(self, backup_host, backups=[], start=0, end=0, directory='', name='',
+                 cli_command_location=''):
+        Task.__init__(self, "enterprise_backup_task")
+        self.backup_host = backup_host
+        self.directory = directory
+        self.name = name
+        self.cli_command_location = cli_command_location
+        self.output = []
+        self.error = []
+        self.backups = backups
+        self.start = start
+        self.end = end
+        try:
+            self.remote_client = RemoteMachineShellConnection(self.backup_host)
+        except Exception, e:
+            self.log.error(e)
+            self.state = FINISHED
+            self.set_exception(e)
+
+    def execute(self, task_manager):
+        try:
+            try:
+                backup_start = self.backups[int(self.start) - 1]
+            except IndexError:
+                backup_start = "{0}{1}".format(self.backups[-1], self.start)
+            try:
+                backup_end = self.backups[int(self.end) - 1]
+            except IndexError:
+                backup_end = "{0}{1}".format(self.backups[-1], self.end)
+            args = "merge --archive {0} --repo {1} --start {2} --end {3}".format(self.directory, self.name,
+                                                                             backup_start, backup_end)
+            command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
+            self.output, self.error = self.remote_client.execute_command(command)
+            self.state = CHECKING
+        except Exception, e:
+            self.log.error("Merge failed for unknown reason")
+            self.set_exception(e)
+            self.state = FINISHED
+            self.set_result(False)
+        task_manager.schedule(self)
+
+    def check(self, task_manager):
+        if self.output:
+            self.state = FINISHED
+            self.set_result(self.output)
+            self.remote_client.log_command_output(self.output, self.error)
+        elif self.error:
+            self.state = FINISHED
+            self.set_result(self.error)
+            self.remote_client.log_command_output(self.output, self.error)
+        else:
+            task_manager.schedule(self, 10)
+
+class EnterpriseCompactTask(Task):
+
+    def __init__(self, backup_host, backup_to_compact, backups=[], directory='', name='',
+                 cli_command_location=''):
+        Task.__init__(self, "enterprise_backup_task")
+        self.backup_host = backup_host
+        self.backup_to_compact = backup_to_compact
+        self.directory = directory
+        self.name = name
+        self.cli_command_location = cli_command_location
+        self.output = []
+        self.error = []
+        self.backups = backups
+        try:
+            self.remote_client = RemoteMachineShellConnection(self.backup_host)
+        except Exception, e:
+            self.log.error(e)
+            self.state = FINISHED
+            self.set_exception(e)
+
+    def execute(self, task_manager):
+        try:
+            args = "compact --archive {0} --repo {1} --backup {2}".format(self.directory, self.name,
+                                                                      self.backups[self.backup_to_compact])
+            command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
+            self.output, self.error = self.remote_client.execute_command(command)
+            self.state = CHECKING
+        except Exception, e:
+            self.log.error("Compact failed for unknown reason")
+            self.set_exception(e)
+            self.state = FINISHED
+            self.set_result(False)
+        task_manager.schedule(self)
+
+    def check(self, task_manager):
+        if self.output:
+            self.state = FINISHED
+            self.set_result(self.output)
+            self.remote_client.log_command_output(self.output, self.error)
+        elif self.error:
+            self.state = FINISHED
+            self.set_result(self.error)
+            self.remote_client.log_command_output(self.output, self.error)
+        else:
+            task_manager.schedule(self, 10)

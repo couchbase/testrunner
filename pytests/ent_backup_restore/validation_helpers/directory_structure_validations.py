@@ -11,6 +11,10 @@ class DirectoryStructureValidations(BackupRestoreValidationBase):
         self.backupset = backupset
 
     def get_directory_structure(self):
+        """
+        Gets the actual directory structure after backing up a cluster
+        :return: directory map
+        """
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         backup_directory = "{0}/{1}".format(self.backupset.directory, self.backupset.name)
         command = "ls -lR {0}".format(backup_directory)
@@ -48,9 +52,17 @@ class DirectoryStructureValidations(BackupRestoreValidationBase):
         return directory_structure
 
     def generate_directory_structure(self):
+        """
+        Generates the expected directory structure for the backup
+        :return: directory map
+        """
         json_helper = JSONGenerator("directory_structure.json", self.backupset.__dict__)
         json_helper.generate_json()
         backupset = json_helper.object[self.backupset.name]
+        curr_backup_len = len(backupset) - 1
+        if curr_backup_len != self.backupset.number_of_backups:
+            for i in range(curr_backup_len, self.backupset.number_of_backups):
+                backupset["backups" + str(i)] = backupset["backups"]
         for backup in backupset:
             b = backupset[backup]
             if not isinstance(b, dict):
@@ -75,6 +87,10 @@ class DirectoryStructureValidations(BackupRestoreValidationBase):
         return json_helper.object
 
     def validate_directory_structure(self):
+        """
+        Validates the directory structure of a backup
+        :return:  status and message
+        """
         expected_directory_structure = self.generate_directory_structure()
         actual_directory_structure = self.get_directory_structure()
         is_equal, not_equal, extra, not_present = self.compare_dictionary(expected_directory_structure,

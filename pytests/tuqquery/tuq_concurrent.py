@@ -28,8 +28,8 @@ class ConcurrentTests(QueryTests):
             super(ConcurrentTests, self).tearDown()
         except:
             pass
-        ClusterOperationHelper.cleanup_cluster(self.servers)
-        self.sleep(10)
+        #ClusterOperationHelper.cleanup_cluster(self.servers)
+        #self.sleep(10)
 
     def suite_tearDown(self):
         super(ConcurrentTests, self).suite_tearDown()
@@ -95,6 +95,8 @@ class ConcurrentTests(QueryTests):
                                                                                ind_name,
                                                                                fields.index(attr),
                                                                                bucket.name, attr, self.index_type)
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, '%s_%s_%s' % (index_name_prefix, ind_name,
                                                         fields.index(attr)))

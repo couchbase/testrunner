@@ -26,7 +26,7 @@ AND = "and"
 OR = "or"
 class QueryDefinition(object):
 	def __init__(self, name = "default", index_name = "Random", index_fields = [], index_creation_template = INDEX_CREATION_TEMPLATE,
-		index_drop_template = INDEX_DROP_TEMPLATE, query_template = "", groups = [], index_where_clause = None):
+		index_drop_template = INDEX_DROP_TEMPLATE, query_template = "", groups = [], index_where_clause = None, gsi_type = None):
 		self.name = str(uuid.uuid4()).replace("-","")
 		self.index_name = index_name
 		self.index_fields = index_fields
@@ -37,15 +37,17 @@ class QueryDefinition(object):
 		self.groups = groups
 
 	def generate_index_create_query(self, bucket = "default", use_gsi_for_secondary = True,
-	        deploy_node_info = None, defer_build = None, index_where_clause = None ):
+	        deploy_node_info = None, defer_build = None, index_where_clause = None, gsi_type=None):
+		deployment_plan = {}
 		query = "CREATE INDEX {0} ON {1}({2})".format(self.index_name,bucket, ",".join(self.index_fields))
 		if index_where_clause:
 			query += " WHERE "+index_where_clause
 		if use_gsi_for_secondary:
 			query += " USING GSI "
-                if not use_gsi_for_secondary:
-                        query += " USING VIEW "
-                deployment_plan = {}
+			if gsi_type == "memdb":
+				deployment_plan["index_type"] = "memdb"
+		if not use_gsi_for_secondary:
+			query += " USING VIEW "
 		if deploy_node_info  != None:
 			deployment_plan["nodes"] = deploy_node_info
 		if defer_build != None:

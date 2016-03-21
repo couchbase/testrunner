@@ -5,6 +5,7 @@
 import getopt
 import copy
 import logging
+import os
 import sys
 from threading import Thread
 from datetime import datetime
@@ -52,6 +53,7 @@ Available keys:
  erlang_threads=         Number of erlang threads (default=16:16 for +S type)
  upr=True                Enable UPR replication
  xdcr_upr=               Enable UPR for XDCR (temporary param until XDCR with UPR is stable), values: None | True | False
+ fts_query_limit=1000000 Set a limit for the max results to be returned by fts for any query
 
 
 Examples:
@@ -63,6 +65,10 @@ Examples:
 
  # to run with build with require openssl version 1.0.0
  install.py -i /tmp/ubuntu.ini -p product=cb,version=2.2.0-792,openssl=1
+
+ # to install latest release of couchbase server via repo (apt-get and yum)
+  install.py -i /tmp/ubuntu.ini -p product=cb,linux_repo=true
+
 """
     sys.exit(err)
 
@@ -172,6 +178,11 @@ class Installer(object):
             if "url" in params and params["url"] != "":
                 direct_build_url = params["url"]
         if ok:
+            if "linux_repo" in params and params["linux_repo"].lower() == "true":
+                linux_repo = True
+            else:
+                linux_repo = False
+        if ok:
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
             cb_alias = ["couchbase", "couchbase-server", "cb"]
             css_alias = ["couchbase-single", "couchbase-single-server", "css"]
@@ -202,14 +213,14 @@ class Installer(object):
         remote_client = RemoteMachineShellConnection(server)
         info = remote_client.extract_remote_info()
         remote_client.disconnect()
-        if ok:
+        if ok and not linux_repo:
             timeout = 300
             if "timeout" in params:
                 timeout = int(params["timeout"])
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
             cb_releases_version = ["1.8.1", "2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0",
                                     "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1", "3.0.2",
-                                    "3.0.3", "3.1.0"]
+                                    "3.0.3", "3.1.0", "3.1.1", "3.1.2", "3.1.3"]
             build_repo = MV_LATESTBUILD_REPO
             if toy is not "":
                 build_repo = CB_REPO
@@ -226,7 +237,7 @@ class Installer(object):
                                                                      build_version=version,
                                                                      product='membase-server-enterprise')
                 elif version[:5] in cb_releases_version:
-                    build = BuildQuery().find_membase_release_build(
+                    build = BuildQuery().find_couchbase_release_build(
                                             deliverable_type=info.deliverable_type,
                                             os_architecture=info.architecture_type,
                                             build_version=version,
@@ -271,8 +282,9 @@ class Installer(object):
                     else:
                         sys.exit("ERROR: URL is not good. Check URL again")
             _errors.append(errors["BUILD-NOT-FOUND"])
-        msg = "unable to find a build for product {0} version {1} for package_type {2}"
-        raise Exception(msg.format(names, version, info.deliverable_type))
+        if not linux_repo:
+            msg = "unable to find a build for product {0} version {1} for package_type {2}"
+            raise Exception(msg.format(names, version, info.deliverable_type))
 
     def is_socket_active(self, host, port, timeout=300):
         """ Check if remote socket is open and active
@@ -482,8 +494,10 @@ class CouchbaseServerInstaller(Installer):
             sys.exit("unable to initialize couchbase node")
 
     def install(self, params, queue=None):
+        start_server = True
         try:
-            build = self.build_url(params)
+            if "linux_repo" not in params:
+                build = self.build_url(params)
         except Exception, e:
             if queue:
                 queue.put(False)
@@ -516,33 +530,64 @@ class CouchbaseServerInstaller(Installer):
         else:
             xdcr_upr = eval(params["xdcr_upr"].capitalize())
 
-        if type == "windows":
-            remote_client.download_binary_in_win(build.url, params["version"])
-            success = remote_client.install_server_win(build, \
-                        params["version"].replace("-rel", ""), vbuckets=vbuckets)
+        if "fts_query_limit" in params:
+            fts_query_limit = params["fts_query_limit"]
+            start_server = False
         else:
-            downloaded = remote_client.download_build(build)
-            if not downloaded:
-                log.error('server {1} unable to download binaries : {0}' \
+            fts_query_limit = None
+
+        if "linux_repo" in params and params["linux_repo"].lower() == "true":
+            linux_repo = True
+        else:
+            linux_repo = False
+
+        if not linux_repo:
+            if type == "windows":
+                remote_client.download_binary_in_win(build.url, params["version"])
+                success = remote_client.install_server_win(build, \
+                        params["version"].replace("-rel", ""), vbuckets=vbuckets)
+            else:
+                downloaded = remote_client.download_build(build)
+                if not downloaded:
+                    log.error('server {1} unable to download binaries : {0}' \
                           .format(build.url, params["server"].ip))
-                return False
-            # TODO: need separate methods in remote_util for couchbase and membase install
-            path = server.data_path or '/tmp'
+                    return False
+                # TODO: need separate methods in remote_util for couchbase and membase install
+                path = server.data_path or '/tmp'
+                try:
+                    success = remote_client.install_server(build, path=path,
+                                         startserver=start_server,\
+                                         vbuckets=vbuckets, swappiness=swappiness,\
+                                        openssl=openssl, upr=upr, xdcr_upr=xdcr_upr,
+                                        fts_query_limit=fts_query_limit)
+                    log.info('wait 5 seconds for membase server to start')
+                    time.sleep(5)
+                    if "rest_vbuckets" in params:
+                        rest_vbuckets = int(params["rest_vbuckets"])
+                        ClusterOperationHelper.set_vbuckets(server, rest_vbuckets)
+                except BaseException, e:
+                    success = False
+                    log.error("installation failed: {0}".format(e))
+            remote_client.disconnect()
+            if queue:
+                queue.put(success)
+            return success
+        elif linux_repo:
+            cb_edition = ""
+            if "type" in params and params["type"] == "community":
+                cb_edition = "community"
             try:
-                success = remote_client.install_server(build, path=path, vbuckets=vbuckets, swappiness=swappiness,
-                                                       openssl=openssl, upr=upr, xdcr_upr=xdcr_upr)
+                success = remote_client.install_server_via_repo(info.deliverable_type,\
+                                                             cb_edition, remote_client)
                 log.info('wait 5 seconds for membase server to start')
                 time.sleep(5)
-                if "rest_vbuckets" in params:
-                    rest_vbuckets = int(params["rest_vbuckets"])
-                    ClusterOperationHelper.set_vbuckets(server, rest_vbuckets)
             except BaseException, e:
                 success = False
                 log.error("installation failed: {0}".format(e))
-        remote_client.disconnect()
-        if queue:
-            queue.put(success)
-        return success
+            remote_client.disconnect()
+            if queue:
+                queue.put(success)
+            return success
 
 
 class MongoInstaller(Installer):
@@ -655,21 +700,29 @@ class SDKInstaller(Installer):
     def initialize(self, params):
         log.info('There is no initialize phase for sdk installation')
 
+    def uninstall(self):
+        pass
+
     def install(self, params):
         remote_client = RemoteMachineShellConnection(params["server"])
         info = remote_client.extract_remote_info()
         os = info.type.lower()
         type = info.deliverable_type.lower()
         version = info.distribution_version.lower()
-        sdk_url = "git+git://github.com/couchbase/couchbase-python-client.git@2.0.0-beta2"
-        if os == "linux":
-            if type == "rpm":
-                repo_file = "/etc/yum.repos.d/couchbase.repo"
-                baseurl = ""
-                if (version.find("centos") != -1 and version.find("6.2") != -1):
-                    baseurl = "http://packages.couchbase.com/rpm/6.2/x86-64"
-                elif (version.find("centos") != -1 and version.find("7") != -1):
-                    baseurl = "http://packages.couchbase.com/rpm/7/x86_64"
+        if params['subdoc'] == 'True':
+            sdk_url = 'git+git://github.com/mnunberg/couchbase-python-client.git@subdoc'
+        else:
+            sdk_url = 'git+git://github.com/couchbase/couchbase-python-client.git'
+        if os == 'linux':
+            if (type == 'rpm' and params['subdoc'] == 'False'):
+                repo_file = '/etc/yum.repos.d/couchbase.repo'
+                baseurl = ''
+                if (version.find('centos') != -1 and version.find('6.2') != -1):
+                    baseurl = 'http://packages.couchbase.com/rpm/6.2/x86-64'
+                elif (version.find('centos') != -1 and version.find('6.4') != -1):
+                    baseurl = 'http://packages.couchbase.com/rpm/6.4/x86-64'
+                elif (version.find('centos') != -1 and version.find('7') != -1):
+                    baseurl = 'http://packages.couchbase.com/rpm/7/x86_64'
                 else:
                     log.info("os version {0} not supported".format(version))
                     exit(1)
@@ -677,13 +730,56 @@ class SDKInstaller(Installer):
                 remote_client.execute_command("touch {0}".format(repo_file))
                 remote_client.execute_command("echo [couchbase] >> {0}".format(repo_file))
                 remote_client.execute_command("echo enabled=1 >> {0}".format(repo_file))
-                remote_client.execute_command("echo name = Couchbase package repository >> {0}".format(repo_file))
-                remote_client.execute_command("baseurl = {0} >> {1}".format(baseurl, repo_file))
-                remote_client.execute_command("yum -y install libcouchbase2-libevent libcouchbase-devel libcouchbase2-bin")
-                remote_client.execute_command("yum -y install pip")
-                remote_client.execute_command("pip uninstall couchbase")
-                remote_client.execute_command("pip install {0}".format(sdk_url))
-            elif type == "deb":
+                remote_client.execute_command("echo name = Couchbase package repository \
+                        >> {0}".format(repo_file))
+                remote_client.execute_command("echo baseurl = {0} >> \
+                        {1}".format(baseurl, repo_file))
+                remote_client.execute_command("yum -n update")
+                remote_client.execute_command("yum -y install \
+                        libcouchbase2-libevent libcouchbase-devel libcouchbase2-bin")
+                remote_client.execute_command("yum -y install python-pip")
+                remote_client.execute_command("pip -y uninstall couchbase")
+                remote_client.execute_command("pip -y install {0}".format(sdk_url))
+
+            elif (type == 'rpm' and params['subdoc'] == 'True'):
+                package_url = ''
+                lcb_core = ''
+                lcb_libevent  = ''
+                lcb_devel = ''
+                lcb_bin = ''
+
+                if (version.find('centos') != -1 and version.find('6') != -1):
+                    package_url = 'http://172.23.105.153/228/DIST/el6/'
+                    lcb_core =  'libcouchbase2-core-2.5.4-11.r10ga37efd8.SP.el6.x86_64.rpm'
+                    lcb_libevent = 'libcouchbase2-libevent-2.5.4-11.r10ga37efd8.SP.el6.x86_64.rpm'
+                    lcb_devel = 'libcouchbase-devel-2.5.4-11.r10ga37efd8.SP.el6.x86_64.rpm'
+                    lcb_bin = 'libcouchbase2-bin-2.5.4-11.r10ga37efd8.SP.el6.x86_64.rpm'
+                    remote_client.execute_command('rpm -ivh http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm')
+
+                elif (version.find('centos') != -1 and version.find('7') != -1):
+                    package_url = 'http://172.23.105.153/228/DIST/el7/'
+                    lcb_core = 'libcouchbase2-core-2.5.4-11.r10ga37efd8.SP.el7.centos.x86_64.rpm'
+                    lcb_libevent = 'libcouchbase2-libevent-2.5.4-11.r10ga37efd8.SP.el7.centos.x86_64.rpm'
+                    lcb_devel = 'libcouchbase-devel-2.5.4-11.r10ga37efd8.SP.el7.centos.x86_64.rpm'
+                    lcb_bin = 'libcouchbase2-bin-2.5.4-11.r10ga37efd8.SP.el7.centos.x86_64.rpm'
+
+                    remote_client.execute_command('yum -y  install epel-release')
+
+                remote_client.execute_command('yum -y remove "libcouchbase*"')
+                remote_client.execute_command('rm -rf {0} {1} {2} {3}'.format(lcb_core,
+                    lcb_libevent, lcb_devel, lcb_bin))
+                remote_client.execute_command('wget {0}{1}'.format(package_url, lcb_core))
+                remote_client.execute_command('wget {0}{1}'.format(package_url,
+                    lcb_libevent))
+                remote_client.execute_command('wget {0}{1}'.format(package_url,lcb_devel))
+                remote_client.execute_command('wget {0}{1}'.format(package_url,lcb_bin))
+                remote_client.execute_command('rpm -ivh {0} {1} {2}'.format(lcb_core,
+                    lcb_libevent,lcb_devel,lcb_bin))
+                remote_client.execute_command('yum -y install python-pip')
+                remote_client.execute_command('pip -y uninstall couchbase')
+                remote_client.execute_command('pip -y install {0}'.format(sdk_url))
+
+            elif (type == "deb" and params['subdoc'] == 'False'):
                 repo_file = "/etc/sources.list.d/couchbase.list"
                 entry = ""
                 if (version.find("ubuntu") != -1 and version.find("12.04") != -1):
@@ -698,19 +794,22 @@ class SDKInstaller(Installer):
                 remote_client.execute_command("rm -rf {0}".format(repo_file))
                 remote_client.execute_command("touch {0}".format(repo_file))
                 remote_client.execute_command("deb {0} >> {1}".format(entry, repo_file))
-                remote_client.execute_command("apt-get -y install libcouchbase2-libevent libcouchbase-devel libcouchbase2-bin")
+                remote_client.execute_command("apt-get update")
+                remote_client.execute_command("apt-get -y install libcouchbase2-libevent \
+                        libcouchbase-devel libcouchbase2-bin")
                 remote_client.execute_command("apt-get -y install pip")
-                remote_client.execute_command("pip uninstall couchbase")
-                remote_client.execute_command("pip install {0}".format(sdk_url))
+                remote_client.execute_command("pip -y uninstall couchbase")
+                remote_client.execute_command("pip -y install {0}".format(sdk_url))
         if os == "mac":
-            remote_client.execute_command("brew install libcouchbase; brew link libcouchbase")
+            remote_client.execute_command("brew install libcouchbase;\
+                    brew link libcouchbase")
             remote_client.execute_command("brew install pip; brew link pip")
             remote_client.execute_command("pip install {0}".format(sdk_url))
         if os == "windows":
             log.info('Currently not supported')
-
         remote_client.disconnect()
         return True
+
 
 class ESInstaller(object):
     def __init__(self):
@@ -718,7 +817,7 @@ class ESInstaller(object):
        pass
 
     def initialize(self, params):
-        self.remote_client.execute_command("~/elasticsearch/bin/elasticsearch start > /var/log/es.log 2>&1 &")
+        self.remote_client.execute_command("~/elasticsearch/bin/elasticsearch > es.log 2>&1 &")
 
     def install(self, params):
         self.remote_client = RemoteMachineShellConnection(params["server"])
@@ -729,8 +828,10 @@ class ESInstaller(object):
         self.remote_client.execute_command("wget {0}".format(download_url))
         self.remote_client.execute_command("tar xvzf elasticsearch-{0}.tar.gz; mv elasticsearch-{0} elasticsearch".format(params["version"]))
         self.remote_client.execute_command("echo couchbase.password: password >> ~/elasticsearch/config/elasticsearch.yml")
-        self.remote_client.execute_command("~/elasticsearch/bin/plugin -install transport-couchbase -url {0}".format(params["plugin-url"]))
-        self.remote_client.execute_command("~/elasticsearch/bin/plugin -install mobz/elasticsearch-head")
+        self.remote_client.execute_command("echo network.bind_host: _eth0:ipv4_ >> ~/elasticsearch/config/elasticsearch.yml")
+        self.remote_client.execute_command("echo couchbase.port: 9091 >> ~/elasticsearch/config/elasticsearch.yml")
+        self.remote_client.execute_command("~/elasticsearch/bin/plugin -u {0} -i transport-couchbase".format(params["plugin-url"]))
+        self.remote_client.execute_command("~/elasticsearch/bin/plugin -u https://github.com/mobz/elasticsearch-head/archive/master.zip -i mobz/elasticsearch-head")
         return True
 
     def __exit__(self):
@@ -820,6 +921,17 @@ class InstallerJob(object):
         for t in initializer_threads:
             t.join()
             print "thread {0} finished".format(t.name)
+        """ remove any capture files left after install windows """
+        remote_client = RemoteMachineShellConnection(servers[0])
+        type = remote_client.extract_remote_info().distribution_type
+        remote_client.disconnect()
+        if type.lower() == 'windows':
+            for server in servers:
+                shell = RemoteMachineShellConnection(server)
+                shell.execute_command("rm -f /cygdrive/c/automation/*_172.23*")
+                shell.execute_command("rm -f /cygdrive/c/automation/*_10.17*")
+                os.system("rm -f resources/windows/automation/*_172.23*")
+                os.system("rm -f resources/windows/automation/*_10.17*")
         return success
 
 

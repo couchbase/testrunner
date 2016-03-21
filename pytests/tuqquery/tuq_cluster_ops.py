@@ -15,7 +15,7 @@ class QueriesOpsTests(QueryTests):
         self.query_params = {'scan_consistency' : 'statement_plus'}
         if self.nodes_init > 1 and not self._testMethodName == 'suite_setUp':
             self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
-        self.indx_type = self.input.param("indx_type", 'VIEW')
+        self.indx_type = self.input.param("indx_type", 'GSI')
 
     def suite_setUp(self):
         super(QueriesOpsTests, self).suite_setUp()
@@ -303,7 +303,10 @@ class QueriesOpsTests(QueryTests):
         index_field = self.input.param("index_field", '')
         self.assertTrue(index_field, "Index field should be provided")
         for bucket in self.bucket:
-            self.run_cbq_query(query="CREATE INDEX %s ON %s(%s) USING GSI" % (index_name, bucket.name, ','.join(index_field.split(';'))))
+            query = "CREATE INDEX %s ON %s(%s) USING GSI" % (index_name, bucket.name, ','.join(index_field.split(';')))
+            # if self.gsi_type:
+            #     query += "  WITH {'index_type': 'memdb'}"
+            self.run_cbq_query(query=query)
         try:
             shell = RemoteMachineShellConnection(self.master)
             fn = getattr(self, method_name)
@@ -530,8 +533,11 @@ class QueriesOpsTests(QueryTests):
         self.assertTrue(self.buckets, 'There are no buckets! check your parameters for run')
         for bucket in self.buckets:
             index_name = 'idx_%s_%s_%s' % (bucket.name, index_field, str(uuid.uuid4())[:4])
-            self.run_cbq_query(query="CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name,
-                                                                      ','.join(index_field.split(';')), self.indx_type))
+            query = "CREATE INDEX %s ON %s(%s) USING %s" % (index_name, bucket.name,
+                                                                      ','.join(index_field.split(';')), self.indx_type)
+            # if self.gsi_type:
+            #     query += " WITH {'index_type': 'memdb'}"
+            self.run_cbq_query(query=query)
             if self.indx_type.lower() == 'gsi':
                 self._wait_for_index_online(bucket, index_name)
         indexes.append(index_name)

@@ -39,13 +39,13 @@ class auditTest(BaseTestCase):
 	    self.log.info ("Enabling Audit ")
             auditTemp.setAuditEnable('true')
             self.sleep(30)
-
+        rest = RestConnection(self.master)
+        self.setupLDAPSettings(rest)
 
     def tearDown(self):
         super(auditTest, self).tearDown()
 
     def getLocalIPAddress(self):
-        '''
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
@@ -54,6 +54,17 @@ class auditTest(BaseTestCase):
         if '1' not in ipAddress:
             status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
+        '''
+
+    def setupLDAPSettings (self,rest):
+        api = rest.baseUrl + 'settings/saslauthdAuth'
+        params = urllib.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
+        status, content, header = rest._http_request(api, 'POST', params)
+        return status, content, header
+
+    def set_user_role(self,rest,username,user_role='admin'):
+        payload = "name=" + username + "&roles=" + user_role
+        status, content, header =  rest._set_user_roles(rest,user_name=username,payload=payload)
 
     #Wrapper around auditmain
     def checkConfig(self, eventID, host, expectedResults):
@@ -74,7 +85,7 @@ class auditTest(BaseTestCase):
                                'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":source, \
-                               "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'' }
+                               "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'','time_synchronization': 'disabled' }
             rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly')
 
@@ -147,7 +158,7 @@ class auditTest(BaseTestCase):
                 expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
                                'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
             else:
-                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + servs_inout[0].ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
                                'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
 
 
@@ -160,7 +171,7 @@ class auditTest(BaseTestCase):
                 expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':[], 'source':'ns_server', \
                                 'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
             else:
-                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + servs_inout[0].ip], 'ejected_nodes':[], 'source':'ns_server', \
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':[], 'source':'ns_server', \
                                 'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
 
         if (ops in ['rebalanceOut']):
@@ -172,7 +183,7 @@ class auditTest(BaseTestCase):
                 expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
                                'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
             else:
-                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + servs_inout[0].ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
                                'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
 
         if (ops in ['failover']):
@@ -199,7 +210,7 @@ class auditTest(BaseTestCase):
         rest = RestConnection(self.master)
 
         if (ops == 'memoryQuota'):
-            expectedResults = {'memory_quota':512, 'source':source, 'user':user, 'ip':self.ipAddress, 'port':12345, 'cluster_name':'', 'index_memory_quota':256}
+            expectedResults = {'memory_quota':512, 'source':source, 'user':user, 'ip':self.ipAddress, 'port':12345, 'cluster_name':'', 'index_memory_quota':256,'fts_memory_quota': 302}
             rest.init_cluster_memoryQuota(expectedResults['user'], password, expectedResults['memory_quota'])
 
         elif (ops == 'loadSample'):
@@ -383,6 +394,8 @@ class auditTest(BaseTestCase):
         source = 'ns_server'
         rest = RestConnection(self.master)
         user = self.master.rest_username
+        roles = []
+        roles.append(role)
 
         if (ops in ['loginRoAdmin', 'deleteuser', 'passwordChange']):
                 rest.create_ro_user(username, password)
@@ -390,7 +403,7 @@ class auditTest(BaseTestCase):
         if (ops in ['loginAdmin', 'loginRoAdmin']):
             status, content = rest.validateLogin(username, password, True, getContent=True)
             sessionID = (((status['set-cookie']).split("="))[1]).split(";")[0]
-            expectedResults = {'source':source, 'user':username, 'password':password, 'role':role, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
+            expectedResults = {'source':source, 'user':username, 'password':password, 'roles':roles, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
 
         elif (ops in ['deleteuser']):
             expectedResults = {"role":role, "real_userid:source":source, 'real_userid:user':user,
@@ -405,16 +418,16 @@ class auditTest(BaseTestCase):
 
         elif (ops in ['invalidlogin']):
             status, content = rest.validateLogin(username, password, True, getContent=True)
-            expectedResults = {'real_userid':username, 'password':password, 'role':role,
-                               'ip':self.ipAddress, "port":123456}
+            expectedResults = {'real_userid':username, 'password':password,
+                               'ip':self.ipAddress, "port":123456,'source': 'rejected','user':username}
 
         #User must be pre-created in LDAP in advance
         elif (ops in ['ldapLogin']):
             rest = RestConnection(self.master)
-            rest.ldapUserRestOperation(True, [[username]], exclude=None)
+            self.set_user_role(rest,username)
             status, content = rest.validateLogin(username, password, True, getContent=True)
             sessionID = (((status['set-cookie']).split("="))[1]).split(";")[0]
-            expectedResults = {'source':'saslauthd', 'user':username, 'password':password, 'role':role, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
+            expectedResults = {'source':'saslauthd', 'user':username, 'password':password, 'roles':roles, 'ip':self.ipAddress, "port":123456, 'sessionid':sessionID}
 
         self.checkConfig(self.eventID, self.master, expectedResults)
 

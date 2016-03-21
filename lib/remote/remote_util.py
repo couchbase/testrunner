@@ -1,9 +1,15 @@
+from ast import literal_eval
 import os
+import re
 import sys
 import urllib
 import uuid
 import time
 import logging
+import stat
+import unittest
+from datetime import datetime
+import logger
 from subprocess import Popen, PIPE
 
 import logger
@@ -23,7 +29,9 @@ from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
-from membase.api.rest_client import RestConnection
+from testconstants import CB_RELEASE_APT_GET_REPO
+from testconstants import CB_RELEASE_YUM_REPO
+from membase.api.rest_client import RestConnection, RestHelper
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -300,13 +308,23 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         return o, r
 
+    def kill_cbft_process(self):
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            o, r = self.execute_command("taskkill /F /T /IM cbft.exe*")
+            self.log_command_output(o, r)
+        else:
+            o, r = self.execute_command("killall -9 cbft")
+            self.log_command_output(o, r)
+        return o, r
+
     def kill_memcached(self):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("taskkill /F /T /IM memcached*")
             self.log_command_output(o, r)
         else:
-            o, r = self.execute_command("killall -9 memcached")
+            o, r = self.execute_command("kill $(ps aux | grep 'memcached' | awk '{print $2}')")
             self.log_command_output(o, r)
         return o, r
 
@@ -646,6 +664,36 @@ class RemoteMachineShellConnection:
                 return False
         return True
 
+    def rmtree(self, sftp, remote_path, level=0):
+        for f in sftp.listdir_attr(remote_path):
+            rpath = remote_path + "/" + f.filename
+            if stat.S_ISDIR(f.st_mode):
+                self.rmtree(sftp, rpath, level=(level + 1))
+            else:
+                rpath = remote_path + "/" + f.filename
+                print('removing %s' % (rpath))
+                sftp.remove(rpath)
+        print('removing %s' % (remote_path))
+        sftp.rmdir(remote_path)
+
+    def remove_directory_recursive(self, remote_path):
+        if self.remote:
+            sftp = self._ssh_client.open_sftp()
+            try:
+                log.info("removing {0} directory...".format(remote_path))
+                self.rmtree(sftp, remote_path)
+            except IOError:
+                return False
+            finally:
+                sftp.close()
+        else:
+            try:
+                p = Popen("rm -rf {0}".format(remote_path) , shell=True, stdout=PIPE, stderr=PIPE)
+                p.communicate()
+            except IOError:
+                return False
+        return True
+
     def list_files(self, remote_path):
         if self.remote:
             sftp = self._ssh_client.open_sftp()
@@ -965,6 +1013,7 @@ class RemoteMachineShellConnection:
     def modify_bat_file(self, remote_path, file_name, name, version, task):
         found = self.find_file(remote_path, file_name)
         sftp = self._ssh_client.open_sftp()
+        capture_iss_file = ""
 
         product_version = ""
         if version[:5] in MEMBASE_VERSIONS:
@@ -974,7 +1023,8 @@ class RemoteMachineShellConnection:
             product_version = version[:5]
             name = "cb"
         else:
-            log.error('Windows automation does not support {0} version yet'.format(version))
+            log.error('Windows automation does not support {0} version yet'\
+                                                               .format(version))
             sys.exit()
 
         if "upgrade" not in task:
@@ -984,17 +1034,20 @@ class RemoteMachineShellConnection:
             name = name.strip()
             version = version.strip()
             if task == "upgrade":
-                content = 'c:\\tmp\{3}.exe /s -f1c:\\automation\{0}_{1}_{2}.iss'.format(name,
-                                                                         product_version, task, version)
+                content = 'c:\\tmp\{3}.exe /s -f1c:\\automation\{0}_{1}_{2}.iss' \
+                                .format(name, product_version, task, version)
             else:
                 content = 'c:\\tmp\{0}.exe /s -f1c:\\automation\{3}_{2}_{1}.iss' \
                              .format(version, task, self.ip, uuid_name)
             log.info("create {0} task with content:{1}".format(task, content))
             f.write(content)
             log.info('Successful write to {0}'.format(found))
+            if "upgrade" not in task:
+                capture_iss_file = '{0}_{1}_{2}.iss'.format(uuid_name, self.ip, task)
         except IOError:
             log.error('Can not write build name file to bat file {0}'.format(found))
         sftp.close()
+        return capture_iss_file
 
     def set_vbuckets_win(self, vbuckets):
         bin_path = WIN_COUCHBASE_BIN_PATH
@@ -1246,7 +1299,8 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
 
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
-                       swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None):
+                       swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None,
+                       fts_query_limit=None):
         server_type = None
         success = True
         track_words = ("warning", "error", "fail")
@@ -1340,6 +1394,13 @@ class RemoteMachineShellConnection:
                     self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export XDCR_USE_OLD_PATH={1}/'\
                     /opt/{0}/etc/{0}_init.d".format(server_type, "true"))
                 success &= self.log_command_output(output, error, track_words)
+            if fts_query_limit:
+                output, error = \
+                    self.execute_command("sed -i 's/export PATH/export PATH\\n"
+                        "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1}/'\
+                    /opt/{0}/bin/{0}-server".format(server_type, int(fts_query_limit)))
+                success &= self.log_command_output(output, error, track_words)
+                startserver = True
 
             # skip output: [WARNING] couchbase-server is already started
             # dirname error skipping for CentOS-6.6 (MB-12536)
@@ -1395,11 +1456,12 @@ class RemoteMachineShellConnection:
             task = "install"
             bat_file = "install.bat"
             dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
+            capture_iss_file = ""
             # build = self.build_url(params)
             self.create_multiple_dir(dir_paths)
             self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
             #self.create_windows_capture_file(task, abbr_product, version)
-            self.modify_bat_file('/cygdrive/c/automation', bat_file, abbr_product, version, task)
+            capture_iss_file = self.modify_bat_file('/cygdrive/c/automation', bat_file, abbr_product, version, task)
             self.stop_schedule_tasks()
             self.remove_win_backup_dir()
             self.remove_win_collect_tmp()
@@ -1424,9 +1486,6 @@ class RemoteMachineShellConnection:
             if not ended:
                 sys.exit("*****  Node %s failed to install  *****" % (self.ip))
             self.sleep(10, "wait for server to start up completely")
-            output, error = self.execute_command("rm -f \
-                       /cygdrive/c/automation/*_{0}_install.iss".format(self.ip))
-            self.log_command_output(output, error)
             output, error = self.execute_command("rm -f *-diag.zip")
             self.log_command_output(output, error, track_words)
             if vbuckets:
@@ -1436,8 +1495,114 @@ class RemoteMachineShellConnection:
                 self.execute_command("rm -rf \
                 /cygdrive/c/Jenkins/workspace/sherlock-windows/couchbase/install/etc/security")
                 """ end remove code for bug MB-13046 """
+            if capture_iss_file:
+                    log.info("Delete {0} in windows automation directory" \
+                                                          .format(capture_iss_file))
+                    output, error = self.execute_command("rm -f \
+                               /cygdrive/c/automation/{0}".format(capture_iss_file))
+                    self.log_command_output(output, error)
+                    log.info("Delete {0} in slave resources/windows/automation dir" \
+                             .format(capture_iss_file))
+                    os.system("rm -f resources/windows/automation/{0}" \
+                                                          .format(capture_iss_file))
             return success
 
+    def install_server_via_repo(self, deliverable_type, cb_edition, remote_client):
+        success = True
+        track_words = ("warning", "error", "fail")
+        if cb_edition:
+            cb_edition = "-" + cb_edition
+        if deliverable_type == "deb":
+            self.update_couchbase_release(remote_client, deliverable_type)
+            output, error = self.execute_command("yes \
+                   | apt-get install couchbase-server{0}".format(cb_edition))
+            self.log_command_output(output, error)
+            success &= self.log_command_output(output, error, track_words)
+        elif deliverable_type == "rpm":
+            self.update_couchbase_release(remote_client, deliverable_type)
+            output, error = self.execute_command("yes \
+                  | yum install couchbase-server{0}".format(cb_edition))
+            self.log_command_output(output, error, track_words)
+            success &= self.log_command_output(output, error, track_words)
+        return success
+
+    def update_couchbase_release(self, remote_client, deliverable_type):
+        if deliverable_type == "deb":
+            """ remove old couchbase-release package """
+            log.info("remove couchbase-release at node {0}".format(self.ip))
+            output, error = self.execute_command("dpkg --get-selections |\
+                                                              grep couchbase")
+            self.log_command_output(output, error)
+            for str in output:
+                if "couchbase-release" in str:
+                    output, error = self.execute_command("apt-get \
+                                                   purge -y couchbase-release")
+            output, error = self.execute_command("dpkg --get-selections |\
+                                                              grep couchbase")
+            self.log_command_output(output, error)
+            package_remove = True
+            for str in output:
+                if "couchbase-release" in str:
+                    package_remove = False
+                    log.info("couchbase-release is not removed at node {0}" \
+                                                                  .format(self.ip))
+                    sys.exit("***  Node %s failed to remove couchbase-release  ***"\
+                                                                        % (self.ip))
+            """ install new couchbase-release package """
+            log.info("install new couchbase-release repo at node {0}" \
+                                                             .format(self.ip))
+            self.execute_command("rm -rf /tmp/couchbase-release*")
+            self.execute_command("cd /tmp; wget {0}".format(CB_RELEASE_APT_GET_REPO))
+            output, error = self.execute_command("yes | dpkg -i /tmp/couchbase-release*")
+            self.log_command_output(output, error)
+            output, error = self.execute_command("dpkg --get-selections |\
+                                                              grep couchbase")
+            package_updated = False
+            for str in output:
+                if "couchbase-release" in str:
+                    package_updated = True
+                    log.info("couchbase-release installed on node {0}" \
+                                               .format(self.ip))
+                    return package_updated
+            if not package_updated:
+                sys.exit("fail to install %s on node %s" % \
+                                  (CB_RELEASE_APT_GET_REPO.rsplit("/",1)[-1], self.ip))
+        elif deliverable_type == "rpm":
+            """ remove old couchbase-release package """
+            log.info("remove couchbase-release at node {0}".format(self.ip))
+            output, error = self.execute_command("rpm -qa | grep couchbase")
+            self.log_command_output(output, error)
+            for str in output:
+                if "couchbase-release" in str:
+                    output, error = self.execute_command("rpm -e couchbase-release")
+            output, error = self.execute_command("rpm -qa | grep couchbase")
+            self.log_command_output(output, error)
+            package_remove = True
+            for str in output:
+                if "couchbase-release" in str:
+                    package_remove = False
+                    log.info("couchbase-release is not removed at node {0}" \
+                                                                  .format(self.ip))
+                    sys.exit("***  Node %s failed to remove couchbase-release  ***"\
+                                                                        % (self.ip))
+            """ install new couchbase-release package """
+            log.info("install new couchbase-release repo at node {0}" \
+                                                             .format(self.ip))
+            self.execute_command("rm -rf /tmp/couchbase-release*")
+            self.execute_command("cd /tmp; wget {0}".format(CB_RELEASE_YUM_REPO))
+            output, error = self.execute_command("yes | rpm -i /tmp/couchbase-release*")
+            self.log_command_output(output, error)
+            output, error = self.execute_command("rpm -qa | grep couchbase")
+            package_updated = False
+            for str in output:
+                if "couchbase-release" in str:
+                    package_updated = True
+                    log.info("couchbase-release installed on node {0}" \
+                                               .format(self.ip))
+                    return package_updated
+            if not package_updated:
+                sys.exit("fail to install %s on node %s" % \
+                                  (CB_RELEASE_YUM_REPO.rsplit("/",1)[-1], self.ip))
 
     def install_moxi(self, build):
         success = True
@@ -1548,11 +1713,10 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("rm -rf {0}".format(folder))
             self.log_command_output(output, error)
 
-
     def couchbase_uninstall(self):
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
-                         "/opt/couchbase", "/data/"]
+                         "/opt/couchbase", "/data/*"]
         terminate_process_list = ["beam.smp", "memcached", "moxi", "vbucketmigrator",
                                   "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr"]
         version_file = "VERSION.txt"
@@ -1570,6 +1734,7 @@ class RemoteMachineShellConnection:
             version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
             deleted = False
             build_repo = MV_LATESTBUILD_REPO
+            capture_iss_file = ""
 
             exist = self.file_exists(version_path, version_file)
             log.info("Is VERSION file existed on {0}? {1}".format(self.ip, exist))
@@ -1614,7 +1779,7 @@ class RemoteMachineShellConnection:
                 self.stop_couchbase()
                 # modify bat file to run uninstall schedule task
                 #self.create_windows_capture_file(task, product, full_version)
-                self.modify_bat_file('/cygdrive/c/automation',
+                capture_iss_file = self.modify_bat_file('/cygdrive/c/automation',
                                         bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
 
@@ -1653,9 +1818,6 @@ class RemoteMachineShellConnection:
                 output, error = self.execute_command("rm -f /cygdrive/c/tmp/{0}"\
                                                               .format(build_name))
                 self.log_command_output(output, error)
-                output, error = self.execute_command("rm -f \
-                       /cygdrive/c/automation/*_{0}_uninstall.iss".format(self.ip))
-                self.log_command_output(output, error)
 
                 """ the code below need to remove when bug MB-11328
                                                            is fixed in 3.0.1 """
@@ -1673,6 +1835,16 @@ class RemoteMachineShellConnection:
                             'HKLM\Software\Wow6432Node\Ericsson\Erlang\ErlSrv' /f ")
                     self.log_command_output(output, error)
                 """ end remove code """
+                if capture_iss_file:
+                    log.info("Delete {0} in windows automation directory" \
+                                                          .format(capture_iss_file))
+                    output, error = self.execute_command("rm -f \
+                               /cygdrive/c/automation/{0}".format(capture_iss_file))
+                    self.log_command_output(output, error)
+                    log.info("Delete {0} in slave resources/windows/automation dir" \
+                             .format(capture_iss_file))
+                    os.system("rm -f resources/windows/automation/{0}" \
+                                                          .format(capture_iss_file))
             else:
                 log.info("No couchbase server on {0} server. Free to install" \
                                                                  .format(self.ip))
@@ -1697,6 +1869,8 @@ class RemoteMachineShellConnection:
                     We need to kill them before doing uninstall """
                 output, error = self.execute_command("killall -9 rpm")
                 self.log_command_output(output, error)
+                output, error = self.execute_command("rm -f /var/lib/rpm/.rpm.lock")
+                self.log_command_output(output, error)
                 if sv in COUCHBASE_FROM_VERSION_4:
                     if self.is_enterprise(type):
                         uninstall_cmd = 'rpm -e {0}'.format("couchbase-server")
@@ -1710,6 +1884,7 @@ class RemoteMachineShellConnection:
                 self.log_command_output(output, error)
             self.terminate_processes(self.info, terminate_process_list)
             self.remove_folders(linux_folders)
+            self.kill_memcached()
         elif self.info.distribution_type.lower() == 'mac':
             self.stop_server(os='mac')
             self.terminate_processes(self.info, terminate_process_list)
@@ -1918,6 +2093,9 @@ class RemoteMachineShellConnection:
                     output, error = self.execute_command("systemctl daemon-reload")
                     self.log_command_output(output, error)
                     success = True
+                elif "Warning" in line and "RPMDB altered outside of yum" in line:
+                    log.info("Warming: RPMDB altered outside of yum")
+                    success = True
                 elif "dirname" in line:
                     log.warning("Ignore dirname error message during couchbase "
                                 "startup/stop/restart for CentOS 6.6 (MB-12536)")
@@ -1939,36 +2117,142 @@ class RemoteMachineShellConnection:
                               .format(self.ip, output, error, track_words))
         return success
 
-    def execute_commands_inside(self, main_command, subcommands=[], min_output_size=0,
+    def execute_commands_inside(self, main_command,query, queries,username,password,bucketname,source,subcommands=[], min_output_size=0,
                                 end_msg='', timeout=250):
-        log.info("running command on {0}: {1}".format(self.ip, main_command))
+        self.extract_remote_info()
+        filename = "/tmp/test"
+        iswin=False
 
+        if self.info.type.lower() == 'windows':
+            iswin = True
+            filename = "/cygdrive/c/tmp/test"
+
+        filedata = ""
+        if not(query==""):
+            main_command = main_command + " -s=\"" + query+ '"'
+            print "main_command is %s" %main_command
+        elif (self.remote and not(queries=="")):
+            sftp = self._ssh_client.open_sftp()
+            filein = sftp.open(filename, 'w')
+            for query in queries:
+                filein.write(query)
+                filein.write('\n')
+            fileout = sftp.open(filename,'r')
+            filedata = fileout.read()
+            #print filedata
+            fileout.close()
+        elif not(queries==""):
+            f = open(filename, 'w')
+            for query in queries:
+                f.write(query)
+                f.write('\n')
+            f.close()
+            fileout = open(filename,'r')
+            filedata = fileout.read()
+            print filedata
+            fileout.close()
+
+        newdata = filedata.replace("bucketname",bucketname)
+        newdata = newdata.replace("user",username)
+        newdata = newdata.replace("pass",password)
+        newdata = newdata.replace("bucket1",username)
+        newdata = newdata.replace("user1",username)
+        newdata = newdata.replace("pass1",password)
+        newdata = newdata.replace("bucket2",bucketname)
+        newdata = newdata.replace("user2",bucketname)
+        newdata = newdata.replace("pass2",password)
+        print newdata
+
+        if (self.remote and not(queries=="")) :
+            f = sftp.open(filename,'w')
+            f.write(newdata)
+            f.close()
+        elif not(queries==""):
+            f = open(filename,'w')
+            f.write(newdata)
+            f.close()
+        if not(queries==""):
+            if (source):
+                if iswin:
+                    main_command = main_command + "  -s=\"\SOURCE " + 'c:\\\\tmp\\\\test'
+                else:
+                    main_command = main_command + "  -s=\"\SOURCE " + filename+ '"'
+            else:
+                if iswin:
+                    main_command = main_command + " -f=" + 'c:\\\\tmp\\\\test'
+                else:
+                    main_command = main_command + " -f=" + filename
+
+        log.info("running command on {0}: {1}".format(self.ip, main_command))
+        output=""
         if self.remote:
-            stdin, stdout, stderro = self._ssh_client.exec_command(main_command)
+            stdin,stdout, stderro = self._ssh_client.exec_command(main_command)
+            time.sleep(20)
+            #output = stdout.readlines().split()
+            count = 0
+            for line in stdout.readlines():
+                if (count == 0) and line.lower().find("error") > 0:
+                   output = "status:FAIL"
+                   break
+              #if line.find("results") > 0 or line.find("status") > 0 or line.find("metrics") or line.find("elapsedTime")> 0 or  line.find("executionTime")> 0 or line.find("resultCount"):
+                if (count > 0):
+                    output+=line.strip()
+                    output = output.strip()
+                    if "Inputwasnotastatement" in output:
+                        output = "status:FAIL"
+                        break
+                    if "timeout" in output:
+                        output = "status:timeout"
+                else:
+                    count+=1
+            stdin.close()
+            stdout.close()
+            stderro.close()
+           # main_command = main_command + " < " + '/tmp/' + filename
+           # stdin,stdout, ssh_stderr = ssh.exec_command(main_command)
+           # stdin.close()
+           # output = []
+           # for line in stdout.read().splitlines():
+           #   print(line)
+           #   output = output.append(line)
+           # f.close()
+           # ssh.close()
+
+           #output = output + end_msg
+
         else:
             p = Popen(main_command , shell=True, stdout=PIPE, stderr=PIPE)
             stdout, stderro = p.communicate()
-        time.sleep(1)
-        for cmd in subcommands:
-              log.info("running command {0} inside {1} ({2})".format(
-                                                        main_command, cmd, self.ip))
-              stdin.channel.send("{0}\n".format(cmd))
-              end_time = time.time() + float(timeout)
-              while True:
-                  if time.time() > end_time:
-                      raise Exception("no output in {3} sec running command \
-                                       {0} inside {1} ({2})".format(main_command,
-                                                                    cmd, self.ip,
-                                                                    timeout))
-                  output = stdout.channel.recv(1024)
-                  if output.strip().endswith(end_msg) and len(output) >= min_output_size:
-                          break
-                  time.sleep(2)
-              log.info("{0}:'{1}' -> '{2}' output\n: {3}".format(self.ip, main_command, cmd, output))
-        stdin.close()
-        stdout.close()
-        stderro.close()
-        return output
+            output = stdout
+            print output
+            time.sleep(1)
+        # for cmd in subcommands:
+        #       log.info("running command {0} inside {1} ({2})".format(
+        #                                                 main_command, cmd, self.ip))
+        #       stdin.channel.send("{0}\n".format(cmd))
+        #       end_time = time.time() + float(timeout)
+        #       while True:
+        #           if time.time() > end_time:
+        #               raise Exception("no output in {3} sec running command \
+        #                                {0} inside {1} ({2})".format(main_command,
+        #                                                             cmd, self.ip,
+        #                                                             timeout))
+        #           output = stdout.channel.recv(1024)
+        #           if output.strip().endswith(end_msg) and len(output) >= min_output_size:
+        #                   break
+        #           time.sleep(2)
+        #       log.info("{0}:'{1}' -> '{2}' output\n: {3}".format(self.ip, main_command, cmd, output))
+        # stdin.close()
+        # stdout.close()
+        # stderro.close()
+        if (self.remote and not(queries=="")) :
+            sftp.remove(filename)
+            sftp.close()
+        elif not(queries==""):
+            os.remove(filename)
+
+        output = re.sub('\s+', '', output)
+        return (output)
 
     def execute_command(self, command, info=None, debug=True, use_channel=False):
         if getattr(self, "info", None) is None and info is not None :

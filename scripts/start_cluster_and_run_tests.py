@@ -45,7 +45,7 @@ def ns_clean(make, verbose = 1):
 
     try:
         os.chdir("{0}{1}build".format(NS_SERVER_DIR, os.sep))
-        subprocess.check_call([make,"ns_dataclean"], stdout = stdout)
+        subprocess.check_call(make.split() + ["ns_dataclean"], stdout = stdout)
         clean = True
     except subprocess.CalledProcessError as cpex:
         print "Error: command {0} failed".format(cpex.cmd)

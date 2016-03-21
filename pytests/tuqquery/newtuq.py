@@ -1,3 +1,5 @@
+import logging
+import threading
 import logger
 import json
 import uuid
@@ -37,9 +39,17 @@ class QueryTests(BaseTestCase):
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.dataset = self.input.param("dataset", "default")
-        self.primary_indx_type = self.input.param("primary_indx_type", 'VIEW')
+        self.primary_indx_type = self.input.param("primary_indx_type", 'GSI')
+        self.index_type = self.input.param("index_type", 'GSI')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
+        self.monitoring = self.input.param("monitoring",False)
+        self.isprepared = False
+        self.skip_primary_index = self.input.param("skip_primary_index",False)
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
+        if self.primary_indx_type.lower() == "gsi":
+            self.gsi_type = self.input.param("gsi_type", None)
+        else:
+            self.gsi_type = None
         if self.input.param("reload_data", False):
             for bucket in self.buckets:
                 self.cluster.bucket_flush(self.master, bucket=bucket,
@@ -81,9 +91,57 @@ class QueryTests(BaseTestCase):
 ##############################################################################################
     def test_simple_check(self):
         for bucket in self.buckets:
+            if self.monitoring:
+                e = threading.Event()
+                t1 = threading.Thread(name='run_simple', target=self.run_active_requests,args=(e,2))
+                t1.start()
+            query = 'select * from %s' %(bucket.name)
+            self.run_cbq_query(query)
+            logging.debug("event is set")
+            if self.monitoring:
+                e.set()
+                t1.join(100)
             query_template = 'FROM %s select $str0, $str1 ORDER BY $str0,$str1 ASC' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(actual_result['results'], expected_result)
+
+    def test_joins_monitoring(self):
+        for bucket in self.buckets:
+            e = threading.Event()
+            if self.monitoring:
+                e = threading.Event()
+                t2 = threading.Thread(name='run_joins', target=self.run_active_requests,args=(e,2))
+                t2.start()
+            query = 'select * from %s b1 inner join %s b2 on keys b1.CurrencyCode inner join %s b3 on keys b1.CurrencyCode left outer join %s b4 on keys b1.CurrencyCode' % (bucket.name,bucket.name,bucket.name,bucket.name)
+            actual_result = self.run_cbq_query(query)
+            logging.debug("event is set")
+            if self.monitoring:
+                e.set()
+                t2.join(100)
+
+    def run_active_requests(self,e,t):
+        while not e.isSet():
+            logging.debug('wait_for_event_timeout starting')
+            event_is_set = e.wait(t)
+            logging.debug('event set: %s', event_is_set)
+            if event_is_set:
+                 result = self.run_cbq_query("select * from system:active_requests")
+                 print result
+                 self.assertTrue(result['metrics']['resultCount'] == 1)
+                 requestId = result['requestID']
+                 result = self.run_cbq_query('delete from system:active_requests where RequestId  =  "%s"' % requestId)
+                 time.sleep(20)
+                 result = self.run_cbq_query('select * from system:active_requests  where RequestId  =  "%s"' % requestId)
+                 self.assertTrue(result['metrics']['resultCount'] == 0)
+                 result = self.run_cbq_query("select * from system:completed_requests")
+                 print result
+                 requestId = result['requestID']
+                 result = self.run_cbq_query('delete from system:completed_requests where RequestId  =  "%s"' % requestId)
+                 time.sleep(10)
+                 result = self.run_cbq_query('select * from system:completed_requests where RequestId  =  "%s"' % requestId)
+                 print result
+                 self.assertTrue(result['metrics']['resultCount'] == 0)
+
 
     def test_simple_negative_check(self):
         queries_errors = {'SELECT $str0 FROM {0} WHERE COUNT({0}.$str0)>3' :
@@ -130,8 +188,16 @@ class QueryTests(BaseTestCase):
     def test_simple_nulls(self):
         queries = ['SELECT id FROM %s WHERE id=NULL or id="null"']
         for bucket in self.buckets:
+            if self.monitoring:
+                e = threading.Event()
+                t3 = threading.Thread(name='run_simple_nulls', target=self.run_active_requests,args=(e,2))
+                t3.start()
             for query in queries:
                 actual_result = self.run_cbq_query(query % (bucket.name))
+                logging.debug("event is set")
+                if self.monitoring:
+                     e.set()
+                     t3.join(100)
                 self._verify_results(actual_result['results'], [])
 
 ##############################################################################################
@@ -146,8 +212,15 @@ class QueryTests(BaseTestCase):
 
     def test_limit_offset(self):
         for bucket in self.buckets:
+            if self.monitoring:
+                e = threading.Event()
+                t4 = threading.Thread(name='run_limit_offset', target=self.run_active_requests,args=(e,2))
+                t4.start()
             query_template = 'SELECT DISTINCT $str0 FROM %s ORDER BY $str0 LIMIT 10' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
+            if self.monitoring:
+                e.set()
+                t4.join(100)
             self._verify_results(actual_result['results'], expected_result)
             query_template = 'SELECT DISTINCT $str0 FROM %s ORDER BY $str0 LIMIT 10 OFFSET 10' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
@@ -186,6 +259,10 @@ class QueryTests(BaseTestCase):
 
     def test_simple_alias(self):
         for bucket in self.buckets:
+            if self.monitoring:
+                e = threading.Event()
+                t5 = threading.Thread(name='run_limit_offset', target=self.run_active_requests,args=(e,2))
+                t5.start()
             query_template = 'SELECT COUNT($str0) AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
             self.assertEquals(actual_result['results'], expected_result,
@@ -194,6 +271,9 @@ class QueryTests(BaseTestCase):
 
             query_template = 'SELECT COUNT(*) + 1 AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
+            if self.monitoring:
+                e.set()
+                t5.join(100)
             expected_result = [ { "COUNT_EMPLOYEE": expected_result[0]['COUNT_EMPLOYEE'] + 1 } ]
             self.assertEquals(actual_result['results'], expected_result,
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
@@ -217,8 +297,15 @@ class QueryTests(BaseTestCase):
                    'SELECT $obj0.$_obj0_int0 AS points FROM %s AS test ' +\
                    'GROUP BY test.$obj0.$_obj0_int0 ORDER BY points']
         for bucket in self.buckets:
+            if self.monitoring:
+                e = threading.Event()
+                t6 = threading.Thread(name='run_limit_offset', target=self.run_active_requests,args=(e,2))
+                t6.start()
             for query_template in queries_templates:
                 actual_result, expected_result = self.run_query_from_template(query_template  % (bucket.name))
+                if self.monitoring:
+                    e.set()
+                    t6.join(100)
                 self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_from_clause_group(self):
@@ -230,9 +317,16 @@ class QueryTests(BaseTestCase):
 
     def test_alias_order_desc(self):
         for bucket in self.buckets:
+            if self.monitoring:
+                e = threading.Event()
+                t7 = threading.Thread(name='run_limit_offset', target=self.run_active_requests,args=(e,2))
+                t7.start()
             query_template = 'SELECT $str0 AS name_new FROM %s AS test ORDER BY name_new DESC' %(
                                                                                 bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
+            if self.monitoring:
+                    e.set()
+                    t7.join(100)
             self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_order_asc(self):
@@ -244,8 +338,15 @@ class QueryTests(BaseTestCase):
 
     def test_alias_aggr_fn(self):
         for bucket in self.buckets:
+            if self.monitoring:
+                e = threading.Event()
+                t8 = threading.Thread(name='run_limit_offset', target=self.run_active_requests,args=(e,2))
+                t8.start()
             query_template = 'SELECT COUNT(TEST.$str0) from %s AS TEST' %(bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
+            if self.monitoring:
+                    e.set()
+                    t8.join(100)
             self._verify_results(actual_result['results'], expected_result)
 
     def test_alias_unnest(self):
@@ -465,21 +566,22 @@ class QueryTests(BaseTestCase):
         query_params.update(cred_params)
         if self.use_rest:
             query_params.update({'scan_consistency': self.scan_consistency})
-            self.log.info('RUN QUERY %s' % query)
             result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params)
         else:
             if self.version == "git_repo":
-                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/" +\
-                                                            "tuq_client/tuq_client " +\
-                                                            "-engine=http://%s:8093/" % server.ip,
-                                                       subcommands=[query,],
-                                                       min_output_size=20,
-                                                       end_msg='tuq_client>')
+                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
+                                                            "shell/cbq/cbq ","","","","","","")
             else:
-                output = self.shell.execute_commands_inside("/tmp/tuq/cbq -engine=http://%s:8093/" % server.ip,
-                                                           subcommands=[query,],
-                                                           min_output_size=20,
-                                                           end_msg='cbq>')
+                os = self.shell.extract_remote_info().type.lower()
+                #if (query.find("VALUES") > 0):
+                if not(self.isprepared):
+                    query = query.replace('"', '\\"')
+                    query = query.replace('`', '\\`')
+                if os == "linux":
+                    cmd = "%s/go_cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
+                    output = self.shell.execute_commands_inside(cmd,query,"","","","","")
+                    #output = self.shell.execute_commands_inside(cmd,query)
+                    result = json.loads(output)
             result = self._parse_query_output(output)
         if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)
@@ -676,23 +778,64 @@ class QueryTests(BaseTestCase):
             shell_connection.execute_command(cmd)
 
     def create_primary_index_for_3_0_and_greater(self):
-        self.log.info("CREATE PRIMARY INDEX")
+        self.log.info("CREATE PRIMARY INDEX using %s" % self.primary_indx_type)
         rest = RestConnection(self.master)
         versions = rest.get_nodes_versions()
         if versions[0].startswith("4") or versions[0].startswith("3"):
             for bucket in self.buckets:
                 if self.primary_indx_drop:
-                    self.log.info("Dropping primary index for %s ..." % bucket.name)
-                    self.query = "DROP PRIMARY INDEX ON %s" % (bucket.name)
+                    self.log.info("Dropping primary index for %s using %s ..." % (bucket.name,self.primary_indx_type))
+                    self.query = "DROP PRIMARY INDEX ON %s USING %s" % (bucket.name,self.primary_indx_type)
+                    #self.run_cbq_query()
                     self.sleep(3, 'Sleep for some time after index drop')
-                self.log.info("Creating primary index for %s ..." % bucket.name)
-                self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
-                try:
+                self.query = 'select * from system:indexes where name="#primary" and keyspace_id = "%s"' % bucket.name
+                res = self.run_cbq_query()
+                self.sleep(10)
+                print res
+                if self.monitoring:
+                    self.query = "delete from system:completed_requests"
                     self.run_cbq_query()
-                    if self.primary_indx_type.lower() == 'gsi':
-                        self._wait_for_index_online(bucket, '#primary')
-                except Exception, ex:
-                    self.log.info(str(ex))
+                if not self.skip_primary_index:
+                    if (res['metrics']['resultCount'] == 0):
+                        self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
+                        self.log.info("Creating primary index for %s ..." % bucket.name)
+                    # if self.gsi_type:
+                    #     self.query += " WITH {'index_type': 'memdb'}"
+                        try:
+                            self.run_cbq_query()
+                            self.primary_index_created = True
+                            if self.primary_indx_type.lower() == 'gsi':
+                                self._wait_for_index_online(bucket, '#primary')
+                        except Exception, ex:
+                            self.log.info(str(ex))
+                if self.monitoring:
+                        self.query = "select * from system:active_requests"
+                        result = self.run_cbq_query()
+                        print result
+                        self.assertTrue(result['metrics']['resultCount'] == 1)
+                        self.query = "select * from system:completed_requests"
+                        time.sleep(20)
+                        result = self.run_cbq_query()
+                        print result
+
+
+
+
+    def _wait_for_index_online(self, bucket, index_name, timeout=6000):
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            query = "SELECT * FROM system:indexes where name='%s'" % index_name
+            res = self.run_cbq_query(query)
+            for item in res['results']:
+                if 'keyspace_id' not in item['indexes']:
+                    self.log.error(item)
+                    continue
+                if item['indexes']['keyspace_id'] == bucket.name:
+                    if item['indexes']['state'] == "online":
+                        return
+            self.sleep(5, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in res['results']])
+        raise Exception('index %s is not online. last response is %s' % (index_name, res))
+
 
     def _get_keys(self, key_num):
         keys = []

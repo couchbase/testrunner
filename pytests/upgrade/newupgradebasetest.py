@@ -37,6 +37,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.upgrade_versions = self.input.param('upgrade_version', '2.0.1-170-rel')
         self.upgrade_versions = self.upgrade_versions.split(";")
+        self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.init_nodes = self.input.param('init_nodes', True)
 
         self.is_downgrade = self.input.param('downgrade', False)
@@ -52,6 +53,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         self.initial_build_type = self.input.param('initial_build_type', None)
         self.stop_persistence = self.input.param('stop_persistence', False)
+        self.std_vbucket_dist = self.input.param("std_vbucket_dist", None)
         self.rest_settings = self.input.membase_settings
         self.rest = None
         self.rest_helper = None
@@ -84,18 +86,23 @@ class NewUpgradeBaseTest(BaseTestCase):
         if type.lower() == "ubuntu":
             self.is_ubuntu = True
         self.queue = Queue.Queue()
+        self.upgrade_servers = []
 
     def tearDown(self):
-        test_failed = (hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures or self._resultForDoCleanups.errors)) \
-                    or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
-        if test_failed:
+        test_failed = (hasattr(self, '_resultForDoCleanups') and \
+                       len(self._resultForDoCleanups.failures or \
+                           self._resultForDoCleanups.errors)) or \
+                                 (hasattr(self, '_exc_info') and \
+                                  self._exc_info()[1] is not None)
+        if test_failed and self.skip_cleanup:
                 self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
                 self.cluster.shutdown(force=True)
                 self.log.info("Test Input params were:")
                 pprint(self.input.test_params)
 
                 if self.input.param('BUGS', False):
-                    self.log.warn("Test failed. Possible reason is: {0}".format(self.input.param('BUGS', False)))
+                    self.log.warn("Test failed. Possible reason is: {0}"
+                                           .format(self.input.param('BUGS', False)))
         else:
             if not hasattr(self, 'rest'):
                 return
@@ -111,9 +118,12 @@ class NewUpgradeBaseTest(BaseTestCase):
                         temp.append(server)
                 self.servers = temp
             except Exception, e:
+                self.log.info("Exception " + e)
                 self.cluster.shutdown(force=True)
                 self.fail(e)
             super(NewUpgradeBaseTest, self).tearDown()
+            if self.upgrade_servers:
+                self._install(self.upgrade_servers,version=self.initial_version)
         self.sleep(20, "sleep 20 seconds before run next test")
 
     def _install(self, servers):
@@ -318,7 +328,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                     self.log.info("Cluster status: {0}".format(cluster_status))
                     self.fail("autocompaction settings weren't saved")
 
-    def verify_all_queries(self):
+    def verify_all_queries(self, queue=None):
         query = {"connectionTimeout" : 60000}
         expected_rows = self.num_items
         if self.max_verify:
@@ -330,11 +340,18 @@ class NewUpgradeBaseTest(BaseTestCase):
         for bucket in self.buckets:
             for ddoc in self.ddocs:
                 prefix = ("", "dev_")[ddoc.views[0].dev_view]
-                self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name,
-                                                          query, bucket=bucket,
-                                               wait_time=self.wait_timeout * 5,
-                                                   expected_rows=expected_rows,
-                                                                 retry_time=10)
+                try:
+                    self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name,
+                                                              query, bucket=bucket,
+                                                   wait_time=self.wait_timeout * 5,
+                                                       expected_rows=expected_rows,
+                                                                     retry_time=10)
+                except Exception, e:
+                    print e
+                    if queue is not None:
+                        queue.put(False)
+                if queue is not None:
+                    queue.put(True)
 
     def change_settings(self):
         status = True
@@ -385,7 +402,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         rest = RestConnection(self.master)
         rest.add_back_node(self.failover_node.id)
 
-    def create_ddocs_and_views(self):
+    def create_ddocs_and_views(self, queue=None):
         self.default_view = View(self.default_view_name, None, None)
         for bucket in self.buckets:
             if int(self.ddocs_num) > 0:
@@ -395,8 +412,15 @@ class NewUpgradeBaseTest(BaseTestCase):
                     ddoc = DesignDocument(self.default_view_name + str(i), views)
                     self.ddocs.append(ddoc)
                     for view in views:
-                        self.cluster.create_view(self.master, ddoc.name, view,
+                        try:
+                            self.cluster.create_view(self.master, ddoc.name, view,
                                                                    bucket=bucket)
+                        except Exception, e:
+                            print e
+                            if queue is not None:
+                                queue.put(False)
+                        if queue is not None:
+                            queue.put(True)
             else:
                 self.fail("Check param ddocs_num value")
 

@@ -41,6 +41,8 @@ class ReadOnlyUserTests(QueryTests):
             index_name = "my_index"
             try:
                 self.query = "CREATE INDEX %s ON %s(VMs) using %s " % (index_name, bucket.name, self.index_type)
+                # if self.gsi_type:
+                #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
             finally:
                 self.query = "DROP INDEX %s.%s using %s" % (bucket.name, index_name, self.index_type)

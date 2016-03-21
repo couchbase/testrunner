@@ -1,3 +1,4 @@
+import paramiko
 import logger
 import json
 import uuid
@@ -18,17 +19,18 @@ class N1QLHelper():
         item_flag = 0, n1ql_port = 8093, full_docs_list = [], log = None, input = None):
         self.version = version
         self.shell = shell
-        self.use_rest = use_rest
         self.max_verify = max_verify
         self.buckets = buckets
         self.item_flag = item_flag
         self.n1ql_port = n1ql_port
         self.input = input
         self.log = log
+        self.use_rest = True
         self.full_docs_list = full_docs_list
         self.master = master
         if self.full_docs_list and len(self.full_docs_list) > 0:
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
+
 
     def killall_tuq_process(self):
         self.shell.execute_command("killall cbq-engine")
@@ -68,23 +70,31 @@ class N1QLHelper():
             if scan_consistency:
                 query_params['scan_consistency']=  scan_consistency
             if scan_vector:
-                query_params['scan_vector']=  scan_vector
+                query_params['scan_vector']=  str(scan_vector).replace("'", '"')
             if verbose:
                 self.log.info('RUN QUERY %s' % query)
             result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared = is_prepared, verbose = verbose)
         else:
-            if self.version == "git_repo":
-                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/" +\
-                                                            "tuq_client/tuq_client " +\
-                                                            "-engine=http://%s:8093/" % server.ip,
-                                                       subcommands=[query,],
-                                                       min_output_size=20,
-                                                       end_msg='tuq_client>')
-            else:
-                output = self.shell.execute_commands_inside("/tmp/tuq/cbq -engine=http://%s:8093/" % server.ip,
-                                                           subcommands=[query,],
-                                                           min_output_size=20,
-                                                           end_msg='cbq>')
+            # if self.version == "git_repo":
+            #     output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbaselabs/tuqtng/" +\
+            #                                                 "tuq_client/tuq_client " +\
+            #                                                 "-engine=http://%s:8093/" % server.ip,
+            #                                            subcommands=[query,],
+            #                                            min_output_size=20,
+            #                                            end_msg='tuq_client>')
+            # else:
+            #os = self.shell.extract_remote_info().type.lower()
+            shell = RemoteMachineShellConnection(server)
+            import pdb;pdb.set_trace()
+            #query = query.replace('"', '\\"')
+            #query = query.replace('`', '\\`')
+            #if os == "linux":
+            cmd = "%s/go_cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
+            output = shell.execute_commands_inside(cmd,query,"","","","","")
+            print "--------------------------------------------------------------------------------------------------------------------------------"
+            print output
+            result = json.loads(output)
+            print result
             result = self._parse_query_output(output)
         if isinstance(result, str) or 'errors' in result:
             error_result = str(result)
@@ -403,6 +413,8 @@ class N1QLHelper():
             self.query = "CREATE PRIMARY INDEX ON %s " % (bucket.name)
             if using_gsi:
                 self.query += " USING GSI"
+                # if gsi_type == "memdb":
+                #     self.query += " WITH {'index_type': 'memdb'}"
             if not using_gsi:
                 self.query += " USING VIEW "
             self.log.info(self.query)
@@ -484,7 +496,7 @@ class N1QLHelper():
             query_params.update("scan_consistency", scan_consistency)
         return query_params
 
-    def _is_index_in_list(self, bucket, index_name, server = None, index_state = ["pending","building"]):
+    def _is_index_in_list(self, bucket, index_name, server = None, index_state = ["pending", "building", "deferred"]):
         query = "SELECT * FROM system:indexes where name = \'{0}\'".format(index_name)
         if server == None:
             server = self.master
@@ -537,6 +549,13 @@ class N1QLHelper():
             res = self.run_cbq_query(query = query.format(bucket.name), server = server)
             map[bucket.name] = int(res["results"][0]["$1"])
         return map
+
+    def get_index_count_using_index(self, bucket, index_name,server=None):
+        query = 'SELECT COUNT(*) FROM {0} USE INDEX ({1})'.format(bucket.name, index_name)
+        if not server:
+            server = self.master
+        res = self.run_cbq_query(query=query, server=server)
+        return int(res['results'][0]['$1'])
 
     def _gen_dict(self, result):
         result_set = []

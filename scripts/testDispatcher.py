@@ -20,7 +20,7 @@ from couchbase.n1ql import N1QLQuery
 
 # need a timeout param
 
-POLL_INTERVAL = 60
+POLL_INTERVAL = 120
 SERVER_MANAGER = '172.23.105.177:8081'
 TEST_SUITE_DB = '172.23.105.177'
 
@@ -41,6 +41,10 @@ def main():
     parser.add_option('-o','--os', dest='os')
     parser.add_option('-n','--noLaunch', action="store_true", dest='noLaunch', default=False)
     parser.add_option('-c','--component', dest='component', default=None)
+    parser.add_option('-p','--poolId', dest='poolId', default='12hour')
+    parser.add_option('-t','--test', dest='test', default=False, action='store_true')
+    parser.add_option('-s','--subcomponent', dest='subcomponent', default=None)
+    parser.add_option('-e','--extraParameters', dest='extraParameters', default=None)
 
 
     options, args = parser.parse_args()
@@ -53,7 +57,8 @@ def main():
     print 'nolaunch', options.noLaunch
     print 'os', options.os
 
-    print 'component is', options.component
+    print 'subcomponent is', options.subcomponent
+
 
 
 
@@ -72,45 +77,84 @@ def main():
     cb = Bucket('couchbase://' + TEST_SUITE_DB + '/QE-Test-Suites')
 
     if options.component is None or options.component == 'None':
-        query = N1QLQuery("select * from `QE-Test-Suites` where '" + options.run + "' in partOf order by component")
+        queryString = "select * from `QE-Test-Suites` where '" + options.run + "' in partOf order by component"
     else:
-        queryString = "select * from `QE-Test-Suites` where '{0}' in partOf and component ='{1}';"
-        print 'the query is', queryString.format(options.run, options.component )
-        query = N1QLQuery(queryString.format(options.run, options.component ))
-    results = cb.n1ql_query( query )
+        if options.subcomponent is None or options.subcomponent == 'None':
+            splitComponents = options.component.split(',')
+            componentString = ''
+            for i in range( len(splitComponents) ):
+                componentString = componentString + "'" + splitComponents[i] + "'"
+                if i < len(splitComponents) - 1:
+                    componentString = componentString + ','
+
+
+            queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in [{1}] order by component;".format(options.run, componentString)
+
+        else:
+            # have a subcomponent, assume only 1 component
+            queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in ['{1}'] and subcomponent ='{2}';".\
+                format(options.run, options.component, options.subcomponent)
+
+
+    print 'the query is', queryString #.format(options.run, componentString)
+    query = N1QLQuery(queryString )
+    results = cb.n1ql_query( queryString )
 
 
     for row in results:
-        data = row['QE-Test-Suites']
-        print 'row', data
+        try:
+            data = row['QE-Test-Suites']
+            print 'row', data
 
-        if 'os' not in data or (data['os'] == options.os) or \
-            (data['os'] == 'linux' and options.os in set(['centos','ubuntu']) ):
-            if 'jenkins' in data:
-                # then this is sort of a special case, launch the old style Jenkins job
-                # not implemented yet
-                print 'Old style Jenkins', data['jenkins']
+            if 'os' not in data or (data['os'] == options.os) or \
+                (data['os'] == 'linux' and options.os in set(['centos','ubuntu']) ):
+                if 'jenkins' in data:
+                    # then this is sort of a special case, launch the old style Jenkins job
+                    # not implemented yet
+                    print 'Old style Jenkins', data['jenkins']
+                else:
+                    if 'initNodes' in data:
+                        initNodes = data['initNodes'].lower() == 'true'
+                    else:
+                        initNodes = True
+                    if 'installParameters' in data:
+                        installParameters = data['installParameters']
+                    else:
+                        installParameters = 'None'
+
+
+                    testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],
+                                'confFile':data['confFile'], 'iniFile':data['config'],
+                                'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
+                                'parameters':data['parameters'], 'initNodes':initNodes,
+                                'installParameters':installParameters})
             else:
-                testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],'confFile':data['confFile'],
-                                   'iniFile':data['config'],
-                                 'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
-                                 'parameters':data['parameters']})
-        else:
-            print 'OS does not apply to', data['component'], data['subcomponent']
+                print 'OS does not apply to', data['component'], data['subcomponent']
 
-    print 'tests to launch',testsToLaunch
+        except Exception as e:
+            print 'exception in querying tests, possible bad record'
+            print traceback.format_exc()
+            print data
+
+    print 'tests to launch:'
+    for i in testsToLaunch: print i['component'], i['subcomponent']
+    print '\n\n'
 
 
+    launchStringBase = 'http://qa.sc.couchbase.com/job/test_suite_executor'
+    if options.test:
+        launchStringBase = launchStringBase + '-test'
 
-    launchString = 'http://qa.sc.couchbase.com/job/test_suite_executor/buildWithParameters?token=test_dispatcher&' + \
+    launchString = launchStringBase + '/buildWithParameters?token=test_dispatcher&' + \
                         'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
-                         'iniFile={5}&servers={6}&parameters={7}&os={8}'
+                         'iniFile={5}&servers={6}&parameters={7}&os={8}&initNodes={9}&installParameters={10}'
 
     summary = []
 
     while len(testsToLaunch) > 0:
         try:
-            response, content = httplib2.Http(timeout=60).request('http://172.23.105.177:8081/getavailablecount/{0}'.format(options.os), 'GET')
+            response, content = httplib2.Http(timeout=60).request('http://' + SERVER_MANAGER +
+                           '/getavailablecount/{0}?poolId={1}'.format(options.os,options.poolId), 'GET')
             if response.status != 200:
                print time.asctime( time.localtime(time.time()) ), 'invalid server response', content
                time.sleep(POLL_INTERVAL)
@@ -132,37 +176,67 @@ def main():
                         i = i + 1
 
                 if haveTestToLaunch:
-                    descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent']
+                    descriptor = urllib.quote(testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] +
+                                    '-' + time.strftime('%b-%d-%X') + '-' + options.version )
                     # get the VMs, they should be there
-                    response, content = httplib2.Http(timeout=60).request('http://' + SERVER_MANAGER +
-                            '/getservers/{0}?count={1}&expiresin={2}&os={3}'.
-                       format(descriptor, testsToLaunch[i]['serverCount'],testsToLaunch[i]['timeLimit'],options.os), 'GET')
+
+                    getVMURL = 'http://' + SERVER_MANAGER + \
+                            '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={4}'. \
+                       format(descriptor, testsToLaunch[i]['serverCount'],testsToLaunch[i]['timeLimit'], \
+                              options.os, options.poolId)
+                    print 'getVMURL', getVMURL
+
+                    response, content = httplib2.Http(timeout=60).request(getVMURL, 'GET')
+
+
+                    print 'response.status', response.status
 
                     if response.status == 499:
                         time.sleep(POLL_INTERVAL) # some error checking here at some point
                     else:
                         r2 = json.loads(content)
+
+                        # figure out the parameters, there are test suite specific, and added at dispatch time
+                        if options.extraParameters is None or options.extraParameters == 'None':
+                            parameters = testsToLaunch[i]['parameters']
+                        else:
+                            if testsToLaunch[i]['parameters'] == 'None':
+                                parameters = options.extraParameters
+                            else:
+                                parameters = testsToLaunch[i]['parameters'] + ',' + options.extraParameters
+
+
                         url = launchString.format(options.version, testsToLaunch[i]['confFile'],
-                                             descriptor, testsToLaunch[i]['component'],
-                                             testsToLaunch[i]['subcomponent'], testsToLaunch[i]['iniFile'],
-                                             urllib.quote(json.dumps(r2).replace(' ','')),
-                                             urllib.quote(testsToLaunch[i]['parameters']), options.os)
-                        print 'launching', url
+                                    descriptor, testsToLaunch[i]['component'], testsToLaunch[i]['subcomponent'],
+                                    testsToLaunch[i]['iniFile'], urllib.quote(json.dumps(r2).replace(' ','')),
+                                    urllib.quote( parameters ), options.os, testsToLaunch[i]['initNodes'],
+                                    testsToLaunch[i]['installParameters'])
+
+                        #print 'launching', url
                         print time.asctime( time.localtime(time.time()) ), 'launching ', descriptor
 
 
-                        if not options.noLaunch:  # sorry for the double negative
+                        if options.noLaunch:
+                            print 'would launch', url
+                            # free the VMs
+                            time.sleep(3)
+                            response, content = httplib2.Http(timeout=60).\
+                                request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor, 'GET')
+                        else:
                             response, content = httplib2.Http(timeout=60).request(url, 'GET')
+
                         testsToLaunch.pop(i)
                         summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
+                        time.sleep(5)
                 else:
-                    print 'no VMs at this time'
+                    print 'not enough VMs at this time'
                     time.sleep(POLL_INTERVAL)
             #endif checking for servers
 
         except Exception as e:
             print 'have an exception'
             print traceback.format_exc()
+            time.sleep(POLL_INTERVAL)
     #endwhile
 
 

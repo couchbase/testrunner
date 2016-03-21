@@ -253,11 +253,15 @@ RES_MAGIC_BYTE = 0x81
 # magic, opcode, keylen, extralen, datatype, vbucket, bodylen, opaque, cas
 REQ_PKT_FMT = ">BBHBBHIIQ"
 
-# subdoc extras format
+
+# subdoc extras format - path len
 REQ_PKT_SD_EXTRAS= ">HB"
 
 # magic, opcode, keylen, extralen, datatype, status, bodylen, opaque, cas
 RES_PKT_FMT = ">BBHBBHIIQ"
+
+#opcode, flags, pathlen, vallen
+REQ_PKT_SD_MULTI_MUTATE = ">BBHI"
 
 
 # min recv packet size
@@ -307,14 +311,15 @@ ERR_SUBDOC_PATH_ENOENT = 0xc0
 ERR_SUBDOC_PATH_MISMATCH = 0xc1
 ERR_SUBDOC_PATH_EINVAL = 0xc2
 ERR_SUBDOC_PATH_E2BIG = 0xc3
-ERR_SUBDOC_DOC_E2DEEP = 0xc4
+ERR_SUBDOC_DOC_ETOODEEP = 0xc4
 ERR_SUBDOC_VALUE_CANTINSERT = 0xc5
 ERR_SUBDOC_DOC_NOTJSON = 0xc6
 ERR_SUBDOC_NUM_ERANGE = 0xc7
 ERR_SUBDOC_DELTA_ERANGE = 0xc8
 ERR_SUBDOC_PATH_EEXISTS = 0xc9
 ERR_SUBDOC_VALUE_TOODEEP = 0xca
-
+ERR_SUBDOC_INVALID_CMD_COMBO = 0xcb
+ERR_SUBDOC_MULTI_PATH_FAILURE = 0xcc
 
 # hello feature parameters - taken from protocol_binary.h
 PROTOCOL_BINARY_FEATURE_DATATYPE = 0x01,

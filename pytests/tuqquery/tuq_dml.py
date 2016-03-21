@@ -3,6 +3,7 @@ import copy
 import uuid
 import collections
 import json
+from tuq import ExplainPlanHelper
 from remote.remote_util import RemoteMachineShellConnection
 from tuqquery.tuq import QueryTests
 from couchbase_helper.documentgenerator import DocumentGenerator
@@ -15,10 +16,20 @@ class DMLQueryTests(QueryTests):
         super(DMLQueryTests, self).setUp()
         self.directory = self.input.param("directory", "/tmp/tuq_data")
         self.named_prepare = self.input.param("named_prepare", None)
-        #self.shell.execute_command("killall cbq-engine")
+        print "-"*100
+        print "Temp process shutdown to debug MB-16888"
+        print "-"*100
+        print(self.shell.execute_command("ps aux | grep cbq"))
+        print(self.shell.execute_command("ps aux | grep indexer"))
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket,
                                   timeout=self.wait_timeout * 5)
+        self.shell.execute_command("killall -9 cbq-engine")
+        self.shell.execute_command("killall -9 indexer")
+        self.sleep(60, 'wait for indexer')
+        print(self.shell.execute_command("ps aux | grep indexer"))
+        print(self.shell.execute_command("ps aux | grep cbq"))
+        print "-"*100
 
 ############################################################################################################################
 #
@@ -252,7 +263,8 @@ class DMLQueryTests(QueryTests):
             self.query = 'insert into %s (key , value) VALUES %s RETURNING ELEMENT name' % (bucket.name, values[:-1])
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.assertEqual(sorted(actual_result['results']), sorted([v['name'] for v in expected_item_values]),
+            if (self.use_rest):
+                self.assertEqual(sorted(actual_result['results']), sorted([v['name'] for v in expected_item_values]),
                              'Results expected:%s, actual: %s' % (expected_item_values, actual_result['results']))
 
     def test_insert_values_returning_elements_long_value(self):
@@ -598,7 +610,8 @@ class DMLQueryTests(QueryTests):
             self.query = 'upsert into %s (key , value) VALUES %s RETURNING ELEMENT name' % (bucket.name, values[:-1])
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.assertEqual(sorted(actual_result['results']), sorted([v['name'] for v in expected_item_values]),
+            if  (self.use_rest):
+                self.assertEqual(sorted(actual_result['results']), sorted([v['name'] for v in expected_item_values]),
                              'Results expected:%s, actual: %s' % (expected_item_values, actual_result['results']))
 
     def items_check(self, prefix, vls, num_docs):
@@ -636,7 +649,8 @@ class DMLQueryTests(QueryTests):
             self.query = 'explain delete from %s  use keys %s'  % (bucket.name, keys_to_delete)
             actual_result = self.run_cbq_query()
             self.log.info(actual_result["results"])
-            self.assertTrue(actual_result["results"][0]["~children"][0]["#operator"]=="KeyScan","KeysScan is not being used in delete query")
+	    plan = ExplainPlanHelper(actual_result)
+            self.assertTrue(plan["~children"][0]["#operator"]=="KeyScan","KeysScan is not being used in delete query")
 
     def test_delete_keys_use_index_clause(self):
         num_docs = self.input.param('docs_to_delete', 3)
@@ -743,30 +757,13 @@ class DMLQueryTests(QueryTests):
 
     def test_delete_where_clause_json_less_equal(self):
         keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
-        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_day"] <=1]
+        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["join_day"] <=1]
         for bucket in self.buckets:
-            self.query = 'delete from %s where job_day<=1'  % (bucket.name)
+            self.query = 'delete from %s where join_day<=1'  % (bucket.name)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
 
-    def test_delete_where_clause_json_not_equal(self):
-        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
-        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_title"] != 'Engineer']
-        for bucket in self.buckets:
-            self.query = 'delete from %s where job_title!="Engineer"'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self._keys_are_deleted(keys_to_delete)
-
-    def test_delete_where_clause_json_less_equal(self):
-        keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
-        keys_to_delete = [keys[i] for i in xrange(len(keys)) if values[i]["job_day"] <=1]
-        for bucket in self.buckets:
-            self.query = 'delete from %s where job_day<=1'  % (bucket.name)
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-        self._keys_are_deleted(keys_to_delete)
 
     def test_prepared_delete_where_clause_json_less_equal(self):
         keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where')
@@ -1182,7 +1179,7 @@ class DMLQueryTests(QueryTests):
                              if len([vm['os'] for vm in row['VMs']
                                      if vm['os'] == updated_value]) == 1], 'Os of vms were not changed')
 
-    def update_keys_clause_hints(self,idx_name):
+    def update_keys_clause_hints(self):
         num_docs = self.input.param('num_docs', 10)
         keys, _ = self._insert_gen_keys(num_docs, prefix='update_keys_hints %s' % str(uuid.uuid4())[:4])
         updated_value = 'new_name'
@@ -1202,7 +1199,7 @@ class DMLQueryTests(QueryTests):
             self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
             self.run_cbq_query()
 
-    def update_where_hints(self,idx_name):
+    def update_where_hints(self):
         num_docs = self.input.param('num_docs', 10)
         _, values = self._insert_gen_keys(num_docs, prefix='update_where %s' % str(uuid.uuid4())[:4])
         updated_value = 'new_name'
@@ -1243,7 +1240,11 @@ class DMLQueryTests(QueryTests):
         try:
             for indx in indexes:
                 fn = getattr(self, method_name)
-                fn(indx)
+                if("update_where_hints" in str(fn) or "update_keys_clause_hints" in str(fn)):
+                    fn()
+                else:
+                    fn(indx)
+
         finally:
             for bucket in self.buckets:
                 for indx in indexes:
@@ -1303,7 +1304,7 @@ class DMLQueryTests(QueryTests):
                     break
                 key, value = gen.next()
                 key = prefix + key
-                value = convert(json.loads(value))  
+                value = convert(json.loads(value))
                 for bucket in self.buckets:
                     self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (bucket.name, key, value)
                     actual_result = self.run_cbq_query()

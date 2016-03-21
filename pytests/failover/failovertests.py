@@ -144,6 +144,7 @@ class FailoverTests(FailoverBaseTest):
         # Kill or restart operations
         if self.killNodes or self.stopNodes or self.firewallOnNodes:
             self.victim_node_operations(node=chosen[0])
+            self.sleep(60)
             self.log.info(" Start Rebalance Again !")
             self.rest.rebalance(otpNodes=[node.id for node in self.nodes], ejectedNodes=[node.id for node in chosen])
 
@@ -219,6 +220,7 @@ class FailoverTests(FailoverBaseTest):
         # Kill or restart operations
         if self.killNodes or self.stopNodes or self.firewallOnNodes:
             self.victim_node_operations(node=chosen[0])
+            self.sleep(60)
             self.log.info(" Start Rebalance Again !")
             self.rest.rebalance(otpNodes=[node.id for node in self.nodes], ejectedNodes=[], deltaRecoveryBuckets=self.deltaRecoveryBuckets)
 
@@ -317,6 +319,7 @@ class FailoverTests(FailoverBaseTest):
                     self.victim_node_operations(node)
                     # Start Graceful Again
                     self.log.info(" Start Graceful Failover Again !")
+                    self.sleep(60)
                     success_failed_over = self.rest.fail_over(node.id, graceful=(self.graceful and graceful_failover))
                     msg = "graceful failover failed for nodes {0}".format(node.id)
                     self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
@@ -647,4 +650,4 @@ class FailoverTests(FailoverBaseTest):
             self.log.info(" Disable Firewall for Node ")
             for start_node in stop_nodes:
                 self.stop_firewall_on_node(start_node)
-        self.sleep(30)
+        self.sleep(60)

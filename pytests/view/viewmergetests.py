@@ -39,6 +39,7 @@ class ViewMergingTests(BaseTestCase):
             self.map_view_name = 'mapview1'
             self.red_view_name = 'redview1'
             self.red_view_stats_name = 'redview_stats'
+            self.keys_view_name = 'mapviewkeys'
             self.clients = self.init_clients()
             if 'first_case' in TestInputSingleton.input.test_params:
                  self.create_ddocs(False)
@@ -95,8 +96,19 @@ class ViewMergingTests(BaseTestCase):
 
     def test_keys(self):
         keys = [5, 3, 10, 39, 666666, 21]
-        results = self.merged_query(self.map_view_name,
-                                    {"keys": keys})
+        results = self.merged_query(self.map_view_name, {"keys": keys})
+        self.verify_results(results, {"keys": keys})
+
+        keys = [2, 1, 4]
+        results = self.merged_query(self.keys_view_name,
+                                    {"keys": keys, "reduce": "false"},
+                                    ddoc='test3')
+        self.verify_results(results, {"keys": keys})
+
+        keys = [0, 2, 1]
+        results = self.merged_query(self.keys_view_name,
+                                    {"keys": keys, "group": "true"},
+                                    ddoc='test3')
         self.verify_results(results, {"keys": keys})
 
     def test_include_docs(self):
@@ -139,8 +151,19 @@ class ViewMergingTests(BaseTestCase):
         results = self.merged_query(self.map_view_name, {'stale': 'update_after'})
         self.assertEquals(results.get(u'total_rows', None), self.num_docs)
         self.assertEquals(len(results.get(u'rows', None)), self.num_docs)
-        time.sleep(1)
-        results = self.merged_query(self.map_view_name, {'stale': 'ok'})
+
+        retries = 50
+        for i in range(retries):
+            results = self.merged_query(self.map_view_name, {'stale': 'ok'})
+            if results['total_rows'] == self.num_docs + 2:
+                break
+            else:
+                # Poll interval to not overwhelm the server
+                time.sleep(0.2)
+        else:
+            self.fail("Updater didn't finish after {0} retries".format(
+                    retries))
+
         self.assertEquals(results.get(u'total_rows', None), self.num_docs + 2)
         self.assertEquals(len(results.get(u'rows', None)), self.num_docs + 2)
         self.verify_keys_are_sorted(results)
@@ -232,41 +255,52 @@ class ViewMergingTests(BaseTestCase):
                 keys = [int(params['key']), ]
             else:
                 keys = []
-        if 'keys' in params:
-            keys = []
-            for k in params['keys']:
-                if int(k) <= self.num_docs:
-                    keys.append(int(k))
-            # When ?keys=[...] parameter is sent, rows are not guaranteed to come
-            # sorted by key.
-            keys.sort()
         return keys
 
     def verify_results(self, results, params):
-        expected = self.calculate_matching_keys(params)
-        self.assertEquals(results.get(u'total_rows', 0), self.num_docs,
-                          "total_rows parameter is wrong, expected %d, actual %d"
-                          % (self.num_docs, results.get(u'total_rows', 0)))
-        self.assertEquals(len(results.get(u'rows', [])), len(expected),
-                          "Rows number is wrong, expected %d, actual %d"
-                          % (len(expected), len(results.get(u'rows', []))))
-        if expected:
-            if 'keys' not in params:
+        if 'keys' not in params:
+            expected = self.calculate_matching_keys(params)
+            self.assertEquals(
+                results.get(u'total_rows', 0), self.num_docs,
+                "total_rows parameter is wrong, expected %d, actual %d"
+                % (self.num_docs, results.get(u'total_rows', 0)))
+            self.assertEquals(
+                len(results.get(u'rows', [])), len(expected),
+                "Rows number is wrong, expected %d, actual %d"
+                % (len(expected), len(results.get(u'rows', []))))
+            if expected:
                 # first
-                self.assertEquals(results.get(u'rows', [])[0]['key'], expected[0],
-                                  "First row key is wrong, expected %d, actual %d"
-                                  % (expected[0], results.get(u'rows', [])[0]['key']))
+                self.assertEquals(
+                    results.get(u'rows', [])[0]['key'], expected[0],
+                    "First row key is wrong, expected %d, actual %d"
+                    % (expected[0], results.get(u'rows', [])[0]['key']))
                 # last
-                self.assertEquals(results.get(u'rows', [])[-1]['key'], expected[-1],
-                                  "Last row key is wrong, expected %d, actual %d"
-                                  % (expected[-1], results.get(u'rows', [])[-1]['key']))
-                desc = 'descending' in params and params['descending'] == 'true'
+                self.assertEquals(
+                    results.get(u'rows', [])[-1]['key'], expected[-1],
+                    "Last row key is wrong, expected %d, actual %d"
+                    % (expected[-1], results.get(u'rows', [])[-1]['key']))
+                desc = ('descending' in params and
+                        params['descending'] == 'true')
                 self.verify_keys_are_sorted(results, desc=desc)
-            else:
-                actual = sorted([row[u'key'] for row in results.get(u'rows', [])])
-                self.assertEquals(actual, expected,
-                                  "Results are wrong, expected %s, actual %s"
-                                  % (expected, results.get(u'rows', [])))
+        else:
+            # For the keys parameter there's a test where there's more than
+            # one document per emitted key, hence we can't determine the
+            # total count. But the important things to verify is that the
+            # result contains at most the keys that were supplied as query
+            # parameter and that the keys from the response have the same
+            # order as the keys that were supplied as query parameter.
+            rows = [row[u'key'] for row in results.get(u'rows', [])]
+            self.log.info("vmx: viewmergetests: rows {}".format(rows))
+            actual = list(rows)
+            for key in params['keys']:
+                while len(rows) > 0 and rows[0] == key:
+                    rows.pop(0)
+
+            self.assertEquals(
+                len(rows), 0,
+                "Result is wrong, expected the result to be sorted and "
+                "a subset of the `keys` query parameter. Supplied keys {}, "
+                "actual returned keys {}".format(params['keys'], actual))
 
     def verify_results_dev(self, results):
         # A development view is always a subset of the production view,
@@ -319,6 +353,14 @@ class ViewMergingTests(BaseTestCase):
              emit(doc.string, doc.string);
           }''', '''_stats''', dev_view=is_dev_view)
         self.cluster.create_view(self.master, 'test2', redview_stats)
+        # The keys view is there to test the `keys` query parameter. In order
+        # to reproduce the ordering bug (MB-16618) there must be more than
+        # one document with the same key, hence modulo is used
+        modulo = self.num_docs / 3
+        keysview = View(self.keys_view_name, '''function(doc) {
+             emit(doc.integer % ''' + str(modulo) + ''', doc.string);
+          }''', '_count', dev_view=is_dev_view)
+        self.cluster.create_view(self.master, 'test3', keysview)
         RebalanceHelper.wait_for_persistence(self.master, self.bucket, 0)
 
     def init_clients(self):

@@ -489,12 +489,14 @@ def watcher():
     http://greenteapress.com/semaphores/threading_cleanup.py (2012-07-31)
     It's now possible to interrupt the testrunner via ctrl-c at any time
     in a platform neutral way."""
-
     if sys.platform == 'win32':
         p = Process(target=main, name="MainProcess")
         p.start()
         try:
             p.join()
+            rc = p.exitcode
+            if rc > 0:
+                sys.exit(rc)
         except KeyboardInterrupt:
             print 'KeyBoardInterrupt'
             p.terminate()

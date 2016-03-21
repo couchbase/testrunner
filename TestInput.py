@@ -26,6 +26,7 @@ class TestInput(object):
         self.membase_settings = None
         self.test_params = {}
         self.tuq_client = {}
+        self.elastic = []
         #servers , each server can have u,p,port,directory
 
     def param(self, name, *args):
@@ -80,6 +81,7 @@ class TestInputServer(object):
         self.index_path = ''
         self.n1ql_port = ''
         self.index_port = ''
+        self.fts_port = ''
         self.es_username = ''
         self.es_password = ''
         self.upgraded = False
@@ -210,6 +212,8 @@ class TestInputParser():
                 input.ui_conf = TestInputParser.get_ui_tests_config(config, section)
             elif section == 'tuq_client':
                 input.tuq_client = TestInputParser.get_tuq_config(config, section)
+            elif section == 'elastic':
+                input.elastic = TestInputParser.get_elastic_config(config, section)
             elif result is not None:
                 cluster_list = TestInputParser.get_server_ips(config, section)
                 cluster_ips.extend(cluster_list)
@@ -322,6 +326,21 @@ class TestInputParser():
         return conf
 
     @staticmethod
+    def get_elastic_config(config, section):
+        server = TestInputServer()
+        options = config.options(section)
+        for option in options:
+            if option == 'ip':
+                server.ip = config.get(section, option)
+            if option == 'port':
+                server.port = config.get(section, option)
+            if option == 'es_username':
+                server.es_username = config.get(section, option)
+            if option == 'es_password':
+                server.es_password = config.get(section, option)
+        return server
+
+    @staticmethod
     def get_server(ip, config):
         server = TestInputServer()
         server.ip = ip
@@ -347,6 +366,8 @@ class TestInputParser():
                         server.n1ql_port = config.get(section, option)
                     if option == 'index_port':
                         server.index_port = config.get(section, option)
+                    if option == 'fts_port':
+                        server.fts_port = config.get(section, option)
                 break
                 #get username
                 #get password

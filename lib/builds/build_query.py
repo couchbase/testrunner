@@ -16,10 +16,11 @@ from testconstants import SHERLOCK_VERSION
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_VERSION_2_WITH_REL
-from testconstants import COUCHBASE_RELEASE_VERSIONS_3
+from testconstants import COUCHBASE_RELEASE_FROM_VERSION_3
 from testconstants import COUCHBASE_FROM_VERSION_3
 from testconstants import CB_RELEASE_REPO
 from testconstants import CB_LATESTBUILDS_REPO
+from testconstants import CE_EE_ON_SAME_FOLDER
 
 
 class MembaseBuild(object):
@@ -151,7 +152,7 @@ class BuildQuery(object):
         if deliverable_type == "exe":
             """ /3.0.1/couchbase-server-enterprise_3.0.1-windows_amd64.exe """
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
-                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
+                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
                     arch_type = "amd64"
                     if "x86_64" not in os_architecture:
                         arch_type = "x86"
@@ -171,7 +172,7 @@ class BuildQuery(object):
                             product, os_architecture, deliverable_type,
                             build_details, CB_RELEASE_REPO)
             else:
-                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
+                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
                     arch_type = "amd64"
                     if "x86_64" not in os_architecture:
                         arch_type = "x86"
@@ -198,7 +199,7 @@ class BuildQuery(object):
                                http://builds.hq.northscale.net/latestbuilds/
                                   couchbase-server-enterprise_x86_64_3.0.1-1444.rpm
                 """
-                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
+                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
                     if "rpm" in deliverable_type:
                         build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
@@ -225,7 +226,7 @@ class BuildQuery(object):
                             product, os_architecture, deliverable_type,
                                         build_details, CB_RELEASE_REPO)
             else:
-                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
+                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
                     if "rpm" in deliverable_type:
                         build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
                             .format(build_version, product, os_architecture,
@@ -276,7 +277,7 @@ class BuildQuery(object):
         if deliverable_type == "exe":
             """ /3.0.1/couchbase-server-enterprise_3.0.1-windows_amd64.exe """
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
-                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
+                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
                     arch_type = "amd64"
                     if "x86_64" not in os_architecture:
                         arch_type = "x86"
@@ -296,7 +297,7 @@ class BuildQuery(object):
                             product, os_architecture, deliverable_type,
                             build_details, CB_RELEASE_REPO)
             else:
-                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
+                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
                     arch_type = "amd64"
                     if "x86_64" not in os_architecture:
                         arch_type = "x86"
@@ -323,7 +324,7 @@ class BuildQuery(object):
                                http://builds.hq.northscale.net/latestbuilds/
                                   couchbase-server-enterprise_x86_64_3.0.1-1444.rpm
                 """
-                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
+                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
                     if "rpm" in deliverable_type:
                         build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
@@ -350,7 +351,7 @@ class BuildQuery(object):
                             product, os_architecture, deliverable_type,
                             build_details, CB_RELEASE_REPO)
             else:
-                if build_version[:5] in COUCHBASE_RELEASE_VERSIONS_3:
+                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
                     if "rpm" in deliverable_type:
                         build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
                             .format(build_version, product, os_architecture,
@@ -372,9 +373,19 @@ class BuildQuery(object):
                         os_architecture, deliverable_type, build_details,
                         CB_LATESTBUILDS_REPO)
         # This points to the Internal s3 account to look for release builds
+        """ add ce folder in community version from 3.0.2 release """
+        if "community" in product and build_version[:5] not in CE_EE_ON_SAME_FOLDER:
+            build.url = build.url.replace("couchbase-server-community", \
+                                          "ce/couchbase-server-community")
         if is_amazon:
-            build.url = 'https://s3.amazonaws.com/packages.couchbase/releases/{0}/{1}_{2}_{0}.{3}'\
-                .format(build_version, product, os_architecture, deliverable_type)
+            """
+                for centos only
+                         https://s3.amazonaws.com/packages.couchbase.com/releases/
+                         4.0.0/couchbase-server-enterprise-4.0.0-centos6.x86_64.rpm """
+            build.url = "https://s3.amazonaws.com/packages.couchbase.com/releases/"\
+                        "{0}/{1}-{0}-centos6.{2}.{3}" \
+                        .format(build_version, product, os_architecture,
+                                                       deliverable_type)
             build.url = build.url.replace("enterprise", "community")
             build.name = build.name.replace("enterprise", "community")
         return build
@@ -524,6 +535,7 @@ class BuildQuery(object):
             """ sherlock build name
                 centos 6: couchbase-server-enterprise-3.5.0-71-centos6.x86_64
                 debian7:  couchbase-server-enterprise_3.5.0-10-debian7_amd64.deb
+                debian8:  couchbase-server-enterprise_4.5.0-1194-debian8_amd64.deb
                 ubuntu 12.04:
                     couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
                 mac:
@@ -533,7 +545,7 @@ class BuildQuery(object):
                     couchbase-server-enterprise_3.5.0-952-windows_amd64.exe"""
 
             if any( x + "-" in build_info for x in COUCHBASE_FROM_VERSION_3):
-                deb_words = ["debian7", "ubuntu12.04", "ubuntu14.04",
+                deb_words = ["debian7", "debian8", "ubuntu12.04", "ubuntu14.04",
                              "windows", "macos"]
                 if "centos" not in build_info:
                     tmp_str = build_info.split("_")
@@ -564,8 +576,8 @@ class BuildQuery(object):
                 elif "-amd64" in build_info:
                     build.architecture_type = "x86_64"
                     build_info = build_info.replace("-amd64", "")
-                del_words = ["centos6", "debian7", "ubuntu12.04", "ubuntu14.04", \
-                             "windows", "macos", "centos7"]
+                del_words = ["centos6", "debian7", "debian8", "ubuntu12.04", \
+                             "ubuntu14.04", "windows", "macos", "centos7"]
                 if build_info.startswith("couchbase-server"):
                     build.product = build_info.split("-")
                     build.product = "-".join([i for i in build.product \
@@ -611,6 +623,7 @@ class BuildQuery(object):
                /1796/couchbase-server-enterprise-4.0.0-1796-oel6.x86_64.rpm
                /723/couchbase-server-enterprise_3.5.0-723-ubuntu12.04_amd64.deb
                /723/couchbase-server-enterprise_3.5.0-732-debian7_amd64.deb
+               /1194/couchbase-server-enterprise_4.5.0-1194-debian8_amd64.deb
                /1120/couchbase-server-enterprise_3.5.0-1120-macos_x86_64.zip
         toy=Ce
         build.name = couchbase-server-enterprise_x86_64_3.0.0-xx-rel.deb
@@ -675,7 +688,6 @@ class BuildQuery(object):
             edition_type = edition_type.replace("centos6", "ubuntu_1204")
         if "debian" in distribution_version:
             os_name = "debian7_"
-
         joint_char = "_"
         version_join_char = "_"
         if toy is not "":
@@ -730,6 +742,9 @@ class BuildQuery(object):
                 elif "debian gnu/linux 7" in distribution_version:
                     build.distribution_version = "debian7"
                     os_name = "debian7"
+                elif "debian gnu/linux 8" in distribution_version:
+                    build.distribution_version = "debian8"
+                    os_name = "debian8"
                 elif "windows" in distribution_version:
                     os_name = "windows"
                     if "x86_64" not in architecture_type:
@@ -764,6 +779,9 @@ class BuildQuery(object):
             elif "debian gnu/linux 7" in distribution_version:
                 build.distribution_version = "debian7"
                 os_name = "debian7_"
+            elif "debian gnu/linux 8" in distribution_version:
+                build.distribution_version = "debian8"
+                os_name = "debian8_"
             elif "windows" in distribution_version:
                 os_name = "windows-"
                 if "x86_64" not in architecture_type:

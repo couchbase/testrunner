@@ -111,6 +111,7 @@ class QueryTests(BaseTestCase):
                 self.n1ql_helper.killall_tuq_process()
         super(QueryTests, self).tearDown()
 
+
     def generate_docs(self, num_items, start=0):
         try:
             if self.dataset == "simple":
@@ -121,6 +122,8 @@ class QueryTests(BaseTestCase):
                 return self.generate_docs_bigdata(num_items, start)
             if self.dataset == "sabre":
                 return self.generate_docs_sabre(num_items, start)
+            if self.dataset == "array":
+                return self.generate_docs_array(num_items, start)
             return getattr(self, 'generate_docs_' + self.dataset)(num_items, start)
         except Exception, ex:
             self.log.info(ex)
@@ -139,6 +142,8 @@ class QueryTests(BaseTestCase):
                 return self.generate_ops(num_items, start, json_generator.generate_docs_sabre)
             if self.dataset == "bigdata":
                 return self.generate_ops(num_items, start, json_generator.generate_docs_bigdata)
+            if self.dataset == "array":
+                return self.generate_ops(num_items, start, json_generator.generate_docs_array)
         except Exception, ex:
             self.log.info(ex)
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
@@ -168,6 +173,11 @@ class QueryTests(BaseTestCase):
         return json_generator.generate_docs_bigdata(docs_per_day=docs_per_day,
             start=start, value_size=self.value_size)
 
+    def generate_docs_array(self, docs_per_day, start=0):
+        json_generator = JsonGenerator()
+        return json_generator.generate_docs_array(docs_per_day=docs_per_day,
+            start=start)
+
     def generate_ops(self, docs_per_day, start=0, method=None):
         gen_docs_map = {}
         for key in self.ops_dist_map.keys():
@@ -175,8 +185,8 @@ class QueryTests(BaseTestCase):
             if key == "update":
                 isShuffle = True
             if self.dataset != "bigdata":
-                gen_docs_map[key] = method(self.ops_dist_map[key]["end"],
-                    self.ops_dist_map[key]["start"])
+                gen_docs_map[key] = method(docs_per_day=self.ops_dist_map[key]["end"],
+                    start=self.ops_dist_map[key]["start"])
             else:
                 gen_docs_map[key] = method(value_size=self.value_size,
                     end=self.ops_dist_map[key]["end"],
