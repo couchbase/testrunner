@@ -1947,7 +1947,7 @@ class QueriesIndexTests(QueryTests):
                     plan = ExplainPlanHelper(actual_result)
                     print plan
                     self.assertTrue(
-                    plan['~children'][0]['#operator'] == 'IndexScan',
+                    plan['~children'][0]['#operator'] == 'DistinctScan',
                     "IndexScan is not being used")
                     result1 = plan['~children'][0]['scan']['index']
                     self.assertTrue(result1 == index_name)
