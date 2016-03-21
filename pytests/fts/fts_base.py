@@ -765,10 +765,11 @@ class CouchbaseCluster:
         service_map = RestConnection(self.__master_node).get_nodes_services()
         for node_ip, services in service_map.iteritems():
             node = self.get_node(node_ip.split(':')[0], node_ip.split(':')[1])
-            if "fts" in services:
-                self.__fts_nodes.append(node)
-            else:
-                self.__non_fts_nodes.append(node)
+            if node:
+                if "fts" in services:
+                    self.__fts_nodes.append(node)
+                else:
+                    self.__non_fts_nodes.append(node)
 
     def get_fts_nodes(self):
         self.__separate_nodes_on_services()
@@ -1688,8 +1689,9 @@ class CouchbaseCluster:
         """
         return self.__async_swap_rebalance(master=True, services=services)
 
-    def async_swap_rebalance(self, services=None):
-        return self.__async_swap_rebalance(services=services)
+    def async_swap_rebalance(self, num_nodes=1, services=None):
+        return self.__async_swap_rebalance(num_nodes=num_nodes,
+                                           services=services)
 
     def swap_rebalance_master(self, services=None):
         """Swap rebalance master node and wait
