@@ -9,6 +9,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
 
     def setUp(self):
         super(SubdocScenarioTests, self).setUp()
+        self.graceful =  self.input.param("graceful",False)
         self.find_nodes_in_list()
         self.generate_map_nodes_out_dist()
         self.run_sync_data()
