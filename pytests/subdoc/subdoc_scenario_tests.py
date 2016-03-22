@@ -5,16 +5,16 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from subdoc_autotestgenerator import SubdocAutoTestGenerator
 import copy
 
-class SubducScenarioTests(SubdocAutoTestGenerator):
+class SubdocScenarioTests(SubdocAutoTestGenerator):
 
     def setUp(self):
-        super(SubducScenarioTests, self).setUp()
+        super(SubdocScenarioTests, self).setUp()
         self.find_nodes_in_list()
         self.generate_map_nodes_out_dist()
         self.run_sync_data()
 
     def tearDown(self):
-        super(SubducScenarioTests, self).tearDown()
+        super(SubdocScenarioTests, self).tearDown()
 
     def test_rebalance_in(self):
         try:
