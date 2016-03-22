@@ -22,7 +22,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],self.nodes_in_list, [], services = self.services_in)
             self.run_mutation_operations_for_situational_tests()
             for t in self.load_thread_list:
-                if t.isAlive():
+                if t.is_alive():
                     if t != None:
                         t.signal = False
             rebalance.result()
@@ -35,7 +35,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
             self.run_mutation_operations_for_situational_tests()
             for t in self.load_thread_list:
-                if t.isAlive():
+                if t.is_alive():
                     if t != None:
                         t.signal = False
         except Exception, ex:
@@ -49,7 +49,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
                                    self.nodes_out_list, services = self.services_in)
             self.run_mutation_operations_for_situational_tests()
             for t in self.load_thread_list:
-                if t.isAlive():
+                if t.is_alive():
                     if t != None:
                         t.signal = False
         except Exception, ex:
@@ -86,7 +86,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
                                    [], servr_out)
             self.run_mutation_operations_for_situational_tests()
             for t in self.load_thread_list:
-                if t.isAlive():
+                if t.is_alive():
                     if t != None:
                         t.signal = False
         except Exception, ex:
@@ -119,7 +119,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
             self.run_mutation_operations_for_situational_tests()
             for t in self.load_thread_list:
-                if t.isAlive():
+                if t.is_alive():
                     if t != None:
                         t.signal = False
         except Exception, ex:
@@ -139,7 +139,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
                                    [], [servr_out[0]])
             self.run_mutation_operations_for_situational_tests()
             for t in self.load_thread_list:
-                if t.isAlive():
+                if t.is_alive():
                     if t != None:
                         t.signal = False
         except Exception, ex:
@@ -157,7 +157,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
                 self.start_firewall_on_node(node)
             self.run_mutation_operations_for_situational_tests()
             for t in self.load_thread_list:
-                if t.isAlive():
+                if t.is_alive():
                     if t != None:
                         t.signal = False
         except Exception, ex:
@@ -177,7 +177,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
         for task in compact_tasks:
             task.result()
         for t in self.load_thread_list:
-            if t.isAlive():
+            if t.is_alive():
                 if t != None:
                     t.signal = False
 
@@ -192,7 +192,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
         self.run_mutation_operations_for_situational_tests()
         for t in self.load_thread_list:
-            if t.isAlive():
+            if t.is_alive():
                 if t != None:
                     t.signal = False
 
@@ -203,6 +203,6 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
             RestConnection(self.master).flush_bucket(bucket.name)
         self.run_mutation_operations_for_situational_tests()
         for t in self.load_thread_list:
-            if t.isAlive():
+            if t.is_alive():
                 if t != None:
                     t.signal = False
