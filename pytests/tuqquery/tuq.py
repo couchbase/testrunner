@@ -803,7 +803,7 @@ class QueryTests(BaseTestCase):
                 a, cas, b = client.get(key.encode('utf-8'))
                 expected_result.append({"cas" : cas})
             expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))
-           # self._verify_results(actual_result, expected_result)
+            #self._verify_results(actual_result, expected_result)
 
     def test_meta_negative(self):
         queries_errors = {'SELECT distinct name FROM %s WHERE META().type = "json"' : ('syntax error', 3000)}
@@ -1502,7 +1502,7 @@ class QueryTests(BaseTestCase):
                                for doc in self.full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
                                                                        doc['period']))
-            self._verify_results(actual_result['results'], expected_result)
+            self._verify_results(actual_result, expected_result)
 
     def test_case_expr(self):
         for bucket in self.buckets:
