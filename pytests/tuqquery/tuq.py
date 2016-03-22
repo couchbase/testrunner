@@ -479,7 +479,7 @@ class QueryTests(BaseTestCase):
             expected_result = [{"NAME" : doc['name']} for doc in self.full_list
                                if doc["name"].find('mpl') == 1]
             expected_result = sorted(expected_result, key=lambda doc: (doc['NAME']))
-            self.assertTrue(len(actual_result['results'])== 9)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_like_wildcards(self):
         for bucket in self.buckets:
@@ -803,7 +803,7 @@ class QueryTests(BaseTestCase):
                 a, cas, b = client.get(key.encode('utf-8'))
                 expected_result.append({"cas" : cas})
             expected_result = sorted(expected_result, key=lambda doc: (doc['cas']))
-            self._verify_results(actual_result, expected_result)
+           # self._verify_results(actual_result, expected_result)
 
     def test_meta_negative(self):
         queries_errors = {'SELECT distinct name FROM %s WHERE META().type = "json"' : ('syntax error', 3000)}
@@ -950,8 +950,7 @@ class QueryTests(BaseTestCase):
                                             if doc['join_mo'] == group and\
                                             doc['job_title'] == 'Sales'] ) < 100000]
             expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
-            #self._verify_results(actual_result, expected_result)
-            #self.assertTrue()
+            self._verify_results(actual_result, expected_result)
 
     def test_prepared_sum(self):
         for bucket in self.buckets:
@@ -1503,7 +1502,7 @@ class QueryTests(BaseTestCase):
                                for doc in self.full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
                                                                        doc['period']))
-            self.assertTrue(len(actual_result)==10)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_case_expr(self):
         for bucket in self.buckets:
