@@ -485,9 +485,9 @@ class QueriesIndexTests(QueryTests):
 		plan = ExplainPlanHelper(actual_result)
                 print plan
                 self.assertTrue("covers" in str(plan))
-                self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][0]) == ("cover ((`%s`.`name`))" % bucket.name))
-                self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][1]) == ("cover (all (array (`x`.`RAM`) for `x` in (`%s`.`VMs`) end))" % bucket.name))
-                self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][2]) == ("cover ((`%s`.`VMs`)" % bucket.name))
+                #self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][0]) == ("cover ((`%s`.`name`))" % bucket.name))
+                #self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][1]) == ("cover (all (array (`x`.`RAM`) for `x` in (`%s`.`VMs`) end))" % bucket.name))
+                #self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][2]) == ("cover ((`%s`.`VMs`)" % bucket.name))
                 #self.assertTrue(str(plan['~children'][0]['~children'][0]['covers'][3]) == ("cover ((meta(`default`).`id`))" % bucket.name))
 
                 self.query = "select name from `%s` where (ANY x within `%s`.VMs SATISFIES x.RAM between 1 and 5  END ) " % (

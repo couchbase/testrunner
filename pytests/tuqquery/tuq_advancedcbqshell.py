@@ -60,11 +60,11 @@ class AdvancedQueryTests(QueryTests):
             for bucket in self.buckets:
                 try:
                     queries = ['\set -timeout "10ms";',"create primary index on bucketname;","select * from bucketname;"]
-                    o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,bucket.name,'',bucket.name,'')
+                    o = shell.execute_commands_inside('%s/go_cbq -q -engine=http://%s:8093/' % (self.path,server.ip),'',queries,bucket.name,'',bucket.name,'')
                     print o
                     self.assertEqual('timeout',o[7:])
                     queries = ['\set -timeout "10ms";',"create primary index on bucketname;","select * from bucketname;"]
-                    o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,bucket.name,'',bucket.name,True)
+                    o = shell.execute_commands_inside('%s/go_cbq -quiet -engine=http://%s:8093/' % (self.path,server.ip),'',queries,bucket.name,'',bucket.name,True)
                     print o
                     self.assertEqual('timeout',o[7:])
                 finally:
