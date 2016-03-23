@@ -22,12 +22,55 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 
 
+"""
+IMPORTANT! NEED TO READ BEFORE RUN UI TEST
+The first server should be host UI slave (ask IT to get it)
+ini file format must follow format below [uiconf]
+
+#### ini file start here
+[global]
+username:xxxx
+password:xxxx
+#ssh_key=/home/xxxx
+port:8091
+
+[servers]
+1:xxx.xxx.xxx.xxx
+2:xxx.xx.xxx.xx
+
+[membase]
+rest_username:Administrator
+rest_password:password
+
+[uiconf]
+browser:chrome
+chrome_path:path_to_chrome_driver
+selenium_path:path_to_selenium_standalone_server
+selenium_ip:UI_slave_IP
+selenium_port:4444
+selenium_user:username_used_to_login_to_UI_slave
+selenium_password:password_used_to_login_to_UI_slave
+screenshots:logs/screens
+
+### ini file end here
+
+jenkins slave must install python selenium as we import it above
+
+"""
+
 class BaseUITestCase(unittest.TestCase):
     # selenium thread
-
     def _start_selenium(self):
-        self.shell.execute_command("java -jar ~/selenium-server-standalone-2.52.0.jar "
-                                   "-Dwebdriver.chromedriver='~/Applications/chromedriver' > selenium.log 2>&1")
+        host = self.machine.ip
+        if host in ['localhost', '127.0.0.1']:
+             os.system("java -jar %sselenium-server-standalone*.jar "
+                       "-Dwebdriver.chrome.driver=%s > selenium.log 2>&1"
+                                 % (self.input.ui_conf['selenium_path'],\
+                                      self.input.ui_conf['chrome_path']))
+        else:
+            """ go to remote server with better video driver to display browser """
+            self.shell.execute_command('{0}start-selenium.bat > {0}selenium.log 2>&1 &'\
+                                           .format(self.input.ui_conf['selenium_path']))
 
     def _kill_old_drivers(self):
         if self.shell.extract_remote_info().type.lower() == 'windows':
@@ -55,19 +98,24 @@ class BaseUITestCase(unittest.TestCase):
         self.t.start()
 
     def _is_selenium_running(self):
+        self.log.info("check if selenium is running")
         host = self.machine.ip
         if host in ['localhost', '127.0.0.1']:
             cmd = 'ps -ef|grep selenium-server'
             output = commands.getstatusoutput(cmd)
             if str(output).find('selenium-server-standalone') > -1:
+                self.log.info("selenium is running")
                 return True
         else:
-            #cmd = "ssh {0}@{1} 'bash -s' < 'tasklist |grep selenium-server'".format(self.input.servers[0].ssh_username,
-            #                                                                        host)
-            cmd = 'tasklist |grep java'
+            """need to add code to go either windows or linux """
+            #cmd = "ssh {0}@{1} 'bash -s' < 'tasklist |grep selenium-server'"
+            #.format(self.input.servers[0].ssh_username,
+            #                                                           host)
+            cmd = "tasklist | grep java"
             o, r = self.shell.execute_command(cmd)
             #cmd = "ssh {0}@{1} 'bash -s' < 'ps -ef|grep selenium-server'"
             if str(o).find('java') > -1:
+                self.log.info("selenium is running")
                 return True
         return False
 
@@ -95,32 +143,23 @@ class BaseUITestCase(unittest.TestCase):
                 self._wait_for_selenium_is_started()
             self.log.info('start selenium session')
             if self.browser == 'firefox':
-                self.log.info("firefox")
-        #         self.driver = webdriver.Remote(desired_capabilities={
-        #     "browserName": "firefox",
-        #     "platform": "MAC",
-        # })
+                self.log.info("Test Couchbase Server UI in Firefox")
                 self.driver = webdriver.Remote(command_executor='http://{0}:{1}/wd/hub'
-                                               .format(self.machine.ip,
-                                                       self.machine.port),
-                                               desired_capabilities=DesiredCapabilities.FIREFOX)
+                                                               .format(self.machine.ip,
+                                                                    self.machine.port),
+                                     desired_capabilities=DesiredCapabilities.FIREFOX)
             elif self.browser == 'chrome':
-                self.log.info("chrome")
-                local_capabilities = DesiredCapabilities.CHROME
-                chrome_options = Options()
-                chrome_options.add_experimental_option("excludeSwitches", ["ignore-certificate-errors"])
-                local_capabilities.update(chrome_options.to_capabilities())
-                self.log.info(self.machine.ip)
-                self.log.info(self.machine.port)
-                self.driver = webdriver.Remote(desired_capabilities={
-            "browserName": "chrome",
-            "platform": "MAC",
-        })
-            self.log.info('start selenium started')
+                self.log.info("Test Couchbase Server UI in Chrome")
+                self.driver = webdriver.Remote(command_executor='http://{0}:{1}/wd/hub'
+                                                               .format(self.machine.ip,
+                                                                    self.machine.port),
+                                      desired_capabilities=DesiredCapabilities.CHROME)
+            """ need to add support test on Internet Explorer """
 
+            self.log.info('*** selenium started ***')
             self.driver.get("http://" + self.servers[0].ip + ":8091")
-            self.username = "Administrator"
-            self.password = "password"
+            self.username = self.input.membase_settings.rest_username
+            self.password = self.input.membase_settings.rest_password
             self.driver.maximize_window()
         except Exception as ex:
             self.input.test_params["stop-on-failure"] = True
@@ -192,7 +231,10 @@ class Control():
 
     def highlightElement(self):
         if self.by:
-            self.selenium.execute_script("document.evaluate(\"{0}\",document,null,XPathResult.ANY_TYPE, null).iterateNext().setAttribute('style','background-color:yellow');".format(self.by))
+            self.selenium.execute_script("document.evaluate(\"{0}\",document,null,\
+                           XPathResult.ANY_TYPE, null).iterateNext().setAttribute(\
+                                              'style','background-color:yellow');"\
+                                                                  .format(self.by))
 
     def type_native(self, text):
         ActionChains(self.selenium).click(self.web_element).perform()
@@ -323,7 +365,7 @@ class BaseHelper():
         self.controls = BaseHelperControls(tc.driver)
 
     def login(self, user=None, password=None):
-        self.tc.log.info("Try to login to application")
+        self.tc.log.info("Try to login to Couchbase Server in browser")
         if not user:
             user =  self.tc.input.membase_settings.rest_username
         if not password:
