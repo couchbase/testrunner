@@ -41,7 +41,7 @@ port:8091
 
 [membase]
 rest_username:Administrator
-rest_password:password
+rest_password:xxxxxxx
 
 [uiconf]
 browser:chrome
