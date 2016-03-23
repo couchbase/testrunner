@@ -2305,15 +2305,15 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
-                    self.query = "EXPLAIN SELECT join_yr,count(*) AS test FROM %s where join_yr > 2009 GROUP BY join_yr ORDER BY name;" % (bucket.name)
+                    self.query = "EXPLAIN SELECT join_yr,count(*),name FROM %s where join_yr > 2009 GROUP BY join_yr,name ORDER BY name;" % (bucket.name)
                     if self.covering_index:
                         self.test_explain_covering_index(index_name)
-                    self.query = "SELECT join_yr,count(*) AS test  FROM %s where join_yr > 2009 GROUP BY join_yr ORDER BY name;" % (bucket.name)
+                    self.query = "SELECT join_yr,count(*),name  FROM %s where join_yr > 2009 GROUP BY join_yr,name ORDER BY name;" % (bucket.name)
                     actual_result = self.run_cbq_query()
                     print actual_result
-                    # self.query = "SELECT join_yr,count(*) AS test FROM %s use index(`#primary`) where join_yr > 2009 GROUP BY join_yr ORDER BY name;" % (bucket.name)
-                    # expected_result = self.run_cbq_query()
-                    # self.assertTrue(sorted(actual_result['results'])==sorted(expected_result['results']))
+                    self.query = "SELECT join_yr,count(*),name FROM %s use index(`#primary`) where join_yr > 2009 GROUP BY join_yr,name ORDER BY name;" % (bucket.name)
+                    expected_result = self.run_cbq_query()
+                    self.assertTrue(len(actual_result['results'])==len(expected_result['results']))
             finally:
                     for index_name in created_indexes:
                         self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
