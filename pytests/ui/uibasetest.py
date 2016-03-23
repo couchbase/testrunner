@@ -23,9 +23,10 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 
 
 """
-IMPORTANT! NEED TO READ BEFORE RUN UI TEST
-The first server should be host UI slave (ask IT to get it)
+*** IMPORTANT! NEED TO READ BEFORE RUN UI TEST ***
+- Server that is used as host UI slave must be in uiconf session (ask IT to get it)
 ini file format must follow format below [uiconf]
+- Jenkins slave must install python selenium as we import selenium above
 
 #### ini file start here
 [global]
@@ -53,8 +54,6 @@ selenium_password:password_used_to_login_to_UI_slave
 screenshots:logs/screens
 
 ### ini file end here
-
-jenkins slave must install python selenium as we import it above
 
 """
 
