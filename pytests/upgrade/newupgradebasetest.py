@@ -17,12 +17,17 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from pprint import pprint
+from testconstants import CB_REPO
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
+from testconstants import COUCHBASE_VERSIONS
 from testconstants import SHERLOCK_VERSION
+from testconstants import CB_VERSION_NAME
 from testconstants import COUCHBASE_FROM_VERSION_3
+from testconstants import COUCHBASE_MP_VERSION
+from testconstants import CE_EE_ON_SAME_FOLDER
 
 
 class NewUpgradeBaseTest(BaseTestCase):
@@ -193,9 +198,12 @@ class NewUpgradeBaseTest(BaseTestCase):
     def _get_build(self, server, version, remote, is_amazon=False, info=None):
         if info is None:
             info = remote.extract_remote_info()
-        build_repo = MV_LATESTBUILD_REPO
-        if version[:3] == "3.5" or version[:3] == "4.0":
-            build_repo = SHERLOCK_BUILD_REPO
+        build_repo = CB_REPO
+        if version[:5] in COUCHBASE_VERSIONS:
+            if version[:3] in CB_VERSION_NAME:
+                build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
+            elif version[:5] in COUCHBASE_MP_VERSION:
+                build_repo = MV_LATESTBUILD_REPO
         builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5, \
                     deliverable_type=info.deliverable_type, architecture_type=info.architecture_type, \
                     edition_type="couchbase-server-enterprise", repo=build_repo, \
@@ -206,7 +214,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             version = version + "-rel"
         if version[:5] in self.released_versions:
             appropriate_build = BuildQuery().\
-                find_membase_release_build('%s-enterprise' % (self.product),
+                find_couchbase_release_build('%s-enterprise' % (self.product),
                                            info.deliverable_type,
                                            info.architecture_type,
                                            version.strip(),
@@ -508,9 +516,9 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def monitor_dcp_rebalance(self):
         if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
-                        self.input.param('released_upgrade_version', None)[:5] in \
-                                                         COUCHBASE_FROM_VERSION_3:
-            if int(self.initial_vbuckets) >= 256:
+           (self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3 or \
+            self.input.param('upgrade_version', '')[:5] in SHERLOCK_VERSION):
+            if int(self.initial_vbuckets) >= 512:
                 if self.master.ip != self.rest.ip or \
                    self.master.ip == self.rest.ip and \
                    str(self.master.port) != str(self.rest.port):
@@ -518,10 +526,12 @@ class NewUpgradeBaseTest(BaseTestCase):
                         self.master.port = self.port
                     self.rest = RestConnection(self.master)
                     self.rest_helper = RestHelper(self.rest)
+                else:
+                    self.log.error("need 512+ vbucket to capture rebalance progress")
                 if self.rest._rebalance_progress_status() == 'running':
                     self.log.info("Start monitoring DCP rebalance upgrade from {0} to {1}"\
                                   .format(self.input.param('initial_version', '')[:5], \
-                                   self.input.param('released_upgrade_version', None)[:5]))
+                                   self.input.param('upgrade_version', '')[:5]))
                     status = self.rest.monitorRebalance()
                 else:
                     self.fail("DCP reabalance upgrade is not running")
