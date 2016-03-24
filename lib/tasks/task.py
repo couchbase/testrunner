@@ -1065,12 +1065,15 @@ class ESRunQueryCompare(Task):
                           % str(self.query_index+1))
             try:
                 fts_hits, fts_doc_ids, fts_time = self.run_fts_query(self.fts_query)
-                self.log.info("FTS hits for query: %s is %s (took %sms)" % \
-                          (json.dumps(self.fts_query, ensure_ascii=False),
-                           fts_hits,
-                           float(fts_time)/1000000))
+                if fts_hits < 0:
+                    self.passed = False
+                else:
+                    self.log.info("FTS hits for query: %s is %s (took %sms)" % \
+                              (json.dumps(self.fts_query, ensure_ascii=False),
+                               fts_hits,
+                               float(fts_time)/1000000))
             except ServerUnavailableException:
-                self.log.error("ERROR: FTS Query timed out (timeout=30s)!")
+                self.log.error("ERROR: FTS Query timed out (timeout=60s)!")
                 self.passed = False
             if self.es and self.es_query['query']:
                 es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query)

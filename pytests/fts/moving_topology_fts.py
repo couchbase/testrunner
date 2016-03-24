@@ -492,6 +492,20 @@ class MovingTopFTS(FTSBaseTest):
                                              expected_hits=self._num_items)
         self.log.info("SUCCESS! Hits: %s" % hits)
 
+    def failover_no_rebalance_with_replicas_between_indexing_and_querying(self):
+        index = self.create_index_generate_queries()
+        self._cb_cluster.async_failover(
+            graceful=self._input.param("graceful", False)).result()
+        try:
+            for index in self._cb_cluster.get_indexes():
+                self.is_index_partitioned_balanced(index)
+        except Exception as e:
+            if self._cb_cluster.get_num_fts_nodes() == 0:
+                self.log.info("Expected exception: %s" % e)
+            else:
+                raise e
+        self.run_query_and_compare(index)
+
     def graceful_failover_and_delta_recovery_between_indexing_and_querying(self):
         #TESTED
         self.load_data()
@@ -661,17 +675,15 @@ class MovingTopFTS(FTSBaseTest):
                 es_index_name=None,
                 query_index=count))
         self.run_tasks_and_report(tasks, len(index.fts_queries))
-        for index in self._cb_cluster.get_indexes():
-            self.is_index_partitioned_balanced(index)
-        for index in self._cb_cluster.get_indexes():
-            hits, _, _ = index.execute_query(query=self.query,
+        self.is_index_partitioned_balanced(index)
+        hits, _, _ = index.execute_query(query=self.query,
                                              expected_hits=self._num_items)
         self.log.info("SUCCESS! Hits: %s" % hits)
 
     def rebalance_out_during_querying(self):
         #TESTED
         index = self.create_index_generate_queries()
-        self.run_query_and_compare(index)
+        #self.run_query_and_compare(index)
         tasks = []
         tasks.append(self._cb_cluster.async_rebalance_out(
             num_nodes=self.num_rebalance))
@@ -682,16 +694,15 @@ class MovingTopFTS(FTSBaseTest):
                 es_index_name=None,
                 query_index=count))
         self.run_tasks_and_report(tasks, len(index.fts_queries))
-        for index in self._cb_cluster.get_indexes():
-            self.is_index_partitioned_balanced(index)
-        for index in self._cb_cluster.get_indexes():
-            hits, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
+        self.is_index_partitioned_balanced(index)
+        self.run_query_and_compare(index)
+        hits, _, _ = index.execute_query(query=self.query,
+                                         expected_hits=self._num_items)
         self.log.info("SUCCESS! Hits: %s" % hits)
 
     def swap_rebalance_during_querying(self):
+        #TESTED
         index = self.create_index_generate_queries()
-        self.load_data()
         services = []
         for _ in xrange(self.num_rebalance):
             services.append("fts")
@@ -705,30 +716,158 @@ class MovingTopFTS(FTSBaseTest):
                 es=self.es,
                 es_index_name=None,
                 query_index=count))
-        for task in tasks:
-            task.result()
-        for index in self._cb_cluster.get_indexes():
-            self.is_index_partitioned_balanced(index)
-        for index in self._cb_cluster.get_indexes():
-            hits, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
+        self.run_tasks_and_report(tasks, len(index.fts_queries))
+        self.is_index_partitioned_balanced(index)
+        hits, _, _ = index.execute_query(query=self.query,
+                                         expected_hits=self._num_items)
         self.log.info("SUCCESS! Hits: %s" % hits)
 
-    def hard_failover_during_querying(self):
-        pass
-
-    def swap_rebalance_during_querying(self):
-        pass
-
-    def fts_node_down_during_querying(self):
-        self.load_data()
-        self.create_fts_indexes_all_buckets()
+    def hard_failover_no_rebalance_during_querying(self):
+        #TESTED
+        index = self.create_index_generate_queries()
+        services = []
+        for _ in xrange(self.num_rebalance):
+            services.append("fts")
+        tasks = []
+        tasks.append(self._cb_cluster.async_failover(
+            num_nodes=1,
+            graceful=False))
+        for count in range(0, len(index.fts_queries)):
+            tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                fts_index=index,
+                es=self.es,
+                es_index_name=None,
+                query_index=count))
+        self.run_tasks_and_report(tasks, len(index.fts_queries))
+        self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
-        self.validate_index_count(equal_bucket_doc_count=True)
+        hits, _, _ = index.execute_query(query=self.query,
+                                         expected_hits=self._num_items)
+        self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def hard_failover_rebalance_out_during_querying(self):
+        #TESTED
+        index = self.create_index_generate_queries()
+        services = []
+        for _ in xrange(self.num_rebalance):
+            services.append("fts")
+        tasks = []
+        tasks.append(self._cb_cluster.async_failover(
+            num_nodes=1,
+            graceful=False))
+        for count in range(0, len(index.fts_queries)):
+            tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                fts_index=index,
+                es=self.es,
+                es_index_name=None,
+                query_index=count))
+        self.run_tasks_and_report(tasks, len(index.fts_queries))
+        self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        hits, _, _ = index.execute_query(query=self.query,
+                                         expected_hits=self._num_items)
+        self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def failover_and_addback_during_querying(self):
+        #TESTED
+        recovery = self._input.param("recovery", None)
+        graceful = self._input.param("graceful", False)
+        index = self.create_index_generate_queries()
+        if graceful:
+            services = ['kv,fts']
+        else:
+            services = ['fts']
+        tasks = []
+        tasks.append(self._cb_cluster.async_failover_add_back_node(
+            num_nodes=1,
+            graceful=graceful,
+            recovery_type=recovery,
+            services=services))
+        for count in range(0, len(index.fts_queries)):
+            tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                fts_index=index,
+                es=self.es,
+                es_index_name=None,
+                query_index=count))
+        self.run_tasks_and_report(tasks, len(index.fts_queries))
+        self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        hits, _, _ = index.execute_query(query=self.query,
+                                         expected_hits=self._num_items)
+        self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def graceful_failover_during_querying(self):
+        index = self.create_index_generate_queries()
+        services = []
+        for _ in xrange(self.num_rebalance):
+            services.append("fts")
+        tasks = []
+        tasks.append(self._cb_cluster.__async_failover_and_rebalance(
+            graceful=False))
+        for count in range(0, len(index.fts_queries)):
+            tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                fts_index=index,
+                es=self.es,
+                es_index_name=None,
+                query_index=count))
+        self.run_tasks_and_report(tasks, len(index.fts_queries))
+        self.is_index_partitioned_balanced(index)
+        hits, _, _ = index.execute_query(query=self.query,
+                                         expected_hits=self._num_items)
+        self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def fts_node_down_with_replicas_during_querying(self):
+        index = self.create_index_generate_queries()
         node = self._cb_cluster.get_random_fts_node()
         NodeHelper.stop_couchbase(node)
-        for index in self._cb_cluster.get_indexes():
+        try:
             hits, _, _ = index.execute_query(query=self.query,
                                              expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+        except Exception as e:
+            self.log.info("Expected exception : %s" % e)
         NodeHelper.start_couchbase(node)
+        NodeHelper.wait_warmup_completed([node])
+        self.run_query_and_compare(index)
+
+    def warmup_master_during_querying(self):
+        #TESTED
+        index = self.create_index_generate_queries()
+        self._cb_cluster.warmup_node(master=True)
+        self.is_index_partitioned_balanced(index)
+        self.run_query_and_compare(index)
+
+    def node_reboot_during_querying(self):
+        #TESTED
+        index = self.create_index_generate_queries()
+        node = self._cb_cluster.reboot_one_node(test_case=self)
+        self._cb_cluster.set_bypass_fts_node(node)
+        self.is_index_partitioned_balanced(index)
+        self.run_query_and_compare(index)
+
+    def memc_crash_during_indexing_and_querying(self):
+        self.load_data()
+        index = self.create_index(
+            bucket=self._cb_cluster.get_bucket_by_name('default'),
+            index_name="default_index")
+        self.generate_random_queries(index, self.num_queries, self.query_types)
+        node = self._cb_cluster.get_random_fts_node()
+        NodeHelper.kill_memcached()
+        self._cb_cluster.set_bypass_fts_node(node)
+        self.run_query_and_compare(index)
+
+    def erl_crash_during_querying(self):
+        #TESTED
+        index = self.create_index_generate_queries()
+        node = self._cb_cluster.get_random_fts_node()
+        NodeHelper.kill_erlang(node)
+        self.is_index_partitioned_balanced(index)
+        self.run_query_and_compare(index)
+
+    def fts_crash_during_querying(self):
+        #TESTED
+        index = self.create_index_generate_queries()
+        self.run_query_and_compare(index)
+        node = self._cb_cluster.get_random_fts_node()
+        NodeHelper.kill_cbft_process(node)
+        self._cb_cluster.set_bypass_fts_node(node)
+        self.run_query_and_compare(index)

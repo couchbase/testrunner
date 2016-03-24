@@ -175,7 +175,7 @@ class QUERY:
                   "level": "",
                   "vectors": {}
                 },
-                "timeout": 0
+                "timeout": 60000
               }
             }
 
@@ -692,7 +692,7 @@ class FTSIndex:
         Takes a query dict, constructs a json, runs and returns results
         """
         query_dict = self.construct_cbft_query_json(query)
-        hits = 0
+        hits = -1
         matches = []
         doc_ids = []
         time_taken = 0
@@ -745,6 +745,8 @@ class CouchbaseCluster:
         self.__indexes = []
         self.__fts_nodes = []
         self.__non_fts_nodes = []
+        # to avoid querying certain nodes that undergo crash/reboot scenarios
+        self.__bypass_fts_nodes = []
         self.__separate_nodes_on_services()
 
     def __str__(self):
@@ -817,11 +819,16 @@ class CouchbaseCluster:
     def get_indexes(self):
         return self.__indexes
 
+    def set_bypass_fts_node(self, node):
+        self.__bypass_fts_nodes.append(node)
+
     def get_random_node(self):
         return self.__nodes[random.randint(0, len(self.__nodes)-1)]
 
     def get_random_fts_node(self):
         self.__separate_nodes_on_services()
+        for node in self.__bypass_fts_nodes:
+            self.__fts_nodes.remove(node)
         if not self.__fts_nodes:
             raise FTSException("No node in the cluster has 'fts' service"
                                 " enabled")
@@ -1706,6 +1713,22 @@ class CouchbaseCluster:
                                            num_nodes = num_nodes)
         task.result()
 
+    def async_failover_and_rebalance(self, master=False, num_nodes=1,
+                                      graceful=False):
+        """Asynchronously failover nodes from Cluster
+        @param master: True if failover master node only.
+        @param num_nodes: number of nodes to rebalance-out from cluster.
+        @param graceful: True if graceful failover else False.
+        """
+        task = self.__async_failover(master=master,
+                                     num_nodes=num_nodes,
+                                     graceful=graceful)
+        task.result()
+        tasks = self.__clusterop.async_rebalance(self.__nodes, [], [],
+                                                 services=None)
+        return tasks
+
+
     def __async_failover(self, master=False, num_nodes=1, graceful=False):
         """Failover nodes from Cluster
         @param master: True if failover master node only.
@@ -1798,6 +1821,42 @@ class CouchbaseCluster:
                 self.__nodes.append(node)
         self.__clusterop.rebalance(self.__nodes, [], [], services=services)
         self.__fail_over_nodes = []
+
+    def async_failover_add_back_node(self, num_nodes=1, graceful=False,
+                                     recovery_type=None, services=None):
+        """add-back failed-over node to the cluster.
+            @param recovery_type: delta/full
+        """
+        task = self.__async_failover(
+            master=False,
+            num_nodes=num_nodes,
+            graceful=graceful)
+        task.result()
+        time.sleep(60)
+        if graceful:
+            # use rebalance stats to monitor failover
+            RestConnection(self.__master_node).monitorRebalance()
+
+        raise_if(
+            len(self.__fail_over_nodes) < 1,
+            FTSException("No failover nodes available to add_back")
+        )
+        rest = RestConnection(self.__master_node)
+        server_nodes = rest.node_statuses()
+        for failover_node in self.__fail_over_nodes:
+            for server_node in server_nodes:
+                if server_node.ip == failover_node.ip:
+                    rest.add_back_node(server_node.id)
+                    if recovery_type:
+                        rest.set_recovery_type(
+                            otpNode=server_node.id,
+                            recoveryType=recovery_type)
+        for node in self.__fail_over_nodes:
+            if node not in self.__nodes:
+                self.__nodes.append(node)
+        self.__fail_over_nodes = []
+        tasks = self.__clusterop.async_rebalance(self.__nodes, [], [], services=services)
+        return tasks
 
     def warmup_node(self, master=False):
         """Warmup node on cluster
