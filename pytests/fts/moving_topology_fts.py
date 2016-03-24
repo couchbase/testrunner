@@ -244,6 +244,7 @@ class MovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           %(index.name,index.get_indexed_doc_count()))
         self._cb_cluster.warmup_node()
+        self.sleep(60, "waiting for fts to start...")
         self.wait_for_indexing_complete()
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
