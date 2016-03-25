@@ -2129,7 +2129,7 @@ class RemoteMachineShellConnection:
 
         if self.info.type.lower() == 'windows':
             iswin = True
-            filename = "/cygdrive/c/tmp/test"
+            filename = "/cygdrive/c/tmp/test.txt"
 
         filedata = ""
         if not(query==""):
@@ -2178,12 +2178,12 @@ class RemoteMachineShellConnection:
         if not(queries==""):
             if (source):
                 if iswin:
-                    main_command = main_command + "  -s=\"\SOURCE " + 'c:\\\\tmp\\\\test'
+                    main_command = main_command + "  -s=\"\SOURCE " + 'c:\\\\tmp\\\\test.txt'
                 else:
                     main_command = main_command + "  -s=\"\SOURCE " + filename+ '"'
             else:
                 if iswin:
-                    main_command = main_command + " -f=" + 'c:\\\\tmp\\\\test'
+                    main_command = main_command + " -f=" + 'c:\\\\tmp\\\\test.txt'
                 else:
                     main_command = main_command + " -f=" + filename
 
