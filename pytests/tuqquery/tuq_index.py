@@ -512,7 +512,7 @@ class QueriesViewsTests(QueryTests):
             index_name = "my_index_date"
             try:
                 self.query = "CREATE INDEX %s ON %s(" % (index_name, bucket.name) + \
-                "str_to_millis(tostr(join_yr) || '-0' || tostr(join_mo) || '-0' || tostr(join_day))) "
+                "str_to_millis(tostr(join_yr) || '-0' || tostr(join_mo) || '-' || tostr(join_day))) "
                 self.run_cbq_query()
             except Exception, ex:
                 self.assertTrue(str(ex).find("Error creating index") != -1,
