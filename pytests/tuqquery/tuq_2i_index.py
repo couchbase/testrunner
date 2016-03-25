@@ -3040,7 +3040,7 @@ class QueriesIndexTests(QueryTests):
                         'WHERE ANY vm IN VMs SATISFIES vm.RAM > 5 end'
                 res = self.run_cbq_query()
 		plan = ExplainPlanHelper(res)
-                self.assertTrue(plan["~children"][0]["scans"][0]['index']  == index_name,
+                self.assertTrue(plan["~children"][0]["scan"]['index']  == index_name,
                                 "Index should be %s, but is: %s" % (index_name, plan))
             finally:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
