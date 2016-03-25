@@ -665,10 +665,13 @@ class MovingTopFTS(FTSBaseTest):
     def rebalance_in_during_querying(self):
         #TESTED
         index = self.create_index_generate_queries()
+        services = []
+        for _ in xrange(self.num_rebalance):
+            services.append("fts")
         tasks = []
         tasks.append(self._cb_cluster.async_rebalance_in(
             num_nodes=self.num_rebalance,
-            services=["kv,fts"]))
+            services=services))
         for count in range(0, len(index.fts_queries)):
             tasks.append(self._cb_cluster.async_run_fts_query_compare(
                 fts_index=index,
