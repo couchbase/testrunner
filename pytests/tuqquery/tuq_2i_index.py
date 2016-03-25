@@ -140,8 +140,8 @@ class QueriesIndexTests(QueryTests):
                     plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan',
                     "Intersect Scan is not being used in and query for 2 array indexes")
 
-                result3 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['index']
-                result4 = plan['~children'][0]['~children'][0]['scans'][1]['scans'][0]['index']
+                result3 = plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
+                result4 = plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
 
                 self.assertTrue(result3 == idx4 or result3 == idx3)
                 self.assertTrue(result4 == idx3 or result4 == idx4)
@@ -965,9 +965,9 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(
-                    plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan',
+                    plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
                     "Union Scan is not being used")
-                result1 = plan['~children'][0]['~children'][0]['scans'][0]['index']
+                result1 = plan['~children'][0]['~children'][0]['scan']['index']
                 self.assertTrue(result1 == idx)
 
                 self.query = "EXPLAIN select name from %s USE INDEX(%s) WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
@@ -976,9 +976,9 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(
-                    plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan',
+                    plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
                     "Union Scan is not being used")
-                result1 = plan['~children'][0]['~children'][0]['scans'][0]['index']
+                result1 = plan['~children'][0]['~children'][0]['scan']['index']
                 self.assertTrue(result1 == idx2)
 
                 self.query = "EXPLAIN select name from %s USE INDEX(%s) WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
@@ -987,9 +987,9 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(
-                    plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan',
+                    plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
                     "Union Scan is not being used")
-                result1 = plan['~children'][0]['~children'][0]['scans'][0]['index']
+                result1 = plan['~children'][0]['~children'][0]['scan']['index']
                 self.assertTrue(result1 == idx3)
 
                 self.query = "EXPLAIN select name from %s USE INDEX(%s) WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
@@ -998,9 +998,9 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(
-                    plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan',
+                    plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
                     "Union Scan is not being used")
-                result1 = plan['~children'][0]['~children'][0]['scans'][0]['index']
+                result1 = plan['~children'][0]['~children'][0]['scan']['index']
                 self.assertTrue(result1 == idx4)
 
                 self.query = "select name from %s use index (%s) WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i.Marketing SATISFIES j.region1='South' end) END " % (
@@ -1071,9 +1071,9 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(
-                    plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan',
-                    "UnionScan is not being used")
-                result1 = plan['~children'][0]['~children'][0]['scans'][0]['index']
+                    plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
+                    "DistinctScan is not being used")
+                result1 = plan['~children'][0]['~children'][0]['scan']['index']
                 self.assertTrue(result1 == idx2)
 
                 self.query = "EXPLAIN select name from %s use index(%s) WHERE ANY i within %s.hobbies SATISFIES i = 'bhangra' END " % (
@@ -1082,9 +1082,9 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(
-                    plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan',
-                    "UnionScan is not being used")
-                result1 = plan['~children'][0]['~children'][0]['scans'][0]['index']
+                    plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
+                    "DistinctScan is not being used")
+                result1 = plan['~children'][0]['~children'][0]['scan']['index']
                 self.assertTrue(result1 == idx)
 
                 self.query = "select name from %s use index(%s) WHERE ANY i within %s.hobbies SATISFIES i = 'bhangra' END " % (
@@ -1136,9 +1136,9 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
 		plan = ExplainPlanHelper(actual_result)
                 self.assertTrue(
-                    plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan',
-                    "UnionScan is not being used")
-                result1 = plan['~children'][0]['~children'][0]['scans'][0]['index']
+                    plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
+                    "DistinctScan is not being used")
+                result1 = plan['~children'][0]['~children'][0]['scan']['index']
                 self.assertTrue(result1 == idx)
                 actual_result = self.run_cbq_query()
                 self.query = "select name from %s WHERE ANY i IN %s.hobbies.hobby SATISFIES  (ANY j IN i.dance SATISFIES j='contemporary' end) END and department='Support'" % (
