@@ -526,8 +526,6 @@ class NewUpgradeBaseTest(BaseTestCase):
                         self.master.port = self.port
                     self.rest = RestConnection(self.master)
                     self.rest_helper = RestHelper(self.rest)
-                else:
-                    self.log.error("need 512+ vbucket to capture rebalance progress")
                 if self.rest._rebalance_progress_status() == 'running':
                     self.log.info("Start monitoring DCP rebalance upgrade from {0} to {1}"\
                                   .format(self.input.param('initial_version', '')[:5], \

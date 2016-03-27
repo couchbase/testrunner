@@ -113,7 +113,8 @@ class UpgradeTests(NewUpgradeBaseTest):
             if self.in_between_events:
                 self.event_threads += self.run_event(self.in_between_events)
             self.finish_events(self.event_threads)
-            self.monitor_dcp_rebalance()
+            if self.upgrade_type == "online":
+                self.monitor_dcp_rebalance()
             self.log.info("Will install upgrade version to any free nodes")
             out_nodes = self._get_free_nodes()
             self.log.info("Here is free nodes {0}".format(out_nodes))
@@ -724,6 +725,8 @@ class UpgradeTests(NewUpgradeBaseTest):
                 if not success_upgrade:
                     self.fail("Upgrade failed!")
                 self.dcp_rebalance_in_offline_upgrade_from_version2_to_version3()
+            """ set install cb version to upgrade version after done upgrade """
+            self.initial_version = self.upgrade_versions[0]
         except Exception, ex:
             self.log.info(ex)
             raise
