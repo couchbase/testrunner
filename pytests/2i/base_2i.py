@@ -506,7 +506,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                 scan_vector = []
                 self.log.info("analyzing for bucket {0}".format(bucket.name))
                 map = sequence_bucket_map[bucket.name]
-                for key in map.keys():
+                for i in range(1024):
+                    key = "vb_" + str(i)
                     value = [ int(map[key]["abs_high_seqno"]), map[key]["uuid"] ]
                     scan_vector.append(value)
                 scan_vectors[bucket.name] = scan_vector
@@ -636,7 +637,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.assertTrue(int(index_count) == int(bucket_count),
                         "Bucket {0}, mismatch in item count for index :{1} : expected {2} != actual {3} ".format
                         (bucket.name, query.index_name, bucket_count, index_count))
-            self.log.info("All {0} items of bucket {1} indexed.".format(index_count, bucket.name))
+        self.log.info("Items Indexed Verified with bucket count...")
 
     def _create_operation_map(self):
         map_initial = {"create_index":False, "query_ops": False, "query_explain_ops": False, "drop_index": False}
