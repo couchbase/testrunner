@@ -3317,6 +3317,7 @@ class QueryTests(BaseTestCase):
     def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False,
                       encoded_plan=None):
         self.log.info("-"*100)
+        print query
         if query is None:
             query = self.query
         if server is None:
