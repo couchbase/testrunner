@@ -3352,7 +3352,7 @@ class QueryTests(BaseTestCase):
                 if not(self.isprepared):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
-                    cmd = "%s/go_cbq  -engine=http://%s:8093/" % (self.path,server.ip)
+                    cmd = "%s/cbq  -engine=http://%s:8093/" % (self.path,server.ip)
                     output = self.shell.execute_commands_inside(cmd,query,"","","","","")
                     result = json.loads(output)
         if isinstance(result, str) or 'errors' in result:
