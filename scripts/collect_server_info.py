@@ -92,7 +92,6 @@ class cbcollectRunner(object):
             remote_client = RemoteMachineShellConnection(self.server)
             print "Collecting logs from %s\n" % self.server.ip
             output, error = remote_client.execute_cbcollect_info(file_name)
-            print "\n".join(output)
             print "\n".join(error)
 
             user_path = "/home/"

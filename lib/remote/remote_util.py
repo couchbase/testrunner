@@ -3012,7 +3012,6 @@ class RemoteMachineShellConnection:
 
         command = "%s %s" % (cbcollect_command, file)
         output, error = self.execute_command(command, use_channel=True)
-        self.log_command_output(output, error)
         return output, error
 
 
