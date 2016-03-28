@@ -364,15 +364,19 @@ class DMLQueryTests(QueryTests):
             for i in xrange(gen.end):
                 if len(keys) == num_docs:
                     break
+                i=i+1
                 key, value = gen.next()
-                key = "insert_json" + key
+                key = "insert_json" + key + str(i)
                 for bucket in self.buckets:
                     query = 'INSERT into %s (key, value) VALUES ("%s", %s)' % (bucket.name, key, value)
                     if self.named_prepare:
+                        i=i+1
                         self.named_prepare="prepare_" + str(i)
                         query = "PREPARE %s from %s" % (self.named_prepare,query)
                     else:
                         query = "PREPARE %s" % query
+                    print query
+                    #import pdb;pdb.set_trace()
                     prepared = self.run_cbq_query(query=query)['results'][0]
                     #prepared = self.run_cbq_query(query='PREPARE %s' % query)['results'][0]
                     actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
@@ -400,6 +404,7 @@ class DMLQueryTests(QueryTests):
                 self.query = 'insert into %s (key "%s_%s", value {"name": name}) select name from %s use keys ["%s"]'  % (bucket.name, prefix, str(i),
                                                                                               bucket.name, keys[i])
                 if self.named_prepare:
+                    i = i+1
                     self.named_prepare="prepare_" + prefix + str(i)
                     self.query = "PREPARE %s from %s" % (self.named_prepare,self.query)
                 else:
