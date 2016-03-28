@@ -21,7 +21,7 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 try:
-                    o = shell.execute_commands_inside('%s/go_cbq -engine=http://%s:8093/' % (self.path,server.ip),'\quit','','','','','','')
+                    o = shell.execute_commands_inside('%s/cbq -engine=http://%s:8093/' % (self.path,server.ip),'\quit','','','','','','')
                     print o
                     self.assertTrue("Exitingtheshell" in o)
                 finally:
@@ -33,7 +33,7 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 try:
-                    o = shell.execute_commands_inside('%s/go_cbq  -q -engine=http://%s:8093/' % (self.path,server.ip),'\quit1','','','','','')
+                    o = shell.execute_commands_inside('%s/cbq  -q -engine=http://%s:8093/' % (self.path,server.ip),'\quit1','','','','','')
                     print o
                     self.assertTrue("FAIL" in o)
                 finally:
@@ -45,10 +45,10 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 try:
-                    o = shell.execute_commands_inside('%s/go_cbq  -q -ne' % (self.path),'select * from %s' % bucket.name,'','','','','')
+                    o = shell.execute_commands_inside('%s/cbq  -q -ne' % (self.path),'select * from %s' % bucket.name,'','','','','')
                     print o
                     self.assertTrue('FAIL' in o)
-                    o = shell.execute_commands_inside('%s/go_cbq -q -ne' % (self.path),'\SET','','','','','')
+                    o = shell.execute_commands_inside('%s/cbq -q -ne' % (self.path),'\SET','','','','','')
                     print o
                 finally:
                     shell.disconnect()
