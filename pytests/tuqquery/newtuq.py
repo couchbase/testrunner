@@ -578,7 +578,7 @@ class QueryTests(BaseTestCase):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
                 if os == "linux":
-                    cmd = "%s/go_cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
+                    cmd = "%s/cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
                     output = self.shell.execute_commands_inside(cmd,query,"","","","","")
                     #output = self.shell.execute_commands_inside(cmd,query)
                     result = json.loads(output)

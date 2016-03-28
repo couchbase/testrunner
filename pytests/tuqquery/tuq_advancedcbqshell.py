@@ -60,11 +60,11 @@ class AdvancedQueryTests(QueryTests):
             for bucket in self.buckets:
                 try:
                     queries = ['\set -timeout "10ms";',"create primary index on bucketname;","select * from bucketname;"]
-                    o = shell.execute_commands_inside('%s/go_cbq -q -engine=http://%s:8093/' % (self.path,server.ip),'',queries,bucket.name,'',bucket.name,'')
+                    o = shell.execute_commands_inside('%s/cbq -q -engine=http://%s:8093/' % (self.path,server.ip),'',queries,bucket.name,'',bucket.name,'')
                     print o
                     self.assertEqual('timeout',o[7:])
                     queries = ['\set -timeout "10ms";',"drop primary index on bucketname;","select * from bucketname;"]
-                    o = shell.execute_commands_inside('%s/go_cbq -quiet -engine=http://%s:8093/' % (self.path,server.ip),'',queries,bucket.name,'',bucket.name,True)
+                    o = shell.execute_commands_inside('%s/cbq -quiet -engine=http://%s:8093/' % (self.path,server.ip),'',queries,bucket.name,'',bucket.name,True)
                     print o
                     self.assertEqual('timeout',o[7:])
                 finally:
@@ -78,36 +78,36 @@ class AdvancedQueryTests(QueryTests):
                 try:
                     if bucket.saslPassword:
                         print('sasl')
-                        o = shell.execute_commands_inside('%s/go_cbq -q -u %s -p %s' % (self.path,bucket.name,bucket.saslPassword),'select *,join_day from %s limit 10'%bucket.name,'','','','','')
+                        o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s' % (self.path,bucket.name,bucket.saslPassword),'select *,join_day from %s limit 10'%bucket.name,'','','','','')
                         print o
-                        o = shell.execute_commands_inside('%s/go_cbq -q -u %s -p %s' % (self.path,bucket.name,'wrong'),'select * from %s limit 10'%bucket.name,'','','','','')
+                        o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s' % (self.path,bucket.name,'wrong'),'select * from %s limit 10'%bucket.name,'','','','','')
                         print o
                         self.assertTrue("AuthorizationFailed"  in o)
-                        o = shell.execute_commands_inside('%s/go_cbq -q -u %s -p %s' % (self.path,'','wrong'),'select * from %s limit 10'%bucket.name,'','','','','')
+                        o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s' % (self.path,'','wrong'),'select * from %s limit 10'%bucket.name,'','','','','')
                         self.assertEqual('FAIL',o[7:])
-                        o = shell.execute_commands_inside('%s/go_cbq -q -u %s -p %s' % (self.path,'wrong',bucket.saslPassword),'select * from %s limit 10'%bucket.name,'','','','','')
+                        o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s' % (self.path,'wrong',bucket.saslPassword),'select * from %s limit 10'%bucket.name,'','','','','')
                         print o
                         self.assertTrue("AuthorizationFailed"  in o)
                         queries = ['\set -creds user:pass;','select *,join_day from bucketname limit 10;']
-                        o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,bucket.name,bucket.saslPassword,bucket.name,'' )
+                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,bucket.name,bucket.saslPassword,bucket.name,'' )
                         print o
                         queries = ['\set -creds user:pass;','select count(1) from bucketname;']
-                        o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                         print o
                         queries = ['\set -creds user:pass;','select count(*) from bucketname;']
-                        o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'',bucket.saslPassword,bucket.name,''  )
+                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'',bucket.saslPassword,bucket.name,''  )
                         print o
                         queries = ['\set -creds user:pass;','select *,email,join_day from bucketname;']
-                        o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,bucket.name,'',bucket.name,'' )
+                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,bucket.name,'',bucket.name,'' )
                         print o
-                        o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'wrong','wrong',bucket.name,'' )
+                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'wrong','wrong',bucket.name,'' )
                         print o
-                        o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'wrong',bucket.saslPassword,bucket.name,'' )
+                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'wrong',bucket.saslPassword,bucket.name,'' )
                         print o
-                        o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,bucket.name,'wrong',bucket.name,'' )
+                        o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,bucket.name,'wrong',bucket.name,'' )
                         print o
                     else:
-                        o = shell.execute_commands_inside('%s/go_cbq -q -u=%s -p=%s' % (self.path,'Admin',''),'select * from %s limit 10;' %bucket.name,'','','','','' )
+                        o = shell.execute_commands_inside('%s/cbq -q -u=%s -p=%s' % (self.path,'Admin',''),'select * from %s limit 10;' %bucket.name,'','','','','' )
                         print o
                         self.assertTrue("InvalidPassword in o");
                 finally:
@@ -118,27 +118,27 @@ class AdvancedQueryTests(QueryTests):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             queries = ['\set -creds user1:pass1,user2:pass2;','create primary index on bucket1;','create primary index on bucket2;']
-            o = shell.execute_commands_inside('%s/go_cbq --quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
+            o = shell.execute_commands_inside('%s/cbq --quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
             print o
-            o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'bucket0','password123','bucket1',''  )
+            o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password123','bucket1',''  )
             print o
             queries = ['\set -creds wrong:pass1,user2:pass2;','drop primary index on bucket1;','drop primary index on bucket2;']
-            o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'bucket0' ,'password','bucket1','' )
+            o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0' ,'password','bucket1','' )
             print o
             queries = ['\set -creds user1:pass1,'':pass2;','create primary index on bucket1;','create primary index on bucket2;']
-            o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','')
+            o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','')
             print o
             queries = ['\set -creds '':pass1,'':pass2;','drop primary index on bucket1;','drop primary index on bucket2;']
-            o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
+            o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
             print o
 
 
     def test_version(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
-            o = shell.execute_commands_inside('%s/go_cbq --version' % (self.path),'','','','','','' )
+            o = shell.execute_commands_inside('%s/cbq --version' % (self.path),'','','','','','' )
             print o
-            o = shell.execute_commands_inside('%s/go_cbq -s="\HELP VERSION"' % (self.path),'','','','','','' )
+            o = shell.execute_commands_inside('%s/cbq -s="\HELP VERSION"' % (self.path),'','','','','','' )
             print o
 
     #
@@ -149,37 +149,37 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 queries = ['\connect http://localhost:8091;','create primary index on bucketname;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
                 queries = ['\connect http://localhost:8093;','drop primary index on bucketname;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
                 # wrong disconnect
                 queries = ['\disconnect http://localhost:8093;','create primary index on bucketname;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 self.assertTrue("Toomanyinputargumentstocommand" in o)
                 print o
                 #wrong port
                 queries = ['\connect http://localhost:8097;','create primary index on bucketname;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 self.assertTrue("Unabletoconnectto" in o)
                 print o
                 #wrong url including http
                 queries = ['\connect http://localhost345:8097;','create primary index on bucketname;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
                 #wrong url not including http
                 queries = ['\connect localhost3458097;','create primary index on bucketname;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
                 queries = ['\disconnect','drop primary index on bucketname;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
                 queries = ['\disconnect','create primary index on bucketname;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
                 queries = ['\connect http://localhost:8091;','create primary index on bucketname;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
 
     # def test_history(self):
@@ -187,7 +187,7 @@ class AdvancedQueryTests(QueryTests):
     #         shell = RemoteMachineShellConnection(server)
     #         for bucket in self.buckets:
     #             queries = ["\ALIAS tempcommand create primary index on bucketname;","\\\\tempcommand;",'\ALIAS tempcommand2 select * from bucketname limit 10;',"\\\\tempcommand2;",'\ALIAS;','\echo tempcommand1;','\echo tempcommand2;']
-    #             o = shell.execute_commands_inside('%s/go_cbq -quiet' % (testconstants.LINUX_COUCHBASE_BIN_PATH),'',queries,'','',bucket.name,'' )
+    #             o = shell.execute_commands_inside('%s/cbq -quiet' % (testconstants.LINUX_COUCHBASE_BIN_PATH),'',queries,'','',bucket.name,'' )
     #             print o
 
 
@@ -196,17 +196,17 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 queries = ["\ALIAS tempcommand create primary index on bucketname;","\\\\tempcommand;",'\ALIAS tempcommand2 select *,email from bucketname limit 10;',"\\\\tempcommand2;",'\ALIAS;','\echo tempcommand1;','\echo tempcommand2;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
                 queries = ['\ALIAS tempcommand drop primary index on bucketname;','\\\\tempcommand;','\ALIAS tempcommand create primary index on bucketname;','\ALIAS tempcommand2 drop primary index on bucketname;','\\\\tempcommand;','\\\\tempcommand2;','\ALIAS;','\echo tempcommand;','\echo tempcommand2;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
                 queries = ['\UNALIAS tempcommand drop primary index on bucketname;','\\\\tempcommand;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 self.assertTrue("Aliasdoesnotexist" in o)
                 print o
                 queries = ['\UNALIAS tempcommand;','\\\\tempcommand;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 self.assertTrue("Aliasdoesnotexist" in o)
                 print o
 
@@ -218,7 +218,7 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 queries = ['\SET -args [7, 0,1,2011];','prepare temp from SELECT tasks_points.task1 AS task from bucketname WHERE join_mo>$1 GROUP BY tasks_points.task1 HAVING COUNT(tasks_points.task1) > $2 AND  (MIN(join_day)=$3 OR MAX(join_yr=$4)) ORDER BY tasks_points.task1 ;','execute temp;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name ,'')
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name ,'')
                 print o
 
 
@@ -228,7 +228,7 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 queries = ['\SET -$join_day 2;','\SET -$project "AB";','prepare temp from select name, tasks_ids,join_day from bucketname where join_day>=$join_day and tasks_ids[0] IN (select ARRAY_AGG(DISTINCT task_name) as names from bucketname d use keys ["test_task-1", "test_task-2"] where project!=$project)[0].names;','execute temp;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
 
     def test_push_pop_set(self):
@@ -249,7 +249,7 @@ class AdvancedQueryTests(QueryTests):
                     pushqueries.append('execute temp;')
                     pushqueries.append('\set;')
                     i=i+1
-                    o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',pushqueries,'','',bucket.name,'' )
+                    o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',pushqueries,'','',bucket.name,'' )
                     print o
                 i=1
                 popqueries =[]
@@ -263,7 +263,7 @@ class AdvancedQueryTests(QueryTests):
                     popqueries.append('prepare temp from select name, tasks_points.task1 AS task from bucketname where join_day>=$join_day and  join_mo>$1 GROUP BY tasks_points.task1 HAVING COUNT(tasks_points.task1) > $2 AND  (MIN(join_day)=$3 OR MAX(join_yr=$4));')
                     popqueries.append('execute temp;')
                     i=i+1
-                    o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',popqueries,'','',bucket.name,'' )
+                    o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',popqueries,'','',bucket.name,'' )
                     print o
 
     def test_redirect(self):
@@ -271,13 +271,13 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 queries = ['\\redirect abc;','create primary index on bucketname;','select name,tasks_points.task1,skills from bucketname;','\\redirect off;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 sftp = shell._ssh_client.open_sftp()
                 fileout = sftp.open("abc",'r')
                 filedata = fileout.read()
                 print filedata
                 queries = ['drop primary index on bucketname;']
-                o = shell.execute_commands_inside('%s/go_cbq -quiet' % (self.path),'',queries,'','',bucket.name,True )
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,True )
                 print o
 
 

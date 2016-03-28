@@ -85,11 +85,10 @@ class N1QLHelper():
             # else:
             #os = self.shell.extract_remote_info().type.lower()
             shell = RemoteMachineShellConnection(server)
-            import pdb;pdb.set_trace()
             #query = query.replace('"', '\\"')
             #query = query.replace('`', '\\`')
             #if os == "linux":
-            cmd = "%s/go_cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
+            cmd = "%s/cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
             output = shell.execute_commands_inside(cmd,query,"","","","","")
             print "--------------------------------------------------------------------------------------------------------------------------------"
             print output
