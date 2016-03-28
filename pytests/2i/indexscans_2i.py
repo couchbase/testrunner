@@ -15,30 +15,30 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
 
     def test_create_query_explain_drop_index(self):
         self.use_primary_index= self.input.param("use_primary_index",False)
-    	self.indexes= self.input.param("indexes","").split(":")
-    	self.emitFields= self.input.param("emitFields","*").split(":")
-    	self.whereCondition= self.input.param("whereCondition",None)
-    	self.emitFields = ",".join(self.emitFields)
-    	query_template = QUERY_TEMPLATE
-    	query_template = query_template.format(self.emitFields)
+        self.indexes= self.input.param("indexes","").split(":")
+        self.emitFields= self.input.param("emitFields","*").split(":")
+        self.whereCondition= self.input.param("whereCondition",None)
+        self.emitFields = ",".join(self.emitFields)
+        query_template = QUERY_TEMPLATE
+        query_template = query_template.format(self.emitFields)
         self.index_name = "test_create_query_explain_drop_index"
         if self.use_primary_index:
             self.run_create_index = False
             self.run_drop_index = False
             self.index_name = "primary"
-    	if self.whereCondition:
-    		query_template += " WHERE {0}".format(self.whereCondition)
-    	query_template = self._translate_where_clause(query_template)
-    	query_definition = QueryDefinition(
-    		index_name=self.index_name,
-    		index_fields = self.indexes,
-    		query_template = query_template,
-    		groups = [])
-    	self.run_multi_operations(
-			buckets = self.buckets,
-			query_definitions = [query_definition],
-			create_index = self.run_create_index, drop_index = self.run_drop_index,
-			query_with_explain = self.run_query_with_explain, query = self.run_query)
+        if self.whereCondition:
+            query_template += " WHERE {0}".format(self.whereCondition)
+        query_template = self._translate_where_clause(query_template)
+        query_definition = QueryDefinition(
+            index_name=self.index_name,
+            index_fields = self.indexes,
+            query_template = query_template,
+            groups = [])
+        self.run_multi_operations(
+            buckets = self.buckets,
+            query_definitions = [query_definition],
+            create_index = self.run_create_index, drop_index = self.run_drop_index,
+            query_with_explain = self.run_query_with_explain, query = self.run_query)
 
     def test_multi_create_query_explain_drop_index(self):
         try:
@@ -80,6 +80,14 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
     def test_concurrent_mutations_index_create_query_drop(self):
         self.query_definitions_create_candidates =[]
         self.query_definitions_query_candidates =[]
+        scan_vector_ranges = []
+        scan_vectors = None
+        if self.scan_vector_per_values:
+            scan_vector_ranges = self._generate_scan_vector_ranges(self.scan_vector_per_values)
+        if len(scan_vector_ranges) > 0:
+            for use_percentage in scan_vector_ranges:
+                scan_vectors = self.gen_scan_vector(use_percentage=use_percentage,
+                                                    use_random=self.random_scan_vector)
         try:
             self.query_definitions_drop_candidates = copy.deepcopy(self.query_definitions)
             self.query_definitions_create_candidates = copy.deepcopy(self.query_definitions)
@@ -101,9 +109,10 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self._create_index_in_async(query_definitions = self.query_definitions_query_candidates)
             self.log.info("<<<<< Run Query Tasks >>>>>>")
             query_tasks = self.async_run_multi_operations(buckets = self.buckets,
-                    query_definitions = self.query_definitions_query_candidates,
-                    create_index = False, drop_index = False,
-                    query_with_explain = False, query = True, scan_consistency = self.scan_consistency)
+                    query_definitions=self.query_definitions_query_candidates,
+                    create_index=False, drop_index=False,
+                    query_with_explain=False, query=True, scan_consistency=self.scan_consistency,
+                    scan_vectors=scan_vectors)
             self.log.info("<<<<< Run Drop Tasks >>>>>>")
             drop_tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions_drop_candidates,
@@ -116,7 +125,12 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self._run_tasks(drop_tasks)
         except Exception, ex:
             self.log.info(ex)
-            raise
+            if not scan_vectors:
+                msg = "No scan_vector value"
+                if msg not in str(ex):
+                    raise
+            else:
+                raise
         finally:
             tasks = self.async_run_multi_operations(buckets = self.buckets,
                     query_definitions = self.query_definitions_create_candidates,
@@ -237,7 +251,12 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 self._run_tasks(tasks)
         except Exception, ex:
             self.log.info(ex)
-            raise
+            if self.scan_consistency == "at_plus" and not scan_vectors:
+                msg = "No scan_vector value"
+                if msg not in str(ex):
+                    raise
+            else:
+                raise
         finally:
             tasks = self.async_run_multi_operations(buckets = self.buckets,
                 query_definitions = self.query_definitions,
@@ -298,7 +317,12 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 self._run_tasks(tasks)
         except Exception, ex:
             self.log.info(ex)
-            raise
+            if self.scan_consistency == "at_plus" and not scan_vectors:
+                msg = "No scan_vector value"
+                if msg not in str(ex):
+                    raise
+            else:
+                raise
 
     def test_failure_query_with_non_existing_primary_index(self):
         self.indexes= self.input.param("indexes","").split(":")
@@ -336,15 +360,15 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         return new_values
 
     def _run_tasks(self, tasks):
-    	for task in tasks:
+        for task in tasks:
             task.result()
 
     def _translate_where_clause(self, query):
-    	query = query.replace("EQUALS","==")
-    	query = query.replace("NOT_EQUALS","!=")
-    	query = query.replace("LESS_THAN","<")
-    	query = query.replace("LESS_THAN_EQUALS","<=")
-    	query = query.replace("GREATER_THAN",">")
-    	query = query.replace("GREATER_THAN_EQUALS",">=")
-    	return query
+        query = query.replace("EQUALS","==")
+        query = query.replace("NOT_EQUALS","!=")
+        query = query.replace("LESS_THAN","<")
+        query = query.replace("LESS_THAN_EQUALS","<=")
+        query = query.replace("GREATER_THAN",">")
+        query = query.replace("GREATER_THAN_EQUALS",">=")
+        return query
 
