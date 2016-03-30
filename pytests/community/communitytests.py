@@ -206,10 +206,12 @@ class CommunityTests(CommunityBaseTest):
                     else:
                         self.fail("maybe bug in add node")
                 elif self.version in WATSON_VERSION:
-                    if self.start_node_services in ["kv", "index,kv,n1ql,fts"] and \
-                          self.add_node_services not in ["kv", "fts,index,kv,n1ql"]:
+                    if self.start_node_services in ["kv", "index,kv,n1ql",
+                         "index,kv,n1ql,fts"] and self.add_node_services not in \
+                                    ["kv", "index,kv,n1ql", "fts,index,kv,n1ql"]:
                         self.log.info("services are enforced in CE")
-                    elif self.start_node_services not in ["kv", "index,kv,n1ql"]:
+                    elif self.start_node_services not in ["kv", "index,kv,n1ql",
+                                                            "fts,index,kv,n1ql"]:
                         self.log.info("services are enforced in CE")
                     else:
                         self.fail("maybe bug in add node")
