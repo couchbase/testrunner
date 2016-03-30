@@ -153,7 +153,7 @@ class CommunityTests(CommunityBaseTest):
         self.rest = RestConnection(self.master)
         self.rest.force_eject_node()
         sherlock_services_in_ce = ["kv", "index,kv,n1ql"]
-        watson_services_in_ce = ["kv", "fts,index,kv,n1ql"]
+        watson_services_in_ce = ["kv", "index,kv,n1ql", "fts,index,kv,n1ql"]
         self.sleep(5, "wait for node reset done")
         try:
             self.log.info("Initialize node with services {0}"
