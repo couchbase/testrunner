@@ -959,7 +959,7 @@ class RestConnection(object):
 
     def stop_replication(self, uri):
         log.info("Deleting replication {0}".format(uri))
-        api = self.baseUrl + uri
+        api = self.baseUrl[:-1] + uri
         self._http_request(api, 'DELETE')
 
     def remove_all_recoveries(self):
