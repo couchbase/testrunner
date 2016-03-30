@@ -265,6 +265,18 @@ class CommunityTests(CommunityBaseTest):
         else:
             self.fail("backup failed to backup correct items")
 
+    def check_ent_backup(self):
+        """ for CE version from Watson, cbbackupmgr exe file should not in bin """
+        command = "cbbackupmgr"
+        shell = RemoteMachineShellConnection(self.master)
+        self.log.info("check if {0} in {1} directory".format(command, self.bin_path))
+        found = shell.file_exists(self.bin_path, command)
+        if found:
+            self.log.info("found {0} in {1} directory".format(command, self.bin_path))
+            self.fail("CE from Watson should not contain {0}".format(command))
+        elif not found:
+            self.log.info("Ent. backup in CE is enforced, not in bin!")
+
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
     def setUp(self):
