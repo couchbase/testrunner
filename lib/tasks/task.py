@@ -121,11 +121,24 @@ class NodeInitializeTask(Task):
             self.set_result(True)
             return
 
+        self.quota = int(info.mcdMemoryReserved * 2 / 3)
+        if self.quota_percent:
+           self.quota = int(info.mcdMemoryReserved * self.quota_percent / 100)
+        if self.index_quota_percent:
+            self.index_quota = int((info.mcdMemoryReserved * 2/3) * \
+                                      self.index_quota_percent / 100)
+            rest.set_indexer_memoryQuota(username, password, self.index_quota)
+        rest.init_cluster_memoryQuota(username, password, self.quota)
+        rest.set_indexer_storage_mode(username, password, self.gsi_type)
+
         if self.services:
-            status = rest.init_node_services(username= username, password = password, port = self.port, hostname= self.server.ip, services= self.services)
+            status = rest.init_node_services(username= username, password = password,\
+                                          port = self.port, hostname= self.server.ip,\
+                                                              services= self.services)
             if not status:
                 self.state = FINISHED
-                self.set_exception(Exception('unable to set services for server %s' % (self.server.ip)))
+                self.set_exception(Exception('unable to set services for server %s'\
+                                                               % (self.server.ip)))
                 return
         if self.disable_consistent_view is not None:
             rest.set_reb_cons_view(self.disable_consistent_view)
@@ -152,14 +165,6 @@ class NodeInitializeTask(Task):
             self.state = FINISHED
             self.set_exception(Exception('unable to get information on a server %s, it is available?' % (self.server.ip)))
             return
-        self.quota = int(info.mcdMemoryReserved * 2 / 3)
-        if self.quota_percent:
-           self.quota = int(info.mcdMemoryReserved * self.quota_percent / 100)
-        if self.index_quota_percent:
-            self.index_quota = int((info.mcdMemoryReserved * 2/3) *self.index_quota_percent / 100)
-            rest.set_indexer_memoryQuota(username, password, self.index_quota)
-        rest.init_cluster_memoryQuota(username, password, self.quota)
-        rest.set_indexer_storage_mode(username, password, self.gsi_type)
         self.state = CHECKING
         task_manager.schedule(self)
 
