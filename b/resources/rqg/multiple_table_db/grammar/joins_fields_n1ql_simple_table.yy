@@ -3,8 +3,7 @@ query:
 
 select:
 	SELECT select_from FROM BUCKET_NAME joins WHERE complex_condition ORDER BY field_list |
-	SELECT select_from FROM BUCKET_NAME joins WHERE complex_condition GROUP BY field_list |
-	SELECT select_from FROM BUCKET_NAME joins WHERE complex_condition GROUP BY field_list ORDER BY field_list direction ;
+	SELECT select_from FROM BUCKET_NAME joins WHERE complex_condition ;
 
 create_index:
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(FIELD_LIST) WHERE complex_condition |
