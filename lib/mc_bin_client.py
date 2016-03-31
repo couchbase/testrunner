@@ -231,6 +231,16 @@ class MemcachedClient(object):
                     memcacheConstants.META_DATA_ID_CONFLICT_RESOLUTION_MODE_SIZE, conflict_resolution_mode)
 
 
+    # doMeta - copied from the mc bin client on github
+    def _doMetaCmd(self, cmd, key, value, cas, exp, flags, seqno, remote_cas):
+        extra = struct.pack('>IIQq', flags, exp, seqno, remote_cas)
+        return self._doCmd(cmd, key, value, extra, cas)
+
+    def setWithMeta(self, key, value, exp, flags, seqno, remote_cas):
+        """Set a value and its meta data in the memcached server."""
+        return self._doMetaCmd(memcacheConstants.CMD_SET_WITH_META,
+                               key, value, 0, exp, flags, seqno, remote_cas)
+
     def set_with_meta(self, key, exp, flags, seqno, cas, val, vbucket= -1, add_extended_meta_data=False,
                       adjusted_time=0, conflict_resolution_mode=0):
         """Set a value in the memcached server."""
