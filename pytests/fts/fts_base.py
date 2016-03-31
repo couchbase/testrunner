@@ -395,23 +395,6 @@ class NodeHelper:
         return str(dir)
 
     @staticmethod
-    def check_fts_log(server, str):
-        """ Checks if a string 'str' is present in goxdcr.log on server
-            and returns the number of occurances
-        """
-        shell = RemoteMachineShellConnection(server)
-        fts_log = NodeHelper.get_log_dir(server) + '/fts.log*'
-        count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
-                                        format(str, fts_log))
-        if isinstance(count, list):
-            count = int(count[0])
-        else:
-            count = int(count)
-        NodeHelper._log.info(count)
-        shell.disconnect()
-        return count
-
-    @staticmethod
     def rename_nodes(servers):
         """Rename server name from ip to their hostname
         @param servers: list of server objects.
@@ -1957,7 +1940,7 @@ class FTSBaseTest(unittest.TestCase):
     def tearDown(self):
         """Clusters cleanup"""
         if len(self.__report_error_list) > 0:
-            error_logger = self.check_errors_in_fts_logs()
+            error_logger = self.check_error_count_in_fts_log()
             if error_logger:
                 self.fail("Errors found in logs : {0}".format(error_logger))
 
@@ -2134,9 +2117,7 @@ class FTSBaseTest(unittest.TestCase):
         """
         for node in self._input.servers:
             self.__error_count_dict[node.ip] = {}
-            for error in self.__report_error_list:
-                self.__error_count_dict[node.ip][error] = \
-                    NodeHelper.check_fts_log(node, error)
+        self.check_error_count_in_fts_log(initial=True)
         self.log.info(self.__error_count_dict)
 
     def __cleanup_previous(self):
@@ -2339,39 +2320,51 @@ class FTSBaseTest(unittest.TestCase):
                 "Waiting for expiration of updated items")
             self._cb_cluster.run_expiry_pager()
 
-    def print_panic_stacktrace(self, node):
+    def print_crash_stacktrace(self, node, error):
         """ Prints panic stacktrace from goxdcr.log*
         """
         shell = RemoteMachineShellConnection(node)
-        result, err = shell.execute_command("zgrep -A 40 'panic:' {0}/fts.log*".
-                            format(NodeHelper.get_log_dir(node)))
+        result, err = shell.execute_command("zgrep -A 40 -B 4 '{0}' {1}/fts.log*".
+                            format(error, NodeHelper.get_log_dir(node)))
         for line in result:
             self.log.info(line)
         shell.disconnect()
 
-    def check_errors_in_fts_logs(self):
+    def check_error_count_in_fts_log(self, initial=False):
         """
         checks if new errors from self.__report_error_list
         were found on any of the goxdcr.logs
         """
         error_found_logger = []
+        fts_log = NodeHelper.get_log_dir(self._input.servers[0]) + '/fts.log*'
         for node in self._input.servers:
+            shell = RemoteMachineShellConnection(node)
             for error in self.__report_error_list:
-                new_error_count = NodeHelper.check_fts_log(node, error)
-                self.log.info("Initial '{0}' count on {1} :{2}, now :{3}".
+                count, err = shell.execute_command(
+                    "zgrep \"{0}\" {1} | wc -l".format(error, fts_log))
+                if isinstance(count, list):
+                    count = int(count[0])
+                else:
+                    count = int(count)
+                NodeHelper._log.info(count)
+                if initial:
+                    self.__error_count_dict[node.ip][error] = count
+                else:
+                    self.log.info("Initial '{0}' count on {1} :{2}, now :{3}".
                             format(error,
                                 node.ip,
                                 self.__error_count_dict[node.ip][error],
-                                new_error_count))
-                if node.ip in self.__error_count_dict.keys():
-                    if (new_error_count  > self.__error_count_dict[node.ip][error]):
-                        error_found_logger.append("{0} found on {1}".format(error,
+                                count))
+                    if node.ip in self.__error_count_dict.keys():
+                        if (count  > self.__error_count_dict[node.ip][error]):
+                            error_found_logger.append("{0} found on {1}".format(error,
                                                                         node.ip))
-                        if "panic" in error:
-                            self.print_panic_stacktrace(node)
-        if error_found_logger:
-            self.log.error(error_found_logger)
-        return error_found_logger
+                            self.print_crash_stacktrace(node, error)
+            shell.disconnect()
+        if not initial:
+            if error_found_logger:
+                self.log.error(error_found_logger)
+            return error_found_logger
 
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
