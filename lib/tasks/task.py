@@ -28,9 +28,7 @@ from membase.api.exception import N1QLQueryException, DropIndexException, Create
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from TestInput import TestInputServer
-from testconstants import MIN_KV_QUOTA
-from testconstants import INDEX_QUOTA
-from testconstants import FTS_QUOTA
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 
 try:
     CHECK_FLAG = False
