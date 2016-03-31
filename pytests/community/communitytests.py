@@ -279,6 +279,26 @@ class CommunityTests(CommunityBaseTest):
         elif not found:
             self.log.info("Ent. backup in CE is enforced, not in bin!")
 
+    def check_memory_optimized_storage_mode(self):
+        """ from Watson, CE should not have option 'memory_optimized' to set """
+        self.rest = RestConnection(self.master)
+        self.rest.force_eject_node()
+        self.sleep(5, "wait for node reset done")
+        try:
+            self.log.info("Initialize node with 'Memory Optimized' option")
+            status = self.rest.set_indexer_storage_mode(
+                            username=self.input.membase_settings.rest_username,
+                            password=self.input.membase_settings.rest_password,
+                                                storageMode='memory_optimized')
+        except Exception, ex:
+            if ex:
+                print ex
+        if not status:
+            self.log.info("Memory Optimized setting enforced in CE "
+                          "Could not set memory_optimized option")
+        else:
+            self.fail("Memory Optimzed setting does not enforced in CE "
+                      "We could set this option in")
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
     def setUp(self):
