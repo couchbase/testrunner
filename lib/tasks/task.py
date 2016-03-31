@@ -136,14 +136,17 @@ class NodeInitializeTask(Task):
         if self.index_quota_percent:
                 index_quota = self.index_quota
         if not self.quota_percent:
-            if "index" in self.services and "fts" not in self.services:
+            set_services = copy.deepcopy(self.services)
+            if set_services is None:
+                set_services = ["kv"]
+            if "index" in set_services and "fts" not in set_services:
                 kv_quota = int(info.mcdMemoryReserved) - index_quota
                 if kv_quota > MIN_KV_QUOTA and kv_quota < int(self.quota):
                     self.quota = kv_quota
                 else:
                     self.set_exception(Exception("KV RAM need to be larger than %s MB "
                                       "at node  %s"  % (MIN_KV_QUOTA, self.server.ip)))
-            elif "index" in self.services and "fts" in self.services:
+            elif "index" in set_services and "fts" in set_services:
                 kv_quota = int(info.mcdMemoryReserved) - index_quota - FTS_QUOTA
                 if kv_quota > MIN_KV_QUOTA and kv_quota < int(self.quota):
                     self.quota = kv_quota
