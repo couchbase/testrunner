@@ -44,7 +44,7 @@ outer_inner_table_primary_key_comparison:
 	AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON;
 
 in_operator:
-	IN | NOT IN;
+	IN;
 
 comparison_operator:
 	EQUALS | NOT_EQUALS;
