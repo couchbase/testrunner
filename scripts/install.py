@@ -459,6 +459,9 @@ class CouchbaseServerInstaller(Installer):
                 if mem_req_tap_env:
                     remote_client.set_environment_variable('MEMCACHED_REQS_TAP_EVENT',
                                                            mem_req_tap_env)
+                """ set cbauth environment variables """
+                remote_client.set_cbauth_env()
+
                 remote_client.disconnect()
                 # TODO: Make it work with windows
                 if "erlang_threads" in params:

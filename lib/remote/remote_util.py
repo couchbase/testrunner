@@ -36,6 +36,7 @@ from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
 from testconstants import CB_RELEASE_APT_GET_REPO
 from testconstants import CB_RELEASE_YUM_REPO
 from membase.api.rest_client import RestConnection, RestHelper
+from TestInput import TestInputSingleton
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -154,6 +155,7 @@ class RemoteMachineShellConnection:
     def __init__(self, serverInfo):
         # let's create a connection
         self.username = serverInfo.ssh_username
+        self.input = TestInputSingleton.input
         self.use_sudo = True
         if self.username == 'root':
            self.use_sudo = False
@@ -3407,6 +3409,26 @@ class RemoteMachineShellConnection:
         else:
             log.info("only check cb version in unix enviroment")
         return fv, sv, bn
+
+    def set_cbauth_env(self):
+        """ from Watson, we need to set cbauth environment variables
+            so cbq could connect to the host """
+        rest_username = self.input.membase_settings.rest_username
+        rest_password = self.input.membase_settings.rest_password
+        self.extract_remote_info()
+        if self.info.type.lower() != 'windows':
+            log.info("***** set NS_SERVER_CBAUTH env in linux *****")
+            self.execute_command('export NS_SERVER_CBAUTH_URL='
+                                     '"http://localhost:8091/_cbauth"')
+            self.execute_command('export NS_SERVER_CBAUTH_USER="{0}"'\
+                                                .format(rest_username))
+            self.execute_command('export NS_SERVER_CBAUTH_PWD="{0}"'\
+                                                .format(rest_password))
+            self.execute_command('export NS_SERVER_CBAUTH_RPC_URL='
+                                 '"http://127.0.0.1:8091/cbauth-demo"')
+            self.execute_command('export CBAUTH_REVRPC_URL='
+                                 '"http://{0}:{1}@localhost:8091/query"'\
+                                   .format(rest_username, rest_password))
 
 
 class RemoteUtilHelper(object):
