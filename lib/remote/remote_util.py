@@ -3413,16 +3413,18 @@ class RemoteMachineShellConnection:
     def set_cbauth_env(self):
         """ from Watson, we need to set cbauth environment variables
             so cbq could connect to the host """
-        if self.input.membase_settings.rest_username:
-            rest_username = self.input.membase_settings.rest_username
-        else:
-            log.error("WARNING: You need to set rest username at ini file")
-            rest_username = "Administrator"
-        if self.input.membase_settings.rest_password:
-            rest_password = self.input.membase_settings.rest_password
-        else:
-            log.error("WARNING: You need to set rest password at ini file")
-            rest_password = "password"
+        rest_username = "Administrator"
+        rest_password = "password"
+        log.info("*** You need to set rest password at ini file ***")
+        try:
+            if self.input.membase_settings.rest_username:
+                rest_username = self.input.membase_settings.rest_username
+            if self.input.membase_settings.rest_password:
+                rest_password = self.input.membase_settings.rest_password
+        except Exception, ex:
+            if ex:
+                print ex
+            pass
         self.extract_remote_info()
         if self.info.type.lower() != 'windows':
             log.info("***** set NS_SERVER_CBAUTH env in linux *****")
