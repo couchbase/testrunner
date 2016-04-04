@@ -2399,15 +2399,15 @@ class FTSBaseTest(unittest.TestCase):
                                 index_doc_count,
                                 self.es.get_index_count('es_index')))
 
-                if bucket_doc_count == index_doc_count:
-                    break
+                #if bucket_doc_count == index_doc_count:
+                #    break
 
                 if prev_count < index_doc_count or prev_count > index_doc_count:
                     prev_count = index_doc_count
                     retry_count = retry
                 else:
                     retry_count -= 1
-                time.sleep(10)
+                time.sleep(5)
         self.log.info("FTS indexed %s docs in %s mins"
                       % (index_doc_count, round(float((time.time()-start_time)/60), 2)))
 
