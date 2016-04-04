@@ -2495,7 +2495,7 @@ class FTSBaseTest(unittest.TestCase):
                           " distributed,pindexes spread across %s while "
                           "fts nodes are %s" % (nodes_partitions.keys(),
                                                 self._cb_cluster.get_fts_nodes()))
-            self.sleep(10, "pIndexes not distributed across % nodes yet"
+            self.sleep(10, "pIndexes not distributed across %s nodes yet"
                            % num_fts_nodes)
             nodes_partitions = self.populate_node_partition_map(index)
         else:
