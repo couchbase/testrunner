@@ -158,7 +158,7 @@ class auditTest(BaseTestCase):
                 expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
                                'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
             else:
-                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + servs_inout[0].ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
                                'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
 
 
@@ -171,7 +171,7 @@ class auditTest(BaseTestCase):
                 expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':[], 'source':'ns_server', \
                                 'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
             else:
-                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':[], 'source':'ns_server', \
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + servs_inout[0].ip], 'ejected_nodes':[], 'source':'ns_server', \
                                 'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
 
         if (ops in ['rebalanceOut']):
@@ -183,7 +183,7 @@ class auditTest(BaseTestCase):
                 expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
                                'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
             else:
-                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + servs_inout[0].ip, "ns_1@" + self.master.ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
+                expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + servs_inout[0].ip], 'ejected_nodes':['ns_1@' + servs_inout[0].ip], 'source':'ns_server', \
                                'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
 
         if (ops in ['failover']):
@@ -210,7 +210,7 @@ class auditTest(BaseTestCase):
         rest = RestConnection(self.master)
 
         if (ops == 'memoryQuota'):
-            expectedResults = {'memory_quota':512, 'source':source, 'user':user, 'ip':self.ipAddress, 'port':12345, 'cluster_name':'', 'index_memory_quota':256,'fts_memory_quota': 302}
+            expectedResults = {'memory_quota':512, 'source':source, 'user':user, 'ip':self.ipAddress, 'port':12345, 'cluster_name':'', 'index_memory_quota':512,'fts_memory_quota': 302}
             rest.init_cluster_memoryQuota(expectedResults['user'], password, expectedResults['memory_quota'])
 
         elif (ops == 'loadSample'):
@@ -407,13 +407,13 @@ class auditTest(BaseTestCase):
 
         elif (ops in ['deleteuser']):
             expectedResults = {"role":role, "real_userid:source":source, 'real_userid:user':user,
-                               'ip':self.ipAddress, "port":123456, 'userid':username}
+                               'ip':self.ipAddress, "port":123456, 'userid':username,'identity:source':'ro_admin','identity:user':'roAdmins'}
             rest.delete_ro_user()
 
         elif (ops in ['passwordChange']):
             expectedResults = {'real_userid:source':source, 'real_userid:user':user,
                                'password':password, 'role':role, 'ip':self.ipAddress, "port":123456,
-                               'userid':username}
+                               'userid':username,'identity:source':'ro_admin','identity:user':'roAdmins'}
             rest.changePass_ro_user(username, password)
 
         elif (ops in ['invalidlogin']):
@@ -445,7 +445,7 @@ class auditTest(BaseTestCase):
                                    'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                    'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                     "flush_enabled":False, "num_threads":3, "source":source, \
-                                   "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'' }
+                                   "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'','time_synchronization': 'disabled' }
                 rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                    '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly')
                 self.log.info ("value of server is {0}".format(server))
@@ -479,7 +479,7 @@ class auditTest(BaseTestCase):
                                 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                 'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":source, \
-                                "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'' }
+                                "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'','time_synchronization': 'disabled' }
             restFirstNode.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                 '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly')
 
@@ -499,7 +499,7 @@ class auditTest(BaseTestCase):
                                    'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                    'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                     "flush_enabled":False, "num_threads":3, "source":source, \
-                                   "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'' }
+                                   "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'','time_synchronization': 'disabled' }
                 rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                    '11211', 'membase', 0, expectedResults['num_threads'], 0 , 'valueOnly')
 
