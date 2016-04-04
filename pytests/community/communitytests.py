@@ -300,6 +300,25 @@ class CommunityTests(CommunityBaseTest):
             self.fail("Memory Optimzed setting does not enforced in CE "
                       "We could set this option in")
 
+    def check_x509_cert(self):
+        """ from Watson, X509 certificate only support in EE """
+        rest = RestConnection(self.master)
+        api = rest.baseUrl + "pools/default/certificate?extended=true"
+        self.log.info("request to get certificate at "
+                      "'pools/default/certificate?extended=true' "
+                      "should return False")
+        try:
+            status, content, header = rest._http_request(api, 'GET')
+        except Exception, ex:
+            if ex:
+                print ex
+        if status:
+            self.fail("This X509 certificate feature only available in EE")
+        elif not status:
+            if "requires enterprise edition" in content:
+                self.log.info("X509 cert is enforced in CE")
+
+
 class CommunityXDCRTests(CommunityXDCRBaseTest):
     def setUp(self):
         super(CommunityXDCRTests, self).setUp()
