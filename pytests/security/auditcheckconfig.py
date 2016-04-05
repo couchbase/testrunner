@@ -14,6 +14,7 @@ import commands
 from security.auditmain import audit
 from clitest.cli_base import CliBaseTest
 import socket
+import urllib
 
 
 class auditcheckconfig(BaseTestCase):
@@ -523,13 +524,24 @@ class auditCLITest(CliBaseTest):
         type = info.type.lower()
         if type == 'windows' and self.source == 'saslauthd':
             raise Exception(" Ldap Tests cannot run on windows");
-        else:
-            if self.source == 'saslauthd':
+        elif self.source == 'saslauthd':
                 rest = RestConnection(self.master)
-                rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
+                self.setupLDAPSettings(rest)
+                #rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
+                self.set_user_role(rest,self.ldapUser)
 
     def tearDown(self):
         super(auditCLITest, self).tearDown()
+
+    def set_user_role(self,rest,username,user_role='admin'):
+        payload = "name=" + username + "&roles=" + user_role
+        status, content, header =  rest._set_user_roles(rest,user_name=username,payload=payload)
+
+    def setupLDAPSettings (self,rest):
+        api = rest.baseUrl + 'settings/saslauthdAuth'
+        params = urllib.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
+        status, content, header = rest._http_request(api, 'POST', params)
+        return status, content, header
 
     def returnBool(self, boolString):
         if boolString in ('True', True, 'true'):
