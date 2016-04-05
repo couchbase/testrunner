@@ -3410,7 +3410,7 @@ class RemoteMachineShellConnection:
             log.info("only check cb version in unix enviroment")
         return fv, sv, bn
 
-    def set_cbauth_env(self):
+    def set_cbauth_env(self,server):
         """ from Watson, we need to set cbauth environment variables
             so cbq could connect to the host """
         rest_username = "Administrator"
@@ -3427,18 +3427,23 @@ class RemoteMachineShellConnection:
             pass
         self.extract_remote_info()
         if self.info.type.lower() != 'windows':
+            print "On server %s" %server
             log.info("***** set NS_SERVER_CBAUTH env in linux *****")
+            #self.execute_command("/etc/init.d/couchbase-server stop")
+            #self.sleep(15)
             self.execute_command('export NS_SERVER_CBAUTH_URL='
-                                     '"http://localhost:8091/_cbauth"')
+                                     '"http://{0}:8091/_cbauth"'.format(server))
             self.execute_command('export NS_SERVER_CBAUTH_USER="{0}"'\
                                                 .format(rest_username))
             self.execute_command('export NS_SERVER_CBAUTH_PWD="{0}"'\
                                                 .format(rest_password))
             self.execute_command('export NS_SERVER_CBAUTH_RPC_URL='
-                                 '"http://127.0.0.1:8091/cbauth-demo"')
+                                 '"http://{0}:8091/cbauth-demo"'.format(server))
             self.execute_command('export CBAUTH_REVRPC_URL='
-                                 '"http://{0}:{1}@localhost:8091/query"'\
-                                   .format(rest_username, rest_password))
+                                 '"http://{0}:{1}@{2}:8091/query"'\
+                                   .format(rest_username, rest_password,server))
+            #self.execute_command("/etc/init.d/couchbase-server start")
+            #self.sleep(15)
 
 
 class RemoteUtilHelper(object):

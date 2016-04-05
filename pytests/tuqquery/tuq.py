@@ -3344,7 +3344,7 @@ class QueryTests(BaseTestCase):
                                                         named_prepare=self.named_prepare, encoded_plan=encoded_plan,
                                                         servers=self.servers)
         else:
-            self._set_env_variable(server)
+            #self._set_env_variable(server)
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
                                                             "shell/cbq/cbq ","","","","","","")

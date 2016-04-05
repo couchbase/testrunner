@@ -460,7 +460,7 @@ class CouchbaseServerInstaller(Installer):
                     remote_client.set_environment_variable('MEMCACHED_REQS_TAP_EVENT',
                                                            mem_req_tap_env)
                 """ set cbauth environment variables """
-                remote_client.set_cbauth_env()
+                remote_client.set_cbauth_env(server.ip)
 
                 remote_client.disconnect()
                 # TODO: Make it work with windows
