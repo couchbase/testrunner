@@ -36,6 +36,8 @@ class CommunityTests(CommunityBaseTest):
         self.start_node_services = self.input.param("start_node_services", "kv")
         self.add_node_services = self.input.param("add_node_services", "kv")
         self.timeout = 6000
+        self.user_add = self.input.param("user_add", None)
+        self.user_role = self.input.param("user_role", None)
 
 
     def tearDown(self):
@@ -317,6 +319,26 @@ class CommunityTests(CommunityBaseTest):
         elif not status:
             if "requires enterprise edition" in content:
                 self.log.info("X509 cert is enforced in CE")
+
+    def check_roles_base_access(self):
+        """ from Watson, roles base access for admin should not in in CE """
+        rest = RestConnection(self.master)
+        if self.user_add is None:
+            self.fail("We need to pass user name (user_add) to run this test. ")
+        if self.user_role is None:
+            self.fail("We need to pass user roles (user_role) to run this test. ")
+        api = rest.baseUrl + "settings/rbac/users/" + self.user_add
+        """ add admin user """
+        param = "name=%s&roles=%s" %s (self.user_add, self.user_role)
+        try:
+            status, content, header = rest._http_request(api, 'PUT', param)
+        except Exception, ex:
+            if ex:
+                print ex
+        if status:
+            self.fail("CE should not allow to add admin users")
+        else:
+            self.log.info("roles base is enforced in CE! ")
 
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
