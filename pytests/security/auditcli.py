@@ -468,6 +468,11 @@ class XdcrCLITest(CliBaseTest):
         type = info.type.lower()
         if type == 'windows' and self.source == 'saslauthd':
             raise Exception(" Ldap Tests cannot run on windows");
+        elif self.source == 'saslauthd':
+                rest = RestConnection(self.master)
+                self.setupLDAPSettings(rest)
+                #rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
+                self.set_user_role(rest,self.ldapUser)
 
     def tearDown(self):
         for server in self.servers:
@@ -476,6 +481,16 @@ class XdcrCLITest(CliBaseTest):
             rest.remove_all_replications()
             rest.remove_all_recoveries()
         super(XdcrCLITest, self).tearDown()
+
+    def set_user_role(self,rest,username,user_role='admin'):
+        payload = "name=" + username + "&roles=" + user_role
+        status, content, header =  rest._set_user_roles(rest,user_name=username,payload=payload)
+
+    def setupLDAPSettings (self,rest):
+        api = rest.baseUrl + 'settings/saslauthdAuth'
+        params = urllib.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
+        status, content, header = rest._http_request(api, 'POST', params)
+        return status, content, header
 
     #Wrapper around auditmain
     def checkConfig(self, eventID, host, expectedResults):
