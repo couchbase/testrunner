@@ -62,15 +62,21 @@ class MemcachedClient(object):
     def __del__(self):
         self.close()
 
-    def _sendCmd(self, cmd, key, val, opaque, extraHeader='', cas=0, extended_meta_data=''):
+    def _sendCmd(self, cmd, key, val, opaque, extraHeader='', cas=0, extended_meta_data='',extraHeaderLength=None):
         self._sendMsg(cmd, key, val, opaque, extraHeader=extraHeader, cas=cas,
-                      vbucketId=self.vbucketId, extended_meta_data=extended_meta_data)
+                      vbucketId=self.vbucketId, extended_meta_data=extended_meta_data, extraHeaderLength=extraHeaderLength)
 
     def _sendMsg(self, cmd, key, val, opaque, extraHeader='', cas=0,
                  dtype=0, vbucketId=0,
-                 fmt=REQ_PKT_FMT, magic=REQ_MAGIC_BYTE, extended_meta_data=''):
+                 fmt=REQ_PKT_FMT, magic=REQ_MAGIC_BYTE, extended_meta_data='', extraHeaderLength=None):
+
+        # a little bit unfortunate but the delWithMeta command expects the extra data length to be the
+        # overall packet length (28 in that case) so we need a facility to support that
+        if extraHeaderLength is None:
+            extraHeaderLength = len(extraHeader)
+
         msg = struct.pack(fmt, magic,
-            cmd, len(key), len(extraHeader), dtype, vbucketId,
+            cmd, len(key), extraHeaderLength, dtype, vbucketId,
                 len(key) + len(extraHeader) + len(val) + len(extended_meta_data), opaque, cas)
         _, w, _ = select.select([], [self.s], [], self.timeout)
         if w:
@@ -122,10 +128,11 @@ class MemcachedClient(object):
         cmd, opaque, cas, keylen, extralen, data = self._handleKeyedResponse(myopaque)
         return opaque, cas, data
 
-    def _doCmd(self, cmd, key, val, extraHeader='', cas=0,extended_meta_data=''):
+    def _doCmd(self, cmd, key, val, extraHeader='', cas=0,extended_meta_data='',extraHeaderLength=None):
         """Send a command and await its response."""
         opaque = self.r.randint(0, 2 ** 32)
-        self._sendCmd(cmd, key, val, opaque, extraHeader, cas, extended_meta_data=extended_meta_data)
+        self._sendCmd(cmd, key, val, opaque, extraHeader, cas, extended_meta_data=extended_meta_data,
+                      extraHeaderLength=extraHeaderLength)
         return self._handleSingleResponse(opaque)
 
     def _doSdCmd(self, cmd, key, path, val=None, expiry=0, opaque=0, cas=0, create=False):
@@ -263,13 +270,12 @@ class MemcachedClient(object):
         """Set a value in the memcached server."""
         self._set_vbucket(key, vbucket)
         if add_extended_meta_data:
-            extended_meta_data =  self.pack_the_extended_meta_data( adjusted_time, conflict_resolution_mode)
             return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
-                   struct.pack(memcacheConstants.EXTENDED_META_CMD_FMT, flags, exp, seqno, 0, len(extended_meta_data)),
+                       struct.pack(memcacheConstants.EXTENDED_META_CMD_FMT, flags, exp, seqno, 0, len(extended_meta_data)),
                    extended_meta_data=extended_meta_data)
         else:
-            return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
-                   struct.pack(META_CMD_FMT, flags, exp, seqno, new_cas), old_cas )
+            extraHeader = struct.pack('I',1)
+            return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '', extraHeader, old_cas,extraHeaderLength=28)
 
 
 
