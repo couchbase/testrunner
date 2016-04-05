@@ -1293,7 +1293,7 @@ class QueriesIndexTests(QueryTests):
             created_indexes = []
             try:
                 idx = "idx"
-                self.query = "CREATE INDEX %s ON %s( distinct array i FOR i in %s END,hobbies.hobby,name,department) WHERE (department = 'Support')  USING %s" % (
+                self.query = "CREATE INDEX %s ON %s( distinct array i FOR i in %s END,hobbies.hobby,name) WHERE (department = 'Support')  USING %s" % (
                   idx, bucket.name, "hobbies.hobby", self.index_type)
                 # if self.gsi_type:
                 #     self.query += " WITH {'index_type': 'memdb'}"
