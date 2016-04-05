@@ -328,6 +328,7 @@ class CommunityTests(CommunityBaseTest):
         if self.user_role is None:
             self.fail("We need to pass user roles (user_role) to run this test. ")
         api = rest.baseUrl + "settings/rbac/users/" + self.user_add
+        self.log.info("url to run this test: %s" % api)
         """ add admin user """
         param = "name=%s&roles=%s" % (self.user_add, self.user_role)
         try:
