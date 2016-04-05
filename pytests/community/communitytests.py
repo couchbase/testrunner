@@ -329,7 +329,7 @@ class CommunityTests(CommunityBaseTest):
             self.fail("We need to pass user roles (user_role) to run this test. ")
         api = rest.baseUrl + "settings/rbac/users/" + self.user_add
         """ add admin user """
-        param = "name=%s&roles=%s" %s (self.user_add, self.user_role)
+        param = "name=%s&roles=%s" % (self.user_add, self.user_role)
         try:
             status, content, header = rest._http_request(api, 'PUT', param)
         except Exception, ex:
