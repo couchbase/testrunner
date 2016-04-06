@@ -8,6 +8,7 @@ import time
 import logging
 import stat
 import unittest
+import TestInput
 from datetime import datetime
 import logger
 from subprocess import Popen, PIPE
@@ -36,7 +37,6 @@ from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
 from testconstants import CB_RELEASE_APT_GET_REPO
 from testconstants import CB_RELEASE_YUM_REPO
 from membase.api.rest_client import RestConnection, RestHelper
-from TestInput import TestInputSingleton
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -155,7 +155,7 @@ class RemoteMachineShellConnection:
     def __init__(self, serverInfo):
         # let's create a connection
         self.username = serverInfo.ssh_username
-        self.input = TestInputSingleton.input
+        self.input = TestInput.TestInputParser.get_test_input(sys.argv)
         self.use_sudo = True
         if self.username == 'root':
            self.use_sudo = False
@@ -165,8 +165,10 @@ class RemoteMachineShellConnection:
         self.port = serverInfo.port
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         msg = 'connecting to {0} with username : {1} password : {2} ssh_key: {3}'
-        log.info(msg.format(serverInfo.ip, serverInfo.ssh_username, serverInfo.ssh_password, serverInfo.ssh_key))
-        # added attempts for connection because of PID check failed. RNG must be re-initialized after fork() error
+        log.info(msg.format(serverInfo.ip, serverInfo.ssh_username,
+                            serverInfo.ssh_password, serverInfo.ssh_key))
+        # added attempts for connection because of PID check failed.
+        # RNG must be re-initialized after fork() error
         # That's a paramiko bug
         max_attempts_connect = 2
         attempt = 0
