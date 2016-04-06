@@ -28,6 +28,7 @@ from testconstants import CB_REPO
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 from testconstants import CB_VERSION_NAME
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 import TestInput
 
 
@@ -426,27 +427,42 @@ class CouchbaseServerInstaller(Installer):
                     init_nodes = params["init_nodes"]
                 else:
                     init_nodes = "True"
-                if (isinstance(init_nodes, bool) and init_nodes) or (init_nodes.lower() == "true"):
-                    if server.services:
-                        rest.init_node_services(username=server.rest_username,
+                if (isinstance(init_nodes, bool) and init_nodes) \
+                                                 or (init_nodes.lower() == "true"):
+                    if not server.services:
+                        set_services = ["kv"]
+                    elif server.services:
+                        set_services = server.services.split(',')
+                    info = rest.get_nodes_self()
+
+                    kv_quota = 0
+                    while kv_quota == 0:
+                        time.sleep(1)
+                        kv_quota = int(info.mcdMemoryReserved)
+
+                    if "index" in set_services and "fts" not in set_services:
+                        kv_quota = int(info.mcdMemoryReserved) - INDEX_QUOTA
+                        if kv_quota < MIN_KV_QUOTA:
+                            raise Exception("KV RAM need to be larger than %s MB "
+                                  "at node  %s"  % (MIN_KV_QUOTA, server.ip))
+                    elif "index" in set_services and "fts" in set_services:
+                        kv_quota = int(info.mcdMemoryReserved) - INDEX_QUOTA - FTS_QUOTA
+                        if kv_quota < MIN_KV_QUOTA:
+                            raise Exception("KV RAM need to be larger than %s MB "
+                                  "at node  %s"  % (MIN_KV_QUOTA, server.ip))
+                    elif "fts" in set_services and "index" not in set_services:
+                        kv_quota = int(info.mcdMemoryReserved) - FTS_QUOTA
+                        if kv_quota < MIN_KV_QUOTA:
+                            raise Exception("KV RAM need to be larger than %s MB "
+                                  "at node  %s"  % (MIN_KV_QUOTA, server.ip))
+                    rest.init_cluster_memoryQuota(server.rest_username, \
+                                                       server.rest_password, \
+                                                                     kv_quota)
+                    rest.init_node_services(username=server.rest_username,
                                                 password=server.rest_password,
-                                                services=server.services.split(','))
+                                                        services=set_services)
                     rest.init_cluster(username=server.rest_username,
-                                      password=server.rest_password)
-                    memory_quota = rest.get_nodes_self().mcdMemoryReserved
-                    # give the cluster time to get the memQuota
-                    while memory_quota == 0:
-                       time.sleep(1)
-                       memory_quota = rest.get_nodes_self().mcdMemoryReserved
-
-                    rest.init_cluster_memoryQuota(memoryQuota=memory_quota)
-
-                # TODO: Symlink data-dir to custom path
-                # remote_client.stop_couchbase()
-                # remote_client.execute_command('mv /opt/couchbase/var {0}'.format(server.data_path))
-                # remote_client.execute_command('ln -s {0}/var /opt/couchbase/var'.format(server.data_path))
-                # remote_client.execute_command("chown -h couchbase:couchbase /opt/couchbase/var")
-                # remote_client.start_couchbase()
+                                         password=server.rest_password)
 
                 # Optionally disable consistency check
                 if params.get('disable_consistency', 0):
