@@ -111,7 +111,8 @@ class rbacclitests(BaseTestCase):
 
 
     def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase", bucket_port=11211, bucket_password=None, \
-                        bucket_ramsize=200, bucket_replica=1, wait=False, enable_flush=None, enable_index_replica=None):
+                        bucket_ramsize=200, bucket_replica=1, wait=False, enable_flush=None, enable_index_replica=None, \
+                       user=None,password=None):
         options = "--bucket={0} --bucket-type={1} --bucket-port={2} --bucket-ramsize={3} --bucket-replica={4}".\
             format(bucket, bucket_type, bucket_port, bucket_ramsize, bucket_replica)
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
@@ -120,8 +121,13 @@ class rbacclitests(BaseTestCase):
         options += (" --bucket-password={0}".format(bucket_password), "")[bucket_password is None]
         options += (" --wait", "")[wait]
         cli_command = "bucket-create"
+        if user is None:
+            user = self.ldapUser
 
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
+        if password is None:
+            password = self.ldapPass
+
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=user, password=password)
         return output
 
     def testClusterEdit(self):
@@ -228,7 +234,8 @@ class rbacclitests(BaseTestCase):
         remote_client = RemoteMachineShellConnection(self.master)
 
         self._create_bucket(remote_client, bucket, bucket_type=bucket_type, bucket_port=bucket_port, bucket_password=bucket_password, \
-                        bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, enable_index_replica=enable_index_replica)
+                        bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, \
+                            enable_index_replica=enable_index_replica,user="Administrator",password='password')
 
         cli_command = "bucket-edit"
         options = "--bucket={0}".format(bucket)
