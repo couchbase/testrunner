@@ -204,7 +204,7 @@ class rbacRoles:
             "permissionSet":"cluster.bucket[<bucket_name>].xdcr!read,cluster.bucket[<bucket_name>].xdcr!write,cluster.bucket[<bucket_name>].xdcr!execute,\
                     cluster.xdcr.settings!read,cluster.xdcr.settings!write,cluster.xdcr.remote_clusters!read,cluster.xdcr.remote_clusters!write,\
                 cluster.pools!read, cluster.nodes!read,cluster.samples!read, cluster.settings!read,cluster.tasks!read,cluster.stats!read,cluster.server_groups!read,\
-                cluster.indexes!read,cluster.xdcr.settings!read,cluster.xdcr.remote_clusters!read"
+                cluster.admin.security!read,cluster.bucket[<bucket_name>].recovery!read,cluster.indexes!read,cluster.xdcr.settings!read,cluster.xdcr.remote_clusters!read"
         }
         return per_set
 
@@ -215,7 +215,7 @@ class rbacRoles:
             "permissionSet":{u'cluster.settings!read': True, u'cluster.nodes!read': True, u'cluster.bucket[<bucket_name>].xdcr!read': True, \
                              u'cluster.xdcr.settings!read': True, u'cluster.samples!read': True, u'cluster.pools!read': True, u'cluster.stats!read': True, \
                              u'cluster.xdcr.remote_clusters!write': True, u'cluster.bucket[<bucket_name>].xdcr!write': True, u'cluster.xdcr.remote_clusters!read': True, \
-                             u'cluster.xdcr.settings!write': True, u'cluster.server_groups!read': True, \
+                             u'cluster.xdcr.settings!write': True, u'cluster.server_groups!read': True,'cluster.admin.security!read':False,'cluster.bucket[<bucket_name>].recovery!read':False, \
                              u'cluster.bucket[<bucket_name>].xdcr!execute': True, u'cluster.indexes!read': True, u'cluster.tasks!read': True}
         }
         return per_set
@@ -225,12 +225,12 @@ class rbacRoles:
         per_set = {
             "name":"Replication admin not allowed permission master",
             "permissionSet":"cluster.admin.internal!all,cluster.admin.diag!read,cluster.admin.diag!write,cluster.admin.setup!write,\
-                            cluster.admin.security!read,cluster.admin.security!write,cluster.admin.logs!read,cluster.pools!write,\
+                            cluster.admin.security!write,cluster.admin.logs!read,cluster.pools!write,\
                             cluster.nodes!write,cluster.settings!write,cluster.server_groups!write,cluster.indexes!write,\
                             cluster.bucket[<bucket_name>].xdcr!read,cluster.bucket[<bucket_name>].xdcr!write,cluster.bucket[<bucket_name>].xdcr!execute,\
                             cluster.bucket[<bucket_name>]!create,cluster.bucket[<bucket_name>]!delete,cluster.bucket[<bucket_name>]!compact,\
                             cluster.bucket[<bucket_name>].settings!read,cluster.bucket[<bucket_name>].settings!write,cluster.bucket[<bucket_name>].password!read,\
-                            cluster.bucket[<bucket_name>].data!write,cluster.bucket[<bucket_name>].recovery!read,cluster.bucket[<bucket_name>].recovery!write"
+                            cluster.bucket[<bucket_name>].data!write,cluster.bucket[<bucket_name>].recovery!write"
         }
         return per_set
 
@@ -239,12 +239,12 @@ class rbacRoles:
         per_set = {
             "name":"Replication admin not allowed permission master",
             "permissionSet":{'cluster.admin.internal!all':False,'cluster.admin.diag!read':False,'cluster.admin.diag!write':False,'cluster.admin.setup!write':False,\
-                            'cluster.admin.security!read':False,'cluster.admin.security!write':False,'cluster.admin.logs!read':False,'cluster.pools!write':False,\
+                            'cluster.admin.security!write':False,'cluster.admin.logs!read':False,'cluster.pools!write':False,\
                             'cluster.nodes!write':False,'cluster.settings!write':False,'cluster.server_groups!write':False,'cluster.indexes!write':False,\
                             'cluster.bucket[<bucket_name>].xdcr!read':True,'cluster.bucket[<bucket_name>].xdcr!write':True,'cluster.bucket[<bucket_name>].xdcr!execute':True,\
                             'cluster.bucket[<bucket_name>]!create':False,'cluster.bucket[<bucket_name>]!delete':False,'cluster.bucket[<bucket_name>]!compact':False,\
                             'cluster.bucket[<bucket_name>].settings!read':True,'cluster.bucket[<bucket_name>].settings!write':False,'cluster.bucket[<bucket_name>].password!read':False,\
-                            'cluster.bucket[<bucket_name>].data!write':False,'cluster.bucket[<bucket_name>].recovery!read':False,'cluster.bucket[<bucket_name>].recovery!write':False}
+                            'cluster.bucket[<bucket_name>].data!write':False,'cluster.bucket[<bucket_name>].recovery!write':False}
         }
         return  per_set
 

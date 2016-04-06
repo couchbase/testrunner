@@ -130,6 +130,7 @@ class rbacmain:
         status, content, header = rbacmain(self.master_ip)._check_user_permission(user_details[0],user_details[1],permission_str)
         content = json.loads(content)
         log.info ("Value of content is {0}".format(content))
+        log.info ("Value of expected key is {0}".format(temp_dict))
         for item in temp_dict.iterkeys():
             if temp_dict[item] != content[item]:
                 log.info ("Item is {0} -- Expected Value is - {1} and Actual Value is {2}".format(item,temp_dict[item],content[item]))
