@@ -26,7 +26,7 @@ from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_REPO
 from testconstants import CB_REPO
 from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
+from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON
 from testconstants import CB_VERSION_NAME
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 import TestInput
@@ -467,7 +467,8 @@ class CouchbaseServerInstaller(Installer):
                     rest.init_cluster_memoryQuota(server.rest_username, \
                                                        server.rest_password, \
                                                                      kv_quota)
-                    rest.init_node_services(username=server.rest_username,
+                    if params["version"][:5] in COUCHBASE_FROM_WATSON:
+                        rest.init_node_services(username=server.rest_username,
                                                 password=server.rest_password,
                                                         services=set_services)
                     rest.init_cluster(username=server.rest_username,
@@ -485,7 +486,7 @@ class CouchbaseServerInstaller(Installer):
                     remote_client.set_environment_variable('MEMCACHED_REQS_TAP_EVENT',
                                                            mem_req_tap_env)
                 """ set cbauth environment variables """
-                remote_client.set_cbauth_env(server.ip)
+                remote_client.set_cbauth_env(server)
 
                 remote_client.disconnect()
                 # TODO: Make it work with windows
