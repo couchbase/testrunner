@@ -377,12 +377,13 @@ class CouchbaseCliTest(CliBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                                 options=options, cluster_host="localhost", \
                                 user="Administrator", password="password")
-                if len(output) == 1:
-                    self.assertEqual(output, ["SUCCESS: server-add {0}:8091" \
-                                              .format(self.servers[num + 1].ip)])
+                if len(output) == 2:
+                    self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
+                                              "Server {0}:8091 added".format(self.servers[num + 1].ip)])
                 else:
-                    self.assertEqual(output, ["SUCCESS: server-add {0}:8091" \
-                                              .format(self.servers[num + 1].ip), ""])
+                    self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
+                                              "Server {0}:8091 added".format(self.servers[num + 1].ip),
+                                              ""])
         else:
              raise Exception("Node add should be smaller total number vms in ini file")
 
@@ -435,7 +436,7 @@ class CouchbaseCliTest(CliBaseTest):
                         cluster_host="localhost", user="Administrator", \
                                                   password="password")
                 output[0] = output[0].rstrip(" .")
-                if len(output) == 2:
+                if len(output) == 3:
                     self.assertEqual(output, ["INFO: graceful failover", \
                                               "SUCCESS: failover ns_1@{0}" \
                                               .format(self.servers[nodes_add - nodes_rem - num].ip), ""])
@@ -487,9 +488,12 @@ class CouchbaseCliTest(CliBaseTest):
                 options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
                 if len(output) == 2:
-                    self.assertEqual(output, ["SUCCESS: server-add {0}:8091".format(self.servers[num + 1].ip), ""])
+                    self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
+                                              "Server {0}:8091 added".format(self.servers[num + 1].ip)])
                 else:
-                    self.assertEqual(output, ["SUCCESS: server-add {0}:8091".format(self.servers[num + 1].ip)])
+                    self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
+                                              "Server {0}:8091 added".format(self.servers[num + 1].ip)],
+                                              "")
         else:
              raise Exception("Node add should be smaller total number vms in ini file")
 
@@ -581,8 +585,8 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                                               options=options, cluster_host="localhost", \
                                                 user="Administrator", password="password")
-            self.assertEqual(output, ["SUCCESS: server-add {0}:8091" \
-                                      .format(self.servers[num + 1].ip)])
+            self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
+                                      "Server {0}:8091 added".format(self.servers[num + 1].ip)])
 
         cli_command = "rebalance-status"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
