@@ -33,7 +33,7 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 try:
-                    o = shell.execute_commands_inside('%s/cbq  -q -engine=http://%s:8091/' % (self.path,server.ip),'\quit1','','','','','')
+                    o = shell.execute_commands_inside('%s/cbq  -q -engine=http://%s:8093/' % (self.path,server.ip),'\quit1','','','','','')
                     print o
                     self.assertTrue("FAIL" in o)
                 finally:
@@ -60,11 +60,7 @@ class AdvancedQueryTests(QueryTests):
             for bucket in self.buckets:
                 try:
                     queries = ['\set -timeout "10ms";',"create primary index on bucketname;","select * from bucketname;"]
-                    o = shell.execute_commands_inside('%s/cbq -q -engine=http://%s:8091/' % (self.path,server.ip),'',queries,bucket.name,'',bucket.name,'')
-                    print o
-                    self.assertEqual('timeout',o[7:])
-                    queries = ['\set -timeout "10ms";',"drop primary index on bucketname;","select * from bucketname;"]
-                    o = shell.execute_commands_inside('%s/cbq -quiet ' % (self.path),'',queries,bucket.name,'',bucket.name,True)
+                    o = shell.execute_commands_inside('%s/cbq -q -engine=http://%s:8093/' % (self.path,server.ip),'',queries,bucket.name,'',bucket.name,'')
                     print o
                     self.assertEqual('timeout',o[7:])
                 finally:
@@ -148,7 +144,7 @@ class AdvancedQueryTests(QueryTests):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
-                queries = ['\connect http://localhost:8091;','create primary index on bucketname;']
+                queries = ['\connect http://localhost:8093;','create primary index on bucketname;']
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
                 queries = ['\connect http://localhost:8093;','drop primary index on bucketname;']
@@ -178,7 +174,7 @@ class AdvancedQueryTests(QueryTests):
                 queries = ['\disconnect','create primary index on bucketname;']
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
-                queries = ['\connect http://localhost:8091;','create primary index on bucketname;']
+                queries = ['\connect http://localhost:8093;','create primary index on bucketname;']
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
 
