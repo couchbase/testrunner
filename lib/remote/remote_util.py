@@ -3412,7 +3412,7 @@ class RemoteMachineShellConnection:
             log.info("only check cb version in unix enviroment")
         return fv, sv, bn
 
-    def set_cbauth_env(self,server):
+    def set_cbauth_env(self, server):
         """ from Watson, we need to set cbauth environment variables
             so cbq could connect to the host """
         version = RestConnection(server).get_nodes_versions()
