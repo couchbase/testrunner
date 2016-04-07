@@ -26,8 +26,8 @@ from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_REPO
 from testconstants import CB_REPO
 from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
-from testconstants import CB_VERSION_NAME
+from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON
+from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 import TestInput
 
@@ -433,41 +433,45 @@ class CouchbaseServerInstaller(Installer):
                         set_services = ["kv"]
                     elif server.services:
                         set_services = server.services.split(',')
-                    info = rest.get_nodes_self()
 
                     kv_quota = 0
                     while kv_quota == 0:
                         time.sleep(1)
-                        kv_quota = int(info.mcdMemoryReserved)
+                        kv_quota = int(rest.get_nodes_self().mcdMemoryReserved)
+                    info = rest.get_nodes_self()
+                    cb_version = info.version[:5]
 
-                    if "index" in set_services and "fts" not in set_services:
-                        log.info("quota for index service will be %s MB" \
+                    if cb_version in COUCHBASE_FROM_VERSION_4:
+                        if "index" in set_services and "fts" not in set_services:
+                            log.info("quota for index service will be %s MB" \
                                                               % (INDEX_QUOTA))
-                        kv_quota = int(info.mcdMemoryReserved) - INDEX_QUOTA
-                        if kv_quota < MIN_KV_QUOTA:
-                            raise Exception("KV RAM need to be larger than %s MB "
-                                  "at node  %s"  % (MIN_KV_QUOTA, server.ip))
-                    elif "index" in set_services and "fts" in set_services:
-                        log.info("quota for index service will be %s MB" \
+                            kv_quota = int(info.mcdMemoryReserved) - INDEX_QUOTA
+                            if kv_quota < MIN_KV_QUOTA:
+                                raise Exception("KV RAM needs to be more than %s MB"
+                                        " at node  %s"  % (MIN_KV_QUOTA, server.ip))
+                        elif "index" in set_services and "fts" in set_services:
+                            log.info("quota for index service will be %s MB" \
                                                               % (INDEX_QUOTA))
-                        log.info("quota for fts service will be %s MB" \
+                            log.info("quota for fts service will be %s MB" \
                                                                 % (FTS_QUOTA))
-                        kv_quota = int(info.mcdMemoryReserved) - INDEX_QUOTA \
+                            kv_quota = int(info.mcdMemoryReserved) - INDEX_QUOTA \
                                                                  - FTS_QUOTA
-                        if kv_quota < MIN_KV_QUOTA:
-                            raise Exception("KV RAM need to be larger than %s MB "
-                                  "at node  %s"  % (MIN_KV_QUOTA, server.ip))
-                    elif "fts" in set_services and "index" not in set_services:
-                        log.info("quota for fts service will be %s MB" \
+                            if kv_quota < MIN_KV_QUOTA:
+                                raise Exception("KV RAM need to be more than %s MB"
+                                       " at node  %s"  % (MIN_KV_QUOTA, server.ip))
+                        elif "fts" in set_services and "index" not in set_services:
+                            log.info("quota for fts service will be %s MB" \
                                                                 % (FTS_QUOTA))
-                        kv_quota = int(info.mcdMemoryReserved) - FTS_QUOTA
-                        if kv_quota < MIN_KV_QUOTA:
-                            raise Exception("KV RAM need to be larger than %s MB "
-                                  "at node  %s"  % (MIN_KV_QUOTA, server.ip))
+                            kv_quota = int(info.mcdMemoryReserved) - FTS_QUOTA
+                            if kv_quota < MIN_KV_QUOTA:
+                                raise Exception("KV RAM need to be more than %s MB"
+                                       " at node  %s"  % (MIN_KV_QUOTA, server.ip))
+                    log.info("quota for kv: %s MB" % kv_quota)
                     rest.init_cluster_memoryQuota(server.rest_username, \
                                                        server.rest_password, \
                                                                      kv_quota)
-                    rest.init_node_services(username=server.rest_username,
+                    if params["version"][:5] in COUCHBASE_FROM_VERSION_4:
+                        rest.init_node_services(username=server.rest_username,
                                                 password=server.rest_password,
                                                         services=set_services)
                     rest.init_cluster(username=server.rest_username,
@@ -484,9 +488,9 @@ class CouchbaseServerInstaller(Installer):
                 if mem_req_tap_env:
                     remote_client.set_environment_variable('MEMCACHED_REQS_TAP_EVENT',
                                                            mem_req_tap_env)
-                """ set cbauth environment variables """
-                remote_client.set_cbauth_env(server.ip)
-
+                """ set cbauth environment variables from Watson version
+                    it is checked version inside method """
+                remote_client.set_cbauth_env(server)
                 remote_client.disconnect()
                 # TODO: Make it work with windows
                 if "erlang_threads" in params:
