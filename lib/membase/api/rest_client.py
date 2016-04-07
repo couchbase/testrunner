@@ -821,6 +821,15 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
+    def set_fts_memoryQuota(self, username='Administrator',
+                                 password='password',
+                                 ftsMemoryQuota=256):
+        api = self.baseUrl + 'pools/default'
+        params = urllib.urlencode({'ftsMemoryQuota': ftsMemoryQuota})
+        log.info('pools/default params : {0}'.format(params))
+        status, content, header = self._http_request(api, 'POST', params)
+        return status
+
     def set_indexer_storage_mode(self, username='Administrator',
                                  password='password',
                                  storageMode='forestdb'):

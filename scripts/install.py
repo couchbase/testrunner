@@ -466,6 +466,13 @@ class CouchbaseServerInstaller(Installer):
                             if kv_quota < MIN_KV_QUOTA:
                                 raise Exception("KV RAM need to be more than %s MB"
                                        " at node  %s"  % (MIN_KV_QUOTA, server.ip))
+                            """ for fts, we need to grep quota from ns_server
+                                but need to make it works even RAM of vm is
+                                smaller than 2 GB """
+                            rest.set_fts_memoryQuota(ftsMemoryQuota=FTS_QUOTA)
+                    """ set kv quota smaller than 1 MB so that it will satify
+                        the condition smaller than allow quota """
+                    kv_quota -= 1
                     log.info("quota for kv: %s MB" % kv_quota)
                     rest.init_cluster_memoryQuota(server.rest_username, \
                                                        server.rest_password, \
