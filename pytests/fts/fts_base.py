@@ -2455,7 +2455,7 @@ class FTSBaseTest(unittest.TestCase):
         3. if index is distributed - present on all fts nodes, almost equally?
         4. if index balanced - every fts node services almost equal num of vbs?
         """
-
+        self.log.info("Validating index distribution for %s ..." % index.name)
         nodes_partitions = self.populate_node_partition_map(index)
 
         # check 1 - test number of pindexes
