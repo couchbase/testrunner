@@ -1636,6 +1636,13 @@ class RestConnection(object):
         log.info("Number of node(s) in cluster is {0} node(s)".format(len(node_ip)))
         return len(node_ip)
 
+    """ this medthod return version on node that is not initialized yet """
+    def get_nodes_version(self):
+        node = self.get_nodes_self()
+        version = node.version
+        log.info("Node version in cluster {0}".format(version))
+        return version
+
     # this method returns the versions of nodes in cluster
     def get_nodes_versions(self):
         nodes = self.get_nodes()
