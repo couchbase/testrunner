@@ -5,6 +5,7 @@ from security.rbacmain import rbacmain
 import json
 from remote.remote_util import RemoteMachineShellConnection
 from newupgradebasetest import NewUpgradeBaseTest
+from security.auditmain import audit
 
 class ServerInfo():
     def __init__(self,
