@@ -7,6 +7,9 @@ import base64
 from security.rbacPermissionList import rbacPermissionList
 
 class rbacmain:
+    AUDIT_ROLE_ASSIGN=8232
+    AUDIT_ROLE_UPDATE=8232
+    AUDIT_REMOVE_ROLE=8194
 
     def __init__(self,
                 master_ip=None,
@@ -130,7 +133,6 @@ class rbacmain:
         status, content, header = rbacmain(self.master_ip)._check_user_permission(user_details[0],user_details[1],permission_str)
         content = json.loads(content)
         log.info ("Value of content is {0}".format(content))
-        log.info ("Value of expected key is {0}".format(temp_dict))
         for item in temp_dict.iterkeys():
             if temp_dict[item] != content[item]:
                 log.info ("Item is {0} -- Expected Value is - {1} and Actual Value is {2}".format(item,temp_dict[item],content[item]))
@@ -156,12 +158,16 @@ class rbacmain:
         print "Into user response"
         role_return = self._convert_user_roles_format(roles)
         result = False
+        print response
         for user in response:
             if  user['id'] == user_id:
-                if user['name'] == user_name:
-                    result = True
                 if [item for item in user['roles'] if item in role_return]:
                     result = True
+                try:
+                    if user['name'] == user_name:
+                        result = True
+                except:
+                    log.info ("This might be an upgrade, There is not username is response")
                 return result
 
     def _convert_user_roles_format(self,roles):
