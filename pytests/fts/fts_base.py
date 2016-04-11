@@ -538,12 +538,6 @@ class FTSIndex:
         if self.custom_map:
             self.generate_new_custom_map(seed=self.cm_id)
 
-        # for wiki docs, specify default analyzer as "simple"
-        if self.index_type == "fulltext-index" and \
-                (self.dataset == "wiki" or self.dataset == "all"):
-            self.index_definition['params'] = self.build_custom_index_params(
-                {"default_analyzer": "simple"})
-
         self.fts_queries = []
 
         if index_params:
@@ -2657,7 +2651,7 @@ class FTSBaseTest(unittest.TestCase):
 
 
     def create_index_es(self, index_name="es_index"):
-        self.es.create_empty_index(index_name)
+        self.es.create_empty_index_with_bleve_equivalent_std_analyzer(index_name)
         self.log.info("Created empty index %s on Elastic Search node"
                       % index_name)
 

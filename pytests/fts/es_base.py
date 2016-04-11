@@ -104,6 +104,34 @@ class ElasticSearchBase(object):
         except Exception as e:
             raise Exception("Could not create ES index : %s" % e)
 
+    def create_empty_index_with_bleve_equivalent_std_analyzer(self, index_name):
+        """
+        Refer:
+        https://www.elastic.co/guide/en/elasticsearch/guide/current/
+        configuring-analyzers.html
+        """
+        analyzer_settings = {
+            "settings": {
+                "analysis": {
+                    "analyzer": {
+                        "my_std": {
+                            "type":      "standard",
+                            "stopwords": "_english_"
+                        }
+                    }
+                }
+            }
+        }
+        try:
+            self.delete_index(index_name)
+            status, content, _ = self._http_request(
+                self.__connection_url + index_name,
+                'PUT', json.dumps(analyzer_settings))
+            if status:
+                self.__indices.append(index_name)
+        except Exception as e:
+            raise Exception("Could not create ES index : %s" % e)
+
     def create_index_mapping(self, index_name, mapping):
         """
         Updates a default index, with the given mapping
