@@ -1291,7 +1291,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Backup creation failed: Backup Set `backup` exists",
+        self.assertEqual(output[0], "Backup repository creation failed: Backup Set `backup` exists",
                                     "Expected error message not thrown")
 
     def test_backup_cluster_restore_negative_args(self):
@@ -1652,6 +1652,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         5. Restores data ans validates
         6. Ensures that same view is created in restore cluster
         """
+        rest_src = RestConnection(self.backupset.cluster_host)
+        rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
+                          self.servers[1].ip, services=['index'])
+        rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
+        rebalance.result()
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
@@ -1664,6 +1669,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         task = self.cluster.async_create_view(self.backupset.cluster_host, default_ddoc_name, view, "default")
         task.result()
         self.backup_cluster_validate()
+        rest_target = RestConnection(self.backupset.restore_cluster_host)
+        rest_target.add_node(self.input.clusters[0][1].rest_username, self.input.clusters[0][1].rest_password,
+                             self.input.clusters[0][1].ip, services=['index'])
+        rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
+        rebalance.result()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
         try:
             result = self.cluster.query_view(self.backupset.restore_cluster_host, prefix + default_ddoc_name,
@@ -1683,6 +1693,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         5. Restores data ans validates
         6. Ensures that same gsi index is created in restore cluster
         """
+        rest_src = RestConnection(self.backupset.cluster_host)
+        rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
+                          self.servers[1].ip, services=['index'])
+        rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
+        rebalance.result()
         gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(100), start=0, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
@@ -1694,6 +1709,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if error or "Index created" not in output[-1]:
             self.fail("GSI index cannot be created")
         self.backup_cluster_validate()
+        rest_target = RestConnection(self.backupset.restore_cluster_host)
+        rest_target.add_node(self.input.clusters[0][1].rest_username, self.input.clusters[0][1].rest_password,
+                             self.input.clusters[0][1].ip, services=['index'])
+        rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
+        rebalance.result()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
         cmd = "cbindex -type list"
         remote_client = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
@@ -1715,27 +1735,37 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         5. Restores data ans validates
         6. Ensures that same FTS index is created in restore cluster
         """
+        rest_src = RestConnection(self.backupset.cluster_host)
+        rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
+                          self.servers[1].ip, services=['fts'])
+        rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
+        rebalance.result()
         gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(100), start=0, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         index_definition = INDEX_DEFINITION
         index_name = index_definition['name'] = "age"
-        rest_src = RestConnection(self.backupset.cluster_host)
+        rest_src_fts = RestConnection(self.servers[1])
         try:
-            rest_src.create_fts_index(index_name, index_definition)
+            rest_src_fts.create_fts_index(index_name, index_definition)
         except Exception, ex:
             self.fail(ex)
         self.backup_cluster_validate()
-        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
         rest_target = RestConnection(self.backupset.restore_cluster_host)
+        rest_target.add_node(self.input.clusters[0][1].rest_username, self.input.clusters[0][1].rest_password,
+                             self.input.clusters[0][1].ip, services=['fts'])
+        rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
+        rebalance.result()
+        self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+        rest_target_fts = RestConnection(self.input.clusters[0][1])
         try:
-            status, content = rest_target.get_fts_index_definition(index_name)
+            status, content = rest_target_fts.get_fts_index_definition(index_name)
             self.assertTrue(status and content['status'] == 'ok', "FTS index not found in restore cluster as expected")
             self.log.info("FTS index found in restore cluster as expected")
         finally:
-            rest_src.delete_fts_index(index_name)
+            rest_src_fts.delete_fts_index(index_name)
             if status:
-                rest_target.delete_fts_index(index_name)
+                rest_target_fts.delete_fts_index(index_name)
 
     def test_backup_restore_with_xdcr(self):
         """
