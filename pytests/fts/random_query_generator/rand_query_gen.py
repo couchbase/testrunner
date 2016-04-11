@@ -14,7 +14,7 @@ class DATASET:
                       'date': ["join_date"]
                       },
 
-              'wiki': {'str': ["title", "revision_text_text", "type", "revision_contributor_username", "revision_contributor_id"],
+              'wiki': {'str': ["title", "revision_text_text", "type", "revision_contributor_username"],
                        'text': ["title", "revision_text_text"],
                        'num': ["mutated"],
                        'bool': [],
@@ -22,7 +22,7 @@ class DATASET:
               }
 
 class QUERY_TYPE:
-    VALUES = ["match", "phrase", "bool", "match_phrase",
+    VALUES = ["match", "bool", "match_phrase",
               "prefix", "fuzzy", "conjunction", "disjunction"
               "wildcard", "regexp",  "query_string",
               "numeric_range", "date_range", "match_all", "match_none"]
