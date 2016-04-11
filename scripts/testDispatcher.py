@@ -113,7 +113,7 @@ def main():
                 (data['os'] == 'linux' and options.os in set(['centos','ubuntu']) ):
 
                 # and also check for which release it is implemented in
-                if 'implementedIn' not in data or releaseVersion >= data['implementedIn']:
+                if 'implementedIn' not in data or releaseVersion >= float(data['implementedIn']):
                     if 'jenkins' in data:
                         # then this is sort of a special case, launch the old style Jenkins job
                         # not implemented yet
@@ -147,6 +147,7 @@ def main():
     print 'tests to launch:'
     for i in testsToLaunch: print i['component'], i['subcomponent']
     print '\n\n'
+
 
 
     launchStringBase = 'http://qa.sc.couchbase.com/job/test_suite_executor'
