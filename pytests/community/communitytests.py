@@ -341,6 +341,20 @@ class CommunityTests(CommunityBaseTest):
         else:
             self.log.info("roles base is enforced in CE! ")
 
+    def check_root_certificate(self):
+        """ from watson, ce should not see root certificate """
+        rest = RestConnection(self.master)
+        api = rest.baseUrl + "pools/default/certificate"
+        try:
+            status, content, header = rest._http_request(api, 'GET')
+        except Exception, ex:
+            if ex:
+                print ex
+        if status:
+            self.fail("CE should not see root certificate!")
+        else:
+            self.log.info("root certificate is enforced in CE! ")
+
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
     def setUp(self):
