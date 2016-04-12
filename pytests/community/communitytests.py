@@ -358,6 +358,23 @@ class CommunityTests(CommunityBaseTest):
         elif "requires enterprise edition" in content:
             self.log.info("root certificate is enforced in CE! ")
 
+    def check_settings_audit(self):
+        """ from watson, ce should not set audit
+            manual test:
+            curl -u Administrator:password -X GET
+                            http://localhost:8091/settings/audit """
+        rest = RestConnection(self.master)
+        api = rest.baseUrl + "settings/audit"
+        try:
+            status, content, header = rest._http_request(api, 'GET')
+        except Exception, ex:
+            if ex:
+                print ex
+        if status:
+            self.fail("CE should not allow to set audit !")
+        elif "requires enterprise edition" in content:
+            self.log.info("settings audit is enforced in CE! ")
+
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
     def setUp(self):
