@@ -342,7 +342,10 @@ class CommunityTests(CommunityBaseTest):
             self.log.info("roles base is enforced in CE! ")
 
     def check_root_certificate(self):
-        """ from watson, ce should not see root certificate """
+        """ from watson, ce should not see root certificate
+            manual test:
+            curl -u Administrator:password -X GET
+                            http://localhost:8091/pools/default/certificate """
         rest = RestConnection(self.master)
         api = rest.baseUrl + "pools/default/certificate"
         try:
@@ -352,7 +355,7 @@ class CommunityTests(CommunityBaseTest):
                 print ex
         if status:
             self.fail("CE should not see root certificate!")
-        else:
+        elif "requires enterprise edition" in content:
             self.log.info("root certificate is enforced in CE! ")
 
 
