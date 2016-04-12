@@ -114,7 +114,7 @@ class ElasticSearchBase(object):
             "settings": {
                 "analysis": {
                     "analyzer": {
-                        "my_std": {
+                        "default": {
                             "type":      "standard",
                             "stopwords": "_english_"
                         }
