@@ -2662,8 +2662,13 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("net start couchbaseserver")
             self.log_command_output(o, r)
         if self.info.type.lower() == "linux":
-            o, r = self.execute_command("/etc/init.d/couchbase-server start")
-            self.log_command_output(o, r)
+            if "centos 7" in self.info.distribution_version.lower():
+                """from watson, systemd is used in centos 7 """
+                o, r = self.execute_command("service couchbase-server start")
+                self.log_command_output(o, r)
+            else:
+                o, r = self.execute_command("/etc/init.d/couchbase-server start")
+                self.log_command_output(o, r)
         if self.info.distribution_type.lower() == "mac":
             o, r = self.execute_command("open /Applications/Couchbase\ Server.app")
             self.log_command_output(o, r)
