@@ -122,7 +122,7 @@ class NodeInitializeTask(Task):
             self.set_result(True)
             return
 
-        self.quota = int(info.mcdMemoryReserved * 2 / 3)
+        self.quota = int(info.mcdMemoryReserved * 2/3)
         if self.index_quota_percent:
             self.index_quota = int((info.mcdMemoryReserved * 2/3) * \
                                       self.index_quota_percent / 100)
@@ -140,15 +140,16 @@ class NodeInitializeTask(Task):
             if set_services is None:
                 set_services = ["kv"]
             if "index" in set_services and "fts" not in set_services:
-                kv_quota = int(info.mcdMemoryReserved) - index_quota
+                kv_quota = int(info.mcdMemoryReserved * 2/3) - index_quota
                 if kv_quota > MIN_KV_QUOTA:
                     if kv_quota < int(self.quota):
                         self.quota = kv_quota
+                    rest.set_indexer_memoryQuota(indexMemoryQuota=index_quota)
                 else:
                     self.set_exception(Exception("KV RAM need to be larger than %s MB "
                                       "at node  %s"  % (MIN_KV_QUOTA, self.server.ip)))
             elif "index" in set_services and "fts" in set_services:
-                kv_quota = int(info.mcdMemoryReserved) - index_quota - FTS_QUOTA
+                kv_quota = int(info.mcdMemoryReserved * 2/3) - index_quota - FTS_QUOTA
                 if kv_quota > MIN_KV_QUOTA:
                     if kv_quota < int(self.quota):
                         self.quota = kv_quota
