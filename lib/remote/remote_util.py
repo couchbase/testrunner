@@ -2650,6 +2650,7 @@ class RemoteMachineShellConnection:
         if self.info.type.lower() == "linux":
             if "centos 7" in self.info.distribution_version.lower():
                 """from watson, systemd is used in centos 7 """
+                log.info("this node is centos 7.x")
                 o, r = self.execute_command("service couchbase-server stop")
                 self.log_command_output(o, r)
             else:
@@ -2669,6 +2670,7 @@ class RemoteMachineShellConnection:
         if self.info.type.lower() == "linux":
             if "centos 7" in self.info.distribution_version.lower():
                 """from watson, systemd is used in centos 7 """
+                log.info("this node is centos 7.x")
                 o, r = self.execute_command("service couchbase-server start")
                 self.log_command_output(o, r)
             else:
