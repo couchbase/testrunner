@@ -1400,21 +1400,27 @@ class RemoteMachineShellConnection:
             success &= self.log_command_output(output, error, track_words)
 
             if vbuckets:
-                output, error = self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export {0}_NUM_VBUCKETS={1}/' /opt/{2}/etc/{2}_init.d".
-                                                    format(server_type.upper(), vbuckets, server_type))
+                output, error = self.execute_command("sed -i 's/ulimit "
+                                                     "-c unlimited/ulimit "
+                                                     "-c unlimited\\n    export "
+                                 "{0}_NUM_VBUCKETS={1}/' /opt/{2}/etc/{2}_init.d".
+                               format(server_type.upper(), vbuckets, server_type))
                 success &= self.log_command_output(output, error, track_words)
             if upr is not None:
                 protocol = "tap"
                 if upr:
                     protocol = "upr"
                 output, error = \
-                self.execute_command("sed -i 's/END INIT INFO/END INIT INFO\\nexport COUCHBASE_REPL_TYPE={1}/'\
-                    /opt/{0}/etc/{0}_init.d".format(server_type, protocol))
+                self.execute_command("sed -i 's/END INIT INFO/END INIT INFO\\nexport"
+                                " COUCHBASE_REPL_TYPE={1}/' /opt/{0}/etc/{0}_init.d"\
+                                                      .format(server_type, protocol))
                 success &= self.log_command_output(output, error, track_words)
             if xdcr_upr == False:
                 output, error = \
-                    self.execute_command("sed -i 's/ulimit -c unlimited/ulimit -c unlimited\\n    export XDCR_USE_OLD_PATH={1}/'\
-                    /opt/{0}/etc/{0}_init.d".format(server_type, "true"))
+                    self.execute_command("sed -i 's/ulimit -c unlimited/ulimit "
+                             "-c unlimited\\n    export XDCR_USE_OLD_PATH={1}/'"
+                                                     "/opt/{0}/etc/{0}_init.d"\
+                                                    .format(server_type, "true"))
                 success &= self.log_command_output(output, error, track_words)
             if fts_query_limit:
                 output, error = \
@@ -1428,13 +1434,14 @@ class RemoteMachineShellConnection:
             # dirname error skipping for CentOS-6.6 (MB-12536)
             track_words = ("error", "fail", "dirname")
             if startserver:
-                output, error = self.execute_command('/etc/init.d/{0}-server start'.format(server_type))
-
-                if (build.product_version.startswith("1.") or build.product_version.startswith("2.0.0"))\
+                self.start_couchbase()
+                if (build.product_version.startswith("1.") \
+                        or build.product_version.startswith("2.0.0"))\
                         and build.deliverable_type == "deb":
                     # skip error '* Failed to start couchbase-server' for 1.* & 2.0.0 builds(MB-7288)
                     # fix in 2.0.1 branch Change-Id: I850ad9424e295bbbb79ede701495b018b5dfbd51
-                    log.warn("Error '* Failed to start couchbase-server' for 1.* builds will be skipped")
+                    log.warn("Error '* Failed to start couchbase-server' for 1.* "
+                                                          "builds will be skipped")
                     self.log_command_output(output, error, track_words)
                 else:
                     success &= self.log_command_output(output, error, track_words)
@@ -2788,7 +2795,12 @@ class RemoteMachineShellConnection:
             shell.send('net start CouchbaseServer\n')
         elif self.info.type.lower() == "linux":
             shell.send('export {0}={1}\n'.format(name, value))
-            shell.send('/etc/init.d/couchbase-server restart\n')
+            if "centos 7" in self.info.distribution_version.lower():
+                """from watson, systemd is used in centos 7 """
+                log.info("this node is centos 7.x")
+                shell.send("service couchbase-server restart\n")
+            else:
+                shell.send('/etc/init.d/couchbase-server restart\n')
         shell.close()
 
     def change_env_variables(self, dict):
@@ -2825,8 +2837,14 @@ class RemoteMachineShellConnection:
         self.log_command_output(o, r)
 
         if self.info.type.lower() == "linux":
-            o, r = self.execute_command("/etc/init.d/couchbase-server restart")
-            self.log_command_output(o, r)
+            if "centos 7" in self.info.distribution_version.lower():
+                """from watson, systemd is used in centos 7 """
+                log.info("this node is centos 7.x")
+                o, r = self.execute_command("service couchbase-server restart")
+                self.log_command_output(o, r)
+            else:
+                o, r = self.execute_command("/etc/init.d/couchbase-server restart")
+                self.log_command_output(o, r)
         else:
             o, r = self.execute_command("net stop couchbaseserver")
             self.log_command_output(o, r)
@@ -2848,8 +2866,14 @@ class RemoteMachineShellConnection:
         o, r = self.execute_command("mv " + backupfile + " " + sourceFile)
         self.log_command_output(o, r)
         if self.info.type.lower() == "linux":
-            o, r = self.execute_command("/etc/init.d/couchbase-server restart")
-            self.log_command_output(o, r)
+            if "centos 7" in self.info.distribution_version.lower():
+                """from watson, systemd is used in centos 7 """
+                log.info("this node is centos 7.x")
+                o, r = self.execute_command("service couchbase-server restart")
+                self.log_command_output(o, r)
+            else:
+                o, r = self.execute_command("/etc/init.d/couchbase-server restart")
+                self.log_command_output(o, r)
         else:
             o, r = self.execute_command("net stop couchbaseserver")
             self.log_command_output(o, r)
