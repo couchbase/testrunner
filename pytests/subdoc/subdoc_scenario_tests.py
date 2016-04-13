@@ -202,6 +202,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
         self.run_async_data()
         for bucket in self.buckets:
             RestConnection(self.master).flush_bucket(bucket.name)
+            self.sleep(60, "Wait for flush")
         self.run_mutation_operations_for_situational_tests()
         for t in self.load_thread_list:
             if t.is_alive():
