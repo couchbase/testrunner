@@ -36,6 +36,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
             self.run_async_data()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
             self.run_mutation_operations_for_situational_tests()
+            self.sleep(120, "Wait for rebalance")
             for t in self.load_thread_list:
                 if t.is_alive():
                     if t != None:
@@ -50,6 +51,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
                                     self.nodes_in_list,
                                    self.nodes_out_list, services = self.services_in)
             self.run_mutation_operations_for_situational_tests()
+            self.sleep(120, "Wait for rebalance")
             for t in self.load_thread_list:
                 if t.is_alive():
                     if t != None:
@@ -87,6 +89,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                    [], servr_out)
             self.run_mutation_operations_for_situational_tests()
+            self.sleep(120, "Wait for rebalance")
             for t in self.load_thread_list:
                 if t.is_alive():
                     if t != None:
@@ -120,6 +123,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
                 rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
             self.run_mutation_operations_for_situational_tests()
+            self.sleep(120, "Wait for rebalance")
             for t in self.load_thread_list:
                 if t.is_alive():
                     if t != None:
@@ -158,6 +162,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
             for node in self.nodes_out_list:
                 self.start_firewall_on_node(node)
             self.run_mutation_operations_for_situational_tests()
+            self.sleep(120, "Wait ..")
             for t in self.load_thread_list:
                 if t.is_alive():
                     if t != None:
@@ -176,6 +181,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
         for bucket in self.buckets:
             compact_tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
         self.run_mutation_operations_for_situational_tests()
+        self.sleep(120, "Wait for compaction")
         for task in compact_tasks:
             task.result()
         for t in self.load_thread_list:
@@ -191,6 +197,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
             remote.stop_server()
             remote.start_server()
             remote.disconnect()
+            self.sleep(120, "Wait for warmup")
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
         self.run_mutation_operations_for_situational_tests()
         for t in self.load_thread_list:
