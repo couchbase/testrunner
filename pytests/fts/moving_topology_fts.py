@@ -855,7 +855,7 @@ class MovingTopFTS(FTSBaseTest):
             index_name="default_index")
         self.generate_random_queries(index, self.num_queries, self.query_types)
         node = self._cb_cluster.get_random_fts_node()
-        NodeHelper.kill_memcached()
+        NodeHelper.kill_memcached(node)
         self._cb_cluster.set_bypass_fts_node(node)
         self.run_query_and_compare(index)
 

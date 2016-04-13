@@ -1319,13 +1319,13 @@ class CouchbaseCluster:
         return task
 
 
-    def load_all_buckets_till_dgm(self, active_resident_threshold, items=0,
-                                  exp=0, kv_store=1, flag=0,
+    def load_all_buckets_till_dgm(self, active_resident_ratio, es=None,
+                                  items=1000, exp=0, kv_store=1, flag=0,
                                   only_store_hash=True, batch_size=1000,
                                   pause_secs=1, timeout_secs=30):
         """Load data synchronously on all buckets till dgm (Data greater than memory)
-        for given active_resident_threshold
-        @param active_resident_threshold: Dgm threshold.
+        for given active_resident_ratio
+        @param active_resident_ratio: Dgm threshold.
         @param value_size: size of the one item.
         @param exp: expiration value.
         @param kv_store: kv store index.
@@ -1351,7 +1351,7 @@ class CouchbaseCluster:
                 'vb_active_perc_mem_resident')[self.__master_node]
             start = items
             end = start + batch_size * 10
-            while int(current_active_resident) > active_resident_threshold:
+            while int(current_active_resident) > active_resident_ratio:
                 self.__log.info("loading %s keys ..." % (end-start))
 
                 kv_gen = JsonDocGenerator(seed,
@@ -1365,6 +1365,11 @@ class CouchbaseCluster:
                     OPS.CREATE, exp, flag, only_store_hash, batch_size,
                     pause_secs, timeout_secs))
 
+                if es:
+                    tasks.append(es.async_bulk_load_ES(index_name='default_es_index',
+                                                        gen=kv_gen,
+                                                        op_type='create'))
+
                 for task in tasks:
                     task.result()
                 start = end
@@ -1377,7 +1382,7 @@ class CouchbaseCluster:
                 self.__log.info(
                     "Current resident ratio: %s, desired: %s bucket %s" % (
                         current_active_resident,
-                        active_resident_threshold,
+                        active_resident_ratio,
                         bucket.name))
             self.__log.info("Loaded a total of %s keys into bucket %s"
                             % (end,bucket.name))
@@ -2069,8 +2074,8 @@ class FTSBaseTest(unittest.TestCase):
         self._disable_compaction = self._input.param("disable_compaction","")
         self._item_count_timeout = self._input.param("item_count_timeout", 300)
         self._dgm_run = self._input.param("dgm_run", False)
-        self._active_resident_threshold = \
-            self._input.param("active_resident_threshold", 100)
+        self._active_resident_ratio = \
+            self._input.param("active_resident_ratio", 100)
         CHECK_AUDIT_EVENT.CHECK = self._input.param("verify_audit", 0)
         self._max_verify = self._input.param("max_verify", 100000)
         self._num_vbuckets = self._input.param("vbuckets", 1024)
@@ -2219,7 +2224,7 @@ class FTSBaseTest(unittest.TestCase):
 
         else:
             self._cb_cluster.load_all_buckets_till_dgm(
-                active_resident_threshold=self._active_resident_threshold,
+                active_resident_ratio=self._active_resident_ratio,
                 items=self._num_items)
 
     def load_utf16_data(self, num_keys=None):
@@ -2686,6 +2691,11 @@ class FTSBaseTest(unittest.TestCase):
         """
          Blocking call to load data to Couchbase and ES
         """
+        if self._dgm_run:
+            self._cb_cluster.load_all_buckets_till_dgm(
+                self._active_resident_ratio,
+                self.compare_es)
+            return
         load_tasks = self.async_load_data()
         for task in load_tasks:
             task.result()
