@@ -290,12 +290,20 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         elif os == "unix" or os == "linux":
             if self.is_couchbase_installed():
-                o, r = self.execute_command("/etc/init.d/couchbase-server stop", use_channel=True)
+                if "centos 7" in self.info.distribution_version.lower():
+                    """from watson, systemd is used in centos 7 """
+                    log.info("this node is centos 7.x")
+                    o, r = self.execute_command("service couchbase-server start")
+                    self.log_command_output(o, r)
+                else:
+                    o, r = self.execute_command("/etc/init.d/couchbase-server stop"\
+                                                                 , use_channel=True)
             else:
                 o, r = self.execute_command("/etc/init.d/membase-server stop")
             self.log_command_output(o, r)
         elif os == "mac":
-            o, r = self.execute_command("ps aux | grep Couchbase | awk '{print $2}' | xargs kill -9")
+            o, r = self.execute_command("ps aux | grep Couchbase | awk '{print $2}'\
+                                                                   | xargs kill -9")
             self.log_command_output(o, r)
             o, r = self.execute_command("killall -9 epmd")
             self.log_command_output(o, r)
