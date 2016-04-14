@@ -1,6 +1,7 @@
 import json
 import time
 import unittest
+import urllib
 import testconstants
 from TestInput import TestInputSingleton
 
@@ -376,20 +377,25 @@ class CommunityTests(CommunityBaseTest):
             self.log.info("settings audit is enforced in CE! ")
 
     def check_infer(self):
-        """ from watson, ce should not see infer """
+        """ from watson, ce should not see infer
+            manual test:
+            curl -H "Content-Type: application/json" -X POST
+                 -d '{"statement":"infer `bucket_name`;"}'
+                       http://localhost:8093/query/service """
         bucket = "default"
         api = self.rest.query_baseUrl + "query/service"
-        shell = RemoteMachineShellConnection(self.master)
-        param = '{{"statement":"infer `{0}` ;"}}'.format(bucket)
+        param = urllib.urlencode({"statement":"infer `%s` ;" % bucket})
         try:
             status, content, header = self.rest._http_request(api, 'POST', param)
+            json_parsed = json.loads(content)
         except Exception, ex:
             if ex:
                 print ex
-        if status:
-            self.fail("CE should not allow to see INFER !")
-        elif "requires enterprise edition" in content:
-            self.log.info("settings audit is enforced in CE! ")
+        if json_parsed["status"] == "success":
+            self.fail("CE should not allow to run INFER !")
+        elif "Not Implemented INFER" in json_parsed["errors"][0]["msg"]:
+            self.log.info("INFER is enforced in CE! ")
+
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
     def setUp(self):
