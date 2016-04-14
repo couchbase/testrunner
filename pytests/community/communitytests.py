@@ -47,10 +47,10 @@ class CommunityTests(CommunityBaseTest):
         disabled_zone = False
         zone_name = "group1"
         serverInfo = self.servers[0]
-        rest = RestConnection(serverInfo)
+        self.rest = RestConnection(serverInfo)
         try:
             self.log.info("create zone name 'group1'!")
-            result = rest.add_zone(zone_name)
+            result = self.rest.add_zone(zone_name)
             print "result  ",result
         except Exception, e :
             if e:
@@ -304,13 +304,13 @@ class CommunityTests(CommunityBaseTest):
 
     def check_x509_cert(self):
         """ from Watson, X509 certificate only support in EE """
-        rest = RestConnection(self.master)
-        api = rest.baseUrl + "pools/default/certificate?extended=true"
+        self.rest = RestConnection(self.master)
+        api = self.rest.baseUrl + "pools/default/certificate?extended=true"
         self.log.info("request to get certificate at "
                       "'pools/default/certificate?extended=true' "
                       "should return False")
         try:
-            status, content, header = rest._http_request(api, 'GET')
+            status, content, header = self.rest._http_request(api, 'GET')
         except Exception, ex:
             if ex:
                 print ex
@@ -322,17 +322,17 @@ class CommunityTests(CommunityBaseTest):
 
     def check_roles_base_access(self):
         """ from Watson, roles base access for admin should not in in CE """
-        rest = RestConnection(self.master)
+        self.rest = RestConnection(self.master)
         if self.user_add is None:
             self.fail("We need to pass user name (user_add) to run this test. ")
         if self.user_role is None:
             self.fail("We need to pass user roles (user_role) to run this test. ")
-        api = rest.baseUrl + "settings/rbac/users/" + self.user_add
+        api = self.rest.baseUrl + "settings/rbac/users/" + self.user_add
         self.log.info("url to run this test: %s" % api)
         """ add admin user """
         param = "name=%s&roles=%s" % (self.user_add, self.user_role)
         try:
-            status, content, header = rest._http_request(api, 'PUT', param)
+            status, content, header = self.rest._http_request(api, 'PUT', param)
         except Exception, ex:
             if ex:
                 print ex
@@ -346,10 +346,10 @@ class CommunityTests(CommunityBaseTest):
             manual test:
             curl -u Administrator:password -X GET
                             http://localhost:8091/pools/default/certificate """
-        rest = RestConnection(self.master)
-        api = rest.baseUrl + "pools/default/certificate"
+        self.rest = RestConnection(self.master)
+        api = self.rest.baseUrl + "pools/default/certificate"
         try:
-            status, content, header = rest._http_request(api, 'GET')
+            status, content, header = self.rest._http_request(api, 'GET')
         except Exception, ex:
             if ex:
                 print ex
@@ -363,10 +363,10 @@ class CommunityTests(CommunityBaseTest):
             manual test:
             curl -u Administrator:password -X GET
                             http://localhost:8091/settings/audit """
-        rest = RestConnection(self.master)
-        api = rest.baseUrl + "settings/audit"
+        self.rest = RestConnection(self.master)
+        api = self.rest.baseUrl + "settings/audit"
         try:
-            status, content, header = rest._http_request(api, 'GET')
+            status, content, header = self.rest._http_request(api, 'GET')
         except Exception, ex:
             if ex:
                 print ex
@@ -375,6 +375,21 @@ class CommunityTests(CommunityBaseTest):
         elif "requires enterprise edition" in content:
             self.log.info("settings audit is enforced in CE! ")
 
+    def check_infer(self):
+        """ from watson, ce should not see infer """
+        bucket = "default"
+        api = self.rest.query_baseUrl + "query/service"
+        shell = RemoteMachineShellConnection(self.master)
+        param = '{{"statement":"infer `{0}` ;"}}'.format(bucket)
+        try:
+            status, content, header = self.rest._http_request(api, 'POST', param)
+        except Exception, ex:
+            if ex:
+                print ex
+        if status:
+            self.fail("CE should not allow to see INFER !")
+        elif "requires enterprise edition" in content:
+            self.log.info("settings audit is enforced in CE! ")
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
     def setUp(self):
@@ -386,8 +401,8 @@ class CommunityXDCRTests(CommunityXDCRBaseTest):
     def test_xdcr_filter(self):
         filter_on = False
         serverInfo = self._servers[0]
-        rest = RestConnection(serverInfo)
-        rest.remove_all_replications()
+        self.rest = RestConnection(serverInfo)
+        self.rest.remove_all_replications()
         shell = RemoteMachineShellConnection(serverInfo)
         output, error = shell.execute_command('curl -X POST '
                                          '-u Administrator:password '
