@@ -841,9 +841,17 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
 
-    def sub_doc(self):
+    def add_sub_doc(self):
         try:
-            self.log.info("sub doc")
+            self.log.info("add sub doc")
+            """add sub doc code here"""
+        except Exception, ex:
+            self.log.info(ex)
+            raise
+
+    def add_fts(self):
+        try:
+            self.log.info("add full text search")
             """add sub doc code here"""
         except Exception, ex:
             self.log.info(ex)
