@@ -86,7 +86,7 @@ class QueryTests(BaseTestCase):
             self.gsi_type = None
         if self.input.param("reload_data", False):
             for bucket in self.buckets:
-                self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
+                self.cluster.bucket_flush(self.master, bucket=bucket, timeout=180000)
             self.gens_load = self.generate_docs(self.docs_per_day)
             self.load(self.gens_load, flag=self.item_flag)
         if not (hasattr(self, 'skip_generation') and self.skip_generation):
@@ -3353,7 +3353,7 @@ class QueryTests(BaseTestCase):
                 if not(self.isprepared):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
-                    cmd = "%s/cbq  -engine=http://%s:8093/" % (self.path,server.ip)
+                    cmd = "%s/cbq  " % (self.path)
                     output = self.shell.execute_commands_inside(cmd,query,"","","","","")
                     result = json.loads(output)
         if isinstance(result, str) or 'errors' in result:
