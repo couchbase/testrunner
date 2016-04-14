@@ -1,8 +1,11 @@
-from newtuq import QueryTests
+import logging
 import random
+
+from newtuq import QueryTests
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
-from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.rest_client import RestConnection
+
+log = logging.getLogger(__name__)
 
 class BaseSecondaryIndexingTests(QueryTests):
 
@@ -279,14 +282,16 @@ class BaseSecondaryIndexingTests(QueryTests):
             for query_definition in query_definitions:
                 self.sync_query_using_index_with_explain(bucket.name,query_definition)
 
-    def query_using_index(self, bucket, query_definition, expected_result = None, scan_consistency = None, scan_vector = None):
-        self.gen_results.query = query_definition.generate_query(bucket = bucket)
-        self.log.info("Query : {0}".format(self.gen_results.query))
+    def query_using_index(self, bucket, query_definition, expected_result=None, scan_consistency=None,
+                          scan_vector=None, verify_results=True):
+        self.gen_results.query = query_definition.generate_query(bucket=bucket)
+        log.info("Query : {0}".format(self.gen_results.query))
         if expected_result == None:
-            expected_result = self.gen_results.generate_expected_result(print_expected_result = False)
+            expected_result = self.gen_results.generate_expected_result(print_expected_result=False)
         self.query = self.gen_results.query
-        msg, check = self.n1ql_helper.run_query_and_verify_result(query = self.query, server = self.n1ql_node, timeout = 420,
-         expected_result = expected_result,scan_consistency = scan_consistency, scan_vector = scan_vector, verify_results = self.query_using_index)
+        msg, check = self.n1ql_helper.run_query_and_verify_result(query=self.query, server=self.n1ql_node, timeout=420,
+                                            expected_result=expected_result, scan_consistency=scan_consistency,
+                                            scan_vector=scan_vector, verify_results=verify_results)
         self.assertTrue(check, msg)
 
     def async_query_using_index(self, bucket, query_definition, expected_result = None, scan_consistency = None, scan_vector = None):
@@ -326,8 +331,9 @@ class BaseSecondaryIndexingTests(QueryTests):
             for query_definition in query_definitions:
                 self.query_using_index_with_emptyset(bucket.name, query_definition)
 
-    def multi_query_using_index(self, buckets =[], query_definitions = [],
-     expected_results = {}, scan_consistency = None, scan_vectors = None):
+    def multi_query_using_index(self, buckets=[], query_definitions=[],
+                                expected_results={}, scan_consistency=None,
+                                scan_vectors=None, verify_results=True):
         for bucket in buckets:
             scan_vector = None
             if scan_vectors != None:
@@ -335,10 +341,11 @@ class BaseSecondaryIndexingTests(QueryTests):
             for query_definition in query_definitions:
                 if expected_results:
                     self.query_using_index(bucket.name, query_definition, expected_results[query_definition.index_name],
-                     scan_consistency = scan_consistency, scan_vector = scan_vector)
+                                           scan_consistency=scan_consistency, scan_vector=scan_vector,
+                                           verify_results=verify_results)
                 else:
-                     self.query_using_index(bucket.name,query_definition, None,
-                      scan_consistency = scan_consistency, scan_vector = scan_vector)
+                     self.query_using_index(bucket.name,query_definition, None, scan_consistency=scan_consistency,
+                                            scan_vector=scan_vector, verify_results=verify_results)
 
     def async_multi_query_using_index(self, buckets =[], query_definitions = [], expected_results = {}, scan_consistency = None, scan_vectors = None):
         multi_query_tasks = []
