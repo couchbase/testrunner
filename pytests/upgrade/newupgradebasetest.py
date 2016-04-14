@@ -567,6 +567,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.nodes_out_dist = nodes_out_dist
         self.generate_map_nodes_out_dist()
 
+    """ subdoc base test starts here """
     def generate_json_for_nesting(self):
         json = {
             "not_tested_integer_zero":0,
@@ -592,6 +593,42 @@ class NewUpgradeBaseTest(BaseTestCase):
         }
         return json
 
+    def generate_simple_data_null(self):
+        json = {
+            "null":None,
+            "null_array":[None, None]
+        }
+        return json
+
+    def generate_simple_data_boolean(self):
+        json = {
+            "true":True,
+            "false":False,
+            "array":[True, False, True, False]
+        }
+        return json
+
+    def generate_nested_json(self):
+        json_data = self.generate_json_for_nesting()
+        json = {
+            "json_1": { "json_2": {"json_3":json_data}}
+        }
+        return json
+
+    def generate_simple_data_numbers(self):
+        json = {
+            "integer_zero":0,
+            "integer_big":1038383839293939383938393,
+            "double_zero":0.0,
+            "integer":1,
+            "integer_negative":-1,
+            "double":1.1,
+            "double_negative":-1.1,
+            "float":2.99792458e8,
+            "float_negative":-2.99792458e8,
+        }
+        return json
+
     def subdoc_direct_client(self, server, bucket, timeout=30):
         # CREATE SDK CLIENT
         if self.use_sdk_client:
@@ -607,3 +644,4 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.log.info("cannot load sdk client due to error {0}".format(str(ex)))
         # USE MC BIN CLIENT WHEN NOT USING SDK CLIENT
         return self.direct_mc_bin_client(server, bucket, timeout= timeout)
+    """ subdoc base test ends here """
