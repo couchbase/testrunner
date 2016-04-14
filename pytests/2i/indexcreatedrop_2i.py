@@ -83,7 +83,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             for task in tasks:
                 task.result()
         except Exception, ex:
-            msg =  "Index test_deployment_plan_defer_build_same_name_index already exist"
+            msg =  "index test_deployment_plan_defer_build_same_name_index already exist"
             self.assertTrue(msg in str(ex),ex)
 
     def test_concurrent_deployment_plan_defer_build_different_name_index(self):
@@ -162,60 +162,60 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             raise
 
     def test_create_primary_using_views_with_existing_primary_index_gsi(self):
-    	query_definition = QueryDefinition(
-    		index_name="test_failure_create_primary_using_views_with_existing_primary_index_gsi",
-    		index_fields = "crap",
-    		query_template = "",
-    		groups = [])
-    	check = False
-    	self.query = "CREATE PRIMARY INDEX ON {0} USING VIEW".format(self.buckets[0].name)
-    	try:
-    		# create index
-    		server = self.get_nodes_from_services_map(service_type = "n1ql")
-        	self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-    	except Exception, ex:
-    		self.log.info(ex)
-    		raise
+        query_definition = QueryDefinition(
+            index_name="test_failure_create_primary_using_views_with_existing_primary_index_gsi",
+            index_fields = "crap",
+            query_template = "",
+            groups = [])
+        check = False
+        self.query = "CREATE PRIMARY INDEX ON {0} USING VIEW".format(self.buckets[0].name)
+        try:
+            # create index
+            server = self.get_nodes_from_services_map(service_type = "n1ql")
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        except Exception, ex:
+            self.log.info(ex)
+            raise
 
     def test_create_primary_using_gsi_with_existing_primary_index_views(self):
-    	query_definition = QueryDefinition(
-    		index_name="test_failure_create_primary_using_gsi_with_existing_primary_index_views",
-    		index_fields = "crap",
-    		query_template = "",
-    		groups = [])
-    	check = False
-    	self.query = "CREATE PRIMARY INDEX ON {0} USING GSI".format(self.buckets[0].name)
-    	try:
-    		# create index
-    		server = self.get_nodes_from_services_map(service_type = "n1ql")
-        	self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        query_definition = QueryDefinition(
+            index_name="test_failure_create_primary_using_gsi_with_existing_primary_index_views",
+            index_fields = "crap",
+            query_template = "",
+            groups = [])
+        check = False
+        self.query = "CREATE PRIMARY INDEX ON {0} USING GSI".format(self.buckets[0].name)
+        try:
+            # create index
+            server = self.get_nodes_from_services_map(service_type = "n1ql")
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         except Exception, ex:
-        	self.log.info(ex)
-        	raise
+            self.log.info(ex)
+            raise
 
     def test_create_gsi_index_existing_view_index(self):
-    	self.indexes= self.input.param("indexes","").split(":")
-    	query_definition = QueryDefinition(
-    		index_name="test_failure_create_index_existing_index",
-    		index_fields = self.indexes,
-    		query_template = "",
-    		groups = [])
-    	self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name,
-    	 use_gsi_for_secondary = False, gsi_type=self.gsi_type)
-    	try:
-    		# create index
-    		server = self.get_nodes_from_services_map(service_type = "n1ql")
-        	self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-    		# create same index again
-    		self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name,
+        self.indexes= self.input.param("indexes","").split(":")
+        query_definition = QueryDefinition(
+            index_name="test_failure_create_index_existing_index",
+            index_fields = self.indexes,
+            query_template = "",
+            groups = [])
+        self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name,
+         use_gsi_for_secondary = False, gsi_type=self.gsi_type)
+        try:
+            # create index
+            server = self.get_nodes_from_services_map(service_type = "n1ql")
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+            # create same index again
+            self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name,
             use_gsi_for_secondary = True, gsi_type=self.gsi_type)
-    		self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-    	except Exception, ex:
-    		self.log.info(ex)
-    		raise
-    	finally:
-    		self.query = query_definition.generate_index_drop_query(bucket = self.buckets[0].name)
-    		actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        except Exception, ex:
+            self.log.info(ex)
+            raise
+        finally:
+            self.query = query_definition.generate_index_drop_query(bucket = self.buckets[0].name)
+            actual_result = self.n1ql_helper.run_cbq_query(query = self.query, server = server)
 
     def test_failure_create_index_big_fields(self):
         field_name = ""
@@ -253,74 +253,74 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
                 " 5000 error not recived as expected {0}".format(ex))
 
     def test_failure_create_index_non_existing_bucket(self):
-    	self.indexes= self.input.param("indexes","").split(":")
-    	query_definition = QueryDefinition(
-    		index_name="test_failure_create_index_existing_index",
-    		index_fields = self.indexes,
-    		query_template = "",
-    		groups = [])
-    	self.query = query_definition.generate_index_create_query(bucket = "not_present_bucket", gsi_type=self.gsi_type)
-    	try:
-    		# create index
-    		server = self.get_nodes_from_services_map(service_type = "n1ql")
-        	self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-    	except Exception, ex:
-    		msg="Keyspace not found keyspace not_present_bucket - cause: No bucket named not_present_bucket"
-    		self.assertTrue(msg in str(ex),
-    			" 5000 error not recived as expected {0}".format(ex))
+        self.indexes= self.input.param("indexes","").split(":")
+        query_definition = QueryDefinition(
+            index_name="test_failure_create_index_existing_index",
+            index_fields = self.indexes,
+            query_template = "",
+            groups = [])
+        self.query = query_definition.generate_index_create_query(bucket = "not_present_bucket", gsi_type=self.gsi_type)
+        try:
+            # create index
+            server = self.get_nodes_from_services_map(service_type = "n1ql")
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        except Exception, ex:
+            msg="Keyspace not found keyspace not_present_bucket - cause: No bucket named not_present_bucket"
+            self.assertTrue(msg in str(ex),
+                " 5000 error not recived as expected {0}".format(ex))
 
     def test_failure_drop_index_non_existing_bucket(self):
-    	query_definition = QueryDefinition(
-    		index_name="test_failure_create_index_existing_index",
-    		index_fields = "crap",
-    		query_template = "",
-    		groups = [])
-    	self.query = query_definition.generate_index_drop_query(bucket = "not_present_bucket")
-    	try:
-    		# create index
-    		server = self.get_nodes_from_services_map(service_type = "n1ql")
-        	self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-    	except Exception, ex:
-    		msg="Keyspace not found keyspace not_present_bucket - cause: No bucket named not_present_bucket"
-    		self.assertTrue(msg in str(ex),
-    			" 5000 error not recived as expected {0}".format(ex))
+        query_definition = QueryDefinition(
+            index_name="test_failure_create_index_existing_index",
+            index_fields = "crap",
+            query_template = "",
+            groups = [])
+        self.query = query_definition.generate_index_drop_query(bucket = "not_present_bucket")
+        try:
+            # create index
+            server = self.get_nodes_from_services_map(service_type = "n1ql")
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        except Exception, ex:
+            msg="Keyspace not found keyspace not_present_bucket - cause: No bucket named not_present_bucket"
+            self.assertTrue(msg in str(ex),
+                " 5000 error not recived as expected {0}".format(ex))
 
     def test_failure_drop_index_non_existing_index(self):
-    	query_definition = QueryDefinition(
-    		index_name="test_failure_create_index_existing_index",
-    		index_fields = "crap",
-    		query_template = "",
-    		groups = [])
-    	self.query = query_definition.generate_index_drop_query(bucket = self.buckets[0].name)
-    	try:
-    		# create index
-    		server = self.get_nodes_from_services_map(service_type = "n1ql")
-        	self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-    	except Exception, ex:
-    		msg="GSI index test_failure_create_index_existing_index not found"
-    		self.assertTrue(msg in str(ex),
-    			" 5000 error not recived as expected {0}".format(ex))
+        query_definition = QueryDefinition(
+            index_name="test_failure_create_index_existing_index",
+            index_fields = "crap",
+            query_template = "",
+            groups = [])
+        self.query = query_definition.generate_index_drop_query(bucket = self.buckets[0].name)
+        try:
+            # create index
+            server = self.get_nodes_from_services_map(service_type = "n1ql")
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        except Exception, ex:
+            msg="GSI index test_failure_create_index_existing_index not found"
+            self.assertTrue(msg in str(ex),
+                " 5000 error not recived as expected {0}".format(ex))
 
     def test_failure_create_index_existing_index(self):
-    	self.indexes= self.input.param("indexes","").split(":")
-    	query_definition = QueryDefinition(
-    		index_name="test_failure_create_index_existing_index",
-    		index_fields = self.indexes,
-    		query_template = "",
-    		groups = [])
-    	self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name, gsi_type=self.gsi_type)
-    	try:
-    		# create index
-    		server = self.get_nodes_from_services_map(service_type = "n1ql")
-        	self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-    		# create same index again
-    		self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-    	except Exception, ex:
-    		self.assertTrue("Index test_failure_create_index_existing_index already exist" in str(ex),
-    			" 5000 error not recived as expected {0}".format(ex))
-    	finally:
-    		self.query = query_definition.generate_index_drop_query(bucket = self.buckets[0].name)
-    		self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        self.indexes= self.input.param("indexes","").split(":")
+        query_definition = QueryDefinition(
+            index_name="test_failure_create_index_existing_index",
+            index_fields = self.indexes,
+            query_template = "",
+            groups = [])
+        self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name, gsi_type=self.gsi_type)
+        try:
+            # create index
+            server = self.get_nodes_from_services_map(service_type = "n1ql")
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+            # create same index again
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
+        except Exception, ex:
+            self.assertTrue("index test_failure_create_index_existing_index already exist" in str(ex),
+                " 5000 error not recived as expected {0}".format(ex))
+        finally:
+            self.query = query_definition.generate_index_drop_query(bucket = self.buckets[0].name)
+            self.n1ql_helper.run_cbq_query(query = self.query, server = server)
 
     def test_fail_create_kv_node_down(self):
         servr_out =[]
@@ -356,7 +356,8 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             self.log.info(" non-existant indexes cannot be dropped ")
         except Exception, ex:
             self.log.info(ex)
-            self.assertTrue("Index does not exist" in str(ex), ex)
+            msg = "GSI index {0} not found".format(self.query_definitions[0].index_name)
+            self.assertTrue(msg in str(ex), ex)
 
     def test_ambiguity_in_gsi_indexes_due_to_node_down(self):
         servr_out = self.get_nodes_from_services_map(service_type = "index")
