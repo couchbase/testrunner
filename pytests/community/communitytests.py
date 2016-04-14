@@ -388,6 +388,9 @@ class CommunityTests(CommunityBaseTest):
         elif "Not Implemented INFER" in json_parsed["errors"][0]["msg"]:
             self.log.info("INFER is enforced in CE! ")
 
+    def check_auto_complete(self):
+        """ this feature has not complete to block in CE """
+
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
     def setUp(self):
