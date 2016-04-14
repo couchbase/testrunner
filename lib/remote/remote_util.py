@@ -2474,7 +2474,9 @@ class RemoteMachineShellConnection:
                         redhat_release = line
                         break
                     redhat_release = redhat_release.rstrip('\n').rstrip('\\l').rstrip('\\n')
-                    if redhat_release.lower().find('centos') != -1:
+                    """ in ec2: Red Hat Enterprise Linux Server release 7.2 """
+                    if redhat_release.lower().find('centos') != -1 \
+                         or redhat_release.lower().find('linux server') != -1:
                         if redhat_release.lower().find('release 7') != -1:
                             os_distro = 'CentOS'
                             os_version = "CentOS 7"
