@@ -63,7 +63,6 @@ class CommunityTests(CommunityBaseTest):
 
     def check_audit_available(self):
         audit_available = False
-        self.rest = RestConnection(self.master)
         try:
             self.rest.getAuditSettings()
             audit_available = True
@@ -89,7 +88,6 @@ class CommunityTests(CommunityBaseTest):
                       "Enterprise Edition")
 
     def check_set_services(self):
-        self.rest = RestConnection(self.master)
         self.rest.force_eject_node()
         self.sleep(7, "wait for node reset done")
         try:
@@ -153,7 +151,6 @@ class CommunityTests(CommunityBaseTest):
             self.fail("some services don't support")
 
     def check_set_services_when_add_node(self):
-        self.rest = RestConnection(self.master)
         self.rest.force_eject_node()
         sherlock_services_in_ce = ["kv", "index,kv,n1ql"]
         watson_services_in_ce = ["kv", "index,kv,n1ql", "fts,index,kv,n1ql"]
@@ -284,7 +281,6 @@ class CommunityTests(CommunityBaseTest):
 
     def check_memory_optimized_storage_mode(self):
         """ from Watson, CE should not have option 'memory_optimized' to set """
-        self.rest = RestConnection(self.master)
         self.rest.force_eject_node()
         self.sleep(5, "wait for node reset done")
         try:
@@ -305,7 +301,6 @@ class CommunityTests(CommunityBaseTest):
 
     def check_x509_cert(self):
         """ from Watson, X509 certificate only support in EE """
-        self.rest = RestConnection(self.master)
         api = self.rest.baseUrl + "pools/default/certificate?extended=true"
         self.log.info("request to get certificate at "
                       "'pools/default/certificate?extended=true' "
@@ -323,7 +318,6 @@ class CommunityTests(CommunityBaseTest):
 
     def check_roles_base_access(self):
         """ from Watson, roles base access for admin should not in in CE """
-        self.rest = RestConnection(self.master)
         if self.user_add is None:
             self.fail("We need to pass user name (user_add) to run this test. ")
         if self.user_role is None:
@@ -347,7 +341,6 @@ class CommunityTests(CommunityBaseTest):
             manual test:
             curl -u Administrator:password -X GET
                             http://localhost:8091/pools/default/certificate """
-        self.rest = RestConnection(self.master)
         api = self.rest.baseUrl + "pools/default/certificate"
         try:
             status, content, header = self.rest._http_request(api, 'GET')
@@ -364,7 +357,6 @@ class CommunityTests(CommunityBaseTest):
             manual test:
             curl -u Administrator:password -X GET
                             http://localhost:8091/settings/audit """
-        self.rest = RestConnection(self.master)
         api = self.rest.baseUrl + "settings/audit"
         try:
             status, content, header = self.rest._http_request(api, 'GET')
