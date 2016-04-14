@@ -841,6 +841,14 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
 
+    def sub_doc(self):
+        try:
+            self.log.info("sub doc")
+            """add sub doc code here"""
+        except Exception, ex:
+            self.log.info(ex)
+            raise
+
     def cluster_stats(self, servers):
         self._wait_for_stats_all_buckets(servers)
 
