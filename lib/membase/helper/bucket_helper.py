@@ -212,8 +212,11 @@ class BucketOperationHelper():
                 if cluster_run:
                     call(["ls", "-lR", path])
                 else:
+                    log.info("Total number of files.  No need to printout all "
+                             "that flood the test log.")
                     shell = RemoteMachineShellConnection(serverInfo)
-                    o, r = shell.execute_command("ls -LR '{0}'".format(path))
+                    #o, r = shell.execute_command("ls -LR '{0}'".format(path))
+                    o, r = shell.execute_command("wc -l '{0}'".format(path))
                     shell.log_command_output(o, r)
 
     #TODO: TRY TO USE MEMCACHED TO VERIFY BUCKET DELETION BECAUSE
