@@ -512,24 +512,24 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             - scripts/cbqe3043.py has to be run against the ini file - this script will mount a 20MB partition on the
               nodes required for the test
         1. Creates specified bucket on the cluster and loads it with given number of items
-        2. Creates a bucket on the backup host and pumps it with 50000 items so that 20MB disk is almost full
-        3. Sets backup directory to the 20MB partition and creates a backupset
+        2. Sets backup directory to the 20MB partition and creates a backupset
+        3. Fills up 20MB partition
         4. Keeps taking backup until no space left on device error is hit
         """
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
-        rest_conn = RestConnection(self.backupset.backup_host)
-        rest_conn.create_bucket(bucket="default",ramQuotaMB=512)
-        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=50000)
-        self._load_all_buckets(self.backupset.backup_host, gen, "create", 0)
         self.backupset.directory = "/cbqe3043/entbackup"
         self.backup_create()
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        output, error = conn.execute_command("dd if=/dev/zero of=/cbqe3043/file bs=18M count=1")
+        conn.log_command_output(output, error)
         output, error = self.backup_cluster()
         while "Backup successfully completed" in output[-1]:
             output, error = self.backup_cluster()
         self.assertTrue("no space left on device" in output[-1],
                         "Expected error message not thrown by backup when disk is full")
         self.log.info("Expected no space left on device error thrown by backup command")
+        conn.execute_command("rm -rf /cbqe3043/file")
 
     def test_backup_and_restore_with_memcached_buckets(self):
         """
@@ -837,7 +837,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.kill_erlang()
             output = restore_result.result(timeout=200)
-            self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
+            self.assertTrue("Error restoring cluster: Not all data was sent to Couchbase due to connectivity issues." in output[0],
                             "Expected error message not thrown by Restore 180 seconds after erlang crash")
             self.log.info("Expected error message thrown by Restore 180 seconds after erlang crash")
         except Exception as ex:
@@ -873,7 +873,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.stop_couchbase()
             output = restore_result.result(timeout=200)
-            self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
+            self.assertTrue("Error restoring cluster: Not all data was sent to Couchbase due to connectivity issues." in output[0],
                             "Expected error message not thrown by Restore 180 seconds after couchbase-server stop")
             self.log.info("Expected error message thrown by Restore 180 seconds after couchbase-server stop")
         except Exception as ex:
@@ -909,7 +909,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.pause_memcached()
             output = restore_result.result(timeout=200)
-            self.assertTrue("Error restoring cluster: Not all data was backed up due to connectivity issues." in output[0],
+            self.assertTrue("Error restoring cluster: Not all data was sent to Couchbase due to connectivity issues." in output[0],
                             "Expected error message not thrown by Restore 180 seconds after memcached crash")
             self.log.info("Expected error message thrown by Restore 180 seconds after memcached crash")
         except Exception as ex:
@@ -1151,21 +1151,22 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
     def test_backup_restore_after_upgrade(self):
         """
         1. Test has to be supplied initial_version to be installed and upgrade_version to be upgraded to
-        2. Installs initial_version on the servers - initializes them and creates bucket default
-        3. Upgrades cluster to upgrade_version
+        2. Installs initial_version on the servers
+        3. Upgrades cluster to upgrade_version - initializes them and creates bucket default
         4. Creates a backupset - backsup data and validates
         5. Restores data and validates
         """
         self._install(self.servers)
-        for server in self.servers:
-            rest_conn = RestConnection(server)
-            rest_conn.init_cluster(username='Administrator', password='asdasd')
-            rest_conn.create_bucket(bucket='default', ramQuotaMB=512)
         upgrade_version = self.input.param("upgrade_version", "4.5.0-1069")
         upgrade_threads = self._async_update(upgrade_version=upgrade_version, servers=self.servers)
         for th in upgrade_threads:
             th.join()
-        self.log.info("Upgraded to: {ver}".format(ver="4.5.0-1069"))
+        self.log.info("Upgraded to: {ver}".format(ver=upgrade_version))
+        self.sleep(30)
+        for server in self.servers:
+            rest_conn = RestConnection(server)
+            rest_conn.init_cluster(username='Administrator', password='password')
+            rest_conn.create_bucket(bucket='default', ramQuotaMB=512)
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
