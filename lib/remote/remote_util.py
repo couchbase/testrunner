@@ -2685,10 +2685,12 @@ class RemoteMachineShellConnection:
                 o, r = self.execute_command("service couchbase-server stop")
                 self.log_command_output(o, r)
             else:
-                o, r = self.execute_command("/etc/init.d/couchbase-server stop", self.info, use_channel=True)
+                o, r = self.execute_command("/etc/init.d/couchbase-server stop",\
+                                                     self.info, use_channel=True)
                 self.log_command_output(o, r)
         if self.info.distribution_type.lower() == "mac":
-            o, r = self.execute_command("ps aux | grep Couchbase | awk '{print $2}' | xargs kill -9")
+            o, r = self.execute_command("ps aux | grep Couchbase | awk '{print $2}'\
+                                                                   | xargs kill -9")
             self.log_command_output(o, r)
             o, r = self.execute_command("killall -9 epmd")
             self.log_command_output(o, r)
