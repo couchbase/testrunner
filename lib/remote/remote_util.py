@@ -163,8 +163,6 @@ class RemoteMachineShellConnection:
         self.ip = serverInfo.ip
         self.remote = (self.ip != "localhost" and self.ip != "127.0.0.1")
         self.port = serverInfo.port
-        self.cb_version = ""
-        self.cbserver = serverInfo
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         msg = 'connecting to {0} with username : {1} password : {2} ssh_key: {3}'
         log.info(msg.format(serverInfo.ip, serverInfo.ssh_username,
@@ -259,7 +257,6 @@ class RemoteMachineShellConnection:
     def start_server(self, os="unix"):
         self.extract_remote_info()
         os = self.info.type.lower()
-        self.cb_version = RestConnection(self.cbserver).get_nodes_version()
         if not os:
             os = "unix"
         if os == "windows":
@@ -267,8 +264,9 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         elif os == "unix" or os == "linux":
             if self.is_couchbase_installed():
+                fv, sv, bn = self.get_cbversion("linux")
                 if "centos 7" in self.info.distribution_version.lower() \
-                   and self.cb_version[:5] in COUCHBASE_FROM_WATSON:
+                   and sv in COUCHBASE_FROM_WATSON:
                     """from watson, systemd is used in centos 7 """
                     log.info("this node is centos 7.x")
                     o, r = self.execute_command("service couchbase-server start")
@@ -287,7 +285,6 @@ class RemoteMachineShellConnection:
     def stop_server(self, os="unix"):
         self.extract_remote_info()
         os = self.info.type.lower()
-        self.cb_version = RestConnection(self.cbserver).get_nodes_version()
         if not os:
             os = "unix"
         if os == "windows":
@@ -295,8 +292,9 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         elif os == "unix" or os == "linux":
             if self.is_couchbase_installed():
+                fv, sv, bn = self.get_cbversion("linux")
                 if "centos 7" in self.info.distribution_version.lower() \
-                   and self.cb_version[:5] in COUCHBASE_FROM_WATSON:
+                   and sv in COUCHBASE_FROM_WATSON:
                     """from watson, systemd is used in centos 7 """
                     log.info("this node is centos 7.x")
                     o, r = self.execute_command("service couchbase-server start")
@@ -2672,14 +2670,14 @@ class RemoteMachineShellConnection:
 
     def stop_couchbase(self):
         self.extract_remote_info()
-        self.cb_version = RestConnection(self.cbserver).get_nodes_version()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("net stop couchbaseserver")
             self.log_command_output(o, r)
             self.sleep(10, "Wait to stop service completely")
         if self.info.type.lower() == "linux":
+            fv, sv, bn = self.get_cbversion("linux")
             if "centos 7" in self.info.distribution_version.lower() \
-                   and self.cb_version[:5] in COUCHBASE_FROM_WATSON:
+                   and sv in COUCHBASE_FROM_WATSON:
                 """from watson, systemd is used in centos 7 """
                 log.info("this node is centos 7.x")
                 o, r = self.execute_command("service couchbase-server stop")
@@ -2697,13 +2695,13 @@ class RemoteMachineShellConnection:
 
     def start_couchbase(self):
         self.extract_remote_info()
-        self.cb_version = RestConnection(self.cbserver).get_nodes_version()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("net start couchbaseserver")
             self.log_command_output(o, r)
         if self.info.type.lower() == "linux":
+            fv, sv, bn = self.get_cbversion("linux")
             if "centos 7" in self.info.distribution_version.lower() \
-                   and self.cb_version[:5] in COUCHBASE_FROM_WATSON:
+                   and sv in COUCHBASE_FROM_WATSON:
                 """from watson, systemd is used in centos 7 """
                 log.info("this node is centos 7.x")
                 o, r = self.execute_command("service couchbase-server start")
