@@ -2229,7 +2229,7 @@ class RestConnection(object):
             "POST",
             json.dumps(query_json, ensure_ascii=False).encode('utf8'),
             headers,
-            timeout=60)
+            timeout=70)
 
         if status:
             content = json.loads(content)
