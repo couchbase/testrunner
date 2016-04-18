@@ -1450,6 +1450,8 @@ class RemoteMachineShellConnection:
                 else:
                     success &= self.log_command_output(output, error, track_words)
         elif self.info.deliverable_type in ["zip"]:
+            """ close Safari browser before install """
+            self.terminate_process(self.info, "Safari")
             o, r = self.execute_command("ps aux | grep Archive | awk '{print $2}' | xargs kill -9")
             o, r = self.execute_command("ps aux | \
                 grep '/Applications/Couchbase Server.app/Contents/MacOS/Couchbase Server' \
@@ -1920,6 +1922,8 @@ class RemoteMachineShellConnection:
             self.kill_memcached()
         elif self.info.distribution_type.lower() == 'mac':
             self.stop_server(os='mac')
+            """ close Safari browser before uninstall """
+            self.terminate_process(self.info, "Safari")
             self.terminate_processes(self.info, terminate_process_list)
             output, error = self.execute_command("rm -rf /Applications/Couchbase\ Server.app")
             self.log_command_output(output, error)
