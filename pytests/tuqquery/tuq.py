@@ -2767,7 +2767,7 @@ class QueryTests(BaseTestCase):
                     # if self.gsi_type:
                     #     for query in queries_errors.iterkeys():
                     #         query += " WITH {'index_type': 'memdb'}"
-                    self.negative_common_body(queries_errors)
+                    #self.negative_common_body(queries_errors)
 
     def test_meta_negative_namespace(self):
         created_indexes = []
@@ -2778,10 +2778,10 @@ class QueryTests(BaseTestCase):
                 index_name = "meta_cas_%s" % ind
                 if ind =="one":
                     #self.query = "CREATE INDEX {0} ON {1}(meta().cas) USING {2}".format(index_name, bucket.name, self.index_type)
-                    queries_errors = {'CREATE INDEX ONE ON default(meta(invalid).id) using GSI' : ('syntax error', 3000),
-                                      'CREATE INDEX ONE ON default(meta(invalid).id) using VIEW' : ('syntax error', 3000),
-                                      'CREATE INDEX ONE ON default(meta()) using GSI' : ('syntax error', 3000),
-                                      'CREATE INDEX ONE ON default(meta()) using VIEW' : ('syntax error', 3000)}
+                    queries_errors = {'CREATE INDEX TWO ON default(meta(invalid).id) using GSI' : ('syntax error', 3000),
+                                      'CREATE INDEX THREE ON default(meta(invalid).id) using VIEW' : ('syntax error', 3000),
+                                      'CREATE INDEX FOUR ON default(meta()) using GSI' : ('syntax error', 3000),
+                                      'CREATE INDEX FIVE ON default(meta()) using VIEW' : ('syntax error', 3000)}
                     # if self.gsi_type:
                     #     for query in queries_errors.iterkeys():
                     #         query += " WITH {'index_type': 'memdb'}"
