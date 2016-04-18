@@ -743,7 +743,12 @@ class CouchbaseCluster:
         self.__non_fts_nodes = []
         service_map = RestConnection(self.__master_node).get_nodes_services()
         for node_ip, services in service_map.iteritems():
-            node = self.get_node(node_ip.split(':')[0], node_ip.split(':')[1])
+            if len(set([server.ip for server in self.__nodes])) == 1:
+                # if cluster-run and ip not 127.0.0.1
+                ip = "127.0.0.1"
+            else:
+                ip = node_ip.split(':')[0]
+            node = self.get_node(ip, node_ip.split(':')[1])
             if node:
                 if "fts" in services:
                     self.__fts_nodes.append(node)
@@ -872,6 +877,7 @@ class CouchbaseCluster:
             except Exception as e:
                     raise FTSException("Unable to initialize cluster with config "
                                         "%s: %s" %(cluster_services, e))
+
             self.__nodes += nodes_to_add
         self.__separate_nodes_on_services()
 
