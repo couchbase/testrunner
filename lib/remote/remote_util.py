@@ -2154,7 +2154,7 @@ class RemoteMachineShellConnection:
                               .format(self.ip, output, error, track_words))
         return success
 
-    def execute_commands_inside(self, main_command,query, queries,username,password,bucketname,source,subcommands=[], min_output_size=0,
+    def execute_commands_inside(self, main_command,query, queries,bucket1,password,bucket2,source,subcommands=[], min_output_size=0,
                                 end_msg='', timeout=250):
         self.extract_remote_info()
         filename = "/tmp/test2"
@@ -2189,14 +2189,17 @@ class RemoteMachineShellConnection:
             print filedata
             fileout.close()
 
-        newdata = filedata.replace("bucketname",bucketname)
-        newdata = newdata.replace("user",username)
+        newdata = filedata.replace("bucketname",bucket2)
+        newdata = newdata.replace("user",bucket1)
         newdata = newdata.replace("pass",password)
-        newdata = newdata.replace("bucket1",username)
-        newdata = newdata.replace("user1",username)
+        newdata = newdata.replace("bucket1",bucket1)
+        print "bucket1 is %s" %bucket1
+        print "bucket2 is %s" %bucket2
+        #import pdb;pdb.set_trace()
+        newdata = newdata.replace("user1",bucket1)
         newdata = newdata.replace("pass1",password)
-        newdata = newdata.replace("bucket2",bucketname)
-        newdata = newdata.replace("user2",bucketname)
+        newdata = newdata.replace("bucket2",bucket2)
+        newdata = newdata.replace("user2",bucket2)
         newdata = newdata.replace("pass2",password)
         print newdata
 
