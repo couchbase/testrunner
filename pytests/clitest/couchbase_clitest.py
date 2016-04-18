@@ -704,7 +704,7 @@ class CouchbaseCliTest(CliBaseTest):
             options = "--cluster-init-username={0} {1}-password={2} {3}-port={4} {5}-ramsize={6}".\
                 format(cluster_init_username, param_prefix, cluster_init_password, param_prefix, cluster_init_port, param_prefix, cluster_init_ramsize)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output[0], "SUCCESS: init localhost")
+            self.assertEqual(output[0], "SUCCESS: init/edit localhost")
 
             if cli_command == "cluster-init":
                 options = "{0}-username={1} {2}-password={3} {4}-port={5} {6}-ramsize={7}".\
@@ -721,7 +721,7 @@ class CouchbaseCliTest(CliBaseTest):
                 output_tm, error_tm = remote_client.execute_couchbase_cli(cli_command="server-info", cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=cluster_init_username + "1", password=cluster_init_password + "1")
                 if "availableStorage" in output_tm[1]:
                     output[0] = "SUCCESS: init localhost"
-            self.assertEqual(output[0], "SUCCESS: init localhost")
+            self.assertEqual(output[0], "SUCCESS: init/edit localhost")
             server.rest_username = cluster_init_username + "1"
             server.rest_password = cluster_init_password + "1"
             server.port = str(cluster_init_port)[:-1] + "9"
@@ -749,7 +749,7 @@ class CouchbaseCliTest(CliBaseTest):
                 output_tm, error_tm = remote_client.execute_couchbase_cli(cli_command="server-info", cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=cluster_init_username + "1", password=cluster_init_password + "1")
                 if "availableStorage" in output_tm[1]:
                     output[0] = "SUCCESS: init localhost"
-            self.assertEqual(output[0], "SUCCESS: init localhost")
+            self.assertEqual(output[0], "SUCCESS: init/edit localhost")
 
             server.rest_username = cluster_init_username
             server.rest_password = cluster_init_password
