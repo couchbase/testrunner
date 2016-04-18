@@ -2153,7 +2153,7 @@ class RemoteMachineShellConnection:
     def execute_commands_inside(self, main_command,query, queries,username,password,bucketname,source,subcommands=[], min_output_size=0,
                                 end_msg='', timeout=250):
         self.extract_remote_info()
-        filename = "/tmp/test"
+        filename = "/tmp/test2"
         iswin=False
 
         if self.info.type.lower() == 'windows':
