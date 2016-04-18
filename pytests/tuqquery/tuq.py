@@ -2076,6 +2076,8 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             res = self.run_cbq_query()
             s = pprint.pformat( res, indent=4 )
+            print s
+            import pdb;pdb.set_trace()
             if index in s:
                 self.log.info("correct index used in json result ")
             else:
@@ -2610,19 +2612,22 @@ class QueryTests(BaseTestCase):
             for ind in ind_list:
                 index_name = "metaindex%s" % ind
                 if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(meta().id)  USING %s" % (index_name, bucket.name, self.index_type)
+                    self.query = "CREATE INDEX %s ON %s(meta().id,meta().cas)  USING %s" % (index_name, bucket.name, self.index_type)
                 # if self.gsi_type:
                 #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
         for bucket in self.buckets:
-            self.query="select meta().id, meta().cas from {0} where meta().id is not null order by meta().id".format(bucket.name)
+            self.query="explain select meta().id, meta().cas from {0} where meta().id is not null order by meta().id limit 10".format(bucket.name)
             if self.covering_index:
                 self.test_explain_covering_index(index_name[0])
 
+            self.query="select meta().id, meta().cas from {0} where meta().id is not null order by meta().id limit 10".format(bucket.name)
+
+
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = (actual_list['results'])
 
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
@@ -2632,11 +2637,12 @@ class QueryTests(BaseTestCase):
             self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
             self._wait_for_index_online(bucket, '#primary')
-            self.query = "select meta().id, meta().cas from {0} where meta().id is not null order by meta().id".format(bucket.name)
+            self.query = "select meta().id, meta().cas from {0} use index(`#primary`) where meta().id is not null order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            expected_result = sorted(actual_list['results'])
-
-            self._verify_results(actual_result, expected_result)
+            expected_result = (expected_list['results'])
+            print "actual result is %s " %actual_result
+            print "expected result is %s " %expected_result
+            self.assertEqual(sorted(actual_result) ,sorted(expected_result))
 
     def test_meta_where(self):
         created_indexes = []
@@ -2646,17 +2652,18 @@ class QueryTests(BaseTestCase):
             for ind in ind_list:
                 index_name = "meta_where%s" % ind
                 if ind =="one":
-                    self.query = "CREATE INDEX {0} ON {1}(meta().id)  where meta().id like 'query-testemployee6%' USING {2}".format(index_name, bucket.name, self.index_type)
+                    self.query = "CREATE INDEX {0} ON {1}(meta().id,meta().cas)  where meta().id like 'query-testemployee6%' USING {2}".format(index_name, bucket.name, self.index_type)
                 # if self.gsi_type:
                 #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
         for bucket in self.buckets:
-            self.query="select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id".format(bucket.name)
+            self.query="explain select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id limit 10".format(bucket.name)
             if self.covering_index:
                 self.test_explain_covering_index(index_name[0])
 
+            self.query="select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id limit 10".format(bucket.name)
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
 
@@ -2665,15 +2672,12 @@ class QueryTests(BaseTestCase):
                 self.run_cbq_query()
 
             self.covering_index = False
-            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-            self._wait_for_index_online(bucket, '#primary')
 
-            self.query = "select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id".format(bucket.name)
+            self.query = "select meta().id, meta().cas from {0} use index(`#primary`) where meta().id like 'query-testemployee6%' order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            expected_result = sorted(actual_list['results'])
-
-            self._verify_results(actual_result, expected_result)
+            expected_result = sorted(expected_list['results'])
+            import pdb;pdb.set_trace()
+            self.assertTrue(actual_result == expected_result)
 
     def test_meta_where_greater_than(self):
         created_indexes = []
@@ -2682,17 +2686,21 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             for ind in ind_list:
                 index_name = "meta_where%s" % ind
+                import pdb;pdb.set_trace()
                 if ind =="one":
-                    self.query = "CREATE INDEX {0} ON {1}(meta().id)  where meta().id >10 USING {2}".format(index_name, bucket.name, self.index_type)
+
+                    self.query = "CREATE INDEX {0} ON {1}(meta().id,meta().cas)  where meta().id >10 USING {2}".format(index_name, bucket.name, self.index_type)
                 # if self.gsi_type:
                 #     self.query += " WITH {'index_type': 'memdb'}"
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
         for bucket in self.buckets:
-            self.query="select meta().id, meta().cas from {0} where meta().id >10 order by meta().id".format(bucket.name)
+            self.query="explain select meta().id, meta().cas from {0} where meta().id >10 order by meta().id".format(bucket.name)
             if self.covering_index:
                 self.test_explain_covering_index(index_name[0])
+
+            self.query="select meta().id, meta().cas from {0} where meta().id >10 order by meta().id limit 10".format(bucket.name)
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
@@ -2702,15 +2710,12 @@ class QueryTests(BaseTestCase):
                 self.run_cbq_query()
 
             self.covering_index = False
-            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-            self._wait_for_index_online(bucket, '#primary')
 
-            self.query = "select meta().id, meta().cas from {0} where meta().id > 10 order by meta().id".format(bucket.name)
+            self.query = "select meta().id, meta().cas from {0} use index(`#primary`)  where meta().id > 10 order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            expected_result = sorted(actual_list['results'])
+            expected_result = sorted(expected_list['results'])
 
-            self._verify_results(actual_result, expected_result)
+            self.assertTrue(actual_result == expected_result)
 
     def test_meta_partial(self):
         created_indexes = []
@@ -2728,10 +2733,11 @@ class QueryTests(BaseTestCase):
                 created_indexes.append(index_name)
 
         for bucket in self.buckets:
-            self.query="select meta().id, name from {0} where meta().id >10 and name is not null order by meta().id".format(bucket.name)
+            self.query="explain select meta().id, name from {0} where meta().id >10 and name is not null order by meta().id limit 10".format(bucket.name)
             if self.covering_index:
                 self.test_explain_covering_index(index_name[0])
 
+            self.query="select meta().id, name from {0} where meta().id >10 and name is not null order by meta().id limit 10".format(bucket.name)
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
 
@@ -2740,15 +2746,13 @@ class QueryTests(BaseTestCase):
                 self.run_cbq_query()
 
             self.covering_index = False
-            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
-            self.run_cbq_query()
-            self._wait_for_index_online(bucket, '#primary')
 
-            self.query = "select meta().id, name from {0} where meta().id > 10 and name is not null order by meta().id".format(bucket.name)
+
+            self.query = "select meta().id, name from {0} use index(`#primary`) where meta().id > 10 and name is not null order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            expected_result = sorted(actual_list['results'])
+            expected_result = sorted(expected_list['results'])
 
-            self._verify_results(actual_result, expected_result)
+            self.assertTrue(actual_result == expected_result)
 
     def test_meta_non_supported(self):
         created_indexes = []
@@ -3353,7 +3357,7 @@ class QueryTests(BaseTestCase):
                 if not(self.isprepared):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
-                    cmd = "%s/cbq  " % (self.path)
+                    cmd = "%s/cbq  -q" % (self.path)
                     output = self.shell.execute_commands_inside(cmd,query,"","","","","")
                     result = json.loads(output)
         if isinstance(result, str) or 'errors' in result:

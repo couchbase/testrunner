@@ -152,7 +152,7 @@ class AdvancedQueryTests(QueryTests):
             print o
             self.assertTrue("requestID" in o)
 
-            queries = ['\set -creds Administrator:pass;','select * from bucket0 union all select * from bucket1 limit 10;']
+            queries = ['\set -creds Administrator:pass;','select * from bucketname union all select * from bucket1 limit 10;']
             o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
             self.assertTrue("requestID" in o)
 
@@ -163,23 +163,28 @@ class AdvancedQueryTests(QueryTests):
 
 
             queries = ['\set -creds Administrator:pass;','select * from bucketname union all select * from default limit 10;']
-            o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket1','password','bucket0','' )
+            o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
             self.assertTrue("requestID" in o)
 
             queries = ['\set -creds user:pass;','select * from bucketname union all select * from default limit 10;']
-            o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket2','' )
+            o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
             self.assertTrue("requestID" in o)
 
             #import pdb;pdb.set_trace()
             queries = ['\set -creds wrong:pass1,user:pass;','drop primary index on bucket1;','drop primary index on bucket2;']
             o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0' ,'password','bucket1','' )
             print o
+            self.assertTrue("AuthorizationFailed" in o)
+
             queries = ['\set -creds user1:pass1,'':pass2;','create primary index on bucket1;','create primary index on bucket2;']
             o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','')
             print o
+            self.assertTrue("Usernamemissingin" in o)
+
             queries = ['\set -creds '':pass1,'':pass2;','drop primary index on bucket1;','drop primary index on bucket2;']
             o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
             print o
+            self.assertTrue("Usernamemissingin" in o)
 
 
     def test_version(self):
@@ -238,25 +243,72 @@ class AdvancedQueryTests(QueryTests):
     def test_history(self):
          for server in self.servers:
             shell = RemoteMachineShellConnection(server)
+            type2 = shell.extract_remote_info().distribution_type
             for bucket in self.buckets:
-                if self.path == testconstants.WIN_COUCHBASE_BIN_PATH:
-                    queries = ["\set histfile /cygdrive/c/tmp/history.txt;"]
-                elif self.path == testconstants.LINUX_COUCHBASE_BIN_PATH:
+                if type2.lower() == 'windows':
+                    queries = ["\set histfile c:\\tmp\\history.txt;"]
+                    queries2 = ["\Alias p c:\\tmp\\history2.txt;"]
+                    queries3 = ["\set $a c:\\tmp\\history3.txt;"]
+                    queries5 = ['\set $a "\\abcde";']
+                    queries6 = ["\set $a '\\abcde';"]
+                elif type2.lower() == "linux":
                     queries = ["\set histfile /tmp/history;"]
-                queries.extend(["\ALIAS tempcommand create primary index on bucketname;""\\\\tempcommand;",'\ALIAS tempcommand2 select * from bucketname limit 10;',"\\\\tempcommand2;",'\ALIAS;','\echo tempcommand1;','\echo tempcommand2;'])
-                o = shell.execute_commands_inside('%s/cbq -quiet' % (testconstants.LINUX_COUCHBASE_BIN_PATH),'',queries,'','',bucket.name,'' )
+                    queries2 = ["\Alias p /tmp/history2;"]
+                    queries3 = ["\set $a /tmp/history3;"]
+                    queries5 = ['\set $a "/abcde";']
+                    queries6 = ["\set $a /abcde;"]
+
+                #import pdb;pdb.set_trace()
+                queries.extend(['\ALIAS tempcommand create primary index on bucketname;','\\\\tempcommand;','\ALIAS tempcommand2 select * from bucketname limit 1;','\\\\tempcommand2;','\ALIAS;','\echo \\\\tempcommand;','\echo \\\\tempcommand2;','\echo histfile;'])
+                print queries
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
+                if type2.lower() == "linux":
+                    self.assertTrue('/tmp/history' in o)
+                #import pdb;pdb.set_trace()
+
                 #open and check the file
+
+
+                queries2.extend(["\set histfile \\\\p;","\echo histfile;","\set histfile '\\\\p';","\echo histfile;"])
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries2,'','',bucket.name,'' )
+                print o
+                if type2.lower() == "linux":
+                    self.assertTrue('/tmp/history2' in o)
+                    self.assertTrue('\\p' in o)
+
+                queries3.extend(["\set histfile $a;","\echo histfile;"])
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries3,'','',bucket.name,'' )
+                print o
+                #import pdb;pdb.set_trace()
+
+                queries4 = ["\push histfile newhistory.txt;","\echo histfile;",'\ALIAS tempcommand create primary index on bucketname;','\\\\tempcommand;','\ALIAS tempcommand2 select * from bucketname limit 1;','\\\\tempcommand2;','\ALIAS;','\echo \\\\tempcommand;','\echo \\\\tempcommand2;','\echo histfile;']
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries4,'','',bucket.name,'' )
+                print o
+                #import pdb;pdb.set_trace()
+
+                queries5.append("\echo $a;")
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries5,'','',bucket.name,'' )
+                print o
+
+                queries6.append("\echo $a;")
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries6,'','',bucket.name,'' )
+                print o
+
+
+
+
+
 
 
     def test_alias_and_echo(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
-                queries = ["\ALIAS tempcommand create primary index on bucketname;","\\\\tempcommand;",'\ALIAS tempcommand2 select *,email from bucketname limit 10;',"\\\\tempcommand2;",'\ALIAS;','\echo tempcommand1;','\echo tempcommand2;']
+                queries = ["\ALIAS tempcommand create primary index on bucketname;","\\\\tempcommand;",'\ALIAS tempcommand2 select *,email from bucketname limit 10;',"\\\\tempcommand2;",'\ALIAS;','\echo \\\\tempcommand1;','\echo \\\\tempcommand2;']
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
-                queries = ['\ALIAS tempcommand drop primary index on bucketname;','\\\\tempcommand;','\ALIAS tempcommand create primary index on bucketname;','\ALIAS tempcommand2 drop primary index on bucketname;','\\\\tempcommand;','\\\\tempcommand2;','\ALIAS;','\echo tempcommand;','\echo tempcommand2;']
+                queries = ['\ALIAS tempcommand drop primary index on bucketname;','\\\\tempcommand;','\ALIAS tempcommand create primary index on bucketname;','\ALIAS tempcommand2 drop primary index on bucketname;','\\\\tempcommand;','\\\\tempcommand2;','\ALIAS;','\echo \\\\tempcommand;','\echo \\\\tempcommand2;']
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
                 print o
                 queries = ['\UNALIAS tempcommand drop primary index on bucketname;','\\\\tempcommand;']
@@ -294,7 +346,33 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 i=1
-                pushqueries =[]
+                pushqueries=['\set -$project "AB";','\push -$project "CD";','\push -$project "EF";','\push -$project "GH";','select $project;']
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',pushqueries,'','',bucket.name,'' )
+                print o
+
+                self.assertTrue('{"$1":"GH"}' in o)
+                pushqueries.append('\pop;')
+                pushqueries.append('select $project;')
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',pushqueries,'','',bucket.name,'' )
+                print o
+                self.assertTrue('{"$1":"EF"}' in o)
+
+                popqueries=['\pop;','select $project;']
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',popqueries,'','',bucket.name,'' )
+                self.assertTrue('Errorevaluatingprojection' in o)
+
+                popqueries.extend(['\push -$project "CD";','\push -$project "EF";','\push -$project "GH";','\pop -$project;','\pop;','select $project;'])
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',popqueries,'','',bucket.name,'' )
+                self.assertTrue('{"$1":"CD"}' in o)
+                popqueries.append('\pop -$project;')
+                popqueries.append('select $project;')
+                self.assertTrue('Errorevaluatingprojection' in o)
+                popqueries.extend(['\set -$project "AB";','\push -$project "CD";','\push -$project "EF";','\pop;','\unset -$project;','select $project;'])
+                o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',popqueries,'','',bucket.name,'' )
+                print o
+                self.assertTrue('Errorevaluatingprojection' in o)
+
+
                 while(i<15):
                     pushqueries.append('\SET -args [7, 0,1,2011];')
                     pushqueries.append('\push;')
