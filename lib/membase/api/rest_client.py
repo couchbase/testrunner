@@ -8,6 +8,7 @@ import logger
 import uuid
 from copy import deepcopy
 from threading import Thread
+from TestInput import TestInputSingleton
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 
 import httplib2
@@ -246,6 +247,7 @@ class RestConnection(object):
             self.username = serverInfo["username"]
             self.password = serverInfo["password"]
             self.port = serverInfo["port"]
+            self.services = serverInfo["services"]
             self.index_port = 9102
             self.fts_port = 8094
             self.query_port=8093
@@ -262,6 +264,7 @@ class RestConnection(object):
             self.username = serverInfo.rest_username
             self.password = serverInfo.rest_password
             self.port = serverInfo.port
+            self.services = serverInfo.services
             self.hostname = ''
             self.index_port = 9102
             self.fts_port = 8094
@@ -276,6 +279,8 @@ class RestConnection(object):
             if hasattr(serverInfo, 'hostname') and serverInfo.hostname and\
                serverInfo.hostname.find(self.ip) == -1:
                 self.hostname = serverInfo.hostname
+        self.input = TestInputSingleton.input
+        self.services_node_init = self.input.param("services_init", None)
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.fts_baseUrl = "http://{0}:{1}/".format(self.ip, self.fts_port)
         self.index_baseUrl = "http://{0}:{1}/".format(self.ip, self.index_port)
@@ -779,6 +784,13 @@ class RestConnection(object):
     def init_node(self):
         """ need a standalone method to initialize a node that could call
             anywhere with quota from testconstant """
+        self.node_services = ""
+        if self.services_node_init is None and self.services == "":
+            self.node_services = "kv"
+        elif self.services_node_init is None and self.services != "":
+            self.node_services = self.services
+        elif self.services_node_init is not None:
+            self.node_services = self.services_node_init
 
     def init_node_services(self, username='Administrator', password='password', hostname='127.0.0.1', port='8091', services=None):
         api = self.baseUrl + '/node/controller/setupServices'
