@@ -10,6 +10,7 @@ from copy import deepcopy
 from threading import Thread
 from TestInput import TestInputSingleton
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
+from testconstants import COUCHBASE_FROM_VERSION_4
 
 import httplib2
 import logger
@@ -795,6 +796,38 @@ class RestConnection(object):
         while kv_quota == 0:
             time.sleep(1)
             kv_quota = int(self.get_nodes_self().mcdMemoryReserved)
+        info = self.get_nodes_self()
+        cb_version = info.version[:5]
+        if cb_version in COUCHBASE_FROM_VERSION_4:
+            if "index" in self.node_services and "fts" not in self.node_services:
+                log.info("quota for index service will be %s MB" % (INDEX_QUOTA))
+                kv_quota = kv_quota - INDEX_QUOTA
+                if kv_quota < MIN_KV_QUOTA:
+                    raise Exception("KV RAM needs to be more than %s MB"
+                            " at node  %s"  % (MIN_KV_QUOTA, self.ip))
+                elif "index" in self.node_services and "fts" in self.node_services:
+                    log.info("quota for index service will be %s MB" \
+                                                      % (INDEX_QUOTA))
+                    log.info("quota for fts service will be %s MB" \
+                                                       % (FTS_QUOTA))
+                    kv_quota = kv_quota - INDEX_QUOTA - FTS_QUOTA
+                    if kv_quota < MIN_KV_QUOTA:
+                        raise Exception("KV RAM need to be more than %s MB"
+                                 " at node  %s"  % (MIN_KV_QUOTA, self.ip))
+                elif "fts" in self.node_services and "index" not in self.node_services:
+                    log.info("quota for fts service will be %s MB" \
+                                                      % (FTS_QUOTA))
+                    kv_quota = kv_quota - FTS_QUOTA
+                    if kv_quota < MIN_KV_QUOTA:
+                        raise Exception("KV RAM need to be more than %s MB"
+                                " at node  %s"  % (MIN_KV_QUOTA, server.ip))
+                    self.set_fts_memoryQuota(ftsMemoryQuota=FTS_QUOTA)
+        log.info("quota for kv: %s MB" % kv_quota)
+        self.init_cluster_memoryQuota(self.username, self.password, kv_quota)
+        if cb_version in COUCHBASE_FROM_VERSION_4:
+            self.init_node_services(username=self.username, password=self.password,
+                                                       services=self.node_services)
+        self.init_cluster(username=self.username, password=self.password)
 
     def init_node_services(self, username='Administrator', password='password', hostname='127.0.0.1', port='8091', services=None):
         api = self.baseUrl + '/node/controller/setupServices'
