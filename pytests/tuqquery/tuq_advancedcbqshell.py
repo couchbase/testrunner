@@ -74,22 +74,22 @@ class AdvancedQueryTests(QueryTests):
                 try:
                     if (bucket.saslPassword != ''):
                         print('sasl')
-                        o = shell.execute_commands_inside('%s/cbq -u %s -p %s -q' % (self.path,bucket.name,bucket.saslPassword),'CREATE PRIMARY INDEX ON %s USING GSI' %bucket.name,'','','','','')
+                        o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path,bucket.name,bucket.saslPassword),'CREATE PRIMARY INDEX ON %s USING GSI' %bucket.name,'','','','','')
                         self.assertTrue("requestID" in o)
-                        o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s -q' % (self.path,bucket.name,bucket.saslPassword),'select *,join_day from %s limit 10'%bucket.name,'','','','','')
+                        o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path,bucket.name,bucket.saslPassword),'select *,join_day from %s limit 10'%bucket.name,'','','','','')
                         self.assertTrue("requestID" in o)
-                        import pdb;pdb.set_trace()
-                        o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s -q' % (self.path,bucket.name,'wrong'),'select * from %s limit 10'%bucket.name,'','','','','')
+                        o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path,bucket.name,'wrong'),'select * from %s limit 10'%bucket.name,'','','','','')
+                        print o
                         self.assertTrue("AuthorizationFailed"  in o)
 
-                        o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s -q' % (self.path,'','wrong'),'select * from %s limit 10'%bucket.name,'','','','','')
+                        o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path,'','wrong'),'select * from %s limit 10'%bucket.name,'','','','','')
                         self.assertEqual('FAIL',o[7:])
-                        o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s -q' % (self.path,'wrong',bucket.saslPassword),'select * from %s limit 10'%bucket.name,'','','','','')
+                        o = shell.execute_commands_inside('%s/cbq -c %s:%s -q' % (self.path,'wrong',bucket.saslPassword),'select * from %s limit 10'%bucket.name,'','','','','')
                         self.assertTrue("AuthorizationFailed"  in o)
+
                         queries = ['\set -creds user:pass;','select *,join_day from bucketname limit 10;']
                         o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,bucket.name,bucket.saslPassword,bucket.name,'' )
                         self.assertTrue("requestID" in o)
-                        import pdb;pdb.set_trace()
                         queries = ['\set -creds user:pass;','select * from bucketname union all select * from default limit 10;']
                         o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'Administrator','password',bucket.name,'' )
                         self.assertTrue("requestID" in o)
@@ -139,50 +139,46 @@ class AdvancedQueryTests(QueryTests):
     def check_multiple_saslbuckets_auth(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
-            #import pdb;pdb.set_trace()
-            # queries = ['\set -creds bucket0:pass,bucket1:pass;','create primary index on bucket0;','create primary index on bucket1;','select count(*) from bucket0  union all select count(*) from bucket1;']
-            # o = shell.execute_commands_inside('%s/cbq --quiet' % (self.path),'',queries,'bucket1','password','bucket0','' )
-            # print o
-            # self.assertTrue("requestID" in o)
-            # queries = ['SELECT buck.email FROM  bucketname buck LEFT JOIN default on keys "query-testemployee10153.1877827-0";']
-            # o = shell.execute_commands_inside('%s/cbq --quiet' % (self.path),'',queries,'bucket1','password','bucket0','' )
-            # print o
-            # self.assertTrue("AuthorizationFailed" in o)
-            # queries = ['\set -creds bucket0:pass,bucket1:pass;','SELECT buck.email FROM  bucketname buck LEFT JOIN default on keys "query-testemployee10153.1877827-0" limit 10;']
-            # o = shell.execute_commands_inside('%s/cbq --quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
-            # print o
-            # self.assertTrue("requestID" in o)
-            #
-            # queries = ['\set -creds Administrator:pass;','select * from bucket1 union all select * from bucket2 limit 10;']
-            # o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
-            # self.assertTrue("requestID" in o)
-            # import pdb;pdb.set_trace()
-            #
-            # queries = ['\set -creds user:pass;','SELECT buck.email FROM  bucket1 buck LEFT JOIN bucket2 on keys "query-testemployee10153.1877827-0";']
-            # o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password123','bucket1',''  )
-            # print o
-            # self.assertTrue("AuthorizationFailed" in o)
-            #
-            #
-            # queries = ['\set -creds Administrator:pass;','select * from bucketname union all select * from default limit 10;']
-            # o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
-            # self.assertTrue("requestID" in o)
-            #
-            # queries = ['\set -creds user:pass;','select * from bucketname union all select * from default limit 10;']
-            # o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
-            # self.assertTrue("requestID" in o)
-            #
-            # #import pdb;pdb.set_trace()
-            # queries = ['\set -creds wrong:pass1,user:pass;','drop primary index on bucket1;','drop primary index on bucket2;']
-            # o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0' ,'password','bucket1','' )
-            # print o
-            # self.assertTrue("AuthorizationFailed" in o)
-            #
-            # queries = ['\set -creds user1:pass1,'':pass2;','create primary index on bucket1;','create primary index on bucket2;']
-            # o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','')
-            # print o
-            # self.assertTrue("Usernamemissingin" in o)
+            queries = ['\set -creds bucket0:pass,bucket1:pass;','create primary index on bucket0;','create primary index on bucket1;','select count(*) from bucket0  union all select count(*) from bucket1;']
+            o = shell.execute_commands_inside('%s/cbq --quiet' % (self.path),'',queries,'bucket1','password','bucket0','' )
+            print o
+            self.assertTrue("requestID" in o)
+            queries = ['SELECT buck.email FROM  bucketname buck LEFT JOIN default on keys "query-testemployee10153.1877827-0";']
+            o = shell.execute_commands_inside('%s/cbq --quiet' % (self.path),'',queries,'bucket1','password','bucket0','' )
+            print o
+            self.assertTrue("AuthorizationFailed" in o)
+            queries = ['\set -creds bucket0:pass,bucket1:pass;','SELECT buck.email FROM  bucketname buck LEFT JOIN default on keys "query-testemployee10153.1877827-0" limit 10;']
+            o = shell.execute_commands_inside('%s/cbq --quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
+            print o
+            self.assertTrue("requestID" in o)
 
+            queries = ['\set -creds Administrator:pass;','select * from bucket1 union all select * from bucket2 limit 10;']
+            o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
+            self.assertTrue("requestID" in o)
+
+            queries = ['\set -creds user:pass;','SELECT buck.email FROM  bucket1 buck LEFT JOIN bucket2 on keys "query-testemployee10153.1877827-0";']
+            o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password123','bucket1',''  )
+            print o
+            self.assertTrue("AuthorizationFailed" in o)
+
+
+            queries = ['\set -creds Administrator:pass;','select * from bucketname union all select * from default limit 10;']
+            o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
+            self.assertTrue("requestID" in o)
+
+            queries = ['\set -creds user:pass;','select * from bucketname union all select * from default limit 10;']
+            o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
+            self.assertTrue("requestID" in o)
+
+            queries = ['\set -creds wrong:pass1,user:pass;','drop primary index on bucket1;','drop primary index on bucket2;']
+            o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0' ,'password','bucket1','' )
+            print o
+            self.assertTrue("AuthorizationFailed" in o)
+
+            queries = ['\set -creds user1:pass1,'':pass2;','create primary index on bucket1;','create primary index on bucket2;']
+            o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','')
+            print o
+            self.assertTrue("Usernamemissingin" in o)
             queries = ['\set -creds '':pass1,'':pass2;','drop primary index on bucket1;','drop primary index on bucket2;']
             o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
             print o
