@@ -170,10 +170,7 @@ class StableTopFTS(FTSBaseTest):
 
         # create indexes on both buckets
         emp_index = self.create_index(emp, "emp_index")
-        wiki_index = self.create_index(
-            wiki,
-            "wiki_index",
-            index_params={"default_analyzer": "simple"})
+        wiki_index = self.create_index(wiki, "wiki_index")
 
         self.wait_for_indexing_complete()
 
