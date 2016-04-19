@@ -95,6 +95,7 @@ class QueryTests(BaseTestCase):
                 e = threading.Event()
                 t1 = threading.Thread(name='run_simple', target=self.run_active_requests,args=(e,2))
                 t1.start()
+
             query = 'select * from %s' %(bucket.name)
             self.run_cbq_query(query)
             logging.debug("event is set")
@@ -566,6 +567,7 @@ class QueryTests(BaseTestCase):
         query_params.update(cred_params)
         if self.use_rest:
             query_params.update({'scan_consistency': self.scan_consistency})
+            self.log.info('RUN QUERY %s' % query)
             result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params)
         else:
             if self.version == "git_repo":
@@ -578,10 +580,11 @@ class QueryTests(BaseTestCase):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
                 if os == "linux":
-                    cmd = "%s/cbq  -q" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
-                    output = self.shell.execute_commands_inside(cmd,query,"","","","","")
-                    #output = self.shell.execute_commands_inside(cmd,query)
-                    result = json.loads(output)
+                    cmd = "%s/cbq  -engine=http://%s:8091/ -q" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
+                elif os == "windows":
+                    cmd = "%s/cbq  -q" % (testconstants.WIN_COUCHBASE_BIN_PATH)
+                output = self.shell.execute_commands_inside(cmd,query,"","","","","")
+                result = json.loads(output)
             result = self._parse_query_output(output)
         if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)

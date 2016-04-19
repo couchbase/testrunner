@@ -3354,7 +3354,7 @@ class QueryTests(BaseTestCase):
                 if not(self.isprepared):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
-                    cmd = "%s/cbq  -q" % (self.path)
+                    cmd = "%s/cbq  -engine=http://%s:8091/ -q" % (self.path,server.ip)
                     output = self.shell.execute_commands_inside(cmd,query,"","","","","")
                     result = json.loads(output)
         if isinstance(result, str) or 'errors' in result:
