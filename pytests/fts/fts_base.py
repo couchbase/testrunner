@@ -580,7 +580,7 @@ class FTSIndex:
                     mapping['mapping']['default_mapping']['enabled'] = False
             mapping['mapping'].update(index_params)
         else:
-            mapping = INDEX_DEFAULTS.ALIAS_DEFINITION
+            mapping = {"targets": {}}
             mapping.update(index_params)
         return mapping
 
@@ -738,12 +738,19 @@ class CouchbaseCluster:
     def get_logger(self):
         return self.__log
 
+    def is_cluster_run(self):
+        cluster_run = False
+        for server in self.__nodes:
+            if server.ip == "127.0.0.1":
+                cluster_run = True
+        return cluster_run
+
     def __separate_nodes_on_services(self):
         self.__fts_nodes = []
         self.__non_fts_nodes = []
         service_map = RestConnection(self.__master_node).get_nodes_services()
         for node_ip, services in service_map.iteritems():
-            if len(set([server.ip for server in self.__nodes])) == 1:
+            if self.is_cluster_run():
                 # if cluster-run and ip not 127.0.0.1
                 ip = "127.0.0.1"
             else:
