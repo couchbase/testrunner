@@ -243,6 +243,10 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             type2 = shell.extract_remote_info().distribution_type
             queries = []
+            queries2 = []
+            queries3 = []
+            queries5 = []
+            queries6 = []
             for bucket in self.buckets:
                 if type2.lower() == 'windows':
                     queries = ["\set histfile c:\\tmp\\history.txt;"]

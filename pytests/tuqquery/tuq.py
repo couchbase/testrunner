@@ -3356,7 +3356,8 @@ class QueryTests(BaseTestCase):
                     query = query.replace('`', '\\`')
                     cmd = "%s/cbq  -engine=http://%s:8091/ -q" % (self.path,server.ip)
                     output = self.shell.execute_commands_inside(cmd,query,"","","","","")
-                    result = json.loads(output)
+                    output1 = '{'+str(output)
+                    result = json.loads(output1)
         if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)
         if 'metrics' in result:
