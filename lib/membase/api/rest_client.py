@@ -8,6 +8,7 @@ import logger
 import uuid
 from copy import deepcopy
 from threading import Thread
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 
 import httplib2
 import logger
@@ -774,6 +775,10 @@ class RestConnection(object):
         log.info('settings/web params on {0}:{1}:{2}'.format(self.ip, self.port, params))
         status, content, header = self._http_request(api, 'POST', params)
         return status
+
+    def init_node(self):
+        """ need a standalone method to initialize a node that could call
+            anywhere with quota from testconstant """
 
     def init_node_services(self, username='Administrator', password='password', hostname='127.0.0.1', port='8091', services=None):
         api = self.baseUrl + '/node/controller/setupServices'
