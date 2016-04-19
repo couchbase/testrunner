@@ -248,7 +248,6 @@ class RestConnection(object):
             self.username = serverInfo["username"]
             self.password = serverInfo["password"]
             self.port = serverInfo["port"]
-            self.services = serverInfo["services"]
             self.index_port = 9102
             self.fts_port = 8094
             self.query_port=8093
@@ -260,12 +259,13 @@ class RestConnection(object):
             self.hostname = ''
             if "hostname" in serverInfo:
                 self.hostname = serverInfo["hostname"]
+            if "services" in serverInfo:
+                self.services = serverInfo["services"]
         else:
             self.ip = serverInfo.ip
             self.username = serverInfo.rest_username
             self.password = serverInfo.rest_password
             self.port = serverInfo.port
-            self.services = serverInfo.services
             self.hostname = ''
             self.index_port = 9102
             self.fts_port = 8094
@@ -280,6 +280,8 @@ class RestConnection(object):
             if hasattr(serverInfo, 'hostname') and serverInfo.hostname and\
                serverInfo.hostname.find(self.ip) == -1:
                 self.hostname = serverInfo.hostname
+            if hasattr(serverInfo, 'services'):
+                self.services = serverInfo.services
         self.input = TestInputSingleton.input
         self.services_node_init = self.input.param("services_init", None)
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
