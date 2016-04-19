@@ -784,13 +784,17 @@ class RestConnection(object):
     def init_node(self):
         """ need a standalone method to initialize a node that could call
             anywhere with quota from testconstant """
-        self.node_services = ""
+        self.node_services = []
         if self.services_node_init is None and self.services == "":
-            self.node_services = "kv"
+            self.node_services = ["kv"]
         elif self.services_node_init is None and self.services != "":
-            self.node_services = self.services
+            self.node_services = self.services.split(",")
         elif self.services_node_init is not None:
-            self.node_services = self.services_node_init
+            self.node_services = self.services_node_init.split(",")
+        kv_quota = 0
+        while kv_quota == 0:
+            time.sleep(1)
+            kv_quota = int(self.get_nodes_self().mcdMemoryReserved)
 
     def init_node_services(self, username='Administrator', password='password', hostname='127.0.0.1', port='8091', services=None):
         api = self.baseUrl + '/node/controller/setupServices'
