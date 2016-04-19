@@ -270,6 +270,9 @@ class RestConnection(object):
             self.index_port = 9102
             self.fts_port = 8094
             self.query_port = 8093
+            self.services = "kv"
+            if hasattr(serverInfo, "services"):
+                self.services = serverInfo.services
             if hasattr(serverInfo, 'index_port'):
                 self.index_port = serverInfo.index_port
             if hasattr(serverInfo, 'query_port'):
@@ -283,7 +286,8 @@ class RestConnection(object):
             if hasattr(serverInfo, 'services'):
                 self.services = serverInfo.services
         self.input = TestInputSingleton.input
-        self.services_node_init = self.input.param("services_init", None)
+        if self.input is not None:
+            self.services_node_init = self.input.param("services_init", None)
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.fts_baseUrl = "http://{0}:{1}/".format(self.ip, self.fts_port)
         self.index_baseUrl = "http://{0}:{1}/".format(self.ip, self.index_port)
