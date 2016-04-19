@@ -714,6 +714,7 @@ class QueriesViewsTests(QueryTests):
         index_name_prefix = "my_index_" + str(uuid.uuid4())[:4]
         method_name = self.input.param('to_run', 'test_any')
         index_fields = self.input.param("index_field", '').split(';')
+        index_name = "test"
         for bucket in self.buckets:
             try:
                 for field in index_fields:
