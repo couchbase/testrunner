@@ -107,7 +107,7 @@ class AdvancedQueryTests(QueryTests):
                         queries = ['\set -creds user:pass;','select *,email,join_day from bucketname;']
                         o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'Administrator','password',bucket.name,'' )
                         self.assertTrue("requestID" in o)
-                        queries = ['\set -creds user:pass;','select email,join_day from bucketname union all select email,join_day from default;']
+                        queries = ['\set -creds user:pass;','create primary index on default;','select email,join_day from bucketname union all select email,join_day from default;']
                         o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,bucket.name,bucket.saslPassword,bucket.name,'' )
                         self.assertTrue("requestID" in o)
 
@@ -141,15 +141,13 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             queries = ['\set -creds bucket0:pass,bucket1:pass;','create primary index on bucket0;','create primary index on bucket1;','select count(*) from bucket0  union all select count(*) from bucket1;']
             o = shell.execute_commands_inside('%s/cbq --quiet' % (self.path),'',queries,'bucket1','password','bucket0','' )
-            print o
             self.assertTrue("requestID" in o)
             queries = ['SELECT buck.email FROM  bucketname buck LEFT JOIN default on keys "query-testemployee10153.1877827-0";']
             o = shell.execute_commands_inside('%s/cbq --quiet' % (self.path),'',queries,'bucket1','password','bucket0','' )
-            print o
             self.assertTrue("AuthorizationFailed" in o)
             queries = ['\set -creds bucket0:pass,bucket1:pass;','SELECT buck.email FROM  bucketname buck LEFT JOIN default on keys "query-testemployee10153.1877827-0" limit 10;']
             o = shell.execute_commands_inside('%s/cbq --quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
-            print o
+
             self.assertTrue("requestID" in o)
 
             queries = ['\set -creds Administrator:pass;','select * from bucket1 union all select * from bucket2 limit 10;']
@@ -158,7 +156,7 @@ class AdvancedQueryTests(QueryTests):
 
             queries = ['\set -creds user:pass;','SELECT buck.email FROM  bucket1 buck LEFT JOIN bucket2 on keys "query-testemployee10153.1877827-0";']
             o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password123','bucket1',''  )
-            print o
+
             self.assertTrue("AuthorizationFailed" in o)
 
 
@@ -172,16 +170,16 @@ class AdvancedQueryTests(QueryTests):
 
             queries = ['\set -creds wrong:pass1,user:pass;','drop primary index on bucket1;','drop primary index on bucket2;']
             o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0' ,'password','bucket1','' )
-            print o
+
             self.assertTrue("AuthorizationFailed" in o)
 
             queries = ['\set -creds user1:pass1,'':pass2;','create primary index on bucket1;','create primary index on bucket2;']
             o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','')
-            print o
+
             self.assertTrue("Usernamemissingin" in o)
             queries = ['\set -creds '':pass1,'':pass2;','drop primary index on bucket1;','drop primary index on bucket2;']
             o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'bucket0','password','bucket1','' )
-            print o
+
             self.assertTrue("Usernamemissingin" in o)
 
 
@@ -265,7 +263,7 @@ class AdvancedQueryTests(QueryTests):
                 queries.extend(['\ALIAS tempcommand create primary index on bucketname;','\\\\tempcommand;','\ALIAS tempcommand2 select * from bucketname limit 1;','\\\\tempcommand2;','\ALIAS;','\echo \\\\tempcommand;','\echo \\\\tempcommand2;','\echo histfile;'])
                 print queries
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,'','',bucket.name,'' )
-                print o
+
                 if type2.lower() == "linux":
                     self.assertTrue('/tmp/history' in o)
                 #import pdb;pdb.set_trace()
@@ -275,28 +273,28 @@ class AdvancedQueryTests(QueryTests):
 
                 queries2.extend(["\set histfile \\\\p;","\echo histfile;","\set histfile '\\\\p';","\echo histfile;"])
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries2,'','',bucket.name,'' )
-                print o
+
                 if type2.lower() == "linux":
                     self.assertTrue('/tmp/history2' in o)
                     self.assertTrue('\\p' in o)
 
                 queries3.extend(["\set histfile $a;","\echo histfile;"])
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries3,'','',bucket.name,'' )
-                print o
+
                 #import pdb;pdb.set_trace()
 
                 queries4 = ["\push histfile newhistory.txt;","\echo histfile;",'\ALIAS tempcommand create primary index on bucketname;','\\\\tempcommand;','\ALIAS tempcommand2 select * from bucketname limit 1;','\\\\tempcommand2;','\ALIAS;','\echo \\\\tempcommand;','\echo \\\\tempcommand2;','\echo histfile;']
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries4,'','',bucket.name,'' )
-                print o
+
                 #import pdb;pdb.set_trace()
 
                 queries5.append("\echo $a;")
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries5,'','',bucket.name,'' )
-                print o
+
 
                 queries6.append("\echo $a;")
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries6,'','',bucket.name,'' )
-                print o
+
 
 
 
