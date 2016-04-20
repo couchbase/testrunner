@@ -1153,40 +1153,6 @@ class RemoteMachineShellConnection:
         except IOError:
             pass
 
-    def membase_upgrade(self, build, save_upgrade_config=False, forcefully=False):
-        # upgrade couchbase server
-        self.extract_remote_info()
-        log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
-        log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
-        command = ''
-        if self.info.type.lower() == 'windows':
-                print "build name in membase upgrade    ", build.product_version
-                self.membase_upgrade_win(self.info.architecture_type, self.info.windows_name, build.product_version)
-                log.info('********* continue upgrade process **********')
-
-        elif self.info.deliverable_type == 'rpm':
-            # run rpm -i to install
-            if save_upgrade_config:
-                self.membase_uninstall(save_upgrade_config=save_upgrade_config)
-                install_command = 'rpm -i /tmp/{0}'.format(build.name)
-                command = 'INSTALL_UPGRADE_CONFIG_DIR=/opt/membase/var/lib/membase/config {0}'.format(install_command)
-            else:
-                command = 'rpm -U /tmp/{0}'.format(build.name)
-                if forcefully:
-                    command = 'rpm -U --force /tmp/{0}'.format(build.name)
-        elif self.info.deliverable_type == 'deb':
-            if save_upgrade_config:
-                self.membase_uninstall(save_upgrade_config=save_upgrade_config)
-                install_command = 'dpkg -i /tmp/{0}'.format(build.name)
-                command = 'INSTALL_UPGRADE_CONFIG_DIR=/opt/membase/var/lib/membase/config {0}'.format(install_command)
-            else:
-                command = 'dpkg -i /tmp/{0}'.format(build.name)
-                if forcefully:
-                    command = 'dpkg -i --force /tmp/{0}'.format(build.name)
-        output, error = self.execute_command(command, use_channel=True)
-        self.log_command_output(output, error)
-        return output, error
-
     def couchbase_upgrade(self, build, save_upgrade_config=False, forcefully=False):
         # upgrade couchbase server
         self.extract_remote_info()
@@ -1195,7 +1161,8 @@ class RemoteMachineShellConnection:
         command = ''
         if self.info.type.lower() == 'windows':
                 print "build name in couchbase upgrade    ", build.product_version
-                self.couchbase_upgrade_win(self.info.architecture_type, self.info.windows_name, build.product_version)
+                self.couchbase_upgrade_win(self.info.architecture_type, \
+                                     self.info.windows_name, build.product_version)
                 log.info('********* continue upgrade process **********')
 
         elif self.info.deliverable_type == 'rpm':
@@ -1203,7 +1170,9 @@ class RemoteMachineShellConnection:
             if save_upgrade_config:
                 self.couchbase_uninstall(save_upgrade_config=save_upgrade_config)
                 install_command = 'rpm -i /tmp/{0}'.format(build.name)
-                command = 'INSTALL_UPGRADE_CONFIG_DIR=/opt/couchbase/var/lib/membase/config {0}'.format(install_command)
+                command = 'INSTALL_UPGRADE_CONFIG_DIR=\
+                          /opt/couchbase/var/lib/membase/config {0}'\
+                                             .format(install_command)
             else:
                 command = 'rpm -U /tmp/{0}'.format(build.name)
                 if forcefully:
@@ -1212,7 +1181,9 @@ class RemoteMachineShellConnection:
             if save_upgrade_config:
                 self.couchbase_uninstall(save_upgrade_config=save_upgrade_config)
                 install_command = 'dpkg -i /tmp/{0}'.format(build.name)
-                command = 'INSTALL_UPGRADE_CONFIG_DIR=/opt/couchbase/var/lib/membase/config {0}'.format(install_command)
+                command = 'INSTALL_UPGRADE_CONFIG_DIR=\
+                          /opt/couchbase/var/lib/membase/config {0}'\
+                                             .format(install_command)
             else:
                 command = 'dpkg -i /tmp/{0}'.format(build.name)
                 if forcefully:
@@ -1221,97 +1192,54 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
         return output, error
 
-    def membase_upgrade_win(self, architecture, windows_name, version):
-        task = "upgrade"
-        bat_file = "upgrade.bat"
-        version_file = "VERSION.txt"
-        print "version in membase upgrade windows ", version
-        deleted = False
-        self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb', version, task)
-        self.stop_schedule_tasks()
-        output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
-        log.info("version to upgrade: {0}".format(output))
-        log.info('before running task schedule upgrademe')
-        if '1.8.0' in str(output):
-            # run installer in second time as workaround for upgrade 1.8.0 only:
-            # Installer needs to update registry value in order to upgrade from the previous version.
-            # Please run installer again to continue."""
-            output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
-            self.log_command_output(output, error)
-            self.sleep(200, "because upgrade version is {0}".format(output))
-            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
-            self.log_command_output(output, error)
-            self.stop_schedule_tasks()
-        # run task schedule to upgrade Membase server
-        output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
-        self.log_command_output(output, error)
-        deleted = self.wait_till_file_deleted(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
-        if not deleted:
-            log.error("Uninstall was failed at node {0}".format(self.ip))
-            sys.exit()
-        self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
-        log.info("installed version:")
-        output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
-        """   """
-        ended = self.wait_till_process_ended(version[:10])
-        if not ended:
-            assert False, "*****  Node {0} failed to upgrade  *****" \
-                                               .format(self.ip)
-        self.sleep(10, "wait for server to start up completely")
-        ct = time.time()
-        while time.time() - ct < 10800:
-            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V| findstr Status ")
-            if "Ready" in str(output):
-                log.info("upgrademe task complteted")
-                break
-            elif "Could not start":
-                log.exception("Ugrade failed!!!")
-                break
-            else:
-                log.info("upgrademe task still running:{0}".format(output))
-                self.sleep(30)
-        output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
-        self.log_command_output(output, error)
-
     def couchbase_upgrade_win(self, architecture, windows_name, version):
         task = "upgrade"
         bat_file = "upgrade.bat"
         version_file = "VERSION.txt"
         deleted = False
-        self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb', version, task)
+        self.modify_bat_file('/cygdrive/c/automation', bat_file, 'cb',\
+                                                         version, task)
         self.stop_schedule_tasks()
         self.remove_win_backup_dir()
         self.remove_win_collect_tmp()
-        output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
+        output, error = self.execute_command("cat "
+                        "'/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
         log.info("version to upgrade from: {0} to {1}".format(output, version))
         log.info('before running task schedule upgrademe')
         if '1.8.0' in str(output):
-            # run installer in second time as workaround for upgrade 1.8.0 only:
-            # Installer needs to update registry value in order to upgrade from the previous version.
-            # Please run installer again to continue."""
-            output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
+            """ run installer in second time as workaround for upgrade 1.8.0 only:
+            #   Installer needs to update registry value in order to upgrade
+            #   from the previous version.
+            #   Please run installer again to continue."""
+            output, error = \
+                        self.execute_command("cmd /c schtasks /run /tn upgrademe")
             self.log_command_output(output, error)
             self.sleep(200, "because upgrade version is {0}".format(output))
-            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
+            output, error = self.execute_command("cmd /c "
+                                      "schtasks /Query /FO LIST /TN upgrademe /V")
             self.log_command_output(output, error)
             self.stop_schedule_tasks()
         # run task schedule to upgrade Membase server
         output, error = self.execute_command("cmd /c schtasks /run /tn upgrademe")
         self.log_command_output(output, error)
-        deleted = self.wait_till_file_deleted(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
+        deleted = self.wait_till_file_deleted(testconstants.WIN_CB_PATH, \
+                                     version_file, timeout_in_seconds=600)
         if not deleted:
             log.error("Uninstall was failed at node {0}".format(self.ip))
             sys.exit()
-        self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, timeout_in_seconds=600)
+        self.wait_till_file_added(testconstants.WIN_CB_PATH, version_file, \
+                                                     timeout_in_seconds=600)
         log.info("installed version: {0}".format(version))
-        output, error = self.execute_command("cat '/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
+        output, error = self.execute_command("cat "
+                       "'/cygdrive/c/Program Files/Couchbase/Server/VERSION.txt'")
         ended = self.wait_till_process_ended(version[:10])
         if not ended:
             sys.exit("*****  Node %s failed to upgrade  *****" % (self.ip))
         self.sleep(10, "wait for server to start up completely")
         ct = time.time()
         while time.time() - ct < 10800:
-            output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V| findstr Status ")
+            output, error = self.execute_command("cmd /c "
+                      "schtasks /Query /FO LIST /TN upgrademe /V| findstr Status ")
             if "Ready" in str(output):
                 log.info("upgrademe task complteted")
                 break
@@ -1321,7 +1249,8 @@ class RemoteMachineShellConnection:
             else:
                 log.info("upgrademe task still running:{0}".format(output))
                 self.sleep(30)
-        output, error = self.execute_command("cmd /c schtasks /Query /FO LIST /TN upgrademe /V")
+        output, error = self.execute_command("cmd /c "
+                                       "schtasks /Query /FO LIST /TN upgrademe /V")
         self.log_command_output(output, error)
 
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
