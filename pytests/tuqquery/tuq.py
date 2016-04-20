@@ -2105,9 +2105,12 @@ class QueryTests(BaseTestCase):
         self.query = "select clock_millis() as now"
         now = time.time()
         res = self.run_cbq_query()
-        self.assertTrue((res["results"][0]["now"] > now * 1000),
+        self.query = "select now_millis() as now"
+        res1 = self.run_cbq_query()
+        self.assertTrue((res["results"][0]["now"] < now * 1000),
                         "Result expected to be in: [%s ... %s]. Actual %s" % (
                                         now * 1000, (now + 10) * 1000, res["results"]))
+
 
     def test_clock_str(self):
         self.query = "select clock_str() as now"
@@ -3356,7 +3359,10 @@ class QueryTests(BaseTestCase):
                     query = query.replace('`', '\\`')
                     cmd = "%s/cbq  -engine=http://%s:8091/ -q" % (self.path,server.ip)
                     output = self.shell.execute_commands_inside(cmd,query,"","","","","")
-                    output1 = '{'+str(output)
+                    if not(output[0] == '{'):
+                        output1 = '{'+str(output)
+                    else:
+                        output1 = output
                     result = json.loads(output1)
         if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)
