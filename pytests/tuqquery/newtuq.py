@@ -584,7 +584,10 @@ class QueryTests(BaseTestCase):
                 elif os == "windows":
                     cmd = "%s/cbq  -q" % (testconstants.WIN_COUCHBASE_BIN_PATH)
                 output = self.shell.execute_commands_inside(cmd,query,"","","","","")
-                output1 = '{'+str(output)
+                if not(output[0] == '{'):
+                    output1 = '{'+str(output)
+                else:
+                    output1 = output
                 result = json.loads(output1)
             #result = self._parse_query_output(output)
         if isinstance(result, str) or 'errors' in result:
