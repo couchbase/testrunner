@@ -2030,7 +2030,7 @@ class FTSBaseTest(unittest.TestCase):
         # simply append to this list, any error from log we want to fail test on
         self.__report_error_list = []
         if self.__fail_on_errors:
-            self.__report_error_list = ["panic:", "SIGABRT: abort"]
+            self.__report_error_list = ["panic:", "crash in forestdb", "cbft terminated: signal: killed"]
 
         # for format {ip1: {"panic": 2}}
         self.__error_count_dict = {}
@@ -2387,7 +2387,7 @@ class FTSBaseTest(unittest.TestCase):
         Wait for index_count for any index to stabilize
         """
         index_doc_count = 0
-        retry = self._input.param("index_retry", 5)
+        retry = self._input.param("index_retry", 10)
         start_time = time.time()
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "alias":
@@ -2411,15 +2411,15 @@ class FTSBaseTest(unittest.TestCase):
                                 index_doc_count,
                                 self.es.get_index_count('es_index')))
 
-                #if bucket_doc_count == index_doc_count:
-                #    break
+                if bucket_doc_count == index_doc_count:
+                    break
 
                 if prev_count < index_doc_count or prev_count > index_doc_count:
                     prev_count = index_doc_count
                     retry_count = retry
                 else:
                     retry_count -= 1
-                time.sleep(5)
+                time.sleep(6)
         self.log.info("FTS indexed %s docs in %s mins"
                       % (index_doc_count, round(float((time.time()-start_time)/60), 2)))
 
