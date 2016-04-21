@@ -118,19 +118,17 @@ class AdvancedQueryTests(QueryTests):
                         o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',queries,bucket.name,'wrong',bucket.name,'' )
                         self.assertTrue("AuthorizationFailed"  in o)
                         o = shell.execute_commands_inside('%s/cbq -q -u=%s -p=%s' % (self.path,'Administrator','password'),'select * from %s limit 10;' %bucket.name,'','','','','' )
-                        print o;
                         self.assertTrue("requestID" in o)
                         o = shell.execute_commands_inside('%s/cbq -q -u=%s -p=%s' % (self.path,bucket.name,bucket.saslPassword),'select * from %s limit 10;' %bucket.name,'','','','','' )
                         self.assertTrue("requestID" in o)
                         print('nonsasl')
                         o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s' % (self.path,'Administrator','password'),'select * from default limit 10;','','','','','' )
-                        print o;
                         self.assertTrue("requestID" in o)
                         o = shell.execute_commands_inside('%s/cbq -q -u %s -p %s' % (self.path,bucket.name,bucket.saslPassword),'select * from default limit 10;' ,'','','','','' )
-                        print o;
                         self.assertTrue("requestID" in o)
                         o = shell.execute_commands_inside('%s/cbq -q ' % (self.path),'select * from default limit 10;','','','','','' )
                         self.assertTrue("requestID" in o)
+                        break;
 
                 finally:
                     shell.disconnect()
