@@ -1329,7 +1329,8 @@ class RestConnection(object):
         retry = 0
         same_progress_count = 0
         previous_progress = 0
-        while progress != -1 and (progress != 100 or self._rebalance_progress_status() == 'running') and retry < 20:
+        while progress != -1 and (progress != 100 or \
+                    self._rebalance_progress_status() == 'running') and retry < 20:
             # -1 is error , -100 means could not retrieve progress
             progress = self._rebalance_progress()
             if progress == -100:
@@ -1338,7 +1339,8 @@ class RestConnection(object):
             else:
                 retry = 0
             if stop_if_loop:
-                # reset same_progress_count if get a different result, or progress is still O
+                # reset same_progress_count if get a different result,
+                # or progress is still O
                 # (it may take a long time until the results are different from 0)
                 if previous_progress != progress or progress == 0:
                     previous_progress = progress
@@ -1346,10 +1348,11 @@ class RestConnection(object):
                 else:
                     same_progress_count += 1
                 if same_progress_count > 50:
-                    log.error("apparently rebalance progress code in infinite loop: {0}".format(progress))
+                    log.error("apparently rebalance progress code in infinite loop:"
+                                                             " {0}".format(progress))
                     return False
-            # sleep for 5 seconds
-            time.sleep(5)
+            # sleep 10 seconds to printout less log
+            time.sleep(10)
         if progress < 0:
             log.error("rebalance progress code : {0}".format(progress))
             return False
