@@ -347,13 +347,11 @@ class AdvancedQueryTests(QueryTests):
                 i=1
                 pushqueries=['\set -$project "AB";','\push -$project "CD";','\push -$project "EF";','\push -$project "GH";','select $project;']
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',pushqueries,'','',bucket.name,'' )
-                print o
 
                 self.assertTrue('{"$1":"GH"}' in o)
                 pushqueries.append('\pop;')
                 pushqueries.append('select $project;')
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',pushqueries,'','',bucket.name,'' )
-                print o
                 self.assertTrue('{"$1":"EF"}' in o)
 
                 popqueries=['\pop;','select $project;']
@@ -368,7 +366,6 @@ class AdvancedQueryTests(QueryTests):
                 self.assertTrue('Errorevaluatingprojection' in o)
                 popqueries.extend(['\set -$project "AB";','\push -$project "CD";','\push -$project "EF";','\pop;','\unset -$project;','select $project;'])
                 o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',popqueries,'','',bucket.name,'' )
-                print o
                 self.assertTrue('Errorevaluatingprojection' in o)
 
 
@@ -388,7 +385,6 @@ class AdvancedQueryTests(QueryTests):
                     pushqueries.append('\set;')
                     i=i+1
                     o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',pushqueries,'','',bucket.name,'' )
-                    print o
                 i=1
                 popqueries =[]
                 while(i<10):
@@ -403,7 +399,6 @@ class AdvancedQueryTests(QueryTests):
                     popqueries.append('execute temp;')
                     i=i+1
                     o = shell.execute_commands_inside('%s/cbq -quiet' % (self.path),'',popqueries,'','',bucket.name,'' )
-                    print o
 
     def test_redirect(self):
         for server in self.servers:
