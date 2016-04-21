@@ -238,13 +238,17 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
 
     def is_goxdcr_migration_successful(self, server):
         count = NodeHelper.check_goxdcr_log(server,
+                                "Starting to migrate xdcr metadata")
+        if count > 0:
+            count = NodeHelper.check_goxdcr_log(server,
                                 "Metadata migration completed without errors")
-        self.log.info(count)
-        if count == 1:
-            self.log.info("SUCCESS: Metadata migration completed without errors")
-            return True
-        self.log.error("ERROR: Metadata migration was unsuccessful")
-        return False
+            self.log.info(count)
+            if count == 1:
+                self.log.info("SUCCESS: Metadata migration completed without errors")
+                return True
+            self.log.error("ERROR: Metadata migration was unsuccessful")
+            return False
+        return True
 
     def is_ssl_over_memcached(self, master):
         if not NodeHelper.check_goxdcr_log(master,
