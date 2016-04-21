@@ -28,7 +28,7 @@ from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_FROM_VERSION_3
 from testconstants import COUCHBASE_RELEASE_VERSIONS_3
-from testconstants import SHERLOCK_VERSION
+from testconstants import SHERLOCK_VERSION, WIN_PROCESSES_KILLED
 from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON
 from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME
@@ -330,7 +330,8 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("taskkill /F /T /IM erl.exe*")
             self.log_command_output(o, r)
         else:
-            o, r = self.execute_command("killall -9 beam.smp")
+            o, r = self.execute_command("kill "
+                        " $(ps aux | grep 'beam.smp' | awk '{print $2}')")
             self.log_command_output(o, r)
         return o, r
 
@@ -350,7 +351,8 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("taskkill /F /T /IM memcached*")
             self.log_command_output(o, r)
         else:
-            o, r = self.execute_command("kill $(ps aux | grep 'memcached' | awk '{print $2}')")
+            o, r = self.execute_command("kill $(ps aux | grep 'memcached' "
+                                                    " | awk '{print $2}')")
             self.log_command_output(o, r)
         return o, r
 
@@ -548,15 +550,9 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         self.disable_firewall()
         if self.info.type.lower() == 'windows':
-            self.execute_command('taskkill /F /T /IM msiexec32.exe')
-            self.execute_command('taskkill /F /T /IM msiexec.exe')
-            self.execute_command('taskkill /F /T IM setup.exe')
-            self.execute_command('taskkill /F /T /IM ISBEW64.*')
-            self.execute_command('taskkill /F /T /IM firefox.*')
-            self.execute_command('taskkill /F /T /IM iexplore.*')
-            self.execute_command('taskkill /F /T /IM WerFault.*')
-            self.execute_command('taskkill /F /T /IM memcached.exe')
-            self.execute_command('taskkill /F /T /IM bash.exe')
+            self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
+            self.terminate_processes(self.info, \
+                                     [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
             self.disable_firewall()
             remove_words = ["-rel", ".exe"]
             for word in remove_words:
@@ -804,14 +800,9 @@ class RemoteMachineShellConnection:
             return False
 
     def download_binary_in_win(self, url, version):
-        self.execute_command('taskkill /F /T /IM msiexec32.exe')
-        self.execute_command('taskkill /F /T /IM msiexec.exe')
-        self.execute_command('taskkill /F /T IM setup.exe')
-        self.execute_command('taskkill /F /T /IM ISBEW64.*')
-        self.execute_command('taskkill /F /T /IM iexplore.*')
-        self.execute_command('taskkill /F /T /IM WerFault.*')
-        self.execute_command('taskkill /F /T /IM Firefox.*')
-        self.execute_command('taskkill /F /T /IM bash.exe')
+        self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
+        self.terminate_processes(self.info, \
+                                 [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
         self.disable_firewall()
         version = version.replace("-rel", "")
         exist = self.file_exists('/cygdrive/c/tmp/', '{0}.exe'.format(version))
@@ -1270,9 +1261,9 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
         if self.info.type.lower() == 'windows':
-            win_processes = ["msiexec32.exe", "msiexec32.exe", "setup.exe", "ISBEW64.*",
-                             "firefox.*", "WerFault.*", "iexplore.*"]
-            self.terminate_processes(self.info, win_processes)
+            self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
+            self.terminate_processes(self.info, \
+                                     [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
             # to prevent getting full disk let's delete some large files
             self.remove_win_backup_dir()
             self.remove_win_collect_tmp()
@@ -1423,23 +1414,27 @@ class RemoteMachineShellConnection:
             capture_iss_file = ""
             # build = self.build_url(params)
             self.create_multiple_dir(dir_paths)
-            self.copy_files_local_to_remote('resources/windows/automation', '/cygdrive/c/automation')
+            self.copy_files_local_to_remote('resources/windows/automation', \
+                                                    '/cygdrive/c/automation')
             #self.create_windows_capture_file(task, abbr_product, version)
-            capture_iss_file = self.modify_bat_file('/cygdrive/c/automation', bat_file, abbr_product, version, task)
+            capture_iss_file = self.modify_bat_file('/cygdrive/c/automation', \
+                                             bat_file, abbr_product, version, task)
             self.stop_schedule_tasks()
             self.remove_win_backup_dir()
             self.remove_win_collect_tmp()
-
-            """ Remove this workaround when bug MB-14504 is fixed """
-            log.info("Kill any un/install process leftover in sherlock")
-            self.execute_command('taskkill /F /T /IM 4.0.0-*')
-            log.info("Kill any un/install process leftover in watson")
-            self.execute_command('taskkill /F /T /IM 4.1.0-*')
-            log.info("Kill any cbq-engine.exe in sherlock")
-            self.execute_command('taskkill /F /T /IM cbq-engine.exe')
             log.info('sleep for 5 seconds before running task '
                                 'schedule uninstall on {0}'.format(self.ip))
-            """ End remove this workaround when bug MB-14504 is fixed """
+
+            """ the code below need to remove when bug MB-11985
+                                                            is fixed in 3.0.1 """
+            if task == "install" and (version[:5] in COUCHBASE_VERSION_2 or \
+                                      version[:5] in COUCHBASE_FROM_VERSION_3):
+                log.info("due to bug MB-11985, we need to delete below registry "
+                                        "before install version 2.x.x and 3.x.x")
+                output, error = self.execute_command("reg delete \
+                         'HKLM\Software\Wow6432Node\Ericsson\Erlang\ErlSrv' /f ")
+                self.log_command_output(output, error)
+            """ end remove code """
 
             """ run task schedule to install cb server """
             output, error = self.execute_command("cmd /c schtasks /run /tn installme")
@@ -2288,10 +2283,12 @@ class RemoteMachineShellConnection:
     def terminate_process(self, info=None, process_name=''):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            o, r = self.execute_command("taskkill /F /T /IM {0}*".format(process_name))
+            o, r = self.execute_command("taskkill /F /T /IM {0}*"\
+                                                        .format(process_name))
             self.log_command_output(o, r)
         else:
-            o, r = self.execute_command("killall -9 {0}".format(process_name))
+            o, r = self.execute_command("kill "
+               "$(ps aux | grep '{0}' | awk '{{print $2}}') ".format(process_name))
             self.log_command_output(o, r)
 
     def disconnect(self):
