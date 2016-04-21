@@ -21,7 +21,7 @@ class AdvancedQueryTests(QueryTests):
             shell = RemoteMachineShellConnection(server)
             for bucket in self.buckets:
                 try:
-                    o = shell.execute_commands_inside('%s/cbq' % (self.path),'\quit','','','','','','')
+                    o = shell.execute_commands_inside('%s/cbq -q' % (self.path),'\quit','','','','','','')
                     print o
                     self.assertTrue("Exitingtheshell" in o)
                 finally:
