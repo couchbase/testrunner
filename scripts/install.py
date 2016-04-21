@@ -456,6 +456,7 @@ class CouchbaseServerInstaller(Installer):
                                                                 % (FTS_QUOTA))
                             kv_quota = int(info.mcdMemoryReserved) - INDEX_QUOTA \
                                                                  - FTS_QUOTA
+                            rest.set_fts_memoryQuota(ftsMemoryQuota=FTS_QUOTA)
                             if kv_quota < MIN_KV_QUOTA:
                                 raise Exception("KV RAM need to be more than %s MB"
                                        " at node  %s"  % (MIN_KV_QUOTA, server.ip))
