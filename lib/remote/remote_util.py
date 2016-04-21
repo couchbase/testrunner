@@ -2110,22 +2110,19 @@ class RemoteMachineShellConnection:
             f.close()
             fileout = open(filename,'r')
             filedata = fileout.read()
-            print filedata
             fileout.close()
 
         newdata = filedata.replace("bucketname",bucket2)
         newdata = newdata.replace("user",bucket1)
         newdata = newdata.replace("pass",password)
         newdata = newdata.replace("bucket1",bucket1)
-        print "bucket1 is %s" %bucket1
-        print "bucket2 is %s" %bucket2
+
         #import pdb;pdb.set_trace()
         newdata = newdata.replace("user1",bucket1)
         newdata = newdata.replace("pass1",password)
         newdata = newdata.replace("bucket2",bucket2)
         newdata = newdata.replace("user2",bucket2)
         newdata = newdata.replace("pass2",password)
-        print newdata
 
         if (self.remote and not(queries=="")) :
             f = sftp.open(filename,'w')
