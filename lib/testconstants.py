@@ -39,7 +39,7 @@ WIN_CB_PATH = "/cygdrive/c/Program Files/Couchbase/Server/"
 WIN_MB_PATH = "/cygdrive/c/Program Files/Membase/Server/"
 WIN_PROCESSES_KILLED = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*",
                         "iexplore.*", "WerFault.*", "Firefox.*", "bash.exe",
-                        "cbq-engine.exe"]
+                        "chrome.exe", "cbq-engine.exe"]
 LINUX_CB_PATH = "/opt/couchbase/"
 WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F", "170":"AF3F80E5-2CA3-409C-B59B-6E0DC805BC3F",
                    "171":"73C5B189-9720-4719-8577-04B72C9DC5A2", "1711":"73C5B189-9720-4719-8577-04B72C9DC5A2",
