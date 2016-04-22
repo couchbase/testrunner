@@ -22,8 +22,7 @@ class AdvancedQueryTests(QueryTests):
             for bucket in self.buckets:
                 try:
                     o = shell.execute_commands_inside('%s/cbq -q' % (self.path),'\quit','','','','','','')
-                    print o
-                    self.assertTrue("Exitingtheshell" in o)
+                    self.assertTrue(o is '')
                 finally:
                     shell.disconnect()
 
