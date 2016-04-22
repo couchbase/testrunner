@@ -1363,7 +1363,7 @@ class XdcrCLITest(CliBaseTest):
                 cluster_host = self.servers[xdcr_hostname].ip
             output, _ = self.__execute_cli(cli_command="ssl-manage", options="--retrieve-cert={0}".format(xdcr_cert), cluster_host=cluster_host)
             options += (" --xdcr-certificate={0}".format(xdcr_cert), "")[xdcr_cert is None]
-            self.assertNotEqual(output[0].find("SUCCESS"), -1, "ssl-manage CLI failed to retrieve certificate")
+            self.assertNotEqual(output[-1].find("SUCCESS"), -1, "ssl-manage CLI failed to retrieve certificate")
 
         output, error = self.__execute_cli(cli_command=cli_command, options=options)
         return output, error, xdcr_cluster_name, xdcr_hostname, cli_command, options
