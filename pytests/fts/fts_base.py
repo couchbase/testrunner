@@ -2425,6 +2425,7 @@ class FTSBaseTest(unittest.TestCase):
 
     def construct_plan_params(self):
         plan_params = {}
+        plan_params['numReplicas'] = 0
         if self.index_replicas:
             plan_params['numReplicas'] = self.index_replicas
         if self.partitions_per_pindex:
