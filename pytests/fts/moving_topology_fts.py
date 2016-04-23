@@ -434,19 +434,11 @@ class MovingTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self._cb_cluster.async_failover().result()
         self.sleep(30)
-        try:
-            for index in self._cb_cluster.get_indexes():
-                self.is_index_partitioned_balanced(index)
-        except Exception as e:
-            if self._cb_cluster.get_num_fts_nodes() == 0:
-                self.log.info("Expected exception: %s" % e)
-            else:
-                raise e
-        self.wait_for_indexing_complete()
         for index in self._cb_cluster.get_indexes():
-            hits, _, _ = index.execute_query(query=self.query,
-                                             expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+            hits, _, _ = index.execute_query(query=self.query)
+            if hits < self._num_items:
+                self.log.info("SUCCESS: Fewer docs ({0}) returned after "
+                              "hard-failover".format(hits))
 
     def hard_failover_master_between_indexing_and_querying(self):
         #TESTED
