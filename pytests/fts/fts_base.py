@@ -1099,9 +1099,9 @@ class CouchbaseCluster:
         """
         if not node:
             node = self.get_random_fts_node()
-        self.__log.info("Running query %s on node: %s"
+        self.__log.info("Running query %s on node: %s:%s"
                         % (json.dumps(query_dict, ensure_ascii=False),
-                           node.ip))
+                           node.ip, node.fts_port))
         total_hits, hit_list, time_taken = \
             RestConnection(node).run_fts_query(index_name, query_dict)
         return total_hits, hit_list, time_taken
