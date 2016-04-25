@@ -128,12 +128,7 @@ class MovingTopFTS(FTSBaseTest):
             for index in self._cb_cluster.get_indexes():
                 self.is_index_partitioned_balanced(index)
         except Exception as e:
-            if self._cb_cluster.get_num_fts_nodes() == 0:
-                self.log.info("Expected exception: %s" % e)
-            else:
-                raise e
-        self.wait_for_indexing_complete()
-        self.validate_index_count(equal_bucket_doc_count=True)
+            self.log.info("Expected exception: %s" % e)
 
     def failover_master_during_index_building(self):
         self.load_data()
