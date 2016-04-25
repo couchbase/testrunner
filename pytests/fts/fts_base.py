@@ -2140,7 +2140,8 @@ class FTSBaseTest(unittest.TestCase):
         cluster_nodes = self._cb_cluster.get_nodes()
         for server in total_servers:
             for cluster_node in cluster_nodes:
-                if server.ip == cluster_node.ip:
+                if server.ip == cluster_node.ip and\
+                                server.port == cluster_node.port:
                     break
                 else:
                     continue
