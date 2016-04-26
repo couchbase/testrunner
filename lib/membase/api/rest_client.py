@@ -6,6 +6,9 @@ import time
 import uuid
 from copy import deepcopy
 from threading import Thread
+from TestInput import TestInputSingleton
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
+from testconstants import COUCHBASE_FROM_VERSION_4
 
 import httplib2
 import logger
@@ -253,6 +256,8 @@ class RestConnection(object):
             self.hostname = ''
             if "hostname" in serverInfo:
                 self.hostname = serverInfo["hostname"]
+            if "services" in serverInfo:
+                self.services = serverInfo["services"]
         else:
             self.ip = serverInfo.ip
             self.username = serverInfo.rest_username
@@ -262,6 +267,9 @@ class RestConnection(object):
             self.index_port = 9102
             self.fts_port = 8094
             self.query_port = 8093
+            self.services = "kv"
+            if hasattr(serverInfo, "services"):
+                self.services = serverInfo.services
             if hasattr(serverInfo, 'index_port'):
                 self.index_port = serverInfo.index_port
             if hasattr(serverInfo, 'query_port'):
@@ -272,6 +280,11 @@ class RestConnection(object):
             if hasattr(serverInfo, 'hostname') and serverInfo.hostname and\
                serverInfo.hostname.find(self.ip) == -1:
                 self.hostname = serverInfo.hostname
+            if hasattr(serverInfo, 'services'):
+                self.services = serverInfo.services
+        self.input = TestInputSingleton.input
+        if self.input is not None:
+            self.services_node_init = self.input.param("services_init", None)
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.fts_baseUrl = "http://{0}:{1}/".format(self.ip, self.fts_port)
         self.index_baseUrl = "http://{0}:{1}/".format(self.ip, self.index_port)
@@ -772,6 +785,53 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
+    def init_node(self):
+        """ need a standalone method to initialize a node that could call
+            anywhere with quota from testconstant """
+        self.node_services = []
+        if self.services_node_init is None and self.services == "":
+            self.node_services = ["kv"]
+        elif self.services_node_init is None and self.services != "":
+            self.node_services = self.services.split(",")
+        elif self.services_node_init is not None:
+            self.node_services = self.services_node_init.split(",")
+        kv_quota = 0
+        while kv_quota == 0:
+            time.sleep(1)
+            kv_quota = int(self.get_nodes_self().mcdMemoryReserved)
+        info = self.get_nodes_self()
+        cb_version = info.version[:5]
+        if cb_version in COUCHBASE_FROM_VERSION_4:
+            if "index" in self.node_services and "fts" not in self.node_services:
+                log.info("quota for index service will be %s MB" % (INDEX_QUOTA))
+                kv_quota = kv_quota - INDEX_QUOTA
+                if kv_quota < MIN_KV_QUOTA:
+                    raise Exception("KV RAM needs to be more than %s MB"
+                            " at node  %s"  % (MIN_KV_QUOTA, self.ip))
+                elif "index" in self.node_services and "fts" in self.node_services:
+                    log.info("quota for index service will be %s MB" \
+                                                      % (INDEX_QUOTA))
+                    log.info("quota for fts service will be %s MB" \
+                                                       % (FTS_QUOTA))
+                    kv_quota = kv_quota - INDEX_QUOTA - FTS_QUOTA
+                    if kv_quota < MIN_KV_QUOTA:
+                        raise Exception("KV RAM need to be more than %s MB"
+                                 " at node  %s"  % (MIN_KV_QUOTA, self.ip))
+                elif "fts" in self.node_services and "index" not in self.node_services:
+                    log.info("quota for fts service will be %s MB" \
+                                                      % (FTS_QUOTA))
+                    kv_quota = kv_quota - FTS_QUOTA
+                    if kv_quota < MIN_KV_QUOTA:
+                        raise Exception("KV RAM need to be more than %s MB"
+                                " at node  %s"  % (MIN_KV_QUOTA, server.ip))
+                    self.set_fts_memoryQuota(ftsMemoryQuota=FTS_QUOTA)
+        log.info("quota for kv: %s MB" % kv_quota)
+        self.init_cluster_memoryQuota(self.username, self.password, kv_quota)
+        if cb_version in COUCHBASE_FROM_VERSION_4:
+            self.init_node_services(username=self.username, password=self.password,
+                                                       services=self.node_services)
+        self.init_cluster(username=self.username, password=self.password)
+
     def init_node_services(self, username='Administrator', password='password', hostname='127.0.0.1', port='8091', services=None):
         api = self.baseUrl + '/node/controller/setupServices'
         if services == None:
@@ -814,6 +874,15 @@ class RestConnection(object):
                                  indexMemoryQuota=256):
         api = self.baseUrl + 'pools/default'
         params = urllib.urlencode({'indexMemoryQuota': indexMemoryQuota})
+        log.info('pools/default params : {0}'.format(params))
+        status, content, header = self._http_request(api, 'POST', params)
+        return status
+
+    def set_fts_memoryQuota(self, username='Administrator',
+                                 password='password',
+                                 ftsMemoryQuota=256):
+        api = self.baseUrl + 'pools/default'
+        params = urllib.urlencode({'ftsMemoryQuota': ftsMemoryQuota})
         log.info('pools/default params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)
         return status
@@ -956,7 +1025,7 @@ class RestConnection(object):
 
     def stop_replication(self, uri):
         log.info("Deleting replication {0}".format(uri))
-        api = self.baseUrl + uri
+        api = self.baseUrl[:-1] + uri
         self._http_request(api, 'DELETE')
 
     def remove_all_recoveries(self):
@@ -1257,7 +1326,8 @@ class RestConnection(object):
         retry = 0
         same_progress_count = 0
         previous_progress = 0
-        while progress != -1 and (progress != 100 or self._rebalance_progress_status() == 'running') and retry < 20:
+        while progress != -1 and (progress != 100 or \
+                    self._rebalance_progress_status() == 'running') and retry < 20:
             # -1 is error , -100 means could not retrieve progress
             progress = self._rebalance_progress()
             if progress == -100:
@@ -1266,7 +1336,8 @@ class RestConnection(object):
             else:
                 retry = 0
             if stop_if_loop:
-                # reset same_progress_count if get a different result, or progress is still O
+                # reset same_progress_count if get a different result,
+                # or progress is still O
                 # (it may take a long time until the results are different from 0)
                 if previous_progress != progress or progress == 0:
                     previous_progress = progress
@@ -1274,10 +1345,11 @@ class RestConnection(object):
                 else:
                     same_progress_count += 1
                 if same_progress_count > 50:
-                    log.error("apparently rebalance progress code in infinite loop: {0}".format(progress))
+                    log.error("apparently rebalance progress code in infinite loop:"
+                                                             " {0}".format(progress))
                     return False
-            # sleep for 5 seconds
-            time.sleep(5)
+            # sleep 10 seconds to printout less log
+            time.sleep(10)
         if progress < 0:
             log.error("rebalance progress code : {0}".format(progress))
             return False
@@ -1623,6 +1695,13 @@ class RestConnection(object):
             node_ip.append(node.ip)
         log.info("Number of node(s) in cluster is {0} node(s)".format(len(node_ip)))
         return len(node_ip)
+
+    """ this medthod return version on node that is not initialized yet """
+    def get_nodes_version(self):
+        node = self.get_nodes_self()
+        version = node.version
+        log.info("Node version in cluster {0}".format(version))
+        return version
 
     # this method returns the versions of nodes in cluster
     def get_nodes_versions(self):
@@ -2210,10 +2289,11 @@ class RestConnection(object):
             "POST",
             json.dumps(query_json, ensure_ascii=False).encode('utf8'),
             headers,
-            timeout=60)
+            timeout=70)
 
         if status:
             content = json.loads(content)
+            log.info("Status: %s" %content['status'])
             return content['total_hits'], content['hits'], content['took']
 
 

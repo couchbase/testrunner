@@ -47,7 +47,6 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.online_upgrade_type = self.input.param("online_upgrade_type","swap")
         self.final_events = []
         self.n1ql_helper = None
-        #self.free_nodes = []
         self.total_buckets = 1
         self.in_servers_pool = self._convert_server_map(self.servers[:self.nodes_init])
         """ Init nodes to not upgrade yet """
@@ -69,7 +68,7 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.after_gen_delete = BlobGenerator('upgrade', 'upgrade',\
                                       self.value_size, start=self.num_items * .5,\
                                                          end=self.num_items* 0.75)
-        self._install(self.servers)
+        self._install(self.servers[:self.nodes_init])
         self._log_start(self)
         self.cluster.rebalance([self.master], self.servers[1:self.nodes_init], [])
         """ sometimes, when upgrade failed and node does not install couchbase
@@ -114,7 +113,8 @@ class UpgradeTests(NewUpgradeBaseTest):
             if self.in_between_events:
                 self.event_threads += self.run_event(self.in_between_events)
             self.finish_events(self.event_threads)
-            self.monitor_dcp_rebalance()
+            if self.upgrade_type == "online":
+                self.monitor_dcp_rebalance()
             self.log.info("Will install upgrade version to any free nodes")
             out_nodes = self._get_free_nodes()
             self.log.info("Here is free nodes {0}".format(out_nodes))
@@ -135,12 +135,13 @@ class UpgradeTests(NewUpgradeBaseTest):
             if not self.success_run and self.failed_thread is not None:
                 raise Exception("*** Failed to {0} ***".format(self.failed_thread))
             """ Default set to always verify data """
-            for event in self.after_events[0].split("-"):
-                if "delete_buckets" in event:
-                    self.log.info("After events has delete buckets event. "
-                                  "No items verification needed")
-                    self.verify_after_events = False
-                    break
+            if self.after_events[0]:
+                for event in self.after_events[0].split("-"):
+                    if "delete_buckets" in event:
+                        self.log.info("After events has delete buckets event. "
+                                      "No items verification needed")
+                        self.verify_after_events = False
+                        break
             if self.verify_after_events:
                 self.log.info("*** Start data verification ***")
                 self.cluster_stats(self.in_servers_pool.values())
@@ -251,8 +252,8 @@ class UpgradeTests(NewUpgradeBaseTest):
         thread_list = []
         if self.upgrade_type == "online":
             t = threading.Thread(target=self.online_upgrade, args = ())
-        else:
-           t = threading.Thread(target=self.offline_upgrade, args = ())
+        elif self.upgrade_type == "offline":
+            t = threading.Thread(target=self.offline_upgrade, args = ())
         t.daemon = True
         t.start()
         thread_list.append(t)
@@ -708,15 +709,14 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info("offline_upgrade")
             stoped_nodes = self.servers[:self.nodes_init]
             for upgrade_version in self.upgrade_versions:
-                self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade to {0} version".\
-                           format(upgrade_version))
+                self.sleep(self.sleep_time, "Pre-setup of old version is done. "
+                        " Wait for upgrade to {0} version".format(upgrade_version))
                 for server in stoped_nodes:
                     remote = RemoteMachineShellConnection(server)
                     remote.stop_server()
                     remote.disconnect()
                 self.sleep(self.sleep_time)
                 upgrade_threads = self._async_update(upgrade_version, stoped_nodes)
-                self.force_reinstall(stoped_nodes)
                 for upgrade_thread in upgrade_threads:
                     upgrade_thread.join()
                 success_upgrade = True
@@ -725,6 +725,8 @@ class UpgradeTests(NewUpgradeBaseTest):
                 if not success_upgrade:
                     self.fail("Upgrade failed!")
                 self.dcp_rebalance_in_offline_upgrade_from_version2_to_version3()
+            """ set install cb version to upgrade version after done upgrade """
+            self.initial_version = self.upgrade_versions[0]
         except Exception, ex:
             self.log.info(ex)
             raise
@@ -835,6 +837,22 @@ class UpgradeTests(NewUpgradeBaseTest):
         try:
             self.log.info("kv_ops_delete")
             self._load_all_buckets(self.master, self.gen_delete, "delete", self.expire_time, flag=self.item_flag)
+        except Exception, ex:
+            self.log.info(ex)
+            raise
+
+    def add_sub_doc(self):
+        try:
+            self.log.info("add sub doc")
+            """add sub doc code here"""
+        except Exception, ex:
+            self.log.info(ex)
+            raise
+
+    def add_fts(self):
+        try:
+            self.log.info("add full text search")
+            """add sub doc code here"""
         except Exception, ex:
             self.log.info(ex)
             raise

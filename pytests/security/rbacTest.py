@@ -4,6 +4,8 @@ import urllib
 from security.rbacmain import rbacmain
 import json
 from remote.remote_util import RemoteMachineShellConnection
+from newupgradebasetest import NewUpgradeBaseTest
+from security.auditmain import audit
 
 class ServerInfo():
     def __init__(self,
@@ -53,6 +55,17 @@ class rbacTest(ldaptest):
 
     def tearDown(self):
         super(rbacTest, self).tearDown()
+
+    def getLocalIPAddress(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('couchbase.com', 0))
+        return s.getsockname()[0]
+        '''
+        status, ipAddress = commands.getstatusoutput("ifconfig en0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
+        if '1' not in ipAddress:
+            status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
+        return ipAddress
+        '''
 
 
 
@@ -316,3 +329,97 @@ class rbacTest(ldaptest):
     def test_role_permission_validate_multiple_rest_api(self):
         result = rbacmain(self.master,servers=self.servers,cluster=self.cluster)._check_role_permission_validate_multiple_rest_api(self.user_id,self.user_role,self.bucket_name,self.role_map)
         self.assertTrue(result,"Issue with role assignment and comparision with permission set")
+
+    def test_role_assignment_audit(self):
+        ops = self.input.param("ops",'assign')
+        if ops in ['assign','edit']:
+            eventID=rbacmain.AUDIT_ROLE_ASSIGN
+        elif ops == 'remove':
+            eventID=rbacmain.AUDIT_REMOVE_ROLE
+        Audit = audit(eventID=eventID, host=self.master)
+        currentState = Audit.getAuditStatus()
+        self.log.info ("Current status of audit on ip - {0} is {1}".format(self.master.ip, currentState))
+        if currentState:
+            Audit.setAuditEnable('false')
+        self.log.info ("Enabling Audit ")
+        Audit.setAuditEnable('true')
+        self.sleep(30)
+        user_name = self.input.param("user_name")
+        final_roles = rbacmain()._return_roles(self.user_role)
+        payload = "name=" + user_name + "&roles=" + final_roles
+        status, content, header =  rbacmain(self.master)._set_user_roles(user_name=self.user_id,payload=payload)
+        expectedResults = {"full_name":"RitamSharma","roles":["admin"],"identity:source":"saslauthd","identity:user":self.user_id,
+                           "real_userid:source":"ns_server","real_userid:user":"Administrator",
+                            "ip":self.ipAddress, "port":123456}
+        if ops == 'edit':
+            payload = "name=" + user_name + "&roles=" + 'admin,cluster_admin'
+            status, content, header =  rbacmain(self.master)._set_user_roles(user_name=self.user_id,payload=payload)
+            expectedResults = {"full_name":"RitamSharma","roles":["admin","cluster_admin"],"identity:source":"saslauthd","identity:user":self.user_id,
+                           "real_userid:source":"ns_server","real_userid:user":"Administrator",
+                            "ip":self.ipAddress, "port":123456}
+        elif ops == 'remove':
+            status, content, header = rbacmain(self.master)._delete_user(self.user_id)
+            expectedResults = {"identity:source":"saslauthd","identity:user":self.user_id,
+                           "real_userid:source":"ns_server","real_userid:user":"Administrator",
+                            "ip":self.ipAddress, "port":123456}
+        fieldVerification, valueVerification = Audit.validateEvents(expectedResults)
+        self.assertTrue(fieldVerification, "One of the fields is not matching")
+        self.assertTrue(valueVerification, "Values for one of the fields is not matching")
+
+
+class rbac_upgrade(NewUpgradeBaseTest,ldaptest):
+
+    def setUp(self):
+        super(rbac_upgrade, self).setUp()
+        self.initial_version = self.input.param("initial_version",'4.1.0-5005')
+        self.upgrade_version = self.input.param("upgrade_version", "4.5.0-2047")
+
+
+    def setup_4_1_settings(self):
+        rest = RestConnection(self.master)
+        self._setupLDAPAuth(rest, self.authRole, self.authState, self.fullAdmin, self.ROAdmin)
+
+    def tearDown(self):
+        super(rbac_upgrade, self).tearDown()
+
+    def upgrade_all_nodes(self):
+        servers_in = self.servers[1:]
+        self._install(self.servers)
+        self.cluster.rebalance(self.servers, servers_in, [])
+        self.user_role = self.input.param('user_role',None)
+        self.setup_4_1_settings()
+
+
+        upgrade_threads = self._async_update(upgrade_version=self.upgrade_version, servers=self.servers)
+        for threads in upgrade_threads:
+            threads.join()
+
+
+        for server in self.servers:
+            status, content, header = rbacmain(server)._retrieve_user_roles()
+            content = json.loads(content)
+            for user_id in self.fullAdmin:
+                temp = rbacmain()._parse_get_user_response(content,user_id[0],user_id[0],self.user_role)
+                self.assertTrue(temp,"Roles are not matching for user")
+
+
+
+    def upgrade_half_nodes(self):
+        serv_upgrade = self.servers[2:4]
+        servers_in = self.servers[1:]
+        self._install(self.servers)
+        self.cluster.rebalance(self.servers, servers_in, [])
+        self.user_role = self.input.param('user_role',None)
+        self.setup_4_1_settings()
+
+        upgrade_threads = self._async_update(upgrade_version=self.upgrade_version, servers=serv_upgrade)
+        for threads in upgrade_threads:
+            threads.join()
+
+        status, content, header = rbacmain(self.master)._retrieve_user_roles()
+        self.assertFalse(status,"Incorrect status for rbac cluster in mixed cluster {0} - {1} - {2}".format(status,content,header))
+
+        for server in serv_upgrade:
+            status, content, header = rbacmain(server)._retrieve_user_roles()
+            self.assertFalse(status,"Incorrect status for rbac cluster in mixed cluster {0} - {1} - {2}".format(status,content,header))
+

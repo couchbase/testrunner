@@ -5,24 +5,26 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from subdoc_autotestgenerator import SubdocAutoTestGenerator
 import copy
 
-class SubducScenarioTests(SubdocAutoTestGenerator):
+class SubdocScenarioTests(SubdocAutoTestGenerator):
 
     def setUp(self):
-        super(SubducScenarioTests, self).setUp()
+        super(SubdocScenarioTests, self).setUp()
+        self.graceful =  self.input.param("graceful",False)
         self.find_nodes_in_list()
         self.generate_map_nodes_out_dist()
         self.run_sync_data()
 
     def tearDown(self):
-        super(SubducScenarioTests, self).tearDown()
+        super(SubdocScenarioTests, self).tearDown()
 
     def test_rebalance_in(self):
         try:
             self.run_async_data()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],self.nodes_in_list, [], services = self.services_in)
             self.run_mutation_operations_for_situational_tests()
+            self.sleep(120, "Wait for rebalance")
             for t in self.load_thread_list:
-                if t.isAlive():
+                if t.is_alive():
                     if t != None:
                         t.signal = False
             rebalance.result()
@@ -34,8 +36,9 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
             self.run_async_data()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
             self.run_mutation_operations_for_situational_tests()
+            self.sleep(120, "Wait for rebalance")
             for t in self.load_thread_list:
-                if t.isAlive():
+                if t.is_alive():
                     if t != None:
                         t.signal = False
         except Exception, ex:
@@ -48,8 +51,9 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
                                     self.nodes_in_list,
                                    self.nodes_out_list, services = self.services_in)
             self.run_mutation_operations_for_situational_tests()
+            self.sleep(120, "Wait for rebalance")
             for t in self.load_thread_list:
-                if t.isAlive():
+                if t.is_alive():
                     if t != None:
                         t.signal = False
         except Exception, ex:
@@ -85,8 +89,9 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                    [], servr_out)
             self.run_mutation_operations_for_situational_tests()
+            self.sleep(120, "Wait for rebalance")
             for t in self.load_thread_list:
-                if t.isAlive():
+                if t.is_alive():
                     if t != None:
                         t.signal = False
         except Exception, ex:
@@ -118,8 +123,9 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
                 rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
             self.run_mutation_operations_for_situational_tests()
+            self.sleep(120, "Wait for rebalance")
             for t in self.load_thread_list:
-                if t.isAlive():
+                if t.is_alive():
                     if t != None:
                         t.signal = False
         except Exception, ex:
@@ -139,7 +145,7 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
                                    [], [servr_out[0]])
             self.run_mutation_operations_for_situational_tests()
             for t in self.load_thread_list:
-                if t.isAlive():
+                if t.is_alive():
                     if t != None:
                         t.signal = False
         except Exception, ex:
@@ -156,8 +162,9 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
             for node in self.nodes_out_list:
                 self.start_firewall_on_node(node)
             self.run_mutation_operations_for_situational_tests()
+            self.sleep(120, "Wait ..")
             for t in self.load_thread_list:
-                if t.isAlive():
+                if t.is_alive():
                     if t != None:
                         t.signal = False
         except Exception, ex:
@@ -174,10 +181,11 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
         for bucket in self.buckets:
             compact_tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
         self.run_mutation_operations_for_situational_tests()
+        self.sleep(120, "Wait for compaction")
         for task in compact_tasks:
             task.result()
         for t in self.load_thread_list:
-            if t.isAlive():
+            if t.is_alive():
                 if t != None:
                     t.signal = False
 
@@ -189,10 +197,11 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
             remote.stop_server()
             remote.start_server()
             remote.disconnect()
+            self.sleep(120, "Wait for warmup")
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
         self.run_mutation_operations_for_situational_tests()
         for t in self.load_thread_list:
-            if t.isAlive():
+            if t.is_alive():
                 if t != None:
                     t.signal = False
 
@@ -201,8 +210,9 @@ class SubducScenarioTests(SubdocAutoTestGenerator):
         self.run_async_data()
         for bucket in self.buckets:
             RestConnection(self.master).flush_bucket(bucket.name)
+            self.sleep(120, "Wait for flush")
         self.run_mutation_operations_for_situational_tests()
         for t in self.load_thread_list:
-            if t.isAlive():
+            if t.is_alive():
                 if t != None:
                     t.signal = False

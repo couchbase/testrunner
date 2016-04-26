@@ -364,12 +364,15 @@ class DMLQueryTests(QueryTests):
             for i in xrange(gen.end):
                 if len(keys) == num_docs:
                     break
+                #i=i+1
                 key, value = gen.next()
                 key = "insert_json" + key
                 for bucket in self.buckets:
                     query = 'INSERT into %s (key, value) VALUES ("%s", %s)' % (bucket.name, key, value)
                     if self.named_prepare:
-                        self.named_prepare="prepare_" + str(i)
+                        prefix = 'insert%s' % str(uuid.uuid4())[:5]
+                        i = i + 1
+                        self.named_prepare="prepare_" + prefix + str(i)
                         query = "PREPARE %s from %s" % (self.named_prepare,query)
                     else:
                         query = "PREPARE %s" % query
@@ -400,6 +403,7 @@ class DMLQueryTests(QueryTests):
                 self.query = 'insert into %s (key "%s_%s", value {"name": name}) select name from %s use keys ["%s"]'  % (bucket.name, prefix, str(i),
                                                                                               bucket.name, keys[i])
                 if self.named_prepare:
+                    i = i+1
                     self.named_prepare="prepare_" + prefix + str(i)
                     self.query = "PREPARE %s from %s" % (self.named_prepare,self.query)
                 else:

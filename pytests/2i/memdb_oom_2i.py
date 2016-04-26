@@ -222,7 +222,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         except ex:
             log.info(str(ex))
         finally:
-            log.info("Starting Couchbase on {0}".format(kv_node["ip"]))
+            log.info("Starting Couchbase on {0}".format(kv_node.ip))
             remote.start_server()
             self.sleep(10)
             self._verify_bucket_count_with_index_count(self.load_query_definitions)

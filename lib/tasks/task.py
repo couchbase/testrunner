@@ -28,6 +28,7 @@ from membase.api.exception import N1QLQueryException, DropIndexException, Create
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from TestInput import TestInputServer
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 
 try:
     CHECK_FLAG = False
@@ -121,11 +122,51 @@ class NodeInitializeTask(Task):
             self.set_result(True)
             return
 
+        self.quota = int(info.mcdMemoryReserved * 2/3)
+        if self.index_quota_percent:
+            self.index_quota = int((info.mcdMemoryReserved * 2/3) * \
+                                      self.index_quota_percent / 100)
+            rest.set_indexer_memoryQuota(username, password, self.index_quota)
+        if self.quota_percent:
+           self.quota = int(info.mcdMemoryReserved * self.quota_percent / 100)
+
+        """ Adjust KV RAM to correct value when there is INDEX
+            and FTS services added to node from Watson  """
+        index_quota = INDEX_QUOTA
+        if self.index_quota_percent:
+                index_quota = self.index_quota
+        if not self.quota_percent:
+            set_services = copy.deepcopy(self.services)
+            if set_services is None:
+                set_services = ["kv"]
+            if "index" in set_services and "fts" not in set_services:
+                kv_quota = int(info.mcdMemoryReserved * 2/3) - index_quota
+                if kv_quota > MIN_KV_QUOTA:
+                    if kv_quota < int(self.quota):
+                        self.quota = kv_quota
+                    rest.set_indexer_memoryQuota(indexMemoryQuota=index_quota)
+                else:
+                    self.set_exception(Exception("KV RAM need to be larger than %s MB "
+                                      "at node  %s"  % (MIN_KV_QUOTA, self.server.ip)))
+            elif "index" in set_services and "fts" in set_services:
+                kv_quota = int(info.mcdMemoryReserved * 2/3) - index_quota - FTS_QUOTA
+                if kv_quota > MIN_KV_QUOTA:
+                    if kv_quota < int(self.quota):
+                        self.quota = kv_quota
+                else:
+                    self.set_exception(Exception("KV RAM need to be larger than %s MB "
+                                      "at node  %s"  % (MIN_KV_QUOTA, self.server.ip)))
+        rest.init_cluster_memoryQuota(username, password, self.quota)
+        rest.set_indexer_storage_mode(username, password, self.gsi_type)
+
         if self.services:
-            status = rest.init_node_services(username= username, password = password, port = self.port, hostname= self.server.ip, services= self.services)
+            status = rest.init_node_services(username= username, password = password,\
+                                          port = self.port, hostname= self.server.ip,\
+                                                              services= self.services)
             if not status:
                 self.state = FINISHED
-                self.set_exception(Exception('unable to set services for server %s' % (self.server.ip)))
+                self.set_exception(Exception('unable to set services for server %s'\
+                                                               % (self.server.ip)))
                 return
         if self.disable_consistent_view is not None:
             rest.set_reb_cons_view(self.disable_consistent_view)
@@ -152,14 +193,6 @@ class NodeInitializeTask(Task):
             self.state = FINISHED
             self.set_exception(Exception('unable to get information on a server %s, it is available?' % (self.server.ip)))
             return
-        self.quota = int(info.mcdMemoryReserved * 2 / 3)
-        if self.quota_percent:
-           self.quota = int(info.mcdMemoryReserved * self.quota_percent / 100)
-        if self.index_quota_percent:
-            self.index_quota = int((info.mcdMemoryReserved * 2/3) *self.index_quota_percent / 100)
-            rest.set_indexer_memoryQuota(username, password, self.index_quota)
-        rest.init_cluster_memoryQuota(username, password, self.quota)
-        rest.set_indexer_storage_mode(username, password, self.gsi_type)
         self.state = CHECKING
         task_manager.schedule(self)
 
@@ -1065,12 +1098,15 @@ class ESRunQueryCompare(Task):
                           % str(self.query_index+1))
             try:
                 fts_hits, fts_doc_ids, fts_time = self.run_fts_query(self.fts_query)
-                self.log.info("FTS hits for query: %s is %s (took %sms)" % \
-                          (json.dumps(self.fts_query, ensure_ascii=False),
-                           fts_hits,
-                           float(fts_time)/1000000))
+                if fts_hits < 0:
+                    self.passed = False
+                else:
+                    self.log.info("FTS hits for query: %s is %s (took %sms)" % \
+                              (json.dumps(self.fts_query, ensure_ascii=False),
+                               fts_hits,
+                               float(fts_time)/1000000))
             except ServerUnavailableException:
-                self.log.error("ERROR: FTS Query timed out (timeout=30s)!")
+                self.log.error("ERROR: FTS Query timed out (timeout=60s)!")
                 self.passed = False
             if self.es and self.es_query['query']:
                 es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query)

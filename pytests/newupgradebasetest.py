@@ -124,7 +124,8 @@ class NewUpgradeBaseTest(BaseTestCase):
                         temp.append(server)
                 self.servers = temp
             except Exception, e:
-                self.log.info("Exception " + e)
+                if e:
+                    print "Exception ", e
                 self.cluster.shutdown(force=True)
                 self.fail(e)
             super(NewUpgradeBaseTest, self).tearDown()
@@ -407,7 +408,7 @@ class NewUpgradeBaseTest(BaseTestCase):
     def create_ddocs_and_views(self):
         self.default_view = View(self.default_view_name, None, None)
         for bucket in self.buckets:
-            for i in xrange(self.ddocs_num):
+            for i in xrange(int(self.ddocs_num)):
                 views = self.make_default_views(self.default_view_name, self.view_num,
                                                self.is_dev_ddoc, different_map=True)
                 ddoc = DesignDocument(self.default_view_name + str(i), views)

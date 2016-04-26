@@ -31,6 +31,12 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
 
+    def query_in_dgm(self):
+        self.create_simple_default_index()
+        for index in self._cb_cluster.get_indexes():
+            self.generate_random_queries(index, self.num_queries, self.query_types)
+            self.run_query_and_compare(index)
+
     def run_default_index_query(self, query=None, expected_hits=None):
         self.create_simple_default_index()
         zero_results_ok = True
@@ -164,10 +170,7 @@ class StableTopFTS(FTSBaseTest):
 
         # create indexes on both buckets
         emp_index = self.create_index(emp, "emp_index")
-        wiki_index = self.create_index(
-            wiki,
-            "wiki_index",
-            index_params={"default_analyzer": "simple"})
+        wiki_index = self.create_index(wiki, "wiki_index")
 
         self.wait_for_indexing_complete()
 

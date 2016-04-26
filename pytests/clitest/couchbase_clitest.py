@@ -377,12 +377,13 @@ class CouchbaseCliTest(CliBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                                 options=options, cluster_host="localhost", \
                                 user="Administrator", password="password")
-                if len(output) == 1:
-                    self.assertEqual(output, ["SUCCESS: server-add {0}:8091" \
-                                              .format(self.servers[num + 1].ip)])
+                if len(output) == 2:
+                    self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
+                                              "Server {0}:8091 added".format(self.servers[num + 1].ip)])
                 else:
-                    self.assertEqual(output, ["SUCCESS: server-add {0}:8091" \
-                                              .format(self.servers[num + 1].ip), ""])
+                    self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
+                                              "Server {0}:8091 added".format(self.servers[num + 1].ip),
+                                              ""])
         else:
              raise Exception("Node add should be smaller total number vms in ini file")
 
@@ -435,7 +436,7 @@ class CouchbaseCliTest(CliBaseTest):
                         cluster_host="localhost", user="Administrator", \
                                                   password="password")
                 output[0] = output[0].rstrip(" .")
-                if len(output) == 2:
+                if len(output) == 3:
                     self.assertEqual(output, ["INFO: graceful failover", \
                                               "SUCCESS: failover ns_1@{0}" \
                                               .format(self.servers[nodes_add - nodes_rem - num].ip), ""])
@@ -487,9 +488,12 @@ class CouchbaseCliTest(CliBaseTest):
                 options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
                 if len(output) == 2:
-                    self.assertEqual(output, ["SUCCESS: server-add {0}:8091".format(self.servers[num + 1].ip), ""])
+                    self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
+                                              "Server {0}:8091 added".format(self.servers[num + 1].ip)])
                 else:
-                    self.assertEqual(output, ["SUCCESS: server-add {0}:8091".format(self.servers[num + 1].ip)])
+                    self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
+                                              "Server {0}:8091 added".format(self.servers[num + 1].ip)],
+                                              "")
         else:
              raise Exception("Node add should be smaller total number vms in ini file")
 
@@ -581,8 +585,8 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                                               options=options, cluster_host="localhost", \
                                                 user="Administrator", password="password")
-            self.assertEqual(output, ["SUCCESS: server-add {0}:8091" \
-                                      .format(self.servers[num + 1].ip)])
+            self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
+                                      "Server {0}:8091 added".format(self.servers[num + 1].ip)])
 
         cli_command = "rebalance-status"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
@@ -700,7 +704,7 @@ class CouchbaseCliTest(CliBaseTest):
             options = "--cluster-init-username={0} {1}-password={2} {3}-port={4} {5}-ramsize={6}".\
                 format(cluster_init_username, param_prefix, cluster_init_password, param_prefix, cluster_init_port, param_prefix, cluster_init_ramsize)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user="Administrator", password="password")
-            self.assertEqual(output[0], "SUCCESS: init localhost")
+            self.assertEqual(output[0], "SUCCESS: init/edit localhost")
 
             if cli_command == "cluster-init":
                 options = "{0}-username={1} {2}-password={3} {4}-port={5} {6}-ramsize={7}".\
@@ -717,7 +721,7 @@ class CouchbaseCliTest(CliBaseTest):
                 output_tm, error_tm = remote_client.execute_couchbase_cli(cli_command="server-info", cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=cluster_init_username + "1", password=cluster_init_password + "1")
                 if "availableStorage" in output_tm[1]:
                     output[0] = "SUCCESS: init localhost"
-            self.assertEqual(output[0], "SUCCESS: init localhost")
+            self.assertEqual(output[0], "SUCCESS: init/edit localhost")
             server.rest_username = cluster_init_username + "1"
             server.rest_password = cluster_init_password + "1"
             server.port = str(cluster_init_port)[:-1] + "9"
@@ -745,7 +749,7 @@ class CouchbaseCliTest(CliBaseTest):
                 output_tm, error_tm = remote_client.execute_couchbase_cli(cli_command="server-info", cluster_host="localhost", cluster_port=str(cluster_init_port)[:-1] + "9", user=cluster_init_username + "1", password=cluster_init_password + "1")
                 if "availableStorage" in output_tm[1]:
                     output[0] = "SUCCESS: init localhost"
-            self.assertEqual(output[0], "SUCCESS: init localhost")
+            self.assertEqual(output[0], "SUCCESS: init/edit localhost")
 
             server.rest_username = cluster_init_username
             server.rest_password = cluster_init_password
@@ -1359,7 +1363,7 @@ class XdcrCLITest(CliBaseTest):
                 cluster_host = self.servers[xdcr_hostname].ip
             output, _ = self.__execute_cli(cli_command="ssl-manage", options="--retrieve-cert={0}".format(xdcr_cert), cluster_host=cluster_host)
             options += (" --xdcr-certificate={0}".format(xdcr_cert), "")[xdcr_cert is None]
-            self.assertNotEqual(output[0].find("SUCCESS"), -1, "ssl-manage CLI failed to retrieve certificate")
+            self.assertNotEqual(output[-1].find("SUCCESS"), -1, "ssl-manage CLI failed to retrieve certificate")
 
         output, error = self.__execute_cli(cli_command=cli_command, options=options)
         return output, error, xdcr_cluster_name, xdcr_hostname, cli_command, options

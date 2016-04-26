@@ -175,7 +175,7 @@ class QUERY:
                   "level": "",
                   "vectors": {}
                 },
-                "timeout": 0
+                "timeout": 60000
               }
             }
 
@@ -395,23 +395,6 @@ class NodeHelper:
         return str(dir)
 
     @staticmethod
-    def check_fts_log(server, str):
-        """ Checks if a string 'str' is present in goxdcr.log on server
-            and returns the number of occurances
-        """
-        shell = RemoteMachineShellConnection(server)
-        fts_log = NodeHelper.get_log_dir(server) + '/fts.log*'
-        count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
-                                        format(str, fts_log))
-        if isinstance(count, list):
-            count = int(count[0])
-        else:
-            count = int(count)
-        NodeHelper._log.info(count)
-        shell.disconnect()
-        return count
-
-    @staticmethod
     def rename_nodes(servers):
         """Rename server name from ip to their hostname
         @param servers: list of server objects.
@@ -555,12 +538,6 @@ class FTSIndex:
         if self.custom_map:
             self.generate_new_custom_map(seed=self.cm_id)
 
-        # for wiki docs, specify default analyzer as "simple"
-        if self.index_type == "fulltext-index" and \
-                (self.dataset == "wiki" or self.dataset == "all"):
-            self.index_definition['params'] = self.build_custom_index_params(
-                {"default_analyzer": "simple"})
-
         self.fts_queries = []
 
         if index_params:
@@ -603,7 +580,7 @@ class FTSIndex:
                     mapping['mapping']['default_mapping']['enabled'] = False
             mapping['mapping'].update(index_params)
         else:
-            mapping = INDEX_DEFAULTS.ALIAS_DEFINITION
+            mapping = {"targets": {}}
             mapping.update(index_params)
         return mapping
 
@@ -692,7 +669,7 @@ class FTSIndex:
         Takes a query dict, constructs a json, runs and returns results
         """
         query_dict = self.construct_cbft_query_json(query)
-        hits = 0
+        hits = -1
         matches = []
         doc_ids = []
         time_taken = 0
@@ -745,6 +722,8 @@ class CouchbaseCluster:
         self.__indexes = []
         self.__fts_nodes = []
         self.__non_fts_nodes = []
+        # to avoid querying certain nodes that undergo crash/reboot scenarios
+        self.__bypass_fts_nodes = []
         self.__separate_nodes_on_services()
 
     def __str__(self):
@@ -759,16 +738,29 @@ class CouchbaseCluster:
     def get_logger(self):
         return self.__log
 
+    def is_cluster_run(self):
+        cluster_run = False
+        for server in self.__nodes:
+            if server.ip == "127.0.0.1":
+                cluster_run = True
+        return cluster_run
+
     def __separate_nodes_on_services(self):
         self.__fts_nodes = []
         self.__non_fts_nodes = []
         service_map = RestConnection(self.__master_node).get_nodes_services()
         for node_ip, services in service_map.iteritems():
-            node = self.get_node(node_ip.split(':')[0], node_ip.split(':')[1])
-            if "fts" in services:
-                self.__fts_nodes.append(node)
+            if self.is_cluster_run():
+                # if cluster-run and ip not 127.0.0.1
+                ip = "127.0.0.1"
             else:
-                self.__non_fts_nodes.append(node)
+                ip = node_ip.split(':')[0]
+            node = self.get_node(ip, node_ip.split(':')[1])
+            if node:
+                if "fts" in services:
+                    self.__fts_nodes.append(node)
+                else:
+                    self.__non_fts_nodes.append(node)
 
     def get_fts_nodes(self):
         self.__separate_nodes_on_services()
@@ -816,11 +808,16 @@ class CouchbaseCluster:
     def get_indexes(self):
         return self.__indexes
 
+    def set_bypass_fts_node(self, node):
+        self.__bypass_fts_nodes.append(node)
+
     def get_random_node(self):
         return self.__nodes[random.randint(0, len(self.__nodes)-1)]
 
     def get_random_fts_node(self):
         self.__separate_nodes_on_services()
+        for node in self.__bypass_fts_nodes:
+            self.__fts_nodes.remove(node)
         if not self.__fts_nodes:
             raise FTSException("No node in the cluster has 'fts' service"
                                 " enabled")
@@ -887,6 +884,7 @@ class CouchbaseCluster:
             except Exception as e:
                     raise FTSException("Unable to initialize cluster with config "
                                         "%s: %s" %(cluster_services, e))
+
             self.__nodes += nodes_to_add
         self.__separate_nodes_on_services()
 
@@ -1101,9 +1099,9 @@ class CouchbaseCluster:
         """
         if not node:
             node = self.get_random_fts_node()
-        self.__log.info("Running query %s on node: %s"
+        self.__log.info("Running query %s on node: %s:%s"
                         % (json.dumps(query_dict, ensure_ascii=False),
-                           node.ip))
+                           node.ip, node.fts_port))
         total_hits, hit_list, time_taken = \
             RestConnection(node).run_fts_query(index_name, query_dict)
         return total_hits, hit_list, time_taken
@@ -1334,13 +1332,13 @@ class CouchbaseCluster:
         return task
 
 
-    def load_all_buckets_till_dgm(self, active_resident_threshold, items=0,
-                                  exp=0, kv_store=1, flag=0,
+    def load_all_buckets_till_dgm(self, active_resident_ratio, es=None,
+                                  items=1000, exp=0, kv_store=1, flag=0,
                                   only_store_hash=True, batch_size=1000,
                                   pause_secs=1, timeout_secs=30):
         """Load data synchronously on all buckets till dgm (Data greater than memory)
-        for given active_resident_threshold
-        @param active_resident_threshold: Dgm threshold.
+        for given active_resident_ratio
+        @param active_resident_ratio: Dgm threshold.
         @param value_size: size of the one item.
         @param exp: expiration value.
         @param kv_store: kv store index.
@@ -1366,7 +1364,7 @@ class CouchbaseCluster:
                 'vb_active_perc_mem_resident')[self.__master_node]
             start = items
             end = start + batch_size * 10
-            while int(current_active_resident) > active_resident_threshold:
+            while int(current_active_resident) > active_resident_ratio:
                 self.__log.info("loading %s keys ..." % (end-start))
 
                 kv_gen = JsonDocGenerator(seed,
@@ -1380,6 +1378,11 @@ class CouchbaseCluster:
                     OPS.CREATE, exp, flag, only_store_hash, batch_size,
                     pause_secs, timeout_secs))
 
+                if es:
+                    tasks.append(es.async_bulk_load_ES(index_name='default_es_index',
+                                                        gen=kv_gen,
+                                                        op_type='create'))
+
                 for task in tasks:
                     task.result()
                 start = end
@@ -1392,7 +1395,7 @@ class CouchbaseCluster:
                 self.__log.info(
                     "Current resident ratio: %s, desired: %s bucket %s" % (
                         current_active_resident,
-                        active_resident_threshold,
+                        active_resident_ratio,
                         bucket.name))
             self.__log.info("Loaded a total of %s keys into bucket %s"
                             % (end,bucket.name))
@@ -1688,8 +1691,9 @@ class CouchbaseCluster:
         """
         return self.__async_swap_rebalance(master=True, services=services)
 
-    def async_swap_rebalance(self, services=None):
-        return self.__async_swap_rebalance(services=services)
+    def async_swap_rebalance(self, num_nodes=1, services=None):
+        return self.__async_swap_rebalance(num_nodes=num_nodes,
+                                           services=services)
 
     def swap_rebalance_master(self, services=None):
         """Swap rebalance master node and wait
@@ -1703,6 +1707,22 @@ class CouchbaseCluster:
         task = self.__async_swap_rebalance(services=services,
                                            num_nodes = num_nodes)
         task.result()
+
+    def async_failover_and_rebalance(self, master=False, num_nodes=1,
+                                      graceful=False):
+        """Asynchronously failover nodes from Cluster
+        @param master: True if failover master node only.
+        @param num_nodes: number of nodes to rebalance-out from cluster.
+        @param graceful: True if graceful failover else False.
+        """
+        task = self.__async_failover(master=master,
+                                     num_nodes=num_nodes,
+                                     graceful=graceful)
+        task.result()
+        tasks = self.__clusterop.async_rebalance(self.__nodes, [], [],
+                                                 services=None)
+        return tasks
+
 
     def __async_failover(self, master=False, num_nodes=1, graceful=False):
         """Failover nodes from Cluster
@@ -1796,6 +1816,42 @@ class CouchbaseCluster:
                 self.__nodes.append(node)
         self.__clusterop.rebalance(self.__nodes, [], [], services=services)
         self.__fail_over_nodes = []
+
+    def async_failover_add_back_node(self, num_nodes=1, graceful=False,
+                                     recovery_type=None, services=None):
+        """add-back failed-over node to the cluster.
+            @param recovery_type: delta/full
+        """
+        task = self.__async_failover(
+            master=False,
+            num_nodes=num_nodes,
+            graceful=graceful)
+        task.result()
+        time.sleep(60)
+        if graceful:
+            # use rebalance stats to monitor failover
+            RestConnection(self.__master_node).monitorRebalance()
+
+        raise_if(
+            len(self.__fail_over_nodes) < 1,
+            FTSException("No failover nodes available to add_back")
+        )
+        rest = RestConnection(self.__master_node)
+        server_nodes = rest.node_statuses()
+        for failover_node in self.__fail_over_nodes:
+            for server_node in server_nodes:
+                if server_node.ip == failover_node.ip:
+                    rest.add_back_node(server_node.id)
+                    if recovery_type:
+                        rest.set_recovery_type(
+                            otpNode=server_node.id,
+                            recoveryType=recovery_type)
+        for node in self.__fail_over_nodes:
+            if node not in self.__nodes:
+                self.__nodes.append(node)
+        self.__fail_over_nodes = []
+        tasks = self.__clusterop.async_rebalance(self.__nodes, [], [], services=services)
+        return tasks
 
     def warmup_node(self, master=False):
         """Warmup node on cluster
@@ -1896,7 +1952,7 @@ class FTSBaseTest(unittest.TestCase):
     def tearDown(self):
         """Clusters cleanup"""
         if len(self.__report_error_list) > 0:
-            error_logger = self.check_errors_in_fts_logs()
+            error_logger = self.check_error_count_in_fts_log()
             if error_logger:
                 self.fail("Errors found in logs : {0}".format(error_logger))
 
@@ -1974,7 +2030,7 @@ class FTSBaseTest(unittest.TestCase):
         # simply append to this list, any error from log we want to fail test on
         self.__report_error_list = []
         if self.__fail_on_errors:
-            self.__report_error_list = ["panic:", "SIGABRT: abort"]
+            self.__report_error_list = ["panic:", "crash in forestdb"]
 
         # for format {ip1: {"panic": 2}}
         self.__error_count_dict = {}
@@ -2031,8 +2087,8 @@ class FTSBaseTest(unittest.TestCase):
         self._disable_compaction = self._input.param("disable_compaction","")
         self._item_count_timeout = self._input.param("item_count_timeout", 300)
         self._dgm_run = self._input.param("dgm_run", False)
-        self._active_resident_threshold = \
-            self._input.param("active_resident_threshold", 100)
+        self._active_resident_ratio = \
+            self._input.param("active_resident_ratio", 100)
         CHECK_AUDIT_EVENT.CHECK = self._input.param("verify_audit", 0)
         self._max_verify = self._input.param("max_verify", 100000)
         self._num_vbuckets = self._input.param("vbuckets", 1024)
@@ -2073,9 +2129,7 @@ class FTSBaseTest(unittest.TestCase):
         """
         for node in self._input.servers:
             self.__error_count_dict[node.ip] = {}
-            for error in self.__report_error_list:
-                self.__error_count_dict[node.ip][error] = \
-                    NodeHelper.check_fts_log(node, error)
+        self.check_error_count_in_fts_log(initial=True)
         self.log.info(self.__error_count_dict)
 
     def __cleanup_previous(self):
@@ -2086,7 +2140,8 @@ class FTSBaseTest(unittest.TestCase):
         cluster_nodes = self._cb_cluster.get_nodes()
         for server in total_servers:
             for cluster_node in cluster_nodes:
-                if server.ip == cluster_node.ip:
+                if server.ip == cluster_node.ip and\
+                                server.port == cluster_node.port:
                     break
                 else:
                     continue
@@ -2183,7 +2238,7 @@ class FTSBaseTest(unittest.TestCase):
 
         else:
             self._cb_cluster.load_all_buckets_till_dgm(
-                active_resident_threshold=self._active_resident_threshold,
+                active_resident_ratio=self._active_resident_ratio,
                 items=self._num_items)
 
     def load_utf16_data(self, num_keys=None):
@@ -2278,39 +2333,51 @@ class FTSBaseTest(unittest.TestCase):
                 "Waiting for expiration of updated items")
             self._cb_cluster.run_expiry_pager()
 
-    def print_panic_stacktrace(self, node):
+    def print_crash_stacktrace(self, node, error):
         """ Prints panic stacktrace from goxdcr.log*
         """
         shell = RemoteMachineShellConnection(node)
-        result, err = shell.execute_command("zgrep -A 40 'panic:' {0}/fts.log*".
-                            format(NodeHelper.get_log_dir(node)))
+        result, err = shell.execute_command("zgrep -A 40 -B 4 '{0}' {1}/fts.log*".
+                            format(error, NodeHelper.get_log_dir(node)))
         for line in result:
             self.log.info(line)
         shell.disconnect()
 
-    def check_errors_in_fts_logs(self):
+    def check_error_count_in_fts_log(self, initial=False):
         """
         checks if new errors from self.__report_error_list
         were found on any of the goxdcr.logs
         """
         error_found_logger = []
+        fts_log = NodeHelper.get_log_dir(self._input.servers[0]) + '/fts.log*'
         for node in self._input.servers:
+            shell = RemoteMachineShellConnection(node)
             for error in self.__report_error_list:
-                new_error_count = NodeHelper.check_fts_log(node, error)
-                self.log.info("Initial '{0}' count on {1} :{2}, now :{3}".
+                count, err = shell.execute_command(
+                    "zgrep \"{0}\" {1} | wc -l".format(error, fts_log))
+                if isinstance(count, list):
+                    count = int(count[0])
+                else:
+                    count = int(count)
+                NodeHelper._log.info(count)
+                if initial:
+                    self.__error_count_dict[node.ip][error] = count
+                else:
+                    self.log.info("Initial '{0}' count on {1} :{2}, now :{3}".
                             format(error,
                                 node.ip,
                                 self.__error_count_dict[node.ip][error],
-                                new_error_count))
-                if node.ip in self.__error_count_dict.keys():
-                    if (new_error_count  > self.__error_count_dict[node.ip][error]):
-                        error_found_logger.append("{0} found on {1}".format(error,
+                                count))
+                    if node.ip in self.__error_count_dict.keys():
+                        if (count  > self.__error_count_dict[node.ip][error]):
+                            error_found_logger.append("{0} found on {1}".format(error,
                                                                         node.ip))
-                        if "panic" in error:
-                            self.print_panic_stacktrace(node)
-        if error_found_logger:
-            self.log.error(error_found_logger)
-        return error_found_logger
+                            self.print_crash_stacktrace(node, error)
+            shell.disconnect()
+        if not initial:
+            if error_found_logger:
+                self.log.error(error_found_logger)
+            return error_found_logger
 
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
@@ -2321,7 +2388,7 @@ class FTSBaseTest(unittest.TestCase):
         Wait for index_count for any index to stabilize
         """
         index_doc_count = 0
-        retry = self._input.param("index_retry", 5)
+        retry = self._input.param("index_retry", 10)
         start_time = time.time()
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "alias":
@@ -2353,12 +2420,13 @@ class FTSBaseTest(unittest.TestCase):
                     retry_count = retry
                 else:
                     retry_count -= 1
-                time.sleep(10)
+                time.sleep(6)
         self.log.info("FTS indexed %s docs in %s mins"
                       % (index_doc_count, round(float((time.time()-start_time)/60), 2)))
 
     def construct_plan_params(self):
         plan_params = {}
+        plan_params['numReplicas'] = 0
         if self.index_replicas:
             plan_params['numReplicas'] = self.index_replicas
         if self.partitions_per_pindex:
@@ -2401,7 +2469,7 @@ class FTSBaseTest(unittest.TestCase):
         3. if index is distributed - present on all fts nodes, almost equally?
         4. if index balanced - every fts node services almost equal num of vbs?
         """
-
+        self.log.info("Validating index distribution for %s ..." % index.name)
         nodes_partitions = self.populate_node_partition_map(index)
 
         # check 1 - test number of pindexes
@@ -2441,7 +2509,7 @@ class FTSBaseTest(unittest.TestCase):
                           " distributed,pindexes spread across %s while "
                           "fts nodes are %s" % (nodes_partitions.keys(),
                                                 self._cb_cluster.get_fts_nodes()))
-            self.sleep(10, "pIndexes not distributed across % nodes yet"
+            self.sleep(10, "pIndexes not distributed across %s nodes yet"
                            % num_fts_nodes)
             nodes_partitions = self.populate_node_partition_map(index)
         else:
@@ -2603,7 +2671,7 @@ class FTSBaseTest(unittest.TestCase):
 
 
     def create_index_es(self, index_name="es_index"):
-        self.es.create_empty_index(index_name)
+        self.es.create_empty_index_with_bleve_equivalent_std_analyzer(index_name)
         self.log.info("Created empty index %s on Elastic Search node"
                       % index_name)
 
@@ -2638,6 +2706,11 @@ class FTSBaseTest(unittest.TestCase):
         """
          Blocking call to load data to Couchbase and ES
         """
+        if self._dgm_run:
+            self._cb_cluster.load_all_buckets_till_dgm(
+                self._active_resident_ratio,
+                self.compare_es)
+            return
         load_tasks = self.async_load_data()
         for task in load_tasks:
             task.result()

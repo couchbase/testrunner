@@ -26,8 +26,9 @@ from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_REPO
 from testconstants import CB_REPO
 from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
-from testconstants import CB_VERSION_NAME
+from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON
+from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 import TestInput
 
 
@@ -426,27 +427,63 @@ class CouchbaseServerInstaller(Installer):
                     init_nodes = params["init_nodes"]
                 else:
                     init_nodes = "True"
-                if (isinstance(init_nodes, bool) and init_nodes) or (init_nodes.lower() == "true"):
-                    if server.services:
+                if (isinstance(init_nodes, bool) and init_nodes) \
+                                                 or (init_nodes.lower() == "true"):
+                    if not server.services:
+                        set_services = ["kv"]
+                    elif server.services:
+                        set_services = server.services.split(',')
+
+                    kv_quota = 0
+                    while kv_quota == 0:
+                        time.sleep(1)
+                        kv_quota = int(rest.get_nodes_self().mcdMemoryReserved)
+                    info = rest.get_nodes_self()
+                    cb_version = info.version[:5]
+
+                    if cb_version in COUCHBASE_FROM_VERSION_4:
+                        if "index" in set_services and "fts" not in set_services:
+                            log.info("quota for index service will be %s MB" \
+                                                              % (INDEX_QUOTA))
+                            kv_quota = int(info.mcdMemoryReserved) - INDEX_QUOTA
+                            if kv_quota < MIN_KV_QUOTA:
+                                raise Exception("KV RAM needs to be more than %s MB"
+                                        " at node  %s"  % (MIN_KV_QUOTA, server.ip))
+                        elif "index" in set_services and "fts" in set_services:
+                            log.info("quota for index service will be %s MB" \
+                                                              % (INDEX_QUOTA))
+                            log.info("quota for fts service will be %s MB" \
+                                                                % (FTS_QUOTA))
+                            kv_quota = int(info.mcdMemoryReserved) - INDEX_QUOTA \
+                                                                 - FTS_QUOTA
+                            rest.set_fts_memoryQuota(ftsMemoryQuota=FTS_QUOTA)
+                            if kv_quota < MIN_KV_QUOTA:
+                                raise Exception("KV RAM need to be more than %s MB"
+                                       " at node  %s"  % (MIN_KV_QUOTA, server.ip))
+                        elif "fts" in set_services and "index" not in set_services:
+                            log.info("quota for fts service will be %s MB" \
+                                                                % (FTS_QUOTA))
+                            kv_quota = int(info.mcdMemoryReserved) - FTS_QUOTA
+                            if kv_quota < MIN_KV_QUOTA:
+                                raise Exception("KV RAM need to be more than %s MB"
+                                       " at node  %s"  % (MIN_KV_QUOTA, server.ip))
+                            """ for fts, we need to grep quota from ns_server
+                                but need to make it works even RAM of vm is
+                                smaller than 2 GB """
+                            rest.set_fts_memoryQuota(ftsMemoryQuota=FTS_QUOTA)
+                    """ set kv quota smaller than 1 MB so that it will satify
+                        the condition smaller than allow quota """
+                    kv_quota -= 1
+                    log.info("quota for kv: %s MB" % kv_quota)
+                    rest.init_cluster_memoryQuota(server.rest_username, \
+                                                       server.rest_password, \
+                                                                     kv_quota)
+                    if params["version"][:5] in COUCHBASE_FROM_VERSION_4:
                         rest.init_node_services(username=server.rest_username,
                                                 password=server.rest_password,
-                                                services=server.services.split(','))
+                                                        services=set_services)
                     rest.init_cluster(username=server.rest_username,
-                                      password=server.rest_password)
-                    memory_quota = rest.get_nodes_self().mcdMemoryReserved
-                    # give the cluster time to get the memQuota
-                    while memory_quota == 0:
-                       time.sleep(1)
-                       memory_quota = rest.get_nodes_self().mcdMemoryReserved
-
-                    rest.init_cluster_memoryQuota(memoryQuota=memory_quota)
-
-                # TODO: Symlink data-dir to custom path
-                # remote_client.stop_couchbase()
-                # remote_client.execute_command('mv /opt/couchbase/var {0}'.format(server.data_path))
-                # remote_client.execute_command('ln -s {0}/var /opt/couchbase/var'.format(server.data_path))
-                # remote_client.execute_command("chown -h couchbase:couchbase /opt/couchbase/var")
-                # remote_client.start_couchbase()
+                                         password=server.rest_password)
 
                 # Optionally disable consistency check
                 if params.get('disable_consistency', 0):
@@ -459,6 +496,9 @@ class CouchbaseServerInstaller(Installer):
                 if mem_req_tap_env:
                     remote_client.set_environment_variable('MEMCACHED_REQS_TAP_EVENT',
                                                            mem_req_tap_env)
+                """ set cbauth environment variables from Watson version
+                    it is checked version inside method """
+                remote_client.set_cbauth_env(server)
                 remote_client.disconnect()
                 # TODO: Make it work with windows
                 if "erlang_threads" in params:

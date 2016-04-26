@@ -404,10 +404,10 @@ class rbacPermissionList():
             _cluster_bucket_data_write[perm] = temp
 
         bucket_data_write = {"create_doc_id":"pools/default/buckets/default/docs/1234;POST;{'click':'to edit','with JSON':'there are no reserved field names'}"}
-        result = self._return_http_code(bucket_data_write,username,password,host=host,port=8092, httpCode=httpCode, user_role=user_role)
+        result = self._return_http_code(bucket_data_write,username,password,host=host,port=8091, httpCode=httpCode, user_role=user_role)
 
         bucket_data_write = {"create_doc_id":"pools/default/buckets/default/docs/1234;DELETE"}
-        result = self._return_http_code(bucket_data_write,username,password,host=host,port=8092, httpCode=httpCode, user_role=user_role)
+        result = self._return_http_code(bucket_data_write,username,password,host=host,port=8091, httpCode=httpCode, user_role=user_role)
 
 
     def cluster_bucket_recovery_read(self,username,password,host,port=8091, servers=None,cluster=None,httpCode=None,user_role=None):
@@ -440,11 +440,11 @@ class rbacPermissionList():
 
     def cluster_stats_read(self,username,password,host,port=8091, servers=None,cluster=None,httpCode=None,user_role=None):
         _cluster_stats_read = {
-            "overviewStats":"pools/default/overviewStats;GET",
-            "stats_direcotry":"pools/default/buckets/<name>/statsDirectory;GET",
+            #"overviewStats":"pools/default/overviewStats;GET",
+            #"stats_direcotry":"pools/default/buckets/<name>/statsDirectory;GET",
             #"query_stats":"pools/default/buckets/@query/stats;GET",
-            "xdcr_stat":"pools/default/buckets/@xdcr-<bucket_name>/stats;GET",
-            "index_stat":"pools/default/buckets/@index-<bucket_name>/stats;GET",
+            #"xdcr_stat":"pools/default/buckets/@xdcr-<bucket_name>/stats;GET",
+            #"index_stat":"pools/default/buckets/@index-<bucket_name>/stats;GET",
             #"node_stat":"pools/default/buckets/@query/nodes/<node_id>/stats;GET",
             #"xdcr_node_bucket":"pools/default/buckets/@xdcr-<bucket_name>/nodes/<node_id>/stats;GET",
             #"bucket_node":"pools/default/buckets/@index-<bucket_name>/nodes/<node_id>/stats;GET"
@@ -457,7 +457,7 @@ class rbacPermissionList():
             temp = temp.replace('<node_id>',host.ip)
             _cluster_stats_read[perm] = temp
 
-        result = self._return_http_code(_cluster_stats_read,username,password,host=host,port=8091, httpCode=httpCode, user_role=user_role)
+        #result = self._return_http_code(_cluster_stats_read,username,password,host=host,port=8091, httpCode=httpCode, user_role=user_role)
 
 
     def cluster_bucket_stats_read(self,username,password,host,port=8091, servers=None,cluster=None,httpCode=None,user_role=None):

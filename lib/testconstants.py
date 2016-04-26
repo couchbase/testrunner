@@ -8,27 +8,28 @@ COUCHBASE_DATA_PATH = "/opt/couchbase/var/lib/couchbase/data/"
 COUCHBASE_VERSIONS = ["1.8.0r", "1.8.0", "1.8.1", "2.0.0", "2.0.1", "2.0.2", "2.1.0",
                       "2.1.1", "2.2.0", "2.2.1", "2.5.0", "2.5.1", "2.5.2", "3.0.0",
                       "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2", "3.1.3",
-                      "3.1.4", "3.5.0", "4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.5.0",
-                      "4.7.0"]
+                      "3.1.4", "3.1.5", "3.5.0", "4.0.0", "4.0.1", "4.1.0", "4.1.1",
+                      "4.5.0", "4.7.0"]
 COUCHBASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1",
-                            "3.1.2", "3.1.3", "3.1.4", "3.5.0", "4.0.0", "4.0.1",
-                            "4.1.0", "4.1.1", "4.5.0", "4.7.0"]
+                            "3.1.2", "3.1.3", "3.1.4", "3.1.5", "3.5.0", "4.0.0",
+                            "4.0.1", "4.1.0", "4.1.1", "4.5.0", "4.7.0"]
 COUCHBASE_RELEASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0",
                                     "3.1.1", "3.1.2", "3.1.3", "4.0.0", "4.1.0"]
 COUCHBASE_FROM_VERSION_4 = ["4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.5.0", "4.7.0"]
+COUCHBASE_FROM_WATSON = ["4.5.0", "4.7.0"]
 COUCHBASE_RELEASE_VERSIONS_3 = ["3.0.1", "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
                                 "3.0.3-1716", "3.1.0", "3.1.0-1797", "3.1.1", "3.1.1-1807",
                                 "3.1.2", "3.1.2-1815", "3.1.3", "3.1.3-1823"]
 CE_EE_ON_SAME_FOLDER = ["2.0.0", "2.0.1", "2.0.2", "2.1.0", "2.1.1", "2.2.0",
                         "2.2.1", "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1"]
-COUCHBASE_MP_VERSION = ["3.1.3", "3.1.4"]
+COUCHBASE_MP_VERSION = ["3.1.3", "3.1.4", "3.1.5"]
 COUCHBASE_VERSION_2 = ["2.0.0", "2.0.1", "2.0.2", "2.1.0", "2.1.1", "2.2.0", "2.2.1",
                        "2.5.0", "2.5.1", "2.5.2"]
 COUCHBASE_VERSION_2_WITH_REL = ["2.5.0", "2.5.1"]
 COUCHBASE_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2",
-                       "3.1.3", "3.1.4", "3.5.0"]
+                       "3.1.3", "3.1.4", "3.1.5", "3.5.0"]
 WIN_CB_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1","3.1.2",
-                    "3.1.3", "3.1.4"]
+                    "3.1.3", "3.1.4", "3.1.5"]
 SHERLOCK_VERSION = ["4.0.0", "4.0.1", "4.0", "4.1.0", "4.1", "4.1.1", "4.5.0", "4.5"]
 WATSON_VERSION = ["4.5.0"]
 CB_VERSION_NAME = {"4.0":"sherlock", "4.1":"sherlock", "4.5":"watson", "4.7":"spock"}
@@ -38,7 +39,7 @@ WIN_CB_PATH = "/cygdrive/c/Program Files/Couchbase/Server/"
 WIN_MB_PATH = "/cygdrive/c/Program Files/Membase/Server/"
 WIN_PROCESSES_KILLED = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*",
                         "iexplore.*", "WerFault.*", "Firefox.*", "bash.exe",
-                        "cbq-engine.exe"]
+                        "chrome.exe", "cbq-engine.exe"]
 LINUX_CB_PATH = "/opt/couchbase/"
 WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F", "170":"AF3F80E5-2CA3-409C-B59B-6E0DC805BC3F",
                    "171":"73C5B189-9720-4719-8577-04B72C9DC5A2", "1711":"73C5B189-9720-4719-8577-04B72C9DC5A2",
@@ -53,7 +54,7 @@ WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F", "170":"AF3F80E
                    "302":"DD309984-2414-FDF4-11AA-85A733064291", "303":"0410F3F3-9F5F-5614-51EC-7DC9F7050055",
                    "310":"5E5D7293-AC1D-3424-E583-0644411FDA20", "311":"41276A8D-2A65-88D4-BDCC-8C4FE109F4B8",
                    "312":"F0794D16-BD9D-4638-9EEA-0E591F170BD7", "313":"71C57EAD-8903-0DA4-0919-25A0B17E20F0",
-                   "314":"040F761F-28D9-F0F4-99F1-9D572E6EB826",
+                   "314":"040F761F-28D9-F0F4-99F1-9D572E6EB826", "315":"BC2C3394-12A0-A334-51F0-F1204EC43243",
                    "350":"24D9F882-481C-2B04-0572-00B273CE17B3", "400":"24D9F882-481C-2B04-0572-00B273CE17B3",
                    "401":"898C4818-1F6D-C554-1163-6DF5C0F1F7D8", "410":"898C4818-1F6D-C554-1163-6DF5C0F1F7D8",
                    "411":"8A2472CD-C408-66F4-B53F-6797FCBF7F4C",
@@ -70,6 +71,9 @@ MIN_TIME_VALUE = 0
 MAX_TIME_MINUTE = 59
 MAX_TIME_HOUR = 23
 NUM_ERLANG_THREADS = 16
+MIN_KV_QUOTA = 250
+INDEX_QUOTA = 512
+FTS_QUOTA = 256
 LINUX_COUCHBASE_BIN_PATH = "/opt/couchbase/bin/"
 LINUX_COUCHBASE_SAMPLE_PATH = "/opt/couchbase/samples/"
 LINUX_BACKUP_PATH = "/tmp/backup/"
@@ -117,17 +121,25 @@ CB_DOWNLOAD_SERVER = "172.23.120.24"
 # old url MV_LATESTBUILD_REPO = "http://builds.hq.northscale.net/latestbuilds/"
 MV_LATESTBUILD_REPO = "http://latestbuilds.hq.couchbase.com/"
 #SHERLOCK_BUILD_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/sherlock/"
-SHERLOCK_BUILD_REPO = "http://{}/builds/latestbuilds/couchbase-server/sherlock/".format(CB_DOWNLOAD_SERVER)
+SHERLOCK_BUILD_REPO = "http://{0}/builds/latestbuilds/couchbase-server/sherlock/".format(CB_DOWNLOAD_SERVER)
 #COUCHBASE_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
-COUCHBASE_REPO = "http://{}/builds/latestbuilds/couchbase-server/".format(CB_DOWNLOAD_SERVER)
-CB_LATESTBUILDS_REPO = "http://{}/builds/latestbuilds/"
+COUCHBASE_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DOWNLOAD_SERVER)
+CB_LATESTBUILDS_REPO = "http://{0}/builds/latestbuilds/"
 #CB_LATESTBUILDS_REPO = "http://latestbuilds.hq.couchbase.com/latestbuilds/"
-CB_REPO = "http://{}/builds/latestbuilds/couchbase-server/".format(CB_DOWNLOAD_SERVER)
+CB_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DOWNLOAD_SERVER)
 #CB_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
-CB_RELEASE_REPO = "http://{}/builds/releases/".format(CB_DOWNLOAD_SERVER)
+CB_RELEASE_REPO = "http://{0}/builds/releases/".format(CB_DOWNLOAD_SERVER)
 #MV_RELEASE_REPO = "http://latestbuilds.hq.couchbase.com/release"
 MC_BIN_CLIENT = "mc_bin_client"
 TESTRUNNER_CLIENT = "testrunner_client"
 PYTHON_SDK = "python_sdk"
 CB_RELEASE_APT_GET_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-release/10/couchbase-release-1.0-0.deb"
 CB_RELEASE_YUM_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-release/10/couchbase-release-1.0-0.noarch.rpm"
+DEWIKI = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/dewiki.txt.gz"
+ENWIKI = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/enwiki.txt.gz"
+ESWIKI = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/eswiki.txt.gz"
+FRWIKI = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/frwiki.txt.gz"
+QUERY_5K_FIELDS = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/query_50000_fields.txt"
+QUERY_5K_NUM_DATE = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/query_50000_functions_numeric_string_datetime.txt"
+QUERY_JOIN = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/queries_joins_50000.txt"
+QUERY_SUBQUERY = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/queries_subqueries_1000.txt"

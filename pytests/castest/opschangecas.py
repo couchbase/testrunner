@@ -7,6 +7,10 @@ from mc_bin_client import MemcachedError
 
 from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
+import json
+
+
+from remote.remote_util import RemoteMachineShellConnection
 
 class OpsChangeCasTests(CasBaseTest):
 
@@ -179,3 +183,116 @@ class OpsChangeCasTests(CasBaseTest):
                 k += 1
             except Exception as ex:
                 raise Exception(ex)
+
+
+    def _corrupt_max_cas(self, mcd, key):
+
+        # set the CAS to -2 and then mutate to increment to -1 and then it should stop there
+        mcd.setWithMeta(key, json.dumps({'value':'value2'}), 0, 0, 0, -2)
+        #print 'max cas pt1', mcd.getMeta(key)[4]
+        mcd.set(key, 0, 0,json.dumps({'value':'value3'}))
+        #print 'max cas pt2', mcd.getMeta(key)[4]
+        mcd.set(key, 0, 0,json.dumps({'value':'value4'}))
+        #print 'max cas pt3', mcd.getMeta(key)[4]
+
+
+
+    # test for MB-17517 - verify that if max CAS somehow becomes -1 we can recover from it
+    def corrupt_cas_is_healed_on_rebalance_out_in(self):
+
+        self.log.info('Start corrupt_cas_is_healed_on_rebalance_out_in')
+
+        KEY_NAME = 'key1'
+
+
+        rest = RestConnection(self.master)
+        client = VBucketAwareMemcached(rest, 'default')
+
+        # set a key
+        client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':'value1'}))
+
+
+        # figure out which node it is on
+        mc_active = client.memcached(KEY_NAME)
+        mc_replica = client.memcached( KEY_NAME, replica_index=0 )
+
+
+        # set the CAS to -2 and then mutate to increment to -1 and then it should stop there
+        self._corrupt_max_cas(mc_active,KEY_NAME)
+
+        # CAS should be 0 now, do some gets and sets to verify that nothing bad happens
+
+
+        resp = mc_active.get(KEY_NAME)
+        self.log.info( 'get for {0} is {1}'.format(KEY_NAME, resp))
+
+
+        # remove that node
+        self.log.info('Remove the node with -1 max cas')
+
+        rebalance = self.cluster.async_rebalance(self.servers[-1:], [] ,[self.master])
+        #rebalance = self.cluster.async_rebalance([self.master], [], self.servers[-1:])
+
+        rebalance.result()
+        replica_CAS = mc_replica.getMeta(KEY_NAME)[4]
+
+
+
+        # add the node back
+        self.log.info('Add the node back, the max_cas should be healed')
+        rebalance = self.cluster.async_rebalance(self.servers[-1:], [self.master], [])
+        #rebalance = self.cluster.async_rebalance([self.master], self.servers[-1:],[])
+
+        rebalance.result()
+
+
+        # verify the CAS is good
+        client = VBucketAwareMemcached(rest, 'default')
+        mc_active = client.memcached(KEY_NAME)
+        active_CAS = mc_active.getMeta(KEY_NAME)[4]
+
+
+        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS,replica_CAS))
+
+
+    # One node only needed for this test
+    def corrupt_cas_is_healed_on_reboot(self):
+        self.log.info('Start corrupt_cas_is_healed_on_reboot')
+
+        KEY_NAME = 'key1'
+
+
+        rest = RestConnection(self.master)
+        client = VBucketAwareMemcached(rest, 'default')
+
+        # set a key
+        client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':'value1'}))
+        #client.memcached(KEY_NAME).set('k2', 0, 0,json.dumps({'value':'value2'}))
+
+
+        # figure out which node it is on
+        mc_active = client.memcached(KEY_NAME)
+
+        # set the CAS to -2 and then mutate to increment to -1 and then it should stop there
+        self._corrupt_max_cas(mc_active,KEY_NAME)
+
+
+
+        #print 'max cas k2', mc_active.getMeta('k2')[4]
+
+        # CAS should be 0 now, do some gets and sets to verify that nothing bad happens
+
+        #self._restart_memcache('default')
+        remote = RemoteMachineShellConnection(self.master)
+        remote.stop_server()
+        time.sleep(30)
+        remote.start_server()
+        time.sleep(30)
+
+
+        rest = RestConnection(self.master)
+        client = VBucketAwareMemcached(rest, 'default')
+        mc_active = client.memcached(KEY_NAME)
+
+        maxCas = mc_active.getMeta(KEY_NAME)[4]
+        self.assertTrue(maxCas == 0, 'max cas after reboot is not 0 it is {0}'.format(maxCas))

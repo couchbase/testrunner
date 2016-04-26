@@ -100,10 +100,12 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self.rest.add_node(self.master.rest_username, self.master.rest_password, node.ip, node.port)
         chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
         # Mark Node for failover
+        self.sleep(30)
         success_failed_over = self.rest.fail_over(chosen[0].id, graceful=False)
         # Mark Node for full recovery
         if success_failed_over:
             self.rest.set_recovery_type(otpNode=chosen[0].id, recoveryType=recovery_type)
+        self.sleep(30)
         self.shuffle_nodes_between_zones_and_rebalance(servs_out)
         self._verify_stats_all_buckets(result_nodes, timeout=120)
         self.verify_cluster_stats(result_nodes, check_ep_items_remaining=True)

@@ -29,6 +29,8 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.initialize_multi_create_index(buckets = self.buckets,
                     query_definitions = self.load_query_definitions)
         self.drop_indexes_in_between = self.input.param("drop_indexes_in_between", False)
+        if len(self.index_nodes_out) == len(self.services_map["index"]):
+            self.all_index_nodes_lost = True
 
     def tearDown(self):
         if hasattr(self, 'query_definitions'):
@@ -291,11 +293,13 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         try:
             kvOps_tasks = self._run_kvops_tasks()
             before_index_ops = self._run_before_index_tasks()
+            self._run_tasks([before_index_ops])
             for node in self.nodes_out_list:
                 self.start_firewall_on_node(node)
             in_between_index_ops = self._run_in_between_tasks()
-            self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
-            self._run_after_index_tasks()
+            self._run_tasks([kvOps_tasks, in_between_index_ops])
+            if not self.all_index_nodes_lost:
+                self._run_after_index_tasks()
         except Exception, ex:
             raise
         finally:
@@ -445,10 +449,11 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         if self.ops_map["in_between"]["create_index"]:
             self.index_nodes_out = []
         self._redefine_index_usage()
-        tasks = self.async_check_and_run_operations(buckets = self.buckets, in_between = True,
-            scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
-        tasks += self._drop_indexes_in_between()
-        return tasks
+        if not self.all_index_nodes_lost:
+            tasks_ops = self.async_check_and_run_operations(buckets = self.buckets, in_between = True,
+                scan_consistency = self.scan_consistency, scan_vectors = self.scan_vectors)
+            tasks_ops += self._drop_indexes_in_between()
+        return tasks_ops
 
     def _drop_indexes_in_between(self):
         drop_tasks =[]

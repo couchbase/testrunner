@@ -28,11 +28,11 @@ class CommunityBaseTest(BaseTestCase):
         self.backup_option = self.input.param("backup_option", '')
         #define the data that will be used to test
         self.blob_generator = self.input.param("blob_generator", True)
-        rest = RestConnection(self.master)
-        if rest.is_enterprise_edition():
+        self.rest = RestConnection(self.master)
+        if self.rest.is_enterprise_edition():
             raise Exception("This couchbase server is not Community Edition."
                   "Tests require Community Edition to test")
-        self.version = rest.get_nodes_versions()[0][:5]
+        self.version = self.rest.get_nodes_version()[:5]
 
         if self.blob_generator:
             #gen_load data is used for upload before each test(1000 items by default)

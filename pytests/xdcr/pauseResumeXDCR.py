@@ -123,7 +123,10 @@ class PauseResumeTest(XDCRNewBaseTest):
         except Exception as e:
             self.log.info(e)
 
+        self._wait_for_replication_to_catchup()
+        self.pause_xdcr()
         self.perform_update_delete()
+        self.resume_xdcr()
         self.verify_results()
 
     def view_query_pause_resume(self):

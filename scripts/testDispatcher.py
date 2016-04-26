@@ -53,6 +53,8 @@ def main():
 
     print 'the run is', options.run
     print 'the  version is', options.version
+    releaseVersion = float( '.'.join( options.version.split('.')[:2]) )
+    print 'release version is', releaseVersion
 
     print 'nolaunch', options.noLaunch
     print 'os', options.os
@@ -106,28 +108,34 @@ def main():
             data = row['QE-Test-Suites']
             print 'row', data
 
+            # check any os specific
             if 'os' not in data or (data['os'] == options.os) or \
                 (data['os'] == 'linux' and options.os in set(['centos','ubuntu']) ):
-                if 'jenkins' in data:
-                    # then this is sort of a special case, launch the old style Jenkins job
-                    # not implemented yet
-                    print 'Old style Jenkins', data['jenkins']
+
+                # and also check for which release it is implemented in
+                if 'implementedIn' not in data or releaseVersion >= float(data['implementedIn']):
+                    if 'jenkins' in data:
+                        # then this is sort of a special case, launch the old style Jenkins job
+                        # not implemented yet
+                        print 'Old style Jenkins', data['jenkins']
+                    else:
+                        if 'initNodes' in data:
+                            initNodes = data['initNodes'].lower() == 'true'
+                        else:
+                            initNodes = True
+                        if 'installParameters' in data:
+                            installParameters = data['installParameters']
+                        else:
+                            installParameters = 'None'
+
+
+                        testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],
+                                    'confFile':data['confFile'], 'iniFile':data['config'],
+                                    'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
+                                    'parameters':data['parameters'], 'initNodes':initNodes,
+                                    'installParameters':installParameters})
                 else:
-                    if 'initNodes' in data:
-                        initNodes = data['initNodes'].lower() == 'true'
-                    else:
-                        initNodes = True
-                    if 'installParameters' in data:
-                        installParameters = data['installParameters']
-                    else:
-                        installParameters = 'None'
-
-
-                    testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],
-                                'confFile':data['confFile'], 'iniFile':data['config'],
-                                'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
-                                'parameters':data['parameters'], 'initNodes':initNodes,
-                                'installParameters':installParameters})
+                    print data['component'], data['subcomponent'], ' is not supported in this release'
             else:
                 print 'OS does not apply to', data['component'], data['subcomponent']
 
@@ -139,6 +147,7 @@ def main():
     print 'tests to launch:'
     for i in testsToLaunch: print i['component'], i['subcomponent']
     print '\n\n'
+
 
 
     launchStringBase = 'http://qa.sc.couchbase.com/job/test_suite_executor'

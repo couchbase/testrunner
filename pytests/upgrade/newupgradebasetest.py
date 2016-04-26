@@ -17,12 +17,17 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from pprint import pprint
+from testconstants import CB_REPO
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
+from testconstants import COUCHBASE_VERSIONS
 from testconstants import SHERLOCK_VERSION
+from testconstants import CB_VERSION_NAME
 from testconstants import COUCHBASE_FROM_VERSION_3
+from testconstants import COUCHBASE_MP_VERSION
+from testconstants import CE_EE_ON_SAME_FOLDER
 
 
 class NewUpgradeBaseTest(BaseTestCase):
@@ -30,7 +35,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         super(NewUpgradeBaseTest, self).setUp()
         self.released_versions = ["2.0.0-1976-rel", "2.0.1", "2.5.0", "2.5.1",
                                   "2.5.2", "3.0.0", "3.0.1",
-                                  "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3"]
+                                  "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
+                                  "3.1.0", "3.1.1", "3.1.2", "3.1.3"]
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
@@ -118,7 +124,8 @@ class NewUpgradeBaseTest(BaseTestCase):
                         temp.append(server)
                 self.servers = temp
             except Exception, e:
-                self.log.info("Exception " + e)
+                if e:
+                    print "Exception ", e
                 self.cluster.shutdown(force=True)
                 self.fail(e)
             super(NewUpgradeBaseTest, self).tearDown()
@@ -193,9 +200,12 @@ class NewUpgradeBaseTest(BaseTestCase):
     def _get_build(self, server, version, remote, is_amazon=False, info=None):
         if info is None:
             info = remote.extract_remote_info()
-        build_repo = MV_LATESTBUILD_REPO
-        if version[:3] == "3.5" or version[:3] == "4.0":
-            build_repo = SHERLOCK_BUILD_REPO
+        build_repo = CB_REPO
+        if version[:5] in COUCHBASE_VERSIONS:
+            if version[:3] in CB_VERSION_NAME:
+                build_repo = CB_REPO + CB_VERSION_NAME[version[:3]] + "/"
+            elif version[:5] in COUCHBASE_MP_VERSION:
+                build_repo = MV_LATESTBUILD_REPO
         builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5, \
                     deliverable_type=info.deliverable_type, architecture_type=info.architecture_type, \
                     edition_type="couchbase-server-enterprise", repo=build_repo, \
@@ -206,7 +216,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             version = version + "-rel"
         if version[:5] in self.released_versions:
             appropriate_build = BuildQuery().\
-                find_membase_release_build('%s-enterprise' % (self.product),
+                find_couchbase_release_build('%s-enterprise' % (self.product),
                                            info.deliverable_type,
                                            info.architecture_type,
                                            version.strip(),
@@ -406,7 +416,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.default_view = View(self.default_view_name, None, None)
         for bucket in self.buckets:
             if int(self.ddocs_num) > 0:
-                for i in xrange(self.ddocs_num):
+                for i in xrange(int(self.ddocs_num)):
                     views = self.make_default_views(self.default_view_name,
                             self.view_num, self.is_dev_ddoc, different_map=True)
                     ddoc = DesignDocument(self.default_view_name + str(i), views)
@@ -508,9 +518,9 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def monitor_dcp_rebalance(self):
         if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
-                        self.input.param('released_upgrade_version', None)[:5] in \
-                                                         COUCHBASE_FROM_VERSION_3:
-            if int(self.initial_vbuckets) >= 256:
+           (self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3 or \
+            self.input.param('upgrade_version', '')[:5] in SHERLOCK_VERSION):
+            if int(self.initial_vbuckets) >= 512:
                 if self.master.ip != self.rest.ip or \
                    self.master.ip == self.rest.ip and \
                    str(self.master.port) != str(self.rest.port):
@@ -521,7 +531,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 if self.rest._rebalance_progress_status() == 'running':
                     self.log.info("Start monitoring DCP rebalance upgrade from {0} to {1}"\
                                   .format(self.input.param('initial_version', '')[:5], \
-                                   self.input.param('released_upgrade_version', None)[:5]))
+                                   self.input.param('upgrade_version', '')[:5]))
                     status = self.rest.monitorRebalance()
                 else:
                     self.fail("DCP reabalance upgrade is not running")
@@ -558,3 +568,82 @@ class NewUpgradeBaseTest(BaseTestCase):
     def generate_map_nodes_out_dist_upgrade(self, nodes_out_dist):
         self.nodes_out_dist = nodes_out_dist
         self.generate_map_nodes_out_dist()
+
+    """ subdoc base test starts here """
+    def generate_json_for_nesting(self):
+        json = {
+            "not_tested_integer_zero":0,
+            "not_tested_integer_big":1038383839293939383938393,
+            "not_tested_double_zero":0.0,
+            "not_tested_integer":1,
+            "not_tested_integer_negative":-1,
+            "not_tested_double":1.1,
+            "not_tested_double_negative":-1.1,
+            "not_tested_float":2.99792458e8,
+            "not_tested_float_negative":-2.99792458e8,
+            "not_tested_array_numbers_integer" : [1,2,3,4,5],
+            "not_tested_array_numbers_double" : [1.1,2.2,3.3,4.4,5.5],
+            "not_tested_array_numbers_float" : [2.99792458e8,2.99792458e8,2.99792458e8],
+            "not_tested_array_numbers_mix" : [0,2.99792458e8,1.1],
+            "not_tested_array_array_mix" : [[2.99792458e8,2.99792458e8,2.99792458e8],[0,2.99792458e8,1.1],[],[0, 0, 0]],
+            "not_tested_simple_string_lower_case":"abcdefghijklmnoprestuvxyz",
+            "not_tested_simple_string_upper_case":"ABCDEFGHIJKLMNOPQRSTUVWXZYZ",
+            "not_tested_simple_string_empty":"",
+            "not_tested_simple_string_datetime":"2012-10-03 15:35:46.461491",
+            "not_tested_simple_string_special_chars":"_-+!#@$%&*(){}\][;.,<>?/",
+            "not_test_json" : { "not_to_bes_tested_string_field1": "not_to_bes_tested_string"}
+        }
+        return json
+
+    def generate_simple_data_null(self):
+        json = {
+            "null":None,
+            "null_array":[None, None]
+        }
+        return json
+
+    def generate_simple_data_boolean(self):
+        json = {
+            "true":True,
+            "false":False,
+            "array":[True, False, True, False]
+        }
+        return json
+
+    def generate_nested_json(self):
+        json_data = self.generate_json_for_nesting()
+        json = {
+            "json_1": { "json_2": {"json_3":json_data}}
+        }
+        return json
+
+    def generate_simple_data_numbers(self):
+        json = {
+            "integer_zero":0,
+            "integer_big":1038383839293939383938393,
+            "double_zero":0.0,
+            "integer":1,
+            "integer_negative":-1,
+            "double":1.1,
+            "double_negative":-1.1,
+            "float":2.99792458e8,
+            "float_negative":-2.99792458e8,
+        }
+        return json
+
+    def subdoc_direct_client(self, server, bucket, timeout=30):
+        # CREATE SDK CLIENT
+        if self.use_sdk_client:
+            try:
+                from sdk_client import SDKClient
+                scheme = "couchbase"
+                host=self.master.ip
+                if self.master.ip == "127.0.0.1":
+                    scheme = "http"
+                    host="{0}:{1}".format(self.master.ip,self.master.port)
+                return SDKClient(scheme=scheme,hosts = [host], bucket = bucket.name)
+            except Exception, ex:
+                self.log.info("cannot load sdk client due to error {0}".format(str(ex)))
+        # USE MC BIN CLIENT WHEN NOT USING SDK CLIENT
+        return self.direct_mc_bin_client(server, bucket, timeout= timeout)
+    """ subdoc base test ends here """

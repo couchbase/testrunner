@@ -85,11 +85,10 @@ class N1QLHelper():
             # else:
             #os = self.shell.extract_remote_info().type.lower()
             shell = RemoteMachineShellConnection(server)
-            import pdb;pdb.set_trace()
             #query = query.replace('"', '\\"')
             #query = query.replace('`', '\\`')
             #if os == "linux":
-            cmd = "%s/go_cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
+            cmd = "%s/cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
             output = shell.execute_commands_inside(cmd,query,"","","","","")
             print "--------------------------------------------------------------------------------------------------------------------------------"
             print output
@@ -617,3 +616,5 @@ class N1QLHelper():
         self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip,server.port))
         self.shell.execute_command("export NS_SERVER_CBAUTH_USER=\"{0}\"".format(server.rest_username))
         self.shell.execute_command("export NS_SERVER_CBAUTH_PWD=\"{0}\"".format(server.rest_password))
+        self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip,server.port))
+        self.shell.execute_command("export CBAUTH_REVRPC_URL=\"http://{0}:{1}@{2}:{3}/query\"".format(server.rest_username,server.rest_password,server.ip,server.port))

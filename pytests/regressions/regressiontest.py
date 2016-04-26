@@ -20,11 +20,3 @@ class RegressionTests(BaseTestCase):
         except MemcachedError, e:
             if e.status != memcacheConstants.ERR_EXISTS:
                 self.fail("Expected replace to return EEXISTS, returned: {0}".format(e.status))
-
-    def test_MB_14288(self):
-        mc = MemcachedClientHelper.proxy_client(self.master, "default")
-        blob = bytearray(1024 * 1024 * 10)
-        mc.set("MB-14288", 0, 0, blob)
-        flags_v, cas_v, retrieved = mc.get("MB-14288")
-        if not blob == retrieved:
-            self.fail("It should be possible to store and retrieve values > 1M")
