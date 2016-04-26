@@ -416,7 +416,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.default_view = View(self.default_view_name, None, None)
         for bucket in self.buckets:
             if int(self.ddocs_num) > 0:
-                for i in xrange(self.ddocs_num):
+                for i in xrange(int(self.ddocs_num)):
                     views = self.make_default_views(self.default_view_name,
                             self.view_num, self.is_dev_ddoc, different_map=True)
                     ddoc = DesignDocument(self.default_view_name + str(i), views)
