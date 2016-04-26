@@ -2068,7 +2068,7 @@ class FTSBaseTest(unittest.TestCase):
         self._cluster_services = \
             self.construct_serv_list(self._input.param("cluster", "D,D+F,F"))
         self._num_replicas = self._input.param("replicas", 1)
-        self._create_default_bucket = self._input.param("default_bucket",True)
+        self._create_default_bucket = self._input.param("default_bucket", True)
         self._num_items = self._input.param("items", 1000)
         self._value_size = self._input.param("value_size", 512)
         self._poll_timeout = self._input.param("poll_timeout", 120)
@@ -2084,7 +2084,7 @@ class FTSBaseTest(unittest.TestCase):
         self._rebalance = self._input.param("rebalance", "")
         self._failover = self._input.param("failover", "")
         self._wait_timeout = self._input.param("timeout", 60)
-        self._disable_compaction = self._input.param("disable_compaction","")
+        self._disable_compaction = self._input.param("disable_compaction", "")
         self._item_count_timeout = self._input.param("item_count_timeout", 300)
         self._dgm_run = self._input.param("dgm_run", False)
         self._active_resident_ratio = \
@@ -2388,7 +2388,7 @@ class FTSBaseTest(unittest.TestCase):
         Wait for index_count for any index to stabilize
         """
         index_doc_count = 0
-        retry = self._input.param("index_retry", 10)
+        retry = self._input.param("index_retry", 20)
         start_time = time.time()
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "alias":

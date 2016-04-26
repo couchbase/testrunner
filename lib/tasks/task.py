@@ -1106,7 +1106,7 @@ class ESRunQueryCompare(Task):
                                fts_hits,
                                float(fts_time)/1000000))
             except ServerUnavailableException:
-                self.log.error("ERROR: FTS Query timed out (timeout=60s)!")
+                self.log.error("ERROR: FTS Query timed out (client timeout=70s)!")
                 self.passed = False
             if self.es and self.es_query['query']:
                 es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query)
