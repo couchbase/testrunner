@@ -9,7 +9,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.kvstore import KVStore
 #from 2i.indexscans_2i import SecondaryIndexingScanTests
 from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3
+from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_VERSION_3
 from testconstants import SHERLOCK_VERSION
 
 
@@ -416,7 +416,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.online_upgrade()
         self.sleep(10)
 
-        if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_3:
+        if self.input.param('initial_version', '')[:5] in COUCHBASE_FROM_VERSION_3:
             self.master = self.servers[self.nodes_init : self.num_servers][0]
         """ verify DCP upgrade in 3.0.0 version """
         self.monitor_dcp_rebalance()
