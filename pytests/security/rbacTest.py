@@ -1,11 +1,13 @@
-from security.ldaptest import ldaptest
-from membase.api.rest_client import RestConnection
-import urllib
-from security.rbacmain import rbacmain
 import json
-from remote.remote_util import RemoteMachineShellConnection
+import urllib
+
+from membase.api.rest_client import RestConnection
 from newupgradebasetest import NewUpgradeBaseTest
+from remote.remote_util import RemoteMachineShellConnection
 from security.auditmain import audit
+from security.ldaptest import ldaptest
+from security.rbacmain import rbacmain
+
 
 class ServerInfo():
     def __init__(self,

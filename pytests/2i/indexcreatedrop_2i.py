@@ -1,4 +1,5 @@
 import logging
+
 from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
 from remote.remote_util import RemoteMachineShellConnection

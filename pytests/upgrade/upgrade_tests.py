@@ -1,25 +1,13 @@
-from newupgradebasetest import NewUpgradeBaseTest
-import json
-import os
-import zipfile
-import pprint
 import Queue
-import json
-import logging
 import copy
-from membase.helper.cluster_helper import ClusterOperationHelper
-import mc_bin_client
 import threading
-from memcached.helper.data_helper import  VBucketAwareMemcached
-from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
-from membase.api.rest_client import RestConnection, Bucket
-from couchbase_helper.tuq_helper import N1QLHelper
-from couchbase_helper.query_helper import QueryHelper
-from TestInput import TestInputSingleton
-from couchbase_helper.tuq_helper import N1QLHelper
-from couchbase_helper.query_helper import QueryHelper
-from membase.api.rest_client import RestConnection, RestHelper
+
 from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.tuq_helper import N1QLHelper
+from membase.api.rest_client import RestConnection, RestHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
+from newupgradebasetest import NewUpgradeBaseTest
+from remote.remote_util import RemoteMachineShellConnection
 
 
 class UpgradeTests(NewUpgradeBaseTest):

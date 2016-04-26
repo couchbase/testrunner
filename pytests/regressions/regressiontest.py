@@ -1,7 +1,8 @@
-from basetestcase import BaseTestCase
-from memcached.helper.data_helper import MemcachedClientHelper
-from mc_bin_client import MemcachedError
 import memcacheConstants
+from basetestcase import BaseTestCase
+from mc_bin_client import MemcachedError
+from memcached.helper.data_helper import MemcachedClientHelper
+
 
 class RegressionTests(BaseTestCase):
     def setUp(self):

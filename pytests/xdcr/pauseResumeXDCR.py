@@ -1,5 +1,7 @@
-from xdcrnewbasetests import XDCRNewBaseTest, Utility, OPS
 from threading import Thread
+
+from xdcrnewbasetests import XDCRNewBaseTest, Utility
+
 
 class PauseResumeTest(XDCRNewBaseTest):
     def setUp(self):

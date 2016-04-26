@@ -1,6 +1,3 @@
-import paramiko
-from membase.api.rest_client import RestConnection
-import testconstants
 from remote.remote_util import RemoteMachineShellConnection
 from tuq import QueryTests
 

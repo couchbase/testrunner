@@ -1,26 +1,25 @@
-import logger
-import time
-import unittest
-import os
-import urllib2
+import ConfigParser
 import commands
-import types
 import datetime
+import os
+import time
+import types
+import unittest
+from threading import Thread
+
 from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait, Select
-from selenium.common.exceptions import NoSuchElementException
-from threading import Thread
-import ConfigParser
-from TestInput import TestInputSingleton,TestInputParser, TestInputServer
-from remote.remote_util import RemoteMachineShellConnection
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import Select
+
+import logger
+from TestInput import TestInputSingleton
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-
+from remote.remote_util import RemoteMachineShellConnection
 
 """
 *** IMPORTANT! NEED TO READ BEFORE RUN UI TEST ***

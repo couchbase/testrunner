@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 import getopt
-import sys
 import os
-import time
-from threading import Thread
-from datetime import datetime
-import subprocess
 import platform
+import subprocess
+import sys
+import time
+from datetime import datetime
+from threading import Thread
 
 sys.path = [".", "lib"] + sys.path
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW

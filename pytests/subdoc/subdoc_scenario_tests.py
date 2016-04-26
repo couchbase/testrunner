@@ -1,9 +1,8 @@
-from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
-from couchbase_helper.query_definitions import QueryDefinition
 from membase.helper.cluster_helper import ClusterOperationHelper
+from remote.remote_util import RemoteMachineShellConnection
 from subdoc_autotestgenerator import SubdocAutoTestGenerator
-import copy
+
 
 class SubdocScenarioTests(SubdocAutoTestGenerator):
 

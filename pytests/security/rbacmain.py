@@ -1,10 +1,12 @@
-from membase.api.rest_client import RestConnection
 import json
-from security.rbacRoles import rbacRoles
+
 import logger
+from membase.api.rest_client import RestConnection
+from security.rbacRoles import rbacRoles
+
 log = logger.Logger.get_logger()
 import base64
-from security.rbacPermissionList import rbacPermissionList
+
 
 class rbacmain:
     AUDIT_ROLE_ASSIGN=8232

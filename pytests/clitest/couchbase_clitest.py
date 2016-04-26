@@ -1,12 +1,10 @@
 import json
-
 from threading import Thread
 
-from membase.api.rest_client import RestConnection
 from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
+from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
-from pprint import pprint
 from testconstants import CLI_COMMANDS
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',

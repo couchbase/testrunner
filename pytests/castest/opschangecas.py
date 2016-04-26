@@ -1,16 +1,14 @@
+import json
 import time
-import logger
-from memcacheConstants import ERR_NOT_FOUND
+
 from castest.cas_base import CasBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
 from mc_bin_client import MemcachedError
-
-from membase.api.rest_client import RestConnection, RestHelper
+from membase.api.rest_client import RestConnection
+from memcacheConstants import ERR_NOT_FOUND
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
-import json
-
-
 from remote.remote_util import RemoteMachineShellConnection
+
 
 class OpsChangeCasTests(CasBaseTest):
 

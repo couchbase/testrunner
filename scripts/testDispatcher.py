@@ -1,19 +1,12 @@
-
-import sys
-import urllib2
-import urllib
-import httplib2
 import json
-import string
 import time
-from optparse import OptionParser
 import traceback
+import urllib
+from optparse import OptionParser
 
-from couchbase import Couchbase
+import httplib2
 from couchbase.bucket import Bucket
-from couchbase.exceptions import CouchbaseError
 from couchbase.n1ql import N1QLQuery
-
 
 # takes an ini template as input, standard out is populated with the server pool
 # need a descriptor as a parameter

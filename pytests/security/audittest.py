@@ -1,28 +1,14 @@
-import json
-import time
-from threading import Thread, Event
+import socket
+import urllib
+
+import logger
+import testconstants
 from basetestcase import BaseTestCase
-from couchbase_helper.document import DesignDocument, View
-from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
-from membase.helper.rebalance_helper import RebalanceHelper
-from membase.api.exception import ReadDocumentException
-from membase.api.exception import DesignDocCreationException
-from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
-import testconstants
-from testconstants import LINUX_COUCHBASE_BIN_PATH
-from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
-from testconstants import MAC_COUCHBASE_BIN_PATH
-from random import randint
-from datetime import datetime
-import commands
-import logger
-import urllib
 from security.auditmain import audit
-from security.ldaptest import ldaptest
-import socket
+
 log = logger.Logger.get_logger()
 
 

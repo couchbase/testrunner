@@ -1,8 +1,9 @@
-from base_2i import BaseSecondaryIndexingTests
 import copy
+
+from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
-from couchbase_helper.tuq_generators import TuqGenerators
+
 QUERY_TEMPLATE = "SELECT {0} FROM %s "
 
 class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):

@@ -1,7 +1,7 @@
-from fts_base import FTSBaseTest, FTSException
-from fts_base import NodeHelper
 from TestInput import TestInputSingleton
-from threading import Thread
+from fts_base import FTSBaseTest
+from fts_base import NodeHelper
+
 
 class MovingTopFTS(FTSBaseTest):
 

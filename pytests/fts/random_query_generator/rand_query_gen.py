@@ -1,5 +1,6 @@
-import random
 import json
+import random
+
 #import sys
 #sys.path.append("/Users/apiravi/testrunner")
 from emp_querables import EmployeeQuerables

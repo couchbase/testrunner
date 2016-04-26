@@ -2,15 +2,15 @@
 
 # TODO: add installer support for membasez
 
-import getopt
+import Queue
 import copy
+import getopt
 import logging
 import os
-import sys
-from threading import Thread
-from datetime import datetime
 import socket
-import Queue
+import sys
+from datetime import datetime
+from threading import Thread
 
 sys.path = [".", "lib"] + sys.path
 import testconstants
@@ -22,11 +22,9 @@ from membase.api.rest_client import RestConnection, RestHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from testconstants import MV_LATESTBUILD_REPO
-from testconstants import SHERLOCK_BUILD_REPO
-from testconstants import COUCHBASE_REPO
 from testconstants import CB_REPO
 from testconstants import COUCHBASE_VERSION_2
-from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_WATSON
+from testconstants import COUCHBASE_VERSION_3
 from testconstants import CB_VERSION_NAME, COUCHBASE_FROM_VERSION_4
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA
 import TestInput

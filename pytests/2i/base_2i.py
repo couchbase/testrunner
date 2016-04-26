@@ -1,8 +1,9 @@
-from newtuq import QueryTests
 import random
+
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
-from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.rest_client import RestConnection
+from newtuq import QueryTests
+
 
 class BaseSecondaryIndexingTests(QueryTests):
 

@@ -1,20 +1,12 @@
-import json
-import time
-from threading import Thread, Event
-from basetestcase import BaseTestCase
-from couchbase_helper.document import DesignDocument, View
-from couchbase_helper.documentgenerator import DocumentGenerator
-from membase.api.rest_client import RestConnection
-from membase.helper.rebalance_helper import RebalanceHelper
-from membase.api.exception import ReadDocumentException
-from membase.api.exception import DesignDocCreationException
-from membase.helper.cluster_helper import ClusterOperationHelper
-from remote.remote_util import RemoteMachineShellConnection
-import commands
-from security.auditmain import audit
-from clitest.cli_base import CliBaseTest
 import socket
+import time
 import urllib
+
+from basetestcase import BaseTestCase
+from clitest.cli_base import CliBaseTest
+from membase.api.rest_client import RestConnection
+from remote.remote_util import RemoteMachineShellConnection
+from security.auditmain import audit
 
 
 class auditcheckconfig(BaseTestCase):

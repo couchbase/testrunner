@@ -1,16 +1,9 @@
-from membase.api.rest_client import RestConnection
-from membase.helper.cluster_helper import ClusterOperationHelper
-import urllib
-import json
-import httplib2
-from tasks.future import Future
-from tasks.taskmanager import TaskManager
-from tasks.task import *
-import types
-from couchbase_helper.document import View
 import base64
-import time
-import logger
+import urllib
+
+from couchbase_helper.document import View
+from tasks.task import *
+
 log = logger.Logger.get_logger()
 
 class rbacPermissionList():

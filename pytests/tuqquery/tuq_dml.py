@@ -1,13 +1,12 @@
-import time
-import copy
-import uuid
 import collections
+import copy
 import json
-from tuq import ExplainPlanHelper
-from remote.remote_util import RemoteMachineShellConnection
-from tuqquery.tuq import QueryTests
-from couchbase_helper.documentgenerator import DocumentGenerator
+import time
+import uuid
 
+from remote.remote_util import RemoteMachineShellConnection
+from tuq import ExplainPlanHelper
+from tuqquery.tuq import QueryTests
 
 TIMEOUT_DELETED = 300
 

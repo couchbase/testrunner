@@ -1,22 +1,20 @@
-import pprint
-import logger
-import json
-import uuid
 import copy
-import math
-import re
-import testconstants
-from datetime import date, timedelta
 import datetime
+import json
+import math
+import pprint
+import re
 import time
-from remote.remote_util import RemoteMachineShellConnection
-from couchbase_helper.tuq_generators import JsonGenerator
+import uuid
+from datetime import date
+
+import testconstants
 from basetestcase import BaseTestCase
-from couchbase_helper.documentgenerator import DocumentGenerator
-from membase.api.exception import CBQError, ReadDocumentException
+from couchbase_helper.tuq_generators import JsonGenerator
+from membase.api.exception import CBQError
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
-from couchbase_helper.tuq_helper import N1QLHelper
+from remote.remote_util import RemoteMachineShellConnection
 
 
 def ExplainPlanHelper(res):

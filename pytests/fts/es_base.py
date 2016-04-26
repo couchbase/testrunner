@@ -1,7 +1,8 @@
 import httplib2
-import json
-from tasks.taskmanager import TaskManager
+
 from tasks.task import *
+from tasks.taskmanager import TaskManager
+
 
 class BLEVE:
     STOPWORDS = ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves',

@@ -1,12 +1,10 @@
-import math
-import time
 import uuid
-from tuq import QueryTests
-from tuq import ExplainPlanHelper
-from tuq_join import JoinTests
-from remote.remote_util import RemoteMachineShellConnection
+
 from membase.api.rest_client import RestConnection
-from membase.api.exception import CBQError
+from tuq import ExplainPlanHelper
+from tuq import QueryTests
+from tuq_join import JoinTests
+
 
 class QueriesViewsTests(QueryTests):
 

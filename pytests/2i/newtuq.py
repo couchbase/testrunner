@@ -1,23 +1,10 @@
-import logger
-import json
-import uuid
-import copy
-import math
-import re
-
-import testconstants
-import datetime
-import time
-from datetime import date
-from couchbase_helper.tuq_generators import TuqGenerators
-from couchbase_helper.tuq_generators import JsonGenerator
-from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
-from couchbase_helper.documentgenerator import DocumentGenerator
+from couchbase_helper.tuq_generators import JsonGenerator
+from couchbase_helper.tuq_generators import TuqGenerators
 from couchbase_helper.tuq_helper import N1QLHelper
-from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
-from memcached.helper.data_helper import MemcachedClientHelper
+from remote.remote_util import RemoteMachineShellConnection
+
 
 class QueryTests(BaseTestCase):
     def setUp(self):
