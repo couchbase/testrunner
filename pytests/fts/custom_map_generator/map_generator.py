@@ -170,8 +170,10 @@ class CustomMapGenerator:
         Add 1 or 2 non-indexed fields(negative test for custom mapping)
         Query on non-indexed fields to see if 0 results are returned
         """
+        count = 0
         if self.num_field_maps < self.max_fields:
-            while(True):
+            while count < self.max_fields:
+                count += 1
                 field, field_type = self.get_random_field_name_and_type(
                     self.fields)
                 if field_type != 'object' and \
@@ -186,6 +188,9 @@ class CustomMapGenerator:
                           " list of queryable fields" % field
                     self.queryable_fields[field_type].append(field)
                     break
+            else:
+                print "Unable to add a non-indexed field after %s retries" \
+                      % self.max_fields
 
     def get_child_map(self, field):
         """
