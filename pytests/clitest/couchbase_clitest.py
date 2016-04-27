@@ -371,21 +371,28 @@ class CouchbaseCliTest(CliBaseTest):
         cli_command = "server-add"
         if int(nodes_add) < len(self.servers):
             for num in xrange(nodes_add):
-                self.log.info("add node {0} to cluster".format(self.servers[num + 1].ip))
-                options = "--server-add={0}:8091 --server-add-username=Administrator \
-                       --server-add-password=password".format(self.servers[num + 1].ip)
-                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                                options=options, cluster_host="localhost", \
-                                user="Administrator", password="password")
-                if len(output) == 2:
-                    self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
-                                              "Server {0}:8091 added".format(self.servers[num + 1].ip)])
-                else:
-                    self.assertEqual(output, ["Warning: Adding server from group-manage is deprecated",
-                                              "Server {0}:8091 added".format(self.servers[num + 1].ip),
-                                              ""])
+                self.log.info("add node {0} to cluster"\
+                                             .format(self.servers[num + 1].ip))
+                options = "--server-add={0}:8091 \
+                           --server-add-username=Administrator \
+                           --server-add-password=password" \
+                            .format(self.servers[num + 1].ip)
+                output, error = \
+                      remote_client.execute_couchbase_cli(cli_command=cli_command,\
+                                       options=options, cluster_host="localhost", \
+                                         user="Administrator", password="password")
+                server_added = False
+                if len(output) >= 1:
+                    for x in output:
+                        if "Server %s:8091 added" % (self.servers[num + 1].ip) in x:
+                            server_added = True
+                            break
+                    if not server_added:
+                        raise Exception("failed to add server {0}"
+                                          .format(self.servers[num + 1].ip))
         else:
-             raise Exception("Node add should be smaller total number vms in ini file")
+             raise Exception("Node add should be smaller total number"
+                                                         " vms in ini file")
 
         cli_command = "rebalance"
         for num in xrange(nodes_rem):
@@ -439,11 +446,11 @@ class CouchbaseCliTest(CliBaseTest):
                 if len(output) == 3:
                     self.assertEqual(output, ["INFO: graceful failover", \
                                               "SUCCESS: failover ns_1@{0}" \
-                                              .format(self.servers[nodes_add - nodes_rem - num].ip), ""])
+                        .format(self.servers[nodes_add - nodes_rem - num].ip), ""])
                 else:
                     self.assertEqual(output, ["INFO: graceful failover", \
                                               "SUCCESS: failover ns_1@{0}" \
-                                              .format(self.servers[nodes_add - nodes_rem - num].ip)])
+                            .format(self.servers[nodes_add - nodes_rem - num].ip)])
 
 
         cli_command = "server-readd"
