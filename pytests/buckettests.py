@@ -236,6 +236,7 @@ class CreateBucketTests(BaseTestCase):
                         --cluster-init-password="password" \
                         --cluster-init-port=8091 \
                         --cluster-ramsize=300 \
+                        --cluster-index-ramsize=300 \
                         --services=data,index,query'
         o, e = shell.execute_couchbase_cli(cli_command="cluster-init", options=options)
         self.assertEqual(o[0], "SUCCESS: init/edit localhost")
