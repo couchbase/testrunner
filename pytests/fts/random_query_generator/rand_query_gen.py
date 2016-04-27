@@ -332,6 +332,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         """
         Generates disjunction, boolean query string queries
         """
+
         if bool(random.getrandbits(1)):
             # text/str terms
             fieldname = self.get_random_value(self.fields['str'] +
@@ -374,26 +375,31 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         connectors = [' ', ' +', ' -']
         match_str = ""
 
-        # search term
-        term = self.construct_terms_query_string_query()
-        connector = self.get_random_value(connectors)
-        match_str += connector + term
-
-        if bool(random.getrandbits(1)):
-            # another term
+        try:
+            # search term
             term = self.construct_terms_query_string_query()
             connector = self.get_random_value(connectors)
             match_str += connector + term
 
-            # another term
-            term = self.construct_terms_query_string_query()
-            connector = self.get_random_value(connectors)
-            match_str += connector + term
+            if bool(random.getrandbits(1)):
+                # another term
+                term = self.construct_terms_query_string_query()
+                connector = self.get_random_value(connectors)
+                match_str += connector + term
 
-        fts_query['query'] = match_str.lstrip()
-        es_query['query_string']['query'] = match_str.lstrip()
+                # another term
+                term = self.construct_terms_query_string_query()
+                connector = self.get_random_value(connectors)
+                match_str += connector + term
 
-        return fts_query, es_query
+            fts_query['query'] = match_str.lstrip()
+            es_query['query_string']['query'] = match_str.lstrip()
+
+            return fts_query, es_query
+        except KeyError:
+            # if there are no sufficient num or str/text fields passed
+            return {}, {}
+
 
     def construct_wildcard_query(self):
         """

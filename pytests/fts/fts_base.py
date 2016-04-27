@@ -2672,7 +2672,8 @@ class FTSBaseTest(unittest.TestCase):
 
     def create_index_es(self, index_name="es_index"):
         self.es.create_empty_index_with_bleve_equivalent_std_analyzer(index_name)
-        self.log.info("Created empty index %s on Elastic Search node"
+        self.log.info("Created empty index %s on Elastic Search node with "
+                      "custom standard analyzer(default)"
                       % index_name)
 
     def get_generator(self, dataset, num_items, start=0, encoding="utf-8",

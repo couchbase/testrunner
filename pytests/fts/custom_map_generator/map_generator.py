@@ -22,12 +22,12 @@ EMP_NESTED_FIELDS = {
 }
 
 WIKI_FIELDS = {
-    'text': ["title", "id", "type"],
+    'text': ["title", "type"],
     'number': ["mutated"],
     'object': ["revision", "text", "contributor"]
 }
 
-TOTAL_WIKI_FIELDS = 7
+TOTAL_WIKI_FIELDS = 6
 
 WIKI_NESTED_FIELDS = {
     'revision': {
@@ -259,6 +259,8 @@ class CustomMapGenerator:
             es_field_map['analyzer'] = analyzer
             if analyzer == "en":
                 es_field_map['analyzer'] = "english"
+            if analyzer == "standard":
+                es_field_map['analyzer'] = "default"
 
         # add to list of queryable fields
         self.add_to_queryable_fields(field, field_type)

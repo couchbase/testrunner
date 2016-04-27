@@ -30,6 +30,19 @@ class BLEVE:
                  'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own',
                  'same', 'so', 'than', 'too', 'very']
 
+    STD_ANALYZER = {
+        "settings": {
+            "analysis": {
+                "analyzer": {
+                    "default": {
+                        "type":      "standard",
+                        "stopwords": STOPWORDS
+                    }
+                }
+            }
+        }
+    }
+
 class ElasticSearchBase(object):
 
     def __init__(self, host, logger):
@@ -136,34 +149,23 @@ class ElasticSearchBase(object):
         https://www.elastic.co/guide/en/elasticsearch/guide/current/
         configuring-analyzers.html
         """
-        analyzer_settings = {
-            "settings": {
-                "analysis": {
-                    "analyzer": {
-                        "default": {
-                            "type":      "standard",
-                            "stopwords": BLEVE.STOPWORDS
-                        }
-                    }
-                }
-            }
-        }
         try:
             self.delete_index(index_name)
             status, content, _ = self._http_request(
                 self.__connection_url + index_name,
-                'PUT', json.dumps(analyzer_settings))
+                'PUT', json.dumps(BLEVE.STD_ANALYZER))
             if status:
                 self.__indices.append(index_name)
         except Exception as e:
-            raise Exception("Could not create ES index : %s" % e)
+            raise Exception("Could not create index with ES std analyzer : %s"
+                            % e)
 
     def create_index_mapping(self, index_name, mapping):
         """
-        Updates a default index, with the given mapping
+        Creates a new default index, with the given mapping
         """
         self.delete_index(index_name)
-        map = {"mappings": mapping}
+        map = {"mappings": mapping, "settings": BLEVE.STD_ANALYZER['settings']}
         try:
             self.__log.info("Creating %s with mapping %s"
                             % (index_name, json.dumps(mapping, indent=3)))
