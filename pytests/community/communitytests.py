@@ -374,7 +374,11 @@ class CommunityTests(CommunityBaseTest):
             curl -H "Content-Type: application/json" -X POST
                  -d '{"statement":"infer `bucket_name`;"}'
                        http://localhost:8093/query/service """
+        self.rest.force_eject_node()
+        self.sleep(7, "wait for node reset done")
+        self.rest.init_node()
         bucket = "default"
+        self.rest.create_bucket(bucket, ramQuotaMB=200)
         api = self.rest.query_baseUrl + "query/service"
         param = urllib.urlencode({"statement":"infer `%s` ;" % bucket})
         try:
