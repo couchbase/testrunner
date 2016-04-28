@@ -5,6 +5,8 @@
   "include_collections": [],
   "filter_keys": "",
   "filter_values": "",
+  "allow_bucket_creation": false,
+  "disable_queries": true,
   "disable_cluster_config": true,
   "disable_bucket_config": false,
   "disable_views": false,
