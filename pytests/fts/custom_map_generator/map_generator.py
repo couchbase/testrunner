@@ -37,7 +37,7 @@ WIKI_NESTED_FIELDS = {
         'text': ["#text"]
     },
     'contributor': {
-        'text': ["username", "id"]
+        'text': ["username"]
     }
 }
 
