@@ -390,7 +390,7 @@ class CommunityTests(CommunityBaseTest):
                 print ex
         if json_parsed["status"] == "success":
             self.fail("CE should not allow to run INFER !")
-        elif "Not Implemented INFER" in json_parsed["errors"][0]["msg"]:
+        elif json_parsed["status"] == "fatal":
             self.log.info("INFER is enforced in CE! ")
 
     def check_auto_complete(self):
