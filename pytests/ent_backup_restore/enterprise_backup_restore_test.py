@@ -1292,7 +1292,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Backup repository creation failed: Backup Set `backup` exists",
+        self.assertEqual(output[0], "Backup repository creation failed: Backup Repository `backup` exists",
                                     "Expected error message not thrown")
 
     def test_backup_cluster_restore_negative_args(self):
@@ -1398,7 +1398,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Backup Set `abc` not found" in output[-1], "Expected error message not thrown")
+        self.assertTrue("Backup Repository `abc` not found" in output[-1], "Expected error message not thrown")
         cmd = cmd_to_test + " --archive {0} --repo {1} --host abc --username {2} \
                               --password {3}".format(self.backupset.directory,
                                                      self.backupset.name,
@@ -1500,7 +1500,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Backup Set `abc` not found" in output[-1],
+        self.assertTrue("Backup Repository `abc` not found" in output[-1],
                         "Expected error message not thrown")
         cmd = "compact --archive {0} --repo {1} --backup abc".format(self.backupset.directory, self.backupset.name)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
@@ -1578,7 +1578,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error merging data: Backup Set `abc` not found" in output[-1],
+        self.assertTrue("Error merging data: Backup Repository `abc` not found" in output[-1],
                         "Expected error message not thrown")
         cmd = "merge --archive {0} --repo {1} --start abc --end {2}".format(self.backupset.directory,
                                                                         self.backupset.name, self.backups[1])
@@ -1641,7 +1641,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Backup Set `abc` not found" in output[-1],
+        self.assertTrue("Backup Repository `abc` not found" in output[-1],
                         "Expected error message not thrown")
 
     def test_backup_restore_with_views(self):
@@ -1993,5 +1993,5 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.log.info("Expected error thrown when file is corrupted")
         conn.execute_command("mv /tmp/entbackup/backup /tmp/entbackup/backup2")
         output, error = self.backup_restore()
-        self.assertTrue("Backup Set `backup` not found" in output[-1], "Expected error message not thrown")
+        self.assertTrue("Backup Repository `backup` not found" in output[-1], "Expected error message not thrown")
         self.log.info("Expected error message thrown")
