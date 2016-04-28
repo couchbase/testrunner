@@ -287,7 +287,9 @@ class RestConnection(object):
                 self.services = serverInfo.services
         self.input = TestInputSingleton.input
         if self.input is not None:
-            self.services_node_init = self.input.param("services_init", None)
+            """ from watson, services param order and format:
+                new_services=fts-kv-index-n1ql """
+            self.services_node_init = self.input.param("new_services", None)
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.fts_baseUrl = "http://{0}:{1}/".format(self.ip, self.fts_port)
         self.index_baseUrl = "http://{0}:{1}/".format(self.ip, self.index_port)
@@ -301,11 +303,14 @@ class RestConnection(object):
         for iteration in xrange(5):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
             if not success and type(http_res) == unicode and\
-               (http_res.find('Node is unknown to this cluster') > -1 or http_res.find('Unexpected server error, request logged') > -1):
-                log.error("Error {0} was gotten, 5 seconds sleep before retry".format(http_res))
+               (http_res.find('Node is unknown to this cluster') > -1 or \
+                http_res.find('Unexpected server error, request logged') > -1):
+                log.error("Error {0} was gotten, 5 seconds sleep before retry"\
+                                                             .format(http_res))
                 time.sleep(5)
                 if iteration == 2:
-                    log.error("node {0}:{1} is in a broken state!".format(self.ip, self.port))
+                    log.error("node {0}:{1} is in a broken state!"\
+                                        .format(self.ip, self.port))
                     raise ServerUnavailableException(self.ip)
                 continue
             else:
@@ -797,7 +802,7 @@ class RestConnection(object):
         elif self.services_node_init is None and self.services != "":
             self.node_services = self.services.split(",")
         elif self.services_node_init is not None:
-            self.node_services = self.services_node_init.split(",")
+            self.node_services = self.services_node_init.split("-")
         kv_quota = 0
         while kv_quota == 0:
             time.sleep(1)
