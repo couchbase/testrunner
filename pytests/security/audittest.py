@@ -611,7 +611,11 @@ class auditTest(BaseTestCase):
         source = 'ns_server'
         input = self.input.param("input",None)
 
-        rest.set_internalSetting(input,value)
+        replications = rest.get_replications()
+        for repl in replications:
+            src_bucket = repl.get_src_bucket()
+            dst_bucket = repl.get_dst_bucket()
+            rest.set_xdcr_param(src_bucket.name, dst_bucket.name, input,value)
         expectedResults = {"user":user, "local_cluster_name":self.master.ip+":8091", ops:value,
                                "source":source}
 

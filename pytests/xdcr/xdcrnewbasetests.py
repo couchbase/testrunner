@@ -1053,9 +1053,7 @@ class CouchbaseCluster:
 
 
     def set_global_checkpt_interval(self, value):
-        RestConnection(self.__master_node).set_internalSetting(
-            XDCR_PARAM.XDCR_CHECKPOINT_INTERVAL,
-            value)
+        self.set_xdcr_param("xdcrCheckpointInterval",value)
 
     def __remove_all_remote_clusters(self):
         rest_remote_clusters = RestConnection(
@@ -1953,7 +1951,11 @@ class CouchbaseCluster:
         @param param: XDCR parameter name.
         @param value: Value of parameter.
         """
-        RestConnection(self.__master_node).set_internalSetting(param, value)
+        for remote_ref in self.get_remote_clusters():
+            for repl in remote_ref.get_replications():
+                src_bucket = repl.get_src_bucket()
+                dst_bucket = repl.get_dest_bucket()
+                RestConnection(self.__master_node).set_xdcr_param(src_bucket.name, dst_bucket.name, param, value)
 
         expected_results = {
             "real_userid:source": "ns_server",
@@ -2369,9 +2371,6 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__set_free_servers()
         if str(self.__class__).find('upgradeXDCR') == -1:
             self.__create_buckets()
-        if self._checkpoint_interval != 1800:
-            for cluster in self.__cb_clusters:
-                cluster.set_global_checkpt_interval(self._checkpoint_interval)
 
     def __init_parameters(self):
         self.__case_number = self._input.param("case_number", 0)
@@ -2810,6 +2809,9 @@ class XDCRNewBaseTest(unittest.TestCase):
     def setup_xdcr(self):
         self.set_xdcr_topology()
         self.setup_all_replications()
+        if self._checkpoint_interval != 1800:
+            for cluster in self.__cb_clusters:
+                cluster.set_global_checkpt_interval(self._checkpoint_interval)
 
     def setup_xdcr_and_load(self):
         self.setup_xdcr()

@@ -247,7 +247,13 @@ class PerfBase(unittest.TestCase):
         self.log.info("changing {0} to {1}".format(param, value))
 
         for servers in self.input.clusters.values():
-            RestConnection(servers[0]).set_internalSetting(param, value)
+            rest_conn = RestConnection(servers[0])
+            replications = rest_conn.get_replications()
+            for repl in replications:
+                src_bucket = repl.get_src_bucket()
+                dst_bucket = repl.get_dest_bucket()
+                rest_conn.set_xdcr_param(src_bucket.name, dst_bucket.name, param, value)
+
 
     def set_ep_compaction(self, comp_ratio):
         """Set up ep_engine side compaction ratio"""
