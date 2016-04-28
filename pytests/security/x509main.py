@@ -24,7 +24,7 @@ class ServerInfo():
 
 class x509main:
     CHAINCERTFILE = 'chain.pem'
-    NODECAKEYFILE = 'pkey.pem'
+    NODECAKEYFILE = 'pkey.key'
     CACERTFILE = "root.crt"
     CAKEYFILE = "root.key"
     WININSTALLPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/"
@@ -151,7 +151,7 @@ class x509main:
         log.info ("OS type is {0}".format(os_type))
         shell.delete_file(final_path , "root.crt")
         shell.delete_file(final_path , "chain.pem")
-        shell.delete_file(final_path , "pkey.pem")
+        shell.delete_file(final_path , "pkey.key")
         if os_type == 'windows':
             final_path = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/inbox'
             shell.execute_command('rm -rf ' + final_path)
