@@ -373,7 +373,8 @@ class CommunityTests(CommunityBaseTest):
             manual test:
             curl -H "Content-Type: application/json" -X POST
                  -d '{"statement":"infer `bucket_name`;"}'
-                       http://localhost:8093/query/service """
+                       http://localhost:8093/query/service
+            test params: new_services=kv-index-n1ql,default_bucket=False """
         self.rest.force_eject_node()
         self.sleep(7, "wait for node reset done")
         self.rest.init_node()
