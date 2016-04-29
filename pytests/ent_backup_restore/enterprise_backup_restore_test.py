@@ -2013,6 +2013,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
             # Rebalance in nodes and then backup_cluster
             serv_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
             serv_out = []
+            self.log.info("Rebalance in following node: {0}".format([a.ip for a in serv_in]))
             load_task = self._async_load_all_buckets(self.master, gen, self.ops_type, 0)
             rebalance = self.cluster.async_rebalance(self.cluster_to_backup, serv_in, serv_out)
             self.sleep(10)
@@ -2022,6 +2023,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
                 task.result()
             rebalance.result()
             # Rebalance out nodes and then backup_cluster while rebalancing
+            self.log.info("Rebalance out following node: {0}".format([a.ip for a in serv_in]))
             load_task = self._async_load_all_buckets(self.master, gen, self.ops_type, 0)
             rebalance = self.cluster.async_rebalance(self.cluster_to_backup, serv_out, serv_in)
             self.sleep(10)
@@ -2034,6 +2036,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
             # Rebalance in nodes and then backup cluster
             serv_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
             serv_out = []
+            self.log.info("Rebalance in following node: {0}".format([a.ip for a in serv_in]))
             load_task = self._async_load_all_buckets(self.master, gen, self.ops_type, 0)
             rebalance = self.cluster.rebalance(self.cluster_to_backup, serv_in, serv_out)
             output, error = self.backup_cluster()
@@ -2041,6 +2044,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
             for task in load_task:
                 task.result()
             # Rebalance out nodes and then backup cluster
+            self.log.info("Rebalance out following node: {0}".format([a.ip for a in serv_in]))
             load_task = self._async_load_all_buckets(self.master, gen, self.ops_type, 0)
             rebalance = self.cluster.rebalance(self.cluster_to_backup, serv_out, serv_in)
             output, error = self.backup_cluster()
@@ -2052,6 +2056,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         # Backup with graceful failover with full recovery
         nodes_all = rest.node_statuses()
         failover_node = randrange(1, nodes_all.__len__())
+        self.log.info("Failover {} node".format(nodes_all[failover_node].id))
         rest.fail_over(otpNode=nodes_all[failover_node].id, graceful=True)
         self.sleep(30)
         output, error = self.backup_cluster()
@@ -2063,6 +2068,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         # Backup with graceful failover with delta recovery
         nodes_all = rest.node_statuses()
         failover_node = randrange(1, nodes_all.__len__())
+        self.log.info("Failover {} node".format(nodes_all[failover_node].id))
         rest.fail_over(otpNode=nodes_all[failover_node].id, graceful=True)
         self.sleep(30)
         output, error = self.backup_cluster()
@@ -2074,6 +2080,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         # Backup with graceful failover with delta recovery
         nodes_all = rest.node_statuses()
         failover_node = randrange(1, nodes_all.__len__())
+        self.log.info("Failover {} node".format(nodes_all[failover_node].id))
         rest.fail_over(otpNode=nodes_all[failover_node].id, graceful=False)
         self.sleep(30)
         output, error = self.backup_cluster()
