@@ -1999,7 +1999,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
     def test_backup_restore_system_test(self):
         def validate_backup_ouptput(output, error):
             if error or "Backup successfully completed" not in output[-1]:
-                self.fail("Taking cluster backup failed.")
+                self.fail("Taking cluster backup failed. {0} {1}".format(output, error))
         self.repeats = self.input.param("repeat", 1)
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         rest = RestConnection(self.backupset.cluster_host)
@@ -2047,10 +2047,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
             validate_backup_ouptput(output, error)
             for task in load_task:
                 task.result()
+        self.cluster.rebalance(self.cluster_to_backup, serv_in, serv_out)
 
         # Backup with graceful failover with full recovery
         nodes_all = rest.node_statuses()
-        failover_node = randrange(1, nodes_all.count())
+        failover_node = randrange(1, nodes_all.__len__())
         rest.fail_over(otpNode=nodes_all[failover_node].id, graceful=True)
         self.sleep(30)
         output, error = self.backup_cluster()
@@ -2061,7 +2062,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
 
         # Backup with graceful failover with delta recovery
         nodes_all = rest.node_statuses()
-        failover_node = randrange(1, nodes_all.count())
+        failover_node = randrange(1, nodes_all.__len__())
         rest.fail_over(otpNode=nodes_all[failover_node].id, graceful=True)
         self.sleep(30)
         output, error = self.backup_cluster()
@@ -2072,7 +2073,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
 
         # Backup with graceful failover with delta recovery
         nodes_all = rest.node_statuses()
-        failover_node = randrange(1, nodes_all.count())
+        failover_node = randrange(1, nodes_all.__len__())
         rest.fail_over(otpNode=nodes_all[failover_node].id, graceful=False)
         self.sleep(30)
         output, error = self.backup_cluster()

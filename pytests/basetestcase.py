@@ -1,33 +1,33 @@
-import unittest
+import commands
 import copy
 import datetime
-import time
-import string
-import random
-import logging
 import json
-import commands
-import mc_bin_client
+import logging
+import random
+import string
+import time
 import traceback
+import unittest
 
-from memcached.helper.data_helper import VBucketAwareMemcached
-from couchbase_helper.documentgenerator import BlobGenerator
+import logger
+import testconstants
+from TestInput import TestInputSingleton
 from couchbase_helper.cluster import Cluster
+from couchbase_helper.data_analysis_helper import *
 from couchbase_helper.document import View
+from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
-from TestInput import TestInputSingleton
+from membase.api.exception import ServerUnavailableException
 from membase.api.rest_client import Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
-from membase.helper.rebalance_helper import RebalanceHelper
-from remote.remote_util import RemoteUtilHelper
-from membase.api.exception import ServerUnavailableException
-from couchbase_helper.data_analysis_helper import *
-from testconstants import STANDARD_BUCKET_PORT
-from testconstants import MIN_COMPACTION_THRESHOLD
-from testconstants import MAX_COMPACTION_THRESHOLD
 from membase.helper.cluster_helper import ClusterOperationHelper
-import testconstants
+from membase.helper.rebalance_helper import RebalanceHelper
+from memcached.helper.data_helper import VBucketAwareMemcached
+from remote.remote_util import RemoteUtilHelper
+from testconstants import MAX_COMPACTION_THRESHOLD
+from testconstants import MIN_COMPACTION_THRESHOLD
+from testconstants import STANDARD_BUCKET_PORT
 
 
 class BaseTestCase(unittest.TestCase):
