@@ -28,6 +28,8 @@ class StableTopFTS(FTSBaseTest):
             self.validate_index_count(equal_bucket_doc_count=True,
                                       zero_rows_ok=False)
             self.async_perform_update_delete(self.upd_del_fields)
+            if self._update:
+                self.sleep(60, "Waiting for updates to get indexed...")
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
 
