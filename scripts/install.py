@@ -585,7 +585,8 @@ class CouchbaseServerInstaller(Installer):
             if type == "windows":
                 remote_client.download_binary_in_win(build.url, params["version"])
                 success = remote_client.install_server_win(build, \
-                        params["version"].replace("-rel", ""), vbuckets=vbuckets)
+                        params["version"].replace("-rel", ""), vbuckets=vbuckets,
+                        fts_query_limit=fts_query_limit)
             else:
                 downloaded = remote_client.download_build(build)
                 if not downloaded:
@@ -628,7 +629,6 @@ class CouchbaseServerInstaller(Installer):
             if queue:
                 queue.put(success)
             return success
-
 
 class MongoInstaller(Installer):
     def get_server(self, params):

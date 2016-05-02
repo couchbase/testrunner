@@ -1112,6 +1112,51 @@ class RemoteMachineShellConnection:
         os.remove(local_file)
         os.remove(des_file)
 
+    def set_fts_query_limit_win(self, name, value):
+        bin_path = WIN_COUCHBASE_BIN_PATH
+        bin_path = bin_path.replace("\\", "")
+        src_file = bin_path + "service_register.bat"
+        des_file = "/tmp/service_register.bat_{0}".format(self.ip)
+        local_file = "/tmp/service_register.bat.tmp_{0}".format(self.ip)
+
+        self.copy_file_remote_to_local(src_file, des_file)
+        f1 = open(des_file, "r")
+        f2 = open(local_file, "w")
+        """ when install new cb server on windows, there is not
+            env CBFT_ENV_OPTIONS yet.  We need to insert this
+            env to service_register.bat right after  ERL_FULLSWEEP_AFTER 512
+            like -env ERL_FULLSWEEP_AFTER 512 -env CBFT_ENV_OPTIONS vbuckets
+            where vbucket is params passed to function when run install scripts """
+        for line in f1:
+            if "-env CBFT_ENV_OPTIONS " in line:
+                tmp1 = line.split("CBFT_ENV_OPTIONS")
+                tmp2 = tmp1[1].strip().split(" ")
+                log.info("set CBFT_ENV_OPTIONS of node {0} to {1}" \
+                                 .format(self.ip, value))
+                tmp2[0] = value
+                tmp1[1] = " ".join(tmp2)
+                line = "CBFT_ENV_OPTIONS ".join(tmp1)
+            elif "-env ERL_FULLSWEEP_AFTER 512" in line:
+                log.info("set CBFT_ENV_OPTIONS of node {0} to {1}" \
+                                 .format(self.ip, value))
+                line = line.replace("-env ERL_FULLSWEEP_AFTER 512", \
+                  "-env ERL_FULLSWEEP_AFTER 512 -env {0} {1}" \
+                                 .format(name, value))
+            f2.write(line)
+        f1.close()
+        f2.close()
+        self.copy_file_local_to_remote(local_file, src_file)
+
+        """ re-register new setup to cb server """
+        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_stop.bat")
+        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_unregister.bat")
+        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_register.bat")
+        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_start.bat")
+        self.sleep(10, "wait for cb server start completely after setting CBFT_ENV_OPTIONS")
+
+        """ remove temporary files on slave """
+        os.remove(local_file)
+        os.remove(des_file)
 
     def create_directory(self, remote_path):
         sftp = self._ssh_client.open_sftp()
@@ -1280,6 +1325,11 @@ class RemoteMachineShellConnection:
             self.sleep(10, "wait for server to start up completely")
             if vbuckets:
                 self.set_vbuckets_win(vbuckets)
+            if fts_query_limit:
+                self.set_environment_variable(
+                    name="CBFT_ENV_OPTIONS",
+                    value="bleveMaxResultWindow={0}".format(int(fts_query_limit))
+                )
 
             output, error = self.execute_command("rm -f \
                        /cygdrive/c/automation/*_{0}_install.iss".format(self.ip))
@@ -1392,7 +1442,8 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error, track_words)
         return success
 
-    def install_server_win(self, build, version, startserver=True, vbuckets=None):
+    def install_server_win(self, build, version, startserver=True,
+                           vbuckets=None, fts_query_limit=None):
         remote_path = None
         success = True
         track_words = ("warning", "error", "fail")
@@ -1449,6 +1500,12 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error, track_words)
             if vbuckets:
                 self.set_vbuckets_win(vbuckets)
+            if fts_query_limit:
+                self.set_fts_query_limit_win(
+                    name="CBFT_ENV_OPTIONS",
+                    value="bleveMaxResultWindow={0}".format(int(fts_query_limit))
+                )
+
             if "4.0" in version[:5]:
                 """  remove folder if it exists in work around of bub MB-13046 """
                 self.execute_command("rm -rf \
@@ -1465,6 +1522,7 @@ class RemoteMachineShellConnection:
                     os.system("rm -f resources/windows/automation/{0}" \
                                                           .format(capture_iss_file))
             return success
+
 
     def install_server_via_repo(self, deliverable_type, cb_edition, remote_client):
         success = True
