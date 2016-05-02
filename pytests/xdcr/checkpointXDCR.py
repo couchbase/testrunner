@@ -20,8 +20,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.dest_master = self.dest_cluster.get_master_node()
         if not self._create_default_bucket:
             self.fail("Remove \'default_bucket=false\', these unit tests are designed to run on default bucket")
-        self.set_xdcr_topology()
-        self.setup_all_replications()
+        self.setup_xdcr()
         self.init()
 
     def tearDown(self):
