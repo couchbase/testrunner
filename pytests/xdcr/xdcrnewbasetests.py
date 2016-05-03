@@ -1053,7 +1053,7 @@ class CouchbaseCluster:
 
 
     def set_global_checkpt_interval(self, value):
-        self.set_xdcr_param("xdcrCheckpointInterval",value)
+        self.set_xdcr_param("checkpointInterval",value)
 
     def __remove_all_remote_clusters(self):
         rest_remote_clusters = RestConnection(
