@@ -730,11 +730,9 @@ class MovingTopFTS(FTSBaseTest):
                 es_index_name=None,
                 query_index=count))
         self.run_tasks_and_report(tasks, len(index.fts_queries))
-        self.is_index_partitioned_balanced(index)
-        self.wait_for_indexing_complete()
-        hits, _, _ = index.execute_query(query=self.query,
-                                         expected_hits=self._num_items)
-        self.log.info("SUCCESS! Hits: %s" % hits)
+        hits, _, _ = index.execute_query(query=self.query)
+        if hits < self._num_items:
+            self.log.info("SUCCESS! Hits: %s" % hits)
 
     def hard_failover_rebalance_out_during_querying(self):
         #TESTED
@@ -743,7 +741,7 @@ class MovingTopFTS(FTSBaseTest):
         for _ in xrange(self.num_rebalance):
             services.append("fts")
         tasks = []
-        tasks.append(self._cb_cluster.async_failover(
+        tasks.append(self._cb_cluster.async_failover_and_rebalance(
             num_nodes=1,
             graceful=False))
         for count in range(0, len(index.fts_queries)):
