@@ -1,8 +1,10 @@
 import json
 import string
 import random
-from couchbase_helper.data import FIRST_NAMES, LAST_NAMES, DEPT, LANGUAGES
 import gzip
+from testconstants import DEWIKI, ENWIKI, ESWIKI, FRWIKI
+from data import FIRST_NAMES, LAST_NAMES, DEPT, LANGUAGES
+
 
 class KVGenerator(object):
     def __init__(self, name, start, end):
@@ -448,16 +450,28 @@ class WikiJSONGenerator(KVGenerator):
         count = 0
         done = False
         while not done:
-            with gzip.open("lib/couchbase_helper/wiki/{0}wiki.txt.gz".
-                            format(self.lang.lower()), "r") as f:
-                for doc in f:
-                    self.gen_docs[count] = doc
-                    if count >= self.end:
-                        f.close()
-                        done = True
-                        break
-                    count += 1
-                f.close()
+            try:
+                with gzip.open("lib/couchbase_helper/wiki/{0}wiki.txt.gz".
+                                format(self.lang.lower()), "r") as f:
+                    for doc in f:
+                        self.gen_docs[count] = doc
+                        if count >= self.end:
+                            f.close()
+                            done = True
+                            break
+                        count += 1
+                    f.close()
+            except IOError:
+                lang = self.lang.lower()
+                wiki = eval("{0}WIKI".format(self.lang))
+                print ("Unable to find file lib/couchbase_helper/wiki/"
+                       "{0}wiki.txt.gz. Downloading from {1}...".
+                       format(lang, wiki))
+                import urllib
+                urllib.URLopener().retrieve(
+                    wiki,
+                    "lib/couchbase_helper/wiki/{0}wiki.txt.gz".format(lang))
+                print "Download complete!"
 
     def next(self):
         if self.itr >= self.end:
