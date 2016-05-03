@@ -1323,7 +1323,7 @@ class RemoteMachineShellConnection:
             if not ended:
                 sys.exit("*****  Node %s failed to install  *****" % (self.ip))
             self.sleep(10, "wait for server to start up completely")
-            if vbuckets:
+            if vbuckets and int(vbuckets) != 1024:
                 self.set_vbuckets_win(vbuckets)
             if fts_query_limit:
                 self.set_environment_variable(
@@ -1498,7 +1498,7 @@ class RemoteMachineShellConnection:
             self.sleep(10, "wait for server to start up completely")
             output, error = self.execute_command("rm -f *-diag.zip")
             self.log_command_output(output, error, track_words)
-            if vbuckets:
+            if vbuckets and int(vbuckets) != 1024:
                 self.set_vbuckets_win(vbuckets)
             if fts_query_limit:
                 self.set_fts_query_limit_win(
