@@ -205,7 +205,7 @@ class XDCRHelper():
         if username:
             self.controls.create_reference_pop_up().user.type(username)
         if password:
-            self.controls.create_reference_pop_up().password.type(password)
+            self.controls.create_reference_pop_up().password.type(password, is_pwd=True)
         if not cancel:
             self.controls.create_reference_pop_up().create_btn.click()
         else:

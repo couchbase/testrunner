@@ -258,10 +258,11 @@ class Control():
         ActionChains(self.selenium).key_down(Keys.ENTER).perform()
         ActionChains(self.selenium).key_up(Keys.ENTER).perform()
 
-    def type(self, message):
+    def type(self, message, is_pwd=False):
         if message:
             self.highlightElement()
-            self.web_element.clear()
+            if not is_pwd:
+                self.web_element.clear()
             if type(message) == types.StringType and message.find('\\') > -1:
                 for symb in list(message):
                     if symb == '\\':
@@ -370,7 +371,7 @@ class BaseHelper():
         if not password:
             password = self.tc.input.membase_settings.rest_password
         self.controls._user_field.type(user)
-        self.controls._user_password.type(password)
+        self.controls._user_password.type(password, is_pwd=True)
         self.controls._login_btn.click()
         self.tc.log.info("user %s is logged in" % user)
 

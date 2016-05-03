@@ -1216,7 +1216,7 @@ class ServerHelper():
     def fill_server_info(self, input):
         self.controls.add_server_dialog().ip_address.type(input.param("add_server_ip", self.tc.servers[1].ip))
         self.controls.add_server_dialog().username.type(input.membase_settings.rest_username)
-        self.controls.add_server_dialog().password.type(input.membase_settings.rest_password)
+        self.controls.add_server_dialog().password.type(input.membase_settings.rest_password, is_pwd=True)
 
     def rebalance(self):
         self.start_rebalancing()
@@ -1476,7 +1476,7 @@ class BucketHelper():
         self.controls.bucket_pop_up(parent).ram_quota.type(bucket.ram_quota)
         if bucket.sasl_password:
             self.controls.bucket_pop_up().standart_port_radio.click()
-            self.controls.bucket_pop_up().sasl_password.type(bucket.sasl_password)
+            self.controls.bucket_pop_up().sasl_password.type(bucket.sasl_password, is_pwd=True)
         if bucket.protocol_port:
             self.controls.bucket_pop_up().dedicated_port_radio.click()
             self.controls.bucket_pop_up().port.type(bucket.protocol_port)
@@ -1674,7 +1674,7 @@ class NodeInitializeHelper():
                                             or input.param("ip_cluster",None):
             self.controls.step_1().join_cluster.click()
             self.controls.step_1().user_cluster.type(input.param("user_cluster",None))
-            self.controls.step_1().password_cluster.type(input.param("password_cluster",None))
+            self.controls.step_1().password_cluster.type(input.param("password_cluster",None), is_pwd=True)
             self.controls.step_1().ip_cluster.type(input.param("ip_cluster",None))
 
     def _fill_2_step(self, input):
@@ -1700,9 +1700,9 @@ class NodeInitializeHelper():
                 self.tc.log.info("This version of application doesn't contain agree checkbox(step 4)")
 
     def _fill_5_step(self, input):
-        self.controls.step_5().password_confirm.type(input.membase_settings.rest_password)
+        self.controls.step_5().password_confirm.type(input.membase_settings.rest_password, is_pwd=True)
         self.controls.step_5().user.type(input.membase_settings.rest_username)
-        self.controls.step_5().password.type(input.membase_settings.rest_password)
+        self.controls.step_5().password.type(input.membase_settings.rest_password, is_pwd=True)
 
     def initialize(self, input):
         self.tc.log.info('Starting initializing node')
@@ -2029,7 +2029,7 @@ class SettingsHelper():
         self.controls.alerts_info().email_host.type(input.param("alerts_email_host", 'itweb01.hq.northscale.net'))
         self.controls.alerts_info().email_user.type(input.param("alerts_email_username", None))
         self.controls.alerts_info().email_port.type(input.param("alerts_email_port", None))
-        self.controls.alerts_info().email_pass.type(input.param("alerts_email_password", None))
+        self.controls.alerts_info().email_pass.type(input.param("alerts_email_password", None), is_pwd=True)
         self.controls.alerts_info().email_encrypt.check(setTrue=input.param("alerts_email_encrypt", True))
         self.controls.alerts_info().email_sender.type(input.param("alerts_email_sender", 'qa@couchbase.com'))
         self.controls.alerts_info().email_recipients.type(input.param("alerts_email_recipients", 'iryna@couchbase.com'))
@@ -2118,7 +2118,7 @@ class SettingsHelper():
         self.wait.until(lambda fn: self.controls.user_create_info().username.is_displayed(),
                         "Username is not displayed in %d sec" % (self.wait._timeout))
         self.controls.user_create_info().username.type(user)
-        self.controls.user_create_info().password.type(pwd)
+        self.controls.user_create_info().password.type(pwd, is_pwd=True)
         self.controls.user_create_info().verify_password.type(verify_pwd)
         self.controls.user_create_info().create_btn.click()
         self.wait.until(lambda fn: self.is_user_created() or self.is_error_present(),
