@@ -166,6 +166,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         if self.port and self.port != '8091':
             self.rest = RestConnection(self.master)
             self.rest_helper = RestHelper(self.rest)
+        self.sleep(7, "wait to make sure node is ready")
         if len(servers) > 1:
             self.cluster.rebalance([servers[0]], servers[1:], [],
                                    use_hostnames=self.use_hostnames)
