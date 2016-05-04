@@ -36,10 +36,16 @@ class CollectinfoTests(CliBaseTest):
         all the log files according to the LOG_FILE_NAME_LIST and in stats.log, we have
         stats for all the buckets we have created"""
 
-        gen_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
-        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items / 2 - 1))
-        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items / 2, end=(self.num_items * 3 / 4 - 1))
-        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items * 3 / 4, end=self.num_items)
+        gen_load = BlobGenerator('nosql', 'nosql-', self.value_size,
+                                                  end=self.num_items)
+        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size,
+                                          end=(self.num_items / 2 - 1))
+        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size,
+                                             start=self.num_items / 2,
+                                             end=(self.num_items * 3 / 4 - 1))
+        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size,
+                                                 start=self.num_items * 3 / 4,
+                                                          end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", 0)
 
         if(self.doc_ops is not None):
@@ -48,32 +54,40 @@ class CollectinfoTests(CliBaseTest):
             if("delete" in self.doc_ops):
                 self._load_all_buckets(self.master, gen_delete, "delete", 0)
             if("expire" in self.doc_ops):
-                self._load_all_buckets(self.master, gen_expire, "update", self.expire_time)
+                self._load_all_buckets(self.master, gen_expire, "update",\
+                                                               self.expire_time)
                 self.sleep(self.expire_time + 1)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         self.shell.delete_files("%s.zip" % (self.log_filename))
-        self.shell.delete_files("cbcollect_info*")  # This is the folder generated after unzip the log package
+        """ This is the folder generated after unzip the log package """
+        self.shell.delete_files("cbcollect_info*")
 
         if self.node_down:
             if self.os == 'linux':
-                output, error = self.shell.execute_command("killall -9 memcached & killall -9 beam.smp")
+                output, error = self.shell.execute_command(
+                                    "killall -9 memcached & killall -9 beam.smp")
                 self.shell.log_command_output(output, error)
-
-        output, error = self.shell.execute_cbcollect_info("%s.zip" % (self.log_filename))
+        output, error = self.shell.execute_cbcollect_info("%s.zip"
+                                                           % (self.log_filename))
 
         if self.os != "windows":
             if len(error) > 0:
-                raise Exception("Command throw out error message. Please check the output of remote_util")
+                """ Restart cb server if test node down """
+                if self.node_down:
+                    self.shell.start_server()
+                raise Exception("Command throw out error: %s " % error)
+
             for output_line in output:
                 if output_line.find("ERROR") >= 0 or output_line.find("Error") >= 0:
-                    raise Exception("Command throw out error message. Please check the output of remote_util")
+                    if self.node_down:
+                        self.shell.start_server()
+                    raise Exception("Command throw out error: %s " % output_line)
         self.verify_results(self, self.log_filename)
 
         if self.node_down:
             if self.os == 'linux':
-                output, error = self.shell.execute_command("/etc/init.d/couchbase-server restart")
-                self.shell.log_command_output(output, error)
+                self.shell.start_server()
                 self.sleep(self.wait_timeout)
 
 
