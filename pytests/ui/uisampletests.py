@@ -1501,6 +1501,7 @@ class BucketHelper():
             self.controls.bucket_pop_up(parent).override_comp_cb.check(setTrue=True)
             if bucket.frag_percent_cb is not None or bucket.frag_percent is not None:
                 self.controls.bucket_compaction(parent).frag_percent_cb.check(setTrue=True)
+                self.controls.bucket_compaction(parent).frag_percent.web_element.clear()
             if bucket.frag_percent is not None:
                 self.controls.bucket_compaction(parent).frag_percent.type(bucket.frag_percent)
             if bucket.frag_mb_cb is not None or bucket.frag_mb is not None:
@@ -1509,6 +1510,7 @@ class BucketHelper():
                 self.controls.bucket_compaction(parent).frag_mb.type(bucket.frag_mb)
             if bucket.view_frag_percent_cb is not None or bucket.view_frag_percent is not None:
                 self.controls.bucket_compaction(parent).view_frag_percent_cb.check(setTrue=True)
+                self.controls.bucket_compaction(parent).view_frag_percent.web_element.clear()
             if bucket.view_frag_percent is not None:
                 self.controls.bucket_compaction(parent).view_frag_percent.type(bucket.view_frag_percent)
             if bucket.view_frag_mb_cb is not None or bucket.view_frag_mb is not None:
@@ -1582,8 +1584,8 @@ class BucketHelper():
     def open_stats(self, bucket):
         self.controls.bucket_info(bucket.name).name.click()
         self.tc.log.info("Stats page is opened")
-        time.sleep(30)
-        self.controls.bucket_stats(tab="Server Resources").arrow.click()
+        #time.sleep(30)
+        #self.controls.bucket_stats(tab="Server Resources").arrow.click()
 
     def open_view_block_stats(self):
         self.wait.until(lambda fn:
