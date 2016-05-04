@@ -1137,9 +1137,16 @@ class CouchbaseCliTest(CliBaseTest):
                         options=options, cluster_host="{0}:8091".format(self.servers[num].ip), \
                         user="Administrator", password="password")
                 output = self.del_runCmd_value(output)
-                self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'group2'" \
+                # This one is before Watson
+                #self.assertEqual(output[0], "SUCCESS: add server {0}:8091' to group 'group2'" \
+                #                                              .format(self.servers[num + 1].ip))
+                self.assertEqual(output[0], "Server {0}:8091 added to group group2" \
                                                               .format(self.servers[num + 1].ip))
-                self.assertEqual(output[1], "SUCCESS: add server '{0}:8091' to group 'group2'" \
+                """Server 172.23.105.114:8091 added to group group2"""
+                # This one is before Watson
+                #self.assertEqual(output[1], "SUCCESS: add server '{0}:8091' to group 'group2'" \
+                #                                              .format(self.servers[num + 2].ip))
+                self.assertEqual(output[1], "Server {0}:8091 added to group group2" \
                                                               .format(self.servers[num + 2].ip))
             # add single server to group
             for num in xrange(nodes_add):
@@ -1149,7 +1156,10 @@ class CouchbaseCliTest(CliBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user="Administrator", password="password")
                 output = self.del_runCmd_value(output)
-                self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'group2'" \
+                # This one is before Watson
+                #self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'group2'" \
+                #                                           .format(self.servers[num + 3].ip)])
+                self.assertEqual(output, ["Server {0}:8091 added to group group2" \
                                                            .format(self.servers[num + 3].ip)])
             # list servers in group
             for num in xrange(nodes_add):
