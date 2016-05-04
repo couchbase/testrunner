@@ -13,8 +13,12 @@ class XDCRTests(BaseUITestCase):
         super(XDCRTests, self).setUp()
         self.bucket = Bucket()
         self._initialize_nodes()
-        RestConnection(self.servers[0]).create_bucket(bucket='default', ramQuotaMB=500)
-        RestConnection(self.servers[1]).create_bucket(bucket='default', ramQuotaMB=500)
+        src_bucket = self.input.param('src_bucket', self.bucket)
+        dest_bucket = self.input.param('dest_bucket', self.bucket)
+        if src_bucket:
+            RestConnection(self.servers[0]).create_bucket(bucket='default', ramQuotaMB=500)
+        if dest_bucket:
+            RestConnection(self.servers[1]).create_bucket(bucket='default', ramQuotaMB=500)
         self.driver.refresh()
         helper = BaseHelper(self)
         helper.login()
@@ -46,10 +50,9 @@ class XDCRTests(BaseUITestCase):
         user = self.input.param('user', self.input.membase_settings.rest_username)
         passwd = self.input.param('passwd', self.input.membase_settings.rest_password)
         error = self.input.param('error', None)
-        helper = XDCRHelper(self)
         NavigationHelper(self).navigate('XDCR')
         try:
-            helper.create_cluster_reference(name, ip, user, passwd)
+            XDCRHelper(self).create_cluster_reference(name, ip, user, passwd)
         except Exception, ex:
             self.log.error(str(ex))
             if error:
@@ -59,7 +62,7 @@ class XDCRTests(BaseUITestCase):
         else:
             if error:
                 raise Exception('Error <%s> was expected' % error)
-        self.assertEqual(helper.is_cluster_reference_created(name, ip), not error,
+        self.assertEqual(XDCRHelper(self).is_cluster_reference_created(name, ip), not error,
                          'Reference should %s appear' % (('', 'not')[error is None]))
         self.log.info('Test finished as expected')
 
@@ -79,12 +82,11 @@ class XDCRTests(BaseUITestCase):
             advanced_settings = {}
             for setng in adv_s:
                 advanced_settings[setng.split(':')[0]] = setng.split(':')[1]
-        helper = XDCRHelper(self)
         NavigationHelper(self).navigate('XDCR')
-        helper.create_cluster_reference(name, ip, user, passwd)
+        XDCRHelper(self).create_cluster_reference(name, ip, user, passwd)
         self.sleep(3)
         try:
-            helper.create_replication(dest_cluster, src_bucket, dest_bucket, advanced_settings=advanced_settings)
+            XDCRHelper(self).create_replication(dest_cluster, src_bucket, dest_bucket, advanced_settings=advanced_settings)
         except Exception, ex:
             self.log.error(str(ex))
             if error:
@@ -94,7 +96,7 @@ class XDCRTests(BaseUITestCase):
         else:
             if error:
                 raise Exception('Error <%s> was expected' % error)
-        self.assertEqual(helper.is_replication_created(self.bucket.name, name, self.bucket.name), not error,
+        self.assertEqual(XDCRHelper(self).is_replication_created(self.bucket.name, name, self.bucket.name), not error,
                          'Reference should %s appear' % (('', 'not')[error is None]))
         self.log.info('Test finished as expected')
 
@@ -104,10 +106,9 @@ class XDCRTests(BaseUITestCase):
         name = self.input.param('name', 'ui_auto')
         user = self.input.param('user', self.input.membase_settings.rest_username)
         passwd = self.input.param('passwd', self.input.membase_settings.rest_password)
-        helper = XDCRHelper(self)
         NavigationHelper(self).navigate('XDCR')
-        helper.create_cluster_reference(name, ip, user, passwd, cancel=True)
-        self.assertFalse(helper.is_cluster_reference_created(name, ip),
+        XDCRHelper(self).create_cluster_reference(name, ip, user, passwd, cancel=True)
+        self.assertFalse(XDCRHelper(self).is_cluster_reference_created(name, ip),
                          'Reference should not appear')
         self.log.info('Test finished as expected')
 
@@ -117,11 +118,13 @@ class XDCRTests(BaseUITestCase):
         name = self.input.param('name', 'ui_auto')
         user = self.input.param('user', self.input.membase_settings.rest_username)
         passwd = self.input.param('passwd', self.input.membase_settings.rest_password)
-        helper = XDCRHelper(self)
+        src_bucket = self.input.param('src_bucket', self.bucket)
+        dest_bucket = self.input.param('dest_bucket', self.bucket)
+        dest_cluster = self.input.param('dest_cluster', name)
         NavigationHelper(self).navigate('XDCR')
-        helper.create_cluster_reference(name, ip, user, passwd)
-        helper.create_replication(name, self.bucket.name, self.bucket.name, cancel=True)
-        self.assertFalse(helper.is_replication_created(self.bucket.name, ip, self.bucket.name),
+        XDCRHelper(self).create_cluster_reference(name, ip, user, passwd)
+        XDCRHelper(self).create_replication(dest_cluster, src_bucket, dest_bucket, cancel=True)
+        self.assertFalse(XDCRHelper(self).is_replication_created(src_bucket.name, name, dest_bucket.name),
                          'Replication should not appear')
         self.log.info('Test finished as expected')
 
@@ -168,7 +171,7 @@ class XDCRControls():
         return self.helper.find_control('xdcr_create_ref', 'error')
 
     def error_replica(self):
-        return self.helper.find_control('xdcr_create_repl', 'error')
+        return self.helper.find_controls('xdcr_create_repl', 'error')
 
     def advanced_settings(self):
         self.max_replication = self.helper.find_control('xdcr_advanced_settings', 'max_replication')
@@ -187,8 +190,9 @@ class XDCRControls():
 class XDCRHelper():
     def __init__(self, tc):
         self.tc = tc
-        self.controls = XDCRControls(tc.driver)
         self.wait = WebDriverWait(tc.driver, timeout=100)
+        self.controls = XDCRControls(tc.driver)
+
 
     def create_cluster_reference(self, cluster_name, ip, username, password, cancel=False):
         self.wait.until(lambda fn: self.controls.create_cluster_reference_btn.is_displayed(),
@@ -218,7 +222,10 @@ class XDCRHelper():
             raise Exception('Reference is not created: %s' % self.controls.error_reference().get_text())
 
     def _cluster_reference_pop_up_reaction(self):
-        return (not self.controls.create_reference_pop_up().pop_up.is_displayed()) or self.controls.error_reference().is_displayed()
+        if self.controls.create_reference_pop_up().pop_up.is_present() or \
+           self.controls.error_reference().is_present():
+            return (not self.controls.create_reference_pop_up().pop_up.is_displayed()) or \
+                    self.controls.error_reference().is_displayed()
 
     def _get_error(self):
         return self.controls.error().get_text()
@@ -259,13 +266,19 @@ class XDCRHelper():
             self.controls.create_replication_pop_up().replicate_btn.click()
         else:
             self.controls.create_replication_pop_up().cancel_btn.click()
+        all_errors = self.controls.error_replica()
+        if all_errors:
+            for error in all_errors:
+                if error.is_present():
+                    if error.is_displayed():
+                        raise Exception('Reference is not created: %s' % error.get_text())
         self.wait.until(lambda fn: self._cluster_replication_pop_up_reaction(),
                         "there is no reaction in %d sec" % (self.wait._timeout))
-        if self.controls.error_replica().is_displayed():
-            raise Exception('Reference is not created: %s' % self.controls.error_replica().get_text())
 
     def _cluster_replication_pop_up_reaction(self):
-        return (not self.controls.create_replication_pop_up().pop_up.is_displayed()) or self.controls.error_replica().is_displayed()
+        if self.controls.create_replication_pop_up().pop_up.is_present() or \
+           self.controls.error_replica().is_present():
+            return (not self.controls.create_replication_pop_up().pop_up.is_displayed()) or self.controls.error_replica().is_displayed()
 
     def is_cluster_reference_created(self, name, ip):
         all_ref = self.controls._all_cluster_references()
