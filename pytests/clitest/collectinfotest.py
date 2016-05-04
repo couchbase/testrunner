@@ -80,6 +80,8 @@ class CollectinfoTests(CliBaseTest):
 
             for output_line in output:
                 if output_line.find("ERROR") >= 0 or output_line.find("Error") >= 0:
+                    if "from http endpoint" in output_line.lower():
+                        continue
                     if self.node_down:
                         self.shell.start_server()
                     raise Exception("Command throw out error: %s " % output_line)
