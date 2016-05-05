@@ -858,3 +858,15 @@ class JoinTests(QueryTests):
         else:
             raise Exception("Unknown type of join")
         return nested_list
+
+
+    def test_dual(self):
+        self.query = "select 1"
+        actual_result = self.run_cbq_query()
+        actual_result = sorted(actual_result)
+        print actual_result
+        self.query = "select 1 from system:dual"
+        expected_result = self.run_cbq_query()
+        expected_result = sorted(expected_result)
+        print expected_result
+        self._verify_results(actual_result, expected_result)
