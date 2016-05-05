@@ -10,6 +10,7 @@ import copy
 from membase.helper.cluster_helper import ClusterOperationHelper
 import mc_bin_client
 import threading
+from fts.fts_base import FTSIndex
 from memcached.helper.data_helper import  VBucketAwareMemcached
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.api.rest_client import RestConnection, Bucket
@@ -754,7 +755,8 @@ class UpgradeTests(NewUpgradeBaseTest):
                 self.log.info(node)
                 rest.add_back_node(node.id)
                 rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                                             [], [])
             rebalance.result()
         except Exception, ex:
             raise
@@ -795,7 +797,8 @@ class UpgradeTests(NewUpgradeBaseTest):
     def kv_after_ops_update(self):
         try:
             self.log.info("kv_after_ops_update")
-            self._load_all_buckets(self.master, self.after_gen_update, "update", self.expire_time, flag=self.item_flag)
+            self._load_all_buckets(self.master, self.after_gen_update, "update",
+                                          self.expire_time, flag=self.item_flag)
         except Exception, ex:
             self.log.info(ex)
             raise
@@ -803,10 +806,24 @@ class UpgradeTests(NewUpgradeBaseTest):
     def kv_after_ops_delete(self):
         try:
             self.log.info("kv_after_ops_delete")
-            self._load_all_buckets(self.master, self.after_gen_delete, "delete", self.expire_time, flag=self.item_flag)
+            self._load_all_buckets(self.master, self.after_gen_delete, "delete",
+                                          self.expire_time, flag=self.item_flag)
         except Exception, ex:
             self.log.info(ex)
             raise
+
+    def doc_ops_initialize(self, queue=None):
+        try:
+            self.log.info("load doc to all buckets")
+            self._load_doc_data_all_buckets(data_op="create", batch_size=1000,
+                                                                gen_load=None)
+            self.log.info("done initialize load doc to all buckets")
+        except Exception, ex:
+            self.log.info(ex)
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
 
     def _convert_server_map(self, servers):
         map = {}
@@ -821,7 +838,8 @@ class UpgradeTests(NewUpgradeBaseTest):
     def kv_ops_create(self):
         try:
             self.log.info("kv_ops_create")
-            self._load_all_buckets(self.master, self.gen_create, "create", self.expire_time, flag=self.item_flag)
+            self._load_all_buckets(self.master, self.gen_create, "create",
+                                    self.expire_time, flag=self.item_flag)
         except Exception, ex:
             self.log.info(ex)
             raise
@@ -829,7 +847,8 @@ class UpgradeTests(NewUpgradeBaseTest):
     def kv_ops_update(self):
         try:
             self.log.info("kv_ops_update")
-            self._load_all_buckets(self.master, self.gen_update, "update", self.expire_time, flag=self.item_flag)
+            self._load_all_buckets(self.master, self.gen_update, "update",
+                                    self.expire_time, flag=self.item_flag)
         except Exception, ex:
             self.log.info(ex)
             raise
@@ -837,7 +856,8 @@ class UpgradeTests(NewUpgradeBaseTest):
     def kv_ops_delete(self):
         try:
             self.log.info("kv_ops_delete")
-            self._load_all_buckets(self.master, self.gen_delete, "delete", self.expire_time, flag=self.item_flag)
+            self._load_all_buckets(self.master, self.gen_delete, "delete",
+                                    self.expire_time, flag=self.item_flag)
         except Exception, ex:
             self.log.info(ex)
             raise
@@ -850,13 +870,45 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
 
-    def add_fts(self):
-        try:
-            self.log.info("add full text search")
-            """add sub doc code here"""
-        except Exception, ex:
-            self.log.info(ex)
-            raise
+    def create_fts_index(self):
+        self.log.info("Checking if index already exists ...")
+        name = "default"
+        SOURCE_CB_PARAMS = {
+                      "authUser": "default",
+                      "authPassword": "",
+                      "authSaslUser": "",
+                      "authSaslPassword": "",
+                      "clusterManagerBackoffFactor": 0,
+                      "clusterManagerSleepInitMS": 0,
+                      "clusterManagerSleepMaxMS": 20000,
+                      "dataManagerBackoffFactor": 0,
+                      "dataManagerSleepInitMS": 0,
+                      "dataManagerSleepMaxMS": 20000,
+                      "feedBufferSizeBytes": 0,
+                      "feedBufferAckThreshold": 0
+                    }
+        self.index_type = 'fulltext-index'
+        self.index_definition = {
+                          "type": "fulltext-index",
+                          "name": "",
+                          "uuid": "",
+                          "params": {},
+                          "sourceType": "couchbase",
+                          "sourceName": "default",
+                          "sourceUUID": "",
+                          "sourceParams": SOURCE_CB_PARAMS,
+                          "planParams": {}
+                          }
+        self.name = self.index_definition['name'] = name
+        rest = RestConnection(self.servers[0])
+        status, _ = rest.get_fts_index_definition(self.name)
+        if status != 400:
+            rest.delete_fts_index(self.name)
+        self.log.info("Creating {0} {1} on {2}".format(
+            self.index_type,
+            self.name,
+            rest.ip))
+        rest.create_fts_index(self.name, self.index_definition)
 
     def cluster_stats(self, servers):
         self._wait_for_stats_all_buckets(servers)
