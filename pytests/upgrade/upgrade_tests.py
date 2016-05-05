@@ -136,6 +136,7 @@ class UpgradeTests(NewUpgradeBaseTest):
                 raise Exception("*** Failed to {0} ***".format(self.failed_thread))
             """ Default set to always verify data """
             if self.after_events[0]:
+                self.log.info("*** Start after events ***")
                 for event in self.after_events[0].split("-"):
                     if "delete_buckets" in event:
                         self.log.info("After events has delete buckets event. "
@@ -456,9 +457,8 @@ class UpgradeTests(NewUpgradeBaseTest):
     def rebalance_in(self, queue=None):
         rebalance_in = False
         service_in = copy.deepcopy(self.after_upgrade_services_in)
-        #self.nodes_in = self.input.param("nodes_in", 1)
-        free_nodes = self._get_free_nodes()
-        if not free_nodes:
+        free_nodes = self._convert_server_map(self._get_free_nodes())
+        if not free_nodes.values():
             raise Exception("No free node available to rebalance in")
         try:
             if self.after_upgrade_services_in and \
@@ -466,16 +466,17 @@ class UpgradeTests(NewUpgradeBaseTest):
                 service_in = [self.after_upgrade_services_in[0]]
             self.nodes_in_list =  self.out_servers_pool.values()[:self.nodes_in]
             self.log.info("<<<<<<<<=== rebalance_in node {0} with services {1}"\
-                                             .format(free_nodes[0], service_in))
+                                       .format(free_nodes.keys(), service_in))
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],\
-                                                                    [free_nodes[0]],\
+                                                                 free_nodes.values(),\
                                                            [], services = service_in)
             rebalance.result()
+            self.in_servers_pool.update(free_nodes)
             rebalance_in = True
             if "index" in service_in:
                 self.log.info("Set storageMode to forestdb after add "
-                              "index node {0} to cluster".format(free_nodes[0]))
-                RestConnection(free_nodes[0]).set_indexer_storage_mode()
+                         "index node {0} to cluster".format(free_nodes.keys()))
+                RestConnection(free_nodes.values()[0]).set_indexer_storage_mode()
             if self.after_upgrade_services_in and \
                 len(self.after_upgrade_services_in) > 1:
                 self.log.info("remove service '{0}' from service list after "
