@@ -1252,8 +1252,11 @@ class CouchbaseCliTest(CliBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user="Administrator", password="password")
                 output = self.del_runCmd_value(output)
-                self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'Group 1'" \
-                                                            .format(self.servers[num + 1].ip)])
+                # This one is before Watson
+                #self.assertEqual(output, ["SUCCESS: add server '{0}:8091' to group 'Group 1'" \
+                #                                            .format(self.servers[num + 1].ip)])
+                self.assertEqual(output[1], "Server {0}:8091 added to group Group 1" \
+                                                            .format(self.servers[num + 1].ip))
 
             # test rebalance command with add server and group manage option
             cli_command = "rebalance"
@@ -1264,10 +1267,13 @@ class CouchbaseCliTest(CliBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user="Administrator", password="password")
                 output = self.del_runCmd_value(output)
-                self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
+                # This one before watson
+                #self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
+                #                                               .format(self.servers[num + 2].ip))
+                self.assertEqual(output[1], "Server {0}:8091 added to group Group 1" \
                                                                .format(self.servers[num + 2].ip))
-                self.assertTrue("INFO: rebalancing" in output[1])
-                self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+
+                self.assertTrue(self._check_output("SUCCESS: rebalanced cluster", output))
 
             for num in xrange(nodes_add):
                 options = "--server-remove={0}:8091 --server-add={1}:8091 \
@@ -1276,10 +1282,10 @@ class CouchbaseCliTest(CliBaseTest):
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user="Administrator", password="password")
                 output = self.del_runCmd_value(output)
-                self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
-                                                               .format(self.servers[num + 3].ip))
-                self.assertTrue("INFO: rebalancing" in output[1])
-                self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+                # This one before watson
+                #self.assertEqual(output[0], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
+                self.assertTrue(self._check_output("Server %s:8091 added" %self.servers[num + 3].ip, output))
+                self.assertTrue(self._check_output("SUCCESS: rebalanced cluster", output))
 
 
         if self.os == "windows":
@@ -1303,8 +1309,9 @@ class CouchbaseCliTest(CliBaseTest):
                         options=options, cluster_host="localhost", user="Administrator", password="password")
                 self.assertEqual(output[4], "SUCCESS: add server '{0}:8091' to group 'Group 1'" \
                                                                .format(self.servers[num + 2].ip))
-                self.assertTrue("INFO: rebalancing" in output[0])
-                self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+                # old before watson
+                #self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+                self.assertTrue(self._check_output("SUCCESS: rebalanced cluster", output))
 
             for num in xrange(nodes_add):
                 options = "--server-remove={0}:8091 --server-add={1}:8091 \
@@ -1316,6 +1323,16 @@ class CouchbaseCliTest(CliBaseTest):
                                                                .format(self.servers[num + 3].ip))
                 self.assertTrue("INFO: rebalancing" in output[1])
                 self.assertEqual(output[2], "SUCCESS: rebalanced cluster")
+
+    def _check_output(self, word_check, output):
+        found = False
+        if len(output) >=1 :
+            for x in output:
+                if word_check in x:
+                    self.log.info("Found %s CLI output" % word_check)
+                    found = True
+        return found
+
 
 class XdcrCLITest(CliBaseTest):
     XDCR_SETUP_SUCCESS = {
