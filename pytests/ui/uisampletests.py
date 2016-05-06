@@ -410,10 +410,10 @@ class  RebalanceProgressTests(BaseUITestCase):
 
     def test_rebalance_in(self):
         NavigationHelper(self).navigate('Server Nodes')
-        self.helper.add(self.input)
-        self.helper.start_rebalancing()
-        transfer_out_stat = self.helper.get_server_rebalance_progress(self.servers[0], 'out')
-        transfer_in_stat = self.helper.get_server_rebalance_progress(self.servers[1], 'in')
+        ServerHelper(self).add(self.input)
+        ServerHelper(self).start_rebalancing()
+        transfer_out_stat = ServerHelper(self).get_server_rebalance_progress(self.servers[0], 'out')
+        transfer_in_stat = ServerHelper(self).get_server_rebalance_progress(self.servers[1], 'in')
         self.verify_stats(transfer_out_stat)
         self.verify_stats(transfer_in_stat)
 
@@ -697,6 +697,8 @@ class ServerTestControls():
         self.confirm_server_addition = self.helper.find_control('server_nodes', 'confirm_server_addition')
         self.add_server_confirm_btn = self.helper.find_control('server_nodes', 'add_server_dialog_btn',
                                                                parent_locator='confirm_server_addition')
+        self.index = self.helper.find_control('server_nodes', 'index')
+        self.n1ql = self.helper.find_control('server_nodes','n1ql')
         return self
 
     def remove_server_dialog(self, parent='remove_server_pop_up'):
@@ -772,8 +774,8 @@ class ServerTestControls():
 
     def select_recovery(self, server_ip):
         self.conf_dialog = self.helper.find_control('pending_server_list', 'server_row', parent_locator='pending_server_container', text=server_ip)
-        self.delta_option = self.helper.find_control('pending_server_list', 'delta_recv_option', parent_locator='pending_server_container')
-        self.full_option = self.helper.find_control('pending_server_list', 'full_recv_option', parent_locator='pending_server_container')
+        self.delta_option = self.helper.find_control('pending_server_list', 'delta_recv_option')
+        self.full_option = self.helper.find_control('pending_server_list', 'full_recv_option')
         return self
 
     def recovery_dialog(self):
@@ -1171,8 +1173,9 @@ class ServerHelper():
         self.wait.until(lambda fn: self.controls.add_server_dialog().add_server_pop_up.is_displayed(),
                         "no reaction for click create new bucket btn in %d sec" % (self.wait._timeout))
         self.fill_server_info(input)
-        self.controls.add_server_dialog().add_server_dialog_btn.click()
-        #self.controls.add_server_dialog().add_server_confirm_btn.click()
+        self.controls.add_server_dialog().index.click()
+        self.controls.add_server_dialog().n1ql.click()
+        self.controls.add_server_dialog().confirm_server_addition.click()
         self.wait.until_not(lambda fn:
                             self.controls.add_server_dialog().confirm_server_addition.is_displayed(),
                             "Add server pop up is not closed in %d sec" % self.wait._timeout)
@@ -1351,7 +1354,9 @@ class ServerHelper():
                     self.controls.failover_confirmation().failover_conf_cb.is_displayed():
                 self.controls.failover_confirmation().failover_conf_cb.check()
             self.controls.failover_confirmation().failover_conf_submit_btn.click_native()
-            self.wait.until(lambda fn: not self.is_confirmation_failover_opened() or\
+            if self.controls.failover_confirmation().failover_conf_dialog.is_present() or \
+                self.controls.failover_warning().is_present():
+                self.wait.until(lambda fn: not self.is_confirmation_failover_opened() or\
                                        self.is_error_present_failover(),
                         "No reaction for failover btn click in %d sec" % (self.wait._timeout))
             self.tc.log.info("Failover confirmed")
