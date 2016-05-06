@@ -16,6 +16,7 @@ from couchbase_helper.document import DesignDocument, View
 from couchbase_helper.documentgenerator import BlobGenerator
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
+from couchbase_helper.tuq_generators import JsonGenerator
 from pprint import pprint
 from testconstants import CB_REPO
 from testconstants import MV_LATESTBUILD_REPO
@@ -80,6 +81,26 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.product = 'membase-server'
         else:
             self.product = 'couchbase-server'
+        self.index_replicas = self.input.param("index_replicas", None)
+        self.index_kv_store = self.input.param("kvstore", None)
+        self.partitions_per_pindex = \
+            self.input.param("max_partitions_pindex", 32)
+        self.dataset = self.input.param("dataset", "emp")
+        self.expiry = self.input.param("expiry", 0)
+        self.create_ops_per = self.input.param("create_ops_per", 0)
+        self.expiry_ops_per = self.input.param("expiry_ops_per", 0)
+        self.delete_ops_per = self.input.param("delete_ops_per", 0)
+        self.update_ops_per = self.input.param("update_ops_per", 0)
+        self.docs_per_day = self.input.param("doc-per-day", 49)
+        self.doc_ops = self.input.param("doc_ops", False)
+        if self.doc_ops:
+            self.ops_dist_map = self.calculate_data_change_distribution(
+                create_per=self.create_ops_per , update_per=self.update_ops_per ,
+                delete_per=self.delete_ops_per, expiry_per=self.expiry_ops_per,
+                start=0, end=self.docs_per_day)
+            self.log.info(self.ops_dist_map)
+            self.docs_gen_map = self.generate_ops_docs(self.docs_per_day, 0)
+            #self.full_docs_list_after_ops = self.generate_full_docs_list_after_ops(self.docs_gen_map)
         if self.max_verify is None:
             self.max_verify = min(self.num_items, 100000)
         shell = RemoteMachineShellConnection(self.master)
@@ -93,6 +114,10 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.is_ubuntu = True
         self.queue = Queue.Queue()
         self.upgrade_servers = []
+        self.index_replicas = self.input.param("index_replicas", None)
+        self.partitions_per_pindex = \
+            self.input.param("max_partitions_pindex", 32)
+        self.index_kv_store = self.input.param("kvstore", None)
 
     def tearDown(self):
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
@@ -648,3 +673,60 @@ class NewUpgradeBaseTest(BaseTestCase):
         # USE MC BIN CLIENT WHEN NOT USING SDK CLIENT
         return self.direct_mc_bin_client(server, bucket, timeout= timeout)
     """ subdoc base test ends here """
+
+    def construct_plan_params(self):
+        plan_params = {}
+        plan_params['numReplicas'] = 0
+        if self.index_replicas:
+            plan_params['numReplicas'] = self.index_replicas
+        if self.partitions_per_pindex:
+            plan_params['maxPartitionsPerPIndex'] = self.partitions_per_pindex
+        return plan_params
+
+    def construct_cbft_query_json(self, query, fields=None, timeout=None):
+        max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
+        query_json = QUERY.JSON
+        # query is a unicode dict
+        query_json['query'] = query
+        query_json['indexName'] = self.name
+        if max_matches:
+            query_json['size'] = int(max_matches)
+        if timeout:
+            query_json['timeout'] = int(timeout)
+        if fields:
+            query_json['fields'] = fields
+        return query_json
+
+    def generate_ops_docs(self, num_items, start=0):
+        try:
+            json_generator = JsonGenerator()
+            if self.dataset == "simple":
+                return self.generate_ops(num_items, start, json_generator.generate_docs_simple)
+            if self.dataset == "sales":
+                return self.generate_ops(num_items, start, json_generator.generate_docs_sales)
+            if self.dataset == "employee" or self.dataset == "default":
+                return self.generate_ops(num_items, start, json_generator.generate_docs_employee)
+            if self.dataset == "sabre":
+                return self.generate_ops(num_items, start, json_generator.generate_docs_sabre)
+            if self.dataset == "bigdata":
+                return self.generate_ops(num_items, start, json_generator.generate_docs_bigdata)
+            if self.dataset == "array":
+                return self.generate_ops(num_items, start, json_generator.generate_docs_array)
+        except Exception, ex:
+            self.log.info(ex)
+            self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
+
+    def generate_ops(self, docs_per_day, start=0, method=None):
+        gen_docs_map = {}
+        for key in self.ops_dist_map.keys():
+            isShuffle = False
+            if key == "update":
+                isShuffle = True
+            if self.dataset != "bigdata":
+                gen_docs_map[key] = method(docs_per_day=self.ops_dist_map[key]["end"],
+                    start=self.ops_dist_map[key]["start"])
+            else:
+                gen_docs_map[key] = method(value_size=self.value_size,
+                    end=self.ops_dist_map[key]["end"],
+                    start=self.ops_dist_map[key]["start"])
+        return gen_docs_map

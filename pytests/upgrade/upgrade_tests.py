@@ -870,10 +870,16 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.log.info(ex)
             raise
 
-    def create_fts_index(self):
-        self.log.info("Checking if index already exists ...")
-        name = "default"
-        SOURCE_CB_PARAMS = {
+
+    def create_fts_index(self, queue=None):
+        try:
+            self.log.info("Checking if index already exists ...")
+            name = "default"
+            """ test on one bucket """
+            for bucket in self.buckets:
+                name = bucket.name
+                break
+            SOURCE_CB_PARAMS = {
                       "authUser": "default",
                       "authPassword": "",
                       "authSaslUser": "",
@@ -886,29 +892,39 @@ class UpgradeTests(NewUpgradeBaseTest):
                       "dataManagerSleepMaxMS": 20000,
                       "feedBufferSizeBytes": 0,
                       "feedBufferAckThreshold": 0
-                    }
-        self.index_type = 'fulltext-index'
-        self.index_definition = {
+                       }
+            self.index_type = 'fulltext-index'
+            self.index_definition = {
                           "type": "fulltext-index",
                           "name": "",
                           "uuid": "",
                           "params": {},
                           "sourceType": "couchbase",
-                          "sourceName": "default",
+                          "sourceName": "",
                           "sourceUUID": "",
                           "sourceParams": SOURCE_CB_PARAMS,
                           "planParams": {}
                           }
-        self.name = self.index_definition['name'] = name
-        rest = RestConnection(self.servers[0])
-        status, _ = rest.get_fts_index_definition(self.name)
-        if status != 400:
-            rest.delete_fts_index(self.name)
-        self.log.info("Creating {0} {1} on {2}".format(
-            self.index_type,
-            self.name,
-            rest.ip))
-        rest.create_fts_index(self.name, self.index_definition)
+            self.name = self.index_definition['name'] = \
+                                self.index_definition['sourceName'] = name
+            fts_node = self.get_nodes_from_services_map("fts")
+            if fts_node:
+                rest = RestConnection(fts_node)
+                status, _ = rest.get_fts_index_definition(self.name)
+                if status != 400:
+                    rest.delete_fts_index(self.name)
+                self.log.info("Creating {0} {1} on {2}".format(self.index_type,
+                                                           self.name, rest.ip))
+                rest.create_fts_index(self.name, self.index_definition)
+            else:
+                raise("No FTS node in cluster")
+            self.async_ops_all_buckets(self.docs_gen_map, batch_size=100)
+        except Exception, ex:
+            self.log.info(ex)
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
 
     def cluster_stats(self, servers):
         self._wait_for_stats_all_buckets(servers)
