@@ -2301,8 +2301,8 @@ class RestConnection(object):
 
         if status:
             content = json.loads(content)
-            log.info("Status: %s" %content['status'])
-            return content['total_hits'], content['hits'], content['took']
+            return content['total_hits'], content['hits'], content['took'], \
+                   content['status']
 
 
     """ End of FTS rest APIs """

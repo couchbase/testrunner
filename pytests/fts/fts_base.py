@@ -507,6 +507,7 @@ class FTSIndex:
         self._source_name = source_name
         self._one_time = False
         self.index_type = index_type
+        self.num_pindexes = 0
         self.index_definition = {
                           "type": "fulltext-index",
                           "name": "",
@@ -624,8 +625,12 @@ class FTSIndex:
             self.name,
             rest.ip))
         status = rest.delete_fts_index(self.name)
-        if status:
-            self.__log.info("{0} deleted".format(self.name))
+        if not self.__cluster.are_index_files_deleted_from_disk(self.name):
+            self.__log.error("Status: {0} but index file for {1} not yet "
+                             "deleted!".format(status, self.name))
+        else:
+            self.__log.info("Validated: all index files for {0} deleted from "
+                            "disk".format(self.name))
 
     def get_index_defn(self):
         rest = RestConnection(self.__cluster.get_random_fts_node())
@@ -673,8 +678,9 @@ class FTSIndex:
         matches = []
         doc_ids = []
         time_taken = 0
+        status = {}
         try:
-            hits, matches, time_taken =\
+            hits, matches, time_taken, status =\
                 self.__cluster.run_fts_query(self.name, query_dict)
         except ServerUnavailableException:
             # query time outs
@@ -692,7 +698,7 @@ class FTSIndex:
         if expected_hits and expected_hits == hits:
             self.__log.info("SUCCESS! Expected hits: %s, fts returned: %s"
                                % (expected_hits, hits))
-        return hits, doc_ids, time_taken
+        return hits, doc_ids, time_taken, status
 
 
 class CouchbaseCluster:
@@ -827,6 +833,28 @@ class CouchbaseCluster:
 
     def get_random_non_fts_node(self):
         return self.__non_fts_nodes[random.randint(0, len(self.__fts_nodes)-1)]
+
+    def are_index_files_deleted_from_disk(self, index_name):
+        nodes = self.get_fts_nodes()
+        for node in nodes:
+            data_dir = RestConnection(node).get_data_path()
+            shell = RemoteMachineShellConnection(node)
+            count = -1
+            retry = 0
+            while count != 0:
+                count, err = shell.execute_command(
+                    "ls {0}/@fts |grep {1}*.pindex | wc -l".
+                    format(data_dir, index_name))
+                count = int(count[0])
+                self.__log.info(count)
+                retry += 1
+                if retry > 5:
+                    files, err = shell.execute_command(
+                        "ls {0}/@fts |grep {1}*.pindex".
+                        format(data_dir, index_name))
+                    self.__log.info(files)
+                    return False
+        return True
 
     def get_mem_quota(self):
         return self.__mem_quota
@@ -1102,9 +1130,9 @@ class CouchbaseCluster:
         self.__log.info("Running query %s on node: %s:%s"
                         % (json.dumps(query_dict, ensure_ascii=False),
                            node.ip, node.fts_port))
-        total_hits, hit_list, time_taken = \
+        total_hits, hit_list, time_taken, status = \
             RestConnection(node).run_fts_query(index_name, query_dict)
-        return total_hits, hit_list, time_taken
+        return total_hits, hit_list, time_taken, status
 
     def get_buckets(self):
         return self.__buckets
@@ -2488,6 +2516,7 @@ class FTSBaseTest(unittest.TestCase):
                                                 total_pindexes,
                                                 exp_num_pindexes))
         self.log.info("Validated: Number of PIndexes = %s" % total_pindexes)
+        index.num_pindexes = total_pindexes
 
         # check 2 - each pindex servicing "partitions_per_pindex" vbs
         num_fts_nodes = len(self._cb_cluster.get_fts_nodes())

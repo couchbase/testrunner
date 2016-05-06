@@ -1091,15 +1091,36 @@ class ESRunQueryCompare(Task):
         self.set_result(self.result)
 
     def execute(self, task_manager):
+        self.es_compare = True
         try:
             self.log.info("---------------------------------------------------"
                           "--------------- Query # %s -----------------------"
                           "------------------------------------------"
                           % str(self.query_index+1))
             try:
-                fts_hits, fts_doc_ids, fts_time = self.run_fts_query(self.fts_query)
+                fts_hits, fts_doc_ids, fts_time, fts_status = \
+                    self.run_fts_query(self.fts_query)
+                self.log.info("Status: %s" %fts_status)
                 if fts_hits < 0:
                     self.passed = False
+                elif 'errors' in fts_status.keys() and fts_status['errors']:
+                        if fts_status['successful'] == 0 and \
+                                (list(set(fts_status['errors'].values())) ==
+                                    [u'context deadline exceeded'] or
+                                list(set(fts_status['errors'].values())) ==
+                                    [u'TooManyClauses[maxClauseCount is set to 1024]']):
+                            # too many clauses in the query for fts to process
+                            self.log.info("FTS chose not to run this big query"
+                                          "...skipping ES validation")
+                            self.passed = True
+                            self.es_compare = False
+                        elif 0 < fts_status['successful'] < \
+                                self.fts_index.num_pindexes:
+                            # partial results
+                            self.log.info("FTS returned partial results..."
+                                          "skipping ES validation")
+                            self.passed = True
+                            self.es_compare = False
                 else:
                     self.log.info("FTS hits for query: %s is %s (took %sms)" % \
                               (json.dumps(self.fts_query, ensure_ascii=False),
@@ -1115,7 +1136,7 @@ class ESRunQueryCompare(Task):
                                self.es_index_name,
                                es_hits,
                                es_time))
-                if self.passed:
+                if self.passed and self.es_compare:
                     if int(es_hits) != int(fts_hits):
                         msg = "FAIL: FTS hits: %s, while ES hits: %s"\
                               % (fts_hits, es_hits)
