@@ -1121,11 +1121,10 @@ class ESRunQueryCompare(Task):
                                           "skipping ES validation")
                             self.passed = True
                             self.es_compare = False
-                else:
-                    self.log.info("FTS hits for query: %s is %s (took %sms)" % \
-                              (json.dumps(self.fts_query, ensure_ascii=False),
-                               fts_hits,
-                               float(fts_time)/1000000))
+                self.log.info("FTS hits for query: %s is %s (took %sms)" % \
+                        (json.dumps(self.fts_query, ensure_ascii=False),
+                        fts_hits,
+                        float(fts_time)/1000000))
             except ServerUnavailableException:
                 self.log.error("ERROR: FTS Query timed out (client timeout=70s)!")
                 self.passed = False
