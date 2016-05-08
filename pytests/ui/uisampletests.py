@@ -190,7 +190,9 @@ class DocumentsTest(BaseUITestCase):
                                                               proxyPort=STANDARD_BUCKET_PORT + 3)
         NavigationHelper(self).navigate('Data Buckets')
         BucketHelper(self).open_documents(self.bucket)
-        old_doc = Document('test', '{"test":"test"}')
+        doc_name = self.input.param('doc_name', 'test')
+        doc_content = self.input.param('content', '{"test" : "test"}')
+        old_doc = Document(doc_name, doc_content)
         DocsHelper(self).create_doc(old_doc)
 
         error = self.input.param('error', None)
@@ -215,13 +217,16 @@ class DocumentsTest(BaseUITestCase):
                                                               proxyPort=STANDARD_BUCKET_PORT + 4)
         NavigationHelper(self).navigate('Data Buckets')
         BucketHelper(self).open_documents(self.bucket)
-        old_doc = Document('test', '{"test":"test"}')
+        doc_name = self.input.param('doc_name', 'test')
+        doc_content = self.input.param('content', '{"test" : "test"}')
+        old_doc = Document(doc_name, doc_content)
         DocsHelper(self).create_doc(old_doc)
 
         doc_content = self.input.param('doc_content', '{"test":"edited"}')
         new_doc = Document(old_doc.name, doc_content)
 
-        NavigationHelper(self).navigate('Views')
+        NavigationHelper(self).navigate('Indexes')
+        DdocViewHelper(self).click_view_tab(text='Views')
         view_name = 'test_view_ui'
         DdocViewHelper(self).create_view(view_name, view_name)
         DdocViewHelper(self).open_view(view_name)
@@ -319,7 +324,8 @@ class ROuserTests(BaseUITestCase):
             NavigationHelper(self).navigate('Data Buckets')
             RestConnection(self.servers[0]).create_bucket(bucket=self.bucket.name, ramQuotaMB=self.bucket.ram_quota or 100,
                                                            proxyPort=STANDARD_BUCKET_PORT + 6)
-            NavigationHelper(self).navigate('Views')
+            NavigationHelper(self).navigate('Indexes')
+            DdocViewHelper(self).click_view_tab(text='Views')
             self.view_name = 'test_view_ui'
             DdocViewHelper(self).create_view(self.view_name, self.view_name)
 
@@ -331,28 +337,28 @@ class ROuserTests(BaseUITestCase):
         username = self.input.param('username', 'myrouser')
         password = self.input.param('password', 'myropass')
 
-        NavigationHelper(self).navigate('Settings')
-        SettingsHelper(self).navigate('Account Management')
+        NavigationHelper(self).navigate('Security')
+        SettingsHelper(self).click_ro_tab()
         SettingsHelper(self).create_user(username, password)
         self.log.info("Login with just created user")
-        self.helper.logout()
-        self.helper.login(user=username, password=password)
+        BaseHelper(self).logout()
+        BaseHelper(self).login(user=username, password=password)
         self.verify_read_only(self.bucket, self.view_name)
 
     def test_delete_read_only_user(self):
         username = self.input.param('username', 'myrouser')
         password = self.input.param('password', 'myropass')
         time.sleep(2)
-        NavigationHelper(self).navigate('Settings')
-        SettingsHelper(self).navigate('Account Management')
+        NavigationHelper(self).navigate('Security')
+        SettingsHelper(self).click_ro_tab()
         SettingsHelper(self).create_user(username, password)
         SettingsHelper(self).delete_user()
 
-        self.helper.logout()
-        self.helper.login(user=username, password=password)
+        BaseHelper(self).logout()
+        BaseHelper(self).login(user=username, password=password)
         time.sleep(3)
-        self.assertTrue(self.helper.controls.error.is_displayed(), "Able to login")
-        self.log.info("Unable to login as expected. %s" % self.helper.controls.error.get_text())
+        self.assertTrue(BaseHelper(self).controls.error.is_displayed(), "Able to login")
+        self.log.info("Unable to login as expected. %s" % BaseHelper(self).controls.error.get_text())
 
     def test_negative_read_only_user(self):
         username = self.input.param('username', 'myrouser')
@@ -360,8 +366,8 @@ class ROuserTests(BaseUITestCase):
         verify_password = self.input.param('verify_password', None)
         error = self.input.param('error', '')
         time.sleep(2)
-        NavigationHelper(self).navigate('Settings')
-        SettingsHelper(self).navigate('Account Management')
+        NavigationHelper(self).navigate('Security')
+        SettingsHelper(self).click_ro_tab()
         try:
             SettingsHelper(self).create_user(username, password, verify_password)
         except Exception, ex:
@@ -383,12 +389,13 @@ class ROuserTests(BaseUITestCase):
         self.assertFalse(BucketHelper(self).controls.edit_btn().is_displayed(),
                          "Bucket can be edited")
         self.log.info("Views check")
-        navigator.navigate('Views')
+        NavigationHelper(self).navigate('Indexes')
+        DdocViewHelper(self).click_view_tab(text='Views')
         DdocViewHelper(self).open_view(view)
-        self.assertTrue(DdocViewHelper(self).controls.view_map_reduce_fn().map_fn.get_attribute("class").find("read_only") != -1,
-                        "Can edit map fn")
-        self.assertTrue(DdocViewHelper(self).controls.view_map_reduce_fn().reduce_fn.get_attribute("class").find("read_only") != -1,
-                        "Can edit reduce fn")
+        self.assertTrue(DdocViewHelper(self).controls.view_map_reduce_fn().save_btn.get_attribute("class").find("dynamic_disabled") != -1,
+                        "Save button not disabled")
+        self.assertTrue(DdocViewHelper(self).controls.view_map_reduce_fn().saveas_btn.get_attribute("class").find("dynamic_disabled") != -1,
+                        "Save as button not disabled")
 
 class  RebalanceProgressTests(BaseUITestCase):
     def setUp(self):
@@ -563,7 +570,8 @@ class ViewsTests(BaseUITestCase):
 
     def test_add_dev_view(self):
         try:
-            NavigationHelper(self).navigate('Views')
+            NavigationHelper(self).navigate('Indexes')
+            DdocViewHelper(self).click_view_tab(text='Views')
             DdocViewHelper(self).create_view(self.ddoc_name, self.view_name)
         except Exception, ex:
             self.log.error(str(ex))
@@ -571,7 +579,8 @@ class ViewsTests(BaseUITestCase):
 
     def test_add_prod_view(self):
         try:
-            NavigationHelper(self).navigate('Views')
+            NavigationHelper(self).navigate('Indexes')
+            DdocViewHelper(self).click_view_tab(text='Views')
             DdocViewHelper(self).create_view(self.ddoc_name, self.view_name, dev_view=False)
         except Exception, ex:
             self.log.error(str(ex))
@@ -579,7 +588,8 @@ class ViewsTests(BaseUITestCase):
 
     def test_delete_view(self):
         try:
-            NavigationHelper(self).navigate('Views')
+            NavigationHelper(self).navigate('Indexes')
+            DdocViewHelper(self).click_view_tab(text='Views')
             DdocViewHelper(self).create_view(self.ddoc_name, self.view_name)
             DdocViewHelper(self).delete_view(self.view_name)
         except Exception, ex:
@@ -588,16 +598,9 @@ class ViewsTests(BaseUITestCase):
 
     def test_edit_view(self):
         try:
-            for bucket in self.buckets:
-                BucketHelper(self).open_documents(bucket)
-            doc_name = self.input.param('doc_name', 'test')
             action = self.input.param('action', 'save')
-            doc_content = self.input.param('content', '{"test" : "test"}')
-            doc = Document(doc_name, doc_content)
-            DocsHelper(self).create_doc(doc)
-            self.assertTrue(DocsHelper(self).get_error() is None, "error appears: %s" \
-                            % DocsHelper(self).get_error())
-            NavigationHelper(self).navigate('Views')
+            NavigationHelper(self).navigate('Indexes')
+            DdocViewHelper(self).click_view_tab(text='Views')
             DdocViewHelper(self).create_view(self.ddoc_name, self.view_name)
             DdocViewHelper(self).edit_view(self.view_name)
             DdocViewHelper(self).fill_edit_view_screen(self.view_name, action)
@@ -617,7 +620,8 @@ class ViewsTests(BaseUITestCase):
             DocsHelper(self).create_doc(doc)
             self.assertTrue(DocsHelper(self).get_error() is None, "error appears: %s" \
                             % DocsHelper(self).get_error())
-        NavigationHelper(self).navigate('Views')
+        NavigationHelper(self).navigate('Indexes')
+        DdocViewHelper(self).click_view_tab(text='Views')
         DdocViewHelper(self).create_view(self.ddoc_name, self.view_name)
         DdocViewHelper(self).open_view(self.view_name)
         DdocViewHelper(self).verify_view_results(view_set, None)
@@ -638,7 +642,8 @@ class ViewsTests(BaseUITestCase):
             self.assertTrue(DocsHelper(self).get_error() is None, "error appears: %s" \
                             % DocsHelper(self).get_error())
             age_sum = age_sum + i
-        NavigationHelper(self).navigate('Views')
+        NavigationHelper(self).navigate('Indexes')
+        DdocViewHelper(self).click_view_tab(text='Views')
         DdocViewHelper(self).create_view(self.ddoc_name, self.view_name)
         DdocViewHelper(self).edit_view(self.view_name)
         DdocViewHelper(self).fill_edit_view_screen(self.view_name, action, reduce_fn)
@@ -945,10 +950,14 @@ class NodeInitializeControls():
 class DdocViewControls():
     def __init__(self, driver):
         self.helper = ControlsHelper(driver)
+
+    def view_btn(self):
         self.create_view_btn = self.helper.find_control('views_screen', 'create_view_btn')
+        return self
 
     def views_screen(self, text=''):
-        return self.helper.find_controls('views_screen', 'views_tab', text=text)
+        self.views_tab = self.helper.find_control('views_screen', 'views_tab', text=text)
+        return self
 
     def error(self):
         return self.helper.find_first_visible('edit_view_screen', 'error')
@@ -978,8 +987,8 @@ class DdocViewControls():
 
     def del_view_dialog(self):
         self.dialog = self.helper.find_control('delete_view', 'dialog')
-        self.ok_btn = self.helper.find_control('delete_view', 'ok_btn', parent_locator='dialog')
-        self.cancel_btn = self.helper.find_control('delete_view', 'cancel_btn', parent_locator='dialog')
+        self.ok_btn = self.helper.find_control('delete_view', 'ok_btn')
+        self.cancel_btn = self.helper.find_control('delete_view', 'cancel_btn')
         return self
 
     def ddoc_row(self, ddoc=''):
@@ -1026,10 +1035,13 @@ class DdocViewControls():
 class DocumentsControls():
     def __init__(self, driver):
         self.helper = ControlsHelper(driver)
+
+    def create_doc_screen(self):
         self.documents_screen = self.helper.find_control('docs_screen', 'screen')
         self.create_doc = self.helper.find_control('docs_screen', 'create_doc_btn')
         self.lookup_input = self.helper.find_control('docs_screen', 'lookup_input')
         self.lookup_btn = self.helper.find_control('docs_screen', 'lookup_btn')
+        return self
 
     def error(self):
         return self.helper.find_first_visible('docs_screen', 'error')
@@ -1084,6 +1096,10 @@ class SettingsTestControls():
         return self.helper.find_control('settings', 'settings_tab_link',
                                         parent_locator='settings_bar',
                                         text=text)
+
+    def ro_tab(self):
+        self.ro_tab = self.helper.find_control('user', 'ro_tab')
+        return self
 
     def alerts_info(self):
         self.enable_email_alerts = self.helper.find_control('alerts', 'enable_email_alerts')
@@ -1730,18 +1746,24 @@ class DdocViewHelper():
         self.wait = WebDriverWait(tc.driver, timeout=250)
         self.controls = DdocViewControls(tc.driver)
 
+    def click_view_tab(self, text=''):
+        self.controls.views_screen(text=text).views_tab.click()
+        self.tc.log.info("tab '%s' is selected" % text)
+        time.sleep(10)
+
     def create_view(self, ddoc_name, view_name, dev_view=True):
         self.tc.log.info('trying create a view %s' % view_name)
-        self.controls.create_view_btn.click()
+        self.controls.view_btn().create_view_btn.click()
         self.wait.until(lambda fn:
-                        self.controls.create_pop_up().ddoc_name.is_displayed(),
-                        "Create pop up bucket is not opened")
+                        self.controls.create_pop_up().pop_up.is_displayed(),
+                        "Create pop up is not opened")
         self.controls.create_pop_up().ddoc_name.type(ddoc_name)
         self.controls.create_pop_up().view_name.type(view_name)
         self.controls.create_pop_up().save_btn.click()
         self.wait.until(lambda fn:
                         self.is_view_present(view_name),
                         "view %s is not appeared" % view_name)
+        self.tc.log.info('View %s created' % view_name)
         if not dev_view:
             self.controls.ddoc_row(ddoc_name).publish_btn.click()
             self.wait.until(lambda fn:
@@ -1750,6 +1772,7 @@ class DdocViewHelper():
             self.wait.until(lambda fn:
                         self.controls.prod_view().prod_view_count.is_displayed(),
                         "View is not published successfully")
+            self.tc.log.info('View %s published' % view_name)
 
     def is_view_present(self, view_name):
         try:
@@ -1808,18 +1831,14 @@ class DdocViewHelper():
         self.wait.until(lambda fn:
                        self.controls.view_row(view_name).row.is_displayed(),
                       "View row %s is not displayed" % view_name)
-        for i in xrange(3):
-            try:
-                self.controls.view_row(view_name).delete_btn.click()
-                break
-            except StaleElementReferenceException:
-                pass
+        self.controls.view_row(view_name).delete_btn.click()
         self.wait.until(lambda fn:
                         self.controls.del_view_dialog().ok_btn.is_displayed(),
                         "Delete view dialog is not opened")
         self.controls.del_view_dialog().ok_btn.click()
+        self.tc.log.info('View %s deleted' % view_name)
 
-    def fill_edit_view_screen(self, view_name, action = 'save', reduce_fn='_count'):
+    def fill_edit_view_screen(self, view_name, action='save', reduce_fn='_count'):
         self.tc.log.info('Fill edit view %s screen' % view_name)
         new_view_name = "test1"
         updated_map_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.id, doc.age);}}'
@@ -1837,8 +1856,9 @@ class DdocViewHelper():
             self.controls.view_map_reduce_fn().saveas_btn.click()
             self.controls.create_pop_up().view_name.type(new_view_name)
             self.controls.create_pop_up().save_btn.click()
+            self.click_view_tab(text='Views')
             self.wait.until(lambda fn:
-                            self.is_new_view_present(new_view_name),
+                            self.is_view_present(new_view_name),
                             "view %s is not appeared" % new_view_name)
             time.sleep(1)
         self.tc.log.info('View is successfully edited')
@@ -1892,8 +1912,8 @@ class DocsHelper():
     def create_doc(self, doc):
         self.tc.log.info('trying create a doc %s' % doc.name)
         self.wait.until(lambda fn:
-                        self.controls.create_doc.is_displayed())
-        self.controls.create_doc.click()
+                        self.controls.create_doc_screen().documents_screen.is_displayed())
+        self.controls.create_doc_screen().create_doc.click()
         self.fill_create_doc_pop_up(doc.name)
         self.wait.until(lambda fn:
                         self.controls.edit_document_screen().content is not None and \
@@ -2024,6 +2044,10 @@ class SettingsHelper():
         self.controls = SettingsTestControls(tc.driver)
         self.wait = WebDriverWait(tc.driver, timeout=250)
 
+    def click_ro_tab(self):
+        self.controls.ro_tab().ro_tab.click()
+        self.tc.log.info("tab Internal User/roles is selected")
+
     def navigate(self, tab):
         self.wait.until(lambda fn: self.controls._settings_tab_link(tab).is_displayed(),
                         "tab '%s' is not displayed in %d sec" % (tab, self.wait._timeout))
@@ -2114,7 +2138,8 @@ class SettingsHelper():
         self.wait.until(lambda fn: self.controls.confirmation_user_delete().delete_btn.is_displayed(),
                         "Confirmation pop up didn't appear in %d sec" % (self.wait._timeout))
         self.controls.confirmation_user_delete().delete_btn.click()
-        self.wait.until(lambda fn: self.controls.user_create_info().username.is_displayed(),
+        if self.controls.user_create_info().username.is_present():
+            self.wait.until(lambda fn: self.controls.user_create_info().username.is_displayed(),
                         "Username is not displayed in %d sec" % (self.wait._timeout))
         self.tc.log.info("RO user is deleted")
 
@@ -2126,7 +2151,7 @@ class SettingsHelper():
                         "Username is not displayed in %d sec" % (self.wait._timeout))
         self.controls.user_create_info().username.type(user)
         self.controls.user_create_info().password.type(pwd, is_pwd=True)
-        self.controls.user_create_info().verify_password.type(verify_pwd)
+        self.controls.user_create_info().verify_password.type(verify_pwd, is_pwd=True)
         self.controls.user_create_info().create_btn.click()
         self.wait.until(lambda fn: self.is_user_created() or self.is_error_present(),
                         "No reaction for create btn in %d sec" % (self.wait._timeout))
