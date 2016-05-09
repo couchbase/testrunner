@@ -65,26 +65,58 @@ class portscan(BaseTestCase):
         os.chmod(testssl_file_name, st.st_mode | stat.S_IEXEC | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
+
+    TEST_SSL_FILENAME = '/tmp/testssl.sh'
+    ports_to_check = [11207, 18091, 18092,18093]
+
+
+
+    """ the testssl.sh output looks like:
+ TLS 1      not offered
+ TLS 1.1    not offered
+ TLS 1.2    offered (OK)
+    """
+    def checkTLS1_1_blocking(self):
+        self.get_the_testssl_script(self.TEST_SSL_FILENAME)
+        command = "ns_config:set(ssl_minimum_protocol, 'tlsv1.2')"
+        self.log.info("posting: %s" % command)
+        rest = RestConnection(self.master)
+        res = rest.diag_eval(command)
+        import pdb;pdb.set_trace()
+        for s in self.servers:
+            for i in self.ports_to_check:
+                self.log.info('{0} Testing port {1}'.format(s,i))
+                cmd  = self.TEST_SSL_FILENAME + ' -p --color 0 {0}:{1}'.format( s.ip, i)
+                res = os.popen(cmd).read().split('\n')
+                print 'the result is', res
+                for r in res:
+                    if 'TLS 1.1' in r:
+                        self.assertTrue( 'not offered' in r,
+                                        msg='TLS 1.1 is incorrect enabled on port {0}'.format(i))
+                    elif 'TLS 1 ' in r:
+                        self.assertTrue( 'not offered' in r,
+                                        msg='TLS 1 is incorrect enabled on port {0}'.format(i))
+
+
+
     def checkPortSecurity(self):
 
-        TEST_SSL_FILENAME = '/tmp/testssl.sh'
 
 
-        self.get_the_testssl_script(TEST_SSL_FILENAME)
+        self.get_the_testssl_script(self.TEST_SSL_FILENAME)
 
 
 
-        ports_to_check = [11207,11214, 18091, 18092]
         all_passed = True
-        check_count = 0
         # Note this analysis is very coupled to the testssl.sh output format. If it changes this code may break.
         # I did ask the testssl person if he would do a machine readable output - EC - 12/14/2015
 
 
-        for i in ports_to_check:
+        for i in self.ports_to_check:
+            check_count = 0
             self.log.info('Testing port {0}'.format(i))
-            cmd  = TEST_SSL_FILENAME + ' --color 0 {0}:{1}'.format( self.master.ip, i)
-            #print 'cmd is', cmd
+            cmd  = self.TEST_SSL_FILENAME + ' --color 0 {0}:{1}'.format( self.master.ip, i)
+            print 'cmd is', cmd
             res = os.popen(cmd).read().split('\n')
             for r in res:
                 # check vulnerabilities
@@ -106,7 +138,7 @@ class portscan(BaseTestCase):
                 elif 'LOGJAM (CVE-2015-4000)' in r:
                     check_count = check_count + 1
                     if 'VULNERABLE (NOT ok)' in r:
-                        self.log.error('Poodle vulnerability on port {0}'.format(i))
+                        self.log.error('LogJam vulnerability on port {0}'.format(i))
                         all_passed = False
 
 
@@ -133,8 +165,8 @@ class portscan(BaseTestCase):
 
 
 
-        self.assertTrue( all_passed, msg='Check logs for failures')
+            self.assertTrue( all_passed, msg='Port {0} failed. Check logs for failures'.format(i))
+            self.log.info('Testing port {0}'.format(i))
 
-
-        # make sure all the tests were seen
-        self.assertTrue( check_count==6, msg='Not all checks present')
+            # make sure all the tests were seen
+            self.assertTrue( check_count==7, msg='Port {0}. Not all checks present - saw {1} checks'.format(i, check_count))
