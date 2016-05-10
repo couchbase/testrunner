@@ -2637,7 +2637,7 @@ class FTSBaseTest(unittest.TestCase):
             name = 'alias_%s' % int(time.time())
 
         if not alias_def:
-            alias_def = INDEX_DEFAULTS.ALIAS_DEFINITION
+            alias_def = {"targets": {}}
             for index in target_indexes:
                 alias_def['targets'][index.name] = {}
                 alias_def['targets'][index.name]['indexUUID'] = index.get_uuid()
