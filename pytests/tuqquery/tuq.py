@@ -2052,8 +2052,9 @@ class QueryTests(BaseTestCase):
             res = self.run_cbq_query()
 	    plan = ExplainPlanHelper(res)
             if("IN" in self.query):
+                import pdb;pdb.set_trace()
                 self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "DistinctScan",
-                        "UnionScan Operator is not used by this query")
+                        "DistinctScan Operator is not used by this query")
             else:
                 self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "UnionScan",
                         "UnionScan Operator is not used by this query")
@@ -2105,8 +2106,6 @@ class QueryTests(BaseTestCase):
         self.query = "select clock_millis() as now"
         now = time.time()
         res = self.run_cbq_query()
-        self.query = "select now_millis() as now"
-        res1 = self.run_cbq_query()
         self.assertTrue((res["results"][0]["now"] < now * 1000),
                         "Result expected to be in: [%s ... %s]. Actual %s" % (
                                         now * 1000, (now + 10) * 1000, res["results"]))
