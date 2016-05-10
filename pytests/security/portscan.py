@@ -82,7 +82,6 @@ class portscan(BaseTestCase):
         self.log.info("posting: %s" % command)
         rest = RestConnection(self.master)
         res = rest.diag_eval(command)
-        import pdb;pdb.set_trace()
         for s in self.servers:
             for i in self.ports_to_check:
                 self.log.info('{0} Testing port {1}'.format(s,i))
