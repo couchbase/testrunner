@@ -125,6 +125,7 @@ class Installer(object):
         remote_client.couchbase_uninstall()
         remote_client.disconnect()
 
+
     def build_url(self, params):
         _errors = []
         version = ''
@@ -445,7 +446,9 @@ class CouchbaseServerInstaller(Installer):
                         if "index" in set_services and "fts" not in set_services:
                             log.info("quota for index service will be %s MB" \
                                                               % (INDEX_QUOTA))
-                            kv_quota = int(info.mcdMemoryReserved) - INDEX_QUOTA
+                            kv_quota = int(info.mcdMemoryReserved * 2/3) - INDEX_QUOTA
+                            log.info("set index quota to node %s " % server.ip)
+                            rest.set_indexer_memoryQuota(indexMemoryQuota=INDEX_QUOTA)
                             if kv_quota < MIN_KV_QUOTA:
                                 raise Exception("KV RAM needs to be more than %s MB"
                                         " at node  %s"  % (MIN_KV_QUOTA, server.ip))
@@ -454,8 +457,12 @@ class CouchbaseServerInstaller(Installer):
                                                               % (INDEX_QUOTA))
                             log.info("quota for fts service will be %s MB" \
                                                                 % (FTS_QUOTA))
-                            kv_quota = int(info.mcdMemoryReserved) - INDEX_QUOTA \
+                            kv_quota = int(info.mcdMemoryReserved * 2/3)\
+                                                                 - INDEX_QUOTA \
                                                                  - FTS_QUOTA
+                            log.info("set both index and fts quota at node %s "\
+                                                                    % server.ip)
+                            rest.set_indexer_memoryQuota(indexMemoryQuota=INDEX_QUOTA)
                             rest.set_fts_memoryQuota(ftsMemoryQuota=FTS_QUOTA)
                             if kv_quota < MIN_KV_QUOTA:
                                 raise Exception("KV RAM need to be more than %s MB"
@@ -463,7 +470,7 @@ class CouchbaseServerInstaller(Installer):
                         elif "fts" in set_services and "index" not in set_services:
                             log.info("quota for fts service will be %s MB" \
                                                                 % (FTS_QUOTA))
-                            kv_quota = int(info.mcdMemoryReserved) - FTS_QUOTA
+                            kv_quota = int(info.mcdMemoryReserved * 2/3) - FTS_QUOTA
                             if kv_quota < MIN_KV_QUOTA:
                                 raise Exception("KV RAM need to be more than %s MB"
                                        " at node  %s"  % (MIN_KV_QUOTA, server.ip))
