@@ -188,19 +188,22 @@ class ElasticSearchBase(object):
         try:
             self.__log.info("Checking if ES alias '{0}' exists...".format(name))
             self.delete_index(name)
-            alias_info = {"actions": [{"add": {"indices": indexes, "alias": name}}]}
+            alias_info = {"actions": []}
+            for index in indexes:
+                alias_info['actions'].append({"add": {"index": index,
+                                                      "alias": name}})
             self.__log.info("Creating ES alias '{0}' on {1}...".format(
                 name,
                 indexes))
             status, content, _ = self._http_request(
-                self.__connection_url + name,
+                self.__connection_url + "_aliases",
                 'POST',
                 json.dumps(alias_info))
             if status:
                 self.__log.info("ES alias '{0}' created".format(name))
                 self.__indices.append(name)
-        except Exception as e:
-            raise Exception("Could not create ES alias : %s" % e)
+        except Exception as ex:
+            raise Exception("Could not create ES alias : %s" % ex)
 
     def async_load_ES(self, index_name, gen, op_type='create'):
         """
