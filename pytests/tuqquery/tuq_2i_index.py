@@ -2262,7 +2262,6 @@ class QueriesIndexTests(QueryTests):
                     created_indexes.append(index_name)
                     self.query = "EXPLAIN SELECT * FROM %s where name " % (bucket.name) +\
                                   "like 'xyz%'"
-                    import pdb;pdb.set_trace()
                     res = self.run_cbq_query()
                     plan = ExplainPlanHelper(res)
                 self.assertTrue(plan["~children"][0]['index'] == index_name,"correct index is not used")

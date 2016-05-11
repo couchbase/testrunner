@@ -2052,7 +2052,6 @@ class QueryTests(BaseTestCase):
             res = self.run_cbq_query()
 	    plan = ExplainPlanHelper(res)
             if("IN" in self.query):
-                import pdb;pdb.set_trace()
                 self.assertTrue(plan["~children"][0]["~children"][0]["#operator"] == "DistinctScan",
                         "DistinctScan Operator is not used by this query")
             else:
