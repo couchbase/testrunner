@@ -85,6 +85,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             in_between_index_ops = self._run_in_between_tasks()
             rebalance.result()
             self._run_tasks([kvOps_tasks, before_index_ops, in_between_index_ops])
+            self.sleep(30)
             self._run_after_index_tasks()
         except Exception, ex:
             raise
