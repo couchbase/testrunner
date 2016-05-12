@@ -1399,7 +1399,7 @@ class RemoteMachineShellConnection:
             if fts_query_limit:
                 output, error = \
                     self.execute_command("sed -i 's/export PATH/export PATH\\n"
-                        "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1}/'\
+                        "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1},ftsMossDebug=1/'\
                     /opt/{0}/bin/{0}-server".format(server_type, int(fts_query_limit)))
                 success &= self.log_command_output(output, error, track_words)
                 startserver = True
