@@ -45,6 +45,7 @@ def main():
     parser.add_option('-t','--test', dest='test', default=False, action='store_true')
     parser.add_option('-s','--subcomponent', dest='subcomponent', default=None)
     parser.add_option('-e','--extraParameters', dest='extraParameters', default=None)
+    parser.add_option('-y','--serverType', dest='serverType', default='VM')
 
 
     options, args = parser.parse_args()
@@ -58,6 +59,8 @@ def main():
 
     print 'nolaunch', options.noLaunch
     print 'os', options.os
+    print 'serverType', options.serverType
+
 
     print 'subcomponent is', options.subcomponent
 
@@ -150,20 +153,32 @@ def main():
 
 
 
+    # Docker goes somewhere else
     launchStringBase = 'http://qa.sc.couchbase.com/job/test_suite_executor'
     if options.test:
         launchStringBase = launchStringBase + '-test'
+    elif options.serverType.lower() == 'docker':
+        launchStringBase = launchStringBase + '-docker'
 
+
+    # this are VM/Docker dependent - or maybe not
     launchString = launchStringBase + '/buildWithParameters?token=test_dispatcher&' + \
                         'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
-                         'iniFile={5}&servers={6}&parameters={7}&os={8}&initNodes={9}&installParameters={10}'
+                         'iniFile={5}&parameters={6}&os={7}&initNodes={8}&installParameters={9}'
 
     summary = []
 
     while len(testsToLaunch) > 0:
         try:
-            response, content = httplib2.Http(timeout=60).request('http://' + SERVER_MANAGER +
-                           '/getavailablecount/{0}?poolId={1}'.format(options.os,options.poolId), 'GET')
+            # this bit is Docker/VM dependent
+            getAvailUrl =  'http://' + SERVER_MANAGER + '/getavailablecount/'
+            if options.serverType.lower() == 'docker':
+                # may want to add OS at some point
+                getAvailUrl = getAvailUrl +  'docker?os={0}&poolId={1}'.format(options.os,options.poolId)
+            else:
+                getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(options.os,options.poolId)
+
+            response, content = httplib2.Http(timeout=60).request(getAvailUrl , 'GET')
             if response.status != 200:
                print time.asctime( time.localtime(time.time()) ), 'invalid server response', content
                time.sleep(POLL_INTERVAL)
@@ -175,35 +190,45 @@ def main():
                 serverCount = int(content)
                 print time.asctime( time.localtime(time.time()) ), 'there are', serverCount, ' servers available'
 
+
                 haveTestToLaunch = False
                 i = 0
                 while not haveTestToLaunch and i < len(testsToLaunch):
-                    #print 'i', i, 'ttl sc', testsToLaunch[i]['serverCount']
                     if testsToLaunch[i]['serverCount'] <= serverCount:
                         haveTestToLaunch = True
                     else:
                         i = i + 1
 
+                print testsToLaunch
+                descriptor = urllib.quote(testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] +
+                                        '-' + time.strftime('%b-%d-%X') + '-' + options.version )
                 if haveTestToLaunch:
-                    descriptor = urllib.quote(testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] +
-                                    '-' + time.strftime('%b-%d-%X') + '-' + options.version )
-                    # get the VMs, they should be there
+                    # grab the server resources
+                    # this bit is Docker/VM dependent
+                    if options.serverType.lower() == 'docker':
+                         getServerURL = 'http://' + SERVER_MANAGER + \
+                                '/getdockers/{0}?count={1}&os={2}&poolId={3}'. \
+                           format(descriptor, testsToLaunch[i]['serverCount'], \
+                                  options.os, options.poolId)
 
-                    getVMURL = 'http://' + SERVER_MANAGER + \
-                            '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={4}'. \
-                       format(descriptor, testsToLaunch[i]['serverCount'],testsToLaunch[i]['timeLimit'], \
-                              options.os, options.poolId)
-                    print 'getVMURL', getVMURL
+                    else:
+                        getServerURL = 'http://' + SERVER_MANAGER + \
+                                '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={4}'. \
+                           format(descriptor, testsToLaunch[i]['serverCount'],testsToLaunch[i]['timeLimit'], \
+                                  options.os, options.poolId)
+                    print 'getServerURL', getServerURL
 
-                    response, content = httplib2.Http(timeout=60).request(getVMURL, 'GET')
+                    response, content = httplib2.Http(timeout=60).request(getServerURL, 'GET')
 
 
-                    print 'response.status', response.status
+                    print 'response.status', response, content
+
 
                     if response.status == 499:
                         time.sleep(POLL_INTERVAL) # some error checking here at some point
                     else:
-                        r2 = json.loads(content)
+                        # and send the request to the test executor
+
 
                         # figure out the parameters, there are test suite specific, and added at dispatch time
                         if options.extraParameters is None or options.extraParameters == 'None':
@@ -215,13 +240,21 @@ def main():
                                 parameters = testsToLaunch[i]['parameters'] + ',' + options.extraParameters
 
 
+
                         url = launchString.format(options.version, testsToLaunch[i]['confFile'],
                                     descriptor, testsToLaunch[i]['component'], testsToLaunch[i]['subcomponent'],
-                                    testsToLaunch[i]['iniFile'], urllib.quote(json.dumps(r2).replace(' ','')),
+                                    testsToLaunch[i]['iniFile'],
                                     urllib.quote( parameters ), options.os, testsToLaunch[i]['initNodes'],
                                     testsToLaunch[i]['installParameters'])
 
-                        #print 'launching', url
+                        if options.serverType.lower() == 'docker':
+                            url = url + '&client=' + content + ':2375'
+                            pass
+                        else:
+                            #r2 = json.loads(content)
+                            url = url + '&servers=' + urllib.quote(json.dumps(content).replace(' ',''))
+
+
                         print time.asctime( time.localtime(time.time()) ), 'launching ', descriptor
 
 
@@ -230,7 +263,8 @@ def main():
                             # free the VMs
                             time.sleep(3)
                             response, content = httplib2.Http(timeout=60).\
-                                request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor, 'GET')
+                                request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available', 'GET')
+                            print 'the release response', response, content
                         else:
                             response, content = httplib2.Http(timeout=60).request(url, 'GET')
 
