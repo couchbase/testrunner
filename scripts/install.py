@@ -1018,7 +1018,7 @@ def main():
     #      like a validator, to check SSH, input params etc
     # check_build(input)
 
-    if "parallel" in input.test_params:
+    if "parallel" in input.test_params and input.test_params['parallel'].lower() != 'false':
         # workaround for a python2.6 bug of using strptime with threads
         datetime.strptime("30 Nov 00", "%d %b %y")
         success = InstallerJob().parallel_install(input.servers, input.test_params)
