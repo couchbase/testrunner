@@ -372,8 +372,12 @@ class JsonDocGenerator(KVGenerator):
                          LAST_NAMES[random.randint(1, len(LAST_NAMES)-1)])
 
     def generate_lang_known(self):
-        return [LANGUAGES[i] for i in xrange(0, random.randint(1,
-                                                               len(LANGUAGES)-1))]
+        count = 0
+        lang = []
+        while count < 3:
+            lang.append(LANGUAGES[random.randint(0, len(LANGUAGES)-1)])
+            count += 1
+        return lang
 
 class WikiJSONGenerator(KVGenerator):
 
