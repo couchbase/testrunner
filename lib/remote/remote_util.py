@@ -1328,7 +1328,7 @@ class RemoteMachineShellConnection:
             if fts_query_limit:
                 self.set_environment_variable(
                     name="CBFT_ENV_OPTIONS",
-                    value="bleveMaxResultWindow={0}".format(int(fts_query_limit))
+                    value="bleveMaxResultWindow={0},ftsMossDebug=1".format(int(fts_query_limit))
                 )
 
             output, error = self.execute_command("rm -f \
