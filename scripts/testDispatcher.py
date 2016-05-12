@@ -199,10 +199,10 @@ def main():
                     else:
                         i = i + 1
 
-                print testsToLaunch
-                descriptor = urllib.quote(testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] +
-                                        '-' + time.strftime('%b-%d-%X') + '-' + options.version )
+
                 if haveTestToLaunch:
+                    descriptor = urllib.quote(testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] +
+                                        '-' + time.strftime('%b-%d-%X') + '-' + options.version )
                     # grab the server resources
                     # this bit is Docker/VM dependent
                     if options.serverType.lower() == 'docker':
@@ -251,8 +251,8 @@ def main():
                             url = url + '&client=' + content + ':2375'
                             pass
                         else:
-                            #r2 = json.loads(content)
-                            url = url + '&servers=' + urllib.quote(json.dumps(content).replace(' ',''))
+                            r2 = json.loads(content)
+                            url = url + '&servers=' + urllib.quote(json.dumps(r2).replace(' ',''))
 
 
                         print time.asctime( time.localtime(time.time()) ), 'launching ', descriptor
