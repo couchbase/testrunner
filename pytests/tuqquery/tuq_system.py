@@ -75,7 +75,7 @@ class SysCatalogTests(QueryTests):
         self.query = "SELECT * FROM system:keyspaces"
         result = self.run_cbq_query()
         print result
-        self.assertTrue(result['metrics']['resultCount'] ==1)
+        self.assertTrue(result['metrics']['resultCount'] ==2)
         self.query = "SELECT count(*) FROM system:keyspaces"
         result = self.run_cbq_query()
-        self.assertTrue(result['metrics']['resultCount'] ==1)
+        self.assertTrue(result['metrics']['resultCount'] ==2)
