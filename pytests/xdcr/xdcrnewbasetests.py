@@ -1957,18 +1957,21 @@ class CouchbaseCluster:
                 dst_bucket = repl.get_dest_bucket()
                 RestConnection(self.__master_node).set_xdcr_param(src_bucket.name, dst_bucket.name, param, value)
 
-        expected_results = {
-            "real_userid:source": "ns_server",
-            "real_userid:user": self.__master_node.rest_username,
-            "local_cluster_name": "",  # TODO
-            "updated_settings": {param: value}
-        }
+                expected_results = {
+                    "real_userid:source": "ns_server",
+                    "real_userid:user": self.__master_node.rest_username,
+                    "local_cluster_name": "%s:%s" % (self.__master_node.ip, self.__master_node.port),
+                    "updated_settings:" + param: value,
+                    "source_bucket_name": repl.get_src_bucket().name,
+                    "remote_cluster_name": "remote_cluster_C1-C2",
+                    "target_bucket_name": repl.get_dest_bucket().name
+                }
 
-        # In case of ns_server xdcr, no events generate for it.
-        ValidateAuditEvent.validate_audit_event(
-            GO_XDCR_AUDIT_EVENT_ID.DEFAULT_SETT,
-            self.get_master_node(),
-            expected_results)
+                # In case of ns_server xdcr, no events generate for it.
+                ValidateAuditEvent.validate_audit_event(
+                    GO_XDCR_AUDIT_EVENT_ID.IND_SETT,
+                    self.get_master_node(),
+                    expected_results)
 
     def get_xdcr_stat(self, bucket_name, stat):
         """ Return given XDCR stat for given bucket.
