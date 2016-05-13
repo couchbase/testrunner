@@ -2137,18 +2137,17 @@ class RestConnection(object):
     def is_replication_paused(self, src_bucket_name, dest_bucket_name):
         return self.get_xdcr_param(src_bucket_name, dest_bucket_name, 'pauseRequested')
 
-    def get_recent_xdcr_vb_ckpt(self, src_bucket_name):
+    def get_recent_xdcr_vb_ckpt(self, repl_id):
         command = 'ns_server_testrunner_api:grab_all_goxdcr_checkpoints().'
         status, content = self.diag_eval(command)
         if not status:
             raise Exception("Unable to get recent XDCR checkpoint information")
-        json_parsed = json.loads(content)
+        repl_ckpt_list = json.loads(content)
         # a single decoding will only return checkpoint record as string
         # convert string to dict using json
-        chkpt_doc_string = json_parsed.values()[0].replace('"', '\"')
+        chkpt_doc_string = repl_ckpt_list['/ckpt/%s/0' % repl_id].replace('"', '\"')
         chkpt_dict = json.loads(chkpt_doc_string)
-        chkpt_dict = chkpt_dict['checkpoints'][0]
-        return chkpt_dict
+        return chkpt_dict['checkpoints'][0]
 
     """ Start of FTS rest apis"""
 

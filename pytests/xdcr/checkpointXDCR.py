@@ -112,8 +112,9 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         Main method that validates a checkpoint record """
     def get_and_validate_latest_checkpoint(self):
         rest_con = RestConnection(self.get_active_vb0_node(self.src_master))
+        repl = rest_con.get_replication_for_buckets('default', 'default')
         try:
-            checkpoint_record = rest_con.get_recent_xdcr_vb_ckpt('default')
+            checkpoint_record = rest_con.get_recent_xdcr_vb_ckpt(repl['id'])
             self.log.info("Checkpoint record : {0}".format(checkpoint_record))
             self.chkpt_records.append(checkpoint_record)
         except Exception as e:
