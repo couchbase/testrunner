@@ -2,6 +2,8 @@ from clitest.cli_base import CliBaseTest
 from membase.api.rest_client import RestConnection
 import testconstants
 import json
+from testconstants import COUCHBASE_FROM_WATSON
+from membase.helper.bucket_helper import BucketOperationHelper
 
 class docloaderTests(CliBaseTest):
 
@@ -28,19 +30,34 @@ class docloaderTests(CliBaseTest):
         cluster. We verify by compare the number of items in cluster with number of
         doc files in zipped sample file package"""
 
-        for bucket in self.buckets:
-            output, error = self.shell.execute_cbdocloader(self.couchbase_usrname, self.couchbase_password,
-                                                           bucket.name, self.memory_quota, self.load_filename)
+        if self.short_v not in COUCHBASE_FROM_WATSON:
+            for bucket in self.buckets:
+                output, error = self.shell.execute_cbdocloader(self.couchbase_usrname,
+                                                              self.couchbase_password,
+                                                                          bucket.name,
+                                                                    self.memory_quota,
+                                                                   self.load_filename)
+        elif self.short_v in COUCHBASE_FROM_WATSON:
+            self.log.info("cluster version: %s " % self.short_v)
+            self.log.info("delete all buckets to create new bucket")
+            BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+            output, error = self.shell.execute_cbdocloader(self.couchbase_usrname,
+                                                              self.couchbase_password,
+                                                                   self.load_filename,
+                                                                    self.memory_quota,
+                                                                   self.load_filename)
 
-
+        self.buckets = RestConnection(self.master).get_buckets()
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 
         self.shell.delete_files(self.load_filename)
 
         if self.os != "windows":
-            command = "unzip %ssamples/%s.zip" % (testconstants.LINUX_CB_PATH, self.load_filename)
+            command = "unzip %ssamples/%s.zip" % (testconstants.LINUX_CB_PATH,
+                                                           self.load_filename)
             if self.os == 'mac':
-                command = "unzip %ssamples/%s.zip" % (testconstants.MAC_CB_PATH, self.load_filename)
+                command = "unzip %ssamples/%s.zip" % (testconstants.MAC_CB_PATH,
+                                                             self.load_filename)
             output, error = self.shell.execute_command(command)
             self.shell.log_command_output(output, error)
 
@@ -125,6 +142,8 @@ class docloaderTests(CliBaseTest):
         self.shell.log_command_output(output, error)
 
         for line in output:
+            if self.short_v in COUCHBASE_FROM_WATSON:
+                if "indexes" in line.split(".")[0]:
+                    continue
             ddoc_names.append(line.split(".")[0])
-
         return ddoc_names
