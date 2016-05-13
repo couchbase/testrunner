@@ -75,7 +75,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
                 log.info("Indexer out of OOM...")
                 break
         self.assertFalse(self._validate_indexer_status_oom(), "Indexer still in OOM")
-        self.sleep(120)
+        self.sleep(180)
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
                     query_definitions=self.load_query_definitions)
@@ -120,7 +120,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
             if not self._validate_indexer_status_oom():
                 log.info("Indexer out of OOM...")
                 break
-        self.sleep(120)
+        self.sleep(180)
         self.assertFalse(self._validate_indexer_status_oom(), "Indexer still in OOM")
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
@@ -147,7 +147,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
                     self.buckets = []
                 break
             log.info("Indexer Still in OOM...")
-        self.sleep(120)
+        self.sleep(180)
         self.assertFalse(self._validate_indexer_status_oom(), "Indexer still in OOM")
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
@@ -167,7 +167,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
                                                  self.nodes_in_list, [], services = ["kv"])
         rebalance.result()
         self._bring_indexer_back_to_life()
-        self.sleep(10)
+        self.sleep(180)
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
                     query_definitions=self.load_query_definitions)
@@ -187,7 +187,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         rebalance = self.cluster.async_rebalance(self.servers, [], [kv_node])
         rebalance.result()
         self._bring_indexer_back_to_life()
-        self.sleep(10)
+        self.sleep(180)
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
                     query_definitions=self.load_query_definitions)
@@ -217,7 +217,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
                 log.info("Indexer out of OOM...")
                 self.load_query_definitions = self.load_query_definitions[i+1:]
                 break
-            self.sleep(20)
+            self.sleep(180)
         try:
             self._verify_bucket_count_with_index_count(self.load_query_definitions)
             self.multi_query_using_index(buckets=self.buckets,
@@ -227,7 +227,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         finally:
             log.info("Starting Couchbase on {0}".format(kv_node.ip))
             remote.start_server()
-            self.sleep(30)
+            self.sleep(180)
             self._verify_bucket_count_with_index_count(self.load_query_definitions)
             self.multi_query_using_index(buckets=self.buckets,
                         query_definitions=self.load_query_definitions)
@@ -246,7 +246,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         if check:
             log.info("Indexer in OOM after reboot...")
             self._bring_indexer_back_to_life()
-        self.sleep(60)
+        self.sleep(180)
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
                     query_definitions=self.load_query_definitions)
@@ -263,7 +263,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         used_memory = self.get_indexer_mem_quota()
         rest = RestConnection(self.oomServer)
         rest.set_indexer_memoryQuota(indexMemoryQuota=used_memory)
-        self.sleep(60)
+        self.sleep(180)
         self.assertTrue(self._validate_indexer_status_oom(), "Indexer is still Online")
 
     def test_change_mem_quota_when_index_building(self):
@@ -389,7 +389,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
                 break
         log.info("Setting indexer memory quota to 500 MB...")
         rest.set_indexer_memoryQuota(indexMemoryQuota=500)
-        self.sleep(120)
+        self.sleep(180)
         self.assertFalse(self._validate_indexer_status_oom(), "Indexer is still in OOM")
 
     def _validate_index_status_oom(self):
