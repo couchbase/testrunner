@@ -52,11 +52,7 @@ class EmployeeQuerables:
         """
         Returns one or two languages
         """
-        if bool(random.getrandbits(1)):
-            return self.get_random_value(LANGUAGES)
-        else:
-            return "%s %s" % (self.get_random_value(LANGUAGES),
-                             self.get_random_value(list(reversed(LANGUAGES))))
+        return self.get_random_value(LANGUAGES)
 
     def get_queryable_email(self):
         return "%s@mcdiabetes.com" % self.get_random_value(FIRST_NAMES).lower()
