@@ -149,6 +149,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             query_definition.index_name = "#primary"
             qdfs.append(query_definition)
         self.query_definitions = qdfs
+        self.sleep(15)
         try:
             self._verify_primary_index_count()
             self.run_doc_ops()
