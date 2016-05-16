@@ -615,6 +615,7 @@ class MovingTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
         NodeHelper.kill_cbft_process(self._cb_cluster.get_random_fts_node())
+        self.sleep(60)
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
                                              expected_hits=self._num_items)
