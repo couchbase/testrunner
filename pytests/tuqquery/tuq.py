@@ -503,7 +503,7 @@ class QueryTests(BaseTestCase):
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             print result
-            self.assertTrue(result['metrics']['resultCount']==0)
+            self.assertTrue(result['metrics']['resultCount']==1)
         for bucket in self.buckets:
             self.query = "SELECT email FROM %s WHERE email " % (bucket.name) +\
                          "LIKE '%@%.%' ORDER BY email"
@@ -511,7 +511,7 @@ class QueryTests(BaseTestCase):
         if self.monitoring:
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
-            self.assertTrue(result['metrics']['resultCount']==1)
+            self.assertTrue(result['metrics']['resultCount']==2)
             print result
 
 
@@ -595,6 +595,8 @@ class QueryTests(BaseTestCase):
 
     def test_prepared_group_by_aggr_fn(self):
         if self.monitoring:
+            self.query = "delete from system:prepareds"
+            result = self.run_cbq_query()
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==0)
@@ -775,10 +777,10 @@ class QueryTests(BaseTestCase):
                 self.query = 'select * from system:completed_requests'
                 result = self.run_cbq_query()
                 print result
-                requestId = result['requestID']
-                self.query = 'delete from system:completed_requests where RequestId  =  "%s"' % requestId
+                requestID = result['requestID']
+                self.query = 'delete from system:completed_requests where requestID  =  "%s"' % requestID
                 self.run_cbq_query()
-                result = self.run_cbq_query('select * from system:completed_requests where RequestId  =  "%s"' % requestId)
+                result = self.run_cbq_query('select * from system:completed_requests where requestID  =  "%s"' % requestID)
                 self.assertTrue(result['metrics']['resultCount'] == 0)
 
     def test_meta_flags(self):
@@ -1764,6 +1766,8 @@ class QueryTests(BaseTestCase):
 
     def test_named_prepared_between(self):
         if self.monitoring:
+            self.query = "delete from system:prepareds"
+            self.run_cbq_query()
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             print result
@@ -1781,10 +1785,10 @@ class QueryTests(BaseTestCase):
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==1)
             print result
-            requestId = result['requestID']
-            self.query = 'delete from system:prepareds where requestID = "%s" '  % requestId
+            name = result['results'][0]['prepareds']['name']
+            self.query = 'delete from system:prepareds where name = "%s" '  % name
             result = self.run_cbq_query()
-            self.query = 'select * from system:prepareds where requestID = "%s" '  % requestId
+            self.query = 'select * from system:prepareds where name = "%s" '  % name
             result = self.run_cbq_query()
             self.assertTrue(result['metrics']['resultCount']==0)
 
@@ -2105,9 +2109,8 @@ class QueryTests(BaseTestCase):
         self.query = "select clock_millis() as now"
         now = time.time()
         res = self.run_cbq_query()
-        self.assertTrue((res["results"][0]["now"] < now * 1000),
-                        "Result expected to be in: [%s ... %s]. Actual %s" % (
-                                        now * 1000, (now + 10) * 1000, res["results"]))
+        print res
+        self.assertTrue((res["results"][0]["now"] < now * 1000))
 
 
     def test_clock_str(self):
