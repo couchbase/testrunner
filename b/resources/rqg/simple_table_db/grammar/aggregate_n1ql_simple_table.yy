@@ -4,15 +4,21 @@ query:
 select:
 	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY field_list |
 	SELECT select_from FROM BUCKET_NAME WHERE complex_condition GROUP BY field_list |
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition;
+	SELECT select_from FROM BUCKET_NAME WHERE complex_condition |
+	SELECT sel_from FROM BUCKET_NAME WHERE numeric_condition |
+	SELECT sel_from FROM BUCKET_NAME WHERE string_condition |
+	SELECT sel_from FROM BUCKET_NAME WHERE bool_condition;
 
 create_index:
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(FIELD_LIST) WHERE complex_condition |
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(complex_condition) |
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(USER_FIELD_LIST);
 
+sel_from:
+	COUNT(*) | COUNT( field ) | MIN( non_string_field );
+
 select_from:
-	COUNT(*) |  COUNT( DISTINCT field ) | SUM( non_string_field ) | SUM(DISTINCT non_string_field ) | AVG( non_string_field ) | AVG( DISTINCT non_string_field ) |  MAX( non_string_field ) | MIN( non_string_field );
+	COUNT(*) |  COUNT( field ) | SUM( non_string_field ) | SUM(DISTINCT non_string_field ) | AVG( non_string_field ) | AVG( DISTINCT non_string_field ) |  MAX( non_string_field ) | MIN( non_string_field );
 
 complex_condition:
 	NOT (condition) | (condition) AND (condition) | (condition) OR (condition) | (condition) AND (condition) OR (condition) AND (condition) | condition;
@@ -29,6 +35,10 @@ field:
 non_string_field:
 	NUMERIC_FIELD;
 
+simple_condition:
+    numeric_condition | string_condition | bool_condition;
+
+
 # NUMERIC RULES
 
 numeric_condition:
@@ -44,7 +54,7 @@ numeric_condition:
 	numeric_is_not_null |
 	numeric_not_equals_condition |
 	numeric_is_null |
-	numeric_in_conidtion ;
+	numeric_in_condition ;
 
 numeric_equals_condition:
 	numeric_field = numeric_value ;
@@ -52,7 +62,7 @@ numeric_equals_condition:
 numeric_not_equals_condition:
 	numeric_field != numeric_value ;
 
-numeric_in_conidtion:
+numeric_in_condition:
 	numeric_field IN ( numeric_field_list );
 
 numeric_between_condition:
