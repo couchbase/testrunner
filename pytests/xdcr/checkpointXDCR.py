@@ -410,7 +410,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         node = self.get_active_vb0_node(master)
         self.log.info("Crashing node {0} containing vb0 ...".format(node))
         shell = RemoteMachineShellConnection(node)
-        shell.terminate_process(process_name='memcached')
+        shell.terminate_process(process_name='memcached',force=True)
         shell.disconnect()
         # If we are killing dest node, try to mutate key at source to cause xdcr activity
         if master == self.dest_master:
