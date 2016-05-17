@@ -2239,14 +2239,14 @@ class QueriesIndexTests(QueryTests):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
                 #self.covering_index = False
-                # self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
-                # self.run_cbq_query()
-                # self._wait_for_index_online(bucket, '#primary')
-                # self.query = "SELECT name, join_day FROM %s where name = 'employee-9'"  % (bucket.name)
-                # result = self.run_cbq_query()
-                # self.assertTrue(actual_result["metrics"]["elapsedTime"]< result["metrics"]["elapsedTime"],"Time used in queries using covering indexes should be less than time used in queries not using covering indexes")
-                # self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
-                #self.run_cbq_query()
+                self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+                self.run_cbq_query()
+                self.sleep(15,'wait for index')
+                self.query = "SELECT name, join_day FROM %s where name = 'employee-9'"  % (bucket.name)
+                result = self.run_cbq_query()
+                self.assertTrue(sorted(actual_result['results']),sorted(result['results']))
+                self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+                self.run_cbq_query()
 
     def test_index_like(self):
         for bucket in self.buckets:
@@ -2370,6 +2370,16 @@ class QueriesIndexTests(QueryTests):
                     for index_name in created_indexes:
                         self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                         self.run_cbq_query()
+                    self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+                    self.run_cbq_query()
+                    self.sleep(15,'wait for index')
+                    self.query = "SELECT count(*),join_yr FROM %s  where join_yr > 2009 GROUP BY join_yr,name ORDER BY name;"  % (bucket.name)
+                    result = self.run_cbq_query()
+                    self.assertTrue(sorted(actual_result['results']),sorted(result['results']))
+                    self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+                    self.run_cbq_query()
+
+
 
     def test_covering_groupby_having(self):
         for bucket in self.buckets:
@@ -2478,11 +2488,20 @@ class QueriesIndexTests(QueryTests):
 			    plan = ExplainPlanHelper(res)
                             self.assertTrue(plan["~children"][0]["index"] == ind,
                                     "Index should be %s, but is: %s" % (ind, plan["~children"][0]["index"]))
-
+                            self.query = 'SELECT name,join_day, join_mo FROM %s  USE INDEX(%s using %s) WHERE join_day>2 AND join_mo>3' % (bucket.name, ind, self.index_type)
+                            res = self.run_cbq_query()
                 finally:
                      for index_name in set(created_indexes):
                         self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                         self.run_cbq_query()
+                self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+                self.run_cbq_query()
+                self.sleep(15,'wait for index')
+                self.query = "SELECT name,join_day, join_mo FROM %s WHERE join_day>2 AND join_mo>3"  % (bucket.name)
+                result = self.run_cbq_query()
+                self.assertTrue(sorted(result['results']),sorted(res['results']))
+                self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+                self.run_cbq_query()
 
     def async_monitor_index(self, bucket, index_name = None):
         monitor_index_task = self.cluster.async_monitor_index(
@@ -2669,10 +2688,12 @@ class QueriesIndexTests(QueryTests):
             for ind in xrange(self.num_indexes):
                     index_name = "coveringindexwithmin%s" % ind
                     self.query = "CREATE INDEX %s ON %s(job_title,join_mo,test_rate)  USING %s" % (index_name, bucket.name,self.index_type)
-                    # if self.gsi_type:
-                    #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
                     created_indexes.append(index_name)
+                    index_name2 = "coveringindexwithcontains%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(test_rate)  USING %s" % (index_name2, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name2)
 
         for bucket in self.buckets:
                 tasks=[]
@@ -2686,13 +2707,28 @@ class QueriesIndexTests(QueryTests):
 
         for bucket in self.buckets:
             try:
-                for index_name in created_indexes:
                     self.query = "explain SELECT join_mo, MIN(test_rate) as rate FROM %s " % (bucket.name) + \
                                  "as employees WHERE job_title='Sales' GROUP BY join_mo " + \
                                  "HAVING MIN(employees.test_rate) > 0 and " + \
                                  "SUM(test_rate) < 100000"
                     if self.covering_index:
-                        self.test_explain_covering_index(index_name)
+                        self.test_explain_covering_index(created_indexes[0])
+
+                    self.query = "explain select MIN(test_rate) from %s where test_rate is not missing and CONTAINS(test_rate,'z')" % (bucket.name)
+                    if self.covering_index:
+                        self.test_explain_covering_index(created_indexes[1])
+
+                    self.query = "select MIN(test_rate) from %s where test_rate is not missing and CONTAINS(test_rate,'z')" % (bucket.name)
+                    actual_result = self.run_cbq_query()
+                    self.assertTrue(str(actual_result['results'][0]) == "{u'$1': None}")
+
+                    self.query = "explain select count(test_rate) from %s where test_rate is not missing and CONTAINS(test_rate,'z')" % (bucket.name)
+                    if self.covering_index:
+                        self.test_explain_covering_index(created_indexes[1])
+
+                    self.query = "select count(test_rate) as count from %s where test_rate is not missing and CONTAINS(test_rate,'z')" % (bucket.name)
+                    actual_result = self.run_cbq_query()
+                    self.assertTrue(actual_result['results'][0]['count'] == 0)
 
                     self.query = "SELECT join_mo, MIN(test_rate) as rate FROM %s " % (bucket.name) + \
                                  "as employees WHERE job_title='Sales' GROUP BY join_mo " + \
@@ -3538,7 +3574,44 @@ class QueriesIndexTests(QueryTests):
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                     self.run_cbq_query()
 
+    def test_count_covering_index(self):
+        for bucket in self.buckets:
+            created_indexes = []
+            for ind in xrange(self.num_indexes):
+                    index_name = "coveringindexwithsubstr%s" % ind
+                    self.query = "CREATE INDEX %s ON %s(_id,join_mo)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.run_cbq_query()
+                    created_indexes.append(index_name)
 
+        for bucket in self.buckets:
+                tasks=[]
+                for index_name in created_indexes:
+                    try:
+                        tasks.append(self.async_monitor_index(bucket = bucket.name, index_name = index_name))
+                        for task in tasks:
+                            task.result()
+                    except Exception, ex:
+                        self.log.info(ex)
+
+        for bucket in self.buckets:
+            try:
+                    self.query = "explain select count(_id) from %s where join_mo is not missing and _id is not null" % (bucket.name)
+                    if self.covering_index:
+                        self.test_explain_covering_index(index_name)
+
+                    self.query = "select count(_id) as count from %s where join_mo is not missing and _id is not null" % (bucket.name)
+                    actual_result = self.run_cbq_query()
+                    print actual_result
+                    self.assertTrue(actual_result['results'][0]['count'] == 2016)
+
+                    self.query = "select count(_id)  as count from %s where join_mo is not missing and _id is null" % (bucket.name)
+
+                    actual_result = self.run_cbq_query()
+                    self.assertTrue(actual_result['results'][0]['count'] == 0)
+            finally:
+                for index_name in set(created_indexes):
+                    self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
+                    self.run_cbq_query()
 
     def test_explain_index_join(self):
         for bucket in self.buckets:
