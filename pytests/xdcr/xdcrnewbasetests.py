@@ -1845,12 +1845,12 @@ class CouchbaseCluster:
     def async_failover(self, num_nodes=1, graceful=False):
         return self.__async_failover(num_nodes=num_nodes, graceful=graceful)
 
-    def failover_and_rebalance_master(self, graceful=False, rebalance=True):
+    def failover_and_rebalance_master(self, graceful=False, rebalance=True,master=True):
         """Failover master node
         @param graceful: True if graceful failover else False
         @param rebalance: True if do rebalance operation after failover.
         """
-        task = self.__async_failover(master=True, graceful=graceful)
+        task = self.__async_failover(master, graceful=graceful)
         task.result()
         if graceful:
             # wait for replica update
