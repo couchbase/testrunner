@@ -385,7 +385,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         # find which node contains vb0, we will failover that node
         node = self.get_active_vb0_node(master)
         self.log.info("Node {0} contains active vb0".format(node))
-        if node == self.src_master:
+        if node in self.src_nodes:
             self.src_cluster.failover_and_rebalance_master()
             if node in self.src_nodes:
                 self.src_nodes.remove(node)
