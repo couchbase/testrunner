@@ -487,7 +487,8 @@ class RebalanceTask(Task):
             self.set_exception(e)
         retry_get_process_num = 25
         if self.rest.is_cluster_mixed():
-            """ for mix cluster, rebalance take longer """
+            """ for mix cluster, rebalance takes longer """
+            self.log.info("rebalance in mix cluster")
             retry_get_process_num = 40
         if progress != -1 and progress != 100:
             if self.retry_get_progress < retry_get_process_num:
