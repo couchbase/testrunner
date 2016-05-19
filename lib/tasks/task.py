@@ -442,8 +442,8 @@ class RebalanceTask(Task):
                         ejectedNodes.append(node.id)
         if self.rest.is_cluster_mixed():
             # workaround MB-8094
-            self.log.warn("cluster is mixed. sleep for 10 seconds before rebalance")
-            time.sleep(10)
+            self.log.warn("cluster is mixed. sleep for 15 seconds before rebalance")
+            time.sleep(15)
 
         self.rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
         self.start_time = time.time()
@@ -485,14 +485,19 @@ class RebalanceTask(Task):
             self.log.error("Unexpected Exception Caught in {0} sec".
                           format(time.time() - self.start_time))
             self.set_exception(e)
+        retry_get_process_num = 25
+        if self.rest.is_cluster_mixed():
+            """ for mix cluster, rebalance take longer """
+            retry_get_process_num = 40
         if progress != -1 and progress != 100:
-            if self.retry_get_progress < 20:
+            if self.retry_get_progress < retry_get_process_num:
                 task_manager.schedule(self, 10)
             else:
                 self.state = FINISHED
                 #self.set_result(False)
                 self.rest.print_UI_logs()
-                self.set_exception(RebalanceFailedException("seems like rebalance hangs. please check logs!"))
+                self.set_exception(RebalanceFailedException(\
+                                "seems like rebalance hangs. please check logs!"))
         else:
             success_cleaned = []
             for removed in self.to_remove:
@@ -504,7 +509,8 @@ class RebalanceTask(Task):
                 start = time.time()
                 while time.time() - start < 30:
                     try:
-                        if 'pools' in rest.get_pools_info() and (len(rest.get_pools_info()["pools"]) == 0):
+                        if 'pools' in rest.get_pools_info() and \
+                                      (len(rest.get_pools_info()["pools"]) == 0):
                             success_cleaned.append(removed)
                             break
                         else:
@@ -513,8 +519,8 @@ class RebalanceTask(Task):
                         self.log.error(e)
             result = True
             for node in set(self.to_remove) - set(success_cleaned):
-                self.log.error("node {0}:{1} was not cleaned after removing from cluster".format(
-                           node.ip, node.port))
+                self.log.error("node {0}:{1} was not cleaned after removing from cluster"\
+                                                              .format(node.ip, node.port))
                 result = False
 
             self.log.info("rebalancing was completed with progress: {0}% in {1} sec".
