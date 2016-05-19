@@ -72,6 +72,8 @@ class QueryTests(BaseTestCase):
         self.isprepared = False
         self.server = self.master
         self.rest = RestConnection(self.server)
+        #self.coverage = self.input.param("coverage",False)
+        self.cover = self.input.param("cover", False)
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
@@ -97,6 +99,7 @@ class QueryTests(BaseTestCase):
             self.create_primary_index_for_3_0_and_greater()
         self.log.info('-'*100)
         self.log.info('Temp fix for MB-16888')
+        #if (self.coverage == False):
         self.shell.execute_command("killall -9 cbq-engine")
         self.shell.execute_command("killall -9 indexer")
         self.sleep(10, 'wait for indexer')
@@ -390,6 +393,16 @@ class QueryTests(BaseTestCase):
                 self.log.info("Result: %s" % actual_result['results'])
                 self.assertTrue(len(item['names']) <= 5, "Slicing doesn't work")
 
+    def test_count_prepare(self):
+        for bucket in self.buckets:
+            self.query = "create index idx_cover on %s(join_mo,join_day) where join_mo > 7" % (bucket.name)
+            self.run_cbq_query()
+            self.query = "SELECT count(*) AS cnt from %s " % (bucket.name) +\
+                         "WHERE join_mo > 7 and join_day > 1"
+            self.prepared_common_body()
+
+
+
 ##############################################################################################
 #
 #   LIKE
@@ -500,10 +513,12 @@ class QueryTests(BaseTestCase):
 
     def test_prepared_like_wildcards(self):
         if self.monitoring:
+            self.query = "delete from system:prepareds"
+            result = self.run_cbq_query()
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
             print result
-            self.assertTrue(result['metrics']['resultCount']==1)
+            self.assertTrue(result['metrics']['resultCount']==0)
         for bucket in self.buckets:
             self.query = "SELECT email FROM %s WHERE email " % (bucket.name) +\
                          "LIKE '%@%.%' ORDER BY email"
@@ -511,7 +526,7 @@ class QueryTests(BaseTestCase):
         if self.monitoring:
             self.query = "select * from system:prepareds"
             result = self.run_cbq_query()
-            self.assertTrue(result['metrics']['resultCount']==2)
+            self.assertTrue(result['metrics']['resultCount']==1)
             print result
 
 
@@ -3314,6 +3329,11 @@ class QueryTests(BaseTestCase):
             result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True, encoded_plan=encoded_plan)['results']
         else:
             result_with_prepare = self.run_cbq_query(query=prepared, is_prepared=True)['results']
+        if(self.cover):
+            self.assertTrue("IndexScan in %s" % result_with_prepare)
+            self.assertTrue("covers in %s" % result_with_prepare)
+            self.assertTrue("filter_covers in %s" % result_with_prepare)
+            self.assertFalse('ERROR' in (str(word).upper() for word in result_with_prepare))
         msg = "Query result with prepare and without doesn't match.\nNo prepare: %s ... %s\nWith prepare: %s ... %s"
         self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare),
                           msg % (result_no_prepare[:100],result_no_prepare[-100:],
@@ -3334,6 +3354,19 @@ class QueryTests(BaseTestCase):
                 cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
         query_params.update(cred_params)
         if self.use_rest:
+           #if (self.coverage == True):
+            #     self._set_env_variable(server)
+            #     n1ql_port = self.input.param("n1ql_port", None)
+            #     if server.ip == "127.0.0.1" and server.n1ql_port:
+            #         n1ql_port = server.n1ql_port
+            #     cmd = "cd %s; " % (testconstants.LINUX_COUCHBASE_BIN_PATH) +\
+            #     "./cbq-engine.test --datastore=http://%s:%s --http=:%s --configstore=http://127.0.0.1:8091 --enterprise=true --https=:18093 -test.coverprofile coverage.cov -system-test >n1ql.log 2>&1 &" %(
+            #                                                     server.ip, server.port,n1ql_port)
+            # # if n1ql_port:
+            # #     cmd = "cd %s; " % (testconstants.LINUX_COUCHBASE_BIN_PATH) +\
+            # #     './cbq-engine -datastore http://%s:%s/ -http=":%s">n1ql.log 2>&1 &' %(
+            # #                                                     server.ip, server.port, n1ql_port)
+            #     self.shell.execute_command(cmd)
             query_params.update({'scan_consistency': self.scan_consistency})
             if hasattr(self, 'query_params') and self.query_params:
                 query_params = self.query_params
@@ -3484,7 +3517,8 @@ class QueryTests(BaseTestCase):
         self.shell.execute_command("export NS_SERVER_CBAUTH_PWD=\"{0}\"".format(server.rest_password))
         self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip,server.port))
         self.shell.execute_command("export CBAUTH_REVRPC_URL=\"http://{0}:{1}@{2}:{3}/query\"".format(server.rest_username,server.rest_password,server.ip,server.port))
-        #self._start_command_line_query(server)
+        #self.shell.execute_command("/etc/init.d/couchbase-server restart")
+        #self.sleep(30)
 
     def _parse_query_output(self, output):
          if output.find("cbq>") == 0:
