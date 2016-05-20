@@ -34,6 +34,7 @@ from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
+from testconstants import WIN_TMP_PATH
 from testconstants import CB_RELEASE_APT_GET_REPO
 from testconstants import CB_RELEASE_YUM_REPO
 from membase.api.rest_client import RestConnection, RestHelper
@@ -788,14 +789,25 @@ class RemoteMachineShellConnection:
 
     def delete_file(self, remotepath, filename):
         sftp = self._ssh_client.open_sftp()
+        delete_file = False
         try:
             filenames = sftp.listdir_attr(remotepath)
             for name in filenames:
                 if name.filename == filename:
                     log.info("File {0} will be deleted".format(filename))
                     sftp.remove(remotepath + filename)
-                    sftp.close()
-                    return True
+                    delete_file = True
+                    break
+            if delete_file:
+                """ verify file is deleted """
+                filenames = sftp.listdir_attr(remotepath)
+                for name in filenames:
+                    if name.filename == filename:
+                        log.error("fail to remove file %s " % filename)
+                        delete_file = False
+                        break
+            sftp.close()
+            return delete_file
         except IOError:
             return False
 
@@ -1288,6 +1300,9 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command("cmd /c "
                                        "schtasks /Query /FO LIST /TN upgrademe /V")
         self.log_command_output(output, error)
+        """ need to remove binary after done upgrade.  Since watson, current binary
+            could not reused to uninstall or install cb server """
+        self.delete_file(WIN_TMP_PATH, version[:10] + ".exe")
 
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
                        swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None,
@@ -1334,6 +1349,7 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("rm -f \
                        /cygdrive/c/automation/*_{0}_install.iss".format(self.ip))
             self.log_command_output(output, error)
+            self.delete_file(WIN_TMP_PATH, build.product_version[:10] + ".exe")
             # output, error = self.execute_command("cmd rm /cygdrive/c/tmp/{0}*.exe".format(build_name))
             # self.log_command_output(output, error)
         elif self.info.deliverable_type in ["rpm", "deb"]:
@@ -1521,6 +1537,7 @@ class RemoteMachineShellConnection:
                              .format(capture_iss_file))
                     os.system("rm -f resources/windows/automation/{0}" \
                                                           .format(capture_iss_file))
+            self.delete_file(WIN_TMP_PATH, build.product_version[:10] + ".exe")
             return success
 
 
@@ -1832,10 +1849,7 @@ class RemoteMachineShellConnection:
                     sys.exit("****  Node %s failed to uninstall  ****" % (self.ip))
                 self.sleep(10, "next step is to install")
                 """ delete binary after uninstall """
-                output, error = self.execute_command("rm -f /cygdrive/c/tmp/{0}"\
-                                                              .format(build_name))
-                self.log_command_output(output, error)
-
+                self.delete_file(WIN_TMP_PATH, build_name)
                 """ the code below need to remove when bug MB-11328
                                                            is fixed in 3.0.1 """
                 output, error = self.kill_erlang(os="windows")
