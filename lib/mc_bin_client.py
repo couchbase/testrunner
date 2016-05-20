@@ -62,6 +62,7 @@ class MemcachedClient(object):
     def __del__(self):
         self.close()
 
+
     def _sendCmd(self, cmd, key, val, opaque, extraHeader='', cas=0, extended_meta_data='',extraHeaderLength=None):
         self._sendMsg(cmd, key, val, opaque, extraHeader=extraHeader, cas=cas,
                       vbucketId=self.vbucketId, extended_meta_data=extended_meta_data, extraHeaderLength=extraHeaderLength)
@@ -83,6 +84,8 @@ class MemcachedClient(object):
             self.s.send(msg + extraHeader + key + val + extended_meta_data)
         else:
             raise exceptions.EOFError("Timeout waiting for socket send. from {0}".format(self.host))
+
+
 
 
     def _recvMsg(self):
@@ -134,6 +137,7 @@ class MemcachedClient(object):
         self._sendCmd(cmd, key, val, opaque, extraHeader, cas, extended_meta_data=extended_meta_data,
                       extraHeaderLength=extraHeaderLength)
         return self._handleSingleResponse(opaque)
+
 
     def _doSdCmd(self, cmd, key, path, val=None, expiry=0, opaque=0, cas=0, create=False):
         createFlag = 0
@@ -264,18 +268,15 @@ class MemcachedClient(object):
 
 
 
-    def del_with_meta(self, key, exp, flags, seqno, old_cas, new_cas, vbucket= -1,
+    def del_with_meta(self, key, exp, flags, seqno, cas, vbucket= -1,
                       add_extended_meta_data=False,
                       adjusted_time=0, conflict_resolution_mode=0):
         """Set a value in the memcached server."""
         self._set_vbucket(key, vbucket)
-        if add_extended_meta_data:
-            return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
-                       struct.pack(memcacheConstants.EXTENDED_META_CMD_FMT, flags, exp, seqno, 0, len(extended_meta_data)),
-                   extended_meta_data=extended_meta_data)
-        else:
-            extraHeader = struct.pack('I',1)
-            return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '', extraHeader, old_cas,extraHeaderLength=28)
+
+        resp = self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
+                       struct.pack(memcacheConstants.EXTENDED_META_CMD_FMT, flags, exp, seqno, cas, 0) )
+        return resp
 
 
 
