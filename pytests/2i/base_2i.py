@@ -58,6 +58,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.index_loglevel = self.input.param("index_loglevel", None)
         if self.index_loglevel:
             self.set_indexer_logLevel(self.index_loglevel)
+        if self.dgm_run:
+            self._load_doc_data_all_buckets(gen_load=self.gens_load)
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
@@ -377,8 +379,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                         scan_consistency = scan_consistency, scan_vector = scan_vector)
 
     def check_and_run_operations(self, buckets = [], initial = False, before = False, after = False, in_between = False):
-        self.verify_query_result = True
-        self.verify_explain_result = True
+        #self.verify_query_result = True
+        #self.verify_explain_result = True
         if initial:
             self._set_query_explain_flags("initial")
             self._run_operations(buckets = buckets, create_index = self.ops_map["initial"]["create_index"],
@@ -407,8 +409,8 @@ class BaseSecondaryIndexingTests(QueryTests):
     def async_check_and_run_operations(self, buckets = [],
      initial = False, before = False, after = False, in_between = False,
      scan_consistency = None, scan_vectors = None):
-        self.verify_query_result = True
-        self.verify_explain_result = True
+        #self.verify_query_result = True
+        #self.verify_explain_result = True
         if initial:
             self._set_query_explain_flags("initial")
             return self._async_run_operations(buckets = buckets,
@@ -597,6 +599,14 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def _verify_primary_index_count(self):
         bucket_map = self.get_buckets_itemCount()
+        count = 0
+        while not self._verify_items_count() and count < 15:
+            self.log.info("All Items Yet to be Indexed...")
+            self.sleep(5)
+            count += 1
+        self.assertTrue(self._verify_items_count(), "All Items didn't get Indexed...")
+        self.log.info("All the documents are indexed...")
+        self.sleep(10)
         index_bucket_map = self.n1ql_helper.get_index_count_using_primary_index(self.buckets, self.n1ql_node)
         self.log.info(bucket_map)
         self.log.info(index_bucket_map)
@@ -613,18 +623,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         as items in the bucket.
         """
         index_map = self.get_index_stats()
-        bucketMap = self.get_buckets_itemCount()
         for bucket_name in index_map.keys():
-            for index_name in index_map[bucket_name].keys():
-                actual_item_count = index_map[
-                    bucket_name][index_name]["items_count"]
-                if actual_item_count == 0:
-                    actual_item_count = index_map[bucket_name][index_name]["num_docs_pending"] + \
-                        index_map[bucket_name][index_name]["num_docs_queued"]
-                expected_item_count = bucketMap[bucket_name]
-                self.assertTrue(str(actual_item_count) == str(expected_item_count), 
-                    "Bucket {0}, mismatch in item count for index :{1} : expected {2} != actual {3} ".format
-                    (bucket_name, index_name, expected_item_count, actual_item_count))
+            for index_name, index_val in index_map[bucket_name].iteritems():
+                if index_val["num_docs_pending"] and index_val["num_docs_queued"]:
+                    return False
+        return True
 
     def _verify_bucket_count_with_index_count(self, query_definitions, buckets=[]):
         """
@@ -635,6 +638,13 @@ class BaseSecondaryIndexingTests(QueryTests):
         """
         if not buckets:
             buckets = self.buckets
+        while not self._verify_items_count() and count < 15:
+            self.log.info("All Items Yet to be Indexed...")
+            self.sleep(5)
+            count += 1
+        if not self._verify_items_count():
+            self.log.info("All Items didn't get Indexed...")
+            raise
         bucket_map = self.get_buckets_itemCount()
         for bucket in buckets:
             bucket_count = bucket_map[bucket.name]
