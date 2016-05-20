@@ -35,6 +35,8 @@ from testconstants import LINUX_DISTRIBUTION_NAME
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
 from testconstants import WIN_TMP_PATH
+from testconstants import CB_VERSION_NAME
+from testconstants import CB_REPO
 from testconstants import CB_RELEASE_APT_GET_REPO
 from testconstants import CB_RELEASE_YUM_REPO
 from membase.api.rest_client import RestConnection, RestHelper
@@ -1767,14 +1769,21 @@ class RemoteMachineShellConnection:
             product_name = "couchbase-server-enterprise"
             version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
             deleted = False
+            build_name, short_version, full_version = \
+                    self.find_build_version(version_path, version_file, product)
             build_repo = MV_LATESTBUILD_REPO
+            if full_version[:5] not in COUCHBASE_VERSION_2 and \
+                 full_version[:5] not in COUCHBASE_VERSION_3:
+                if full_version[:3] in CB_VERSION_NAME:
+                    build_repo = CB_REPO + CB_VERSION_NAME[full_version[:3]] + "/"
+                else:
+                    sys.exit("version is not support yet")
             capture_iss_file = ""
 
             exist = self.file_exists(version_path, version_file)
             log.info("Is VERSION file existed on {0}? {1}".format(self.ip, exist))
             if exist:
                 log.info("VERSION file exists.  Start to uninstall {0} on {1} server".format(product, self.ip))
-                build_name, short_version, full_version = self.find_build_version(version_path, version_file, product)
                 if full_version[:3] == "4.0":
                     build_repo = SHERLOCK_BUILD_REPO
                 log.info('Build name: {0}'.format(build_name))
