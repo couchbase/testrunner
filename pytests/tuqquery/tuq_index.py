@@ -895,7 +895,7 @@ class QueriesViewsTests(QueryTests):
                     self.assertTrue(result["#operator"] == 'IntersectScan',
                                     "Index should be intersect scan and is %s" % (plan))
 
-                    actual_indexes = [scan['scans'][0]['index'] if 'scans' in scan else scan['index']
+                    actual_indexes = [scan['scans'][0]['index'] if result['scans'][0]['#operator'] == 'DistinctScan' else scan['index']
                             for scan in result['scans']]
 
                     print actual_indexes
