@@ -512,10 +512,13 @@ class NewUpgradeBaseTest(BaseTestCase):
                     self.rest = RestConnection(self.master)
                     self.rest_helper = RestHelper(self.rest)
                 if self.rest._rebalance_progress_status() == 'running':
-                    self.log.info("Start monitoring DCP rebalance upgrade from {0} to {1}"\
-                                  .format(self.input.param('initial_version', '')[:5], \
-                                   self.input.param('upgrade_version', '')[:5]))
+                    self.log.info("Start monitoring DCP upgrade from {0} to {1}"\
+                           .format(self.input.param('initial_version', '')[:5], \
+                                    self.input.param('upgrade_version', '')[:5]))
                     status = self.rest.monitorRebalance()
+                elif any ("DCP upgrade completed successfully.\n" \
+                                    in d.values() for d in self.rest.get_logs(10)):
+                    self.log.info("DCP upgrade is completed")
                 else:
                     self.fail("DCP reabalance upgrade is not running")
 
@@ -524,7 +527,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 else:
                     self.fail("Failed DCP rebalance upgrade")
             else:
-                self.fail("Need vbuckets setting >= 256 for upgrade from 2.x.x to 3.x.x")
+                self.fail("Need vbuckets setting >= 256 for upgrade from 2.x.x to 3+")
         else:
             if self.master.ip != self.rest.ip:
                 self.rest = RestConnection(self.master)
