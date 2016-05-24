@@ -516,16 +516,15 @@ class NewUpgradeBaseTest(BaseTestCase):
                            .format(self.input.param('initial_version', '')[:5], \
                                     self.input.param('upgrade_version', '')[:5]))
                     status = self.rest.monitorRebalance()
+                    if status:
+                        self.log.info("Done DCP rebalance upgrade!")
+                    else:
+                        self.fail("Failed DCP rebalance upgrade")
                 elif any ("DCP upgrade completed successfully.\n" \
                                     in d.values() for d in self.rest.get_logs(10)):
                     self.log.info("DCP upgrade is completed")
                 else:
                     self.fail("DCP reabalance upgrade is not running")
-
-                if status:
-                    self.log.info("Done DCP rebalance upgrade!")
-                else:
-                    self.fail("Failed DCP rebalance upgrade")
             else:
                 self.fail("Need vbuckets setting >= 256 for upgrade from 2.x.x to 3+")
         else:

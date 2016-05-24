@@ -907,7 +907,8 @@ class UpgradeTests(NewUpgradeBaseTest):
                           }
             self.name = self.index_definition['name'] = \
                                 self.index_definition['sourceName'] = name
-            fts_node = self.get_nodes_from_services_map("fts")
+            fts_node = self.get_nodes_from_services_map("fts", \
+                                servers=self.get_nodes_in_cluster_after_upgrade())
             if fts_node:
                 rest = RestConnection(fts_node)
                 status, _ = rest.get_fts_index_definition(self.name)
@@ -918,6 +919,13 @@ class UpgradeTests(NewUpgradeBaseTest):
                 rest.create_fts_index(self.name, self.index_definition)
             else:
                 raise("No FTS node in cluster")
+            self.ops_dist_map = self.calculate_data_change_distribution(
+                create_per=self.create_ops_per , update_per=self.update_ops_per ,
+                delete_per=self.delete_ops_per, expiry_per=self.expiry_ops_per,
+                start=0, end=self.docs_per_day)
+            self.log.info(self.ops_dist_map)
+            self.dataset = "default"
+            self.docs_gen_map = self.generate_ops_docs(self.docs_per_day, 0)
             self.async_ops_all_buckets(self.docs_gen_map, batch_size=100)
         except Exception, ex:
             self.log.info(ex)
