@@ -1769,20 +1769,26 @@ class RemoteMachineShellConnection:
             product_name = "couchbase-server-enterprise"
             version_path = "/cygdrive/c/Program Files/Couchbase/Server/"
             deleted = False
-            build_name, short_version, full_version = \
+            if self.file_exists(version_path, version_file):
+                build_name, short_version, full_version = \
                     self.find_build_version(version_path, version_file, product)
-            build_repo = MV_LATESTBUILD_REPO
-            if full_version[:5] not in COUCHBASE_VERSION_2 and \
-                 full_version[:5] not in COUCHBASE_VERSION_3:
-                if full_version[:3] in CB_VERSION_NAME:
-                    build_repo = CB_REPO + CB_VERSION_NAME[full_version[:3]] + "/"
-                else:
-                    sys.exit("version is not support yet")
             capture_iss_file = ""
-
             exist = self.file_exists(version_path, version_file)
             log.info("Is VERSION file existed on {0}? {1}".format(self.ip, exist))
             if exist:
+                cb_releases_version = ["2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0",
+                                       "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1",
+                                       "3.0.2", "3.0.3", "3.1.0", "3.1.1", "3.1.2",
+                                       "3.1.3", "3.1.5"]
+                build_name, short_version, full_version = \
+                    self.find_build_version(version_path, version_file, product)
+                build_repo = MV_LATESTBUILD_REPO
+                if full_version[:5] not in COUCHBASE_VERSION_2 and \
+                   full_version[:5] not in COUCHBASE_VERSION_3:
+                    if full_version[:3] in CB_VERSION_NAME:
+                        build_repo = CB_REPO + CB_VERSION_NAME[full_version[:3]] + "/"
+                    else:
+                        sys.exit("version is not support yet")
                 log.info("VERSION file exists.  Start to uninstall {0} on {1} server".format(product, self.ip))
                 if full_version[:3] == "4.0":
                     build_repo = SHERLOCK_BUILD_REPO
@@ -1791,7 +1797,14 @@ class RemoteMachineShellConnection:
                 log.info('Check if {0} is in tmp directory on {1} server'.format(build_name, self.ip))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
                 if not exist:  # if not exist in tmp dir, start to download that version build
-                    if short_version in COUCHBASE_RELEASE_VERSIONS_3:
+                    if short_version[:5] in cb_releases_version:
+                        build = query.find_couchbase_release_build(product_name,
+                                                        self.info.deliverable_type,
+                                                       self.info.architecture_type,
+                                                                     short_version,
+                                                                  is_amazon=False,
+                                 os_version=self.info.distribution_version.lower())
+                    elif short_version in COUCHBASE_RELEASE_VERSIONS_3:
                         build = query.find_membase_release_build(product_name,
                                                    self.info.deliverable_type,
                                                   self.info.architecture_type,
