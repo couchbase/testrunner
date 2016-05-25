@@ -2211,7 +2211,6 @@ class RemoteMachineShellConnection:
         newdata = newdata.replace("pass",password)
         newdata = newdata.replace("bucket1",bucket1)
 
-        #import pdb;pdb.set_trace()
         newdata = newdata.replace("user1",bucket1)
         newdata = newdata.replace("pass1",password)
         newdata = newdata.replace("bucket2",bucket2)
@@ -2956,7 +2955,7 @@ class RemoteMachineShellConnection:
         # TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            backup_command = "%scbbackup.exe" % (WIN_COUCHBASE_BIN_PATH_RAW)
+            backup_command = "\"%scbbackup.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
             backup_file_location = "C:%s" % (backup_location)
             output, error = self.execute_command("taskkill /F /T /IM cbbackup.exe")
             self.log_command_output(output, error)
@@ -2988,7 +2987,7 @@ class RemoteMachineShellConnection:
         backup_file_location = backup_location
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            restore_command = "%scbrestore.exe" % (WIN_COUCHBASE_BIN_PATH_RAW)
+            restore_command = "\"%scbrestore.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
             backup_file_location = "C:%s" % (backup_location)
         if self.info.distribution_type.lower() == 'mac':
             restore_command = "%scbrestore" % (testconstants.MAC_COUCHBASE_BIN_PATH)
@@ -3061,7 +3060,7 @@ class RemoteMachineShellConnection:
         transfer_command = "%scbtransfer" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            transfer_command = "%scbtransfer.exe" % (WIN_COUCHBASE_BIN_PATH_RAW)
+            transfer_command = "\"%scbtransfer.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
         if self.info.distribution_type.lower() == 'mac':
             transfer_command = "%scbtransfer" % (testconstants.MAC_COUCHBASE_BIN_PATH)
 
