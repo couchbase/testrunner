@@ -109,6 +109,7 @@ def main():
     for row in results:
         try:
             data = row['QE-Test-Suites']
+            data['config'] = data['config'].rstrip()       # trailing spaces causes problems opening the files
             print 'row', data
 
             # check any os specific
