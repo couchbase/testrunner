@@ -88,7 +88,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
             query_definitions = self.query_definitions,
             create_index = True, drop_index = False,
             query_with_explain = False, query = False)
-        self._verify_items_count()
+        self._verify_bucket_count_with_index_count()
         try:
             servr_out = self.servers[1:self.nodes_init]
             failover_task = self.cluster.async_failover([self.master],
@@ -113,7 +113,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
             query_definitions = self.query_definitions,
             create_index = True, drop_index = False,
             query_with_explain = False, query = False)
-        self._verify_items_count()
+        self._verify_bucket_count_with_index_count()
         try:
             # Run operations expiry and deletion
             self.run_doc_ops()
