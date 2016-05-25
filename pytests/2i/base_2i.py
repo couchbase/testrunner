@@ -1,7 +1,7 @@
 import logging
 import random
-
 from newtuq import QueryTests
+from couchbase_helper.cluster import Cluster
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from membase.api.rest_client import RestConnection
 
@@ -60,6 +60,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.set_indexer_logLevel(self.index_loglevel)
         if self.dgm_run:
             self._load_doc_data_all_buckets(gen_load=self.gens_load)
+        self.gsi_thread = Cluster()
+        self.index_op = self.input.param("index_op", None)
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
@@ -87,7 +89,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.query = query_definition.generate_index_create_query(bucket = bucket,
             use_gsi_for_secondary = self.use_gsi_for_secondary, deploy_node_info = deploy_node_info,
             defer_build = self.defer_build, index_where_clause = index_where_clause)
-        create_index_task = self.cluster.async_create_index(
+        create_index_task = self.gsi_thread.async_create_index(
                  server = self.n1ql_node, bucket = bucket,
                  query = self.query , n1ql_helper = self.n1ql_helper,
                  index_name = query_definition.index_name, defer_build = self.defer_build,
@@ -95,7 +97,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         return create_index_task
 
     def async_monitor_index(self, bucket, index_name = None):
-        monitor_index_task = self.cluster.async_monitor_index(
+        monitor_index_task = self.gsi_thread.async_monitor_index(
                  server = self.n1ql_node, bucket = bucket,
                  n1ql_helper = self.n1ql_helper,
                  index_name = index_name,
@@ -105,7 +107,7 @@ class BaseSecondaryIndexingTests(QueryTests):
     def async_build_index(self, bucket = "default", index_list = []):
         self.query = self.n1ql_helper.gen_build_index_query(bucket = bucket, index_list = index_list)
         self.log.info(self.query)
-        build_index_task = self.cluster.async_build_index(
+        build_index_task = self.gsi_thread.async_build_index(
                  server = self.n1ql_node, bucket = bucket,
                  query = self.query , n1ql_helper = self.n1ql_helper)
         return build_index_task
@@ -225,7 +227,7 @@ class BaseSecondaryIndexingTests(QueryTests):
     def async_drop_index(self, bucket, query_definition):
         self.query = query_definition.generate_index_drop_query(bucket = bucket,
           use_gsi_for_secondary = self.use_gsi_for_secondary, use_gsi_for_primary = self.use_gsi_for_primary)
-        drop_index_task = self.cluster.async_drop_index(
+        drop_index_task = self.gsi_thread.async_drop_index(
                  server = self.n1ql_node, bucket = bucket,
                  query = self.query , n1ql_helper = self.n1ql_helper,
                  index_name = query_definition.index_name)
@@ -234,7 +236,7 @@ class BaseSecondaryIndexingTests(QueryTests):
     def sync_drop_index(self, bucket, query_definition):
         self.query = query_definition.generate_index_drop_query(bucket = bucket,
           use_gsi_for_secondary = self.use_gsi_for_secondary, use_gsi_for_primary = self.use_gsi_for_primary)
-        self.cluster.drop_index(self,
+        self.gsi_thread.drop_index(self,
                  server = self.n1ql_node, bucket = bucket,
                  query = self.query , n1ql_helper = self.n1ql_helper,
                  index_name = query_definition.index_name)
@@ -250,7 +252,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def async_query_using_index_with_explain(self, bucket, query_definition):
         self.query = query_definition.generate_query_with_explain(bucket = bucket)
-        query_with_index_task = self.cluster.async_n1ql_query_verification(
+        query_with_index_task = self.gsi_thread.async_n1ql_query_verification(
                  server = self.n1ql_node, bucket = bucket,
                  query = self.query, n1ql_helper = self.n1ql_helper,
                  is_explain_query=True, index_name = query_definition.index_name,
@@ -259,7 +261,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def sync_query_using_index_with_explain(self, bucket, query_definition):
         self.query = query_definition.generate_query_with_explain(bucket = bucket)
-        self.cluster.sync_n1ql_query_verification(
+        self.gsi_thread.sync_n1ql_query_verification(
                  server = self.n1ql_node, bucket = bucket.name,
                  query = self.query, n1ql_helper = self.n1ql_helper,
                  is_explain_query=True, index_name = query_definition.index_name)
@@ -302,7 +304,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         if expected_result == None:
             expected_result = self.gen_results.generate_expected_result(print_expected_result = False)
         self.query = self.gen_results.query
-        query_with_index_task = self.cluster.async_n1ql_query_verification(
+        query_with_index_task = self.gsi_thread.async_n1ql_query_verification(
                  server = self.n1ql_node, bucket = bucket,
                  query = self.query, n1ql_helper = self.n1ql_helper,
                  expected_result=expected_result, index_name = query_definition.index_name,
@@ -316,7 +318,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         if expected_result == None:
             expected_result = self.gen_results.generate_expected_result(print_expected_result = False)
         self.query = self.gen_results.query
-        self.cluster.n1ql_query_verification(
+        self.gsi_thread.n1ql_query_verification(
                  server = self.n1ql_node, bucket = bucket.name,
                  query = self.query, n1ql_helper = self.n1ql_helper,
                  expected_result=expected_result, scan_consistency = scan_consistency, scan_vector = scan_vector)
@@ -629,13 +631,15 @@ class BaseSecondaryIndexingTests(QueryTests):
                     return False
         return True
 
-    def _verify_bucket_count_with_index_count(self, query_definitions, buckets=[]):
+    def _verify_bucket_count_with_index_count(self, query_definitions=None, buckets=[]):
         """
 
         :param bucket:
         :param index:
         :return:
         """
+        if not query_definitions:
+            query_definitions = self.query_definitions
         if not buckets:
             buckets = self.buckets
         while not self._verify_items_count() and count < 15:
@@ -649,8 +653,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         for bucket in buckets:
             bucket_count = bucket_map[bucket.name]
             for query in query_definitions:
-                index_count = self.n1ql_helper.get_index_count_using_index(
-                                                        bucket, query.index_name)
+                index_count = self.n1ql_helper.get_index_count_using_index(bucket,
+                                                                           query.index_name, self.n1ql_node)
                 self.assertTrue(int(index_count) == int(bucket_count),
                         "Bucket {0}, mismatch in item count for index :{1} : expected {2} != actual {3} ".format
                         (bucket.name, query.index_name, bucket_count, index_count))
@@ -756,6 +760,23 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
         if not self.defer_build:
             self.defer_build = None
+
+    def async_index_operations(self, index_op=None, buckets=[], query_definitions=[]):
+            func_map = {
+                "create": self.async_multi_create_index,
+                "query": self.async_multi_query_using_index,
+                "query_with_explain": self.async_multi_query_using_index_with_explain,
+                "drop": self.async_multi_drop_index
+            }
+            if not buckets:
+                buckets = self.buckets
+            if not query_definitions:
+                query_definitions = self.query_definitions
+            if not index_op:
+                index_op = self.index_op
+            if index_op != None:
+                return func_map[index_op](buckets, query_definitions)
+            return None
 
     def set_indexer_logLevel(self, loglevel="info"):
         """
