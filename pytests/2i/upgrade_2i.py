@@ -4,6 +4,7 @@ from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition, SQLDefinitionGenerator
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
 
 log = logging.getLogger(__name__)
 QUERY_TEMPLATE = "SELECT {0} FROM %s "
