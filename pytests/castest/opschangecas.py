@@ -38,6 +38,8 @@ class OpsChangeCasTests(CasBaseTest):
         if(self.doc_ops is not None):
             if("update" in self.doc_ops):
                 self.verify_cas("update", gen_update)
+            if("touch" in self.doc_ops):
+                self.verify_cas("touch", gen_update)
             if("delete" in self.doc_ops):
                 self.verify_cas("delete", gen_delete)
             if("expire" in self.doc_ops):
@@ -68,19 +70,25 @@ class OpsChangeCasTests(CasBaseTest):
                 key, value = gen.next()
 
 
-                if ops == "update":
+                if ops in  ["update","touch"]:
                     for x in range(self.mutate_times):
                         o_old, cas_old, d_old = client.get(key)
-                        client.memcached(key).cas(key, 0, 0, cas_old, "{0}-{1}".format("mysql-new-value", x))
+                        if ops == 'update':
+                            client.memcached(key).cas(key, 0, 0, cas_old, "{0}-{1}".format("mysql-new-value", x))
+                        else:
+                            rc = client.memcached(key).touch(key,10)
 
-                        o_new, cas_new, d_new = client.get(key)
+                        o_new, cas_new, d_new = client.memcached(key).get(key)
                         if cas_old == cas_new:
+                            print 'cas did not change'
                             cas_error_collection.append(cas_old)
-                        if d_new != "{0}-{1}".format("mysql-new-value", x):
-                            data_error_collection.append((d_new,"{0}-{1}".format("mysql-new-value", x)))
-                        if cas_old != cas_new and d_new == "{0}-{1}".format("mysql-new-value", x):
-                            self.log.info("Use item cas {0} to mutate the same item with key {1} successfully! Now item cas is {2} "
-                                          .format(cas_old, key, cas_new))
+
+                        if ops == 'update':
+                            if d_new != "{0}-{1}".format("mysql-new-value", x):
+                                data_error_collection.append((d_new,"{0}-{1}".format("mysql-new-value", x)))
+                            if cas_old != cas_new and d_new == "{0}-{1}".format("mysql-new-value", x):
+                                self.log.info("Use item cas {0} to mutate the same item with key {1} successfully! Now item cas is {2} "
+                                              .format(cas_old, key, cas_new))
 
                         mc_active = client.memcached( key )
                         mc_replica = client.memcached( key, replica_index=0 )
