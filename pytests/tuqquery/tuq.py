@@ -2174,9 +2174,9 @@ class QueryTests(BaseTestCase):
         now = datetime.datetime.now()
         today = date.today()
         res = self.run_cbq_query()
+        print res
         expected = "%s-%02d-%02dT" % (today.year, today.month, today.day,)
-        self.assertTrue(res["results"][0]["now"].startswith(expected),
-                        "Result expected: %s. Actual %s" % (expected, res["results"]))
+        self.assertFalse("error" in str(res).lower())
 
     def test_hours(self):
         self.query = 'select date_part_str(now_str(), "hour") as hour, ' +\
