@@ -1514,7 +1514,10 @@ class RemoteMachineShellConnection:
                 ended = self.wait_till_process_ended(build.product_version[:10])
                 if not ended:
                     sys.exit("*****  Node %s failed to install  *****" % (self.ip))
-            self.sleep(10, "wait for server to start up completely")
+            if version[:3] == "2.5":
+                self.sleep(15, "wait for server to start up completely")
+            else:
+                self.sleep(10, "wait for server to start up completely")
             output, error = self.execute_command("rm -f *-diag.zip")
             self.log_command_output(output, error, track_words)
             if vbuckets and int(vbuckets) != 1024:
@@ -1871,7 +1874,10 @@ class RemoteMachineShellConnection:
                     ended = self.wait_till_process_ended(full_version[:10])
                     if not ended:
                         sys.exit("****  Node %s failed to uninstall  ****" % (self.ip))
-                self.sleep(10, "next step is to install")
+                if full_version[:3] == "2.5":
+                    self.sleep(15, "next step is to install")
+                else:
+                    self.sleep(10, "next step is to install")
                 """ delete binary after uninstall """
                 self.delete_file(WIN_TMP_PATH, build_name)
                 """ the code below need to remove when bug MB-11328
