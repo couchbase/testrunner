@@ -1515,7 +1515,7 @@ class RemoteMachineShellConnection:
                 if not ended:
                     sys.exit("*****  Node %s failed to install  *****" % (self.ip))
             if version[:3] == "2.5":
-                self.sleep(15, "wait for server to start up completely")
+                self.sleep(20, "wait for server to start up completely")
             else:
                 self.sleep(10, "wait for server to start up completely")
             output, error = self.execute_command("rm -f *-diag.zip")
@@ -1875,7 +1875,7 @@ class RemoteMachineShellConnection:
                     if not ended:
                         sys.exit("****  Node %s failed to uninstall  ****" % (self.ip))
                 if full_version[:3] == "2.5":
-                    self.sleep(15, "next step is to install")
+                    self.sleep(20, "next step is to install")
                 else:
                     self.sleep(10, "next step is to install")
                 """ delete binary after uninstall """
