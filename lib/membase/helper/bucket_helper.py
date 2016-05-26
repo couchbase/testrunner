@@ -285,7 +285,7 @@ class BucketOperationHelper():
                         ex_msg = str(e)
                         if "Not my vbucket" in log_msg:
                             log_msg = log_msg[:log_msg.find("vBucketMap") + 12] + "..."
-                        if "Not my vbucket" in ex_msg:
+                        if e.status == memcacheConstants.ERR_NOT_MY_VBUCKET:
                             # May receive this while waiting for vbuckets, continue and retry...S
                             continue
                         log.error("%s: %s" % (log_msg, ex_msg))
