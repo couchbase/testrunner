@@ -1,4 +1,5 @@
 import copy
+import exceptions
 import time
 import uuid
 import zlib
@@ -290,6 +291,19 @@ class BucketOperationHelper():
                             continue
                         log.error("%s: %s" % (log_msg, ex_msg))
                         continue
+                    except exceptions.EOFError:
+                        # The client was disconnected for some reason. This can
+                        # happen just after the bucket REST API is returned (before
+                        # the buckets are created in each of the memcached processes.)
+                        # See here for some details: http://review.couchbase.org/#/c/49781/
+                        # Longer term when we don't disconnect clients in this state we
+                        # should probably remove this code.
+                        log.error("got disconnected from the server, reconnecting")
+                        client.reconnect()
+                        client.sasl_auth_plain(bucket_info.name.encode('ascii'),
+                                               bucket_info.saslPassword.encode('ascii'))
+                        continue
+
                     if c.find("\x01") > 0 or c.find("\x02") > 0:
                         ready_vbuckets[i] = True
                     elif i in ready_vbuckets:
