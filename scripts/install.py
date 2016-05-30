@@ -428,8 +428,8 @@ class CouchbaseServerInstaller(Installer):
                     init_nodes = params["init_nodes"]
                 else:
                     init_nodes = "True"
-                if (isinstance(init_nodes, bool) and init_nodes) \
-                                                 or (init_nodes.lower() == "true"):
+                if (isinstance(init_nodes, bool) and init_nodes) or \
+                        (isinstance(init_nodes, str) and init_nodes.lower() == "true"):
                     if not server.services:
                         set_services = ["kv"]
                     elif server.services:
