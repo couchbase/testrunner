@@ -1744,6 +1744,7 @@ class RemoteMachineShellConnection:
         for process in list:
             type = info.distribution_type.lower()
             if type == "windows":
+                # set debug=False if does not want to show log
                 self.execute_command("taskkill /F /T /IM {0}".format(process))
             elif type in LINUX_DISTRIBUTION_NAME:
                 self.terminate_process(info, process)
@@ -1850,6 +1851,8 @@ class RemoteMachineShellConnection:
                 self.execute_command('taskkill /F /T /IM 4.0.1-*')
                 log.info("Kill any cbq-engine.exe in sherlock")
                 self.execute_command('taskkill /F /T /IM cbq-engine.exe')
+                self.terminate_processes(self.info, \
+                                     [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
                 log.info('sleep for 5 seconds before running task '
                                     'schedule uninstall on {0}'.format(self.ip))
                 """ End remove this workaround when bug MB-14504 is fixed """
