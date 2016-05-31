@@ -124,3 +124,29 @@ class rbacclitest(rbacTest):
         output, error = self.execute_admin_role_manage(options)
         self.assertTrue("ERROR: You must specify either '--get-roles', '--set-users', or '--delete-users'" in output[0],"for incorrect switch")
 
+
+    def test_set_roles_with_name(self):
+        self.user_name = self.input.param("user_name",None)
+        final_user_name = rbacmain().returnUserList(self.user_name)
+        final_user_id = rbacmain().returnUserList(self.user_id)
+
+        user_list = ""
+        user_name = ""
+        if len(final_user_id) == 1:
+            user_list = str(final_user_id[0])
+            user_name = str(final_user_name[0])
+        else:
+            for final_user in final_user_id:
+                user_list = user_list + "," + str(final_user[0])
+
+            for final_name in final_user_name:
+                user_name = user_name + "," + str(final_name)
+
+            user_list = user_list[1:]
+            user_name = user_name[3:-2]
+            user_name = "\"" + user_name + "\""
+
+        final_roles = rbacmain()._return_roles(self.user_role)
+        options = "--set-users=" + user_list + " --roles=" + final_roles + " --set-names=" + user_name
+        output, error = self.execute_admin_role_manage(options)
+        self.check_role_assignment(final_user_id,self.user_role,output)
