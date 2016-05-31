@@ -1745,7 +1745,8 @@ class RemoteMachineShellConnection:
             type = info.distribution_type.lower()
             if type == "windows":
                 # set debug=False if does not want to show log
-                self.execute_command("taskkill /F /T /IM {0}".format(process))
+                self.execute_command("taskkill /F /T /IM {0}".format(process),
+                                                                  debug=False)
             elif type in LINUX_DISTRIBUTION_NAME:
                 self.terminate_process(info, process)
 
@@ -1778,6 +1779,10 @@ class RemoteMachineShellConnection:
                 build_name, short_version, full_version = \
                     self.find_build_version(version_path, version_file, product)
             capture_iss_file = ""
+            log.info("kill any in/uninstall process from version 3 in node %s"
+                                                                        % self.ip)
+            self.terminate_processes(self.info, \
+                                     [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
             exist = self.file_exists(version_path, version_file)
             log.info("Is VERSION file existed on {0}? {1}".format(self.ip, exist))
             if exist:
@@ -1794,14 +1799,16 @@ class RemoteMachineShellConnection:
                         build_repo = CB_REPO + CB_VERSION_NAME[full_version[:3]] + "/"
                     else:
                         sys.exit("version is not support yet")
-                log.info("VERSION file exists.  Start to uninstall {0} on {1} server".format(product, self.ip))
+                log.info("VERSION file exists.  Start to uninstall {0} on {1} server"\
+                                                           .format(product, self.ip))
                 if full_version[:3] == "4.0":
                     build_repo = SHERLOCK_BUILD_REPO
                 log.info('Build name: {0}'.format(build_name))
                 build_name = build_name.rstrip() + ".exe"
-                log.info('Check if {0} is in tmp directory on {1} server'.format(build_name, self.ip))
+                log.info('Check if {0} is in tmp directory on {1} server'\
+                                                       .format(build_name, self.ip))
                 exist = self.file_exists("/cygdrive/c/tmp/", build_name)
-                if not exist:  # if not exist in tmp dir, start to download that version build
+                if not exist:  # if not exist in tmp dir, start to download that version
                     if short_version[:5] in cb_releases_version:
                         build = query.find_couchbase_release_build(product_name,
                                                         self.info.deliverable_type,
@@ -1846,13 +1853,8 @@ class RemoteMachineShellConnection:
 
                 """ Remove this workaround when bug MB-14504 is fixed """
                 log.info("Kill any un/install process leftover in sherlock")
-                self.execute_command('taskkill /F /T /IM 4.0.0-*')
-                log.info("Kill any un/install process leftover in watson")
-                self.execute_command('taskkill /F /T /IM 4.0.1-*')
                 log.info("Kill any cbq-engine.exe in sherlock")
                 self.execute_command('taskkill /F /T /IM cbq-engine.exe')
-                self.terminate_processes(self.info, \
-                                     [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
                 log.info('sleep for 5 seconds before running task '
                                     'schedule uninstall on {0}'.format(self.ip))
                 """ End remove this workaround when bug MB-14504 is fixed """
