@@ -46,9 +46,8 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
 
     def test_load_balance_when_index_node_down_network_partition(self):
         index_dist_factor = 1
-        index_servers = []
         #Create Indexes
-        index_servers = self.get_nodes_from_services_map(service_type="index", 
+        index_servers = self.get_nodes_from_services_map(service_type="index",
             get_all_nodes=True)
         num_indexes=len(index_servers)*index_dist_factor
         self.query_definitions = self._create_query_definitions(index_count=num_indexes)
@@ -57,27 +56,30 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
             for bucket in self.buckets:
                 deploy_node_info = ["{0}:{1}".format(index_servers[node_count].ip,
                     index_servers[node_count].port)]
-                self.create_index(bucket.name, query_definition, 
+                self.log.info("Creating {0} index on bucket {1} on node {2}...".format(
+                    query_definition.index_name, bucket.name, deploy_node_info[0]
+                ))
+                self.create_index(bucket.name, query_definition,
                     deploy_node_info=deploy_node_info)
                 node_count += 1
-
+                self.sleep(30)
         # Bring down one node
+        self.log.info("Starting firewall on node {0}...".format(index_servers[0].ip))
         self.start_firewall_on_node(index_servers[0])
-        self.sleep(10)
+        self.sleep(60)
         # Remove index for offline node.
         unavailable_query = self.query_definitions.pop(0)
         # Query to see the other
-        self.run_multi_operations(buckets=self.buckets, 
+        self.run_multi_operations(buckets=self.buckets,
              query_definitions=self.query_definitions, query_with_explain=True, query=True)
-
+        self.log.info("Stopping firewall on node {0}...".format(index_servers[0].ip))
         self.stop_firewall_on_node(index_servers[0])
         self.sleep(60)
         # Add removed index from query
         self.query_definitions.append(unavailable_query)
         # Drop indexes
-        self.run_multi_operations(buckets=self.buckets, 
+        self.run_multi_operations(buckets=self.buckets,
             query_definitions=self.query_definitions, create_index=False, drop_index=True)
-
 
     def test_index_create_sync(self):
         index_dist_factor = 2
@@ -148,7 +150,6 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
             query_definitions = [self.query_definitions[x] for x in range(0,num_indexes/2)]
             delete_query_definitions = [self.query_definitions[x] for x in range(num_indexes/2,num_indexes)]
             self.run_multi_operations(buckets = self.buckets, query_definitions = query_definitions, create_index = False, drop_index = True)
-            index_map = self.get_index_stats(perNode=True)
             query_definitions = self._create_query_definitions(start= num_indexes, index_count=num_indexes/2)
             self.run_multi_operations(buckets = self.buckets, query_definitions = query_definitions, create_index = True, drop_index = False)
             index_map = self.get_index_stats(perNode=True)
@@ -172,8 +173,9 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
             #Create Index
             servers = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
             num_indexes=len(servers)*index_dist_factor
-            self.query_definitions = self._create_query_definitions(index_count = num_indexes)
-            self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = True, query = True)
+            self.query_definitions = self._create_query_definitions(index_count=num_indexes)
+            self.run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
+                                      create_index=True, query=True)
             index_map = self.get_index_stats(perNode=True)
             self.log.info(index_map)
             for node in index_map.keys():
