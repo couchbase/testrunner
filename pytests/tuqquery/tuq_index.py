@@ -891,11 +891,23 @@ class QueriesViewsTests(QueryTests):
                 result = plan["~children"][0]["~children"][0] if "~children" in plan["~children"][0] \
                         else plan["~children"][0]
                 print result
+                #import pdb;pdb.set_trace()
                 if not(result['scans'][0]['#operator']=='DistinctScan'):
                     self.assertTrue(result["#operator"] == 'IntersectScan',
                                     "Index should be intersect scan and is %s" % (plan))
+                    # actual_indexes = []
+                    # for scan in result['scans']:
+                    #     print scan
+                    #     if (scan['#operator'] == 'IndexScan'):
+                    #         actual_indexes.append([result['scans'][0]['index']])
+                    #
+                    #     elif (scan['#operator'] == 'DistinctScan'):
+                    #         actual_indexes.append([result['scans'][0]['scan']['index']])
+                    #     else:
+                    #          actual_indexes.append(scan['index'])
 
-                    actual_indexes = [scan['scans'][0]['index'] if result['scans'][0]['#operator'] == 'DistinctScan' else scan['index']
+
+                    actual_indexes = [scan['index'] if scan['#operator'] == 'IndexScan' else scan['scan']['index'] if scan['#operator'] == 'DistinctScan' else scan['index']
                             for scan in result['scans']]
 
                     print actual_indexes
