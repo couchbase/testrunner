@@ -1815,12 +1815,12 @@ class RestConnection(object):
                       replica_index=1,
                       threadsNumber=3,
                       flushEnabled=1,
-                      evictionPolicy='valueOnly'):
+                      evictionPolicy='valueOnly',
+                      timeSynchronization=''):
 
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.urlencode({})
 
-        # this only works for default bucket ?
         if bucket == 'default':
             params = urllib.urlencode({'name': bucket,
                                        'authType': 'sasl',
@@ -1856,6 +1856,21 @@ class RestConnection(object):
                                        'threadsNumber': threadsNumber,
                                        'flushEnabled': flushEnabled,
                                        'evictionPolicy': evictionPolicy})
+
+        # this only works for default bucket i?
+        if timeSynchronization:
+         params = urllib.urlencode({'name': bucket,
+                                       'ramQuotaMB': ramQuotaMB,
+                                       'authType': authType,
+                                       'saslPassword': saslPassword,
+                                       'replicaNumber': replicaNumber,
+                                       'proxyPort': self.get_nodes_self().moxi,
+                                       'bucketType': bucketType,
+                                       'threadsNumber': threadsNumber,
+                                       'flushEnabled': flushEnabled,
+                                       'evictionPolicy': evictionPolicy,
+                                       'timeSynchronization': timeSynchronization})
+
         log.info("{0} with param: {1}".format(api, params))
         create_start_time = time.time()
 
