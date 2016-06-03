@@ -520,7 +520,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                         self.log.info("Done DCP rebalance upgrade!")
                     else:
                         self.fail("Failed DCP rebalance upgrade")
-                elif any ("DCP upgrade completed successfully.\n" \
+                elif self.sleep(5) is None and any ("DCP upgrade completed successfully." \
                                     in d.values() for d in self.rest.get_logs(10)):
                     self.log.info("DCP upgrade is completed")
                 else:
@@ -533,10 +533,11 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.rest_helper = RestHelper(self.rest)
             self.log.info("No need to do DCP rebalance upgrade")
 
-    def dcp_rebalance_in_offline_upgrade_from_version2_to_version3(self):
+    def dcp_rebalance_in_offline_upgrade_from_version2(self):
         if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
            (self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3 or \
-            self.input.param('upgrade_version', '')[:5] in SHERLOCK_VERSION):
+            self.input.param('upgrade_version', '')[:5] in SHERLOCK_VERSION) and \
+            self.input.param('num_stoped_nodes', self.nodes_init) >= self.nodes_init:
             otpNodes = []
             nodes = self.rest.node_statuses()
             for node in nodes:

@@ -167,10 +167,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
                     rem = [server for server in self.servers[:self.nodes_init]
                          if self.failover_node.ip == server.ip and str(self.failover_node.port) == server.port]
-                    self.dcp_rebalance_in_offline_upgrade_from_version2_to_version3()
+                    self.dcp_rebalance_in_offline_upgrade_from_version2()
                     self.verification(list(set(self.servers[:self.nodes_init]) - set(rem)))
                     return
-            self.dcp_rebalance_in_offline_upgrade_from_version2_to_version3()
+            self.dcp_rebalance_in_offline_upgrade_from_version2()
             self.verification(self.servers[:self.nodes_init])
             if self.input.param('check_seqno', True):
                 self.check_seqno(seqno_expected)
@@ -201,7 +201,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 success_upgrade &= self.queue.get()
             if not success_upgrade:
                 self.fail("Upgrade failed!")
-            self.dcp_rebalance_in_offline_upgrade_from_version2_to_version3()
+            self.dcp_rebalance_in_offline_upgrade_from_version2()
             for server in stoped_nodes:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
@@ -246,7 +246,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.fail("Upgrade failed!")
             ClusterOperationHelper.wait_for_ns_servers_or_assert(stoped_nodes, self)
             self.cluster.rebalance(self.servers[:self.nodes_init], [], servs_out)
-            self.dcp_rebalance_in_offline_upgrade_from_version2_to_version3()
+            self.dcp_rebalance_in_offline_upgrade_from_version2()
             self.verification(list(set(self.servers[:self.nodes_init] + servs_in) - set(servs_out)))
 
     def offline_cluster_upgrade_non_default_path(self):
@@ -297,7 +297,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     success_upgrade &= self.queue.get()
                 if not success_upgrade:
                     self.fail("Upgrade failed!")
-                self.dcp_rebalance_in_offline_upgrade_from_version2_to_version3()
+                self.dcp_rebalance_in_offline_upgrade_from_version2()
                 self.sleep(self.expire_time)
                 for server in servers_with_not_default:
                     rest = RestConnection(server)
@@ -357,7 +357,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 success_upgrade &= self.queue.get()
             if not success_upgrade:
                 self.fail("Upgrade failed!")
-            self.dcp_rebalance_in_offline_upgrade_from_version2_to_version3()
+            self.dcp_rebalance_in_offline_upgrade_from_version2()
             self.verification(self.servers[:self.nodes_init])
 
     def online_upgrade_rebalance_in_with_ops(self):

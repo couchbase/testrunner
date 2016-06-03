@@ -726,7 +726,7 @@ class UpgradeTests(NewUpgradeBaseTest):
                     success_upgrade &= self.queue.get()
                 if not success_upgrade:
                     self.fail("Upgrade failed!")
-                self.dcp_rebalance_in_offline_upgrade_from_version2_to_version3()
+                self.dcp_rebalance_in_offline_upgrade_from_version2()
             """ set install cb version to upgrade version after done upgrade """
             self.initial_version = self.upgrade_versions[0]
         except Exception, ex:
