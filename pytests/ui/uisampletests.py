@@ -1352,9 +1352,13 @@ class ServerHelper():
         self.tc.log.info("Confirmation failover dialog for server %s is opened" % server.ip)
 
     def is_confirmation_failover_opened(self):
-        opened = self.controls.failover_confirmation().failover_conf_dialog.is_displayed()
-        opened &= self.controls.failover_confirmation().failover_conf_hard_failover.is_displayed()
-        opened &= self.controls.failover_confirmation().failover_conf_submit_btn.is_displayed()
+        opened = True
+        try:
+            opened &= self.controls.failover_confirmation().failover_conf_dialog.is_displayed()
+            opened &= self.controls.failover_confirmation().failover_conf_hard_failover.is_displayed()
+            opened &= self.controls.failover_confirmation().failover_conf_submit_btn.is_displayed()
+        except StaleElementReferenceException:
+            opened = False
         return opened
 
     def confirm_failover(self, confirm=True, is_graceful=None, confirm_failover_check=False):
