@@ -1037,6 +1037,8 @@ class DdocViewControls():
 class DocumentsControls():
     def __init__(self, driver):
         self.helper = ControlsHelper(driver)
+        self.lookup_input = self.helper.find_control('docs_screen', 'lookup_input')
+        self.lookup_btn = self.helper.find_control('docs_screen', 'lookup_btn')
 
     def create_doc_screen(self):
         self.documents_screen = self.helper.find_control('docs_screen', 'screen')
@@ -1919,6 +1921,7 @@ class DocsHelper():
         self.tc.log.info('trying create a doc %s' % doc.name)
         self.wait.until(lambda fn:
                         self.controls.create_doc_screen().documents_screen.is_displayed())
+        time.sleep(5)
         self.controls.create_doc_screen().create_doc.click()
         self.fill_create_doc_pop_up(doc.name)
         self.wait.until(lambda fn:
@@ -1990,7 +1993,10 @@ class DocsHelper():
     def is_doc_opened(self, name, content=None):
         opened = self.controls.edit_document_screen(doc=name).name.is_displayed()
         if content:
-            opened &= (re.sub(r'\s', '', self.controls.edit_document_screen().content.get_text()) ==
+            original_content = self.controls.edit_document_screen().content.get_text()
+            original_content = original_content.split('\n')
+            original_content = "".join(original_content[1::2])
+            opened &= (re.sub(r'\s', '', original_content) ==
                        re.sub(r'\s', '', content))
         return opened
 
