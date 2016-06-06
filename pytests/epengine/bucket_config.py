@@ -20,7 +20,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.rebalance_helper import RebalanceHelper
 
 
-class basic_ops(unittest.TestCase):
+class bucket_config(unittest.TestCase):
 
     def setUp(self):
         self.testcase = '1'
