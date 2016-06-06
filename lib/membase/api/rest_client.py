@@ -1857,7 +1857,6 @@ class RestConnection(object):
                                        'flushEnabled': flushEnabled,
                                        'evictionPolicy': evictionPolicy})
 
-        # this only works for default bucket i?
         if timeSynchronization:
          params = urllib.urlencode({'name': bucket,
                                        'ramQuotaMB': ramQuotaMB,
