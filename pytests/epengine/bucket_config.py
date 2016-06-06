@@ -14,8 +14,10 @@ from membase.helper.bucket_helper import BucketOperationHelper
 import json
 from membase.helper.cluster_helper import ClusterOperationHelper
 import logger
+from couchbase_helper.cluster import Cluster
 
 from remote.remote_util import RemoteMachineShellConnection
+from membase.helper.rebalance_helper import RebalanceHelper
 
 
 class basic_ops(unittest.TestCase):
@@ -29,27 +31,29 @@ class basic_ops(unittest.TestCase):
         self.bucket='bucket-1'
         self.master = self.servers[0]
         self.rest = RestConnection(self.master)
+        self.cluster = Cluster()
+        self.skip_rebalance = self.input.param("skip_rebalance", False)
 
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
         mem_quota = int(self.rest.get_nodes_self().mcdMemoryReserved *
                         node_ram_ratio)
 
-        self.rest.init_cluster(self.master.rest_username,
-            self.master.rest_password)
-        self.rest.init_cluster_memoryQuota(self.master.rest_username,
-            self.master.rest_password,
-            memoryQuota=mem_quota)
-        for server in self.servers:
-            ClusterOperationHelper.cleanup_cluster([server])
-            ClusterOperationHelper.wait_for_ns_servers_or_assert(
-                [self.master], self.testcase)
+        if not self.skip_rebalance:
+            self.rest.init_cluster(self.master.rest_username,
+                self.master.rest_password)
+            self.rest.init_cluster_memoryQuota(self.master.rest_username,
+                self.master.rest_password,
+                memoryQuota=mem_quota)
+            for server in self.servers:
+                ClusterOperationHelper.cleanup_cluster([server])
+                ClusterOperationHelper.wait_for_ns_servers_or_assert(
+                    [self.master], self.testcase)
+            try:
+                rebalanced = ClusterOperationHelper.add_and_rebalance(
+                    self.servers)
 
-        try:
-            rebalanced = ClusterOperationHelper.add_and_rebalance(
-                self.servers)
-
-        except Exception, e:
-            self.fail(e, 'cluster is not rebalanced')
+            except Exception, e:
+                self.fail(e, 'cluster is not rebalanced')
 
         self._create_bucket()
 
@@ -63,11 +67,38 @@ class basic_ops(unittest.TestCase):
 
 
     def test_restart(self):
-        self.log.info("Restarting the servers ..")
-        self._restart_server(self.servers[:])
-        self.log.info("Verifying bucket settings after restart ..")
-        self._check_config()
+        try:
+            self.log.info("Restarting the servers ..")
+            self._restart_server(self.servers[:])
+            self.log.info("Verifying bucket settings after restart ..")
+            self._check_config()
+        except Exception, e:
+            self.fail("[ERROR] Restart failed with exception {0}".format(e))
 
+    def test_failover(self):
+        num_nodes=1
+        self.cluster.failover(self.servers, self.servers[1:num_nodes])
+        try:
+            self.log.info("Failing over 1 of the servers ..")
+            self.cluster.rebalance(self.servers, [], self.servers[1:num_nodes])
+            self.log.info("Verifying bucket settings after failover ..")
+            self._check_config()
+        except Exception, e:
+            self.fail('[ERROR]Failed to failover .. , {0}'.format(e))
+
+    def test_rebalance_in(self):
+        num_nodes=1
+        try:
+            self.log.info("Rebalancing 1 of the servers ..")
+            ClusterOperationHelper.add_and_rebalance(
+                self.servers)
+            self.log.info("Verifying bucket settings after rebalance ..")
+            self._check_config()
+        except Exception, e:
+            self.fail('[ERROR]Rebalance failed .. , {0}'.format(e))
+
+    ''' Helper functions for above testcases
+    '''
     #create a bucket if it doesn't exist
     def _create_bucket(self):
         helper = RestHelper(self.rest)
