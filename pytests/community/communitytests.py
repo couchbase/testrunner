@@ -234,13 +234,13 @@ class CommunityTests(CommunityBaseTest):
 
         """ first full backup """
         shell.execute_command("{0}cbbackup http://{1}:8091 {2} -m full"
-                .format(self.bin_path, self.master.ip, self.backup_location))
+                .format(self.bin_path, self.master.ip, self.backup_c_location))
         output, error = shell.execute_command("ls -lh {0}*/"
                                         .format(self.backup_location))
         shell.log_command_output(output, error)
         output, error = shell.execute_command("{0}cbtransfer {1}*/*-full/ stdout: \
                                                          | grep set | uniq | wc -l"
-                                      .format(self.bin_path, self.backup_location))
+                                    .format(self.bin_path, self.backup_c_location))
         shell.log_command_output(output, error)
         if int(output[0]) != 1000:
             self.fail("full backup did not work in CE. "
@@ -249,14 +249,14 @@ class CommunityTests(CommunityBaseTest):
                                             .format(self.bin_path, self.master.ip))
         """ do different backup mode """
         shell.execute_command("{0}cbbackup http://{1}:8091 {2} -m {3}"
-                       .format(self.bin_path, self.master.ip, self.backup_location,
+                       .format(self.bin_path, self.master.ip, self.backup_c_location,
                                                                self.backup_option))
         output, error = shell.execute_command("ls -lh {0}"
                                                      .format(self.backup_location))
         shell.log_command_output(output, error)
         output, error = shell.execute_command("{0}cbtransfer {1}*/*-{2}/ stdout: \
                                                          | grep set | uniq | wc -l"
-                                       .format(self.bin_path, self.backup_location,
+                                       .format(self.bin_path, self.backup_c_location,
                                                                self.backup_option))
         shell.log_command_output(output, error)
         if int(output[0]) == 2000:
