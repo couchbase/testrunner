@@ -23,7 +23,7 @@ from membase.helper.rebalance_helper import RebalanceHelper
 class bucket_config(unittest.TestCase):
 
     def setUp(self):
-        self.testcase = '1'
+        self.testcase = '2'
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         self.servers = self.input.servers
@@ -61,10 +61,16 @@ class bucket_config(unittest.TestCase):
         if not "skip_cleanup" in TestInputSingleton.input.test_params:
             BucketOperationHelper.delete_all_buckets_or_assert(
                 self.servers, self.testcase)
-            ClusterOperationHelper.cleanup_cluster(self.servers)
-            ClusterOperationHelper.wait_for_ns_servers_or_assert(
-                self.servers, self.testcase)
+            #ClusterOperationHelper.cleanup_cluster(self.servers)
+            #ClusterOperationHelper.wait_for_ns_servers_or_assert(
+            #    self.servers, self.testcase)
 
+    def test_modify_bucket_params(self):
+        try:
+            self.log.info("Modifying timeSynchronization value after bucket creation .....")
+            self._modify_bucket()
+        except Exception, e:
+            self.fail('[ERROR] Modify testcase failed .., {0}'.format(e))
 
     def test_restart(self):
         try:
@@ -87,7 +93,6 @@ class bucket_config(unittest.TestCase):
             self.fail('[ERROR]Failed to failover .. , {0}'.format(e))
 
     def test_rebalance_in(self):
-        num_nodes=1
         try:
             self.log.info("Rebalancing 1 of the servers ..")
             ClusterOperationHelper.add_and_rebalance(
@@ -96,6 +101,39 @@ class bucket_config(unittest.TestCase):
             self._check_config()
         except Exception, e:
             self.fail('[ERROR]Rebalance failed .. , {0}'.format(e))
+
+    def test_backup_same_cluster1(self):
+
+        self.cluster.failover(self.servers, self.servers[1:num_nodes])
+        try:
+            self.log.info("Failing over 1 of the servers ..")
+            self.cluster.rebalance(self.servers, [], self.servers[1:num_nodes])
+            self.log.info("Verifying bucket settings after failover ..")
+            self._check_config()
+        except Exception, e:
+            self.fail('[ERROR]Failed to failover .. , {0}'.format(e))
+
+    def test_backup_same_cluster(self):
+        self.shell = RemoteMachineShellConnection(self.master)
+        self.buckets = RestConnection(self.master).get_buckets()
+        self.couchbase_login_info = "%s:%s" % (self.input.membase_settings.rest_username,
+                                               self.input.membase_settings.rest_password)
+        self.backup_location = "/tmp/backup"
+        self.command_options = self.input.param("command_options", '')
+        try:
+            shell = RemoteMachineShellConnection(self.master)
+            self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
+
+            #self.cluster.bucket_flush(self.master, bucket=self.bucket)
+            time.sleep(5)
+            shell.restore_backupFile(self.couchbase_login_info, self.backup_location, [bucket.name for bucket in self.buckets])
+
+        finally:
+            print '*'*100
+            self._check_config()
+
+    def test_backup_new_cluster(self):
+        pass
 
     ''' Helper functions for above testcases
     '''
@@ -116,6 +154,20 @@ class bucket_config(unittest.TestCase):
                     self.bucket)
             except Exception, e:
                 self.fail(e, 'unable to create bucket')
+
+    def _modify_bucket(self):
+        helper = RestHelper(self.rest)
+        node_ram_ratio = BucketOperationHelper.base_bucket_ratio(
+            self.servers)
+        info = self.rest.get_nodes_self()
+        available_ram = int(info.memoryQuota * node_ram_ratio)
+        if available_ram < 256:
+            available_ram = 256
+        self.rest.change_bucket_props(bucket=self.bucket,
+            ramQuotaMB=available_ram,authType='sasl',timeSynchronization=self.time_synchronization)
+        ready = BucketOperationHelper.wait_for_memcached(self.master,
+                self.bucket)
+        self.assertFalse(ready, '', msg = '[PASS] Expect modify to not work.')
 
     def _restart_server(self, servers):
         for server in servers:

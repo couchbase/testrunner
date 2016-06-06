@@ -1857,6 +1857,7 @@ class RestConnection(object):
                                        'flushEnabled': flushEnabled,
                                        'evictionPolicy': evictionPolicy})
 
+        # this only works for default bucket i?
         if timeSynchronization:
          params = urllib.urlencode({'name': bucket,
                                        'ramQuotaMB': ramQuotaMB,
@@ -1902,7 +1903,8 @@ class RestConnection(object):
                       replicaNumber=None,
                       proxyPort=None,
                       replicaIndex=None,
-                      flushEnabled=None):
+                      flushEnabled=None,
+                      timeSynchronization=None):
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
         if isinstance(bucket, Bucket):
             api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket.name)
@@ -1924,6 +1926,9 @@ class RestConnection(object):
             params_dict["replicaIndex"] = replicaIndex
         if flushEnabled:
             params_dict["flushEnabled"] = flushEnabled
+        if timeSynchronization:
+            params_dict["timeSynchronization"] = timeSynchronization
+
         params = urllib.urlencode(params_dict)
 
         log.info("%s with param: %s" % (api, params))
