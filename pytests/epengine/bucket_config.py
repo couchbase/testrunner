@@ -61,9 +61,9 @@ class bucket_config(unittest.TestCase):
         if not "skip_cleanup" in TestInputSingleton.input.test_params:
             BucketOperationHelper.delete_all_buckets_or_assert(
                 self.servers, self.testcase)
-            #ClusterOperationHelper.cleanup_cluster(self.servers)
-            #ClusterOperationHelper.wait_for_ns_servers_or_assert(
-            #    self.servers, self.testcase)
+            ClusterOperationHelper.cleanup_cluster(self.servers)
+            ClusterOperationHelper.wait_for_ns_servers_or_assert(
+                self.servers, self.testcase)
 
     def test_modify_bucket_params(self):
         try:
@@ -102,17 +102,6 @@ class bucket_config(unittest.TestCase):
         except Exception, e:
             self.fail('[ERROR]Rebalance failed .. , {0}'.format(e))
 
-    def test_backup_same_cluster1(self):
-
-        self.cluster.failover(self.servers, self.servers[1:num_nodes])
-        try:
-            self.log.info("Failing over 1 of the servers ..")
-            self.cluster.rebalance(self.servers, [], self.servers[1:num_nodes])
-            self.log.info("Verifying bucket settings after failover ..")
-            self._check_config()
-        except Exception, e:
-            self.fail('[ERROR]Failed to failover .. , {0}'.format(e))
-
     def test_backup_same_cluster(self):
         self.shell = RemoteMachineShellConnection(self.master)
         self.buckets = RestConnection(self.master).get_buckets()
@@ -124,31 +113,48 @@ class bucket_config(unittest.TestCase):
             shell = RemoteMachineShellConnection(self.master)
             self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
 
-            #self.cluster.bucket_flush(self.master, bucket=self.bucket)
             time.sleep(5)
             shell.restore_backupFile(self.couchbase_login_info, self.backup_location, [bucket.name for bucket in self.buckets])
 
         finally:
-            print '*'*100
             self._check_config()
 
-    def test_backup_new_cluster(self):
-        pass
+    def test_backup_diff_bucket(self):
+        self.shell = RemoteMachineShellConnection(self.master)
+        self.buckets = RestConnection(self.master).get_buckets()
+        self.couchbase_login_info = "%s:%s" % (self.input.membase_settings.rest_username,
+                                               self.input.membase_settings.rest_password)
+        self.backup_location = "/tmp/backup"
+        self.command_options = self.input.param("command_options", '')
+        try:
+            shell = RemoteMachineShellConnection(self.master)
+            self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
+
+            time.sleep(5)
+            self._create_bucket(time_sync="disabled",name="new_bucket")
+            self.buckets = RestConnection(self.master).get_buckets()
+            shell.restore_backupFile(self.couchbase_login_info, self.backup_location, ["new_bucket"])
+
+        finally:
+            self._check_config()
 
     ''' Helper functions for above testcases
     '''
     #create a bucket if it doesn't exist
-    def _create_bucket(self):
+    def _create_bucket(self, time_sync=None, name=None):
+        if time_sync:
+            self.time_synchronization=time_sync
+
+        if  name:
+            self.bucket=name
+
         helper = RestHelper(self.rest)
         if not helper.bucket_exists(self.bucket):
             node_ram_ratio = BucketOperationHelper.base_bucket_ratio(
                 self.servers)
             info = self.rest.get_nodes_self()
-            available_ram = int(info.memoryQuota * node_ram_ratio)
-            if available_ram < 256:
-                available_ram = 256
             self.rest.create_bucket(bucket=self.bucket,
-                ramQuotaMB=available_ram,authType='sasl',timeSynchronization=self.time_synchronization)
+                ramQuotaMB=512,authType='sasl',timeSynchronization=self.time_synchronization)
             try:
                 ready = BucketOperationHelper.wait_for_memcached(self.master,
                     self.bucket)
@@ -160,11 +166,9 @@ class bucket_config(unittest.TestCase):
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(
             self.servers)
         info = self.rest.get_nodes_self()
-        available_ram = int(info.memoryQuota * node_ram_ratio)
-        if available_ram < 256:
-            available_ram = 256
+
         self.rest.change_bucket_props(bucket=self.bucket,
-            ramQuotaMB=available_ram,authType='sasl',timeSynchronization=self.time_synchronization)
+            ramQuotaMB=512,authType='sasl',timeSynchronization=self.time_synchronization)
         ready = BucketOperationHelper.wait_for_memcached(self.master,
                 self.bucket)
         self.assertFalse(ready, '', msg = '[PASS] Expect modify to not work.')
