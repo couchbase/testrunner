@@ -914,8 +914,8 @@ class QueriesViewsTests(QueryTests):
 
                     actual_indexes = [x.encode('UTF8') for x in actual_indexes]
 
-                    self.log.info('actual indexes {}'.format(actual_indexes))
-                    self.log.info('compared against {}'.format(indexes_names))
+                    self.log.info('actual indexes "{0}"'.format(actual_indexes))
+                    self.log.info('compared against "{0}"'.format(indexes_names))
                     self.assertTrue(set(actual_indexes) == set(indexes_names),"Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
             else:
                 result = plan
