@@ -345,8 +345,14 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         #Flush the bucket
         for bucket in self.buckets:
             log.info("Flushing bucket {0}...".format(bucket.name))
-            RestConnection(self.master).flush_bucket(bucket.name)
-        self.sleep(10)
+            rest = RestConnection(self.master)
+            rest.flush_bucket(bucket.name)
+            count = 0
+            while rest.get_bucket_status(bucket.name) != "healthy" and count < 10:
+                log.info("Bucket Status is {0}. Sleeping...".format(rest.get_bucket_status(bucket.name)))
+                count += 1
+                self.sleep(10)
+            log.info("Bucket {0} is {0}".format(rest.get_bucket_status(bucket.name)))
         in_between_index_ops = self._run_in_between_tasks()
         self._run_tasks([kvOps_tasks, in_between_index_ops])
         self._run_after_index_tasks()

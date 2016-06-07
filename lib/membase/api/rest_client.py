@@ -1752,6 +1752,21 @@ class RestConnection(object):
                         stats[stat_name] = samples[stat_name][last_sample]
         return stats
 
+
+    def get_bucket_status(self, bucket):
+        if not bucket:
+            log.error("Bucket Name not Specified")
+            return None
+        api = self.baseUrl + 'pools/default/buckets'
+        status, content, header = self._http_request(api)
+        if status:
+            json_parsed = json.loads(content)
+            for item in json_parsed:
+                if item["name"] == bucket:
+                    return item["nodes"][0]["status"]
+            log.error("Bucket {0} doesn't exist".format(bucket))
+            return None
+
     def get_bucket_stats_json(self, bucket='default'):
         stats = {}
         api = "{0}{1}{2}{3}".format(self.baseUrl, 'pools/default/buckets/', bucket, "/stats")
