@@ -196,7 +196,7 @@ class DocumentsTest(BaseUITestCase):
         DocsHelper(self).create_doc(old_doc)
 
         error = self.input.param('error', None)
-        doc_name = self.input.param('doc_name', 'test_edited')
+        doc_name = self.input.param('new_doc_name', 'test_edited')
         doc_content = self.input.param('doc_content', '{"test":"edited"}')
         new_doc = Document(doc_name, doc_content)
         action = self.input.param('action', 'save')
