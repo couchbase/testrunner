@@ -1,5 +1,6 @@
 from clitest.cli_base import CliBaseTest
 from membase.api.rest_client import RestConnection
+from testconstants import COUCHBASE_FROM_WATSON
 
 class epctlTests(CliBaseTest):
 
@@ -11,6 +12,9 @@ class epctlTests(CliBaseTest):
         self.param_type = self.input.param("param_type", "set flush_param")
         self.param = self.input.param("param", "max_size")
         self.param_value = self.input.param("param_value", 1000000)
+        self.server = self.master
+        self.rest = RestConnection(self.server)
+        self.node_version = self.rest.get_nodes_version()
 
     def tearDown(self):
         super(epctlTests, self).tearDown()
@@ -20,6 +24,9 @@ class epctlTests(CliBaseTest):
         verify the result by checking the command output"""
 
         for bucket in self.buckets:
+            if self.node_version[:5] in COUCHBASE_FROM_WATSON:
+                if self.param == "item_num_based_new_chk":
+                    self.param_value = "true"
             if self.persistence == "start":
                 output, error = self.shell.execute_cbepctl(bucket, "stop", self.param_type,
                                                           self.param, self.param_value)
