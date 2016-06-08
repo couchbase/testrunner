@@ -150,6 +150,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             success = True
             for server in servers:
                 success &= RemoteMachineShellConnection(server).is_couchbase_installed()
+                self.sleep(5, "sleep 5 seconds to let cb up completely")
                 if not success:
                     sys.exit("some nodes were not install successfully!")
         if self.rest is None:
