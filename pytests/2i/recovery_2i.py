@@ -340,22 +340,24 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
     def test_network_partitioning(self):
         self._run_initial_index_tasks()
+        self.sleep(10)
         try:
             kvOps_tasks = self._run_kvops_tasks()
             before_index_ops = self._run_before_index_tasks()
             self._run_tasks([before_index_ops])
             for node in self.nodes_out_list:
                 self.start_firewall_on_node(node)
+                self.sleep(10)
             in_between_index_ops = self._run_in_between_tasks()
             self._run_tasks([kvOps_tasks, in_between_index_ops])
-            if not self.all_index_nodes_lost:
-                self._run_after_index_tasks()
         except Exception, ex:
+            self.log.info(str(ex))
             raise
         finally:
             for node in self.nodes_out_list:
                 self.stop_firewall_on_node(node)
-            self.sleep(1)
+                self.sleep(10)
+            self._run_after_index_tasks()
 
     def test_couchbase_bucket_compaction(self):
         self._run_initial_index_tasks()
