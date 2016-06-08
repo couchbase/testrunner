@@ -1331,27 +1331,6 @@ class BaseTestCase(unittest.TestCase):
         self.assertTrue(logic, output)
         return bucketMap
 
-    def verify_index_stats(self, index_map, index_name, bucket_name, index_stat_values, check_keys=None):
-        self.assertTrue((bucket_name in index_map.keys()), "bucket name {0} not present in stats".format(bucket_name))
-        self.assertTrue((index_name in index_map[bucket_name].keys()),
-                        "index name {0} not present in set of indexes {1}".format(index_name,
-                                                                                  index_map[bucket_name].keys()))
-        for key in index_map[bucket_name][index_name].keys():
-            self.assertTrue((key in index_stat_values.keys()),
-                            "stats name {0} not present in stats, map {1}".format(key,
-                                                                                  index_map[bucket_name][index_name]))
-            if check_keys:
-                if key in check_keys:
-                    self.assertTrue(str(index_map[bucket_name][index_name][key]) == str(index_stat_values[key]),
-                                    " for key {0} : {1} != {2}".format(key,
-                                                                       index_map[bucket_name][index_name][key],
-                                                                       index_stat_values[key]))
-            else:
-                self.assertTrue(str(index_map[bucket_name][index_name][key]) == str(index_stat_values[key]),
-                                " for key {0} : {1} != {2}".format(key,
-                                                                   index_map[bucket_name][index_name][key],
-                                                                   index_stat_values[key]))
-
     def print_results_per_node(self, map):
         """ Method to print map results - Used only for debugging purpose """
         output = ""
@@ -1934,20 +1913,6 @@ class BaseTestCase(unittest.TestCase):
             else:
                 index_map = RestConnection(server).get_index_stats(index_map=index_map)
         return index_map
-
-    def get_index_settings(self):
-        servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        index_settings_map = {}
-        for server in servers:
-            key = "{0}:{1}".format(server.ip, server.port)
-            index_settings_map[key] = RestConnection(server).get_index_settings()
-        return index_settings_map
-
-    def set_index_settings(self, settings):
-        servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        index_settings_map = {}
-        for server in servers:
-            RestConnection(server).set_index_settings(settings)
 
     def get_nodes_from_services_map(self, service_type="n1ql", get_all_nodes=False, servers=None, master=None):
         if not servers:
