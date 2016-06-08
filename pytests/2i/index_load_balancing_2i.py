@@ -195,22 +195,33 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
         index_dist_factor = 1
         try:
             #Create Index
-            servers = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
+            servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
             num_indexes=len(servers)*index_dist_factor
             self.query_definitions = self._create_query_definitions(index_count=num_indexes)
-            self.run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
-                                      create_index=True, query=True)
+            self.multi_query_using_index(buckets=self.buckets,
+                                         query_definitions=self.query_definitions)
             index_map = self.get_index_stats(perNode=True)
             self.log.info(index_map)
             for node in index_map.keys():
                 self.log.info(" verifying node {0}".format(node))
                 for bucket_name in index_map[node].keys():
                     for index_name in index_map[node][bucket_name].keys():
-                        self.assertTrue(index_map[node][bucket_name][index_name]['total_scan_duration']  > 0, " scan did not happen at node {0}".format(node))
+                        count = 0
+                        scan_duration = index_map[node][bucket_name][index_name]['total_scan_duration']
+                        while not scan_duration and count < 5:
+                            self.multi_query_using_index(buckets=self.buckets,
+                                                         query_definitions=self.query_definitions)
+                            index_map = self.get_index_stats(perNode=True)
+                            scan_duration = index_map[node][bucket_name][index_name]['total_scan_duration']
+                            count += 1
+                        self.assertTrue(index_map[node][bucket_name][index_name]['total_scan_duration']  > 0,
+                                        " scan did not happen at node {0}".format(node))
         except Exception, ex:
+            self.log.info(str(ex))
             raise
         finally:
-            self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = self.run_drop_index)
+            self.run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
+                                      create_index=False, drop_index=self.run_drop_index)
 
     def _create_query_definitions(self, start= 0, index_count=2):
         query_definitions = []
