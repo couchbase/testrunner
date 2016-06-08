@@ -300,7 +300,7 @@ class RemoteMachineShellConnection:
                    and sv in COUCHBASE_FROM_WATSON:
                     """from watson, systemd is used in centos 7 """
                     log.info("this node is centos 7.x")
-                    o, r = self.execute_command("service couchbase-server start")
+                    o, r = self.execute_command("service couchbase-server stop")
                     self.log_command_output(o, r)
                 else:
                     o, r = self.execute_command("/etc/init.d/couchbase-server stop"\

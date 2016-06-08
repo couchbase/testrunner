@@ -289,10 +289,10 @@ class BaseSecondaryIndexingTests(QueryTests):
     def query_using_index(self, bucket, query_definition, expected_result=None, scan_consistency=None,
                           scan_vector=None, verify_results=True):
         self.gen_results.query = query_definition.generate_query(bucket=bucket)
-        log.info("Query : {0}".format(self.gen_results.query))
         if expected_result == None:
             expected_result = self.gen_results.generate_expected_result(print_expected_result=False)
         self.query = self.gen_results.query
+        log.info("Query : {0}".format(self.query))
         msg, check = self.n1ql_helper.run_query_and_verify_result(query=self.query, server=self.n1ql_node, timeout=420,
                                             expected_result=expected_result, scan_consistency=scan_consistency,
                                             scan_vector=scan_vector, verify_results=verify_results)
