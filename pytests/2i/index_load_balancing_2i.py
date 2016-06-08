@@ -71,7 +71,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
         unavailable_query = self.query_definitions.pop(0)
         # Query to see the other
         self.run_multi_operations(buckets=self.buckets,
-             query_definitions=self.query_definitions, query_with_explain=True, query=True)
+             query_definitions=self.query_definitions, query_with_explain=False, query=True)
         self.log.info("Stopping firewall on node {0}...".format(index_servers[0].ip))
         self.stop_firewall_on_node(index_servers[0])
         self.sleep(60)
@@ -166,6 +166,30 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
         finally:
             self.run_multi_operations(buckets = self.buckets, query_definitions = delete_query_definitions, create_index = False, drop_index = True)
             self.run_multi_operations(buckets = self.buckets, query_definitions = query_definitions, create_index = False, drop_index = True)
+
+    def test_scan_when_replica_index_drop(self):
+        """
+        CBQE-3152
+        1. Create two index defined on the same bucket/fields so that it will behave as replica.
+        2. Drop one of the index.
+        3. start issuing the scans and validate that the scan does not pick the dropped replica.
+        """
+        index_dist_factor = 1
+        servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        num_indexes = len(servers)*index_dist_factor
+        self.query_definitions = self._create_query_definitions(index_count=num_indexes)
+        self.run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
+                                  create_index=True, drop_index=False)
+        #drop fewindexes
+        query_definitions = [self.query_definitions[x] for x in range(num_indexes/2)]
+        delete_query_definitions = [self.query_definitions[x] for x in range(num_indexes/2, num_indexes)]
+        self.run_multi_operations(buckets=self.buckets, query_definitions=query_definitions,
+                                  create_index=False, drop_index=True)
+        #Run Queries
+        self.run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions, query=True)
+        #Finally Drop All Indexes
+        self.run_multi_operations(buckets=self.buckets, query_definitions=delete_query_definitions,
+                                  create_index=False, drop_index=True)
 
     def test_query_using_index_sync(self):
         index_dist_factor = 1
