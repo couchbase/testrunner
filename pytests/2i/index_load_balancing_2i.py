@@ -1,6 +1,10 @@
+import logging
 from base_2i import BaseSecondaryIndexingTests
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.query_definitions import QueryDefinition
+from membase.api.rest_client import RestConnection
+
+log = logging.getLogger(__name__)
 
 
 class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
@@ -222,6 +226,32 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
         finally:
             self.run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
                                       create_index=False, drop_index=self.run_drop_index)
+
+    def test_index_drop_folder_cleanup(self):
+        index_dist_factor = 1
+        servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        num_indexes = len(servers)*index_dist_factor
+        self.query_definitions = self._create_query_definitions(index_count=num_indexes)
+        self.run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
+                                  create_index=True, drop_index=False)
+        for server in servers:
+            shell = RemoteMachineShellConnection(server)
+            rest = RestConnection(server)
+            data_path = rest.get_data_path()
+            before_deletion_files = shell.list_files(data_path + "/@2i/")
+            log.info("Files on node {0}: {1}".format(server.ip, before_deletion_files))
+            self.assertTrue((len(before_deletion_files) > 1), "Index Files not created on node {0}".format(server.ip))
+        self.run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
+                                  create_index=False, drop_index=True)
+        self.sleep(20)
+        for server in servers:
+            shell = RemoteMachineShellConnection(server)
+            rest = RestConnection(server)
+            data_path = rest.get_data_path()
+            after_deletion_files = shell.list_files(data_path + "/@2i/")
+            log.info("Files on node {0}: {1}".format(server.ip, after_deletion_files))
+            self.assertEqual(len(after_deletion_files), 1,
+                        "Index directory not clean after drop Index on node {0}".format(server.ip))
 
     def _create_query_definitions(self, start= 0, index_count=2):
         query_definitions = []
