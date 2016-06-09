@@ -817,7 +817,8 @@ class CouchbaseCliTest(CliBaseTest):
             self.sleep(7)  # time needed to reload couchbase
             if self.node_version[:5] in COUCHBASE_FROM_WATSON:
                 self.assertTrue(self._check_output(\
-                                "option cluster-ramsize is not specified", output))
+                                "option cluster-ramsize is not specified", output) or \
+                                self._check_output("ERROR:", output))
             else:
                 self.assertEqual(output,
                             [u'ERROR: Both username and password are required.'] or \
