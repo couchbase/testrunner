@@ -7,7 +7,7 @@ from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from pprint import pprint
-from testconstants import CLI_COMMANDS
+from testconstants import CLI_COMMANDS, COUCHBASE_FROM_WATSON
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
  'COMMAND': {'bucket-compact': 'compact database and index data',
@@ -815,8 +815,13 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                       options=options, cluster_host="localhost", user=None, password=None)
             self.sleep(7)  # time needed to reload couchbase
-            self.assertEqual(output, [u'ERROR: Both username and password are required.']
-                          or output == [u'The password must be at least six characters.'])
+            if self.node_version[:5] in COUCHBASE_FROM_WATSON:
+                self.assertTrue(self._check_output(\
+                                "option cluster-ramsize is not specified", output))
+            else:
+                self.assertEqual(output,
+                            [u'ERROR: Both username and password are required.'] or \
+                        output == [u'The password must be at least six characters.'])
             remote_client.disconnect()
         finally:
             rest = RestConnection(server)
