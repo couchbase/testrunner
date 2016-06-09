@@ -2565,8 +2565,8 @@ class QueryTests(BaseTestCase):
 
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-            for a in actual_result:
-                print "{0}".format(a)
+            #for a in actual_result:
+                #print "{0}".format(a)
             expected_result = [{"name" : doc["name"]}
                                 for doc in self.full_list]
             expected_result.extend([{"email" : doc["email"]}
@@ -2576,6 +2576,14 @@ class QueryTests(BaseTestCase):
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self.sleep(15,'wait for index')
+            self.query = "select name from %s where name is not null union select email from %s where email is not null and join_mo >2" % (bucket.name, bucket.name)
+            result = self.run_cbq_query()
+            self.assertEqual(actual_result,sorted(result['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
 
     def test_union_aggr_fns(self):
         for bucket in self.buckets:
@@ -2618,6 +2626,14 @@ class QueryTests(BaseTestCase):
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self.sleep(15,'wait for index')
+            self.query = "select count(name) as names from %s where join_day is not null union select count(email) as emails from %s where email is not null" % (bucket.name, bucket.name)
+            result = self.run_cbq_query()
+            self.assertEqual(actual_result,sorted(result['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
 
         ############## META NEW ###################
     def test_meta_basic(self):
@@ -2656,9 +2672,10 @@ class QueryTests(BaseTestCase):
             self._wait_for_index_online(bucket, '#primary')
             self.query = "select meta().id, meta().cas from {0} use index(`#primary`) where meta().id is not null order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            expected_result = (expected_list['results'])
-            print "actual result is %s " %actual_result
-            print "expected result is %s " %expected_result
+            self.assertTrue(actual_result,sorted(expected_list['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+
             #self.assertEqual(sorted(actual_result) ,sorted(expected_result))
 
     def test_meta_where(self):
@@ -2689,10 +2706,14 @@ class QueryTests(BaseTestCase):
                 self.run_cbq_query()
 
             self.covering_index = False
-
-            self.query = "select meta().id, meta().cas from {0} use index(`#primary`) where meta().id like 'query-testemployee6%' order by meta().id limit 10".format(bucket.name)
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, '#primary')
+            self.query = "select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            expected_result = sorted(expected_list['results'])
+            self.assertTrue(actual_result,sorted(expected_list['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
             #self.assertTrue(actual_result == expected_result)
 
     def test_meta_where_greater_than(self):
@@ -2726,9 +2747,14 @@ class QueryTests(BaseTestCase):
 
             self.covering_index = False
 
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, '#primary')
             self.query = "select meta().id, meta().cas from {0} use index(`#primary`)  where meta().id > 10 order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            expected_result = sorted(expected_list['results'])
+            self.assertTrue(actual_result,sorted(expected_list['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
 
             #self.assertTrue(actual_result == expected_result)
 
@@ -2762,11 +2788,15 @@ class QueryTests(BaseTestCase):
 
             self.covering_index = False
 
-
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, '#primary')
             self.query = "select meta().id, name from {0} use index(`#primary`) where meta().id > 10 and name is not null order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            expected_result = sorted(expected_list['results'])
-
+            #expected_result = sorted(expected_list['results'])
+            self.assertTrue(actual_result,sorted(expected_list['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
             #self.assertTrue(actual_result == expected_result)
 
     def test_meta_non_supported(self):
@@ -2849,6 +2879,15 @@ class QueryTests(BaseTestCase):
                 index_name = "coveringindex%s" % ind
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
                 self.run_cbq_query()
+            self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+            self._wait_for_index_online(bucket, '#primary')
+            self.query = "select name from %s where job_title='Engineer' intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
+            expected_list = self.run_cbq_query()
+            self.assertEqual(actual_result,sorted(expected_list['results']))
+            self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
+            self.run_cbq_query()
+
 
     def test_intersect_all(self):
         for bucket in self.buckets:
