@@ -964,7 +964,10 @@ class CouchbaseCliTest(CliBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                               options=options, cluster_host="localhost",
                                               user="Administrator", password="password")
-            self.assertEqual(output, ['Database data will be purged from disk ...',
+            if self.node_version[:5] in COUCHBASE_FROM_WATSON:
+                self.assertTrue(self._check_output("ERROR:", output))
+            else:
+                self.assertEqual(output, ['Database data will be purged from disk ...',
                 'ERROR: unable to bucket-flush; please check if the bucket exists or not;'
                      ' (400) Bad Request', "{u'_': u'Flush is disabled for the bucket'}"])
             cli_command = "bucket-edit"
