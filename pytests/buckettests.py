@@ -177,6 +177,8 @@ class CreateBucketTests(BaseTestCase):
             if e:
                 print e
         if status:
+            if self.node_version[:5] in COUCHBASE_FROM_WATSON:
+                self.rest.set_indexer_storage_mode(storageMode="memory_optimized")
             shell = RemoteMachineShellConnection(self.master)
             shell.execute_command("""curl -v -u Administrator:password \
                          -X POST http://{0}:8091/sampleBuckets/install \
@@ -235,12 +237,15 @@ class CreateBucketTests(BaseTestCase):
         self.rest.force_eject_node()
 
         shell = RemoteMachineShellConnection(self.master)
+        set_index_storage_type = ""
+        if self.node_version[:5] in COUCHBASE_FROM_WATSON:
+            set_index_storage_type = " --index-storage-setting=memopt "
         options = '--cluster-init-username="Administrator" \
                         --cluster-init-password="password" \
                         --cluster-init-port=8091 \
                         --cluster-ramsize=300 \
                         --cluster-index-ramsize=300 \
-                        --services=data,index,query'
+                        --services=data,index,query %s ' % set_index_storage_type
         o, e = shell.execute_couchbase_cli(cli_command="cluster-init", options=options)
         self.assertEqual(o[0], "SUCCESS: init/edit localhost")
 
@@ -265,6 +270,7 @@ class CreateBucketTests(BaseTestCase):
         self.assertTrue(int(num_actual) == self.total_items_travel_sample,
                         "Items number expected %s, actual %s" % (
                                 self.total_items_travel_sample, num_actual))
+        self.log.info("Total items %s " % num_actual)
 
         """ check all indexes are completed """
         index_name = []
