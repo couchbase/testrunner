@@ -458,6 +458,8 @@ class UpgradeTests(NewUpgradeBaseTest):
     def rebalance_in(self, queue=None):
         rebalance_in = False
         service_in = copy.deepcopy(self.after_upgrade_services_in)
+        if service_in is None:
+            service_in = ["kv"]
         free_nodes = self._convert_server_map(self._get_free_nodes())
         if not free_nodes.values():
             raise Exception("No free node available to rebalance in")
